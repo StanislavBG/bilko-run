@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — ContentGrade</title>
+  <meta name="description" content="Privacy Policy for ContentGrade — the local AI content grader suite." />
+  <link rel="canonical" href="https://content-grade.github.io/Content-Grade/privacy.html" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --bg2: #0f0f1a;
+      --bg3: #141424;
+      --border: rgba(255,255,255,0.08);
+      --text: #e0e0e0;
+      --muted: #888;
+      --accent: #7c4dff;
+      --accent-light: #9e7aff;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    a { color: var(--accent-light); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    nav {
+      position: sticky;
+      top: 0;
+      background: rgba(10,10,15,0.92);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+    .nav-logo {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+    .nav-logo:hover { text-decoration: none; color: var(--accent-light); }
+    .logo-icon { font-size: 18px; }
+    .nav-back { font-size: 13px; color: var(--muted); margin-left: auto; }
+    .nav-back:hover { color: var(--text); }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 60px 24px 80px;
+    }
+    .page-header { margin-bottom: 48px; }
+    .page-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .page-header p { color: var(--muted); font-size: 14px; }
+    h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 36px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    p { margin-bottom: 16px; }
+    ul { margin: 12px 0 16px 20px; }
+    li { margin-bottom: 6px; }
+    .highlight {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 24px 0;
+      font-size: 15px;
+    }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--accent-light); text-decoration: none; }
+    .footer-links { display: flex; justify-content: center; gap: 24px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="./landing.html">
+    <span class="logo-icon">✦</span>
+    ContentGrade
+  </a>
+  <a class="nav-back" href="./landing.html">← Back to home</a>
+</nav>
+
+<main>
+  <div class="page-header">
+    <h1>Privacy Policy</h1>
+    <p>Last updated: March 2026</p>
+  </div>
+
+  <div class="highlight">
+    <strong>Short version:</strong> ContentGrade runs entirely on your local machine. Your content never leaves your device. Optional, opt-in telemetry collects only aggregate usage statistics — no personal data, no content, no identifiers.
+  </div>
+
+  <h2>1. What ContentGrade Is</h2>
+  <p>ContentGrade is an open-source CLI tool for AI-powered content quality analysis. It runs locally on your computer via the Claude CLI. All analysis is performed on-device — ContentGrade has no servers, no cloud backend, and no data pipeline.</p>
+
+  <h2>2. Data We Collect</h2>
+  <p>ContentGrade collects <strong>no data by default</strong>. There is an optional, opt-in telemetry system that you must explicitly enable by running:</p>
+  <p style="background:var(--bg3);padding:10px 14px;border-radius:6px;font-family:monospace;font-size:14px;">content-grade telemetry on</p>
+  <p>If you enable telemetry, the following <strong>anonymous, aggregate</strong> statistics may be sent:</p>
+  <ul>
+    <li>Which command was used (e.g., "grade", "headline", "batch")</li>
+    <li>Whether the command succeeded or failed (no error messages, no content)</li>
+    <li>Approximate duration of the command</li>
+    <li>Score range buckets (e.g., "60–70") — not exact scores, never your content</li>
+    <li>A random session ID that resets every 24 hours (not linked to you)</li>
+  </ul>
+  <p>We <strong>never</strong> collect: your content, your API keys, your file paths, your IP address, or any personally identifiable information.</p>
+  <p>You can disable telemetry at any time: <code>content-grade telemetry off</code></p>
+
+  <h2>3. Landing Page Analytics</h2>
+  <p>The ContentGrade website uses <a href="https://www.goatcounter.com" target="_blank" rel="noopener">GoatCounter</a> for privacy-friendly page view analytics. GoatCounter:</p>
+  <ul>
+    <li>Does not use cookies</li>
+    <li>Does not collect personal data or IP addresses</li>
+    <li>Does not track users across sites</li>
+    <li>Is open source and GDPR-compliant by design</li>
+  </ul>
+
+  <h2>4. Third-Party Services</h2>
+  <p>ContentGrade depends on the following third-party services, each with their own privacy practices:</p>
+  <ul>
+    <li><strong>Anthropic Claude CLI</strong> — ContentGrade uses Claude CLI to perform content analysis. Your content is sent to Anthropic's API as part of normal Claude CLI operation. Review <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener">Anthropic's Privacy Policy</a> for details on how they handle data.</li>
+    <li><strong>npm Registry</strong> — Used only for installation. No ongoing data collection.</li>
+  </ul>
+  <p>ContentGrade does not sell or share your data with any third parties.</p>
+
+  <h2>5. Your Rights (GDPR)</h2>
+  <p>If you are in the European Union or UK, you have the following rights under GDPR:</p>
+  <ul>
+    <li><strong>Right of access</strong> — You can request a copy of any data we hold about you.</li>
+    <li><strong>Right to erasure</strong> — You can request deletion of any data associated with you.</li>
+    <li><strong>Right to object</strong> — You can opt out of telemetry at any time with <code>content-grade telemetry off</code>.</li>
+  </ul>
+  <p>Because ContentGrade does not collect personal data by default, GDPR obligations are minimal. The opt-in telemetry stores no personal identifiers. If you have a concern, contact us and we will respond within 30 days.</p>
+
+  <h2>6. Data Retention</h2>
+  <p>Telemetry data (if enabled) is aggregate-only and retained for up to 12 months for product improvement. No content or personal data is ever stored.</p>
+
+  <h2>7. Children's Privacy</h2>
+  <p>ContentGrade is a developer tool not directed at children under 13. We do not knowingly collect information from children.</p>
+
+  <h2>8. Changes to This Policy</h2>
+  <p>We may update this Privacy Policy from time to time. The "Last updated" date at the top reflects the most recent revision. Continued use of ContentGrade after changes constitutes acceptance of the updated policy.</p>
+
+  <h2>9. Contact</h2>
+  <p>Questions or requests about this Privacy Policy:</p>
+  <p><a href="mailto:bilko@bglabs.app">bilko@bglabs.app</a></p>
+  <p>ContentGrade is open source: <a href="https://github.com/Content-Grade/Content-Grade" target="_blank" rel="noopener">github.com/Content-Grade/Content-Grade</a></p>
+</main>
+
+<footer>
+  <span>&copy; 2026 ContentGrade. MIT Licensed.</span>
+  <div class="footer-links">
+    <a href="./landing.html">Home</a>
+    <a href="./privacy.html">Privacy Policy</a>
+    <a href="./terms.html">Terms of Service</a>
+    <a href="mailto:bilko@bglabs.app">Contact</a>
+  </div>
+</footer>
+
+</body>
+</html>

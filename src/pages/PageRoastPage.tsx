@@ -378,14 +378,14 @@ function BuyTokensCard({ email }: { email: string }) {
       <div className="bg-gradient-to-r from-fire-50 to-warm-50 border-2 border-fire-200 rounded-2xl p-8 text-center">
         <p className="text-2xl font-bold text-warm-900 mb-2">You're out of tokens</p>
         <p className="text-sm text-warm-600 mb-6">
-          Buy 10 more roasts for $5 — support an indie maker and keep grading.
+          Get 5 credits for $5 — each roast costs 1, A/B compare costs 2.
         </p>
         <button
           onClick={buyTokens}
           disabled={loading}
           className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 transition-all"
         >
-          {loading ? 'Redirecting to checkout...' : 'Buy 10 Roasts — $5'}
+          {loading ? 'Redirecting to checkout...' : 'Buy 5 Credits — $5'}
         </button>
         <p className="mt-3 text-xs text-warm-400">One-time purchase. No subscription.</p>
       </div>
@@ -562,9 +562,9 @@ export function PageRoastPage() {
           <div className="flex items-center justify-end mb-3 px-1">
             <div className="text-sm font-semibold text-warm-700">
               {tokenBalance === 0 ? (
-                <span className="text-fire-600">0 roasts left</span>
+                <span className="text-fire-600">0 credits</span>
               ) : (
-                <>{tokenBalance} roast{tokenBalance !== 1 ? 's' : ''} left</>
+                <>{tokenBalance} credit{tokenBalance !== 1 ? 's' : ''}</>
               )}
             </div>
           </div>
@@ -815,7 +815,7 @@ export function PageRoastPage() {
               <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">Questions</h2>
               <div className="space-y-6">
                 {[
-                  { q: 'Is this really free?', a: 'Yes. You get free analyses per day, no sign-up required. The tool runs on AI and the cost per analysis is low enough that I can offer it free.' },
+                  { q: 'What does it cost?', a: 'You get 1 free roast when you sign up. After that, $5 gets you 5 credits. A single roast costs 1 credit, an A/B compare costs 2.' },
                   { q: 'How does the scoring work?', a: 'Your page is scored across 4 CRO frameworks (Hero, Social Proof, Clarity, Conversion) with 25 points each. The AI evaluates real conversion principles used by top landing page experts.' },
                   { q: 'What about my data/privacy?', a: 'We fetch your page\'s public HTML to analyze it. We don\'t store your page content after analysis. The URL and score are kept for rate limiting only.' },
                   { q: 'What\'s the A/B Compare mode?', a: 'Paste two URLs and we\'ll score both, then tell you which one wins and why. Perfect for testing your page against a competitor or comparing redesigns.' },

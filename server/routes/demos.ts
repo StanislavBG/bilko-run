@@ -662,13 +662,13 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       grantFreeTokens(email);
     }
 
-    // Pro subscribers skip token deduction
+    // A/B compare requires purchased tokens (free grant not enough) — costs 2
     const sub = await getActiveSubscriptionLive(email);
     if (!sub.isPro) {
-      const deduction = deductToken(email, 1, 'page_roast_compare');
+      const deduction = deductToken(email, 2, 'page_roast_compare');
       if (!deduction.success) {
         reply.status(402);
-        return { error: 'No tokens remaining.', requiresTokens: true, balance: deduction.balance };
+        return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance: deduction.balance };
       }
     }
 

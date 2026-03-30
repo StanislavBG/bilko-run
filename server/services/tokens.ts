@@ -1,7 +1,7 @@
 import { getDb } from '../db.js';
 
-const FREE_TOKEN_GRANT = 3;
-const TOKENS_PER_BUNDLE = 10;
+const FREE_TOKEN_GRANT = 1;
+const TOKENS_PER_BUNDLE = 5;
 
 export { TOKENS_PER_BUNDLE };
 

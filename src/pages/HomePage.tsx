@@ -6,51 +6,6 @@ const SOCIAL_LINKS = [
   { href: 'https://github.com/StanislavBG', label: 'GitHub', icon: 'github' },
 ] as const;
 
-const PROJECTS = [
-  {
-    name: 'PageRoast',
-    line: 'AI roasts your landing page in 60 seconds',
-    metric: 'Live',
-    href: '/projects/page-roast',
-    live: true,
-  },
-  {
-    name: 'HeadlineGrader',
-    line: 'Score headlines with proven copywriting frameworks',
-    metric: 'Building',
-    href: '/projects',
-    live: false,
-  },
-  {
-    name: 'AdScorer',
-    line: 'Grade ad copy before you spend the budget',
-    metric: 'Building',
-    href: '/projects',
-    live: false,
-  },
-  {
-    name: 'Stepproof',
-    line: 'Behavioral regression tests for AI workflows',
-    metric: 'Shipped',
-    href: '/projects',
-    live: false,
-  },
-  {
-    name: 'AgentTrace',
-    line: 'Local observability for AI agents',
-    metric: 'Shipped',
-    href: '/projects',
-    live: false,
-  },
-  {
-    name: 'ContentGrade',
-    line: 'Holistic content quality scoring',
-    metric: 'Building',
-    href: '/projects',
-    live: false,
-  },
-];
-
 function SocialIcon({ type }: { type: string }) {
   if (type === 'x') return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
@@ -66,36 +21,25 @@ function SocialIcon({ type }: { type: string }) {
 export function HomePage() {
   return (
     <>
-      {/* Hero — Pieter Levels / Marc Lou pattern: identity + proof strip + socials */}
+      {/* Hero — all about Bilko */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-fire-50/40 via-warm-50 to-warm-50" />
-        <div className="relative max-w-3xl mx-auto px-6 pt-20 pb-10 md:pt-28 md:pb-14 text-center">
-          {/* Identity */}
+        <div className="absolute inset-0 bg-gradient-to-b from-fire-50/30 via-warm-50 to-warm-50" />
+        <div className="relative max-w-3xl mx-auto px-6 pt-24 pb-16 md:pt-36 md:pb-24 text-center">
           <h1 className="text-5xl md:text-7xl font-black tracking-tight text-warm-900 animate-slide-up">
             Bilko
           </h1>
-          <p className="mt-3 text-xl md:text-2xl text-warm-600 font-medium animate-slide-up" style={{ animationDelay: '60ms' }}>
-            I build AI tools and ship them.
+          <p className="mt-4 text-xl md:text-2xl text-warm-600 font-medium animate-slide-up" style={{ animationDelay: '60ms' }}>
+            Solopreneur. Builder. Shipper.
           </p>
 
-          {/* Proof strip */}
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-warm-500 animate-slide-up" style={{ animationDelay: '120ms' }}>
-            <span><strong className="text-warm-800 text-base">8</strong> tools shipped</span>
-            <span className="text-warm-300">|</span>
-            <span><strong className="text-warm-800 text-base">1</strong> person</span>
-            <span className="text-warm-300">|</span>
-            <span><strong className="text-warm-800 text-base">0</strong> VC dollars</span>
-          </div>
-
-          {/* Social links */}
-          <div className="mt-6 flex items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: '180ms' }}>
+          <div className="mt-6 flex items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: '120ms' }}>
             {SOCIAL_LINKS.map(({ href, label, icon }) => (
               <a
                 key={icon}
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-all text-sm font-medium"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-all text-sm font-medium"
                 title={label}
               >
                 <SocialIcon type={icon} />
@@ -106,93 +50,93 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* Featured tool CTA — one clear action */}
-      <section className="max-w-2xl mx-auto px-6 pb-16">
-        <Link
-          to="/projects/page-roast"
-          className="group block bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 shadow-sm hover:shadow-lg hover:shadow-fire-100/50 transition-all hover:-translate-y-0.5 p-6 md:p-8"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs font-bold uppercase tracking-wider text-green-700">Live Now</span>
-            </div>
-          </div>
-          <h2 className="text-2xl md:text-3xl font-extrabold text-warm-900 group-hover:text-fire-600 transition-colors">
-            PageRoast
-          </h2>
-          <p className="mt-2 text-warm-600 leading-relaxed">
-            Paste any URL. AI scores your landing page across 4 CRO frameworks, gives you a brutal one-liner, and tells you exactly what to fix. Takes 60 seconds.
+      {/* Story */}
+      <section className="max-w-2xl mx-auto px-6 pb-16 md:pb-24">
+        <div className="text-warm-600 leading-relaxed space-y-4 text-lg">
+          <p>
+            I quit waiting for permission and started building. One person, no funding, no team — just
+            ideas that won't shut up and an unreasonable belief that shipping beats planning.
           </p>
-          <div className="mt-4 inline-flex items-center gap-2 text-fire-500 font-semibold group-hover:text-fire-600">
-            Try it free
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-          </div>
-        </Link>
-      </section>
-
-      {/* All projects — simple list, Marc Lou style with metrics */}
-      <section className="border-t border-warm-200/60 bg-white">
-        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20">
-          <h2 className="text-2xl font-extrabold text-warm-900 mb-8">Projects</h2>
-          <div className="divide-y divide-warm-100">
-            {PROJECTS.map((p) => {
-              const inner = (
-                <div className="flex items-center justify-between py-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-warm-900">{p.name}</span>
-                      {p.live && <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />}
-                    </div>
-                    <p className="text-sm text-warm-500 mt-0.5 truncate">{p.line}</p>
-                  </div>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ml-4 ${
-                    p.metric === 'Live' ? 'bg-green-100 text-green-700' :
-                    p.metric === 'Shipped' ? 'bg-blue-100 text-blue-700' :
-                    'bg-warm-100 text-warm-500'
-                  }`}>
-                    {p.metric}
-                  </span>
-                </div>
-              );
-
-              return p.live ? (
-                <Link key={p.name} to={p.href} className="block hover:bg-warm-50 -mx-4 px-4 rounded-lg transition-colors">
-                  {inner}
-                </Link>
-              ) : (
-                <div key={p.name} className="opacity-70">{inner}</div>
-              );
-            })}
-          </div>
-          <Link to="/projects" className="inline-block mt-6 text-sm font-semibold text-fire-500 hover:text-fire-600">
-            View all projects &rarr;
-          </Link>
+          <p>
+            I build AI-powered tools for people who make things on the internet. Marketers who need
+            honest feedback before they launch. Founders who want data, not opinions. Developers who
+            ship AI and need to test it.
+          </p>
+          <p>
+            Everything here is built with Claude, Gemini, and a lot of coffee. If it helps someone
+            ship better work, I'll build it.
+          </p>
         </div>
       </section>
 
-      {/* About — short, personal, builder voice */}
-      <section className="border-t border-warm-200/40">
-        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20">
-          <h2 className="text-2xl font-extrabold text-warm-900 mb-4">About</h2>
-          <div className="text-warm-600 leading-relaxed space-y-3">
-            <p>
-              I'm a solo builder shipping AI-powered tools for makers, marketers, and founders.
-              Everything on this site is built by one person — no team, no funding, no permission needed.
-            </p>
-            <p>
-              I build with Claude and Gemini, ship on Render, and sell with Stripe.
-              If it helps someone make better content or ship faster, I'll probably build it.
-            </p>
+      {/* What I believe in */}
+      <section className="border-t border-warm-200/60 bg-white">
+        <div className="max-w-3xl mx-auto px-6 py-16 md:py-24">
+          <h2 className="text-2xl font-extrabold text-warm-900 mb-8">How I work</h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { title: 'Ship first', desc: 'An imperfect thing in the wild beats a perfect thing in my head. I ship weekly, learn daily, fix fast.' },
+              { title: 'Solo by choice', desc: 'No co-founders, no investors, no board meetings. Just me and the users. Every decision is instant.' },
+              { title: 'Build in public', desc: 'Revenue, failures, lessons — I share it all. Follow along on X and LinkedIn.' },
+            ].map(({ title, desc }) => (
+              <div key={title}>
+                <h3 className="font-bold text-warm-900 mb-2">{title}</h3>
+                <p className="text-sm text-warm-500 leading-relaxed">{desc}</p>
+              </div>
+            ))}
           </div>
-          <div className="mt-6 flex gap-3">
+        </div>
+      </section>
+
+      {/* What I'm working on */}
+      <section className="border-t border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16 md:py-24">
+          <h2 className="text-2xl font-extrabold text-warm-900 mb-3">What I'm building</h2>
+          <p className="text-warm-500 mb-8">AI tools for content, marketing, and developer workflows.</p>
+
+          <div className="space-y-4">
+            <Link
+              to="/projects/page-roast"
+              className="group flex items-center justify-between p-4 -mx-4 rounded-xl hover:bg-warm-50 transition-colors"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-warm-900 group-hover:text-fire-600 transition-colors">PageRoast</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="text-xs font-semibold text-green-700">Live</span>
+                </div>
+                <p className="text-sm text-warm-500 mt-0.5">AI roasts your landing page. Scores, savage feedback, fixes.</p>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-warm-400 group-hover:text-fire-500 group-hover:translate-x-1 transition-all" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </Link>
+
+            <Link
+              to="/projects"
+              className="group flex items-center justify-between p-4 -mx-4 rounded-xl hover:bg-warm-50 transition-colors"
+            >
+              <div>
+                <span className="font-bold text-warm-900 group-hover:text-fire-600 transition-colors">More tools</span>
+                <p className="text-sm text-warm-500 mt-0.5">HeadlineGrader, AdScorer, Stepproof, AgentTrace, and more.</p>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-warm-400 group-hover:text-fire-500 group-hover:translate-x-1 transition-all" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Connect */}
+      <section className="border-t border-warm-200/40 bg-warm-100/30">
+        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20 text-center">
+          <h2 className="text-2xl font-extrabold text-warm-900 mb-3">Let's connect</h2>
+          <p className="text-warm-500 mb-6">I post about building, shipping, and what I'm learning along the way.</p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
             {SOCIAL_LINKS.map(({ href, label, icon }) => (
               <a
                 key={icon}
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-warm-200 text-warm-600 hover:text-warm-900 hover:border-warm-300 transition-all text-sm font-medium"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-warm-200 bg-white text-warm-700 hover:text-warm-900 hover:border-warm-400 hover:shadow-sm transition-all text-sm font-semibold"
               >
                 <SocialIcon type={icon} />
                 {label}

@@ -507,17 +507,38 @@ export function PageRoastPage() {
     }
   }
 
+  // If user isn't signed in, clicking "Roast" opens Clerk modal
+  const signInRef = useRef<HTMLButtonElement>(null);
+
+  function handleRoastClick() {
+    if (!isSignedIn) {
+      // Trigger the hidden SignInButton
+      signInRef.current?.click();
+      return;
+    }
+    roast();
+  }
+
+  function handleCompareClick() {
+    if (!isSignedIn) {
+      signInRef.current?.click();
+      return;
+    }
+    compare();
+  }
+
   return (
     <>
+      {/* Hidden Clerk sign-in trigger */}
+      <SignInButton mode="modal">
+        <button ref={signInRef} className="hidden" aria-hidden="true" />
+      </SignInButton>
+
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-fire-50 via-warm-50 to-warm-100/50" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,107,26,0.08),transparent_60%)]" />
         <div className="relative max-w-3xl mx-auto px-6 pt-16 pb-12 md:pt-24 md:pb-16 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-fire-100 text-fire-700 text-xs font-semibold mb-6">
-            3 free roasts &middot; then $5 for 10 more &middot; 60 seconds
-          </div>
-
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-warm-900 leading-[1.1]">
             Your landing page
             <br />
@@ -534,37 +555,11 @@ export function PageRoastPage() {
         </div>
       </section>
 
-      {/* Loading state while Clerk initializes */}
-      {(!clerkLoaded || !userLoaded) && (
-        <section className="max-w-md mx-auto px-6 mb-12">
-          <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-8 text-center">
-            <div className="animate-pulse text-warm-400">Loading...</div>
-          </div>
-        </section>
-      )}
-
-      {/* Sign-in Gate */}
-      {clerkLoaded && userLoaded && !isSignedIn && (
-        <section className="max-w-md mx-auto px-6 mb-12">
-          <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-8 text-center">
-            <div className="text-4xl mb-3">🔥</div>
-            <h2 className="text-lg font-bold text-warm-900 mb-2">Sign in to start the roast</h2>
-            <p className="text-sm text-warm-500 mb-6">3 free roasts. 10 seconds to sign in. Infinite pain for your landing page.</p>
-            <SignInButton mode="modal">
-              <button className="px-8 py-3.5 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all text-lg">
-                🔥 Let me in
-              </button>
-            </SignInButton>
-          </div>
-        </section>
-      )}
-
-      {/* Input Section (only shown when signed in) */}
-      {isSignedIn && (
+      {/* URL Input — always visible, login pops on submit if needed */}
       <section className="max-w-2xl mx-auto px-6 -mt-2 mb-12">
-        {/* Token Balance */}
-        <div className="flex items-center justify-end mb-4 px-1">
-          {tokenBalance !== null && (
+        {/* Token Balance (only when signed in) */}
+        {isSignedIn && tokenBalance !== null && (
+          <div className="flex items-center justify-end mb-3 px-1">
             <div className="text-sm font-semibold text-warm-700">
               {tokenBalance === 0 ? (
                 <span className="text-fire-600">0 roasts left</span>
@@ -572,8 +567,8 @@ export function PageRoastPage() {
                 <>{tokenBalance} roast{tokenBalance !== 1 ? 's' : ''} left</>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Tab Toggle */}
         <div className="flex gap-1 bg-warm-100 rounded-xl p-1 mb-6 w-fit mx-auto">
@@ -612,11 +607,11 @@ export function PageRoastPage() {
                 className="flex-1 px-4 py-3.5 rounded-xl border border-warm-200 bg-warm-50 text-warm-900 placeholder:text-warm-400 text-base focus:outline-none focus:ring-2 focus:ring-fire-300 focus:border-fire-300 transition-all"
               />
               <button
-                onClick={roast}
+                onClick={handleRoastClick}
                 disabled={loading || !url.trim()}
                 className="px-6 py-3.5 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-fire-500/20 hover:shadow-fire-500/30 transition-all whitespace-nowrap disabled:shadow-none"
               >
-                🔥 Roast It
+                🔥 Roast Me
               </button>
             </div>
             <p className="mt-2 text-xs text-warm-400 text-center">
@@ -651,7 +646,7 @@ export function PageRoastPage() {
               </div>
             </div>
             <button
-              onClick={compare}
+              onClick={handleCompareClick}
               disabled={loading || !urlA.trim() || !urlB.trim()}
               className="w-full py-3.5 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all disabled:shadow-none"
             >
@@ -665,7 +660,6 @@ export function PageRoastPage() {
           </div>
         )}
       </section>
-      )}
 
       {/* Roasting overlay */}
       {loading && <RoastingOverlay onCancel={() => setLoading(false)} />}

@@ -21,6 +21,7 @@ interface SocialRoastResult {
   roast_a: string;
   roast_b: string;
   tweet: string;
+  hashtags?: string[];
 }
 
 export function getRivalPair(id: number): RivalPair | null {
@@ -76,7 +77,8 @@ Respond ONLY with valid JSON:
   "winner": "A" | "B" | "tie",
   "roast_a": "<one punchy line about A's website>",
   "roast_b": "<one punchy line about B's website>",
-  "tweet": "<the fun comparison tweet — NO handles, NO links, just the roast>"
+  "tweet": "<the fun comparison tweet — NO handles, NO links, NO hashtags, just the roast>",
+  "hashtags": ["<2-3 relevant hashtags — location-based like #Woodinville or #WoodinvilleWine, plus one category like #WineryLife or #CraftBeer — lowercase, no # prefix>"]
 }`;
 
   const prompt = `Compare these two rival ${pair.category || 'business'} websites from ${pair.location || 'the area'}:
@@ -102,14 +104,24 @@ Page content: ${pageTextB.slice(0, 3000)}`;
   const handleA = pair.x_handle_a ? `@${pair.x_handle_a.replace(/^@/, '')}` : pair.name_a;
   const handleB = pair.x_handle_b ? `@${pair.x_handle_b.replace(/^@/, '')}` : pair.name_b;
 
+  // Build hashtag string from AI + location fallback
+  const aiTags: string[] = Array.isArray(result.hashtags) ? result.hashtags : [];
+  const tags = aiTags.map(t => `#${t.replace(/^#/, '')}`);
+  // Ensure location hashtag if we have a location
+  if (pair.location && !tags.some(t => t.toLowerCase().includes(pair.location!.split(',')[0].trim().toLowerCase().replace(/\s+/g, '')))) {
+    tags.unshift(`#${pair.location.split(',')[0].trim().replace(/\s+/g, '')}`);
+  }
+  const hashtagLine = tags.slice(0, 4).join(' ');
+
   const postText = [
     result.tweet,
     '',
     `${pair.name_a} (${result.score_a}/100) vs ${pair.name_b} (${result.score_b}/100)`,
     '',
-    `Get your page roasted free: bilko.run/projects/page-roast`,
+    `🔥 Get your page roasted free: bilko.run/projects/page-roast`,
     '',
     `${handleA} ${handleB}`,
+    hashtagLine,
   ].join('\n');
 
   // Insert into queue

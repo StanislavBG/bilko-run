@@ -1,7 +1,74 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useUser, SignInButton, useAuth } from '@clerk/clerk-react';
 
 const API = import.meta.env.VITE_API_URL || '/api';
+
+// ── Fire Particles ───────────────────────────────────────────────────────────
+
+const ROAST_PHRASES = [
+  'Fetching your page...',
+  'Reading every pixel...',
+  'Judging your hero section...',
+  'Looking for social proof...',
+  'Checking your CTAs...',
+  'Finding the weakest spots...',
+  'Writing the roast...',
+  'This is going to hurt...',
+  'Almost done burning...',
+  'Preparing the verdict...',
+];
+
+function FireParticles() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      {Array.from({ length: 20 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute animate-flame-rise"
+          style={{
+            left: `${10 + Math.random() * 80}%`,
+            bottom: '-10px',
+            animationDelay: `${Math.random() * 2}s`,
+            animationDuration: `${1 + Math.random() * 1.5}s`,
+            animationIterationCount: 'infinite',
+            fontSize: `${14 + Math.random() * 20}px`,
+            opacity: 0.7 + Math.random() * 0.3,
+          }}
+        >
+          {['🔥', '🔥', '🔥', '💀', '🔥', '😤', '🔥', '🔥'][i % 8]}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RoastingOverlay() {
+  const [phraseIdx, setPhraseIdx] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPhraseIdx(i => (i + 1) % ROAST_PHRASES.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-warm-900/80 backdrop-blur-sm">
+      <div className="relative text-center">
+        <FireParticles />
+        <div className="relative z-10">
+          <div className="text-8xl mb-6 animate-flame-flicker">🔥</div>
+          <p className="text-3xl font-black text-white mb-3 animate-roast-shake">
+            ROASTING...
+          </p>
+          <p className="text-lg text-fire-300 animate-fade-in" key={phraseIdx}>
+            {ROAST_PHRASES[phraseIdx]}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,13 +154,31 @@ function copyToClipboard(text: string) {
 
 // ── Components ───────────────────────────────────────────────────────────────
 
+function gradeVerdict(grade: string): string {
+  if (grade === 'A+' || grade === 'A') return 'Your page is fire. Respect.';
+  if (grade === 'A-' || grade === 'B+') return 'Solid. But there\'s still meat on the bone.';
+  if (grade === 'B' || grade === 'B-') return 'Decent, but your competitors are eating your lunch.';
+  if (grade === 'C+' || grade === 'C') return 'Mediocre. Your visitors are bouncing and you know it.';
+  if (grade === 'C-' || grade === 'D') return 'Rough. This page needs CPR.';
+  return 'This page is on fire. And not in a good way.';
+}
+
 function ScoreHero({ result, url }: { result: RoastResult; url: string }) {
-  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast\n\n"${result.roast}"\n\nGet your free audit: bilko.run/projects/page-roast`;
+  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted free: bilko.run/projects/page-roast`;
   const [copied, setCopied] = useState(false);
 
   return (
-    <div className={`rounded-2xl border-2 p-8 text-center animate-slide-up ${gradeBg(result.grade)}`}>
-      <div className="flex items-center justify-center gap-6 mb-4">
+    <div className={`relative rounded-2xl border-2 p-8 text-center animate-result-slam overflow-hidden ${gradeBg(result.grade)}`}>
+      {/* Mini fire at top for low scores */}
+      {result.total_score < 50 && (
+        <div className="absolute top-0 left-0 right-0 flex justify-center gap-1 -mt-1">
+          {['🔥','🔥','🔥'].map((f, i) => (
+            <span key={i} className="text-2xl animate-flame-flicker" style={{ animationDelay: `${i * 0.1}s` }}>{f}</span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-center gap-6 mb-2">
         <div className="animate-score">
           <span className="text-7xl md:text-8xl font-black text-warm-900">{result.total_score}</span>
           <span className="text-lg text-warm-500 font-medium">/100</span>
@@ -103,9 +188,13 @@ function ScoreHero({ result, url }: { result: RoastResult; url: string }) {
         </div>
       </div>
 
-      <p className="text-lg md:text-xl font-semibold text-fire-600 italic max-w-lg mx-auto leading-relaxed mb-2">
-        &ldquo;{result.roast}&rdquo;
-      </p>
+      <p className="text-sm font-semibold text-warm-500 mb-4">{gradeVerdict(result.grade)}</p>
+
+      <div className="bg-white/60 rounded-xl p-4 mb-4 border border-fire-200/50">
+        <p className="text-lg md:text-xl font-bold text-fire-700 italic max-w-lg mx-auto leading-relaxed">
+          &ldquo;{result.roast}&rdquo;
+        </p>
+      </div>
       <p className="text-xs text-warm-400 mb-6 truncate max-w-md mx-auto">{url}</p>
 
       <div className="flex flex-wrap items-center justify-center gap-3">
@@ -407,16 +496,17 @@ export function PageRoastPage() {
           </div>
 
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-warm-900 leading-[1.1]">
-            Get your landing page
+            Your landing page
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-fire-500 to-fire-700">
-              brutally roasted.
+              is about to get roasted.
             </span>
+            <span className="inline-block animate-flame-flicker text-5xl md:text-6xl ml-2">🔥</span>
           </h1>
 
           <p className="mt-5 text-lg text-warm-600 max-w-xl mx-auto leading-relaxed">
-            Paste a URL. AI scores your page across 4 CRO frameworks,
-            tells you exactly what's broken, and gives you a savage one-liner you'll want to screenshot.
+            Paste a URL. AI tears apart your page across 4 CRO frameworks,
+            tells you exactly what's broken, and delivers a savage one-liner you'll want to screenshot.
           </p>
         </div>
       </section>
@@ -425,11 +515,12 @@ export function PageRoastPage() {
       {!isSignedIn && (
         <section className="max-w-md mx-auto px-6 mb-12">
           <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-8 text-center">
-            <h2 className="text-lg font-bold text-warm-900 mb-2">Sign in to start roasting</h2>
-            <p className="text-sm text-warm-500 mb-6">You'll get 3 free roasts. Takes 10 seconds.</p>
+            <div className="text-4xl mb-3">🔥</div>
+            <h2 className="text-lg font-bold text-warm-900 mb-2">Sign in to start the roast</h2>
+            <p className="text-sm text-warm-500 mb-6">3 free roasts. 10 seconds to sign in. Infinite pain for your landing page.</p>
             <SignInButton mode="modal">
               <button className="px-8 py-3.5 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all text-lg">
-                Sign in to Roast
+                🔥 Let me in
               </button>
             </SignInButton>
           </div>
@@ -493,16 +584,11 @@ export function PageRoastPage() {
                 disabled={loading || !url.trim()}
                 className="px-6 py-3.5 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-fire-500/20 hover:shadow-fire-500/30 transition-all whitespace-nowrap disabled:shadow-none"
               >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                    Roasting...
-                  </span>
-                ) : 'Roast It'}
+                🔥 Roast It
               </button>
             </div>
             <p className="mt-2 text-xs text-warm-400 text-center">
-              Works with any public URL. Results in about 30 seconds.
+              Any public URL. Results in ~30 seconds. Feelings not guaranteed to survive.
             </p>
           </div>
         )}
@@ -548,6 +634,9 @@ export function PageRoastPage() {
         )}
       </section>
       )}
+
+      {/* Roasting overlay */}
+      {loading && <RoastingOverlay />}
 
       {/* Error */}
       {error && (
@@ -624,12 +713,12 @@ export function PageRoastPage() {
       {!result && !compareResult && !loading && (
         <>
           <section className="max-w-4xl mx-auto px-6 py-16">
-            <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">How it works</h2>
+            <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">How the roast works</h2>
             <div className="grid md:grid-cols-3 gap-8 stagger-children">
               {[
-                { step: '1', title: 'Paste your URL', desc: 'Any public landing page, homepage, or product page. We fetch it in real-time.' },
-                { step: '2', title: 'AI audits 4 areas', desc: 'Hero section, social proof, clarity & persuasion, and conversion architecture. Each scored 0-25.' },
-                { step: '3', title: 'Get your roast', desc: 'Overall score, letter grade, a savage one-liner, and the exact fixes to improve conversions.' },
+                { step: '🔗', title: 'Drop your URL', desc: 'Any public page. We fetch it live, strip the fluff, and read every word like a judgmental copywriter.' },
+                { step: '🔥', title: 'AI roasts 4 areas', desc: 'Hero, social proof, clarity, and conversion architecture. Each scored 0-25. No mercy.' },
+                { step: '💀', title: 'Get destroyed', desc: 'A score, a letter grade, a savage one-liner, and the exact fixes. Share the pain on X.' },
               ].map(({ step, title, desc }) => (
                 <div key={step} className="text-center">
                   <div className="w-12 h-12 rounded-2xl bg-fire-100 text-fire-600 text-xl font-black flex items-center justify-center mx-auto mb-4">
@@ -717,13 +806,13 @@ export function PageRoastPage() {
 
           {/* Bottom CTA */}
           <section className="max-w-4xl mx-auto px-6 py-16 text-center">
-            <h2 className="text-3xl font-extrabold text-warm-900 mb-4">Stop guessing. Start converting.</h2>
-            <p className="text-warm-500 mb-6">Your landing page has one job. Find out if it's doing it.</p>
+            <h2 className="text-3xl font-extrabold text-warm-900 mb-4">Think your page converts? Prove it. 🔥</h2>
+            <p className="text-warm-500 mb-6">Free. 60 seconds. Your ego may not survive.</p>
             <button
               onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5"
             >
-              Roast My Page
+              🔥 Roast My Page
             </button>
           </section>
         </>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { ClerkProvider } from '@clerk/clerk-react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
 import { Layout } from './components/Layout.js';
 import { HomePage } from './pages/HomePage.js';
@@ -7,6 +8,8 @@ import { PageRoastPage } from './pages/PageRoastPage.js';
 
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
+
+const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_ZHJpdmVuLXBpa2EtNDUuY2xlcmsuYWNjb3VudHMuZGV2JA';
 import { HeadlineGraderView } from './views/HeadlineGraderView.js';
 import { PageRoastView } from './views/PageRoastView.js';
 import { AdScorerView } from './views/AdScorerView.js';
@@ -54,6 +57,7 @@ function LegacyDashboard({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <ClerkProvider publishableKey={CLERK_KEY}>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -79,5 +83,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ClerkProvider>
   );
 }

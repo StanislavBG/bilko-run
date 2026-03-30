@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useUser, SignInButton, useAuth } from '@clerk/clerk-react';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -288,9 +289,11 @@ function BuyTokensCard({ email }: { email: string }) {
 }
 
 export function PageRoastPage() {
+  const { isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
+  const email = user?.primaryEmailAddress?.emailAddress ?? '';
+
   const [tab, setTab] = useState<'roast' | 'compare'>('roast');
-  const [email, setEmail] = useState(() => localStorage.getItem('bilko_pro_email') ?? '');
-  const [emailInput, setEmailInput] = useState('');
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
   const [url, setUrl] = useState('');
   const [urlA, setUrlA] = useState('');
@@ -302,30 +305,28 @@ export function PageRoastPage() {
   const [needsTokens, setNeedsTokens] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
-  // Fetch token balance when email is set
+  // Fetch token balance when signed in
   useEffect(() => {
-    if (!email || !email.includes('@')) return;
+    if (!isSignedIn || !email) return;
     fetch(`${API}/tokens/balance?email=${encodeURIComponent(email)}`)
       .then(r => r.json())
       .then(d => setTokenBalance(d.balance ?? 0))
       .catch(() => {});
-  }, [email]);
+  }, [isSignedIn, email]);
 
   // Check for ?tokens=purchased in URL (returning from Stripe)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tokens') === 'purchased' && email) {
-      // Re-fetch balance after short delay for webhook processing
       setTimeout(() => {
         fetch(`${API}/tokens/balance?email=${encodeURIComponent(email)}`)
           .then(r => r.json())
           .then(d => { setTokenBalance(d.balance ?? 0); setNeedsTokens(false); })
           .catch(() => {});
       }, 2000);
-      // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, []);
+  }, [email]);
 
   // Scroll to results when they arrive
   useEffect(() => {
@@ -334,11 +335,12 @@ export function PageRoastPage() {
     }
   }, [result, compareResult]);
 
-  function submitEmail() {
-    const v = emailInput.trim().toLowerCase();
-    if (!v.includes('@')) return;
-    setEmail(v);
-    localStorage.setItem('bilko_pro_email', v);
+  async function authHeaders(): Promise<Record<string, string>> {
+    const token = await getToken();
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
   }
 
   async function roast() {
@@ -349,9 +351,10 @@ export function PageRoastPage() {
     setError(null);
     setNeedsTokens(false);
     try {
+      const headers = await authHeaders();
       const res = await fetch(`${API}/demos/page-roast`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ url: url.trim(), email }),
       });
       const data = await res.json();
@@ -374,9 +377,10 @@ export function PageRoastPage() {
     setError(null);
     setNeedsTokens(false);
     try {
+      const headers = await authHeaders();
       const res = await fetch(`${API}/demos/page-roast/compare`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ url_a: urlA.trim(), url_b: urlB.trim(), email }),
       });
       const data = await res.json();
@@ -417,42 +421,26 @@ export function PageRoastPage() {
         </div>
       </section>
 
-      {/* Email Gate */}
-      {!email && (
+      {/* Sign-in Gate */}
+      {!isSignedIn && (
         <section className="max-w-md mx-auto px-6 mb-12">
           <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-8 text-center">
-            <h2 className="text-lg font-bold text-warm-900 mb-2">Enter your email to start roasting</h2>
-            <p className="text-sm text-warm-500 mb-6">You'll get 3 free roasts. No password, no spam.</p>
-            <div className="flex gap-3">
-              <input
-                type="email"
-                value={emailInput}
-                onChange={e => setEmailInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') submitEmail(); }}
-                placeholder="you@example.com"
-                className="flex-1 px-4 py-3 rounded-xl border border-warm-200 bg-warm-50 text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-300 focus:border-fire-300 transition-all"
-              />
-              <button
-                onClick={submitEmail}
-                disabled={!emailInput.includes('@')}
-                className="px-6 py-3 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all"
-              >
-                Go
+            <h2 className="text-lg font-bold text-warm-900 mb-2">Sign in to start roasting</h2>
+            <p className="text-sm text-warm-500 mb-6">You'll get 3 free roasts. Takes 10 seconds.</p>
+            <SignInButton mode="modal">
+              <button className="px-8 py-3.5 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all text-lg">
+                Sign in to Roast
               </button>
-            </div>
+            </SignInButton>
           </div>
         </section>
       )}
 
-      {/* Input Section (only shown when email is set) */}
-      {email && (
+      {/* Input Section (only shown when signed in) */}
+      {isSignedIn && (
       <section className="max-w-2xl mx-auto px-6 -mt-2 mb-12">
         {/* Token Balance */}
-        <div className="flex items-center justify-between mb-4 px-1">
-          <div className="flex items-center gap-2 text-sm text-warm-500">
-            <span className="font-medium text-warm-700">{email}</span>
-            <button onClick={() => { setEmail(''); localStorage.removeItem('bilko_pro_email'); setTokenBalance(null); }} className="text-warm-400 hover:text-warm-600 text-xs">(change)</button>
-          </div>
+        <div className="flex items-center justify-end mb-4 px-1">
           {tokenBalance !== null && (
             <div className="text-sm font-semibold text-warm-700">
               {tokenBalance === 0 ? (

@@ -6,6 +6,7 @@ import { getDb } from '../db.js';
 import { askGemini } from '../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../services/stripe.js';
 import { getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount } from '../services/tokens.js';
+import { verifyClerkToken } from '../clerk.js';
 
 // ── Usage tracking utilities ──────────────────────────────────────
 
@@ -450,11 +451,12 @@ Write the verdict and suggested hybrid.`;
       return { error: 'URL is required.' };
     }
 
-    // Require email
-    const email = (body?.email ?? '').trim().toLowerCase();
+    // Authenticate: prefer Clerk token, fall back to body email
+    const clerkEmail = await verifyClerkToken(req.headers.authorization);
+    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
     if (!email || !email.includes('@')) {
       reply.status(401);
-      return { error: 'Email required to use PageRoast.', requiresEmail: true };
+      return { error: 'Sign in required to use PageRoast.', requiresEmail: true };
     }
 
     let parsedUrl: URL;
@@ -618,11 +620,12 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Both URLs are required.' };
     }
 
-    // Require email
-    const email = (body?.email ?? '').trim().toLowerCase();
+    // Authenticate: prefer Clerk token, fall back to body email
+    const clerkEmail = await verifyClerkToken(req.headers.authorization);
+    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
     if (!email || !email.includes('@')) {
       reply.status(401);
-      return { error: 'Email required to use PageRoast.', requiresEmail: true };
+      return { error: 'Sign in required to use PageRoast.', requiresEmail: true };
     }
 
     // Auto-grant free tokens for new users

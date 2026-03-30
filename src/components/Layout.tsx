@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
 const NAV_LINKS = [
   { to: '/projects', label: 'Projects' },
@@ -32,6 +33,22 @@ export function Layout() {
                 {label}
               </NavLink>
             ))}
+            <div className="ml-2">
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button className="px-4 py-2 text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 rounded-lg transition-all">
+                    Sign in
+                  </button>
+                </SignInButton>
+              </SignedOut>
+              <SignedIn>
+                <UserButton
+                  appearance={{
+                    elements: { avatarBox: 'w-8 h-8' }
+                  }}
+                />
+              </SignedIn>
+            </div>
           </div>
         </nav>
       </header>

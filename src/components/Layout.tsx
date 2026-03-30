@@ -81,7 +81,7 @@ export function Layout() {
                 <div className="flex flex-col gap-2">
                   <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">X / Twitter</a>
                   <a href="https://linkedin.com/in/bilkobibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">LinkedIn</a>
-                  <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">GitHub</a>
+                  <a href="https://github.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">GitHub</a>
                 </div>
               </div>
             </div>

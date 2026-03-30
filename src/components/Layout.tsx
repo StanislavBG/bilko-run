@@ -35,7 +35,7 @@ export function Layout() {
             ))}
             <div className="ml-2">
               <SignedOut>
-                <SignInButton mode="modal">
+                <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
                   <button className="px-4 py-2 text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 rounded-lg transition-all">
                     Sign in
                   </button>

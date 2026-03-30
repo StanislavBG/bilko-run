@@ -679,7 +679,7 @@ export function PageRoastPage() {
   return (
     <>
       {/* Hidden Clerk sign-in trigger */}
-      <SignInButton mode="modal">
+      <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
         <button ref={signInRef} className="hidden" aria-hidden="true" />
       </SignInButton>
 

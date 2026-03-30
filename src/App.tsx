@@ -79,7 +79,12 @@ function LegacyDashboard({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <ErrorBoundary>
-    <ClerkProvider publishableKey={CLERK_KEY} afterSignOutUrl="/">
+    <ClerkProvider
+      publishableKey={CLERK_KEY}
+      afterSignInUrl={window.location.pathname + window.location.search}
+      afterSignUpUrl={window.location.pathname + window.location.search}
+      afterSignOutUrl="/"
+    >
     <AuthProvider>
       <BrowserRouter>
         <Routes>

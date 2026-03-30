@@ -534,131 +534,153 @@ export function PageRoastPage() {
         <button ref={signInRef} className="hidden" aria-hidden="true" />
       </SignInButton>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-fire-50 via-warm-50 to-warm-100/50" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,107,26,0.08),transparent_60%)]" />
-        <div className="relative max-w-3xl mx-auto px-6 pt-16 pb-12 md:pt-24 md:pb-16 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-warm-900 leading-[1.1]">
-            Your landing page
+      {/* Hero Banner — everything in one dramatic section */}
+      <section className="relative overflow-hidden min-h-[70vh] flex items-center justify-center">
+        {/* Background layers */}
+        <div className="absolute inset-0 bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,107,26,0.15),transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,140,60,0.08),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(232,90,10,0.06),transparent_50%)]" />
+
+        {/* Ambient fire particles in background */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute animate-flame-rise opacity-20"
+              style={{
+                left: `${5 + Math.random() * 90}%`,
+                bottom: '-20px',
+                animationDelay: `${Math.random() * 4}s`,
+                animationDuration: `${2 + Math.random() * 3}s`,
+                animationIterationCount: 'infinite',
+                fontSize: `${20 + Math.random() * 24}px`,
+              }}
+            >
+              🔥
+            </div>
+          ))}
+        </div>
+
+        <div className="relative max-w-3xl mx-auto px-6 py-20 md:py-28 text-center">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.1] animate-slide-up">
+            Drop your URL.
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-fire-500 to-fire-700">
-              is about to get roasted.
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-fire-400 to-fire-600">
+              We'll roast it.
             </span>
-            <span className="inline-block animate-flame-flicker text-5xl md:text-6xl ml-2">🔥</span>
           </h1>
 
-          <p className="mt-5 text-lg text-warm-600 max-w-xl mx-auto leading-relaxed">
-            Paste a URL. AI tears apart your page across 4 CRO frameworks,
-            tells you exactly what's broken, and delivers a savage one-liner you'll want to screenshot.
+          <p className="mt-4 text-base md:text-lg text-warm-400 max-w-lg mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '80ms' }}>
+            AI scores your page across 4 CRO frameworks and delivers a savage one-liner you'll want to screenshot.
           </p>
-        </div>
-      </section>
 
-      {/* URL Input — always visible, login pops on submit if needed */}
-      <section className="max-w-2xl mx-auto px-6 -mt-2 mb-12">
-        {/* Token Balance (only when signed in) */}
-        {isSignedIn && tokenBalance !== null && (
-          <div className="flex items-center justify-end mb-3 px-1">
-            <div className="text-sm font-semibold text-warm-700">
-              {tokenBalance === 0 ? (
-                <span className="text-fire-600">0 credits</span>
-              ) : (
-                <>{tokenBalance} credit{tokenBalance !== 1 ? 's' : ''}</>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tab Toggle */}
-        <div className="flex gap-1 bg-warm-100 rounded-xl p-1 mb-6 w-fit mx-auto">
-          <button
-            onClick={() => { setTab('roast'); setCompareResult(null); }}
-            className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              tab === 'roast'
-                ? 'bg-white text-warm-900 shadow-sm'
-                : 'text-warm-500 hover:text-warm-700'
-            }`}
-          >
-            Roast
-          </button>
-          <button
-            onClick={() => { setTab('compare'); setResult(null); }}
-            className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              tab === 'compare'
-                ? 'bg-white text-warm-900 shadow-sm'
-                : 'text-warm-500 hover:text-warm-700'
-            }`}
-          >
-            A/B Compare
-          </button>
-        </div>
-
-        {/* Single Roast Input */}
-        {tab === 'roast' && (
-          <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-6">
-            <div className="flex gap-3">
-              <input
-                type="url"
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') roast(); }}
-                placeholder="https://your-landing-page.com"
-                className="flex-1 px-4 py-3.5 rounded-xl border border-warm-200 bg-warm-50 text-warm-900 placeholder:text-warm-400 text-base focus:outline-none focus:ring-2 focus:ring-fire-300 focus:border-fire-300 transition-all"
-              />
+          {/* ── THE URL INPUT — center of the universe ── */}
+          <div className="mt-10 animate-slide-up" style={{ animationDelay: '160ms' }}>
+            {/* Tab Toggle */}
+            <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
               <button
-                onClick={handleRoastClick}
-                disabled={loading || !url.trim()}
-                className="px-6 py-3.5 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-fire-500/20 hover:shadow-fire-500/30 transition-all whitespace-nowrap disabled:shadow-none"
+                onClick={() => { setTab('roast'); setCompareResult(null); }}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  tab === 'roast'
+                    ? 'bg-white text-warm-900 shadow-sm'
+                    : 'text-warm-400 hover:text-white'
+                }`}
               >
-                🔥 Roast Me
+                🔥 Roast
+              </button>
+              <button
+                onClick={() => { setTab('compare'); setResult(null); }}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  tab === 'compare'
+                    ? 'bg-white text-warm-900 shadow-sm'
+                    : 'text-warm-400 hover:text-white'
+                }`}
+              >
+                A/B Compare
+                <span className="ml-1.5 text-[10px] font-bold text-fire-400">2cr</span>
               </button>
             </div>
-            <p className="mt-2 text-xs text-warm-400 text-center">
-              Any public URL. Results in ~30 seconds. Feelings not guaranteed to survive.
-            </p>
-          </div>
-        )}
 
-        {/* Compare Input */}
-        {tab === 'compare' && (
-          <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-6">
-            <div className="grid md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-2 block">Page A</label>
-                <input
-                  type="url"
-                  value={urlA}
-                  onChange={e => setUrlA(e.target.value)}
-                  placeholder="https://page-a.com"
-                  className="w-full px-4 py-3 rounded-xl border border-warm-200 bg-warm-50 text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-300 focus:border-fire-300 transition-all"
-                />
+            {/* Single Roast Input */}
+            {tab === 'roast' && (
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl shadow-fire-900/20 animate-pulse-glow">
+                <div className="flex gap-3">
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={e => setUrl(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRoastClick(); }}
+                    placeholder="https://your-landing-page.com"
+                    className="flex-1 px-5 py-4 rounded-xl border-0 bg-white text-warm-900 placeholder:text-warm-400 text-base md:text-lg focus:outline-none focus:ring-2 focus:ring-fire-400 shadow-inner transition-all"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleRoastClick}
+                    disabled={loading || !url.trim()}
+                    className="px-6 md:px-8 py-4 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 disabled:from-warm-500 disabled:to-warm-600 disabled:cursor-not-allowed text-white font-black text-base md:text-lg rounded-xl shadow-lg shadow-fire-600/30 hover:shadow-fire-500/50 transition-all whitespace-nowrap disabled:shadow-none hover:-translate-y-0.5"
+                  >
+                    🔥 Roast Me
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-warm-500">
+                  Any public URL &middot; ~30 seconds &middot; feelings not guaranteed to survive
+                </p>
               </div>
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-2 block">Page B</label>
-                <input
-                  type="url"
-                  value={urlB}
-                  onChange={e => setUrlB(e.target.value)}
-                  placeholder="https://page-b.com"
-                  className="w-full px-4 py-3 rounded-xl border border-warm-200 bg-warm-50 text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-300 focus:border-fire-300 transition-all"
-                />
+            )}
+
+            {/* Compare Input */}
+            {tab === 'compare' && (
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl shadow-fire-900/20">
+                <div className="grid md:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1.5 block text-left">Page A</label>
+                    <input
+                      type="url"
+                      value={urlA}
+                      onChange={e => setUrlA(e.target.value)}
+                      placeholder="https://page-a.com"
+                      className="w-full px-4 py-3 rounded-xl border-0 bg-white text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-400 shadow-inner transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1.5 block text-left">Page B</label>
+                    <input
+                      type="url"
+                      value={urlB}
+                      onChange={e => setUrlB(e.target.value)}
+                      placeholder="https://page-b.com"
+                      className="w-full px-4 py-3 rounded-xl border-0 bg-white text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-400 shadow-inner transition-all"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleCompareClick}
+                  disabled={loading || !urlA.trim() || !urlB.trim()}
+                  className="w-full py-3.5 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 disabled:from-warm-500 disabled:to-warm-600 disabled:cursor-not-allowed text-white font-black rounded-xl shadow-lg shadow-fire-600/30 transition-all disabled:shadow-none"
+                >
+                  🔥 Compare Pages
+                </button>
+                <p className="mt-3 text-xs text-warm-500">
+                  Costs 2 credits &middot; scores both pages &middot; picks a winner
+                </p>
               </div>
-            </div>
-            <button
-              onClick={handleCompareClick}
-              disabled={loading || !urlA.trim() || !urlB.trim()}
-              className="w-full py-3.5 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all disabled:shadow-none"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  Comparing...
-                </span>
-              ) : 'Compare Pages'}
-            </button>
+            )}
           </div>
-        )}
+
+          {/* Token balance pill */}
+          {isSignedIn && tokenBalance !== null && (
+            <div className="mt-5 animate-fade-in">
+              <span className={`inline-block px-4 py-1.5 rounded-full text-xs font-semibold ${
+                tokenBalance === 0
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  : 'bg-white/10 text-warm-300 border border-white/20'
+              }`}>
+                {tokenBalance === 0 ? '0 credits — buy more below' : `${tokenBalance} credit${tokenBalance !== 1 ? 's' : ''} remaining`}
+              </span>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Roasting overlay */}

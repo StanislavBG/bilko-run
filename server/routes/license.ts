@@ -48,7 +48,7 @@ export function registerLicenseRoutes(app: FastifyInstance): void {
       // Key not in DB — could be Render cold start DB wipe. Guide user to self-serve recovery.
       const isValidFormat = /^CG-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/i.test(key);
       if (isValidFormat) {
-        return { valid: false, reason: 'not_found', message: 'Key not found. If you are a Pro subscriber, retrieve your key at: https://content-grade.onrender.com/my-license' };
+        return { valid: false, reason: 'not_found', message: 'Key not found. If you are a Pro subscriber, retrieve your key at: https://bilko.run/my-license' };
       }
       return { valid: false, reason: 'format_invalid', message: 'Invalid license key format.' };
     }
@@ -62,7 +62,7 @@ export function registerLicenseRoutes(app: FastifyInstance): void {
     if (result.productKey === 'contentgrade_pro' && result.email) {
       const subActive = await hasActiveSubscriptionLive(result.email);
       if (!subActive) {
-        return { valid: false, reason: 'subscription_expired', message: 'Subscription is no longer active. Please renew at content-grade.onrender.com.' };
+        return { valid: false, reason: 'subscription_expired', message: 'Subscription is no longer active. Please renew at bilko.run.' };
       }
     }
 

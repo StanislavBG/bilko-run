@@ -58,15 +58,6 @@ const PROJECTS: Project[] = [
     features: ['Subject line scoring', 'Body copy analysis', 'Open rate prediction', 'A/B variants'],
   },
   {
-    slug: 'content-grade',
-    name: 'ContentGrade',
-    tagline: 'Holistic content quality scoring',
-    description: 'The catch-all content analyzer. Score blog posts, landing pages, ad copy — anything text-based — across six quality dimensions.',
-    status: 'coming-soon',
-    category: 'content',
-    features: ['6 quality dimensions', 'Batch analysis', 'CLI + web interface', 'Score tracking'],
-  },
-  {
     slug: 'stepproof',
     name: 'Stepproof',
     tagline: 'Behavioral regression tests for AI workflows',

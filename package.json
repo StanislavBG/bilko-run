@@ -21,15 +21,15 @@
     "seo",
     "headline",
     "landing-page",
-    "cli"
+    "page-roast"
   ],
-  "homepage": "https://www.npmjs.com/package/content-grade",
+  "homepage": "https://bilko.run",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Content-Grade/Content-Grade.git"
+    "url": "git+https://github.com/StanislavBG/bilko-run.git"
   },
   "bugs": {
-    "url": "https://github.com/Content-Grade/Content-Grade/issues"
+    "url": "https://github.com/StanislavBG/bilko-run/issues"
   },
   "license": "MIT",
   "engines": {

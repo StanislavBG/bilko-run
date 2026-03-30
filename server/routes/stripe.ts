@@ -15,7 +15,7 @@ function successHtml(title: string, body: string): string {
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>${title} — Content-Grade</title>
+  <title>${title} — Bilko.run</title>
   <style>
     body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#e8e8e8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
     .card{max-width:600px;width:90%;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:40px}
@@ -28,7 +28,7 @@ function successHtml(title: string, body: string): string {
   <div class="card">
     <h1>${title}</h1>
     ${body}
-    <p><a href="https://content-grade.onrender.com">← Back to Content-Grade</a></p>
+    <p><a href="https://bilko.run">← Back to Bilko.run</a></p>
   </div>
 </body>
 </html>`;
@@ -90,7 +90,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         upsertCustomer(email, stripeCustomerId);
       }
 
-      const publicUrl = process.env.PUBLIC_URL || 'https://content-grade.onrender.com';
+      const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
       const defaultSuccessUrl = priceType === 'pageroast_tokens'
         ? `${publicUrl}/projects/page-roast?tokens=purchased`
         : `${publicUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -236,7 +236,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     }
 
     try {
-      const publicUrl = process.env.PUBLIC_URL || 'https://content-grade.onrender.com';
+      const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
       const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
         return_url: body?.returnUrl ?? publicUrl,
@@ -260,7 +260,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     const isActive = await hasActiveSubscriptionLive(email);
     if (!isActive) {
       reply.status(403);
-      return { error: 'No active Content-Grade Pro subscription found for this email.' };
+      return { error: 'No active Bilko.run Pro subscription found for this email.' };
     }
 
     // Retroactively generate a key for subscribers who paid before this feature existed
@@ -296,7 +296,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 
     if (!sessionId) {
       reply.type('text/html').status(400);
-      return successHtml('Something went wrong', '<p>No checkout session found. Please contact support at content-grade.onrender.com.</p>');
+      return successHtml('Something went wrong', '<p>No checkout session found. Please contact support at bilko.run.</p>');
     }
 
     const stripe = getStripe();
@@ -328,7 +328,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         <p>Your license key:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${licenseKey}</pre>
         <p>Activate it in your terminal:</p>
-        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">content-grade activate ${licenseKey}</pre>
+        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${licenseKey}</pre>
         <p style="font-size:0.9em;color:#888">
           Retrieve it any time: <a href="/my-license?email=${encodeURIComponent(email)}">/my-license?email=${encodeURIComponent(email)}</a>
         </p>
@@ -352,7 +352,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       if (!isActive) {
         reply.type('text/html');
         return successHtml('No active subscription found', `
-          <p>No active Content-Grade Pro subscription was found for <strong>${email}</strong>.</p>
+          <p>No active Bilko.run Pro subscription was found for <strong>${email}</strong>.</p>
           <p>If you just paid, it can take up to a minute for the webhook to process. Try again shortly.</p>
           <p>If you believe this is an error, contact support with your Stripe receipt.</p>
           <p><a href="/my-license">Try a different email</a></p>
@@ -361,12 +361,12 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       const customerId = getCustomerStripeId(email);
       const licenseKey = upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
       reply.type('text/html');
-      return successHtml('Your Content-Grade Pro License', `
+      return successHtml('Your Bilko.run Pro License', `
         <p>Active Pro subscription confirmed for <strong>${email}</strong>.</p>
         <p>Your license key:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${licenseKey}</pre>
         <p>Activate it in your terminal:</p>
-        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">content-grade activate ${licenseKey}</pre>
+        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${licenseKey}</pre>
         <p style="font-size:0.9em;color:#888">
           Bookmark this page to retrieve your key any time.<br>
           Replace the email in the URL: <code>/my-license?email=${encodeURIComponent(email)}</code>
@@ -381,7 +381,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Retrieve License Key — Content-Grade</title>
+  <title>Retrieve License Key — Bilko.run</title>
   <style>
     body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#e8e8e8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
     .card{max-width:480px;width:90%;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:40px}
@@ -396,7 +396,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 <body>
   <div class="card">
     <h1>Retrieve Your License Key</h1>
-    <p>Enter the email address you used when purchasing Content-Grade Pro.</p>
+    <p>Enter the email address you used when purchasing Bilko.run Pro.</p>
     <form method="GET" action="/my-license">
       <input type="email" name="email" placeholder="you@example.com" required autofocus/>
       <button type="submit">Get My License Key</button>

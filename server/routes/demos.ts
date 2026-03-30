@@ -1,7 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { createHash } from 'crypto';
-import * as https from 'https';
-import * as http from 'http';
 import { getDb } from '../db.js';
 import { askGemini } from '../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../services/stripe.js';
@@ -18,7 +16,7 @@ const PRO_TIER_LIMIT = 1_000_000;
 const BUSINESS_TIER_LIMIT = 1_000_000;
 const TEAM_TIER_LIMIT = 1_000_000;
 const HEADLINE_GRADER_ENDPOINT = 'headline-grader';
-const UPGRADE_URL = 'https://content-grade.github.io/Content-Grade/#pricing';
+const UPGRADE_URL = 'https://bilko.run/pricing';
 
 const TIER_LIMITS: Record<string, number> = {
   free: FREE_TIER_LIMIT,
@@ -31,7 +29,7 @@ function freeGateMsg(_what: string): string {
   return `Free limit reached (${FREE_TIER_LIMIT} per session). Upgrade to Pro for unlimited: ${UPGRADE_URL}`;
 }
 function paidGateMsg(limit: number): string {
-  return `Rate limit reached (${limit}/day). Upgrade for more at content-grade.github.io/Content-Grade/#pricing. Resets at midnight UTC.`;
+  return `Rate limit reached (${limit}/day). Upgrade for more at bilko.run/pricing. Resets at midnight UTC.`;
 }
 
 function hashIp(ip: string): string {
@@ -166,7 +164,7 @@ export function registerDemoRoutes(app: FastifyInstance): void {
         isPro: rate.isPro,
         remaining: 0,
         limit: rate.limit,
-        message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -301,7 +299,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         remaining: 0,
         limit: hgcRate.limit,
         message: hgcRate.isPro
-          ? paidGateMsg(hgcRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+          ? paidGateMsg(hgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -778,7 +776,7 @@ Write the verdict and analysis.`;
         isPro: _asRate.isPro,
         remaining: 0,
         limit: _asRate.limit,
-        message: _asRate.isPro ? paidGateMsg(_asRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: _asRate.isPro ? paidGateMsg(_asRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -884,7 +882,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         isPro: ascRate.isPro,
         remaining: 0,
         limit: ascRate.limit,
-        message: ascRate.isPro ? paidGateMsg(ascRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: ascRate.isPro ? paidGateMsg(ascRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -1038,7 +1036,7 @@ Write the verdict, suggested hybrid, and strategic analysis.`;
         isPro: _tgRate.isPro,
         remaining: 0,
         limit: _tgRate.limit,
-        message: _tgRate.isPro ? paidGateMsg(_tgRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: _tgRate.isPro ? paidGateMsg(_tgRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -1144,7 +1142,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         isPro: tgcRate.isPro,
         remaining: 0,
         limit: tgcRate.limit,
-        message: tgcRate.isPro ? paidGateMsg(tgcRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: tgcRate.isPro ? paidGateMsg(tgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -1298,7 +1296,7 @@ Write the verdict, suggested hybrid hook, and strategic analysis.`;
         isPro: _efRate.isPro,
         remaining: 0,
         limit: _efRate.limit,
-        message: _efRate.isPro ? paidGateMsg(_efRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: _efRate.isPro ? paidGateMsg(_efRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -1419,7 +1417,7 @@ Make each email feel distinct — different frameworks, different emotional leve
         isPro: efcRate.isPro,
         remaining: 0,
         limit: efcRate.limit,
-        message: efcRate.isPro ? paidGateMsg(efcRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: efcRate.isPro ? paidGateMsg(efcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -1591,7 +1589,7 @@ Overall winner: Sequence ${winner} by ${margin} points.`;
         isPro: _adRate.isPro,
         remaining: 0,
         limit: _adRate.limit,
-        message: _adRate.isPro ? paidGateMsg(_adRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: _adRate.isPro ? paidGateMsg(_adRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 
@@ -1694,7 +1692,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         isPro: adcRate.isPro,
         remaining: 0,
         limit: adcRate.limit,
-        message: adcRate.isPro ? paidGateMsg(adcRate.limit) : freeGateMsg('Upgrade for more at content-grade.onrender.com/#pricing'),
+        message: adcRate.isPro ? paidGateMsg(adcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
 

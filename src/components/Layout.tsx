@@ -1,10 +1,58 @@
+import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
-const NAV_LINKS = [
-  { to: '/projects', label: 'Projects' },
-  { to: '/projects/page-roast', label: 'PageRoast' },
+const PROJECT_LINKS = [
+  { to: '/projects/page-roast', label: 'PageRoast', badge: '🔥' },
+  { to: '/projects', label: 'All Projects' },
 ] as const;
+
+function ProjectsDropdown() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+          open ? 'bg-warm-200/60 text-warm-900' : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
+        }`}
+      >
+        Projects
+        <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-52 bg-white rounded-xl border border-warm-200/60 shadow-lg shadow-warm-200/30 py-1.5 animate-fade-in z-50">
+          {PROJECT_LINKS.map(({ to, label, ...rest }) => (
+            <Link
+              key={to}
+              to={to}
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-between px-4 py-2.5 text-sm text-warm-700 hover:bg-warm-50 hover:text-fire-600 transition-colors"
+            >
+              {label}
+              {'badge' in rest && <span className="text-xs">{(rest as any).badge}</span>}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Layout() {
   return (
@@ -18,21 +66,21 @@ export function Layout() {
           </Link>
 
           <div className="flex items-center gap-1">
-            {NAV_LINKS.map(({ to, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                    isActive
-                      ? 'bg-warm-200/60 text-warm-900'
-                      : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
-                  }`
-                }
-              >
-                {label}
-              </NavLink>
-            ))}
+            <ProjectsDropdown />
+
+            <NavLink
+              to="/pricing"
+              className={({ isActive }) =>
+                `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  isActive
+                    ? 'bg-warm-200/60 text-warm-900'
+                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
+                }`
+              }
+            >
+              Pricing
+            </NavLink>
+
             <div className="ml-2">
               <SignedOut>
                 <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
@@ -74,6 +122,7 @@ export function Layout() {
                 <div className="flex flex-col gap-2">
                   <Link to="/projects/page-roast" className="text-warm-500 hover:text-fire-600 transition-colors">PageRoast</Link>
                   <Link to="/projects" className="text-warm-500 hover:text-fire-600 transition-colors">All Projects</Link>
+                  <Link to="/pricing" className="text-warm-500 hover:text-fire-600 transition-colors">Pricing</Link>
                 </div>
               </div>
               <div>

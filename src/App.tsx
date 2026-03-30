@@ -5,6 +5,7 @@ import { Layout } from './components/Layout.js';
 import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { PageRoastPage } from './pages/PageRoastPage.js';
+import { PricingPage } from './pages/PricingPage.js';
 
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
@@ -93,6 +94,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/page-roast" element={<PageRoastPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
           </Route>
 
           {/* ── Legacy dashboard at /app ── */}

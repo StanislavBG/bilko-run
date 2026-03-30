@@ -10,6 +10,27 @@ import { PageRoastPage } from './pages/PageRoastPage.js';
 import { AuthProvider } from './hooks/useAuth.js';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
+
+// Error boundary so Clerk init failures don't blank the entire site
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(err: Error) { console.error('[ErrorBoundary]', err); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', color: '#4a3d33' }}>
+          <h1 style={{ fontSize: 24, fontWeight: 800 }}>Something went wrong</h1>
+          <p style={{ marginTop: 8, color: '#8c7660' }}>Try refreshing the page.</p>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 16, padding: '10px 24px', background: '#ff6b1a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
+            Refresh
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { HeadlineGraderView } from './views/HeadlineGraderView.js';
 import { PageRoastView } from './views/PageRoastView.js';
 import { AdScorerView } from './views/AdScorerView.js';
@@ -57,7 +78,8 @@ function LegacyDashboard({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <ClerkProvider publishableKey={CLERK_KEY}>
+    <ErrorBoundary>
+    <ClerkProvider publishableKey={CLERK_KEY} afterSignOutUrl="/">
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -84,5 +106,6 @@ export default function App() {
       </BrowserRouter>
     </AuthProvider>
     </ClerkProvider>
+    </ErrorBoundary>
   );
 }

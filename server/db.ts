@@ -146,6 +146,36 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_token_balances_email ON token_balances(email);
     CREATE INDEX IF NOT EXISTS idx_token_transactions_email ON token_transactions(email);
+
+    CREATE TABLE IF NOT EXISTS social_roast_rivals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name_a TEXT NOT NULL,
+      url_a TEXT NOT NULL,
+      x_handle_a TEXT,
+      name_b TEXT NOT NULL,
+      url_b TEXT NOT NULL,
+      x_handle_b TEXT,
+      category TEXT,
+      location TEXT,
+      last_roasted_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS social_roast_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rival_pair_id INTEGER REFERENCES social_roast_rivals(id),
+      platform TEXT DEFAULT 'x',
+      post_text TEXT NOT NULL,
+      score_a INTEGER,
+      score_b INTEGER,
+      winner TEXT,
+      roast_a TEXT,
+      roast_b TEXT,
+      status TEXT DEFAULT 'draft',
+      scheduled_for TEXT,
+      posted_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Additive migrations for existing DBs (safe to re-run — fails silently if column exists)

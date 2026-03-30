@@ -9,6 +9,7 @@ import { registerDemoRoutes } from './routes/demos.js';
 import { registerStripeRoutes } from './routes/stripe.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerLicenseRoutes } from './routes/license.js';
+import { registerSocialRoutes } from './routes/social.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -62,6 +63,7 @@ registerDemoRoutes(app);
 registerStripeRoutes(app);
 registerAnalyticsRoutes(app);
 registerLicenseRoutes(app);
+registerSocialRoutes(app);
 
 // Health check
 app.get('/api/health', async () => ({

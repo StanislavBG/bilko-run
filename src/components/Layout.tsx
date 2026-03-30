@@ -80,7 +80,7 @@ export function Layout() {
                 <h4 className="font-semibold text-warm-700 mb-3">Connect</h4>
                 <div className="flex flex-col gap-2">
                   <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">X / Twitter</a>
-                  <a href="https://linkedin.com/in/bilkobibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">LinkedIn</a>
+                  <a href="https://www.linkedin.com/in/bilko-bibitkov-23b5b13b1/" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">LinkedIn</a>
                   <a href="https://github.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">GitHub</a>
                 </div>
               </div>

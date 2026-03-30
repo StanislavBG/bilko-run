@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 const SOCIAL_LINKS = [
   { href: 'https://x.com/BilkoBibitkov', label: 'X / Twitter', icon: 'x' },
-  { href: 'https://linkedin.com/in/bilkobibitkov', label: 'LinkedIn', icon: 'linkedin' },
+  { href: 'https://www.linkedin.com/in/bilko-bibitkov-23b5b13b1/', label: 'LinkedIn', icon: 'linkedin' },
   { href: 'https://github.com/BilkoBibitkov', label: 'GitHub', icon: 'github' },
 ] as const;
 

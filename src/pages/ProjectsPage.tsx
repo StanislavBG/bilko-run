@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 interface Project {
@@ -104,6 +105,11 @@ const CATEGORY_LABELS = {
 } as const;
 
 export function ProjectsPage() {
+  useEffect(() => {
+    document.title = 'Projects — bilko.run';
+    return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
+  }, []);
+
   return (
     <>
       {/* Header */}

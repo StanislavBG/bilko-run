@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useUser, SignInButton, useAuth } from '@clerk/clerk-react';
+import { useState, useRef, useEffect } from 'react';
+import { useUser, SignInButton, useAuth, useClerk } from '@clerk/clerk-react';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -42,28 +42,39 @@ function FireParticles() {
   );
 }
 
-function RoastingOverlay() {
+function RoastingOverlay({ onCancel }: { onCancel: () => void }) {
   const [phraseIdx, setPhraseIdx] = useState(0);
+  const [showCancel, setShowCancel] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setPhraseIdx(i => (i + 1) % ROAST_PHRASES.length);
     }, 3000);
-    return () => clearInterval(interval);
+    // Show cancel after 10s in case it's hanging
+    const cancelTimer = setTimeout(() => setShowCancel(true), 10000);
+    return () => { clearInterval(interval); clearTimeout(cancelTimer); };
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-warm-900/80 backdrop-blur-sm">
-      <div className="relative text-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-warm-900/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Roasting in progress">
+      <div className="relative text-center max-w-sm mx-4">
         <FireParticles />
         <div className="relative z-10">
-          <div className="text-8xl mb-6 animate-flame-flicker">🔥</div>
-          <p className="text-3xl font-black text-white mb-3 animate-roast-shake">
+          <div className="text-6xl md:text-8xl mb-6 animate-flame-flicker">🔥</div>
+          <p className="text-2xl md:text-3xl font-black text-white mb-3 animate-roast-shake">
             ROASTING...
           </p>
-          <p className="text-lg text-fire-300 animate-fade-in" key={phraseIdx}>
+          <p className="text-base md:text-lg text-fire-300 animate-fade-in" key={phraseIdx}>
             {ROAST_PHRASES[phraseIdx]}
           </p>
+          {showCancel && (
+            <button
+              onClick={onCancel}
+              className="mt-6 px-4 py-2 text-sm text-warm-400 hover:text-white border border-warm-600 hover:border-warm-400 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -148,8 +159,13 @@ function shareToX(text: string) {
   );
 }
 
-function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── Components ───────────────────────────────────────────────────────────────
@@ -206,7 +222,7 @@ function ScoreHero({ result, url }: { result: RoastResult; url: string }) {
           Share on X
         </button>
         <button
-          onClick={() => { copyToClipboard(shareText); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+          onClick={async () => { const ok = await copyToClipboard(shareText); setCopied(ok); if (ok) setTimeout(() => setCopied(false), 2000); }}
           className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-warm-300 hover:border-warm-400 text-warm-700 text-sm font-semibold rounded-lg transition-colors"
         >
           {copied ? 'Copied!' : 'Copy Result'}
@@ -378,9 +394,16 @@ function BuyTokensCard({ email }: { email: string }) {
 }
 
 export function PageRoastPage() {
-  const { isSignedIn, user } = useUser();
+  const { isSignedIn, user, isLoaded: userLoaded } = useUser();
   const { getToken } = useAuth();
+  const { loaded: clerkLoaded } = useClerk();
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
+
+  // Set page title
+  useEffect(() => {
+    document.title = 'PageRoast — Free Landing Page Audit | bilko.run';
+    return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
+  }, []);
 
   const [tab, setTab] = useState<'roast' | 'compare'>('roast');
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
@@ -420,7 +443,7 @@ export function PageRoastPage() {
   // Scroll to results when they arrive
   useEffect(() => {
     if ((result || compareResult) && resultRef.current) {
-      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [result, compareResult]);
 
@@ -511,8 +534,17 @@ export function PageRoastPage() {
         </div>
       </section>
 
+      {/* Loading state while Clerk initializes */}
+      {(!clerkLoaded || !userLoaded) && (
+        <section className="max-w-md mx-auto px-6 mb-12">
+          <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-8 text-center">
+            <div className="animate-pulse text-warm-400">Loading...</div>
+          </div>
+        </section>
+      )}
+
       {/* Sign-in Gate */}
-      {!isSignedIn && (
+      {clerkLoaded && userLoaded && !isSignedIn && (
         <section className="max-w-md mx-auto px-6 mb-12">
           <div className="bg-white rounded-2xl border border-warm-200/60 shadow-lg shadow-warm-200/20 p-8 text-center">
             <div className="text-4xl mb-3">🔥</div>
@@ -636,7 +668,7 @@ export function PageRoastPage() {
       )}
 
       {/* Roasting overlay */}
-      {loading && <RoastingOverlay />}
+      {loading && <RoastingOverlay onCancel={() => setLoading(false)} />}
 
       {/* Error */}
       {error && (

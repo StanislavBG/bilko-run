@@ -121,17 +121,22 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     const rawBody = (req as any).rawBody as Buffer | undefined;
     const sig = req.headers['stripe-signature'] as string | undefined;
 
+    const isProd = process.env.NODE_ENV === 'production';
     let event: any;
     try {
       if (webhookSecret && rawBody && sig) {
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+      } else if (isProd) {
+        console.error('[Stripe] CRITICAL: Webhook received without signature verification in production');
+        reply.status(400);
+        return { error: 'Webhook signature required.' };
       } else {
-        if (!webhookSecret) console.warn('[Stripe] STRIPE_WEBHOOK_SECRET not set — skipping signature verification (dev mode)');
+        console.warn('[Stripe] STRIPE_WEBHOOK_SECRET not set — skipping signature verification (dev mode)');
         event = req.body;
       }
     } catch (err: any) {
       reply.status(400);
-      return { error: `Webhook signature failed: ${err.message}` };
+      return { error: 'Webhook signature verification failed.' };
     }
 
     try {

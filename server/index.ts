@@ -23,7 +23,10 @@ try {
   console.error('[DB] SQLite init failed:', err);
 }
 
-const app = Fastify({ logger: { level: 'warn' } });
+const app = Fastify({
+  logger: { level: 'warn' },
+  bodyLimit: 2 * 1024 * 1024, // 2MB max body
+});
 
 // Raw body for Stripe webhook signature verification
 app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
@@ -35,9 +38,23 @@ app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, 
   }
 });
 
+// CORS — restrict to bilko.run in production
 await app.register(cors, {
-  origin: true,
+  origin: isProd
+    ? ['https://bilko.run', 'https://www.bilko.run', 'https://clerk.bilko.run', 'https://accounts.bilko.run']
+    : true,
   credentials: true,
+});
+
+// Security headers
+app.addHook('onSend', async (_request, reply) => {
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('X-XSS-Protection', '0');
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (isProd) {
+    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
 });
 
 // Register API routes

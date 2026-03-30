@@ -6,10 +6,11 @@ export async function askGemini(prompt: string, opts?: {
 }): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured');
+    throw new Error('AI service not configured.');
   }
 
-  const url = `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  // Pass API key via header, not URL param (avoids key leaking in logs/errors)
+  const url = `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent`;
 
   const body: Record<string, unknown> = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -29,21 +30,34 @@ export async function askGemini(prompt: string, opts?: {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
 
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Gemini API error ${res.status}: ${text.slice(0, 200)}`);
+      const status = res.status;
+      // Log details server-side only, return generic error to client
+      const detail = await res.text().catch(() => '');
+      console.error(`[Gemini] API error ${status}: ${detail.slice(0, 200)}`);
+      throw new Error(`AI service error (${status}). Please try again.`);
     }
 
-    const data = await res.json() as any;
+    let data: any;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!text) {
-      throw new Error('Gemini returned empty response');
+    if (!text || typeof text !== 'string') {
+      console.error('[Gemini] Unexpected response structure:', JSON.stringify(data).slice(0, 300));
+      throw new Error('AI returned an unexpected response.');
     }
 
     return text.trim();

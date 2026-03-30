@@ -37,26 +37,26 @@ export function grantFreeTokens(email: string, amount: number = FREE_TOKEN_GRANT
   return txn();
 }
 
-/** Deduct tokens. Returns { success, balance }. Fails if insufficient balance. */
+/** Deduct tokens atomically. Returns { success, balance }. Fails if insufficient balance. */
 export function deductToken(email: string, cost: number = 1, reason: string = 'page_roast'): { success: boolean; balance: number } {
   const db = getDb();
   const txn = db.transaction(() => {
-    const row = db.prepare('SELECT balance FROM token_balances WHERE email = ?').get(email) as { balance: number } | undefined;
-    const currentBalance = row?.balance ?? 0;
+    // Atomic deduction — WHERE clause prevents negative balance even under concurrency
+    const result = db.prepare(
+      'UPDATE token_balances SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE email = ? AND balance >= ?'
+    ).run(cost, email, cost);
 
-    if (currentBalance < cost) {
-      return { success: false, balance: currentBalance };
+    if (result.changes === 0) {
+      const row = db.prepare('SELECT balance FROM token_balances WHERE email = ?').get(email) as { balance: number } | undefined;
+      return { success: false, balance: row?.balance ?? 0 };
     }
-
-    db.prepare(
-      'UPDATE token_balances SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?'
-    ).run(cost, email);
 
     db.prepare(
       'INSERT INTO token_transactions (email, amount, reason) VALUES (?, ?, ?)'
     ).run(email, -cost, reason);
 
-    return { success: true, balance: currentBalance - cost };
+    const row = db.prepare('SELECT balance FROM token_balances WHERE email = ?').get(email) as { balance: number } | undefined;
+    return { success: true, balance: row?.balance ?? 0 };
   });
 
   return txn();

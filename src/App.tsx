@@ -9,7 +9,7 @@ import { PageRoastPage } from './pages/PageRoastPage.js';
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
 
-const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_aGVhbHRoeS1veC0yNC5jbGVyay5hY2NvdW50cy5kZXYk';
+const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
 import { HeadlineGraderView } from './views/HeadlineGraderView.js';
 import { PageRoastView } from './views/PageRoastView.js';
 import { AdScorerView } from './views/AdScorerView.js';

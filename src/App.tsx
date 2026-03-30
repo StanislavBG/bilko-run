@@ -12,23 +12,13 @@ import { AuthProvider } from './hooks/useAuth.js';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
 
-// Error boundary so Clerk init failures don't blank the entire site
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
-  state = { error: null as Error | null };
-  static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidCatch(err: Error) { console.error('[ErrorBoundary]', err); }
+// Error boundary — renders children without auth if Clerk fails
+class ClerkErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err: Error) { console.error('[Clerk init failed, running without auth]', err.message); }
   render() {
-    if (this.state.error) {
-      return (
-        <div style={{ padding: 40, textAlign: 'center', fontFamily: 'Inter, system-ui, sans-serif', color: '#4a3d33' }}>
-          <h1 style={{ fontSize: 24, fontWeight: 800 }}>Something went wrong</h1>
-          <p style={{ marginTop: 8, color: '#8c7660' }}>Try refreshing the page.</p>
-          <button onClick={() => window.location.reload()} style={{ marginTop: 16, padding: '10px 24px', background: '#ff6b1a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
-            Refresh
-          </button>
-        </div>
-      );
-    }
+    if (this.state.hasError) return this.props.fallback;
     return this.props.children;
   }
 }
@@ -77,15 +67,8 @@ function LegacyDashboard({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
+function AppRoutes() {
   return (
-    <ErrorBoundary>
-    <ClerkProvider
-      publishableKey={CLERK_KEY}
-      afterSignInUrl={window.location.pathname + window.location.search}
-      afterSignUpUrl={window.location.pathname + window.location.search}
-      afterSignOutUrl="/"
-    >
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -112,7 +95,20 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
-    </ClerkProvider>
-    </ErrorBoundary>
+  );
+}
+
+export default function App() {
+  return (
+    <ClerkErrorBoundary fallback={<AppRoutes />}>
+      <ClerkProvider
+        publishableKey={CLERK_KEY}
+        afterSignInUrl={window.location.pathname + window.location.search}
+        afterSignUpUrl={window.location.pathname + window.location.search}
+        afterSignOutUrl="/"
+      >
+        <AppRoutes />
+      </ClerkProvider>
+    </ClerkErrorBoundary>
   );
 }

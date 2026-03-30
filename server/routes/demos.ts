@@ -430,6 +430,14 @@ Write the verdict and suggested hybrid.`;
 
   // ── Page Roast ──────────────────────────────────────
 
+  // ── Recent roasts feed (public) ─────────────────────────────────
+  app.get('/api/roasts/recent', async () => {
+    const rows = getDb().prepare(
+      'SELECT url, score, grade, roast, created_at FROM roast_history ORDER BY created_at DESC LIMIT 20'
+    ).all();
+    return rows;
+  });
+
   // ── Token balance endpoint ──────────────────────────────────────
   app.get('/api/tokens/balance', async (req, reply) => {
     const email = ((req.query as any)?.email ?? '').trim().toLowerCase();
@@ -560,6 +568,12 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         if (!jsonMatch) throw new Error('Could not parse audit response.');
         parsed = JSON.parse(jsonMatch[0]);
       }
+
+      // Save to history for the roast feed (anonymize URL to domain only)
+      try {
+        const domain = parsedUrl.hostname.replace(/^www\./, '');
+        getDb().prepare('INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)').run(domain, parsed.total_score, parsed.grade, parsed.roast);
+      } catch { /* best effort */ }
 
       const balance = getTokenBalance(email);
       return { ...parsed, usage: { balance, gated: false } };

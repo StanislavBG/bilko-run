@@ -170,6 +170,145 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 // ── Components ───────────────────────────────────────────────────────────────
 
+// ── Example roast (baked in, no API call) ────────────────────────────────────
+
+const EXAMPLE_ROAST: RoastResult = {
+  total_score: 62,
+  grade: 'C+',
+  section_scores: {
+    hero: { score: 18, max: 25, feedback: 'Headline is clear but the subheadline reads like a legal disclaimer.', fixes: ['Shorten the subheadline to one benefit-driven sentence.'] },
+    social_proof: { score: 12, max: 25, feedback: 'Two testimonials from people named "J." is not social proof, it\'s a mystery novel.', fixes: ['Add full names, photos, and company logos.'] },
+    clarity: { score: 17, max: 25, feedback: 'Passes the 5-second test but only because there\'s barely anything on the page.', fixes: ['Add a "who this is for" line above the fold.'] },
+    conversion: { score: 15, max: 25, feedback: 'One CTA buried below three paragraphs of features nobody asked for.', fixes: ['Move CTA above the fold. Add a second one after social proof.'] },
+  },
+  roast: "Your landing page has the conversion power of a 'Please take one' sign at a dentist's office.",
+  top_fixes: [
+    'Move the CTA above the fold — nobody scrolls to pay you.',
+    'Replace "J." testimonials with real humans or delete them entirely.',
+    'Your hero subheadline is 47 words. Make it 12.',
+  ],
+  competitor_edge: 'A full rewrite of your hero section alone could lift conversions 20-40%.',
+};
+
+// ── Shareable Score Card ─────────────────────────────────────────────────────
+
+function ShareableCard({ result, url }: { result: RoastResult; url: string }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted: bilko.run/projects/page-roast`;
+
+  return (
+    <div className="animate-slide-up" style={{ animationDelay: '50ms' }}>
+      {/* The visual card — designed to be screenshotted */}
+      <div ref={cardRef} className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-8 text-center relative overflow-hidden">
+        {/* Decorative glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.15),transparent_60%)]" />
+
+        <div className="relative">
+          <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-4">PageRoast by bilko.run</p>
+
+          <div className="flex items-center justify-center gap-4 mb-3">
+            <span className="text-6xl md:text-7xl font-black text-white">{result.total_score}</span>
+            <div className="text-left">
+              <div className={`text-4xl md:text-5xl font-black ${
+                result.grade.startsWith('A') ? 'text-green-400' :
+                result.grade.startsWith('B') ? 'text-blue-400' :
+                result.grade.startsWith('C') ? 'text-yellow-400' :
+                result.grade === 'D' ? 'text-orange-400' : 'text-red-400'
+              }`}>{result.grade}</div>
+              <div className="text-xs text-warm-500">/100</div>
+            </div>
+          </div>
+
+          <p className="text-fire-300 font-bold italic text-lg max-w-md mx-auto leading-relaxed mb-3">
+            &ldquo;{result.roast}&rdquo;
+          </p>
+
+          <p className="text-xs text-warm-500 truncate max-w-xs mx-auto mb-4">{url}</p>
+
+          <div className="flex justify-center gap-2">
+            {Object.entries(result.section_scores).map(([key, s]) => {
+              const pct = Math.round((s.score / s.max) * 100);
+              return (
+                <div key={key} className="text-center">
+                  <div className={`text-lg font-black ${
+                    pct >= 70 ? 'text-green-400' : pct >= 50 ? 'text-yellow-400' : 'text-red-400'
+                  }`}>{s.score}</div>
+                  <div className="text-[9px] text-warm-500 uppercase">{
+                    key === 'hero' ? 'Hero' : key === 'social_proof' ? 'Social' : key === 'clarity' ? 'Clarity' : 'CRO'
+                  }</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Share actions below the card */}
+      <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+        <button
+          onClick={() => shareToX(shareText)}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-warm-900 hover:bg-warm-800 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Share on X
+        </button>
+        <button
+          onClick={async () => { await copyToClipboard(shareText); }}
+          className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-warm-300 hover:border-warm-400 text-warm-700 text-sm font-semibold rounded-lg transition-colors"
+        >
+          Copy Result
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Recent Roasts Feed ───────────────────────────────────────────────────────
+
+function RecentRoasts() {
+  const [roasts, setRoasts] = useState<Array<{ url: string; score: number; grade: string; roast: string; created_at: string }>>([]);
+
+  useEffect(() => {
+    fetch(`${API}/roasts/recent`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setRoasts(d); })
+      .catch(() => {});
+  }, []);
+
+  if (roasts.length === 0) return null;
+
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-16">
+      <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-2">Wall of Shame 💀</h2>
+      <p className="text-center text-warm-500 mb-8 text-sm">Recent roasts. No names, just pain.</p>
+      <div className="space-y-3 stagger-children">
+        {roasts.slice(0, 8).map((r, i) => (
+          <div key={i} className="flex items-center gap-4 bg-white rounded-xl border border-warm-200/60 p-4 hover:shadow-sm transition-shadow">
+            <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
+              r.grade.startsWith('A') ? 'bg-green-100 text-green-700' :
+              r.grade.startsWith('B') ? 'bg-blue-100 text-blue-700' :
+              r.grade.startsWith('C') ? 'bg-yellow-100 text-yellow-700' :
+              r.grade === 'D' ? 'bg-orange-100 text-orange-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {r.grade}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-fire-700 font-semibold italic truncate">&ldquo;{r.roast}&rdquo;</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-warm-400">{r.url}</span>
+                <span className="text-xs text-warm-300">&middot;</span>
+                <span className="text-xs font-bold text-warm-600">{r.score}/100</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function gradeVerdict(grade: string): string {
   if (grade === 'A+' || grade === 'A') return 'Your page is fire. Respect.';
   if (grade === 'A-' || grade === 'B+') return 'Solid. But there\'s still meat on the bone.';
@@ -401,7 +540,17 @@ export function PageRoastPage() {
 
   // Set page title
   useEffect(() => {
-    document.title = 'PageRoast — Free Landing Page Audit | bilko.run';
+    document.title = 'PageRoast — Get Your Landing Page Roasted by AI 🔥';
+    // Update OG tags for social sharing
+    const setMeta = (property: string, content: string) => {
+      let el = document.querySelector(`meta[property="${property}"]`) || document.querySelector(`meta[name="${property}"]`);
+      if (el) el.setAttribute('content', content);
+    };
+    setMeta('og:title', 'PageRoast — Get Your Landing Page Roasted by AI 🔥');
+    setMeta('og:description', 'Paste a URL. AI scores your page across 4 CRO frameworks and delivers a savage one-liner you\'ll want to screenshot.');
+    setMeta('og:url', 'https://bilko.run/projects/page-roast');
+    setMeta('twitter:title', 'PageRoast — Get Your Landing Page Roasted by AI 🔥');
+    setMeta('twitter:description', 'Paste a URL. AI scores your page and delivers a savage one-liner. Free.');
     return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
   }, []);
 
@@ -701,7 +850,7 @@ export function PageRoastPage() {
       {/* Single Roast Results */}
       {result && (
         <div ref={resultRef} className="max-w-2xl mx-auto px-6 space-y-6 pb-16">
-          <ScoreHero result={result} url={url} />
+          <ShareableCard result={result} url={url} />
           <TopFixes fixes={result.top_fixes} />
           <SectionBreakdown result={result} />
           <CompetitorEdge text={result.competitor_edge} />
@@ -757,91 +906,93 @@ export function PageRoastPage() {
         </div>
       )}
 
-      {/* How It Works (shown when no results) */}
+      {/* Below-fold content (shown when no results) */}
       {!result && !compareResult && !loading && (
         <>
-          <section className="max-w-4xl mx-auto px-6 py-16">
-            <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">How the roast works</h2>
-            <div className="grid md:grid-cols-3 gap-8 stagger-children">
-              {[
-                { step: '🔗', title: 'Drop your URL', desc: 'Any public page. We fetch it live, strip the fluff, and read every word like a judgmental copywriter.' },
-                { step: '🔥', title: 'AI roasts 4 areas', desc: 'Hero, social proof, clarity, and conversion architecture. Each scored 0-25. No mercy.' },
-                { step: '💀', title: 'Get destroyed', desc: 'A score, a letter grade, a savage one-liner, and the exact fixes. Share the pain on X.' },
-              ].map(({ step, title, desc }) => (
-                <div key={step} className="text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-fire-100 text-fire-600 text-xl font-black flex items-center justify-center mx-auto mb-4">
-                    {step}
-                  </div>
-                  <h3 className="font-bold text-warm-900 mb-2">{title}</h3>
-                  <p className="text-sm text-warm-500 leading-relaxed">{desc}</p>
-                </div>
-              ))}
-            </div>
+          {/* Example Roast — show the goods */}
+          <section className="max-w-2xl mx-auto px-6 py-16">
+            <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-2">Here's what a roast looks like</h2>
+            <p className="text-center text-warm-500 mb-8 text-sm">This is real output. Yours will be worse.</p>
+            <ShareableCard result={EXAMPLE_ROAST} url="example-saas-landing.com" />
           </section>
 
-          {/* What's scored */}
+          {/* How it works — punchy */}
           <section className="bg-white border-y border-warm-200/40">
             <div className="max-w-4xl mx-auto px-6 py-16">
-              <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-3">4 CRO Frameworks. 100 Points.</h2>
-              <p className="text-center text-warm-500 mb-10">Each section is scored by a conversion expert AI. No fluff, no vanity metrics.</p>
-              <div className="grid md:grid-cols-2 gap-4">
+              <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">Three steps to humiliation</h2>
+              <div className="grid md:grid-cols-3 gap-8 stagger-children">
                 {[
-                  { title: 'Hero Section', pts: '25 pts', items: ['Headline clarity (0-8)', 'Subheadline specifics (0-7)', 'CTA visibility (0-5)', 'Visual hierarchy (0-5)'] },
-                  { title: 'Social Proof', pts: '25 pts', items: ['Testimonials with identity (0-8)', 'Trust logos & press (0-7)', 'Quantified proof (0-5)', 'Risk reversal signals (0-5)'] },
-                  { title: 'Clarity & Persuasion', pts: '25 pts', items: ['5-second test pass (0-8)', 'Benefits over features (0-7)', 'Readability & scanning (0-5)', 'Objection handling (0-5)'] },
-                  { title: 'Conversion Architecture', pts: '25 pts', items: ['CTA frequency (0-7)', 'Friction reduction (0-7)', 'Urgency/scarcity (0-5)', 'Page speed signals (0-6)'] },
-                ].map(({ title, pts, items }) => (
-                  <div key={title} className="bg-warm-50 rounded-xl p-5 border border-warm-200/60">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-bold text-warm-900">{title}</h3>
-                      <span className="text-xs font-semibold text-fire-500 bg-fire-50 px-2.5 py-0.5 rounded-full">{pts}</span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {items.map(item => (
-                        <li key={item} className="text-sm text-warm-600 flex items-start gap-2">
-                          <span className="text-fire-400 mt-0.5">&#x2022;</span>
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
+                  { step: '🔗', title: 'Drop your URL', desc: 'Any public page. We read every word like a copywriter who hasn\'t had coffee.' },
+                  { step: '🔥', title: 'Get judged harshly', desc: 'Hero, social proof, clarity, conversion. Four areas. 100 points. Zero sympathy.' },
+                  { step: '💀', title: 'Face the roast', desc: 'A score, a grade, and a one-liner so brutal you\'ll screenshot it and tag your co-founder.' },
+                ].map(({ step, title, desc }) => (
+                  <div key={step} className="text-center">
+                    <div className="text-3xl mb-3">{step}</div>
+                    <h3 className="font-bold text-warm-900 mb-2">{title}</h3>
+                    <p className="text-sm text-warm-500 leading-relaxed">{desc}</p>
                   </div>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* Grading scale */}
+          {/* What we actually judge */}
           <section className="max-w-4xl mx-auto px-6 py-16">
-            <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-8">Grading Scale</h2>
-            <div className="flex flex-wrap justify-center gap-3">
+            <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-3">We judge your page on 4 things. Harshly.</h2>
+            <p className="text-center text-warm-500 mb-10">Each scored 0-25. Total out of 100. No participation trophies.</p>
+            <div className="grid md:grid-cols-2 gap-4">
               {[
-                { grade: 'A+', range: '90-100', color: 'bg-green-100 text-green-700 border-green-200' },
-                { grade: 'A', range: '85-89', color: 'bg-green-50 text-green-600 border-green-200' },
-                { grade: 'B+', range: '75-79', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-                { grade: 'B', range: '70-74', color: 'bg-blue-50 text-blue-600 border-blue-200' },
-                { grade: 'C+', range: '60-64', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-                { grade: 'C', range: '55-59', color: 'bg-yellow-50 text-yellow-600 border-yellow-200' },
-                { grade: 'D', range: '40-49', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-                { grade: 'F', range: '0-39', color: 'bg-red-100 text-red-700 border-red-200' },
-              ].map(({ grade, range, color }) => (
-                <div key={grade} className={`px-4 py-2 rounded-xl border text-sm font-bold ${color}`}>
-                  {grade} <span className="font-normal opacity-70">{range}</span>
+                { emoji: '🎯', title: 'Hero Section', desc: 'Can someone understand what you do in 5 seconds? Is your CTA visible? Or did you hide it below 3 paragraphs of fluff?', pts: '25 pts' },
+                { emoji: '⭐', title: 'Social Proof', desc: 'Real testimonials with real names? Or "J." from "a company" saying "great product"? We see through it.', pts: '25 pts' },
+                { emoji: '💡', title: 'Clarity & Persuasion', desc: 'Benefits or features? Short sentences or wall of text? Are you selling or lecturing?', pts: '25 pts' },
+                { emoji: '🔥', title: 'Conversion Architecture', desc: 'How many CTAs? How much friction? Are you begging or commanding? The difference matters.', pts: '25 pts' },
+              ].map(({ emoji, title, desc, pts }) => (
+                <div key={title} className="bg-warm-50 rounded-xl p-5 border border-warm-200/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-bold text-warm-900">{emoji} {title}</h3>
+                    <span className="text-xs font-semibold text-fire-500 bg-fire-50 px-2.5 py-0.5 rounded-full">{pts}</span>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">{desc}</p>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* FAQ */}
+          {/* Grading scale — compact */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-12">
+              <h2 className="text-lg font-extrabold text-warm-900 text-center mb-6">The scale of devastation</h2>
+              <div className="flex flex-wrap justify-center gap-2">
+                {[
+                  { grade: 'A+', label: 'Chef\'s kiss', color: 'bg-green-100 text-green-700 border-green-200' },
+                  { grade: 'A', label: 'Impressive', color: 'bg-green-50 text-green-600 border-green-200' },
+                  { grade: 'B', label: 'Not bad', color: 'bg-blue-50 text-blue-600 border-blue-200' },
+                  { grade: 'C', label: 'Mediocre', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+                  { grade: 'D', label: 'Yikes', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+                  { grade: 'F', label: 'Delete it', color: 'bg-red-100 text-red-700 border-red-200' },
+                ].map(({ grade, label, color }) => (
+                  <div key={grade} className={`px-3 py-1.5 rounded-lg border text-sm font-bold ${color}`}>
+                    {grade} <span className="font-normal text-xs opacity-70">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Wall of Shame — recent roasts */}
+          <RecentRoasts />
+
+          {/* FAQ — casual */}
           <section className="bg-warm-100/50 border-t border-warm-200/40">
             <div className="max-w-3xl mx-auto px-6 py-16">
-              <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">Questions</h2>
+              <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">You have questions. We have roasts.</h2>
               <div className="space-y-6">
                 {[
-                  { q: 'What does it cost?', a: 'You get 1 free roast when you sign up. After that, $5 gets you 5 credits. A single roast costs 1 credit, an A/B compare costs 2.' },
-                  { q: 'How does the scoring work?', a: 'Your page is scored across 4 CRO frameworks (Hero, Social Proof, Clarity, Conversion) with 25 points each. The AI evaluates real conversion principles used by top landing page experts.' },
-                  { q: 'What about my data/privacy?', a: 'We fetch your page\'s public HTML to analyze it. We don\'t store your page content after analysis. The URL and score are kept for rate limiting only.' },
-                  { q: 'What\'s the A/B Compare mode?', a: 'Paste two URLs and we\'ll score both, then tell you which one wins and why. Perfect for testing your page against a competitor or comparing redesigns.' },
-                  { q: 'Who built this?', a: 'Bilko — a solopreneur building AI-powered tools for makers and marketers. This is one of several free tools at bilko.run.' },
+                  { q: 'Is this free?', a: 'Your first roast is free. After that, $5 gets you 5 credits. One roast = 1 credit. A/B compare = 2 credits. Cheaper than the therapist you\'ll need after seeing your score.' },
+                  { q: 'Is this actually useful or just a joke?', a: 'Both. The roast line is for entertainment. The score, section breakdown, and fixes are real CRO analysis. Founders use it to improve their pages. Then they share the roast for clout.' },
+                  { q: 'Will you store my page content?', a: 'No. We fetch your public HTML, analyze it, and forget it. We keep the domain, score, and roast line for the Wall of Shame. That\'s it.' },
+                  { q: 'What\'s A/B Compare?', a: 'Paste your page and a competitor\'s. We score both and pick a winner. It costs 2 credits because we\'re roasting twice as hard.' },
+                  { q: 'Who made this?', a: 'Bilko. One person. No funding. Lots of opinions about your landing page. bilko.run' },
                 ].map(({ q, a }) => (
                   <div key={q}>
                     <h3 className="font-bold text-warm-900 mb-1">{q}</h3>
@@ -854,8 +1005,8 @@ export function PageRoastPage() {
 
           {/* Bottom CTA */}
           <section className="max-w-4xl mx-auto px-6 py-16 text-center">
-            <h2 className="text-3xl font-extrabold text-warm-900 mb-4">Think your page converts? Prove it. 🔥</h2>
-            <p className="text-warm-500 mb-6">Free. 60 seconds. Your ego may not survive.</p>
+            <h2 className="text-3xl font-extrabold text-warm-900 mb-4">Still scrolling? Your page isn't going to roast itself. 🔥</h2>
+            <p className="text-warm-500 mb-6">One URL. 60 seconds. Maximum emotional damage.</p>
             <button
               onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5"

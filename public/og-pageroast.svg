@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" style="stop-color:#ff6b1a;stop-opacity:0.2"/>
+      <stop offset="100%" style="stop-color:#1a1613;stop-opacity:0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#1a1613"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Fire emoji -->
+  <text x="600" y="180" text-anchor="middle" font-size="100" fill="#ff6b1a" opacity="0.8">&#x1F525;</text>
+
+  <!-- Title -->
+  <text x="600" y="310" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="900" font-size="72" fill="white">PageRoast</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="370" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="500" font-size="28" fill="#c4b49e">Get your landing page brutally roasted by AI</text>
+
+  <!-- Features -->
+  <text x="600" y="440" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="600" font-size="22" fill="#ff8a47">Score (0-100)  &#x2022;  Savage Roast Line  &#x2022;  Actionable Fixes</text>
+
+  <!-- CTA -->
+  <rect x="425" y="480" width="350" height="56" rx="14" fill="#ff6b1a"/>
+  <text x="600" y="516" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="22" fill="white">bilko.run/projects/page-roast</text>
+
+  <!-- Branding -->
+  <text x="600" y="590" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="18" fill="#6b5a49">bilko.run — Tools for Makers Who Ship</text>
+</svg>

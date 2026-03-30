@@ -24,13 +24,14 @@ class ClerkErrorBoundary extends React.Component<{ children: React.ReactNode; fa
     return this.props.children;
   }
 }
-import { HeadlineGraderView } from './views/HeadlineGraderView.js';
-import { PageRoastView } from './views/PageRoastView.js';
-import { AdScorerView } from './views/AdScorerView.js';
-import { ThreadGraderView } from './views/ThreadGraderView.js';
-import { EmailForgeView } from './views/EmailForgeView.js';
-import AudienceDecoderView from './views/AudienceDecoderView.js';
-import { MetricsView } from './views/MetricsView.js';
+// Legacy views — lazy loaded (only fetched if user visits /app)
+const HeadlineGraderView = React.lazy(() => import('./views/HeadlineGraderView.js').then(m => ({ default: m.HeadlineGraderView })));
+const PageRoastView = React.lazy(() => import('./views/PageRoastView.js').then(m => ({ default: m.PageRoastView })));
+const AdScorerView = React.lazy(() => import('./views/AdScorerView.js').then(m => ({ default: m.AdScorerView })));
+const ThreadGraderView = React.lazy(() => import('./views/ThreadGraderView.js').then(m => ({ default: m.ThreadGraderView })));
+const EmailForgeView = React.lazy(() => import('./views/EmailForgeView.js').then(m => ({ default: m.EmailForgeView })));
+const AudienceDecoderView = React.lazy(() => import('./views/AudienceDecoderView.js'));
+const MetricsView = React.lazy(() => import('./views/MetricsView.js').then(m => ({ default: m.MetricsView })));
 
 const LEGACY_NAV = [
   { path: '/headline', label: 'HeadlineGrader' },
@@ -86,13 +87,13 @@ function AppRoutes() {
 
           {/* ── Legacy dashboard at /app ── */}
           <Route path="/app" element={<Navigate to="/app/headline" replace />} />
-          <Route path="/app/headline" element={<LegacyDashboard><HeadlineGraderView /></LegacyDashboard>} />
-          <Route path="/app/page-roast" element={<LegacyDashboard><PageRoastView /></LegacyDashboard>} />
-          <Route path="/app/ad-scorer" element={<LegacyDashboard><AdScorerView /></LegacyDashboard>} />
-          <Route path="/app/thread" element={<LegacyDashboard><ThreadGraderView /></LegacyDashboard>} />
-          <Route path="/app/email-forge" element={<LegacyDashboard><EmailForgeView /></LegacyDashboard>} />
-          <Route path="/app/audience" element={<LegacyDashboard><AudienceDecoderView /></LegacyDashboard>} />
-          <Route path="/app/metrics" element={<LegacyDashboard><MetricsView /></LegacyDashboard>} />
+          <Route path="/app/headline" element={<React.Suspense fallback={null}><LegacyDashboard><HeadlineGraderView /></LegacyDashboard></React.Suspense>} />
+          <Route path="/app/page-roast" element={<React.Suspense fallback={null}><LegacyDashboard><PageRoastView /></LegacyDashboard></React.Suspense>} />
+          <Route path="/app/ad-scorer" element={<React.Suspense fallback={null}><LegacyDashboard><AdScorerView /></LegacyDashboard></React.Suspense>} />
+          <Route path="/app/thread" element={<React.Suspense fallback={null}><LegacyDashboard><ThreadGraderView /></LegacyDashboard></React.Suspense>} />
+          <Route path="/app/email-forge" element={<React.Suspense fallback={null}><LegacyDashboard><EmailForgeView /></LegacyDashboard></React.Suspense>} />
+          <Route path="/app/audience" element={<React.Suspense fallback={null}><LegacyDashboard><AudienceDecoderView /></LegacyDashboard></React.Suspense>} />
+          <Route path="/app/metrics" element={<React.Suspense fallback={null}><LegacyDashboard><MetricsView /></LegacyDashboard></React.Suspense>} />
 
           {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />

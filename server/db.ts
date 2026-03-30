@@ -196,4 +196,21 @@ function migrate(db: Database.Database): void {
   try { db.exec(`ALTER TABLE cli_telemetry ADD COLUMN package TEXT`); } catch {}
   // Conversion funnel: outcome label (pass/fail/error/rate_limited/activate/upgrade_shown)
   try { db.exec(`ALTER TABLE cli_telemetry ADD COLUMN outcome TEXT`); } catch {}
+
+  // Seed Wall of Shame with sample roasts (only if empty)
+  const count = db.prepare('SELECT COUNT(*) as n FROM roast_history').get() as { n: number };
+  if (count.n === 0) {
+    const seeds = [
+      ['stripe.com', 62, 'C+', "Stripe's landing page is so comprehensive, it's practically a textbook — and just as exciting to read."],
+      ['example.com', 15, 'F', "This page has the conversion power of a 'Please take one' sign at a dentist's office."],
+      ['shopify.com', 78, 'B+', "Shopify's page sells the dream of entrepreneurship while burying the pricing like a prenup."],
+      ['notion.so', 71, 'B', "Notion's landing page is clean, minimal, and about as urgent as a Sunday afternoon nap."],
+      ['linear.app', 85, 'A', "Linear's site is so well-designed it makes you feel bad about your own product before you even sign up."],
+      ['vercel.com', 74, 'B', "Vercel's hero section deploys faster than their actual deploys. The rest of the page is still loading."],
+    ];
+    const insert = db.prepare('INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)');
+    for (const [url, score, grade, roast] of seeds) {
+      insert.run(url, score, grade, roast);
+    }
+  }
 }

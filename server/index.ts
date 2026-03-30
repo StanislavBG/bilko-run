@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import staticPlugin from '@fastify/static';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { getDb } from './db.js';
 import { registerDemoRoutes } from './routes/demos.js';
 import { registerStripeRoutes } from './routes/stripe.js';
@@ -87,13 +87,48 @@ if (isProd) {
       prefix: '/',
     });
 
-    // SPA fallback — all non-API routes serve index.html (React Router handles routing)
+    // Route-specific OG meta tags for social sharing (crawlers don't run JS)
+    const indexHtml = readFileSync(resolve(distPath, 'index.html'), 'utf-8');
+
+    const OG_OVERRIDES: Record<string, { title: string; description: string; url: string }> = {
+      '/projects/page-roast': {
+        title: 'PageRoast — Get Your Landing Page Roasted by AI 🔥',
+        description: 'Paste a URL. AI scores your page across 4 CRO frameworks and delivers a savage one-liner you\'ll want to screenshot. Free.',
+        url: 'https://bilko.run/projects/page-roast',
+      },
+      '/projects': {
+        title: 'Projects — bilko.run',
+        description: 'AI-powered tools for makers, marketers, and founders. PageRoast, HeadlineGrader, AdScorer, and more.',
+        url: 'https://bilko.run/projects',
+      },
+      '/pricing': {
+        title: 'Pricing — bilko.run',
+        description: '1 free roast on sign-up. Then $5 for 5 credits. No subscriptions.',
+        url: 'https://bilko.run/pricing',
+      },
+    };
+
+    function serveWithOg(path: string): string {
+      const override = OG_OVERRIDES[path];
+      if (!override) return indexHtml;
+      return indexHtml
+        .replace(/<title>[^<]*<\/title>/, `<title>${override.title}</title>`)
+        .replace(/content="Bilko\.run — Tools for Makers Who Ship"/, `content="${override.title}"`)
+        .replace(/content="Free AI-powered tools for solopreneurs[^"]*"/, `content="${override.description}"`)
+        .replace(/content="AI tools for solopreneurs\.[^"]*"/, `content="${override.description}"`)
+        .replace(/content="https:\/\/bilko\.run"/, `content="${override.url}"`)
+        .replace(/content="PageRoast — Get Your Landing Page Roasted by AI"/, `content="${override.title}"`)
+        .replace(/content="Paste a URL\. AI scores your page across 4 CRO frameworks and delivers a savage one-liner\. Free\."/, `content="${override.description}"`);
+    }
+
+    // SPA fallback — inject route-specific OG tags for social crawlers
     app.setNotFoundHandler(async (req, reply) => {
       if (req.url.startsWith('/api')) {
         reply.status(404).send({ error: 'Not found' });
         return;
       }
-      return reply.sendFile('index.html');
+      const path = req.url.split('?')[0];
+      reply.type('text/html').send(serveWithOg(path));
     });
   }
 }

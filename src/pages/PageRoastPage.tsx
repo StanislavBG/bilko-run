@@ -195,7 +195,7 @@ const EXAMPLE_ROAST: RoastResult = {
 function ShareableCard({ result, url }: { result: RoastResult; url: string }) {
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted: bilko.run/projects/page-roast`;
+  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted: https://bilko.run/projects/page-roast`;
 
   return (
     <div className="animate-slide-up" style={{ animationDelay: '50ms' }}>
@@ -319,7 +319,7 @@ function gradeVerdict(grade: string): string {
 }
 
 function ScoreHero({ result, url }: { result: RoastResult; url: string }) {
-  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted free: bilko.run/projects/page-roast`;
+  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted free: https://bilko.run/projects/page-roast`;
   const [copied, setCopied] = useState(false);
 
   return (

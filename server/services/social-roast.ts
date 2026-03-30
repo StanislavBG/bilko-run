@@ -118,7 +118,7 @@ Page content: ${pageTextB.slice(0, 3000)}`;
     '',
     `${pair.name_a} (${result.score_a}/100) vs ${pair.name_b} (${result.score_b}/100)`,
     '',
-    `🔥 Get your page roasted free: bilko.run/projects/page-roast`,
+    `🔥 Get your page roasted free: https://bilko.run/projects/page-roast`,
     '',
     `${handleA} ${handleB}`,
     hashtagLine,

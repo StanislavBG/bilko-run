@@ -436,6 +436,38 @@ Write the verdict and suggested hybrid.`;
     return rows;
   });
 
+  // ── User's past roasts ─────────────────────────────────────────
+  app.get('/api/roasts/mine', async (req, reply) => {
+    const clerkEmail = await verifyClerkToken(req.headers.authorization);
+    const email = clerkEmail || ((req.query as any)?.email ?? '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      reply.status(401);
+      return { error: 'Sign in required.' };
+    }
+    const rows = getDb().prepare(
+      'SELECT id, url, score, grade, roast, created_at FROM user_roasts WHERE email = ? ORDER BY created_at DESC LIMIT 50'
+    ).all(email);
+    return rows;
+  });
+
+  app.get('/api/roasts/mine/:id', async (req, reply) => {
+    const clerkEmail = await verifyClerkToken(req.headers.authorization);
+    const email = clerkEmail || ((req.query as any)?.email ?? '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      reply.status(401);
+      return { error: 'Sign in required.' };
+    }
+    const { id } = req.params as { id: string };
+    const row = getDb().prepare(
+      'SELECT * FROM user_roasts WHERE id = ? AND email = ?'
+    ).get(parseInt(id, 10), email) as any;
+    if (!row) {
+      reply.status(404);
+      return { error: 'Roast not found.' };
+    }
+    return { ...row, result: JSON.parse(row.result_json) };
+  });
+
   // ── Token balance endpoint ──────────────────────────────────────
   app.get('/api/tokens/balance', async (req, reply) => {
     const email = ((req.query as any)?.email ?? '').trim().toLowerCase();
@@ -567,10 +599,14 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         parsed = JSON.parse(jsonMatch[0]);
       }
 
-      // Save to history for the roast feed (anonymize URL to domain only)
+      // Save to public wall (anonymized domain only) + user's personal history (full result)
       try {
         const domain = parsedUrl.hostname.replace(/^www\./, '');
-        getDb().prepare('INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)').run(domain, parsed.total_score, parsed.grade, parsed.roast);
+        const db = getDb();
+        db.prepare('INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)').run(domain, parsed.total_score, parsed.grade, parsed.roast);
+        db.prepare('INSERT INTO user_roasts (email, url, score, grade, roast, result_json) VALUES (?, ?, ?, ?, ?, ?)').run(
+          email, parsedUrl.toString(), parsed.total_score, parsed.grade, parsed.roast, JSON.stringify(parsed)
+        );
       } catch { /* best effort */ }
 
       const balance = getTokenBalance(email);

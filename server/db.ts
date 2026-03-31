@@ -170,6 +170,18 @@ function migrate(db: Database.Database): void {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS user_roasts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      url TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      grade TEXT NOT NULL,
+      roast TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_roasts_email ON user_roasts(email);
+
     CREATE TABLE IF NOT EXISTS social_roast_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       rival_pair_id INTEGER REFERENCES social_roast_rivals(id),

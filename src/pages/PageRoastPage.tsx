@@ -18,30 +18,6 @@ const ROAST_PHRASES = [
   'Preparing the verdict...',
 ];
 
-function FireParticles() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-      {Array.from({ length: 20 }).map((_, i) => (
-        <div
-          key={i}
-          className="absolute animate-flame-rise"
-          style={{
-            left: `${10 + Math.random() * 80}%`,
-            bottom: '-10px',
-            animationDelay: `${Math.random() * 2}s`,
-            animationDuration: `${1 + Math.random() * 1.5}s`,
-            animationIterationCount: 'infinite',
-            fontSize: `${14 + Math.random() * 20}px`,
-            opacity: 0.7 + Math.random() * 0.3,
-          }}
-        >
-          {['🔥', '🔥', '🔥', '💀', '🔥', '😤', '🔥', '🔥'][i % 8]}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function RoastingOverlay({ onCancel }: { onCancel: () => void }) {
   const [phraseIdx, setPhraseIdx] = useState(0);
   const [showCancel, setShowCancel] = useState(false);
@@ -50,32 +26,49 @@ function RoastingOverlay({ onCancel }: { onCancel: () => void }) {
     const interval = setInterval(() => {
       setPhraseIdx(i => (i + 1) % ROAST_PHRASES.length);
     }, 3000);
-    // Show cancel after 10s in case it's hanging
     const cancelTimer = setTimeout(() => setShowCancel(true), 10000);
     return () => { clearInterval(interval); clearTimeout(cancelTimer); };
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-warm-900/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Roasting in progress">
-      <div className="relative text-center max-w-sm mx-4">
-        <FireParticles />
-        <div className="relative z-10">
-          <div className="text-6xl md:text-8xl mb-6 animate-flame-flicker">🔥</div>
-          <p className="text-2xl md:text-3xl font-black text-white mb-3 animate-roast-shake">
-            ROASTING...
-          </p>
-          <p className="text-base md:text-lg text-fire-300 animate-fade-in" key={phraseIdx}>
-            {ROAST_PHRASES[phraseIdx]}
-          </p>
-          {showCancel && (
-            <button
-              onClick={onCancel}
-              className="mt-6 px-4 py-2 text-sm text-warm-400 hover:text-white border border-warm-600 hover:border-warm-400 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-warm-900/90 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Roasting in progress">
+      {/* Sparse fire particles — edges only, no overlap with text */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute animate-flame-rise"
+            style={{
+              left: i < 5 ? `${2 + Math.random() * 15}%` : `${83 + Math.random() * 15}%`,
+              bottom: '-20px',
+              animationDelay: `${Math.random() * 3}s`,
+              animationDuration: `${2 + Math.random() * 2}s`,
+              animationIterationCount: 'infinite',
+              fontSize: `${18 + Math.random() * 14}px`,
+              opacity: 0.4 + Math.random() * 0.3,
+            }}
+          >
+            🔥
+          </div>
+        ))}
+      </div>
+
+      <div className="relative z-10 text-center px-6">
+        <div className="text-6xl md:text-7xl mb-8 animate-flame-flicker">🔥</div>
+        <p className="text-2xl md:text-3xl font-black text-white mb-4 animate-roast-shake">
+          ROASTING...
+        </p>
+        <p className="text-base text-fire-300/80 animate-fade-in min-h-[28px]" key={phraseIdx}>
+          {ROAST_PHRASES[phraseIdx]}
+        </p>
+        {showCancel && (
+          <button
+            onClick={onCancel}
+            className="mt-8 px-4 py-2 text-sm text-warm-500 hover:text-white border border-warm-700 hover:border-warm-400 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+        )}
       </div>
     </div>
   );
@@ -154,6 +147,14 @@ function barColor(pct: number): string {
 function shareToX(text: string) {
   window.open(
     `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`,
+    '_blank',
+    'width=550,height=420'
+  );
+}
+
+function shareToFacebook(url: string) {
+  window.open(
+    `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent('My landing page just got roasted 🔥')}`,
     '_blank',
     'width=550,height=420'
   );
@@ -245,13 +246,20 @@ function ShareableCard({ result, url }: { result: RoastResult; url: string }) {
       </div>
 
       {/* Share actions below the card */}
-      <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+      <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
         <button
           onClick={() => shareToX(shareText)}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-warm-900 hover:bg-warm-800 text-white text-sm font-semibold rounded-lg transition-colors"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
           Share on X
+        </button>
+        <button
+          onClick={() => shareToFacebook('https://bilko.run/projects/page-roast')}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1877F2] hover:bg-[#166FE5] text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          Facebook
         </button>
         <button
           onClick={async () => { await copyToClipboard(shareText); }}
@@ -305,6 +313,72 @@ function RecentRoasts() {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function MyRoasts({ email, onView }: { email: string; onView: (r: RoastResult, url: string) => void }) {
+  const [roasts, setRoasts] = useState<Array<{ id: number; url: string; score: number; grade: string; roast: string; created_at: string }>>([]);
+  const [expanded, setExpanded] = useState(false);
+  const { getToken } = useAuth();
+
+  useEffect(() => {
+    if (!email) return;
+    (async () => {
+      const token = await getToken();
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      fetch(`${API}/roasts/mine?email=${encodeURIComponent(email)}`, { headers })
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d)) setRoasts(d); })
+        .catch(() => {});
+    })();
+  }, [email]);
+
+  if (roasts.length === 0) return null;
+
+  const visible = expanded ? roasts : roasts.slice(0, 3);
+
+  return (
+    <section className="max-w-2xl mx-auto px-6 py-8">
+      <h3 className="text-lg font-bold text-warm-900 mb-4">Your Past Roasts</h3>
+      <div className="space-y-2">
+        {visible.map((r) => (
+          <button
+            key={r.id}
+            onClick={async () => {
+              const token = await getToken();
+              const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+              const res = await fetch(`${API}/roasts/mine/${r.id}?email=${encodeURIComponent(email)}`, { headers });
+              const data = await res.json();
+              if (data.result) onView(data.result, r.url);
+            }}
+            className="w-full flex items-center gap-3 bg-white rounded-xl border border-warm-200/60 p-3 hover:border-fire-300 hover:shadow-sm transition-all text-left"
+          >
+            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm ${
+              r.grade.startsWith('A') ? 'bg-green-100 text-green-700' :
+              r.grade.startsWith('B') ? 'bg-blue-100 text-blue-700' :
+              r.grade.startsWith('C') ? 'bg-yellow-100 text-yellow-700' :
+              r.grade === 'D' ? 'bg-orange-100 text-orange-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {r.grade}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-warm-800 truncate">{r.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+                <span className="text-xs font-bold text-warm-500">{r.score}/100</span>
+              </div>
+              <p className="text-xs text-warm-400 truncate italic mt-0.5">{r.roast}</p>
+            </div>
+            <svg className="w-4 h-4 text-warm-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          </button>
+        ))}
+      </div>
+      {roasts.length > 3 && !expanded && (
+        <button onClick={() => setExpanded(true)} className="mt-3 text-sm font-semibold text-fire-500 hover:text-fire-600">
+          Show all {roasts.length} roasts
+        </button>
+      )}
     </section>
   );
 }
@@ -640,19 +714,20 @@ export function PageRoastPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,140,60,0.08),transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(232,90,10,0.06),transparent_50%)]" />
 
-        {/* Ambient fire particles in background */}
+        {/* Subtle ambient fire — edges only */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: 5 }).map((_, i) => (
             <div
               key={i}
-              className="absolute animate-flame-rise opacity-20"
+              className="absolute animate-flame-rise"
               style={{
-                left: `${5 + Math.random() * 90}%`,
+                left: i < 3 ? `${2 + i * 5}%` : `${88 + (i - 3) * 5}%`,
                 bottom: '-20px',
-                animationDelay: `${Math.random() * 4}s`,
-                animationDuration: `${2 + Math.random() * 3}s`,
+                animationDelay: `${i * 1.5}s`,
+                animationDuration: `${3 + Math.random() * 2}s`,
                 animationIterationCount: 'infinite',
-                fontSize: `${20 + Math.random() * 24}px`,
+                fontSize: `${16 + Math.random() * 12}px`,
+                opacity: 0.12,
               }}
             >
               🔥
@@ -796,9 +871,14 @@ export function PageRoastPage() {
       {/* Buy Tokens Gate */}
       {needsTokens && email && <BuyTokensCard email={email} />}
 
+      {/* My Past Roasts — show between input and results, or on return visits */}
+      {isSignedIn && email && !loading && !result && !compareResult && (
+        <MyRoasts email={email} onView={(r, u) => { setResult(r); setUrl(u); }} />
+      )}
+
       {/* Single Roast Results */}
       {result && (
-        <div ref={resultRef} className="max-w-2xl mx-auto px-6 space-y-6 pb-16">
+        <div ref={resultRef} className="max-w-2xl mx-auto px-6 pt-12 space-y-6 pb-16">
           <ShareableCard result={result} url={url} />
           <TopFixes fixes={result.top_fixes} />
           <SectionBreakdown result={result} />
@@ -822,7 +902,7 @@ export function PageRoastPage() {
 
       {/* Compare Results */}
       {compareResult && (
-        <div ref={resultRef} className="max-w-4xl mx-auto px-6 space-y-6 pb-16">
+        <div ref={resultRef} className="max-w-4xl mx-auto px-6 pt-12 space-y-6 pb-16">
           {/* Winner Banner */}
           {compareResult.comparison.winner !== 'tie' ? (
             <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 text-center animate-slide-up">

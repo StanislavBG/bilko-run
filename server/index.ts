@@ -7,7 +7,6 @@ import { existsSync, readFileSync } from 'fs';
 import { getDb } from './db.js';
 import { registerDemoRoutes } from './routes/demos.js';
 import { registerStripeRoutes } from './routes/stripe.js';
-import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerLicenseRoutes } from './routes/license.js';
 import { registerSocialRoutes } from './routes/social.js';
 
@@ -61,7 +60,6 @@ app.addHook('onSend', async (_request, reply) => {
 // Register API routes
 registerDemoRoutes(app);
 registerStripeRoutes(app);
-registerAnalyticsRoutes(app);
 registerLicenseRoutes(app);
 registerSocialRoutes(app);
 

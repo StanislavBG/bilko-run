@@ -318,58 +318,7 @@ function gradeVerdict(grade: string): string {
   return 'This page is on fire. And not in a good way.';
 }
 
-function ScoreHero({ result, url }: { result: RoastResult; url: string }) {
-  const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted free: https://bilko.run/projects/page-roast`;
-  const [copied, setCopied] = useState(false);
 
-  return (
-    <div className={`relative rounded-2xl border-2 p-8 text-center animate-result-slam overflow-hidden ${gradeBg(result.grade)}`}>
-      {/* Mini fire at top for low scores */}
-      {result.total_score < 50 && (
-        <div className="absolute top-0 left-0 right-0 flex justify-center gap-1 -mt-1">
-          {['🔥','🔥','🔥'].map((f, i) => (
-            <span key={i} className="text-2xl animate-flame-flicker" style={{ animationDelay: `${i * 0.1}s` }}>{f}</span>
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center justify-center gap-6 mb-2">
-        <div className="animate-score">
-          <span className="text-7xl md:text-8xl font-black text-warm-900">{result.total_score}</span>
-          <span className="text-lg text-warm-500 font-medium">/100</span>
-        </div>
-        <div className={`text-5xl md:text-6xl font-black ${gradeColor(result.grade)} animate-score`} style={{ animationDelay: '200ms' }}>
-          {result.grade}
-        </div>
-      </div>
-
-      <p className="text-sm font-semibold text-warm-500 mb-4">{gradeVerdict(result.grade)}</p>
-
-      <div className="bg-white/60 rounded-xl p-4 mb-4 border border-fire-200/50">
-        <p className="text-lg md:text-xl font-bold text-fire-700 italic max-w-lg mx-auto leading-relaxed">
-          &ldquo;{result.roast}&rdquo;
-        </p>
-      </div>
-      <p className="text-xs text-warm-400 mb-6 truncate max-w-md mx-auto">{url}</p>
-
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <button
-          onClick={() => shareToX(shareText)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-warm-900 hover:bg-warm-800 text-white text-sm font-semibold rounded-lg transition-colors"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-          Share on X
-        </button>
-        <button
-          onClick={async () => { const ok = await copyToClipboard(shareText); setCopied(ok); if (ok) setTimeout(() => setCopied(false), 2000); }}
-          className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-warm-300 hover:border-warm-400 text-warm-700 text-sm font-semibold rounded-lg transition-colors"
-        >
-          {copied ? 'Copied!' : 'Copy Result'}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function SectionBreakdown({ result }: { result: RoastResult }) {
   return (
@@ -854,6 +803,20 @@ export function PageRoastPage() {
           <TopFixes fixes={result.top_fixes} />
           <SectionBreakdown result={result} />
           <CompetitorEdge text={result.competitor_edge} />
+
+          {/* Post-result CTA */}
+          <div className="text-center pt-4">
+            {tokenBalance !== null && tokenBalance > 0 ? (
+              <button
+                onClick={() => { setResult(null); setUrl(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all"
+              >
+                🔥 Roast Another Page
+              </button>
+            ) : (
+              <BuyTokensCard email={email} />
+            )}
+          </div>
         </div>
       )}
 
@@ -871,7 +834,7 @@ export function PageRoastPage() {
               </p>
               <button
                 onClick={() => shareToX(
-                  `Page ${compareResult.comparison.winner} won my A/B landing page test by ${compareResult.comparison.margin} points on PageRoast.\n\nCompare your pages free: bilko.run/projects/page-roast`
+                  `Page ${compareResult.comparison.winner} won my A/B landing page test by ${compareResult.comparison.margin} points on PageRoast.\n\nCompare your pages free: https://bilko.run/projects/page-roast`
                 )}
                 className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-warm-900 hover:bg-warm-800 text-white text-sm font-semibold rounded-lg transition-colors"
               >
@@ -902,6 +865,20 @@ export function PageRoastPage() {
           <div className="bg-gradient-to-r from-fire-50 to-warm-50 rounded-2xl border border-fire-200 p-6 animate-slide-up" style={{ animationDelay: '300ms' }}>
             <h3 className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-3">Strategic Analysis</h3>
             <p className="text-sm text-warm-700 leading-relaxed">{compareResult.comparison.analysis}</p>
+          </div>
+
+          {/* Post-compare CTA */}
+          <div className="text-center pt-4">
+            {tokenBalance !== null && tokenBalance > 0 ? (
+              <button
+                onClick={() => { setCompareResult(null); setUrlA(''); setUrlB(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all"
+              >
+                🔥 Compare More Pages
+              </button>
+            ) : (
+              <BuyTokensCard email={email} />
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import { usePageView } from '../hooks/usePageView.js';
 
 const PROJECT_LINKS = [
   { to: '/projects/page-roast', label: 'PageRoast', badge: '🔥' },
@@ -55,6 +56,8 @@ function ProjectsDropdown() {
 }
 
 export function Layout() {
+  usePageView();
+
   return (
     <div className="min-h-screen bg-warm-50 flex flex-col">
       <header className="sticky top-0 z-50 backdrop-blur-md bg-warm-50/80 border-b border-warm-200/60">

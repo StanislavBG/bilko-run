@@ -182,6 +182,19 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_user_roasts_email ON user_roasts(email);
 
+    CREATE TABLE IF NOT EXISTS page_views (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      path TEXT NOT NULL,
+      referrer TEXT,
+      country TEXT,
+      ua TEXT,
+      screen TEXT,
+      date TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_page_views_date ON page_views(date);
+    CREATE INDEX IF NOT EXISTS idx_page_views_path ON page_views(path);
+
     CREATE TABLE IF NOT EXISTS social_roast_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       rival_pair_id INTEGER REFERENCES social_roast_rivals(id),

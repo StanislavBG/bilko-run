@@ -57,13 +57,16 @@ export function AdminPage() {
   useEffect(() => {
     if (!isAdmin) return;
     setLoading(true);
-    Promise.all([
-      fetch(`${API}/analytics/stats?days=${days}`).then(r => r.json()),
-      fetch(`${API}/roasts/recent`).then(r => r.json()),
-    ]).then(([s, r]) => {
+    (async () => {
+      const token = await getToken();
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const [s, r] = await Promise.all([
+        fetch(`${API}/analytics/stats?days=${days}`, { headers }).then(res => res.json()),
+        fetch(`${API}/roasts/recent`).then(res => res.json()),
+      ]);
       setStats(s);
       if (Array.isArray(r)) setRecentRoasts(r);
-    }).catch(() => {}).finally(() => setLoading(false));
+    })().catch(() => {}).finally(() => setLoading(false));
   }, [isAdmin, days]);
 
   if (isLoaded && !isAdmin) return <Navigate to="/" replace />;

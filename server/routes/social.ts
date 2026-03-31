@@ -3,19 +3,7 @@ import {
   listRivalPairs, addRivalPair, generateSocialRoast,
   listQueue, approveQueueItem, rejectQueueItem,
 } from '../services/social-roast.js';
-import { verifyClerkToken } from '../clerk.js';
-
-const ADMIN_EMAILS = ['bilkobibitkov2000@gmail.com'];
-
-async function requireAdmin(req: any, reply: any): Promise<boolean> {
-  const email = await verifyClerkToken(req.headers.authorization);
-  if (!email || !ADMIN_EMAILS.includes(email.toLowerCase())) {
-    reply.status(403);
-    reply.send({ error: 'Admin access required.' });
-    return false;
-  }
-  return true;
-}
+import { requireAdmin } from '../clerk.js';
 
 export function registerSocialRoutes(app: FastifyInstance): void {
   app.get('/api/social/rivals', async (req, reply) => {

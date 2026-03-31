@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { usePageView } from '../hooks/usePageView.js';
-
-const ADMIN_EMAILS = ['bilkobibitkov2000@gmail.com'];
+import { ADMIN_EMAILS } from '../constants.js';
 
 const PROJECT_LINKS = [
   { to: '/projects/page-roast', label: 'PageRoast', badge: '🔥' },

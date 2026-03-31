@@ -1,8 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { getDb } from '../db.js';
-import { verifyClerkToken } from '../clerk.js';
-
-const ADMIN_EMAILS = ['bilkobibitkov2000@gmail.com'];
+import { requireAdmin } from '../clerk.js';
 
 export function registerAnalyticsRoutes(app: FastifyInstance): void {
   // Fire-and-forget page view tracking — no cookies, no PII
@@ -30,11 +28,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
 
   // Dashboard stats — admin only
   app.get('/api/analytics/stats', async (req, reply) => {
-    const email = await verifyClerkToken(req.headers.authorization);
-    if (!email || !ADMIN_EMAILS.includes(email.toLowerCase())) {
-      reply.status(403);
-      return { error: 'Admin access required.' };
-    }
+    if (!await requireAdmin(req, reply)) return;
     const db = getDb();
     const days = parseInt(((req.query as any)?.days ?? '7'), 10);
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);

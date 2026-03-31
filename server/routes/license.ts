@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { validateLicenseKey, getLicenseKeysForEmail } from '../services/license.js';
 import { hasActiveSubscriptionLive } from '../services/stripe.js';
-import { verifyClerkToken } from '../clerk.js';
+import { requireAuth } from '../clerk.js';
 
 // Simple in-memory rate limiter: max 10 calls per IP per minute
 const _validateRateLimiter = new Map<string, { count: number; resetAt: number }>();
@@ -20,13 +20,9 @@ function checkRateLimit(ip: string): boolean {
 
 export function registerLicenseRoutes(app: FastifyInstance): void {
   app.get('/api/license/my-keys', async (req, reply) => {
-    // Require Clerk auth — only return keys for the authenticated user
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    if (!clerkEmail) {
-      reply.status(401);
-      return { error: 'Sign in required.' };
-    }
-    const keys = getLicenseKeysForEmail(clerkEmail);
+    const email = await requireAuth(req, reply);
+    if (!email) return;
+    const keys = getLicenseKeysForEmail(email);
     return { keys };
   });
 

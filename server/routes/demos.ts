@@ -4,7 +4,7 @@ import { getDb } from '../db.js';
 import { askGemini } from '../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../services/stripe.js';
 import { getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount } from '../services/tokens.js';
-import { verifyClerkToken } from '../clerk.js';
+import { verifyClerkToken, requireAuth } from '../clerk.js';
 import { validatePublicUrl, fetchPageBounded } from '../services/page-fetch.js';
 
 // ── Usage tracking utilities ──────────────────────────────────────
@@ -436,13 +436,10 @@ Write the verdict and suggested hybrid.`;
     return rows;
   });
 
-  // ── User's past roasts (Clerk auth required — no email fallback) ──
+  // ── User's past roasts (Clerk auth required) ──
   app.get('/api/roasts/mine', async (req, reply) => {
-    const email = await verifyClerkToken(req.headers.authorization);
-    if (!email) {
-      reply.status(401);
-      return { error: 'Sign in required.' };
-    }
+    const email = await requireAuth(req, reply);
+    if (!email) return;
     const rows = getDb().prepare(
       'SELECT id, url, score, grade, roast, created_at FROM user_roasts WHERE email = ? ORDER BY created_at DESC LIMIT 50'
     ).all(email);
@@ -450,11 +447,8 @@ Write the verdict and suggested hybrid.`;
   });
 
   app.get('/api/roasts/mine/:id', async (req, reply) => {
-    const email = await verifyClerkToken(req.headers.authorization);
-    if (!email) {
-      reply.status(401);
-      return { error: 'Sign in required.' };
-    }
+    const email = await requireAuth(req, reply);
+    if (!email) return;
     const { id } = req.params as { id: string };
     const row = getDb().prepare(
       'SELECT * FROM user_roasts WHERE id = ? AND email = ?'
@@ -488,7 +482,7 @@ Write the verdict and suggested hybrid.`;
       return { error: 'URL is required.' };
     }
 
-    // Authenticate: Clerk token required, body email as fallback only if Clerk unavailable
+    // Prefer Clerk-verified email; fall back to body email if no valid token
     const clerkEmail = await verifyClerkToken(req.headers.authorization);
     const bodyEmail = (body?.email ?? '').trim().toLowerCase();
     const email = clerkEmail || bodyEmail;
@@ -626,7 +620,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Both URLs are required.' };
     }
 
-    // Authenticate: Clerk token required, body email as fallback only if Clerk unavailable
+    // Prefer Clerk-verified email; fall back to body email if no valid token
     const clerkEmail = await verifyClerkToken(req.headers.authorization);
     const bodyEmail = (body?.email ?? '').trim().toLowerCase();
     const email = clerkEmail || bodyEmail;

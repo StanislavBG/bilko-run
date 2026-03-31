@@ -1,8 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-
-function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 import {
   getStripe, isStripeConfigured, isAudienceDecoderConfigured,
   hasActiveSubscription, hasPurchased,
@@ -12,6 +8,10 @@ import {
 } from '../services/stripe.js';
 import { upsertLicenseKey, getLicenseKeysForEmail, validateLicenseKey } from '../services/license.js';
 import { creditTokens, grantFreeTokens, hasTokenAccount, TOKENS_PER_BUNDLE } from '../services/tokens.js';
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 function successHtml(title: string, body: string): string {
   return `<!DOCTYPE html>

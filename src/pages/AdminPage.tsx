@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useUser, useAuth } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 
+import { ADMIN_EMAILS } from '../constants.js';
+
 const API = import.meta.env.VITE_API_URL || '/api';
-const ADMIN_EMAILS = ['bilkobibitkov2000@gmail.com'];
 
 interface Stats {
   period: { days: number; since: string };

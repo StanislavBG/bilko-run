@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { usePageView } from '../hooks/usePageView.js';
+
+const ADMIN_EMAILS = ['bilkobibitkov2000@gmail.com'];
 
 const PROJECT_LINKS = [
   { to: '/projects/page-roast', label: 'PageRoast', badge: '🔥' },
@@ -55,8 +57,15 @@ function ProjectsDropdown() {
   );
 }
 
+function useIsAdmin(): boolean {
+  const { user } = useUser();
+  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? '';
+  return ADMIN_EMAILS.includes(email);
+}
+
 export function Layout() {
   usePageView();
+  const isAdmin = useIsAdmin();
 
   return (
     <div className="min-h-screen bg-warm-50 flex flex-col">
@@ -83,6 +92,21 @@ export function Layout() {
             >
               Pricing
             </NavLink>
+
+            {isAdmin && (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  `px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    isActive
+                      ? 'bg-fire-100 text-fire-700'
+                      : 'text-fire-400 hover:text-fire-600 hover:bg-fire-50'
+                  }`
+                }
+              >
+                Admin
+              </NavLink>
+            )}
 
             <div className="ml-2">
               <SignedOut>

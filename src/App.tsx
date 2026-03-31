@@ -8,6 +8,7 @@ import { PageRoastPage } from './pages/PageRoastPage.js';
 import { PricingPage } from './pages/PricingPage.js';
 import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
+import { AdminPage } from './pages/AdminPage.js';
 
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
@@ -83,6 +84,7 @@ function AppRoutes() {
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Route>
 
           {/* ── Legacy dashboard at /app ── */}

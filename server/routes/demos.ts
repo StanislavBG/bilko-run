@@ -4,7 +4,7 @@ import { getDb } from '../db.js';
 import { askGemini } from '../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../services/stripe.js';
 import { getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount } from '../services/tokens.js';
-import { verifyClerkToken, requireAuth } from '../clerk.js';
+import { verifyClerkToken, requireAuth, EMAIL_RE } from '../clerk.js';
 import { validatePublicUrl, fetchPageBounded } from '../services/page-fetch.js';
 
 // ── Usage tracking utilities ──────────────────────────────────────
@@ -463,7 +463,7 @@ Write the verdict and suggested hybrid.`;
   // ── Token balance endpoint ──────────────────────────────────────
   app.get('/api/tokens/balance', async (req, reply) => {
     const email = ((req.query as any)?.email ?? '').trim().toLowerCase();
-    if (!email || !email.includes('@')) {
+    if (!email || !EMAIL_RE.test(email)) {
       reply.status(400);
       return { error: 'Valid email required.' };
     }
@@ -486,7 +486,7 @@ Write the verdict and suggested hybrid.`;
     const clerkEmail = await verifyClerkToken(req.headers.authorization);
     const bodyEmail = (body?.email ?? '').trim().toLowerCase();
     const email = clerkEmail || bodyEmail;
-    if (!email || !email.includes('@')) {
+    if (!email || !EMAIL_RE.test(email)) {
       reply.status(401);
       return { error: 'Sign in required to use PageRoast.', requiresEmail: true };
     }
@@ -624,7 +624,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
     const clerkEmail = await verifyClerkToken(req.headers.authorization);
     const bodyEmail = (body?.email ?? '').trim().toLowerCase();
     const email = clerkEmail || bodyEmail;
-    if (!email || !email.includes('@')) {
+    if (!email || !EMAIL_RE.test(email)) {
       reply.status(401);
       return { error: 'Sign in required to use PageRoast.', requiresEmail: true };
     }
@@ -1576,7 +1576,7 @@ Overall winner: Sequence ${winner} by ${margin} points.`;
     const email = (body?.email ?? '').trim().toLowerCase();
     const tool = (body?.tool ?? '').trim();
     const score = String(body?.score ?? '').trim();
-    if (!email || !email.includes('@') || !tool) {
+    if (!email || !EMAIL_RE.test(email) || !tool) {
       reply.status(400);
       return { error: 'Valid email and tool are required.' };
     }

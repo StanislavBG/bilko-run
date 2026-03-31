@@ -1,6 +1,7 @@
 import { verifyToken, createClerkClient } from '@clerk/backend';
 
 export const ADMIN_EMAILS = ['bilkobibitkov2000@gmail.com'];
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 let _clerk: ReturnType<typeof createClerkClient> | null = null;
 

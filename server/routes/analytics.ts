@@ -57,15 +57,40 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     const totalRoasts = db.prepare('SELECT COUNT(*) as n FROM roast_history').get() as { n: number };
     const totalUsers = db.prepare('SELECT COUNT(*) as n FROM token_balances').get() as { n: number };
 
+    // Per-user stats: roasts, credits, last active
+    const topUsers = db.prepare(`
+      SELECT
+        tb.email,
+        tb.balance AS credits,
+        (SELECT COUNT(*) FROM user_roasts ur WHERE ur.email = tb.email) AS roasts,
+        (SELECT MAX(created_at) FROM user_roasts ur WHERE ur.email = tb.email) AS last_roast
+      FROM token_balances tb
+      ORDER BY roasts DESC
+      LIMIT 50
+    `).all();
+
+    // Revenue: token purchases
+    const tokenPurchases = db.prepare(
+      "SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = 'pageroast_tokens'"
+    ).get() as { count: number };
+
+    // Signups over time
+    const signupsByDay = db.prepare(
+      'SELECT date(created_at) as date, COUNT(*) as signups FROM token_balances WHERE date(created_at) >= ? GROUP BY date(created_at) ORDER BY date'
+    ).all(since);
+
     return {
       period: { days, since },
       views: totalViews.n,
       todayViews: todayViews.n,
       totalRoasts: totalRoasts.n,
       totalUsers: totalUsers.n,
+      tokenPurchases: tokenPurchases.count,
       byDay,
       byPage,
       byReferrer,
+      topUsers,
+      signupsByDay,
     };
   });
 }

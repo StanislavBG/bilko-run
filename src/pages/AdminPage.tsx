@@ -12,9 +12,12 @@ interface Stats {
   todayViews: number;
   totalRoasts: number;
   totalUsers: number;
+  tokenPurchases: number;
   byDay: Array<{ date: string; views: number }>;
   byPage: Array<{ path: string; views: number }>;
   byReferrer: Array<{ referrer: string; views: number }>;
+  topUsers: Array<{ email: string; credits: number; roasts: number; last_roast: string | null }>;
+  signupsByDay: Array<{ date: string; signups: number }>;
 }
 
 interface RecentRoast {
@@ -90,11 +93,12 @@ export function AdminPage() {
       {stats && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <StatCard label="Views Today" value={stats.todayViews} />
             <StatCard label={`Views (${days}d)`} value={stats.views} />
             <StatCard label="Total Roasts" value={stats.totalRoasts} />
             <StatCard label="Total Users" value={stats.totalUsers} />
+            <StatCard label="Token Purchases" value={stats.tokenPurchases} sub={`$${stats.tokenPurchases * 5} revenue`} />
           </div>
 
           {/* Views by Day */}
@@ -150,6 +154,61 @@ export function AdminPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Signups by Day */}
+      {stats && stats.signupsByDay.length > 0 && (
+        <div className="bg-white rounded-xl border border-warm-200/60 p-5 mb-6">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Signups by Day</h2>
+          <div className="space-y-2">
+            {stats.signupsByDay.map(d => {
+              const max = Math.max(...stats.signupsByDay.map(x => x.signups), 1);
+              const pct = Math.round((d.signups / max) * 100);
+              return (
+                <div key={d.date} className="flex items-center gap-3">
+                  <span className="text-xs text-warm-500 w-20 flex-shrink-0 font-mono">{d.date.slice(5)}</span>
+                  <div className="flex-1 h-5 bg-warm-50 rounded-full overflow-hidden">
+                    <div className="h-full bg-green-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs font-bold text-warm-700 w-10 text-right">{d.signups}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Users Table */}
+      {stats && stats.topUsers.length > 0 && (
+        <div className="bg-white rounded-xl border border-warm-200/60 p-5 mb-6">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Users ({stats.topUsers.length})</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-warm-100">
+                  <th className="text-left py-2 px-2 text-xs font-bold text-warm-400 uppercase">Email</th>
+                  <th className="text-right py-2 px-2 text-xs font-bold text-warm-400 uppercase">Roasts</th>
+                  <th className="text-right py-2 px-2 text-xs font-bold text-warm-400 uppercase">Credits</th>
+                  <th className="text-right py-2 px-2 text-xs font-bold text-warm-400 uppercase">Last Roast</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.topUsers.map(u => (
+                  <tr key={u.email} className="border-b border-warm-50 hover:bg-warm-50">
+                    <td className="py-2 px-2 text-warm-800 font-medium truncate max-w-[200px]">{u.email}</td>
+                    <td className="py-2 px-2 text-right font-bold text-warm-900">{u.roasts}</td>
+                    <td className="py-2 px-2 text-right">
+                      <span className={u.credits === 0 ? 'text-red-500 font-bold' : 'text-warm-600'}>{u.credits}</span>
+                    </td>
+                    <td className="py-2 px-2 text-right text-xs text-warm-400">
+                      {u.last_roast ? u.last_roast.slice(0, 16).replace('T', ' ') : 'Never'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Recent Roasts Log */}

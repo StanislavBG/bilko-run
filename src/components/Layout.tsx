@@ -66,18 +66,20 @@ function useIsAdmin(): boolean {
 export function Layout() {
   usePageView();
   const isAdmin = useIsAdmin();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-warm-50 flex flex-col">
       <header className="sticky top-0 z-50 backdrop-blur-md bg-warm-50/80 border-b border-warm-200/60">
         <nav className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group">
+          <Link to="/" className="flex items-center gap-2 group" onClick={() => setMobileOpen(false)}>
             <span className="text-xl font-extrabold tracking-tight text-warm-900 group-hover:text-fire-600 transition-colors">
               bilko<span className="text-fire-500">.run</span>
             </span>
           </Link>
 
-          <div className="flex items-center gap-1">
+          {/* Desktop nav */}
+          <div className="hidden md:flex items-center gap-1">
             <ProjectsDropdown />
 
             <NavLink
@@ -125,7 +127,56 @@ export function Layout() {
               </SignedIn>
             </div>
           </div>
+
+          {/* Mobile: auth + hamburger */}
+          <div className="flex md:hidden items-center gap-2">
+            <SignedIn>
+              <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
+            </SignedIn>
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="p-2 text-warm-600 hover:text-warm-900 rounded-lg hover:bg-warm-100 transition-all"
+              aria-label="Menu"
+            >
+              {mobileOpen ? (
+                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              ) : (
+                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+              )}
+            </button>
+          </div>
         </nav>
+
+        {/* Mobile menu */}
+        {mobileOpen && (
+          <div className="md:hidden border-t border-warm-200/60 bg-warm-50/95 backdrop-blur-md px-6 py-4 space-y-1 animate-fade-in">
+            {[
+              { to: '/projects/page-roast', label: 'PageRoast' },
+              { to: '/projects', label: 'All Projects' },
+              { to: '/pricing', label: 'Pricing' },
+              ...(isAdmin ? [{ to: '/admin', label: 'Admin' }] : []),
+            ].map(({ to, label }) => (
+              <Link
+                key={to}
+                to={to}
+                onClick={() => setMobileOpen(false)}
+                className="block px-4 py-2.5 text-sm font-medium text-warm-700 hover:bg-warm-100 hover:text-fire-600 rounded-lg transition-colors"
+              >
+                {label}
+              </Link>
+            ))}
+            <SignedOut>
+              <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="w-full px-4 py-2.5 text-sm font-medium text-fire-600 hover:bg-fire-50 rounded-lg transition-colors text-left"
+                >
+                  Sign in
+                </button>
+              </SignInButton>
+            </SignedOut>
+          </div>
+        )}
       </header>
 
       <main className="flex-1">

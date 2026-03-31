@@ -9,6 +9,7 @@ import { PricingPage } from './pages/PricingPage.js';
 import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
+import { NotFoundPage } from './pages/NotFoundPage.js';
 
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
@@ -97,8 +98,10 @@ function AppRoutes() {
           <Route path="/app/audience" element={<React.Suspense fallback={null}><LegacyDashboard><AudienceDecoderView /></LegacyDashboard></React.Suspense>} />
           <Route path="/app/metrics" element={<React.Suspense fallback={null}><LegacyDashboard><MetricsView /></LegacyDashboard></React.Suspense>} />
 
-          {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* 404 */}
+          <Route path="*" element={<Layout />}>
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>

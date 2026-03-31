@@ -1,4 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 import {
   getStripe, isStripeConfigured, isAudienceDecoderConfigured,
   hasActiveSubscription, hasPurchased,
@@ -324,11 +328,11 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 
       reply.type('text/html');
       return successHtml('You\'re now Pro 🎉', `
-        <p>Payment confirmed for <strong>${email}</strong>.</p>
+        <p>Payment confirmed for <strong>${escHtml(email)}</strong>.</p>
         <p>Your license key:</p>
-        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${licenseKey}</pre>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${escHtml(licenseKey)}</pre>
         <p>Activate it in your terminal:</p>
-        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${licenseKey}</pre>
+        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${escHtml(licenseKey)}</pre>
         <p style="font-size:0.9em;color:#888">
           Retrieve it any time: <a href="/my-license?email=${encodeURIComponent(email)}">/my-license?email=${encodeURIComponent(email)}</a>
         </p>
@@ -352,7 +356,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       if (!isActive) {
         reply.type('text/html');
         return successHtml('No active subscription found', `
-          <p>No active Bilko.run Pro subscription was found for <strong>${email}</strong>.</p>
+          <p>No active Bilko.run Pro subscription was found for <strong>${escHtml(email)}</strong>.</p>
           <p>If you just paid, it can take up to a minute for the webhook to process. Try again shortly.</p>
           <p>If you believe this is an error, contact support with your Stripe receipt.</p>
           <p><a href="/my-license">Try a different email</a></p>
@@ -362,11 +366,11 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       const licenseKey = upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
       reply.type('text/html');
       return successHtml('Your Bilko.run Pro License', `
-        <p>Active Pro subscription confirmed for <strong>${email}</strong>.</p>
+        <p>Active Pro subscription confirmed for <strong>${escHtml(email)}</strong>.</p>
         <p>Your license key:</p>
-        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${licenseKey}</pre>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${escHtml(licenseKey)}</pre>
         <p>Activate it in your terminal:</p>
-        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${licenseKey}</pre>
+        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${escHtml(licenseKey)}</pre>
         <p style="font-size:0.9em;color:#888">
           Bookmark this page to retrieve your key any time.<br>
           Replace the email in the URL: <code>/my-license?email=${encodeURIComponent(email)}</code>

@@ -1,7 +1,7 @@
 import * as https from 'https';
 import * as http from 'http';
 
-const BLOCKED_HOSTS = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|localhost|::1|169\.254\.)/i;
+const BLOCKED_HOSTS = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|localhost|::1|169\.254\.|fe80|fc00|fd00|::ffff|\[::)/i;
 const MAX_FETCH_BYTES = 2 * 1024 * 1024; // 2MB
 
 export function validatePublicUrl(raw: string): URL {

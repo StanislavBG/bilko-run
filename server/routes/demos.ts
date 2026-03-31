@@ -436,11 +436,10 @@ Write the verdict and suggested hybrid.`;
     return rows;
   });
 
-  // ── User's past roasts ─────────────────────────────────────────
+  // ── User's past roasts (Clerk auth required — no email fallback) ──
   app.get('/api/roasts/mine', async (req, reply) => {
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const email = clerkEmail || ((req.query as any)?.email ?? '').trim().toLowerCase();
-    if (!email || !email.includes('@')) {
+    const email = await verifyClerkToken(req.headers.authorization);
+    if (!email) {
       reply.status(401);
       return { error: 'Sign in required.' };
     }
@@ -451,9 +450,8 @@ Write the verdict and suggested hybrid.`;
   });
 
   app.get('/api/roasts/mine/:id', async (req, reply) => {
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const email = clerkEmail || ((req.query as any)?.email ?? '').trim().toLowerCase();
-    if (!email || !email.includes('@')) {
+    const email = await verifyClerkToken(req.headers.authorization);
+    if (!email) {
       reply.status(401);
       return { error: 'Sign in required.' };
     }
@@ -490,9 +488,10 @@ Write the verdict and suggested hybrid.`;
       return { error: 'URL is required.' };
     }
 
-    // Authenticate: prefer Clerk token, fall back to body email
+    // Authenticate: Clerk token required, body email as fallback only if Clerk unavailable
     const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
+    const bodyEmail = (body?.email ?? '').trim().toLowerCase();
+    const email = clerkEmail || bodyEmail;
     if (!email || !email.includes('@')) {
       reply.status(401);
       return { error: 'Sign in required to use PageRoast.', requiresEmail: true };
@@ -627,9 +626,10 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Both URLs are required.' };
     }
 
-    // Authenticate: prefer Clerk token, fall back to body email
+    // Authenticate: Clerk token required, body email as fallback only if Clerk unavailable
     const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
+    const bodyEmail = (body?.email ?? '').trim().toLowerCase();
+    const email = clerkEmail || bodyEmail;
     if (!email || !email.includes('@')) {
       reply.status(401);
       return { error: 'Sign in required to use PageRoast.', requiresEmail: true };

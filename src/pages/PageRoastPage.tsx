@@ -7,15 +7,17 @@ const API = import.meta.env.VITE_API_URL || '/api';
 
 const ROAST_PHRASES = [
   'Fetching your page...',
-  'Reading every pixel...',
-  'Judging your hero section...',
-  'Looking for social proof...',
-  'Checking your CTAs...',
-  'Finding the weakest spots...',
-  'Writing the roast...',
+  'Reading every word you wrote at 2am...',
+  'Counting your exclamation marks...',
+  'Looking for social proof... still looking...',
+  'Your hero section is... interesting...',
+  'Found 3 CTAs that all say different things...',
+  'Trying to figure out what you actually sell...',
+  'Checking if "synergy" counts as a value prop...',
   'This is going to hurt...',
-  'Almost done burning...',
-  'Preparing the verdict...',
+  'Writing something you\'ll screenshot anyway...',
+  'Calibrating the savagery...',
+  'Almost done. Deep breaths.',
 ];
 
 function RoastingOverlay({ onCancel }: { onCancel: () => void }) {
@@ -195,6 +197,7 @@ const EXAMPLE_ROAST: RoastResult = {
 
 function ShareableCard({ result, url }: { result: RoastResult; url: string }) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
 
   const shareText = `My landing page scored ${result.total_score}/100 (${result.grade}) on PageRoast 🔥\n\n"${result.roast}"\n\nGet roasted: https://bilko.run/projects/page-roast`;
 
@@ -221,11 +224,13 @@ function ShareableCard({ result, url }: { result: RoastResult; url: string }) {
             </div>
           </div>
 
+          <p className="text-xs font-semibold uppercase tracking-wider text-warm-500 mb-2">{gradeVerdict(result.grade)}</p>
+
           <p className="text-fire-300 font-bold italic text-lg max-w-md mx-auto leading-relaxed mb-3">
             &ldquo;{result.roast}&rdquo;
           </p>
 
-          <p className="text-xs text-warm-500 truncate max-w-xs mx-auto mb-4">{url}</p>
+          <p className="text-xs text-warm-600 truncate max-w-xs mx-auto mb-4">{url}</p>
 
           <div className="flex justify-center gap-2">
             {Object.entries(result.section_scores).map(([key, s]) => {
@@ -262,10 +267,10 @@ function ShareableCard({ result, url }: { result: RoastResult; url: string }) {
           Facebook
         </button>
         <button
-          onClick={async () => { await copyToClipboard(shareText); }}
+          onClick={async () => { const ok = await copyToClipboard(shareText); if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); } }}
           className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-warm-300 hover:border-warm-400 text-warm-700 text-sm font-semibold rounded-lg transition-colors"
         >
-          Copy Result
+          {copied ? 'Copied!' : 'Copy Result'}
         </button>
         <button
           onClick={() => downloadJson(result, `pageroast-${url.replace(/[^a-z0-9]/gi, '-').slice(0, 30)}.json`)}
@@ -423,11 +428,11 @@ function MyRoasts({ email, onView }: { email: string; onView: (r: RoastResult, u
 }
 
 function gradeVerdict(grade: string): string {
-  if (grade === 'A+' || grade === 'A') return 'Your page is fire. Respect.';
-  if (grade === 'A-' || grade === 'B+') return 'Solid. But there\'s still meat on the bone.';
-  if (grade === 'B' || grade === 'B-') return 'Decent, but your competitors are eating your lunch.';
-  if (grade === 'C+' || grade === 'C') return 'Mediocre. Your visitors are bouncing and you know it.';
-  if (grade === 'C-' || grade === 'D') return 'Rough. This page needs CPR.';
+  if (grade === 'A+' || grade === 'A') return 'Ok fine. Your page is actually good.';
+  if (grade === 'A-' || grade === 'B+') return 'Solid — but you left money on the table.';
+  if (grade === 'B' || grade === 'B-') return 'Your competitors just smiled.';
+  if (grade === 'C+' || grade === 'C') return 'Your bounce rate is not surprised.';
+  if (grade === 'C-' || grade === 'D') return 'This page needs more than a redesign.';
   return 'This page is on fire. And not in a good way.';
 }
 
@@ -436,7 +441,7 @@ function gradeVerdict(grade: string): string {
 function SectionBreakdown({ result }: { result: RoastResult }) {
   return (
     <div className="bg-white rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '100ms' }}>
-      <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-6">Section Breakdown</h3>
+      <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-6">Where it hurts</h3>
       <div className="space-y-6">
         {SECTIONS.map(({ key, label, icon }) => {
           const section = result.section_scores[key as keyof typeof result.section_scores];
@@ -478,7 +483,7 @@ function TopFixes({ fixes }: { fixes: string[] }) {
   if (fixes.length === 0) return null;
   return (
     <div className="bg-white rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '200ms' }}>
-      <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Top Fixes (Highest Impact First)</h3>
+      <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Fix these first (or don't, we're not your mom)</h3>
       <div className="space-y-3">
         {fixes.map((fix, i) => (
           <div key={i} className="flex items-start gap-3">
@@ -577,9 +582,9 @@ function BuyTokensCard({ email }: { email: string }) {
   return (
     <div className="max-w-xl mx-auto px-6 mb-8">
       <div className="bg-white border border-warm-200/60 rounded-2xl p-8 text-center">
-        <p className="text-xl font-bold text-warm-900 mb-1">You're out of credits</p>
+        <p className="text-xl font-bold text-warm-900 mb-1">The roast stops here. (For now.)</p>
         <p className="text-sm text-warm-500 mb-6">
-          1 credit per roast &middot; 2 credits for A/B compare
+          Feed the fire &middot; 1 credit per roast &middot; 2 for A/B compare
         </p>
         <div className="flex items-stretch justify-center gap-3">
           <button
@@ -794,7 +799,7 @@ export function PageRoastPage() {
           </h1>
 
           <p className="mt-4 text-base md:text-lg text-warm-400 max-w-lg mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '80ms' }}>
-            AI scores your page across 4 CRO frameworks and delivers a savage one-liner you'll want to screenshot.
+            4 CRO frameworks. 100 points. A one-liner so savage you'll screenshot it before you fix anything.
           </p>
 
           {/* ── THE URL INPUT — center of the universe ── */}
@@ -846,7 +851,7 @@ export function PageRoastPage() {
                   </button>
                 </div>
                 <p className="mt-3 text-xs text-warm-500">
-                  Any public URL &middot; ~30 seconds &middot; feelings not guaranteed to survive
+                  Any public URL &middot; ~30 seconds &middot; emotional damage not covered by insurance
                 </p>
               </div>
             )}
@@ -1018,7 +1023,7 @@ export function PageRoastPage() {
           {/* Example Roast — show the goods */}
           <section className="max-w-2xl mx-auto px-6 py-16">
             <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-2">Here's what a roast looks like</h2>
-            <p className="text-center text-warm-500 mb-8 text-sm">This is real output. Yours will be worse.</p>
+            <p className="text-center text-warm-500 mb-8 text-sm">Real output from a real page. Yours will probably score lower.</p>
             <ShareableCard result={EXAMPLE_ROAST} url="example-saas-landing.com" />
           </section>
 
@@ -1070,12 +1075,12 @@ export function PageRoastPage() {
               <h2 className="text-lg font-extrabold text-warm-900 text-center mb-6">The scale of devastation</h2>
               <div className="flex flex-wrap justify-center gap-2">
                 {[
-                  { grade: 'A+', label: 'Chef\'s kiss', color: 'bg-green-100 text-green-700 border-green-200' },
-                  { grade: 'A', label: 'Impressive', color: 'bg-green-50 text-green-600 border-green-200' },
-                  { grade: 'B', label: 'Not bad', color: 'bg-blue-50 text-blue-600 border-blue-200' },
-                  { grade: 'C', label: 'Mediocre', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-                  { grade: 'D', label: 'Yikes', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-                  { grade: 'F', label: 'Delete it', color: 'bg-red-100 text-red-700 border-red-200' },
+                  { grade: 'A+', label: 'You can stop reading', color: 'bg-green-100 text-green-700 border-green-200' },
+                  { grade: 'A', label: 'Your competitors hate you', color: 'bg-green-50 text-green-600 border-green-200' },
+                  { grade: 'B', label: 'Almost respectable', color: 'bg-blue-50 text-blue-600 border-blue-200' },
+                  { grade: 'C', label: 'Your visitors are bouncing', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+                  { grade: 'D', label: 'Did an intern build this?', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+                  { grade: 'F', label: 'Start over', color: 'bg-red-100 text-red-700 border-red-200' },
                 ].map(({ grade, label, color }) => (
                   <div key={grade} className={`px-3 py-1.5 rounded-lg border text-sm font-bold ${color}`}>
                     {grade} <span className="font-normal text-xs opacity-70">{label}</span>
@@ -1111,8 +1116,8 @@ export function PageRoastPage() {
 
           {/* Bottom CTA */}
           <section className="max-w-4xl mx-auto px-6 py-16 text-center">
-            <h2 className="text-3xl font-extrabold text-warm-900 mb-4">Still scrolling? Your page isn't going to roast itself. 🔥</h2>
-            <p className="text-warm-500 mb-6">One URL. 60 seconds. Maximum emotional damage.</p>
+            <h2 className="text-3xl font-extrabold text-warm-900 mb-4">You've read this far instead of fixing your landing page. 🔥</h2>
+            <p className="text-warm-500 mb-6">One URL. 30 seconds. The feedback your co-founder won't give you.</p>
             <button
               onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5"

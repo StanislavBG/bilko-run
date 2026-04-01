@@ -36,7 +36,7 @@ When building automation that interacts with external platforms (Reddit, X/Twitt
 - `server/clerk.ts` — Auth helpers: `verifyClerkToken`, `requireAuth`, `requireAdmin`, `ADMIN_EMAILS`
 - `server/services/page-fetch.ts` — Shared URL fetching with SSRF protection
 - `server/gemini.ts` — Gemini API client (key via header, not URL)
-- `server/services/tokens.ts` — Token balance system (1 free, $5/5 credits)
+- `server/services/tokens.ts` — Token balance system (1 free, $1/1 credit or $5/7 credits)
 - `src/constants.ts` — Client-side shared constants (ADMIN_EMAILS)
 
 ## Deployment

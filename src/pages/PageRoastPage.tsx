@@ -551,15 +551,15 @@ function CompareCard({ label, url, result, isWinner, isDimmed }: {
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 function BuyTokensCard({ email }: { email: string }) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<'single' | 'bundle' | null>(null);
 
-  async function buyTokens() {
-    setLoading(true);
+  async function buyTokens(priceType: 'pageroast_token_single' | 'pageroast_tokens') {
+    setLoading(priceType === 'pageroast_token_single' ? 'single' : 'bundle');
     try {
       const res = await fetch(`${API}/stripe/create-checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, priceType: 'pageroast_tokens' }),
+        body: JSON.stringify({ email, priceType }),
       });
       const data = await res.json();
       if (data.url) {
@@ -570,7 +570,7 @@ function BuyTokensCard({ email }: { email: string }) {
     } catch {
       alert('Checkout unavailable. Try again later.');
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   }
 
@@ -579,15 +579,25 @@ function BuyTokensCard({ email }: { email: string }) {
       <div className="bg-gradient-to-r from-fire-50 to-warm-50 border-2 border-fire-200 rounded-2xl p-8 text-center">
         <p className="text-2xl font-bold text-warm-900 mb-2">You're out of tokens</p>
         <p className="text-sm text-warm-600 mb-6">
-          Get 5 credits for $5 — each roast costs 1, A/B compare costs 2.
+          Each roast costs 1 credit, A/B compare costs 2.
         </p>
-        <button
-          onClick={buyTokens}
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 transition-all"
-        >
-          {loading ? 'Redirecting to checkout...' : 'Buy 5 Credits — $5'}
-        </button>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            onClick={() => buyTokens('pageroast_token_single')}
+            disabled={!!loading}
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 border-2 border-fire-400 hover:bg-fire-50 disabled:border-warm-200 disabled:bg-warm-100 text-fire-600 font-bold text-base rounded-xl transition-all"
+          >
+            {loading === 'single' ? 'Redirecting...' : '1 Credit — $1'}
+          </button>
+          <button
+            onClick={() => buyTokens('pageroast_tokens')}
+            disabled={!!loading}
+            className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 transition-all relative"
+          >
+            {loading === 'bundle' ? 'Redirecting...' : '7 Credits — $5'}
+            <span className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">SAVE 29%</span>
+          </button>
+        </div>
         <p className="mt-3 text-xs text-warm-400">One-time purchase. No subscription.</p>
       </div>
     </div>
@@ -1084,7 +1094,7 @@ export function PageRoastPage() {
               <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">You have questions. We have roasts.</h2>
               <div className="space-y-6">
                 {[
-                  { q: 'Is this free?', a: 'Your first roast is free. After that, $5 gets you 5 credits. One roast = 1 credit. A/B compare = 2 credits. Cheaper than the therapist you\'ll need after seeing your score.' },
+                  { q: 'Is this free?', a: 'Your first roast is free. After that, credits start at $1 each — or grab 7 for $5. One roast = 1 credit. A/B compare = 2 credits. Cheaper than the therapist you\'ll need after seeing your score.' },
                   { q: 'Is this actually useful or just a joke?', a: 'Both. The roast line is for entertainment. The score, section breakdown, and fixes are real CRO analysis. Founders use it to improve their pages. Then they share the roast for clout.' },
                   { q: 'Will you store my results?', a: 'Your roast results are stored temporarily and may be cleared during server maintenance. Use the Download button to save your results permanently. We don\'t guarantee long-term data persistence — treat the download as your backup.' },
                   { q: 'What\'s A/B Compare?', a: 'Paste your page and a competitor\'s. We score both and pick a winner. It costs 2 credits because we\'re roasting twice as hard.' },

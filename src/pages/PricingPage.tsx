@@ -47,17 +47,14 @@ export function PricingPage() {
             </Link>
           </div>
 
-          {/* Credits */}
-          <div className="bg-white rounded-2xl border-2 border-fire-300 p-8 relative shadow-lg shadow-fire-100/30">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-fire-500 text-white text-xs font-bold px-3 py-0.5 rounded-full">
-              Best Value
-            </div>
-            <h2 className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Credits</h2>
+          {/* 1 Credit */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-8">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Quick Credit</h2>
             <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-black text-warm-900">$5</span>
-              <span className="text-sm text-warm-500">/ 5 credits</span>
+              <span className="text-4xl font-black text-warm-900">$1</span>
+              <span className="text-sm text-warm-500">/ 1 credit</span>
             </div>
-            <p className="text-sm text-warm-500 mb-6 mt-1">$1 per roast. Pay once, use anytime.</p>
+            <p className="text-sm text-warm-500 mb-6 mt-1">Just need one roast? Done.</p>
             <ul className="space-y-3 text-sm text-warm-600 mb-8">
               {[
                 'PageRoast = 1 credit',
@@ -72,6 +69,27 @@ export function PricingPage() {
                 </li>
               ))}
             </ul>
+            <Link
+              to="/projects/page-roast"
+              className="block w-full py-3 text-center text-sm font-bold text-fire-600 border-2 border-fire-300 hover:border-fire-400 rounded-xl transition-colors"
+            >
+              Start roasting
+            </Link>
+          </div>
+        </div>
+
+        {/* 7 Credits Bundle */}
+        <div className="max-w-sm mx-auto mt-6">
+          <div className="bg-white rounded-2xl border-2 border-fire-300 p-8 relative shadow-lg shadow-fire-100/30">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-fire-500 text-white text-xs font-bold px-3 py-0.5 rounded-full">
+              Best Value — Save 29%
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Credit Bundle</h2>
+            <div className="flex items-baseline gap-1">
+              <span className="text-4xl font-black text-warm-900">$5</span>
+              <span className="text-sm text-warm-500">/ 7 credits</span>
+            </div>
+            <p className="text-sm text-warm-500 mb-6 mt-1">~$0.71 per roast. Best deal.</p>
             <Link
               to="/projects/page-roast"
               className="block w-full py-3 text-center text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-xl shadow-md shadow-fire-500/20 transition-all"
@@ -89,7 +107,7 @@ export function PricingPage() {
           <div className="space-y-5">
             {[
               { q: 'Why not a subscription?', a: 'Because you don\'t roast pages every day. Pay for what you use, not what you don\'t.' },
-              { q: 'What if I don\'t use all my credits?', a: 'They never expire. Buy 5 today, use the last one next year. No pressure.' },
+              { q: 'What if I don\'t use all my credits?', a: 'They never expire. Buy today, use the last one next year. No pressure.' },
               { q: 'Can I get a refund?', a: 'Credits are consumed instantly on analysis. All purchases are final — but your first roast is free, so you know what you\'re getting.' },
               { q: 'Is my payment secure?', a: 'Payments are processed by Stripe. We never see your card number.' },
               { q: 'What\'s the A/B Compare?', a: 'Paste two URLs — your page vs. a competitor. We score both and pick a winner. Costs 2 credits because we\'re working twice as hard.' },

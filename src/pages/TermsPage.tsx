@@ -31,7 +31,7 @@ export function TermsPage() {
           <h2 className="text-lg font-bold text-warm-900 mb-2">4. Credits & Payments</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>New accounts receive 1 free credit.</li>
-            <li>Additional credits: $5 for 5 credits (one-time purchase via Stripe).</li>
+            <li>Additional credits: $1 for 1 credit or $5 for 7 credits (one-time purchase via Stripe).</li>
             <li>PageRoast analysis: 1 credit. A/B Compare: 2 credits.</li>
             <li>Credits do not expire.</li>
             <li><strong>All purchases are final. No refunds.</strong> Credits are consumed immediately upon analysis.</li>

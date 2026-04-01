@@ -1,9 +1,10 @@
 import { getDb } from '../db.js';
 
 const FREE_TOKEN_GRANT = 1;
-const TOKENS_PER_BUNDLE = 5;
+const TOKENS_PER_SINGLE = 1;
+const TOKENS_PER_BUNDLE = 7;
 
-export { TOKENS_PER_BUNDLE };
+export { TOKENS_PER_SINGLE, TOKENS_PER_BUNDLE };
 
 export function getTokenBalance(email: string): number {
   const db = getDb();

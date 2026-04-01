@@ -103,7 +103,7 @@ if (isProd) {
       },
       '/pricing': {
         title: 'Pricing — bilko.run',
-        description: '1 free roast on sign-up. Then $5 for 5 credits. No subscriptions.',
+        description: '1 free roast on sign-up. Then $1 per credit or 7 for $5. No subscriptions.',
         url: 'https://bilko.run/pricing',
       },
     };

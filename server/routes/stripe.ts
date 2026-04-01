@@ -7,7 +7,7 @@ import {
   saveOneTimePurchase, priceToPlanTier, hasActiveSubscriptionLive,
 } from '../services/stripe.js';
 import { upsertLicenseKey, getLicenseKeysForEmail, validateLicenseKey } from '../services/license.js';
-import { creditTokens, grantFreeTokens, hasTokenAccount, TOKENS_PER_BUNDLE } from '../services/tokens.js';
+import { creditTokens, grantFreeTokens, hasTokenAccount, TOKENS_PER_SINGLE, TOKENS_PER_BUNDLE } from '../services/tokens.js';
 
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -42,7 +42,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
   app.post('/api/stripe/create-checkout-session', async (req, reply) => {
     const body = req.body as {
       email?: string;
-      priceType?: 'contentgrade_pro' | 'contentgrade_business' | 'contentgrade_team' | 'audiencedecoder_report' | 'pageroast_tokens';
+      priceType?: 'contentgrade_pro' | 'contentgrade_business' | 'contentgrade_team' | 'audiencedecoder_report' | 'pageroast_tokens' | 'pageroast_token_single';
       successUrl?: string;
       cancelUrl?: string;
     } | null;
@@ -76,6 +76,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     } else if (priceType === 'pageroast_tokens') {
       priceId = process.env.STRIPE_PRICE_TOKENS;
       mode = 'payment';
+    } else if (priceType === 'pageroast_token_single') {
+      priceId = process.env.STRIPE_PRICE_TOKEN_SINGLE;
+      mode = 'payment';
     } else {
       priceId = process.env.STRIPE_PRICE_AUDIENCEDECODER;
       mode = 'payment';
@@ -95,7 +98,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       }
 
       const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
-      const defaultSuccessUrl = priceType === 'pageroast_tokens'
+      const defaultSuccessUrl = (priceType === 'pageroast_tokens' || priceType === 'pageroast_token_single')
         ? `${publicUrl}/projects/page-roast?tokens=purchased`
         : `${publicUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
       const session = await stripe.checkout.sessions.create({
@@ -181,12 +184,17 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         } else if (data.mode === 'payment' && email && stripeCustomerId) {
           // Determine which one-time product was purchased
           let productKey = 'audiencedecoder_report';
+          let tokenAmount = 0;
           try {
             const s = getStripe()!;
             const lineItems = await s.checkout.sessions.listLineItems(data.id, { limit: 1 });
             const purchasedPriceId = lineItems.data[0]?.price?.id;
             if (purchasedPriceId === process.env.STRIPE_PRICE_TOKENS) {
               productKey = 'pageroast_tokens';
+              tokenAmount = TOKENS_PER_BUNDLE;
+            } else if (purchasedPriceId === process.env.STRIPE_PRICE_TOKEN_SINGLE) {
+              productKey = 'pageroast_tokens';
+              tokenAmount = TOKENS_PER_SINGLE;
             }
           } catch { /* default to audiencedecoder */ }
 
@@ -197,10 +205,10 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             product_key: productKey,
           });
 
-          if (productKey === 'pageroast_tokens') {
+          if (productKey === 'pageroast_tokens' && tokenAmount > 0) {
             if (!hasTokenAccount(email)) grantFreeTokens(email, 0);
-            creditTokens(email, TOKENS_PER_BUNDLE, data.payment_intent as string);
-            console.log(`[stripe] Credited ${TOKENS_PER_BUNDLE} tokens for ${email}`);
+            creditTokens(email, tokenAmount, data.payment_intent as string);
+            console.log(`[stripe] Credited ${tokenAmount} tokens for ${email}`);
           }
         }
       } else if (event.type === 'customer.subscription.updated') {

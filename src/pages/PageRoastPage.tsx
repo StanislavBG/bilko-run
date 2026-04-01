@@ -575,30 +575,30 @@ function BuyTokensCard({ email }: { email: string }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-6 mb-8">
-      <div className="bg-gradient-to-r from-fire-50 to-warm-50 border-2 border-fire-200 rounded-2xl p-8 text-center">
-        <p className="text-2xl font-bold text-warm-900 mb-2">You're out of tokens</p>
-        <p className="text-sm text-warm-600 mb-6">
-          Each roast costs 1 credit, A/B compare costs 2.
+    <div className="max-w-xl mx-auto px-6 mb-8">
+      <div className="bg-white border border-warm-200/60 rounded-2xl p-8 text-center">
+        <p className="text-xl font-bold text-warm-900 mb-1">You're out of credits</p>
+        <p className="text-sm text-warm-500 mb-6">
+          1 credit per roast &middot; 2 credits for A/B compare
         </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="flex items-stretch justify-center gap-3">
           <button
             onClick={() => buyTokens('pageroast_token_single')}
             disabled={!!loading}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 border-2 border-fire-400 hover:bg-fire-50 disabled:border-warm-200 disabled:bg-warm-100 text-fire-600 font-bold text-base rounded-xl transition-all"
+            className="flex-1 max-w-[160px] py-3 border border-warm-200 hover:border-fire-300 disabled:opacity-50 text-warm-700 hover:text-fire-600 font-bold text-sm rounded-xl transition-all"
           >
-            {loading === 'single' ? 'Redirecting...' : '1 Credit — $1'}
+            {loading === 'single' ? 'Redirecting...' : '1 credit — $1'}
           </button>
           <button
             onClick={() => buyTokens('pageroast_tokens')}
             disabled={!!loading}
-            className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 disabled:bg-warm-300 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 transition-all relative"
+            className="flex-1 max-w-[200px] py-3 bg-fire-500 hover:bg-fire-600 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-md shadow-fire-500/20 transition-all"
           >
-            {loading === 'bundle' ? 'Redirecting...' : '7 Credits — $5'}
-            <span className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">SAVE 29%</span>
+            {loading === 'bundle' ? 'Redirecting...' : '7 credits — $5'}
+            <span className="block text-[10px] font-semibold text-fire-200 mt-0.5">save 29%</span>
           </button>
         </div>
-        <p className="mt-3 text-xs text-warm-400">One-time purchase. No subscription.</p>
+        <p className="mt-4 text-xs text-warm-400">One-time purchase &middot; No subscription &middot; Credits never expire</p>
       </div>
     </div>
   );

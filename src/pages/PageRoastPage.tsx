@@ -267,6 +267,13 @@ function ShareableCard({ result, url }: { result: RoastResult; url: string }) {
         >
           Copy Result
         </button>
+        <button
+          onClick={() => downloadJson(result, `pageroast-${url.replace(/[^a-z0-9]/gi, '-').slice(0, 30)}.json`)}
+          className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-warm-300 hover:border-warm-400 text-warm-700 text-sm font-semibold rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          Download
+        </button>
       </div>
     </div>
   );
@@ -317,6 +324,16 @@ function RecentRoasts() {
   );
 }
 
+function downloadJson(data: any, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function MyRoasts({ email, onView }: { email: string; onView: (r: RoastResult, url: string) => void }) {
   const [roasts, setRoasts] = useState<Array<{ id: number; url: string; score: number; grade: string; roast: string; created_at: string }>>([]);
   const [expanded, setExpanded] = useState(false);
@@ -340,7 +357,29 @@ function MyRoasts({ email, onView }: { email: string; onView: (r: RoastResult, u
 
   return (
     <section className="max-w-2xl mx-auto px-6 py-8">
-      <h3 className="text-lg font-bold text-warm-900 mb-4">Your Past Roasts</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold text-warm-900">Your Past Roasts</h3>
+        <button
+          onClick={async () => {
+            const token = await getToken();
+            const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+            const all = await Promise.all(roasts.map(r =>
+              fetch(`${API}/roasts/mine/${r.id}?email=${encodeURIComponent(email)}`, { headers })
+                .then(res => res.json())
+                .then(d => ({ url: r.url, score: r.score, grade: r.grade, roast: r.roast, date: r.created_at, result: d.result }))
+                .catch(() => null)
+            ));
+            downloadJson(all.filter(Boolean), `pageroast-export-${new Date().toISOString().slice(0, 10)}.json`);
+          }}
+          className="text-xs font-semibold text-warm-500 hover:text-fire-600 flex items-center gap-1 transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          Download all
+        </button>
+      </div>
+      <p className="text-xs text-warm-400 mb-4 bg-warm-100/50 rounded-lg px-3 py-2">
+        Roast data is stored temporarily and may be cleared during maintenance. Download your results to keep them.
+      </p>
       <div className="space-y-2">
         {visible.map((r) => (
           <button
@@ -1047,7 +1086,7 @@ export function PageRoastPage() {
                 {[
                   { q: 'Is this free?', a: 'Your first roast is free. After that, $5 gets you 5 credits. One roast = 1 credit. A/B compare = 2 credits. Cheaper than the therapist you\'ll need after seeing your score.' },
                   { q: 'Is this actually useful or just a joke?', a: 'Both. The roast line is for entertainment. The score, section breakdown, and fixes are real CRO analysis. Founders use it to improve their pages. Then they share the roast for clout.' },
-                  { q: 'Will you store my page content?', a: 'No. We fetch your public HTML, analyze it, and forget it. We keep the domain, score, and roast line for the Wall of Shame. That\'s it.' },
+                  { q: 'Will you store my results?', a: 'Your roast results are stored temporarily and may be cleared during server maintenance. Use the Download button to save your results permanently. We don\'t guarantee long-term data persistence — treat the download as your backup.' },
                   { q: 'What\'s A/B Compare?', a: 'Paste your page and a competitor\'s. We score both and pick a winner. It costs 2 credits because we\'re roasting twice as hard.' },
                   { q: 'Who made this?', a: 'Bilko. One person. No funding. Lots of opinions about your landing page. bilko.run' },
                 ].map(({ q, a }) => (

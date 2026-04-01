@@ -1,4 +1,7 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+
+const API = import.meta.env.VITE_API_URL || '/api';
 
 const SOCIAL_LINKS = [
   { href: 'https://x.com/BilkoBibitkov', label: 'X / Twitter', icon: 'x' },
@@ -19,130 +22,135 @@ function SocialIcon({ type }: { type: string }) {
 }
 
 export function HomePage() {
+  const [stats, setStats] = useState<{ totalRoasts: number; totalUsers: number } | null>(null);
+
+  useEffect(() => {
+    fetch(`${API}/roasts/stats`).then(r => r.json()).then(setStats).catch(() => {});
+  }, []);
+
   return (
     <>
-      {/* Hero — all about Bilko */}
+      {/* Hero — visitor benefit first */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-fire-50/30 via-warm-50 to-warm-50" />
-        <div className="relative max-w-3xl mx-auto px-6 pt-24 pb-16 md:pt-36 md:pb-24 text-center">
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-warm-900 animate-slide-up">
-            Bilko
+        <div className="absolute inset-0 bg-gradient-to-b from-fire-50/40 via-warm-50 to-warm-50" />
+        <div className="relative max-w-3xl mx-auto px-6 pt-20 pb-12 md:pt-32 md:pb-20 text-center">
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-warm-900 leading-[1.1] animate-slide-up">
+            Find out why your landing page
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-fire-500 to-fire-600">
+              isn't converting.
+            </span>
           </h1>
-          <p className="mt-4 text-xl md:text-2xl text-warm-600 font-medium animate-slide-up" style={{ animationDelay: '60ms' }}>
-            Solopreneur. Builder. Shipper.
+
+          <p className="mt-5 text-lg md:text-xl text-warm-600 max-w-xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '80ms' }}>
+            AI scores your page, roasts the weak spots, and tells you exactly what to fix. Free. 30 seconds.
           </p>
 
-          <div className="mt-6 flex items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: '120ms' }}>
-            {SOCIAL_LINKS.map(({ href, label, icon }) => (
-              <a
-                key={icon}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-all text-sm font-medium"
-                title={label}
-              >
-                <SocialIcon type={icon} />
-                <span className="hidden sm:inline">{label}</span>
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Story */}
-      <section className="max-w-2xl mx-auto px-6 pb-16 md:pb-24">
-        <div className="text-warm-600 leading-relaxed space-y-4 text-lg">
-          <p>
-            I quit waiting for permission and started building. One person, no funding, no team — just
-            ideas that won't shut up and an unreasonable belief that shipping beats planning.
-          </p>
-          <p>
-            I build AI-powered tools for people who make things on the internet. Marketers who need
-            honest feedback before they launch. Founders who want data, not opinions. Developers who
-            ship AI and need to test it.
-          </p>
-          <p>
-            Everything here is built with Claude, Gemini, and a lot of coffee. If it helps someone
-            ship better work, I'll build it.
-          </p>
-        </div>
-      </section>
-
-      {/* What I believe in */}
-      <section className="border-t border-warm-200/60 bg-white">
-        <div className="max-w-3xl mx-auto px-6 py-16 md:py-24">
-          <h2 className="text-2xl font-extrabold text-warm-900 mb-8">How I work</h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { title: 'Ship first', desc: 'An imperfect thing in the wild beats a perfect thing in my head. I ship weekly, learn daily, fix fast.' },
-              { title: 'Solo by choice', desc: 'No co-founders, no investors, no board meetings. Just me and the users. Every decision is instant.' },
-              { title: 'Build in public', desc: 'Revenue, failures, lessons — I share it all. Follow along on X and LinkedIn.' },
-            ].map(({ title, desc }) => (
-              <div key={title}>
-                <h3 className="font-bold text-warm-900 mb-2">{title}</h3>
-                <p className="text-sm text-warm-500 leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* What I'm working on */}
-      <section className="border-t border-warm-200/40">
-        <div className="max-w-3xl mx-auto px-6 py-16 md:py-24">
-          <h2 className="text-2xl font-extrabold text-warm-900 mb-3">What I'm building</h2>
-          <p className="text-warm-500 mb-8">AI tools for content, marketing, and developer workflows.</p>
-
-          <div className="space-y-4">
+          {/* CTA + social proof */}
+          <div className="mt-8 animate-slide-up" style={{ animationDelay: '160ms' }}>
             <Link
               to="/projects/page-roast"
-              className="group flex items-center justify-between p-4 -mx-4 rounded-xl hover:bg-warm-50 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 hover:shadow-fire-500/30 transition-all hover:-translate-y-0.5"
             >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-warm-900 group-hover:text-fire-600 transition-colors">PageRoast</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  <span className="text-xs font-semibold text-green-700">Live</span>
-                </div>
-                <p className="text-sm text-warm-500 mt-0.5">AI roasts your landing page. Scores, savage feedback, fixes.</p>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-warm-400 group-hover:text-fire-500 group-hover:translate-x-1 transition-all" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              🔥 Roast My Page — Free
             </Link>
-
-            <Link
-              to="/projects"
-              className="group flex items-center justify-between p-4 -mx-4 rounded-xl hover:bg-warm-50 transition-colors"
-            >
-              <div>
-                <span className="font-bold text-warm-900 group-hover:text-fire-600 transition-colors">More tools</span>
-                <p className="text-sm text-warm-500 mt-0.5">HeadlineGrader, AdScorer, Stepproof, AgentTrace, and more.</p>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-warm-400 group-hover:text-fire-500 group-hover:translate-x-1 transition-all" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-            </Link>
+            <p className="mt-3 text-sm text-warm-500">
+              1 free roast, no credit card required
+              {stats && stats.totalRoasts > 0 && (
+                <span> &middot; <strong className="text-warm-700">{stats.totalRoasts}+ pages roasted</strong></span>
+              )}
+            </p>
           </div>
         </div>
       </section>
 
-      {/* Connect */}
-      <section className="border-t border-warm-200/40 bg-warm-100/30">
-        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20 text-center">
-          <h2 className="text-2xl font-extrabold text-warm-900 mb-3">Let's connect</h2>
-          <p className="text-warm-500 mb-6">I post about building, shipping, and what I'm learning along the way.</p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {SOCIAL_LINKS.map(({ href, label, icon }) => (
-              <a
-                key={icon}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-warm-200 bg-white text-warm-700 hover:text-warm-900 hover:border-warm-400 hover:shadow-sm transition-all text-sm font-semibold"
-              >
-                <SocialIcon type={icon} />
-                {label}
-              </a>
+      {/* Product preview — show the score card */}
+      <section className="max-w-2xl mx-auto px-6 -mt-4 pb-16">
+        <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 md:p-8 text-center relative overflow-hidden shadow-xl">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.15),transparent_60%)]" />
+          <div className="relative">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-3">Sample Result</p>
+            <div className="flex items-center justify-center gap-4 mb-2">
+              <span className="text-5xl md:text-6xl font-black text-white">62</span>
+              <div className="text-left">
+                <div className="text-3xl md:text-4xl font-black text-yellow-400">C+</div>
+                <div className="text-xs text-warm-500">/100</div>
+              </div>
+            </div>
+            <p className="text-fire-300 font-bold italic text-sm md:text-base max-w-md mx-auto">
+              &ldquo;Your landing page has the conversion power of a 'Please take one' sign at a dentist's office.&rdquo;
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* What it checks — benefit-focused */}
+      <section className="border-t border-warm-200/60 bg-white">
+        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20">
+          <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">AI audits 4 things that make or break conversions</h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            {[
+              { icon: '🎯', title: 'Hero Section', desc: 'Is your headline clear? Is the CTA visible? Can someone understand your product in 5 seconds?' },
+              { icon: '⭐', title: 'Social Proof', desc: 'Real testimonials or fake-looking quotes from "J."? Trust logos or empty promises?' },
+              { icon: '💡', title: 'Clarity & Persuasion', desc: 'Benefits or feature dumps? Short sentences or walls of text? Are you selling or lecturing?' },
+              { icon: '🔥', title: 'Conversion Architecture', desc: 'How many CTAs? How much friction? Is the path to payment obvious or hidden?' },
+            ].map(({ icon, title, desc }) => (
+              <div key={title} className="flex gap-4 items-start">
+                <span className="text-2xl flex-shrink-0">{icon}</span>
+                <div>
+                  <h3 className="font-bold text-warm-900">{title}</h3>
+                  <p className="text-sm text-warm-500 leading-relaxed mt-1">{desc}</p>
+                </div>
+              </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Built by Bilko — founder's note */}
+      <section className="border-t border-warm-200/40">
+        <div className="max-w-2xl mx-auto px-6 py-16 md:py-20">
+          <div className="flex items-start gap-5">
+            <div className="flex-shrink-0 w-14 h-14 rounded-full bg-fire-100 text-fire-600 flex items-center justify-center text-2xl font-black">
+              B
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-warm-900 mb-2">Built by Bilko</h2>
+              <p className="text-warm-600 leading-relaxed">
+                I built PageRoast because I was tired of launching pages and getting zero feedback.
+                I'm a solo builder — no team, no funding, no board meetings. Just me and Claude,
+                shipping tools for people who make things on the internet.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {SOCIAL_LINKS.map(({ href, label, icon }) => (
+                  <a
+                    key={icon}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-warm-500 hover:text-fire-600 transition-colors"
+                  >
+                    <SocialIcon type={icon} />
+                    {label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* More tools teaser */}
+      <section className="border-t border-warm-200/40 bg-warm-100/30">
+        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20 text-center">
+          <h2 className="text-2xl font-extrabold text-warm-900 mb-3">More tools coming</h2>
+          <p className="text-warm-500 mb-6">HeadlineGrader, AdScorer, Stepproof, AgentTrace — all built solo, all shipping soon.</p>
+          <Link
+            to="/projects"
+            className="text-sm font-semibold text-fire-500 hover:text-fire-600"
+          >
+            View all projects &rarr;
+          </Link>
         </div>
       </section>
     </>

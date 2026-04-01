@@ -94,6 +94,13 @@ export function Layout() {
               Pricing
             </NavLink>
 
+            <Link
+              to="/projects/page-roast"
+              className="px-4 py-2 text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-lg shadow-sm shadow-fire-500/20 transition-all"
+            >
+              Try Free
+            </Link>
+
             {isAdmin && (
               <NavLink
                 to="/admin"

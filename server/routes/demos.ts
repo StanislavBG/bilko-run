@@ -428,6 +428,14 @@ Write the verdict and suggested hybrid.`;
 
   // ── Page Roast ──────────────────────────────────────
 
+  // ── Public stats (for social proof) ─────────────────────────────
+  app.get('/api/roasts/stats', async () => {
+    const db = getDb();
+    const total = db.prepare('SELECT COUNT(*) as n FROM roast_history').get() as { n: number };
+    const users = db.prepare('SELECT COUNT(*) as n FROM token_balances').get() as { n: number };
+    return { totalRoasts: total.n, totalUsers: users.n };
+  });
+
   // ── Recent roasts feed (public) ─────────────────────────────────
   app.get('/api/roasts/recent', async () => {
     const rows = getDb().prepare(

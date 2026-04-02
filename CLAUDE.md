@@ -25,7 +25,7 @@ When making multi-file refactors (especially splitting files or restructuring ro
 
 When editing SQL migrations, never split on semicolons naively — trigger blocks contain BEGIN/END with internal semicolons. Always parse migration files accounting for PL/pgSQL and SQLite trigger syntax.
 
-SQLite with WAL mode. Schema defined in `server/db.ts`. All queries use parameterized statements (no string interpolation in SQL).
+Turso (libSQL) for persistent storage. Schema defined in `server/db.ts`. All queries use parameterized statements via async helpers (`dbGet`, `dbAll`, `dbRun`, `dbTransaction`). Falls back to local SQLite file in dev when `TURSO_DATABASE_URL` is not set.
 
 ## Automation & Scraping
 

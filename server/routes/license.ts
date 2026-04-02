@@ -22,7 +22,7 @@ export function registerLicenseRoutes(app: FastifyInstance): void {
   app.get('/api/license/my-keys', async (req, reply) => {
     const email = await requireAuth(req, reply);
     if (!email) return;
-    const keys = getLicenseKeysForEmail(email);
+    const keys = await getLicenseKeysForEmail(email);
     return { keys };
   });
 
@@ -40,7 +40,7 @@ export function registerLicenseRoutes(app: FastifyInstance): void {
       return { valid: false, message: 'key required' };
     }
 
-    const result = validateLicenseKey(key);
+    const result = await validateLicenseKey(key);
     if (!result.valid) {
       // Key not in DB — could be Render cold start DB wipe. Guide user to self-serve recovery.
       const isValidFormat = /^CG-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/i.test(key);

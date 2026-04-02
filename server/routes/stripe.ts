@@ -90,11 +90,11 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     }
 
     try {
-      let stripeCustomerId = getCustomerStripeId(email);
+      let stripeCustomerId = await getCustomerStripeId(email);
       if (!stripeCustomerId) {
         const stripeCustomer = await stripe.customers.create({ email });
         stripeCustomerId = stripeCustomer.id;
-        upsertCustomer(email, stripeCustomerId);
+        await upsertCustomer(email, stripeCustomerId);
       }
 
       const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
@@ -158,11 +158,10 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         }
 
         if (email && stripeCustomerId) {
-          upsertCustomer(email, stripeCustomerId);
+          await upsertCustomer(email, stripeCustomerId);
         }
 
         if (data.mode === 'subscription' && email && stripeCustomerId) {
-          // Resolve plan tier from the Stripe price ID on the checkout line items
           let planTier = 'pro';
           try {
             const stripe = getStripe()!;
@@ -170,7 +169,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             const priceId = lineItems.data[0]?.price?.id;
             if (priceId) planTier = priceToPlanTier(priceId);
           } catch { /* default to pro */ }
-          saveSubscription({
+          await saveSubscription({
             email,
             stripe_customer_id: stripeCustomerId,
             stripe_subscription_id: data.subscription as string,
@@ -178,11 +177,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             status: 'active',
             current_period_end: 0,
           });
-          // Generate and store license key for CLI pro access
-          const licenseKey = upsertLicenseKey(email, stripeCustomerId, 'contentgrade_pro');
+          const licenseKey = await upsertLicenseKey(email, stripeCustomerId, 'contentgrade_pro');
           console.log(`[stripe] License key issued for ${email}: ${licenseKey.slice(0, 10)}...`);
         } else if (data.mode === 'payment' && email && stripeCustomerId) {
-          // Determine which one-time product was purchased
           let productKey = 'audiencedecoder_report';
           let tokenAmount = 0;
           try {
@@ -198,7 +195,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             }
           } catch { /* default to audiencedecoder */ }
 
-          saveOneTimePurchase({
+          await saveOneTimePurchase({
             email,
             stripe_customer_id: stripeCustomerId,
             stripe_payment_intent_id: data.payment_intent as string,
@@ -206,18 +203,18 @@ export function registerStripeRoutes(app: FastifyInstance): void {
           });
 
           if (productKey === 'pageroast_tokens' && tokenAmount > 0) {
-            if (!hasTokenAccount(email)) grantFreeTokens(email, 0);
-            creditTokens(email, tokenAmount, data.payment_intent as string);
+            if (!(await hasTokenAccount(email))) await grantFreeTokens(email, 0);
+            await creditTokens(email, tokenAmount, data.payment_intent as string);
             console.log(`[stripe] Credited ${tokenAmount} tokens for ${email}`);
           }
         }
       } else if (event.type === 'customer.subscription.updated') {
-        updateSubscriptionPeriod(data.id, data.status, data.current_period_end);
+        await updateSubscriptionPeriod(data.id, data.status, data.current_period_end);
       } else if (event.type === 'customer.subscription.deleted') {
-        updateSubscriptionStatus(data.id, 'canceled');
+        await updateSubscriptionStatus(data.id, 'canceled');
       } else if (event.type === 'invoice.payment_failed') {
         if (data.subscription) {
-          updateSubscriptionStatus(data.subscription, 'past_due');
+          await updateSubscriptionStatus(data.subscription, 'past_due');
         }
       }
     } catch (err: any) {
@@ -241,7 +238,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       return { error: 'Stripe not configured' };
     }
 
-    const customerId = getCustomerStripeId(email);
+    const customerId = await getCustomerStripeId(email);
     if (!customerId) {
       reply.status(404);
       return { error: 'No Stripe customer found for this email. Please use the email you used to subscribe.' };
@@ -276,8 +273,8 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     }
 
     // Retroactively generate a key for subscribers who paid before this feature existed
-    const customerId = getCustomerStripeId(email);
-    const licenseKey = upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
+    const customerId = await getCustomerStripeId(email);
+    const licenseKey = await upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
 
     return { licenseKey, email };
   });
@@ -291,7 +288,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       return { error: 'key required' };
     }
 
-    const result = validateLicenseKey(key);
+    const result = await validateLicenseKey(key);
     if (!result.valid) {
       reply.status(403);
       return { valid: false, error: 'Invalid or revoked license key.' };
@@ -332,7 +329,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       }
 
       const customerId = typeof session.customer === 'string' ? session.customer : undefined;
-      const licenseKey = upsertLicenseKey(email, customerId, 'contentgrade_pro');
+      const licenseKey = await upsertLicenseKey(email, customerId, 'contentgrade_pro');
 
       reply.type('text/html');
       return successHtml('You\'re now Pro 🎉', `
@@ -370,8 +367,8 @@ export function registerStripeRoutes(app: FastifyInstance): void {
           <p><a href="/my-license">Try a different email</a></p>
         `);
       }
-      const customerId = getCustomerStripeId(email);
-      const licenseKey = upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
+      const customerId = await getCustomerStripeId(email);
+      const licenseKey = await upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
       reply.type('text/html');
       return successHtml('Your Bilko.run Pro License', `
         <p>Active Pro subscription confirmed for <strong>${escHtml(email)}</strong>.</p>
@@ -436,13 +433,14 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       return { error: 'email required' };
     }
 
-    const keys = getLicenseKeysForEmail(email);
+    const keys = await getLicenseKeysForEmail(email);
     const activeLicenseKey = keys.find(k => k.status === 'active')?.key ?? null;
+    const active = await hasActiveSubscription(email);
 
     return {
-      active: hasActiveSubscription(email),
-      audiencedecoder: hasPurchased(email, 'audiencedecoder_report'),
-      plan: hasActiveSubscription(email) ? 'contentgrade_pro' : null,
+      active,
+      audiencedecoder: await hasPurchased(email, 'audiencedecoder_report'),
+      plan: active ? 'contentgrade_pro' : null,
       licenseKey: activeLicenseKey,
       configured: isStripeConfigured(),
       audienceDecoderConfigured: isAudienceDecoderConfigured(),

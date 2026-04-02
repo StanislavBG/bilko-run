@@ -4,7 +4,7 @@ import staticPlugin from '@fastify/static';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
-import { getDb } from './db.js';
+import { initDb } from './db.js';
 import { registerDemoRoutes } from './routes/demos.js';
 import { registerStripeRoutes } from './routes/stripe.js';
 import { registerLicenseRoutes } from './routes/license.js';
@@ -16,13 +16,15 @@ const PORT = parseInt(process.env.PORT || '4000', 10);
 const isProd = process.env.NODE_ENV === 'production';
 console.log(`[Boot] NODE_ENV=${process.env.NODE_ENV}, isProd=${isProd}, __dirname=${__dirname}, cwd=${process.cwd()}`);
 
-// Init DB on startup
-try {
-  getDb();
-  console.log('[DB] SQLite initialized');
-} catch (err) {
-  console.error('[DB] SQLite init failed:', err);
+// Init DB on startup (async — runs before server listen)
+async function boot() {
+  try {
+    await initDb();
+  } catch (err) {
+    console.error('[DB] Init failed:', err);
+  }
 }
+boot();
 
 const app = Fastify({
   logger: { level: 'warn' },

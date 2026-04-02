@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { createHash } from 'crypto';
-import { getDb } from '../db.js';
+import { dbGet, dbAll, dbRun } from '../db.js';
 import { askGemini } from '../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../services/stripe.js';
 import { getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount } from '../services/tokens.js';
@@ -40,28 +40,27 @@ function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function getUsageCount(ipHash: string, endpoint: string): number {
-  const db = getDb();
-  const row = db.prepare(
-    'SELECT count FROM usage_tracking WHERE ip_hash = ? AND endpoint = ? AND date = ?'
-  ).get(ipHash, endpoint, todayUTC()) as { count: number } | undefined;
+async function getUsageCount(ipHash: string, endpoint: string): Promise<number> {
+  const row = await dbGet<{ count: number }>(
+    'SELECT count FROM usage_tracking WHERE ip_hash = ? AND endpoint = ? AND date = ?',
+    ipHash, endpoint, todayUTC(),
+  );
   return row?.count ?? 0;
 }
 
-function incrementUsage(ipHash: string, endpoint: string): number {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 1)
-    ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = count + 1
-  `).run(ipHash, endpoint, todayUTC());
+async function incrementUsage(ipHash: string, endpoint: string): Promise<number> {
+  await dbRun(
+    `INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 1) ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = count + 1`,
+    ipHash, endpoint, todayUTC(),
+  );
   return getUsageCount(ipHash, endpoint);
 }
 
-function resetUsage(ipHash: string, endpoint: string): void {
-  const db = getDb();
-  db.prepare(
-    'INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 0) ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = 0'
-  ).run(ipHash, endpoint, todayUTC());
+async function resetUsage(ipHash: string, endpoint: string): Promise<void> {
+  await dbRun(
+    'INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 0) ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = 0',
+    ipHash, endpoint, todayUTC(),
+  );
 }
 
 interface RateLimitResult {
@@ -77,16 +76,15 @@ interface RateLimitResult {
 // Verifies subscription status against Stripe API directly (5-min cache) instead of a stale DB flag.
 function recordFunnelEvent(event: string, ipHash: string, tool?: string, email?: string): void {
   try {
-    const db = getDb();
-    db.prepare('INSERT INTO funnel_events (event, ip_hash, tool, email) VALUES (?, ?, ?, ?)').run(event, ipHash, tool ?? null, email ?? null);
+    dbRun('INSERT INTO funnel_events (event, ip_hash, tool, email) VALUES (?, ?, ?, ?)', event, ipHash, tool ?? null, email ?? null);
   } catch { /* non-critical */ }
 }
 
 async function checkRateLimit(ipHash: string, endpoint: string, email?: string, productKey?: string): Promise<RateLimitResult> {
   if (email) {
     // One-time purchases (e.g. AudienceDecoder) get Pro-level limits
-    if (productKey && hasPurchased(email, productKey)) {
-      const count = getUsageCount(ipHash, endpoint);
+    if (productKey && await hasPurchased(email, productKey)) {
+      const count = await getUsageCount(ipHash, endpoint);
       const limit = PRO_TIER_LIMIT;
       if (count >= limit) return { allowed: false, remaining: 0, limit, isPro: true };
       return { allowed: true, remaining: limit - count, limit, isPro: true };
@@ -95,12 +93,12 @@ async function checkRateLimit(ipHash: string, endpoint: string, email?: string, 
     const sub = await getActiveSubscriptionLive(email);
     if (sub.isPro) {
       const limit = TIER_LIMITS[sub.tier] || PRO_TIER_LIMIT;
-      const count = getUsageCount(ipHash, endpoint);
+      const count = await getUsageCount(ipHash, endpoint);
       if (count >= limit) return { allowed: false, remaining: 0, limit, isPro: true };
       return { allowed: true, remaining: limit - count, limit, isPro: true };
     }
   }
-  const count = getUsageCount(ipHash, endpoint);
+  const count = await getUsageCount(ipHash, endpoint);
   if (count >= FREE_TIER_LIMIT) {
     recordFunnelEvent('free_limit_hit', ipHash, endpoint, email);
     return { allowed: false, remaining: 0, limit: FREE_TIER_LIMIT, isPro: false };
@@ -127,15 +125,15 @@ export function registerDemoRoutes(app: FastifyInstance): void {
       return { error: 'Valid email address required.' };
     }
     const ipHash = hashIp(req.ip);
-    const db = getDb();
     try {
-      db.prepare(
-        'INSERT OR IGNORE INTO email_captures (email, tool, score, ip_hash, source) VALUES (?, ?, ?, ?, ?)'
-      ).run(email, 'headline-grader', '', ipHash, 'headline-grader');
+      await dbRun(
+        'INSERT OR IGNORE INTO email_captures (email, tool, score, ip_hash, source) VALUES (?, ?, ?, ?, ?)',
+        email, 'headline-grader', '', ipHash, 'headline-grader',
+      );
     } catch (_err) {
       // already captured — that's fine, still grant the reset
     }
-    resetUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
+    await resetUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
     return { unlocked: true, remaining: FREE_TIER_LIMIT };
   });
 
@@ -265,7 +263,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         parsed = JSON.parse(jsonMatch[0]);
       }
 
-      const newCount = incrementUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
+      const newCount = await incrementUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
       const remaining = Math.max(0, rate.limit - newCount);
       return { ...parsed, usage: { remaining, limit: rate.limit, isPro: rate.isPro, gated: false } };
     } catch (err: any) {
@@ -416,7 +414,7 @@ Write the verdict and suggested hybrid.`;
         suggested_hybrid: compParsed.suggested_hybrid ?? '',
       };
 
-      const hgcNewCount = incrementUsage(hgcIpHash, HEADLINE_GRADER_ENDPOINT);
+      const hgcNewCount = await incrementUsage(hgcIpHash, HEADLINE_GRADER_ENDPOINT);
       const hgcRemaining = Math.max(0, hgcRate.limit - hgcNewCount);
       return { headlineA: scoreA, headlineB: scoreB, comparison, usage: { remaining: hgcRemaining, limit: hgcRate.limit, isPro: hgcRate.isPro, gated: false } };
     } catch (err: any) {
@@ -430,37 +428,28 @@ Write the verdict and suggested hybrid.`;
 
   // ── Public stats (for social proof) ─────────────────────────────
   app.get('/api/roasts/stats', async () => {
-    const db = getDb();
-    const total = db.prepare('SELECT COUNT(*) as n FROM roast_history').get() as { n: number };
-    const users = db.prepare('SELECT COUNT(*) as n FROM token_balances').get() as { n: number };
-    return { totalRoasts: total.n, totalUsers: users.n };
+    const total = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history');
+    const users = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances');
+    return { totalRoasts: total?.n ?? 0, totalUsers: users?.n ?? 0 };
   });
 
   // ── Recent roasts feed (public) ─────────────────────────────────
   app.get('/api/roasts/recent', async () => {
-    const rows = getDb().prepare(
-      'SELECT url, score, grade, roast, created_at FROM roast_history ORDER BY created_at DESC LIMIT 20'
-    ).all();
-    return rows;
+    return dbAll('SELECT url, score, grade, roast, created_at FROM roast_history ORDER BY created_at DESC LIMIT 20');
   });
 
   // ── User's past roasts (Clerk auth required) ──
   app.get('/api/roasts/mine', async (req, reply) => {
     const email = await requireAuth(req, reply);
     if (!email) return;
-    const rows = getDb().prepare(
-      'SELECT id, url, score, grade, roast, created_at FROM user_roasts WHERE email = ? ORDER BY created_at DESC LIMIT 50'
-    ).all(email);
-    return rows;
+    return dbAll('SELECT id, url, score, grade, roast, created_at FROM user_roasts WHERE email = ? ORDER BY created_at DESC LIMIT 50', email);
   });
 
   app.get('/api/roasts/mine/:id', async (req, reply) => {
     const email = await requireAuth(req, reply);
     if (!email) return;
     const { id } = req.params as { id: string };
-    const row = getDb().prepare(
-      'SELECT * FROM user_roasts WHERE id = ? AND email = ?'
-    ).get(parseInt(id, 10), email) as any;
+    const row = await dbGet<any>('SELECT * FROM user_roasts WHERE id = ? AND email = ?', parseInt(id, 10), email);
     if (!row) {
       reply.status(404);
       return { error: 'Roast not found.' };
@@ -475,11 +464,11 @@ Write the verdict and suggested hybrid.`;
       reply.status(400);
       return { error: 'Valid email required.' };
     }
-    const account = hasTokenAccount(email);
+    const account = await hasTokenAccount(email);
     if (!account) {
-      grantFreeTokens(email);
+      await grantFreeTokens(email);
     }
-    return { balance: getTokenBalance(email), hasAccount: true };
+    return { balance: await getTokenBalance(email), hasAccount: true };
   });
 
   app.post('/api/demos/page-roast', async (req, reply) => {
@@ -508,14 +497,14 @@ Write the verdict and suggested hybrid.`;
     }
 
     // Auto-grant free tokens for new users
-    if (!hasTokenAccount(email)) {
-      grantFreeTokens(email);
+    if (!(await hasTokenAccount(email))) {
+      await grantFreeTokens(email);
     }
 
     // Pro subscribers skip token deduction
     const sub = await getActiveSubscriptionLive(email);
     if (!sub.isPro) {
-      const deduction = deductToken(email, 1, 'page_roast');
+      const deduction = await deductToken(email, 1, 'page_roast');
       if (!deduction.success) {
         reply.status(402);
         return { error: 'No tokens remaining.', requiresTokens: true, balance: deduction.balance };
@@ -603,14 +592,13 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       // Save to public wall (anonymized domain only) + user's personal history (full result)
       try {
         const domain = parsedUrl.hostname.replace(/^www\./, '');
-        const db = getDb();
-        db.prepare('INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)').run(domain, parsed.total_score, parsed.grade, parsed.roast);
-        db.prepare('INSERT INTO user_roasts (email, url, score, grade, roast, result_json) VALUES (?, ?, ?, ?, ?, ?)').run(
-          email, parsedUrl.toString(), parsed.total_score, parsed.grade, parsed.roast, JSON.stringify(parsed)
+        await dbRun('INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)', domain, parsed.total_score, parsed.grade, parsed.roast);
+        await dbRun('INSERT INTO user_roasts (email, url, score, grade, roast, result_json) VALUES (?, ?, ?, ?, ?, ?)',
+          email, parsedUrl.toString(), parsed.total_score, parsed.grade, parsed.roast, JSON.stringify(parsed),
         );
       } catch { /* best effort */ }
 
-      const balance = getTokenBalance(email);
+      const balance = await getTokenBalance(email);
       return { ...parsed, usage: { balance, gated: false } };
     } catch (err: any) {
       console.error('page_roast_demo', err);
@@ -638,14 +626,14 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
     }
 
     // Auto-grant free tokens for new users
-    if (!hasTokenAccount(email)) {
-      grantFreeTokens(email);
+    if (!(await hasTokenAccount(email))) {
+      await grantFreeTokens(email);
     }
 
     // A/B compare requires purchased tokens (free grant not enough) — costs 2
     const sub = await getActiveSubscriptionLive(email);
     if (!sub.isPro) {
-      const deduction = deductToken(email, 2, 'page_roast_compare');
+      const deduction = await deductToken(email, 2, 'page_roast_compare');
       if (!deduction.success) {
         reply.status(402);
         return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance: deduction.balance };
@@ -780,7 +768,7 @@ Write the verdict and analysis.`;
         verdict: compParsed.verdict ?? '',
       };
 
-      const balance = getTokenBalance(email);
+      const balance = await getTokenBalance(email);
       return { score_a: scoreA, score_b: scoreB, comparison, usage: { balance, gated: false } };
     } catch (err: any) {
       console.error('page_roast_compare', err);
@@ -885,7 +873,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         parsed = JSON.parse(jsonMatch[0]);
       }
 
-      const _asNewCount = incrementUsage(_asIpHash, 'ad-scorer');
+      const _asNewCount = await incrementUsage(_asIpHash, 'ad-scorer');
       const _asRemaining = Math.max(0, _asRate.limit - _asNewCount);
       return { ...parsed, usage: { remaining: _asRemaining, limit: _asRate.limit, isPro: _asRate.isPro, gated: false } };
     } catch (err: any) {
@@ -1040,7 +1028,7 @@ Write the verdict, suggested hybrid, and strategic analysis.`;
         strategic_analysis: compParsed.strategic_analysis ?? '',
       };
 
-      const ascNewCount = incrementUsage(ascIpHash, 'ad-scorer');
+      const ascNewCount = await incrementUsage(ascIpHash, 'ad-scorer');
       const ascRemaining = Math.max(0, ascRate.limit - ascNewCount);
       return { adCopyA: scoreA, adCopyB: scoreB, comparison, usage: { remaining: ascRemaining, limit: ascRate.limit, isPro: ascRate.isPro, gated: false } };
     } catch (err: any) {
@@ -1146,7 +1134,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         parsed = JSON.parse(jsonMatch[0]);
       }
 
-      const _tgNewCount = incrementUsage(_tgIpHash, 'thread-grader');
+      const _tgNewCount = await incrementUsage(_tgIpHash, 'thread-grader');
       const _tgRemaining = Math.max(0, _tgRate.limit - _tgNewCount);
       return { ...parsed, usage: { remaining: _tgRemaining, limit: _tgRate.limit, isPro: _tgRate.isPro, gated: false } };
     } catch (err: any) {
@@ -1290,7 +1278,7 @@ Write the verdict, suggested hybrid hook, and strategic analysis.`;
         strategic_analysis: compParsed.strategic_analysis ?? '',
       };
 
-      const tgcNewCount = incrementUsage(tgcIpHash, 'thread-grader');
+      const tgcNewCount = await incrementUsage(tgcIpHash, 'thread-grader');
       const tgcRemaining = Math.max(0, tgcRate.limit - tgcNewCount);
       return { threadA: scoreA, threadB: scoreB, comparison, usage: { remaining: tgcRemaining, limit: tgcRate.limit, isPro: tgcRate.isPro, gated: false } };
     } catch (err: any) {
@@ -1410,7 +1398,7 @@ Make each email feel distinct — different frameworks, different emotional leve
         parsed = JSON.parse(jsonMatch[0]);
       }
 
-      const _efNewCount = incrementUsage(_efIpHash, 'email-forge');
+      const _efNewCount = await incrementUsage(_efIpHash, 'email-forge');
       const _efRemaining = Math.max(0, _efRate.limit - _efNewCount);
       return { ...parsed, usage: { remaining: _efRemaining, limit: _efRate.limit, isPro: _efRate.isPro, gated: false } };
     } catch (err: any) {
@@ -1557,7 +1545,7 @@ Overall winner: Sequence ${winner} by ${margin} points.`;
 
       const compParsed = parseSeq(rawComp);
 
-      const efcNewCount = incrementUsage(efcIpHash, 'email-forge');
+      const efcNewCount = await incrementUsage(efcIpHash, 'email-forge');
       const efcRemaining = Math.max(0, efcRate.limit - efcNewCount);
       return {
         sequence_a: seqA,
@@ -1589,11 +1577,11 @@ Overall winner: Sequence ${winner} by ${margin} points.`;
       return { error: 'Valid email and tool are required.' };
     }
     try {
-      const db = getDb();
       const ipHash = hashIp(req.ip);
-      db.prepare(
-        'INSERT OR IGNORE INTO email_captures (email, tool, score, ip_hash, source) VALUES (?, ?, ?, ?, ?)'
-      ).run(email, tool, score, ipHash, tool);
+      await dbRun(
+        'INSERT OR IGNORE INTO email_captures (email, tool, score, ip_hash, source) VALUES (?, ?, ?, ?, ?)',
+        email, tool, score, ipHash, tool,
+      );
       return { ok: true };
     } catch (err: any) {
       console.error('email_capture', err);
@@ -1697,7 +1685,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         parsed = JSON.parse(jsonMatch[0]);
       }
 
-      const _adNewCount = incrementUsage(_adIpHash, 'audience-decoder');
+      const _adNewCount = await incrementUsage(_adIpHash, 'audience-decoder');
       const _adRemaining = Math.max(0, _adRate.limit - _adNewCount);
       return { ...parsed, usage: { remaining: _adRemaining, limit: _adRate.limit, isPro: _adRate.isPro, gated: false } };
     } catch (err: any) {
@@ -1819,7 +1807,7 @@ Compare these two creators and identify collaboration potential, audience overla
 
       const comparison = parseResult(rawComp);
 
-      const adcNewCount = incrementUsage(adcIpHash, 'audience-decoder');
+      const adcNewCount = await incrementUsage(adcIpHash, 'audience-decoder');
       const adcRemaining = Math.max(0, adcRate.limit - adcNewCount);
       return {
         analysis_a: analysisA,

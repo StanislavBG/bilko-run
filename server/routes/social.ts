@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   listRivalPairs, addRivalPair, generateSocialRoast,
-  listQueue, approveQueueItem, rejectQueueItem,
+  listQueue, updateQueueStatus,
 } from '../services/social-roast.js';
 import { requireAdmin } from '../clerk.js';
 
@@ -42,14 +42,14 @@ export function registerSocialRoutes(app: FastifyInstance): void {
   app.post('/api/social/queue/:id/approve', async (req, reply) => {
     if (!await requireAdmin(req, reply)) return;
     const { id } = req.params as { id: string };
-    await approveQueueItem(parseInt(id, 10));
+    await updateQueueStatus(parseInt(id, 10), 'approved');
     return { ok: true };
   });
 
   app.post('/api/social/queue/:id/reject', async (req, reply) => {
     if (!await requireAdmin(req, reply)) return;
     const { id } = req.params as { id: string };
-    await rejectQueueItem(parseInt(id, 10));
+    await updateQueueStatus(parseInt(id, 10), 'rejected');
     return { ok: true };
   });
 }

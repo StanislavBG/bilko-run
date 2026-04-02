@@ -58,14 +58,6 @@ export async function updateSubscriptionPeriod(stripeSubId: string, status: stri
   await dbRun("UPDATE stripe_subscriptions SET status = ?, current_period_end = ?, updated_at = datetime('now') WHERE stripe_subscription_id = ?", status, currentPeriodEnd, stripeSubId);
 }
 
-export async function hasActiveSubscription(email: string): Promise<boolean> {
-  const row = await dbGet<{ status: string }>(
-    `SELECT status FROM stripe_subscriptions WHERE email = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
-    email,
-  );
-  return row?.status === 'active';
-}
-
 export async function getSubscriptionTier(email: string): Promise<'free' | 'pro' | 'business' | 'team'> {
   const row = await dbGet<{ plan_tier: string }>(
     `SELECT plan_tier FROM stripe_subscriptions WHERE email = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
@@ -74,6 +66,10 @@ export async function getSubscriptionTier(email: string): Promise<'free' | 'pro'
   const tier = row?.plan_tier;
   if (tier === 'team' || tier === 'business' || tier === 'pro') return tier;
   return 'free';
+}
+
+export async function hasActiveSubscription(email: string): Promise<boolean> {
+  return (await getSubscriptionTier(email)) !== 'free';
 }
 
 // Map Stripe price IDs to plan tiers
@@ -126,9 +122,8 @@ export async function getActiveSubscriptionLive(email: string): Promise<{ isPro:
 
   const stripe = getStripe();
   if (!stripe) {
-    const active = await hasActiveSubscription(email);
-    const tier = active ? await getSubscriptionTier(email) : 'free';
-    return { isPro: active, tier };
+    const tier = await getSubscriptionTier(email);
+    return { isPro: tier !== 'free', tier };
   }
 
   let customerId = await getCustomerStripeId(email);
@@ -162,7 +157,7 @@ export async function getActiveSubscriptionLive(email: string): Promise<{ isPro:
     if (isPro) {
       const priceId = subscriptions.data[0]?.items?.data[0]?.price?.id ?? '';
       tier = priceToPlanTier(priceId);
-      if (!(await hasActiveSubscription(email))) {
+      if ((await getSubscriptionTier(email)) === 'free') {
         await saveSubscription({
           email,
           stripe_customer_id: customerId,
@@ -177,9 +172,9 @@ export async function getActiveSubscriptionLive(email: string): Promise<{ isPro:
     return { isPro, tier };
   } catch (err) {
     console.error('[stripe] Live subscription check failed, falling back to DB:', err);
-    const active = await hasActiveSubscription(email);
-    const tier = active ? await getSubscriptionTier(email) : 'free';
-    _subCache.set(email, { isPro: active, tier, expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
-    return { isPro: active, tier };
+    const tier = await getSubscriptionTier(email);
+    const isPro = tier !== 'free';
+    _subCache.set(email, { isPro, tier, expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
+    return { isPro, tier };
   }
 }

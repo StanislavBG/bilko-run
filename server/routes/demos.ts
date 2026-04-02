@@ -6,23 +6,20 @@ import { getActiveSubscriptionLive, hasPurchased } from '../services/stripe.js';
 import { getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount } from '../services/tokens.js';
 import { verifyClerkToken, requireAuth, EMAIL_RE } from '../clerk.js';
 import { validatePublicUrl, fetchPageBounded } from '../services/page-fetch.js';
+import { parseJsonResponse } from '../utils.js';
 
 // ── Usage tracking utilities ──────────────────────────────────────
 
 const FREE_TIER_LIMIT = 3;
-// Pro/Business/Team subscribers get effectively unlimited runs. 1_000_000 is large
-// enough to never be hit in practice and serialises cleanly to JSON (unlike Infinity).
-const PRO_TIER_LIMIT = 1_000_000;
-const BUSINESS_TIER_LIMIT = 1_000_000;
-const TEAM_TIER_LIMIT = 1_000_000;
+const PAID_TIER_LIMIT = 1_000_000; // effectively unlimited; serialises cleanly to JSON (unlike Infinity)
 const HEADLINE_GRADER_ENDPOINT = 'headline-grader';
 const UPGRADE_URL = 'https://bilko.run/pricing';
 
 const TIER_LIMITS: Record<string, number> = {
   free: FREE_TIER_LIMIT,
-  pro: PRO_TIER_LIMIT,
-  business: BUSINESS_TIER_LIMIT,
-  team: TEAM_TIER_LIMIT,
+  pro: PAID_TIER_LIMIT,
+  business: PAID_TIER_LIMIT,
+  team: PAID_TIER_LIMIT,
 };
 
 function freeGateMsg(_what: string): string {
@@ -49,11 +46,11 @@ async function getUsageCount(ipHash: string, endpoint: string): Promise<number> 
 }
 
 async function incrementUsage(ipHash: string, endpoint: string): Promise<number> {
-  await dbRun(
-    `INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 1) ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = count + 1`,
+  const row = await dbGet<{ count: number }>(
+    `INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 1) ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = count + 1 RETURNING count`,
     ipHash, endpoint, todayUTC(),
   );
-  return getUsageCount(ipHash, endpoint);
+  return row?.count ?? 1;
 }
 
 async function resetUsage(ipHash: string, endpoint: string): Promise<void> {
@@ -79,14 +76,14 @@ async function checkRateLimit(ipHash: string, endpoint: string, email?: string, 
     // One-time purchases (e.g. AudienceDecoder) get Pro-level limits
     if (productKey && await hasPurchased(email, productKey)) {
       const count = await getUsageCount(ipHash, endpoint);
-      const limit = PRO_TIER_LIMIT;
+      const limit = PAID_TIER_LIMIT;
       if (count >= limit) return { allowed: false, remaining: 0, limit, isPro: true };
       return { allowed: true, remaining: limit - count, limit, isPro: true };
     }
     // Subscription users — resolve their actual tier
     const sub = await getActiveSubscriptionLive(email);
     if (sub.isPro) {
-      const limit = TIER_LIMITS[sub.tier] || PRO_TIER_LIMIT;
+      const limit = TIER_LIMITS[sub.tier] || PAID_TIER_LIMIT;
       const count = await getUsageCount(ipHash, endpoint);
       if (count >= limit) return { allowed: false, remaining: 0, limit, isPro: true };
       return { allowed: true, remaining: limit - count, limit, isPro: true };
@@ -100,12 +97,7 @@ async function checkRateLimit(ipHash: string, endpoint: string, email?: string, 
   return { allowed: true, remaining: FREE_TIER_LIMIT - count, limit: FREE_TIER_LIMIT, isPro: false };
 }
 
-function parseResult(raw: string): any {
-  try { return JSON.parse(raw); } catch {}
-  const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('Could not parse analysis response.');
-  return JSON.parse(m[0]);
-}
+const parseResult = parseJsonResponse;
 
 export function registerDemoRoutes(app: FastifyInstance): void {
 
@@ -348,12 +340,6 @@ Respond ONLY with valid JSON — no markdown, no extra text:
   "suggested_hybrid": "<the rewritten headline itself — punchy, direct, no quotes> | <one sentence: what was taken from A and what was taken from B>"
 }`;
 
-    function parseScore(raw: string): any {
-      try { return JSON.parse(raw); } catch {}
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse scoring response.');
-      return JSON.parse(m[0]);
-    }
 
     try {
       const [rawA, rawB] = await Promise.all([
@@ -365,8 +351,8 @@ Respond ONLY with valid JSON — no markdown, no extra text:
         }),
       ]);
 
-      const scoreA = parseScore(rawA);
-      const scoreB = parseScore(rawB);
+      const scoreA = parseResult(rawA);
+      const scoreB = parseResult(rawB);
 
       // Compute winner/margin/framework_winners deterministically — never trust the model for arithmetic
       const fA = scoreA.framework_scores;
@@ -399,7 +385,7 @@ Write the verdict and suggested hybrid.`;
         systemPrompt: compareSystemPrompt,
       });
 
-      const compParsed = parseScore(rawComp);
+      const compParsed = parseResult(rawComp);
       const comparison = {
         winner: computedWinner,
         margin: computedMargin,
@@ -703,12 +689,6 @@ Respond ONLY with valid JSON — no markdown, no extra text:
   "analysis": "<3-4 sentences of deeper strategic analysis: what each page does well, what the loser could steal from the winner>"
 }`;
 
-    function parseScore(raw: string): any {
-      try { return JSON.parse(raw); } catch {}
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse scoring response.');
-      return JSON.parse(m[0]);
-    }
 
     try {
       const [rawA, rawB] = await Promise.all([
@@ -720,8 +700,8 @@ Respond ONLY with valid JSON — no markdown, no extra text:
         }),
       ]);
 
-      const scoreA = parseScore(rawA);
-      const scoreB = parseScore(rawB);
+      const scoreA = parseResult(rawA);
+      const scoreB = parseResult(rawB);
 
       const sA = scoreA.section_scores;
       const sB = scoreB.section_scores;
@@ -753,7 +733,7 @@ Write the verdict and analysis.`;
         systemPrompt: compareSystemPrompt,
       });
 
-      const compParsed = parseScore(rawComp);
+      const compParsed = parseResult(rawComp);
       const comparison = {
         winner: computedWinner,
         margin: computedMargin,
@@ -962,12 +942,6 @@ Respond ONLY with valid JSON — no markdown, no extra text:
   "strategic_analysis": "<one sentence tactical recommendation for the next iteration>"
 }`;
 
-    function parseScore(raw: string): any {
-      try { return JSON.parse(raw); } catch {}
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse scoring response.');
-      return JSON.parse(m[0]);
-    }
 
     try {
       const [rawA, rawB] = await Promise.all([
@@ -979,8 +953,8 @@ Respond ONLY with valid JSON — no markdown, no extra text:
         }),
       ]);
 
-      const scoreA = parseScore(rawA);
-      const scoreB = parseScore(rawB);
+      const scoreA = parseResult(rawA);
+      const scoreB = parseResult(rawB);
 
       const pA = scoreA.pillar_scores;
       const pB = scoreB.pillar_scores;
@@ -1012,7 +986,7 @@ Write the verdict, suggested hybrid, and strategic analysis.`;
         systemPrompt: compareSystemPrompt,
       });
 
-      const compParsed = parseScore(rawComp);
+      const compParsed = parseResult(rawComp);
       const comparison = {
         winner: computedWinner,
         margin: computedMargin,
@@ -1210,12 +1184,6 @@ Respond ONLY with valid JSON — no markdown, no extra text:
   "strategic_analysis": "<one sentence tactical recommendation for the next thread>"
 }`;
 
-    function parseScore(raw: string): any {
-      try { return JSON.parse(raw); } catch {}
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse scoring response.');
-      return JSON.parse(m[0]);
-    }
 
     try {
       const [rawA, rawB] = await Promise.all([
@@ -1227,8 +1195,8 @@ Respond ONLY with valid JSON — no markdown, no extra text:
         }),
       ]);
 
-      const scoreA = parseScore(rawA);
-      const scoreB = parseScore(rawB);
+      const scoreA = parseResult(rawA);
+      const scoreB = parseResult(rawB);
 
       const pA = scoreA.pillar_scores;
       const pB = scoreB.pillar_scores;
@@ -1262,7 +1230,7 @@ Write the verdict, suggested hybrid hook, and strategic analysis.`;
         systemPrompt: compareSystemPrompt,
       });
 
-      const compParsed = parseScore(rawComp);
+      const compParsed = parseResult(rawComp);
       const comparison = {
         winner: computedWinner,
         margin: computedMargin,

@@ -32,24 +32,32 @@ export function _resetDbForTests(): void {
 
 // ── Query helpers ───────────────────────────────────────────────────────────
 
-export async function dbGet<T = Record<string, unknown>>(sql: string, ...args: unknown[]): Promise<T | undefined> {
-  const result = await getClient().execute({ sql, args: args as any[] });
+type Executor = { execute(stmt: { sql: string; args: any[] }): Promise<any> };
+
+async function execGet<T>(exec: Executor, sql: string, ...args: unknown[]): Promise<T | undefined> {
+  const result = await exec.execute({ sql, args: args as any[] });
   if (result.rows.length === 0) return undefined;
   return result.rows[0] as unknown as T;
 }
 
-export async function dbAll<T = Record<string, unknown>>(sql: string, ...args: unknown[]): Promise<T[]> {
-  const result = await getClient().execute({ sql, args: args as any[] });
+async function execAll<T>(exec: Executor, sql: string, ...args: unknown[]): Promise<T[]> {
+  const result = await exec.execute({ sql, args: args as any[] });
   return result.rows as unknown as T[];
 }
 
-export async function dbRun(sql: string, ...args: unknown[]): Promise<{ changes: number; lastInsertRowid: number }> {
-  const result = await getClient().execute({ sql, args: args as any[] });
-  return {
-    changes: result.rowsAffected,
-    lastInsertRowid: Number(result.lastInsertRowid ?? 0),
-  };
+async function execRun(exec: Executor, sql: string, ...args: unknown[]): Promise<{ changes: number; lastInsertRowid: number }> {
+  const result = await exec.execute({ sql, args: args as any[] });
+  return { changes: result.rowsAffected, lastInsertRowid: Number(result.lastInsertRowid ?? 0) };
 }
+
+// Global-scoped helpers (use the singleton client)
+export const dbGet = <T = Record<string, unknown>>(sql: string, ...args: unknown[]) => execGet<T>(getClient(), sql, ...args);
+export const dbAll = <T = Record<string, unknown>>(sql: string, ...args: unknown[]) => execAll<T>(getClient(), sql, ...args);
+export const dbRun = (sql: string, ...args: unknown[]) => execRun(getClient(), sql, ...args);
+
+// Transaction-scoped helpers (use a transaction object)
+export const txGet = <T = Record<string, unknown>>(tx: Transaction, sql: string, ...args: unknown[]) => execGet<T>(tx, sql, ...args);
+export const txRun = (tx: Transaction, sql: string, ...args: unknown[]) => execRun(tx, sql, ...args);
 
 export async function dbTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   const tx = await getClient().transaction('write');
@@ -61,21 +69,6 @@ export async function dbTransaction<T>(fn: (tx: Transaction) => Promise<T>): Pro
     await tx.rollback();
     throw e;
   }
-}
-
-// Transaction-scoped helpers
-export async function txGet<T = Record<string, unknown>>(tx: Transaction, sql: string, ...args: unknown[]): Promise<T | undefined> {
-  const result = await tx.execute({ sql, args: args as any[] });
-  if (result.rows.length === 0) return undefined;
-  return result.rows[0] as unknown as T;
-}
-
-export async function txRun(tx: Transaction, sql: string, ...args: unknown[]): Promise<{ changes: number; lastInsertRowid: number }> {
-  const result = await tx.execute({ sql, args: args as any[] });
-  return {
-    changes: result.rowsAffected,
-    lastInsertRowid: Number(result.lastInsertRowid ?? 0),
-  };
 }
 
 // ── Migration ───────────────────────────────────────────────────────────────

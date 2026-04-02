@@ -1,6 +1,7 @@
 import { dbGet, dbAll, dbRun } from '../db.js';
 import { askGemini } from '../gemini.js';
 import { validatePublicUrl, fetchPageBounded } from './page-fetch.js';
+import { parseJsonResponse } from '../utils.js';
 
 interface RivalPair {
   id: number;
@@ -87,14 +88,7 @@ Page content: ${pageTextB.slice(0, 3000)}`;
 
   const raw = await askGemini(prompt, { systemPrompt });
 
-  let result: SocialRoastResult;
-  try {
-    result = JSON.parse(raw);
-  } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('Could not parse roast response');
-    result = JSON.parse(match[0]);
-  }
+  const result: SocialRoastResult = parseJsonResponse(raw);
 
   const handleA = pair.x_handle_a ? `@${pair.x_handle_a.replace(/^@/, '')}` : pair.name_a;
   const handleB = pair.x_handle_b ? `@${pair.x_handle_b.replace(/^@/, '')}` : pair.name_b;
@@ -130,10 +124,6 @@ export async function listQueue(status?: string) {
   return dbAll('SELECT q.*, r.name_a, r.name_b, r.category, r.location FROM social_roast_queue q JOIN social_roast_rivals r ON q.rival_pair_id = r.id ORDER BY q.created_at DESC');
 }
 
-export async function approveQueueItem(id: number) {
-  await dbRun('UPDATE social_roast_queue SET status = ? WHERE id = ?', 'approved', id);
-}
-
-export async function rejectQueueItem(id: number) {
-  await dbRun('UPDATE social_roast_queue SET status = ? WHERE id = ?', 'rejected', id);
+export async function updateQueueStatus(id: number, status: 'approved' | 'rejected' | 'posted') {
+  await dbRun('UPDATE social_roast_queue SET status = ? WHERE id = ?', status, id);
 }

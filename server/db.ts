@@ -185,6 +185,7 @@ const MIGRATIONS = [
     country TEXT,
     ua TEXT,
     screen TEXT,
+    email TEXT,
     date TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`,
@@ -232,6 +233,13 @@ export async function initDb(): Promise<void> {
 
   // Run all migrations in a single batch (one network round-trip)
   await client.batch(MIGRATIONS.map(sql => ({ sql, args: [] })), 'write');
+
+  // Additive migrations for existing DBs (safe to re-run)
+  for (const sql of [
+    'ALTER TABLE page_views ADD COLUMN email TEXT',
+  ]) {
+    try { await client.execute(sql); } catch { /* column already exists */ }
+  }
 
   // Seed Wall of Shame with sample roasts (only if empty)
   const count = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history');

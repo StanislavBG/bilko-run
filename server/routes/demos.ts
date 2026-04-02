@@ -70,14 +70,8 @@ interface RateLimitResult {
   isPro: boolean;
 }
 
-// Checks free vs Pro tier. Pass email from request body when available.
-// Pro users (active subscription) get PRO_TIER_LIMIT instead of FREE_TIER_LIMIT.
-// AudienceDecoder passes productKey='audiencedecoder_report' to check one-time purchase.
-// Verifies subscription status against Stripe API directly (5-min cache) instead of a stale DB flag.
 function recordFunnelEvent(event: string, ipHash: string, tool?: string, email?: string): void {
-  try {
-    dbRun('INSERT INTO funnel_events (event, ip_hash, tool, email) VALUES (?, ?, ?, ?)', event, ipHash, tool ?? null, email ?? null);
-  } catch { /* non-critical */ }
+  dbRun('INSERT INTO funnel_events (event, ip_hash, tool, email) VALUES (?, ?, ?, ?)', event, ipHash, tool ?? null, email ?? null).catch(() => {});
 }
 
 async function checkRateLimit(ipHash: string, endpoint: string, email?: string, productKey?: string): Promise<RateLimitResult> {

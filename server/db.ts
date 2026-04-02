@@ -237,19 +237,19 @@ const SEEDS = [
 export async function initDb(): Promise<void> {
   const client = getClient();
 
-  for (const sql of MIGRATIONS) {
-    await client.execute(sql);
-  }
+  // Run all migrations in a single batch (one network round-trip)
+  await client.batch(MIGRATIONS.map(sql => ({ sql, args: [] })), 'write');
 
   // Seed Wall of Shame with sample roasts (only if empty)
   const count = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history');
   if (!count || count.n === 0) {
-    for (const [url, score, grade, roast] of SEEDS) {
-      await dbRun(
-        'INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)',
-        url, score, grade, roast,
-      );
-    }
+    await client.batch(
+      SEEDS.map(([url, score, grade, roast]) => ({
+        sql: 'INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)',
+        args: [url, score, grade, roast],
+      })),
+      'write',
+    );
   }
 
   console.log('[DB] Initialized' + (process.env.TURSO_DATABASE_URL ? ' (Turso)' : ' (local SQLite)'));

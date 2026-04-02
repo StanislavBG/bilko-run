@@ -5,7 +5,7 @@
 This project uses TypeScript as the primary language. Always use TypeScript over JavaScript for new files. The stack also includes Python for scraping/automation pipelines.
 
 - **Frontend**: React + Vite + Tailwind CSS v4
-- **Backend**: Fastify + SQLite (better-sqlite3)
+- **Backend**: Fastify + Turso/libSQL (@libsql/client)
 - **AI**: Gemini 2.0 Flash (REST API)
 - **Auth**: Clerk
 - **Payments**: Stripe (token-based)

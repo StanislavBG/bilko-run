@@ -16,15 +16,12 @@ const PORT = parseInt(process.env.PORT || '4000', 10);
 const isProd = process.env.NODE_ENV === 'production';
 console.log(`[Boot] NODE_ENV=${process.env.NODE_ENV}, isProd=${isProd}, __dirname=${__dirname}, cwd=${process.cwd()}`);
 
-// Init DB on startup (async — runs before server listen)
-async function boot() {
-  try {
-    await initDb();
-  } catch (err) {
-    console.error('[DB] Init failed:', err);
-  }
+// Init DB before server starts accepting requests
+try {
+  await initDb();
+} catch (err) {
+  console.error('[DB] Init failed:', err);
 }
-boot();
 
 const app = Fastify({
   logger: { level: 'warn' },

@@ -33,35 +33,20 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     const days = parseInt(((req.query as any)?.days ?? '7'), 10);
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
-    const totalViews = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM page_views WHERE date >= ?', since);
-    const byDay = await dbAll('SELECT date, COUNT(*) as views FROM page_views WHERE date >= ? GROUP BY date ORDER BY date', since);
-    const byPage = await dbAll('SELECT path, COUNT(*) as views FROM page_views WHERE date >= ? GROUP BY path ORDER BY views DESC LIMIT 20', since);
-    const byReferrer = await dbAll("SELECT referrer, COUNT(*) as views FROM page_views WHERE date >= ? AND referrer IS NOT NULL AND referrer != '' GROUP BY referrer ORDER BY views DESC LIMIT 20", since);
-
     const today = new Date().toISOString().slice(0, 10);
-    const todayViews = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM page_views WHERE date = ?', today);
-    const totalRoasts = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history');
-    const totalUsers = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances');
 
-    const topUsers = await dbAll(`
-      SELECT
-        tb.email,
-        tb.balance AS credits,
-        (SELECT COUNT(*) FROM user_roasts ur WHERE ur.email = tb.email) AS roasts,
-        (SELECT MAX(created_at) FROM user_roasts ur WHERE ur.email = tb.email) AS last_roast
-      FROM token_balances tb
-      ORDER BY roasts DESC
-      LIMIT 50
-    `);
-
-    const tokenPurchases = await dbGet<{ count: number }>(
-      "SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = 'pageroast_tokens'",
-    );
-
-    const signupsByDay = await dbAll(
-      'SELECT date(created_at) as date, COUNT(*) as signups FROM token_balances WHERE date(created_at) >= ? GROUP BY date(created_at) ORDER BY date',
-      since,
-    );
+    const [totalViews, byDay, byPage, byReferrer, todayViews, totalRoasts, totalUsers, topUsers, tokenPurchases, signupsByDay] = await Promise.all([
+      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM page_views WHERE date >= ?', since),
+      dbAll('SELECT date, COUNT(*) as views FROM page_views WHERE date >= ? GROUP BY date ORDER BY date', since),
+      dbAll('SELECT path, COUNT(*) as views FROM page_views WHERE date >= ? GROUP BY path ORDER BY views DESC LIMIT 20', since),
+      dbAll("SELECT referrer, COUNT(*) as views FROM page_views WHERE date >= ? AND referrer IS NOT NULL AND referrer != '' GROUP BY referrer ORDER BY views DESC LIMIT 20", since),
+      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM page_views WHERE date = ?', today),
+      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history'),
+      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances'),
+      dbAll(`SELECT tb.email, tb.balance AS credits, (SELECT COUNT(*) FROM user_roasts ur WHERE ur.email = tb.email) AS roasts, (SELECT MAX(created_at) FROM user_roasts ur WHERE ur.email = tb.email) AS last_roast FROM token_balances tb ORDER BY roasts DESC LIMIT 50`),
+      dbGet<{ count: number }>("SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = 'pageroast_tokens'"),
+      dbAll('SELECT date(created_at) as date, COUNT(*) as signups FROM token_balances WHERE date(created_at) >= ? GROUP BY date(created_at) ORDER BY date', since),
+    ]);
 
     return {
       period: { days, since },

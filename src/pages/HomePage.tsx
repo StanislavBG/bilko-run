@@ -1,7 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-
-const API = import.meta.env.VITE_API_URL || '/api';
 
 const SOCIAL_LINKS = [
   { href: 'https://x.com/BilkoBibitkov', label: 'X / Twitter', icon: 'x' },
@@ -21,138 +19,341 @@ function SocialIcon({ type }: { type: string }) {
   );
 }
 
-export function HomePage() {
-  const [stats, setStats] = useState<{ totalRoasts: number; totalUsers: number } | null>(null);
+function Divider() {
+  return <div className="max-w-xs mx-auto border-t border-warm-200/60 my-0" />;
+}
 
+export function HomePage() {
   useEffect(() => {
-    fetch(`${API}/roasts/stats`).then(r => r.json()).then(setStats).catch(() => {});
+    document.title = 'Bilko — Builder, Tools, Lessons';
   }, []);
 
   return (
-    <>
-      {/* Hero — visitor benefit first */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-fire-50/40 via-warm-50 to-warm-50" />
-        <div className="relative max-w-3xl mx-auto px-6 pt-20 pb-12 md:pt-32 md:pb-20 text-center">
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-warm-900 leading-[1.1] animate-slide-up">
-            Find out why your landing page
-            <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-fire-500 to-fire-600">
-              isn't converting.
-            </span>
-          </h1>
+    <article className="max-w-2xl mx-auto px-6">
 
-          <p className="mt-5 text-lg md:text-xl text-warm-600 max-w-xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '80ms' }}>
-            AI scores your page, roasts the weak spots, and tells you exactly what to fix. Free. 30 seconds.
+      {/* ── Intro ── */}
+      <header className="pt-16 pb-12 md:pt-24 md:pb-16">
+        <div className="flex items-center gap-5 mb-8 animate-slide-up">
+          <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-fire-400 to-fire-600 text-white flex items-center justify-center text-3xl md:text-4xl font-black shadow-lg shadow-fire-500/20 flex-shrink-0">
+            B
+          </div>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-black text-warm-900">Bilko</h1>
+            <p className="text-warm-500 text-sm mt-0.5">Builder. Solo. Shipping AI tools from a laptop.</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mb-10">
+          {SOCIAL_LINKS.map(({ href, label, icon }) => (
+            <a key={icon} href={href} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-warm-200/60 text-warm-500 hover:text-fire-600 hover:border-warm-300 text-sm transition-colors">
+              <SocialIcon type={icon} />
+              <span className="hidden sm:inline">{label}</span>
+            </a>
+          ))}
+        </div>
+
+        <div className="prose-warm animate-slide-up" style={{ animationDelay: '80ms' }}>
+          <p className="text-xl md:text-2xl font-bold text-warm-900 leading-snug mb-6">
+            I build AI tools for founders, marketers, and developers who make
+            things on the internet and don't have time to be bad at marketing.
           </p>
+          <p className="text-warm-600 leading-relaxed">
+            This is my corner of the internet. I use it to share what I'm building,
+            what I've learned, and what I think about building software alone
+            in the age of AI. If you're here, you're probably building something too.
+            Good. Keep reading.
+          </p>
+        </div>
+      </header>
 
-          {/* CTA + social proof */}
-          <div className="mt-8 animate-slide-up" style={{ animationDelay: '160ms' }}>
-            <Link
-              to="/projects/page-roast"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-fire-500/20 hover:shadow-fire-500/30 transition-all hover:-translate-y-0.5"
-            >
-              🔥 Roast My Page — Free
-            </Link>
-            <p className="mt-3 text-sm text-warm-500">
-              1 free roast, no credit card required
-              {stats && stats.totalRoasts > 0 && (
-                <span> &middot; <strong className="text-warm-700">{stats.totalRoasts}+ pages roasted</strong></span>
-              )}
+      <Divider />
+
+      {/* ── The Story ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-6">The short version</h2>
+        <div className="space-y-4 text-warm-600 leading-relaxed">
+          <p>
+            I launched my first product to zero signups.
+          </p>
+          <p>
+            The code was fine. The design was fine. The product actually worked. But the landing
+            page — the only thing standing between a stranger and my product — was terrible. I
+            didn't know it was terrible because I'd never studied what makes a landing page work.
+            I thought "clear" meant the same as "clever." I thought one testimonial from a friend
+            counted as social proof. I thought hiding the price made me seem premium.
+          </p>
+          <p>
+            I was wrong about all of it.
+          </p>
+          <p>
+            Over the next year, I studied conversion rate optimization, direct response copywriting,
+            and landing page psychology. I read Joanna Wiebe, Peep Laja, Harry Dry. I learned
+            that the headline is worth more than the rest of the page combined. That "social proof"
+            means real people with real names saying specific things — not <em>"Great product!" — J.</em>
+          </p>
+          <p>
+            I learned that most of this knowledge is locked behind $200/hour consultants and
+            agencies that won't talk to you unless you're spending $10k/month on ads.
+          </p>
+          <p>
+            So I started building tools that do what those consultants do — but in 30 seconds,
+            for a dollar. Not generic AI summaries. Real analysis, using real frameworks,
+            against your actual content.
+          </p>
+          <p className="font-semibold text-warm-800">
+            That's bilko.run. Tools for makers who ship.
+          </p>
+        </div>
+      </section>
+
+      <Divider />
+
+      {/* ── What I Believe ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-8">Things I believe</h2>
+        <div className="space-y-8">
+          <div>
+            <h3 className="font-bold text-warm-900 mb-2">Most products fail at marketing, not engineering.</h3>
+            <p className="text-warm-600 leading-relaxed">
+              Developers spend months building features and minutes on the page that sells them.
+              Then they wonder why nobody signs up. The landing page is the product's first
+              impression, its elevator pitch, and its sales team — all at once. If you get it
+              wrong, nothing downstream matters. Your beautiful dashboard, your elegant API,
+              your 99.99% uptime — invisible. Because nobody got past your hero section.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-warm-900 mb-2">One person with AI can outship a team of ten.</h3>
+            <p className="text-warm-600 leading-relaxed">
+              This isn't aspirational — it's my daily experience. I use Claude as my architect,
+              pair programmer, and code reviewer. I use Gemini to power the analysis tools.
+              The entire bilko.run codebase — frontend, backend, database, payments, deployment —
+              is maintained by one person. Not because I'm unusually productive, but because
+              the tools have gotten that good. The gap between "idea" and "shipped product"
+              has collapsed. The bottleneck is no longer engineering capacity. It's knowing
+              what to build.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-warm-900 mb-2">Feedback should be specific, not supportive.</h3>
+            <p className="text-warm-600 leading-relaxed">
+              "Looks great!" is the most dangerous feedback a founder can get. It costs nothing
+              to say and teaches nothing. The tools I build are designed to be honest, not nice.
+              PageRoast doesn't tell you your page is good if it isn't. It tells you your
+              hero section is vague, your social proof is weak, and your CTA is buried — then
+              gives you specific fixes. The roast line exists because brutal honesty delivered
+              with humor is more useful than polite dishonesty delivered with emojis.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-warm-900 mb-2">Building in public is a forcing function.</h3>
+            <p className="text-warm-600 leading-relaxed">
+              When I share what I'm building, I'm not doing it for engagement. I'm doing it
+              because public accountability is the best antidote to perfectionism. If I say
+              "shipping HeadlineGrader this month," I have to actually ship HeadlineGrader
+              this month. The internet remembers. The alternative is spending six months
+              polishing something in private that nobody asked for. I've done that. It's bad.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-warm-900 mb-2">The best pricing model is the one that doesn't punish experimentation.</h3>
+            <p className="text-warm-600 leading-relaxed">
+              I hate subscriptions for tools I use twice a month. So bilko.run uses credits.
+              Your first roast is free. After that, $1 per credit or $5 for seven. No recurring
+              charges. No "you forgot to cancel" moment. No annual upsell. Buy when you need it,
+              don't when you don't. If the tool is useful, you'll come back. If it isn't,
+              I shouldn't be charging you monthly for it.
             </p>
           </div>
         </div>
       </section>
 
-      {/* Product preview — show the score card */}
-      <section className="max-w-2xl mx-auto px-6 -mt-4 pb-16">
-        <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 md:p-8 text-center relative overflow-hidden shadow-xl">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.15),transparent_60%)]" />
-          <div className="relative">
-            <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-3">Sample Result</p>
-            <div className="flex items-center justify-center gap-4 mb-2">
-              <span className="text-5xl md:text-6xl font-black text-white">62</span>
-              <div className="text-left">
-                <div className="text-3xl md:text-4xl font-black text-yellow-400">C+</div>
-                <div className="text-xs text-warm-500">/100</div>
-              </div>
+      <Divider />
+
+      {/* ── What I'm Building ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-3">What I'm building</h2>
+        <p className="text-warm-500 mb-8">
+          Each tool takes a piece of the marketing or dev stack that used to require a
+          specialist and makes it accessible to anyone in seconds.
+        </p>
+
+        <div className="space-y-6">
+          {/* PageRoast */}
+          <Link to="/projects/page-roast"
+            className="group block rounded-2xl p-6 border-2 border-fire-200 bg-gradient-to-r from-fire-50/50 to-warm-50 hover:border-fire-400 hover:shadow-lg hover:shadow-fire-100/40 transition-all relative">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">LIVE</span>
+              <span className="text-xs font-bold text-warm-400 uppercase tracking-wider">Content</span>
             </div>
-            <p className="text-fire-300 font-bold italic text-sm md:text-base max-w-md mx-auto">
-              &ldquo;Your landing page has the conversion power of a 'Please take one' sign at a dentist's office.&rdquo;
+            <h3 className="text-lg font-black text-warm-900 group-hover:text-fire-600 transition-colors mb-1">
+              PageRoast
+            </h3>
+            <p className="text-sm font-medium text-fire-600 mb-3">Brutally honest landing page audits</p>
+            <p className="text-sm text-warm-600 leading-relaxed">
+              Paste any URL. AI reads every word on your page and scores it across four CRO
+              frameworks: hero clarity, social proof quality, persuasion effectiveness, and
+              conversion architecture. You get a score out of 100, a letter grade, section-by-section
+              feedback with specific fixes, and a savage one-liner roast that people keep
+              screenshotting and sharing. A/B Compare mode lets you pit your page against a
+              competitor's — both get scored, one gets crowned, the other gets roasted.
             </p>
-          </div>
-        </div>
-      </section>
+            <p className="text-sm text-fire-500 font-semibold mt-3 group-hover:text-fire-600">
+              Try it free &rarr;
+            </p>
+          </Link>
 
-      {/* What it checks — benefit-focused */}
-      <section className="border-t border-warm-200/60 bg-white">
-        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20">
-          <h2 className="text-2xl font-extrabold text-warm-900 text-center mb-10">AI audits 4 things that make or break conversions</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            {[
-              { icon: '🎯', title: 'Hero Section', desc: 'Is your headline clear? Is the CTA visible? Can someone understand your product in 5 seconds?' },
-              { icon: '⭐', title: 'Social Proof', desc: 'Real testimonials or fake-looking quotes from "J."? Trust logos or empty promises?' },
-              { icon: '💡', title: 'Clarity & Persuasion', desc: 'Benefits or feature dumps? Short sentences or walls of text? Are you selling or lecturing?' },
-              { icon: '🔥', title: 'Conversion Architecture', desc: 'How many CTAs? How much friction? Is the path to payment obvious or hidden?' },
-            ].map(({ icon, title, desc }) => (
-              <div key={title} className="flex gap-4 items-start">
-                <span className="text-2xl flex-shrink-0">{icon}</span>
-                <div>
-                  <h3 className="font-bold text-warm-900">{title}</h3>
-                  <p className="text-sm text-warm-500 leading-relaxed mt-1">{desc}</p>
-                </div>
+          {/* Upcoming */}
+          {[
+            { name: 'HeadlineGrader', cat: 'Content', tagline: 'Score headlines like a pro copywriter',
+              desc: 'Your headline is the most important sentence on your page. This tool scores it against Masterson\'s Rule, Hormozi\'s Value Equation, and classic direct response frameworks. Specific scores, specific rewrites, specific reasons why your headline is or isn\'t working.' },
+            { name: 'AdScorer', cat: 'Marketing', tagline: 'Grade ad copy before you spend the budget',
+              desc: 'A great Google ad is not a great Facebook ad. AdScorer applies platform-specific grading for character limits, hook patterns, CTA effectiveness, and curiosity gaps. Catch weak copy before it eats your ad spend.' },
+            { name: 'ThreadGrader', cat: 'Content', tagline: 'Write threads that don\'t die on tweet 2',
+              desc: 'Most threads lose 80% of readers after the first tweet. ThreadGrader scores hook strength, retention flow, and engagement triggers. It analyzes structure, not just content — because a great insight in a boring thread is a great insight nobody sees.' },
+            { name: 'EmailForge', cat: 'Marketing', tagline: 'Craft emails that get opened and clicked',
+              desc: 'Subject line scoring, body copy analysis, and engagement prediction for cold outreach and newsletters. A/B subject line variants so you test instead of guess.' },
+            { name: 'Stepproof', cat: 'Dev Tools', tagline: 'Behavioral regression tests for AI pipelines',
+              desc: 'AI outputs aren\'t deterministic. Stepproof lets you write YAML scenarios, run them N times, and use LLM judges to assert quality. SARIF and JUnit output for CI. Like unit tests, but for agents.' },
+            { name: 'AgentTrace', cat: 'Dev Tools', tagline: 'Local observability for AI agents',
+              desc: 'When your agent runs for 3 minutes and produces garbage, you need to know why. OpenTelemetry spans, local SQLite storage, zero cloud dependency. Your data stays on your machine.' },
+          ].map(tool => (
+            <div key={tool.name} className="rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warm-200 text-warm-500">COMING SOON</span>
+                <span className="text-xs font-bold text-warm-400 uppercase tracking-wider">{tool.cat}</span>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Built by Bilko — founder's note */}
-      <section className="border-t border-warm-200/40">
-        <div className="max-w-2xl mx-auto px-6 py-16 md:py-20">
-          <div className="flex items-start gap-5">
-            <div className="flex-shrink-0 w-14 h-14 rounded-full bg-fire-100 text-fire-600 flex items-center justify-center text-2xl font-black">
-              B
+              <h3 className="font-bold text-warm-800 mb-1">{tool.name}</h3>
+              <p className="text-sm font-medium text-warm-600 mb-2">{tool.tagline}</p>
+              <p className="text-sm text-warm-500 leading-relaxed">{tool.desc}</p>
             </div>
-            <div>
-              <h2 className="text-lg font-extrabold text-warm-900 mb-2">Built by Bilko</h2>
-              <p className="text-warm-600 leading-relaxed">
-                I built PageRoast because I was tired of launching pages and getting zero feedback.
-                I'm a solo builder — no team, no funding, no board meetings. Just me and Claude,
-                shipping tools for people who make things on the internet.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                {SOCIAL_LINKS.map(({ href, label, icon }) => (
-                  <a
-                    key={icon}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-warm-500 hover:text-fire-600 transition-colors"
-                  >
-                    <SocialIcon type={icon} />
-                    {label}
-                  </a>
-                ))}
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
-      </section>
 
-      {/* More tools teaser */}
-      <section className="border-t border-warm-200/40 bg-warm-100/30">
-        <div className="max-w-3xl mx-auto px-6 py-16 md:py-20 text-center">
-          <h2 className="text-2xl font-extrabold text-warm-900 mb-3">More tools coming</h2>
-          <p className="text-warm-500 mb-6">HeadlineGrader, AdScorer, Stepproof, AgentTrace — all built solo, all shipping soon.</p>
-          <Link
-            to="/projects"
-            className="text-sm font-semibold text-fire-500 hover:text-fire-600"
-          >
+        <div className="mt-8 text-center">
+          <Link to="/projects" className="text-sm font-semibold text-fire-500 hover:text-fire-600">
             View all projects &rarr;
           </Link>
         </div>
       </section>
-    </>
+
+      <Divider />
+
+      {/* ── How I Work ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-6">How the sausage gets made</h2>
+        <div className="space-y-4 text-warm-600 leading-relaxed">
+          <p>
+            The tech stack is TypeScript everywhere. React and Vite on the frontend. Fastify and
+            Turso (hosted SQLite) on the backend. Gemini for the AI analysis. Clerk for auth.
+            Stripe for payments. Deployed on Render.
+          </p>
+          <p>
+            I write almost all of the code collaboratively with Claude. Not "generate code and
+            paste it" — actual back-and-forth where Claude reviews architecture decisions,
+            catches bugs, suggests optimizations, and occasionally tells me my approach is wrong.
+            I treat it like a senior engineer on the team. The difference is it's available
+            at 2am and doesn't need a standup.
+          </p>
+          <p>
+            This changes what's possible for a solo builder. I can ship a full-stack SaaS — auth,
+            payments, AI analysis, admin dashboard, analytics — in days, not months. The
+            constraint isn't "can I build it?" anymore. It's "should I build it?" That's a
+            much better problem to have.
+          </p>
+          <p>
+            I also try to build things that work at the speed of thought. PageRoast returns
+            results in about 30 seconds. That's the target for everything: faster than
+            hiring someone, more specific than Googling it, and cheap enough that you
+            don't need to think about the price.
+          </p>
+        </div>
+      </section>
+
+      <Divider />
+
+      {/* ── Lessons ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-8">Lessons from building alone</h2>
+        <div className="space-y-6">
+          {[
+            { title: 'Ship before you\'re ready.',
+              body: 'The first version of PageRoast was embarrassing. The UI was rough. The scoring was imprecise. The roast lines weren\'t funny enough. I shipped it anyway. People used it. They gave feedback. I fixed things. If I\'d waited until it was "ready," I\'d still be waiting. The market doesn\'t care about your code quality. It cares about whether your tool solves a problem.' },
+            { title: 'Your landing page is never done.',
+              body: 'I\'ve rewritten the bilko.run homepage four times. Each time I thought it was good. Each time, the data said otherwise. Bounce rate too high. Nobody clicking the CTA. Hero section too vague. The page you\'re reading right now is version five. It will change again. If you\'re not uncomfortable with how often you rewrite your copy, you\'re not rewriting it enough.' },
+            { title: 'Charge from day one.',
+              body: 'I gave my first tool away for free for months. I was afraid that charging would kill growth. Instead, free users gave zero feedback, requested infinite features, and churned immediately when I introduced pricing. Paid users told me exactly what was wrong, asked for specific improvements, and stuck around. Price is a filter. Charge early.' },
+            { title: 'AI is a multiplier, not a replacement.',
+              body: 'Claude doesn\'t write my code for me. It writes code with me. The difference matters. I still make every architecture decision. I still review every line. I still debug when things break. But the speed at which I can go from "I want this feature" to "this feature is live" has collapsed from days to hours. AI multiplied my output by 5x-10x. It didn\'t replace the judgment calls that matter.' },
+            { title: 'Solo doesn\'t mean alone.',
+              body: 'I don\'t have co-founders or employees, but I\'m not isolated. I share what I\'m building on X and LinkedIn. I talk to users. I read what other solo builders are doing. The internet is full of people building things alone — and most of them are happy to help each other. The solo builder community is the most generous community I\'ve been part of.' },
+          ].map(({ title, body }) => (
+            <div key={title}>
+              <h3 className="font-bold text-warm-900 mb-2">{title}</h3>
+              <p className="text-warm-600 leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <Divider />
+
+      {/* ── CTA / Connect ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-4">If you've read this far</h2>
+        <div className="space-y-4 text-warm-600 leading-relaxed mb-8">
+          <p>
+            You're probably building something. Or thinking about it. Or stuck in the middle
+            of it. Either way — I'd like to hear about it.
+          </p>
+          <p>
+            I'm most active on X, where I share what I'm working on, honest numbers from
+            my projects, and occasional opinions about solo building. I write longer posts
+            on LinkedIn. All the code is on GitHub.
+          </p>
+          <p>
+            If you have a landing page, go{' '}
+            <Link to="/projects/page-roast" className="text-fire-600 font-semibold hover:text-fire-700 underline decoration-fire-200 hover:decoration-fire-400">
+              roast it
+            </Link>
+            . It's free. You'll learn something. It might hurt.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3 mb-12">
+          {SOCIAL_LINKS.map(({ href, label, icon }) => (
+            <a key={icon} href={href} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 border border-warm-200 hover:border-warm-300 text-warm-600 hover:text-fire-600 text-sm font-semibold rounded-lg transition-colors">
+              <SocialIcon type={icon} />
+              {label}
+            </a>
+          ))}
+        </div>
+
+        <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 md:p-8 text-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.12),transparent_60%)]" />
+          <div className="relative">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-3">Featured</p>
+            <h3 className="text-xl md:text-2xl font-black text-white mb-2">PageRoast</h3>
+            <p className="text-warm-400 text-sm mb-5 max-w-md mx-auto">
+              AI scores your landing page and delivers a one-liner so savage
+              you'll screenshot it before you fix anything.
+            </p>
+            <Link to="/projects/page-roast"
+              className="inline-flex items-center gap-2 px-7 py-3.5 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-lg shadow-fire-600/30 transition-all hover:-translate-y-0.5">
+              Get Your Free Roast
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Bottom spacer */}
+      <div className="pb-12" />
+    </article>
   );
 }

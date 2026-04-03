@@ -1,19 +1,5 @@
 import type { PillarScore } from './SectionBreakdown.js';
-
-function gradeColor(grade: string): string {
-  if (grade.startsWith('A')) return 'text-green-700';
-  if (grade.startsWith('B')) return 'text-blue-700';
-  if (grade.startsWith('C')) return 'text-yellow-700';
-  if (grade === 'D') return 'text-orange-700';
-  return 'text-red-700';
-}
-
-function barColor(pct: number): string {
-  if (pct >= 80) return 'bg-green-500';
-  if (pct >= 60) return 'bg-blue-500';
-  if (pct >= 40) return 'bg-yellow-500';
-  return 'bg-red-500';
-}
+import { gradeColor, barColor } from './colors.js';
 
 interface CompareCardProps {
   label: string;

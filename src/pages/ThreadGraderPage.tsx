@@ -36,7 +36,7 @@ function countTweets(text: string): number {
 }
 
 export function ThreadGraderPage() {
-  const { result, compareResult, loading, error, submit, submitCompare, reset, signInRef } = useToolApi<GraderResult>('thread-grader');
+  const { result, compareResult, loading, error, needsTokens, submit, submitCompare, reset, signInRef } = useToolApi<GraderResult>('thread-grader');
 
   const [tab, setTab] = useState<'score' | 'compare'>('score');
   const [thread, setThread] = useState('');
@@ -131,6 +131,15 @@ export function ThreadGraderPage() {
       {error && (
         <div className="max-w-2xl mx-auto px-6 mb-6">
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+        </div>
+      )}
+
+      {needsTokens && (
+        <div className="max-w-2xl mx-auto px-6 mb-6">
+          <div className="bg-fire-50 border border-fire-200 rounded-2xl p-6 text-center">
+            <p className="text-warm-800 font-semibold mb-1">Out of free credits</p>
+            <p className="text-sm text-warm-600"><a href="/pricing" className="text-fire-500 hover:underline font-bold">Grab tokens</a> to keep grading.</p>
+          </div>
         </div>
       )}
 

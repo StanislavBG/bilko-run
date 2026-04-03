@@ -1,9 +1,4 @@
-function barColor(pct: number): string {
-  if (pct >= 80) return 'bg-green-500';
-  if (pct >= 60) return 'bg-blue-500';
-  if (pct >= 40) return 'bg-yellow-500';
-  return 'bg-red-500';
-}
+import { barColor } from './colors.js';
 
 export interface PillarScore {
   score: number;

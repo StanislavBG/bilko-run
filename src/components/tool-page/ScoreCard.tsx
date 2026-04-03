@@ -1,12 +1,5 @@
 import { useState } from 'react';
-
-function gradeColor(grade: string): string {
-  if (grade.startsWith('A')) return 'text-green-400';
-  if (grade.startsWith('B')) return 'text-blue-400';
-  if (grade.startsWith('C')) return 'text-yellow-400';
-  if (grade === 'D') return 'text-orange-400';
-  return 'text-red-400';
-}
+import { gradeColorLight } from './colors.js';
 
 export function ScoreCard({ score, grade, verdict, toolName }: {
   score: number; grade: string; verdict: string; toolName: string;
@@ -22,7 +15,7 @@ export function ScoreCard({ score, grade, verdict, toolName }: {
         <div className="flex items-center justify-center gap-4 mb-3">
           <span className="text-6xl md:text-7xl font-black text-white">{score}</span>
           <div className="text-left">
-            <div className={`text-4xl md:text-5xl font-black ${gradeColor(grade)}`}>{grade}</div>
+            <div className={`text-4xl md:text-5xl font-black ${gradeColorLight(grade)}`}>{grade}</div>
             <div className="text-xs text-warm-500">/100</div>
           </div>
         </div>

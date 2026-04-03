@@ -22,6 +22,10 @@ interface SequenceResult {
   grade: string;
 }
 
+interface TemplateEntry { product: string; audience: string; goal: string; tone: string; score: number; grade: string; date: string; }
+const TEMPLATES_KEY = 'bilko_email_templates';
+function loadTemplates(): TemplateEntry[] { try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || '[]'); } catch { return []; } }
+
 const GOALS = ['cold_outreach', 'nurture', 'launch', 're-engagement'] as const;
 const GOAL_LABELS: Record<string, string> = { cold_outreach: 'Cold Outreach', nurture: 'Nurture', launch: 'Launch', 're-engagement': 'Re-engagement' };
 const TONES = ['professional', 'casual', 'urgent', 'storytelling'] as const;
@@ -129,6 +133,23 @@ export function EmailForgePage() {
   const [goalB, setGoalB] = useState<typeof GOALS[number]>('cold_outreach');
   const [toneB, setToneB] = useState<typeof TONES[number]>('professional');
   const [allCopied, setAllCopied] = useState(false);
+  const [templates, setTemplates] = useState<TemplateEntry[]>(loadTemplates);
+
+  function saveTemplate() {
+    if (!result) return;
+    const entry: TemplateEntry = { product, audience, goal, tone, score: result.overall_score, grade: result.grade, date: new Date().toISOString() };
+    const updated = [entry, ...templates.filter(t => t.product !== product || t.audience !== audience)].slice(0, 10);
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(updated));
+    setTemplates(updated);
+  }
+
+  function loadTemplate(t: TemplateEntry) {
+    setProduct(t.product);
+    setAudience(t.audience);
+    setGoal(t.goal as typeof goal);
+    setTone(t.tone as typeof tone);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -238,6 +259,10 @@ export function EmailForgePage() {
               className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-warm-300 hover:border-fire-300 text-warm-700 text-sm font-semibold rounded-lg transition-colors">
               {allCopied ? 'All emails copied!' : 'Copy full sequence'}
             </button>
+            <button onClick={saveTemplate}
+              className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-fire-200 hover:border-fire-400 text-fire-600 text-sm font-semibold rounded-lg transition-colors">
+              Save as Template
+            </button>
           </div>
         </div>
       )}
@@ -276,6 +301,30 @@ export function EmailForgePage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Template Library */}
+      {templates.length > 0 && (
+        <div className="max-w-2xl mx-auto px-6 pb-12">
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">My Templates ({templates.length})</h3>
+            <div className="space-y-2">
+              {templates.map((t, i) => (
+                <div key={i} className="flex items-center gap-3 py-2 border-b border-warm-50 last:border-0">
+                  <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                    t.grade.startsWith('A') ? 'bg-green-100 text-green-700' :
+                    t.grade.startsWith('B') ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+                  }`}>{t.grade}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-warm-800 truncate">{t.product}</p>
+                    <p className="text-xs text-warm-400">{GOAL_LABELS[t.goal]} &middot; {TONE_LABELS[t.tone]} &middot; {t.score}/100</p>
+                  </div>
+                  <button onClick={() => loadTemplate(t)} className="text-xs text-fire-500 hover:text-fire-600 font-semibold flex-shrink-0">Re-generate</button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

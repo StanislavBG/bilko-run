@@ -26,6 +26,15 @@ interface CompareResponse {
   comparison: { winner: 'A' | 'B' | 'tie'; margin: number; verdict: string; analysis?: string };
 }
 
+interface HistoryEntry { headline: string; score: number; grade: string; date: string; }
+const HISTORY_KEY = 'bilko_headline_history';
+function loadHistory(): HistoryEntry[] { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
+function saveToHistory(entry: HistoryEntry) {
+  const h = loadHistory().filter(e => e.headline !== entry.headline);
+  h.unshift(entry);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 10)));
+}
+
 const PILLAR_LABELS: Record<string, string> = {
   rule_of_one: 'Rule of One',
   value_equation: 'Value Equation',
@@ -55,8 +64,18 @@ export function HeadlineGraderPage() {
   const [headlineA, setHeadlineA] = useState('');
   const [headlineB, setHeadlineB] = useState('');
   const [context, setContext] = useState('general');
+  const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
 
   useEffect(() => { document.title = 'Headline Grader — bilko.run'; }, []);
+
+  // Auto-save scored headlines
+  useEffect(() => {
+    if (result && headline) {
+      const entry = { headline, score: result.total_score, grade: result.grade, date: new Date().toISOString() };
+      saveToHistory(entry);
+      setHistory(loadHistory());
+    }
+  }, [result]);
 
   function handleTabChange(next: 'score' | 'compare') {
     setTab(next);
@@ -238,6 +257,33 @@ export function HeadlineGraderPage() {
           />
         )}
       </div>
+
+      {/* Headline History */}
+      {history.length > 0 && (
+        <div className="max-w-2xl mx-auto px-6 pb-12">
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Recent Headlines ({history.length})</h3>
+            <div className="space-y-2">
+              {history.map((h, i) => (
+                <div key={i} className="flex items-center gap-3 py-2 border-b border-warm-50 last:border-0">
+                  <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                    h.grade.startsWith('A') ? 'bg-green-100 text-green-700' :
+                    h.grade.startsWith('B') ? 'bg-blue-100 text-blue-700' :
+                    h.grade.startsWith('C') ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>{h.grade}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-warm-800 truncate">{h.headline}</p>
+                    <p className="text-xs text-warm-400">{h.score}/100</p>
+                  </div>
+                  <button onClick={() => { setHeadline(h.headline); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className="text-xs text-fire-500 hover:text-fire-600 font-semibold flex-shrink-0">Re-score</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

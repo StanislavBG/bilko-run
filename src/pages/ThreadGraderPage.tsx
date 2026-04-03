@@ -27,6 +27,10 @@ const PILLAR_LABELS: Record<string, string> = {
   share_trigger: 'Share Trigger',
 };
 
+interface HookEntry { text: string; label: string; date: string; }
+const HOOKS_KEY = 'bilko_hook_library';
+function loadHooks(): HookEntry[] { try { return JSON.parse(localStorage.getItem(HOOKS_KEY) || '[]'); } catch { return []; } }
+
 function countTweets(text: string): number {
   return text.split(/---|\n\n/).filter(t => t.trim().length > 0).length;
 }
@@ -39,6 +43,14 @@ export function ThreadGraderPage() {
   const [threadA, setThreadA] = useState('');
   const [threadB, setThreadB] = useState('');
   const resultRef = useRef<HTMLDivElement>(null);
+  const [hooks, setHooks] = useState<HookEntry[]>(loadHooks);
+
+  function saveHook(rw: { text: string; label: string }) {
+    const entry: HookEntry = { text: rw.text, label: rw.label, date: new Date().toISOString() };
+    const updated = [entry, ...hooks.filter(h => h.text !== rw.text)].slice(0, 20);
+    localStorage.setItem(HOOKS_KEY, JSON.stringify(updated));
+    setHooks(updated);
+  }
 
   useEffect(() => {
     document.title = 'ThreadGrader — Score Your X/Twitter Threads';
@@ -153,6 +165,16 @@ export function ThreadGraderPage() {
           )}
 
           {result.rewrites && <Rewrites rewrites={result.rewrites} noun="hook rewrite" />}
+          {result.rewrites && result.rewrites.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {result.rewrites.map((rw, i) => (
+                <button key={i} onClick={() => saveHook(rw)}
+                  className="text-xs px-3 py-1.5 border border-fire-200 text-fire-600 hover:bg-fire-50 rounded-lg transition-colors">
+                  Save hook: {rw.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -167,6 +189,24 @@ export function ThreadGraderPage() {
             cardB={{ label: 'Thread B', score: compareResult.threadB.total_score, grade: compareResult.threadB.grade, verdict: compareResult.threadB.verdict, pillars: compareResult.threadB.pillar_scores }}
             pillarLabels={PILLAR_LABELS}
           />
+        </div>
+      )}
+
+      {/* Hook Library */}
+      {hooks.length > 0 && (
+        <div className="max-w-2xl mx-auto px-6 pb-12">
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">My Hooks ({hooks.length})</h3>
+            <div className="space-y-2">
+              {hooks.map((h, i) => (
+                <div key={i} className="flex items-start gap-3 py-2 border-b border-warm-50 last:border-0">
+                  <span className="text-[10px] font-bold text-fire-500 uppercase bg-fire-50 px-2 py-0.5 rounded-full flex-shrink-0">{h.label}</span>
+                  <p className="text-sm text-warm-700 flex-1">{h.text}</p>
+                  <button onClick={() => { navigator.clipboard.writeText(h.text); }} className="text-xs text-warm-400 hover:text-fire-500 flex-shrink-0">Copy</button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </>

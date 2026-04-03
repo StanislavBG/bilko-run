@@ -12,6 +12,10 @@ interface Archetype {
   evidence: string[];
 }
 
+interface SnapshotEntry { headline: string; score: number; grade: string; archetypes: string[]; date: string; }
+const SNAPSHOTS_KEY = 'bilko_audience_snapshots';
+function loadSnapshots(): SnapshotEntry[] { try { return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]'); } catch { return []; } }
+
 interface AnalysisResult {
   audience_archetypes: Archetype[];
   content_patterns: {
@@ -297,6 +301,18 @@ export function AudienceDecoderPage() {
   const [contentA, setContentA] = useState('');
   const [contentB, setContentB] = useState('');
   const resultRef = useRef<HTMLDivElement>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotEntry[]>(loadSnapshots);
+
+  function saveSnapshot() {
+    if (!r) return;
+    const entry: SnapshotEntry = {
+      headline: r.headline, score: r.overall_score, grade: r.grade,
+      archetypes: r.audience_archetypes.map(a => a.name), date: new Date().toISOString(),
+    };
+    const updated = [entry, ...snapshots.filter(s => s.headline !== entry.headline)].slice(0, 10);
+    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(updated));
+    setSnapshots(updated);
+  }
 
   const r = result as AnalysisResult | null;
   const cr = compareResult as CompareResponse | null;
@@ -409,6 +425,11 @@ export function AudienceDecoderPage() {
         {r && (
           <>
             <ScoreCard score={r.overall_score} grade={r.grade} verdict={r.headline} toolName="Audience Decoder" />
+            <div className="text-center">
+              <button onClick={saveSnapshot} className="text-xs px-4 py-2 border border-fire-200 text-fire-600 hover:bg-fire-50 rounded-lg transition-colors">
+                Save Audience Snapshot
+              </button>
+            </div>
 
             <Section title="Audience Archetypes" delay={100}>
               <div className="space-y-3">
@@ -436,6 +457,29 @@ export function AudienceDecoderPage() {
           </>
         )}
       </div>
+
+      {/* Audience Snapshots */}
+      {snapshots.length > 0 && (
+        <div className="max-w-2xl mx-auto px-6 pb-12">
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">My Snapshots ({snapshots.length})</h3>
+            <div className="space-y-2">
+              {snapshots.map((s, i) => (
+                <div key={i} className="flex items-start gap-3 py-2 border-b border-warm-50 last:border-0">
+                  <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${
+                    s.grade.startsWith('A') ? 'bg-green-100 text-green-700' :
+                    s.grade.startsWith('B') ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+                  }`}>{s.grade}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-warm-800 font-medium truncate">{s.headline}</p>
+                    <p className="text-xs text-warm-400">{s.score}/100 &middot; {s.archetypes.join(', ')} &middot; {new Date(s.date).toLocaleDateString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

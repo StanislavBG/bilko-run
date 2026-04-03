@@ -26,6 +26,10 @@ interface CompareResponse {
   comparison: { winner: 'A' | 'B' | 'tie'; margin: number; verdict: string; analysis?: string };
 }
 
+interface SwipeEntry { text: string; predicted_score: number; optimized_for: string; platform: string; date: string; }
+const SWIPE_KEY = 'bilko_swipe_file';
+function loadSwipe(): SwipeEntry[] { try { return JSON.parse(localStorage.getItem(SWIPE_KEY) || '[]'); } catch { return []; } }
+
 const PILLAR_LABELS: Record<string, string> = {
   hook: 'Hook Strength',
   value_prop: 'Value Proposition',
@@ -54,6 +58,14 @@ export function AdScorerPage() {
   const [adCopyA, setAdCopyA] = useState('');
   const [adCopyB, setAdCopyB] = useState('');
   const [platform, setPlatform] = useState<Platform>('facebook');
+  const [swipeFile, setSwipeFile] = useState<SwipeEntry[]>(loadSwipe);
+
+  function saveToSwipe(rw: { text: string; predicted_score: number; optimized_for: string }) {
+    const entry: SwipeEntry = { ...rw, platform, date: new Date().toISOString() };
+    const updated = [entry, ...swipeFile.filter(e => e.text !== rw.text)].slice(0, 20);
+    localStorage.setItem(SWIPE_KEY, JSON.stringify(updated));
+    setSwipeFile(updated);
+  }
 
   useEffect(() => { document.title = 'Ad Scorer — bilko.run'; }, []);
 
@@ -255,6 +267,42 @@ export function AdScorerPage() {
           />
         )}
       </div>
+
+      {/* Swipe File */}
+      {swipeFile.length > 0 && (
+        <div className="max-w-2xl mx-auto px-6 pb-12">
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400">My Swipe File ({swipeFile.length})</h3>
+              <button onClick={() => { navigator.clipboard.writeText(swipeFile.map(s => s.text).join('\n\n---\n\n')); }}
+                className="text-xs text-fire-500 hover:text-fire-600 font-semibold">Copy all</button>
+            </div>
+            <div className="space-y-2">
+              {swipeFile.slice(0, 8).map((s, i) => (
+                <div key={i} className="flex items-start gap-3 py-2 border-b border-warm-50 last:border-0">
+                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">~{s.predicted_score}</span>
+                  <p className="text-sm text-warm-700 flex-1 line-clamp-2">{s.text}</p>
+                  <span className="text-[10px] font-bold text-warm-400 uppercase flex-shrink-0">{s.platform}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save to Swipe File buttons — injected via rewrites enhancement */}
+      {result?.rewrites?.filter(r => (r.predicted_score ?? 0) > 70).length ? (
+        <div className="max-w-2xl mx-auto px-6 pb-6">
+          <div className="flex flex-wrap gap-2">
+            {result.rewrites!.filter(r => (r.predicted_score ?? 0) > 70).map((rw, i) => (
+              <button key={i} onClick={() => saveToSwipe(rw)}
+                className="text-xs px-3 py-1.5 border border-fire-200 text-fire-600 hover:bg-fire-50 rounded-lg transition-colors">
+                Save rewrite #{i + 1} to Swipe File
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

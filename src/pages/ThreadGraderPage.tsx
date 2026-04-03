@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
-import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites } from '../components/tool-page/index.js';
+import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
 
 interface PillarScore { score: number; max: number; feedback: string; }
 interface TweetBreakdown { tweet_index: number; text_preview: string; score: number; note: string; }
@@ -33,6 +33,13 @@ function loadHooks(): HookEntry[] { try { return JSON.parse(localStorage.getItem
 
 function countTweets(text: string): number {
   return text.split(/---|\n\n/).filter(t => t.trim().length > 0).length;
+}
+
+function viralPotential(score: number) {
+  if (score >= 85) return { label: 'High Viral Potential', color: 'text-green-600 bg-green-50', note: 'This thread has all the signals. Ship it.' };
+  if (score >= 65) return { label: 'Moderate Potential', color: 'text-blue-600 bg-blue-50', note: 'Good bones. The hook could be sharper.' };
+  if (score >= 45) return { label: 'Low Potential', color: 'text-yellow-600 bg-yellow-50', note: 'Needs work. Most readers will drop off early.' };
+  return { label: 'Rewrite', color: 'text-red-600 bg-red-50', note: 'Start over. The hook isn\'t stopping anyone.' };
 }
 
 export function ThreadGraderPage() {
@@ -146,6 +153,15 @@ export function ThreadGraderPage() {
       {result && (
         <div ref={resultRef} className="max-w-2xl mx-auto px-6 pt-10 space-y-6 pb-16">
           <ScoreCard score={result.total_score} grade={result.grade} verdict={result.verdict} toolName="ThreadGrader" />
+          {(() => {
+            const vp = viralPotential(result.total_score);
+            return (
+              <div className={`rounded-2xl border border-warm-200/60 p-5 animate-slide-up ${vp.color}`} style={{ animationDelay: '80ms' }}>
+                <p className="text-sm font-bold">{vp.label}</p>
+                <p className="text-xs mt-1 opacity-80">{vp.note}</p>
+              </div>
+            );
+          })()}
           <SectionBreakdown pillars={result.pillar_scores} labels={PILLAR_LABELS} />
 
           {/* Per-tweet breakdown */}
@@ -184,6 +200,7 @@ export function ThreadGraderPage() {
               ))}
             </div>
           )}
+          <CrossPromo currentTool="thread-grader" />
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
-import { ToolHero, ScoreCard } from '../components/tool-page/index.js';
+import { ToolHero, ScoreCard, CrossPromo } from '../components/tool-page/index.js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +49,18 @@ interface CompareResponse {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+function inferPersonality(engagement: AnalysisResult['engagement_model']): { type: string; emoji: string; desc: string } {
+  const hook = engagement.hook_effectiveness.score;
+  const controversy = engagement.controversy_index.score;
+  const share = engagement.shareability_score;
+
+  if (hook > 70 && controversy > 50) return { type: 'The Provocateur', emoji: '\u{1F3AD}', desc: 'High hook + high controversy. You start debates and people can\'t look away.' };
+  if (hook > 70 && share > 70) return { type: 'The Amplifier', emoji: '\u{1F4E2}', desc: 'Your content spreads. People share you because you make them look smart.' };
+  if (share > 70 && controversy < 30) return { type: 'The Educator', emoji: '\u{1F4DA}', desc: 'Trusted voice. You teach and people save your posts for later.' };
+  if (hook < 40) return { type: 'The Slow Burn', emoji: '\u{1F56F}\uFE0F', desc: 'Your hooks need work, but people who find you stay. Build the top of funnel.' };
+  return { type: 'The Generalist', emoji: '\u{1F3AF}', desc: 'Solid across the board. Pick a lane to 10x one dimension.' };
+}
 
 function scorePillColor(score: number) {
   if (score >= 70) return 'bg-green-100 text-green-700 border-green-200';
@@ -431,6 +443,17 @@ export function AudienceDecoderPage() {
               </button>
             </div>
 
+            {(() => {
+              const p = inferPersonality(r.engagement_model);
+              return (
+                <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-6 text-center animate-slide-up">
+                  <span className="text-3xl">{p.emoji}</span>
+                  <p className="text-lg font-black text-warm-900 mt-2">{p.type}</p>
+                  <p className="text-sm text-warm-600 mt-1">{p.desc}</p>
+                </div>
+              );
+            })()}
+
             <Section title="Audience Archetypes" delay={100}>
               <div className="space-y-3">
                 {r.audience_archetypes.map((a, i) => (
@@ -457,6 +480,8 @@ export function AudienceDecoderPage() {
           </>
         )}
       </div>
+
+      {r && <CrossPromo currentTool="audience-decoder" />}
 
       {/* Below-fold engagement content — only when idle */}
       {!r && !cr && !loading && (

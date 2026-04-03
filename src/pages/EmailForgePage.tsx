@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
-import { ToolHero } from '../components/tool-page/index.js';
+import { ToolHero, CrossPromo } from '../components/tool-page/index.js';
 
 interface EmailItem {
   position: number;
@@ -25,6 +25,12 @@ interface SequenceResult {
 interface TemplateEntry { product: string; audience: string; goal: string; tone: string; score: number; grade: string; date: string; }
 const TEMPLATES_KEY = 'bilko_email_templates';
 function loadTemplates(): TemplateEntry[] { try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || '[]'); } catch { return []; } }
+
+const SPAM_TRIGGERS = ['free', 'act now', 'limited time', 'click here', 'buy now', 'order now', 'urgent', '!!!', 'CAPS', '$$$', 'winner', 'congratulations'];
+
+function checkDeliverability(text: string): string[] {
+  return SPAM_TRIGGERS.filter(t => text.toLowerCase().includes(t.toLowerCase()));
+}
 
 const GOALS = ['cold_outreach', 'nurture', 'launch', 're-engagement'] as const;
 const GOAL_LABELS: Record<string, string> = { cold_outreach: 'Cold Outreach', nurture: 'Nurture', launch: 'Launch', 're-engagement': 'Re-engagement' };
@@ -257,6 +263,17 @@ export function EmailForgePage() {
             <p className="text-sm text-warm-600">{result.sequence_strategy}</p>
           </div>
 
+          {/* Deliverability warning */}
+          {(() => {
+            const flagged = result.emails.filter(e => checkDeliverability(`${e.subject_line} ${e.body}`).length > 0);
+            const words = [...new Set(flagged.flatMap(e => checkDeliverability(`${e.subject_line} ${e.body}`)))];
+            return flagged.length > 0 ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-700">
+                <span className="font-bold">Deliverability note:</span> {flagged.length} email(s) contain spam trigger words ({words.join(', ')}). Consider rephrasing to avoid spam filters.
+              </div>
+            ) : null;
+          })()}
+
           {/* Email cards */}
           {result.emails.map((email, i) => (
             <EmailCard key={email.position} email={email} defaultOpen={i === 0} />
@@ -275,6 +292,8 @@ export function EmailForgePage() {
           </div>
         </div>
       )}
+
+      {result && <CrossPromo currentTool="email-forge" />}
 
       {compareResult && (
         <div ref={resultRef} className="max-w-4xl mx-auto px-6 pt-10 space-y-6 pb-16">

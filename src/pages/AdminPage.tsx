@@ -22,6 +22,8 @@ interface Stats {
   roastsByDay: Array<{ date: string; roasts: number }>;
   recentUserRoasts: Array<{ email: string; url: string; score: number; grade: string; roast: string; created_at: string }>;
   activityFeed: Array<{ type: string; email: string; detail: string; created_at: string }>;
+  toolUsage: Array<{ endpoint: string; uses: number }>;
+  toolVisits: Array<{ path: string; visits: number }>;
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -86,7 +88,7 @@ export function AdminPage() {
   const [days, setDays] = useState(7);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'users' | 'roasts' | 'activity'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'roasts' | 'activity' | 'tools'>('overview');
 
   useEffect(() => {
     document.title = 'Admin — bilko.run';
@@ -143,7 +145,7 @@ export function AdminPage() {
 
           {/* Tab Nav */}
           <div className="flex gap-1 bg-warm-100 rounded-xl p-1 mb-6 w-fit">
-            {(['overview', 'users', 'roasts', 'activity'] as const).map(t => (
+            {(['overview', 'users', 'roasts', 'activity', 'tools'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -316,6 +318,92 @@ export function AdminPage() {
                   </div>
                 ))}
                 {stats.activityFeed.length === 0 && <p className="text-sm text-warm-400">No activity in this period</p>}
+              </div>
+            </div>
+          )}
+
+          {/* ── Tools Tab ── */}
+          {tab === 'tools' && (
+            <div className="space-y-6">
+              {/* Tool API Usage */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">
+                  Tool API Usage ({days}d)
+                </h2>
+                {stats.toolUsage && stats.toolUsage.length > 0 ? (
+                  <div className="space-y-2">
+                    {stats.toolUsage.map(t => {
+                      const max = Math.max(...stats.toolUsage.map(x => x.uses), 1);
+                      const pct = Math.round((t.uses / max) * 100);
+                      const name = t.endpoint.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                      return (
+                        <div key={t.endpoint} className="flex items-center gap-3">
+                          <span className="text-sm text-warm-700 w-36 flex-shrink-0 truncate font-medium">{name}</span>
+                          <div className="flex-1 h-4 bg-warm-50 rounded-full overflow-hidden">
+                            <div className="h-full bg-fire-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-sm font-bold text-warm-900 w-12 text-right">{t.uses}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-warm-400">No tool usage data yet</p>
+                )}
+              </div>
+
+              {/* Tool Page Visits */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">
+                  Tool Page Visits ({days}d)
+                </h2>
+                {stats.toolVisits && stats.toolVisits.length > 0 ? (
+                  <div className="space-y-2">
+                    {stats.toolVisits.map(t => {
+                      const max = Math.max(...stats.toolVisits.map(x => x.visits), 1);
+                      const pct = Math.round((t.visits / max) * 100);
+                      const name = t.path.replace('/projects/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                      return (
+                        <div key={t.path} className="flex items-center gap-3">
+                          <span className="text-sm text-warm-700 w-36 flex-shrink-0 truncate font-medium">{name}</span>
+                          <div className="flex-1 h-4 bg-warm-50 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-sm font-bold text-warm-900 w-12 text-right">{t.visits}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-warm-400">No tool visit data yet</p>
+                )}
+              </div>
+
+              {/* Tool Health Summary */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">All Projects</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { name: 'PageRoast', status: 'live', path: '/projects/page-roast' },
+                    { name: 'HeadlineGrader', status: 'live', path: '/projects/headline-grader' },
+                    { name: 'AdScorer', status: 'live', path: '/projects/ad-scorer' },
+                    { name: 'ThreadGrader', status: 'live', path: '/projects/thread-grader' },
+                    { name: 'EmailForge', status: 'live', path: '/projects/email-forge' },
+                    { name: 'AudienceDecoder', status: 'live', path: '/projects/audience-decoder' },
+                    { name: 'Stepproof', status: 'live', path: '/projects/stepproof' },
+                    { name: 'AgentTrace', status: 'cli', path: '' },
+                  ].map(p => (
+                    <div key={p.name} className="border border-warm-100 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`w-2 h-2 rounded-full ${p.status === 'live' ? 'bg-green-500' : 'bg-warm-300'}`} />
+                        <span className="text-sm font-bold text-warm-800">{p.name}</span>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-warm-400">
+                        {p.status === 'live' ? 'LIVE' : 'CLI ONLY'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
-import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites } from '../components/tool-page/index.js';
+import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +44,14 @@ const PLATFORMS: { value: Platform; label: string; charLimit: number; limitLabel
   { value: 'google', label: 'Google', charLimit: 90, limitLabel: '90 desc' },
   { value: 'linkedin', label: 'LinkedIn', charLimit: 150, limitLabel: '150 intro' },
 ];
+
+function getBenchmark(score: number): string {
+  if (score >= 90) return 'Predicted to outperform 95% of ads on this platform';
+  if (score >= 75) return 'Predicted to outperform 70% of ads';
+  if (score >= 60) return 'In the top 40% of ads we\'ve scored';
+  if (score >= 40) return 'Average — room for improvement';
+  return 'Below average — check the fixes';
+}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -138,9 +146,20 @@ export function AdScorerPage() {
                 rows={4}
                 className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
               />
-              <p className={`text-xs mt-1 text-right ${adCopy.length > activePlatform.charLimit ? 'text-red-400' : 'text-warm-500'}`}>
-                {adCopy.length}/{activePlatform.charLimit} chars ({activePlatform.limitLabel})
-              </p>
+              {(() => {
+                const charUsed = adCopy.length;
+                const charLimit = activePlatform.charLimit;
+                const pct = Math.min(100, Math.round((charUsed / charLimit) * 100));
+                const barColor = pct > 100 ? 'bg-red-500' : pct > 80 ? 'bg-yellow-500' : 'bg-green-500';
+                return (
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                    <span className={`text-xs ${pct > 100 ? 'text-red-400' : 'text-warm-500'}`}>{charUsed}/{charLimit}</span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
@@ -235,10 +254,14 @@ export function AdScorerPage() {
               verdict={result.verdict}
               toolName="Ad Scorer"
             />
+            <div className="bg-white rounded-2xl border border-warm-200/60 p-4 text-center animate-slide-up" style={{ animationDelay: '80ms' }}>
+              <p className="text-sm font-semibold text-warm-700">{getBenchmark(result.total_score)}</p>
+            </div>
             <SectionBreakdown pillars={result.pillar_scores} labels={PILLAR_LABELS} />
             {result.rewrites && result.rewrites.length > 0 && (
               <Rewrites rewrites={result.rewrites} noun="rewrite" />
             )}
+            <CrossPromo currentTool="ad-scorer" />
           </>
         )}
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
-import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites } from '../components/tool-page/index.js';
+import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,6 +50,17 @@ const CONTEXT_OPTIONS = [
   { value: 'blog', label: 'Blog Post' },
   { value: 'social', label: 'Social Post' },
 ];
+
+function analyzeHeadline(text: string) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const powerWords = ['free', 'new', 'proven', 'secret', 'instant', 'guaranteed', 'discover', 'exclusive', 'limited', 'ultimate', 'best', 'easy', 'fast', 'now', 'today', 'save', 'boost', 'hack', 'master', 'unlock'];
+  const emotionalWords = ['love', 'hate', 'fear', 'amazing', 'shocking', 'incredible', 'terrible', 'brilliant', 'dangerous', 'stunning', 'obsessed', 'devastating', 'thrilling', 'heartbreaking', 'jaw-dropping'];
+  const powerCount = words.filter(w => powerWords.includes(w.toLowerCase())).length;
+  const emotionalCount = words.filter(w => emotionalWords.includes(w.toLowerCase())).length;
+  const readingTimeSec = Math.max(0.5, words.length * 0.3);
+  const type = text.endsWith('?') ? 'Question' : text.match(/^\d|how to|ways to|steps to|tips/i) ? 'List/How-to' : text.match(/^why|^what|^when/i) ? 'Question' : 'Statement';
+  return { wordCount: words.length, powerCount, emotionalCount, readingTimeSec, type };
+}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -127,6 +138,18 @@ export function HeadlineGraderPage() {
               <p className={`text-xs mt-1 text-right ${charLen > 60 ? 'text-red-400' : 'text-warm-500'}`}>
                 {charLen}/60 chars
               </p>
+              {headline.trim() && (() => {
+                const { wordCount, powerCount, emotionalCount, readingTimeSec, type } = analyzeHeadline(headline);
+                return (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-warm-400">{wordCount} words</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-warm-400">{readingTimeSec.toFixed(1)}s read</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${powerCount > 0 ? 'bg-green-500/20 text-green-300' : 'bg-white/10 text-warm-500'}`}>{powerCount} power words</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${emotionalCount > 0 ? 'bg-fire-500/20 text-fire-300' : 'bg-white/10 text-warm-500'}`}>{emotionalCount} emotional</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-warm-400">{type}</span>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex items-center gap-3">
@@ -257,6 +280,9 @@ export function HeadlineGraderPage() {
           />
         )}
       </div>
+
+      {/* ── Cross Promo ──────────────────────────────────────────────── */}
+      <CrossPromo currentTool="headline-grader" />
 
       {/* ── Below-fold engagement content ────────────────────────────── */}
       {!result && !compareResult && !loading && (

@@ -39,7 +39,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       totalViews, byDay, byPage, byReferrer, todayViews,
       totalRoasts, totalUsers, topUsers, tokenPurchases,
       signupsByDay, roastsByDay, recentUserRoasts, activityFeed,
-      revenueSingle, revenueBundle,
+      revenueSingle, revenueBundle, toolUsage, toolVisits,
     ] = await Promise.all([
       dbGet<{ n: number }>('SELECT COUNT(*) as n FROM page_views WHERE date >= ?', since),
       dbAll('SELECT date, COUNT(*) as views FROM page_views WHERE date >= ? GROUP BY date ORDER BY date', since),
@@ -74,6 +74,10 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       // Revenue breakdown
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1"),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7"),
+      // Per-tool usage stats
+      dbAll(`SELECT endpoint, SUM(count) as uses FROM usage_tracking WHERE date >= ? GROUP BY endpoint ORDER BY uses DESC`, since),
+      // Per-tool page visits
+      dbAll(`SELECT path, COUNT(*) as visits FROM page_views WHERE date >= ? AND path LIKE '/projects/%' GROUP BY path ORDER BY visits DESC`, since),
     ]);
 
     const singleCount = revenueSingle?.n ?? 0;
@@ -92,6 +96,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       byReferrer,
       topUsers,
       signupsByDay,
+      toolUsage,
+      toolVisits,
       roastsByDay,
       recentUserRoasts,
       activityFeed,

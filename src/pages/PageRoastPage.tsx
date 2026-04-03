@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useUser, SignInButton, useAuth, useClerk } from '@clerk/clerk-react';
+import { CrossPromo } from '../components/tool-page/index.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -934,6 +935,23 @@ export function PageRoastPage() {
       {result && (
         <div ref={resultRef} className="max-w-2xl mx-auto px-6 pt-12 space-y-6 pb-16">
           <ShareableCard result={result} url={url} />
+
+          {/* Industry Benchmark */}
+          <div className="bg-warm-50 rounded-xl border border-warm-200/60 p-4 text-center animate-slide-up">
+            <p className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">Industry Benchmark</p>
+            <p className="text-sm font-bold text-warm-800">
+              {result.total_score >= 90
+                ? 'Better than 95% of pages we\'ve scored'
+                : result.total_score >= 75
+                  ? 'Better than 70% of pages'
+                  : result.total_score >= 60
+                    ? 'Better than 40% of pages'
+                    : result.total_score >= 40
+                      ? 'Better than 15% of pages'
+                      : 'In the bottom 10%'}
+            </p>
+          </div>
+
           <TopFixes fixes={result.top_fixes} />
           <SectionBreakdown result={result} />
           <CompetitorEdge text={result.competitor_edge} />
@@ -951,6 +969,8 @@ export function PageRoastPage() {
               <BuyTokensCard email={email} />
             )}
           </div>
+
+          <CrossPromo currentTool="page-roast" />
         </div>
       )}
 

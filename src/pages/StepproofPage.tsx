@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
-import { ToolHero } from '../components/tool-page/index.js';
+import { ToolHero, CrossPromo } from '../components/tool-page/index.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -9,6 +9,10 @@ interface StepSummary { stepId: string; totalRuns: number; passes: number; failu
 interface AssertionResult { type: string; passed: boolean; message?: string; }
 interface StepResult { stepId: string; iteration: number; output: string; passed: boolean; assertions: AssertionResult[]; error?: string; durationMs: number; }
 interface ScenarioReport { name: string; iterations: number; durationMs: number; steps: StepSummary[]; allPassed: boolean; results: StepResult[]; }
+interface TestRun { name: string; passed: boolean; iterations: number; duration: number; date: string; }
+const HISTORY_KEY = 'bilko_stepproof_history';
+function loadHistory(): TestRun[] { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
+
 interface Preset { id: string; name: string; description: string; yaml: string; }
 
 export function StepproofPage() {
@@ -24,6 +28,7 @@ export function StepproofPage() {
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
+  const [history, setHistory] = useState<TestRun[]>(loadHistory);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,6 +44,12 @@ export function StepproofPage() {
 
   useEffect(() => {
     if (report && resultRef.current) resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (report) {
+      const entry: TestRun = { name: report.name, passed: report.allPassed, iterations: report.iterations, duration: report.durationMs, date: new Date().toISOString() };
+      const updated = [entry, ...history].slice(0, 20);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      setHistory(updated);
+    }
   }, [report]);
 
   async function runScenario() {
@@ -320,6 +331,30 @@ export function StepproofPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          <CrossPromo currentTool="stepproof" />
+        </div>
+      )}
+
+      {/* Test History */}
+      {history.length > 0 && (
+        <div className="max-w-2xl mx-auto px-6 pb-12">
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Test History ({history.length})</h3>
+            <div className="space-y-2">
+              {history.map((h, i) => (
+                <div key={i} className="flex items-center gap-3 py-2 border-b border-warm-50 last:border-0">
+                  <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${h.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {h.passed ? 'PASS' : 'FAIL'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-warm-800 truncate">{h.name}</p>
+                    <p className="text-xs text-warm-400">{h.iterations} iter &middot; {(h.duration / 1000).toFixed(1)}s &middot; {new Date(h.date).toLocaleDateString()}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -144,9 +144,16 @@ export function HeadlineGraderPage() {
                   <div className="flex flex-wrap gap-2 mt-1">
                     <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-warm-400">{wordCount} words</span>
                     <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-warm-400">{readingTimeSec.toFixed(1)}s read</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded ${powerCount > 0 ? 'bg-green-500/20 text-green-300' : 'bg-white/10 text-warm-500'}`}>{powerCount} power words</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded ${emotionalCount > 0 ? 'bg-fire-500/20 text-fire-300' : 'bg-white/10 text-warm-500'}`}>{emotionalCount} emotional</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${powerCount >= 1 ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+                      {powerCount} power {powerCount >= 1 ? '\u2713' : '\u2014 add 1+'}
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${emotionalCount >= 1 ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                      {emotionalCount} emotional {emotionalCount >= 1 ? '\u2713' : '\u2014 aim for 10-15%'}
+                    </span>
                     <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-warm-400">{type}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded ${wordCount >= 6 && wordCount <= 12 ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                      {wordCount >= 6 && wordCount <= 12 ? 'Good length' : wordCount < 6 ? 'Too short' : 'Consider trimming'}
+                    </span>
                   </div>
                 );
               })()}

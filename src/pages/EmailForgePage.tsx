@@ -32,6 +32,23 @@ function checkDeliverability(text: string): string[] {
   return SPAM_TRIGGERS.filter(t => text.toLowerCase().includes(t.toLowerCase()));
 }
 
+function computeDeliverabilityScore(emails: EmailItem[]): { score: number; issues: string[] } {
+  let score = 100;
+  const issues: string[] = [];
+  for (const e of emails) {
+    const text = `${e.subject_line} ${e.body} ${e.cta}`;
+    const upper = (text.match(/[A-Z]{3,}/g) || []).length;
+    if (upper > 2) { score -= 10; issues.push('Excessive caps in email ' + e.position); }
+    const excl = (text.match(/!/g) || []).length;
+    if (excl > 3) { score -= 5; issues.push('Too many exclamation marks in email ' + e.position); }
+    if (e.subject_line.length > 60) { score -= 5; issues.push('Subject line too long in email ' + e.position); }
+    const triggers = SPAM_TRIGGERS.filter(t => text.toLowerCase().includes(t.toLowerCase()));
+    score -= triggers.length * 3;
+    if (triggers.length > 0) issues.push(`Spam words in email ${e.position}: ${triggers.join(', ')}`);
+  }
+  return { score: Math.max(0, Math.min(100, score)), issues };
+}
+
 const GOALS = ['cold_outreach', 'nurture', 'launch', 're-engagement', 'win_back'] as const;
 const GOAL_LABELS: Record<string, string> = { cold_outreach: 'Cold Outreach', nurture: 'Nurture', launch: 'Launch', 're-engagement': 'Re-engagement', win_back: 'Win-back' };
 const TONES = ['professional', 'casual', 'urgent', 'storytelling'] as const;
@@ -262,6 +279,19 @@ export function EmailForgePage() {
             </div>
             <p className="text-sm text-warm-600">{result.sequence_strategy}</p>
           </div>
+
+          {/* Deliverability score */}
+          {(() => {
+            const d = computeDeliverabilityScore(result.emails);
+            const color = d.score >= 80 ? 'bg-green-50 border-green-200 text-green-700' : d.score >= 60 ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-red-50 border-red-200 text-red-700';
+            return (
+              <div className={`rounded-xl border p-4 text-center ${color} animate-slide-up`}>
+                <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-1">Deliverability Score</p>
+                <p className="text-2xl font-black">{d.score}/100</p>
+                {d.issues.length > 0 && <p className="text-xs mt-1 opacity-80">{d.issues.length} issue{d.issues.length !== 1 ? 's' : ''} found</p>}
+              </div>
+            );
+          })()}
 
           {/* Deliverability warning */}
           {(() => {

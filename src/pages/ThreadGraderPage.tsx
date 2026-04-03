@@ -223,6 +223,14 @@ export function ThreadGraderPage() {
             </div>
           )}
           <CrossPromo currentTool="thread-grader" />
+          <div className="text-center pt-4">
+            <button
+              onClick={() => { reset(); setThread(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all"
+            >
+              Score Another Thread
+            </button>
+          </div>
         </div>
       )}
 

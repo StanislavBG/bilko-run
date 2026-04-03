@@ -268,6 +268,72 @@ export function AdScorerPage() {
         )}
       </div>
 
+      {/* ── Below-fold engagement content ────────────────────────────── */}
+      {!result && !compareResult && !loading && (
+        <>
+          {/* What we check */}
+          <div className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-12">
+              <h2 className="text-lg font-black text-warm-900 mb-6">What we check</h2>
+              <div className="space-y-5">
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Hook <span className="text-warm-400 font-normal">(25 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Does your first line make someone stop scrolling? Or does it sound like every other ad in their feed?</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Value Prop <span className="text-warm-400 font-normal">(25 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Can someone understand what they get in 3 seconds? If you need a paragraph to explain it, you've already lost.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Emotional <span className="text-warm-400 font-normal">(25 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">People buy on emotion and justify with logic. Your ad should make them feel something before asking for a click.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">CTA & Conversion <span className="text-warm-400 font-normal">(25 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Is the button clear? Is there urgency? Or are you hoping people will figure out what to do next?</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div className="max-w-2xl mx-auto px-6 py-12">
+            <h2 className="text-lg font-black text-warm-900 mb-6">Frequently asked questions</h2>
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm font-bold text-warm-900">Why does the platform matter?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Facebook gives you images + 125 chars. Google gives you 90 chars, no images. LinkedIn is professional. Different rules, different scores.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Will this work for display ads?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Text ads only for now. Display/video scoring is coming. But your copy still matters even with a great image.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">How do I use the rewrites?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Copy the best one. Test it as a new variant. Don't delete your original -- A/B test both.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Same credits as PageRoast?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Same credits, same wallet. 1 per score, 2 for compare.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom CTA */}
+          <div className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-10 text-center">
+              <p className="text-warm-900 font-bold text-base mb-3">Your ad budget is waiting. Score the copy first.</p>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="bg-fire-500 hover:bg-fire-600 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
+              >
+                Back to top
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Swipe File */}
       {swipeFile.length > 0 && (
         <div className="max-w-2xl mx-auto px-6 pb-12">

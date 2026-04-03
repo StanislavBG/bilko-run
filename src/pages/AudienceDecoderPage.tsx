@@ -458,6 +458,86 @@ export function AudienceDecoderPage() {
         )}
       </div>
 
+      {/* Below-fold engagement content — only when idle */}
+      {!r && !cr && !loading && (
+        <div className="max-w-3xl mx-auto px-6 pb-8 space-y-10">
+          {/* What you'll learn */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">What You'll Learn</h3>
+            <p className="text-sm text-warm-500 mb-5">Five areas of insight. Zero hand-waving.</p>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black">1</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Audience Archetypes</p>
+                  <p className="text-sm text-warm-600">Who actually follows you — not who you think follows you. Names, percentages, evidence.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-xs font-black">2</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Content Patterns</p>
+                  <p className="text-sm text-warm-600">What's working, what's flopping, and what you should stop posting entirely.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">3</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Engagement Model</p>
+                  <p className="text-sm text-warm-600">Hook effectiveness, CTA quality, controversy risk, shareability. Four numbers that explain your reach.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-black">4</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Growth Opportunities</p>
+                  <p className="text-sm text-warm-600">Impact x effort matrix. Because "post more" isn't a strategy.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-black">5</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Content Calendar</p>
+                  <p className="text-sm text-warm-600">Weekly mix, theme rotation, gaps to fill. An actual plan, not vibes.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Frequently Asked Questions</h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-bold text-warm-900">How much content should I paste?</p>
+                <p className="text-sm text-warm-600">10-20 posts minimum. More data = better archetypes. Paste your last month of content.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Can I decode a competitor?</p>
+                <p className="text-sm text-warm-600">Paste their public content instead of yours. Use Compare mode to see how your audiences differ.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Is this the same as audience analytics?</p>
+                <p className="text-sm text-warm-600">No. Analytics tells you demographics. This tells you psychographics — who they are, what they care about, why they follow you.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">How often should I re-decode?</p>
+                <p className="text-sm text-warm-600">Monthly. Save snapshots to track how your audience evolves as your content strategy shifts.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom CTA */}
+          <div className="text-center">
+            <p className="text-lg font-bold text-warm-800 mb-3">Your audience is already telling you what they want. Decode it.</p>
+            <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="px-6 py-3 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 text-white font-bold rounded-xl shadow-lg transition-all text-sm">
+              Back to top
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Audience Snapshots */}
       {snapshots.length > 0 && (
         <div className="max-w-2xl mx-auto px-6 pb-12">

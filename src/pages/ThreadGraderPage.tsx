@@ -201,6 +201,72 @@ export function ThreadGraderPage() {
         </div>
       )}
 
+      {/* ── Below-fold engagement content ────────────────────────────── */}
+      {!result && !compareResult && !loading && (
+        <>
+          {/* What we grade */}
+          <div className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-12">
+              <h2 className="text-lg font-black text-warm-900 mb-6">What we grade</h2>
+              <div className="space-y-5">
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Hook <span className="text-warm-400 font-normal">(30 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Tweet 1 is everything. If your hook doesn't stop the scroll, tweets 2-10 are a monologue to nobody.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Tension <span className="text-warm-400 font-normal">(25 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Each tweet should make the reader need the next one. Not want. Need. Like a cliffhanger, but shorter.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Payoff <span className="text-warm-400 font-normal">(25 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Promise something in the hook, deliver it by the end. The internet never forgives a bait-and-switch.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Share Trigger <span className="text-warm-400 font-normal">(20 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Quote-worthy insights, surprising stats, hot takes people can't resist retweeting.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div className="max-w-2xl mx-auto px-6 py-12">
+            <h2 className="text-lg font-black text-warm-900 mb-6">Frequently asked questions</h2>
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm font-bold text-warm-900">How do I separate tweets?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Use --- or leave a blank line between tweets. We count them automatically.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Why is the hook worth 30 points?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Because 80% of readers decide on tweet 1. If you lose them there, your thread is a diary entry.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Can I grade LinkedIn posts too?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Paste any long-form content. The frameworks work for any multi-section piece. We just call them tweets.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Same credits?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Same credits across all tools. 1 per grade, 2 for A/B compare.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom CTA */}
+          <div className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-10 text-center">
+              <p className="text-warm-900 font-bold text-base mb-3">Still writing threads nobody reads? Let's fix that.</p>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="bg-fire-500 hover:bg-fire-600 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
+              >
+                Back to top
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Hook Library */}
       {hooks.length > 0 && (
         <div className="max-w-2xl mx-auto px-6 pb-12">

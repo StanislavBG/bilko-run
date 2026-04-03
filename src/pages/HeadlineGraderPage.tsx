@@ -258,6 +258,72 @@ export function HeadlineGraderPage() {
         )}
       </div>
 
+      {/* ── Below-fold engagement content ────────────────────────────── */}
+      {!result && !compareResult && !loading && (
+        <>
+          {/* How it scores */}
+          <div className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-12">
+              <h2 className="text-lg font-black text-warm-900 mb-6">How it scores</h2>
+              <div className="space-y-5">
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Rule of One <span className="text-warm-400 font-normal">(30 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">One dominant idea. Not three competing ones crammed into a run-on sentence.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Value Equation <span className="text-warm-400 font-normal">(30 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Dream outcome x likelihood / time x effort. Hormozi math applied to your 12 words.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Readability <span className="text-warm-400 font-normal">(20 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Grade-5 reading level is the goal. Your headline isn't a PhD thesis.</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Proof + Promise + Plan <span className="text-warm-400 font-normal">(20 pts)</span></p>
+                  <p className="text-sm text-warm-500 mt-0.5">Promise something specific. Prove it's possible. Hint at the plan.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div className="max-w-2xl mx-auto px-6 py-12">
+            <h2 className="text-lg font-black text-warm-900 mb-6">Frequently asked questions</h2>
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm font-bold text-warm-900">What makes a good headline?</p>
+                <p className="text-sm text-warm-600 mt-0.5">One idea, specific benefit, emotional hook, under 60 characters. That's it. Most headlines fail at "one idea."</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Why 60 characters?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Google truncates at 60. If your headline gets cut off, you just wasted the most important piece of copy on your page.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Are the rewrites any good?</p>
+                <p className="text-sm text-warm-600 mt-0.5">They're a starting point. AI rewrites optimize for specific framework weaknesses. Use them as inspiration, not gospel.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Do I use the same credits?</p>
+                <p className="text-sm text-warm-600 mt-0.5">Yep. 1 credit per score, 2 for A/B compare. Same credits work across all bilko.run tools.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom CTA */}
+          <div className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-10 text-center">
+              <p className="text-warm-900 font-bold text-base mb-3">Still tweaking your headline? That's the right instinct. Score it.</p>
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="bg-fire-500 hover:bg-fire-600 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
+              >
+                Back to top
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Headline History */}
       {history.length > 0 && (
         <div className="max-w-2xl mx-auto px-6 pb-12">

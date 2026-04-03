@@ -314,6 +314,86 @@ export function EmailForgePage() {
         </div>
       )}
 
+      {/* Below-fold engagement content — only when idle */}
+      {!result && !compareResult && !loading && (
+        <div className="max-w-2xl mx-auto px-6 pt-10 pb-8 space-y-10">
+          {/* How it generates */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">How It Generates</h3>
+            <p className="text-sm text-warm-500 mb-5">Five emails. Five proven persuasion frameworks. Here's what's under the hood.</p>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">1</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">AIDA</p>
+                  <p className="text-sm text-warm-600">Attention-Interest-Desire-Action. The framework your marketing professor taught you. Still works.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-black">2</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">PAS</p>
+                  <p className="text-sm text-warm-600">Problem-Agitate-Solve. Find the wound, pour salt on it, then hand them the bandaid.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black">3</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Hormozi</p>
+                  <p className="text-sm text-warm-600">Dream Outcome x Perceived Likelihood / Time x Effort. Math that makes people buy.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-xs font-black">4</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Cialdini</p>
+                  <p className="text-sm text-warm-600">Give massive free value first. Then ask. Reciprocity is a hell of a drug.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-black">5</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Storytelling</p>
+                  <p className="text-sm text-warm-600">Setup &rarr; Conflict &rarr; Resolution &rarr; CTA. Because humans are wired for stories, not sales pitches.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Frequently Asked Questions</h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-bold text-warm-900">Can I edit the emails?</p>
+                <p className="text-sm text-warm-600">Copy them, paste them, change everything. They're a starting point, not a straitjacket.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Why 5 emails?</p>
+                <p className="text-sm text-warm-600">Research says 5-7 touchpoints to convert a cold lead. We give you 5 with different frameworks so you're not repeating yourself.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Are the open rate estimates real?</p>
+                <p className="text-sm text-warm-600">They're AI estimates based on subject line patterns. Useful for comparison between emails, not as gospel truth.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Same credits?</p>
+                <p className="text-sm text-warm-600">Same wallet. 1 credit per sequence, 2 for A/B compare. Works across all bilko.run tools.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom CTA */}
+          <div className="text-center">
+            <p className="text-lg font-bold text-warm-800 mb-3">Your next email sequence is one prompt away.</p>
+            <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="px-6 py-3 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 text-white font-bold rounded-xl shadow-lg transition-all text-sm">
+              Back to top
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Template Library */}
       {templates.length > 0 && (
         <div className="max-w-2xl mx-auto px-6 pb-12">

@@ -194,6 +194,13 @@ export function StepproofPage() {
                 </div>
               </div>
             </div>
+            <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 mt-4">
+              <p className="text-sm text-warm-800 font-medium">Provider-independent</p>
+              <p className="text-xs text-warm-600 mt-0.5">
+                Unlike tools acquired by specific AI companies, Stepproof works with any LLM provider.
+                Gemini, OpenAI, Anthropic — test them all with the same scenarios. No vendor lock-in.
+              </p>
+            </div>
           </div>
 
           {/* Assertion types */}

@@ -950,6 +950,12 @@ export function PageRoastPage() {
                       ? 'Better than 15% of pages'
                       : 'In the bottom 10%'}
             </p>
+            <p className="text-xs text-warm-500 mt-1">
+              {result.total_score >= 75 ? 'Top SaaS pages average 72. You\'re competitive.' :
+               result.total_score >= 60 ? 'Average SaaS pages score 55-70. You have room to grow.' :
+               result.total_score >= 40 ? 'Most pages we score land here. The fixes above will move the needle.' :
+               'Don\'t panic. The specific fixes above are where to start.'}
+            </p>
           </div>
 
           <TopFixes fixes={result.top_fixes} />

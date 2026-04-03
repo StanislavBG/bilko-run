@@ -64,6 +64,9 @@ export function HomePage() {
             in the age of AI. If you're here, you're probably building something too.
             Good. Keep reading.
           </p>
+          <p className="mt-4 text-sm text-warm-400">
+            7 tools live &middot; All free to start &middot; Built solo with AI
+          </p>
         </div>
       </header>
 

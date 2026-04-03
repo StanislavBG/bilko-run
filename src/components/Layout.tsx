@@ -6,6 +6,11 @@ import { ADMIN_EMAILS } from '../constants.js';
 
 const PROJECT_LINKS = [
   { to: '/projects/page-roast', label: 'PageRoast', badge: '🔥' },
+  { to: '/projects/headline-grader', label: 'HeadlineGrader' },
+  { to: '/projects/ad-scorer', label: 'AdScorer' },
+  { to: '/projects/thread-grader', label: 'ThreadGrader' },
+  { to: '/projects/email-forge', label: 'EmailForge' },
+  { to: '/projects/audience-decoder', label: 'AudienceDecoder' },
   { to: '/projects', label: 'All Projects' },
 ] as const;
 

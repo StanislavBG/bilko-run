@@ -1,0 +1,260 @@
+import { useState, useEffect, useRef } from 'react';
+import { SignInButton } from '@clerk/clerk-react';
+import { useToolApi } from '../hooks/useToolApi.js';
+import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites } from '../components/tool-page/index.js';
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface PillarScore { score: number; max: number; feedback: string; }
+
+interface ScorerResult {
+  total_score: number;
+  grade: string;
+  pillar_scores: {
+    hook: PillarScore;
+    value_prop: PillarScore;
+    emotional: PillarScore;
+    cta_conversion: PillarScore;
+  };
+  verdict: string;
+  rewrites?: Array<{ text: string; predicted_score: number; optimized_for: string }>;
+}
+
+interface CompareResponse {
+  adCopyA: ScorerResult;
+  adCopyB: ScorerResult;
+  comparison: { winner: 'A' | 'B' | 'tie'; margin: number; verdict: string; analysis?: string };
+}
+
+const PILLAR_LABELS: Record<string, string> = {
+  hook: 'Hook Strength',
+  value_prop: 'Value Proposition',
+  emotional: 'Emotional Architecture',
+  cta_conversion: 'CTA & Conversion',
+};
+
+type Platform = 'facebook' | 'google' | 'linkedin';
+
+const PLATFORMS: { value: Platform; label: string; charLimit: number; limitLabel: string }[] = [
+  { value: 'facebook', label: 'Facebook', charLimit: 125, limitLabel: '125 primary' },
+  { value: 'google', label: 'Google', charLimit: 90, limitLabel: '90 desc' },
+  { value: 'linkedin', label: 'LinkedIn', charLimit: 150, limitLabel: '150 intro' },
+];
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
+export function AdScorerPage() {
+  const {
+    result, compareResult, loading, error, needsTokens,
+    email, isSignedIn, submit, submitCompare, reset, signInRef, SignInButton: ClerkSignIn,
+  } = useToolApi<ScorerResult>('ad-scorer');
+
+  const [tab, setTab] = useState<'score' | 'compare'>('score');
+  const [adCopy, setAdCopy] = useState('');
+  const [adCopyA, setAdCopyA] = useState('');
+  const [adCopyB, setAdCopyB] = useState('');
+  const [platform, setPlatform] = useState<Platform>('facebook');
+
+  useEffect(() => { document.title = 'Ad Scorer — bilko.run'; }, []);
+
+  const activePlatform = PLATFORMS.find((p) => p.value === platform)!;
+
+  function handleTabChange(next: 'score' | 'compare') {
+    setTab(next);
+    reset();
+  }
+
+  function handleScore(e: React.FormEvent) {
+    e.preventDefault();
+    if (!adCopy.trim()) return;
+    submit({ adCopy: adCopy.trim(), platform });
+  }
+
+  function handleCompare(e: React.FormEvent) {
+    e.preventDefault();
+    if (!adCopyA.trim() || !adCopyB.trim()) return;
+    submitCompare({ adCopyA: adCopyA.trim(), adCopyB: adCopyB.trim(), platform });
+  }
+
+  const compare = compareResult as CompareResponse | null;
+
+  function PlatformPills() {
+    return (
+      <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1">
+        {PLATFORMS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            onClick={() => setPlatform(p.value)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+              platform === p.value
+                ? 'bg-white text-warm-900 shadow-sm'
+                : 'text-warm-400 hover:text-white'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-warm-50">
+      {/* Hidden sign-in trigger */}
+      <div className="hidden">
+        <SignInButton mode="modal">
+          <button ref={signInRef} />
+        </SignInButton>
+      </div>
+
+      {/* ── Hero + Input ─────────────────────────────────────────────── */}
+      <ToolHero
+        title="Score your ad copy"
+        tagline="AI grades hook, value prop, emotion, and CTA in seconds"
+        tab={tab}
+        onTabChange={handleTabChange}
+        hasCompare
+      >
+        {tab === 'score' ? (
+          <form onSubmit={handleScore} className="max-w-xl mx-auto text-left space-y-4">
+            <div>
+              <textarea
+                value={adCopy}
+                onChange={(e) => setAdCopy(e.target.value)}
+                placeholder="Paste your ad copy here..."
+                rows={4}
+                className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+              />
+              <p className={`text-xs mt-1 text-right ${adCopy.length > activePlatform.charLimit ? 'text-red-400' : 'text-warm-500'}`}>
+                {adCopy.length}/{activePlatform.charLimit} chars ({activePlatform.limitLabel})
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <PlatformPills />
+
+              <button
+                type="submit"
+                disabled={loading || !adCopy.trim()}
+                className="flex-1 bg-fire-500 hover:bg-fire-600 disabled:opacity-50 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
+              >
+                {loading ? 'Scoring...' : 'Score Ad'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleCompare} className="max-w-xl mx-auto text-left space-y-4">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1 block">Ad Copy A</label>
+              <textarea
+                value={adCopyA}
+                onChange={(e) => setAdCopyA(e.target.value)}
+                placeholder="First ad variation..."
+                rows={3}
+                className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+              />
+              <p className={`text-xs mt-1 text-right ${adCopyA.length > activePlatform.charLimit ? 'text-red-400' : 'text-warm-500'}`}>
+                {adCopyA.length}/{activePlatform.charLimit} chars
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1 block">Ad Copy B</label>
+              <textarea
+                value={adCopyB}
+                onChange={(e) => setAdCopyB(e.target.value)}
+                placeholder="Second ad variation..."
+                rows={3}
+                className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+              />
+              <p className={`text-xs mt-1 text-right ${adCopyB.length > activePlatform.charLimit ? 'text-red-400' : 'text-warm-500'}`}>
+                {adCopyB.length}/{activePlatform.charLimit} chars
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <PlatformPills />
+
+              <button
+                type="submit"
+                disabled={loading || !adCopyA.trim() || !adCopyB.trim()}
+                className="flex-1 bg-fire-500 hover:bg-fire-600 disabled:opacity-50 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
+              >
+                {loading ? 'Comparing...' : 'Compare Ads'}
+              </button>
+            </div>
+          </form>
+        )}
+      </ToolHero>
+
+      {/* ── Results ──────────────────────────────────────────────────── */}
+      <div className="max-w-3xl mx-auto px-6 py-10 space-y-6">
+        {/* Error */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700 animate-slide-up">
+            {error}
+          </div>
+        )}
+
+        {/* Needs tokens */}
+        {needsTokens && (
+          <div className="bg-fire-50 border border-fire-200 rounded-2xl p-6 text-center animate-slide-up">
+            <p className="text-warm-800 font-semibold mb-1">Out of free credits</p>
+            <p className="text-sm text-warm-600">
+              <a href="/pricing" className="text-fire-500 hover:underline font-bold">Grab tokens</a> to keep scoring.
+            </p>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center gap-3 py-8 animate-slide-up">
+            <div className="h-5 w-5 rounded-full border-2 border-fire-500 border-t-transparent animate-spin" />
+            <span className="text-sm text-warm-500 font-medium">Analyzing...</span>
+          </div>
+        )}
+
+        {/* Score result */}
+        {result && !loading && (
+          <>
+            <ScoreCard
+              score={result.total_score}
+              grade={result.grade}
+              verdict={result.verdict}
+              toolName="Ad Scorer"
+            />
+            <SectionBreakdown pillars={result.pillar_scores} labels={PILLAR_LABELS} />
+            {result.rewrites && result.rewrites.length > 0 && (
+              <Rewrites rewrites={result.rewrites} noun="rewrite" />
+            )}
+          </>
+        )}
+
+        {/* Compare result */}
+        {compare && !loading && (
+          <CompareLayout
+            winner={compare.comparison.winner}
+            margin={compare.comparison.margin}
+            verdict={compare.comparison.verdict}
+            analysis={compare.comparison.analysis}
+            cardA={{
+              label: 'Ad Copy A',
+              score: compare.adCopyA.total_score,
+              grade: compare.adCopyA.grade,
+              verdict: compare.adCopyA.verdict,
+              pillars: compare.adCopyA.pillar_scores,
+            }}
+            cardB={{
+              label: 'Ad Copy B',
+              score: compare.adCopyB.total_score,
+              grade: compare.adCopyB.grade,
+              verdict: compare.adCopyB.verdict,
+              pillars: compare.adCopyB.pillar_scores,
+            }}
+            pillarLabels={PILLAR_LABELS}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

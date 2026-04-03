@@ -100,6 +100,31 @@ if (isProd) {
         description: 'AI-powered tools for makers, marketers, and founders. PageRoast, HeadlineGrader, AdScorer, and more.',
         url: 'https://bilko.run/projects',
       },
+      '/projects/headline-grader': {
+        title: 'HeadlineGrader — Score Headlines Like a Pro Copywriter',
+        description: 'AI grades your headlines against 4 proven frameworks. Get a score, diagnosis, and AI rewrites. Free.',
+        url: 'https://bilko.run/projects/headline-grader',
+      },
+      '/projects/ad-scorer': {
+        title: 'AdScorer — Grade Ad Copy Before You Spend the Budget',
+        description: 'Platform-specific ad copy grading for Google, Meta, and LinkedIn. Score hook, value prop, emotion, and CTA.',
+        url: 'https://bilko.run/projects/ad-scorer',
+      },
+      '/projects/thread-grader': {
+        title: 'ThreadGrader — Score Your X/Twitter Threads',
+        description: 'AI scores hook strength, tension chain, payoff, and share triggers. Plus tweet-by-tweet breakdown.',
+        url: 'https://bilko.run/projects/thread-grader',
+      },
+      '/projects/email-forge': {
+        title: 'EmailForge — AI Email Sequence Generator',
+        description: 'Generate 5-email sequences using AIDA, PAS, Hormozi, Cialdini, and Storytelling frameworks. Free.',
+        url: 'https://bilko.run/projects/email-forge',
+      },
+      '/projects/audience-decoder': {
+        title: 'AudienceDecoder — Decode Who Actually Follows You',
+        description: 'Paste your social content. AI identifies audience archetypes, engagement patterns, and growth opportunities.',
+        url: 'https://bilko.run/projects/audience-decoder',
+      },
       '/pricing': {
         title: 'Pricing — bilko.run',
         description: '1 free roast on sign-up. Then $1 per credit or 7 for $5. No subscriptions.',

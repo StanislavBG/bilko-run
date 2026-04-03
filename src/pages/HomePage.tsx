@@ -208,30 +208,45 @@ export function HomePage() {
             </p>
           </Link>
 
-          {/* Upcoming */}
+          {/* Live tools */}
           {[
-            { name: 'HeadlineGrader', cat: 'Content', tagline: 'Score headlines like a pro copywriter',
-              desc: 'Your headline is the most important sentence on your page. This tool scores it against Masterson\'s Rule, Hormozi\'s Value Equation, and classic direct response frameworks. Specific scores, specific rewrites, specific reasons why your headline is or isn\'t working.' },
-            { name: 'AdScorer', cat: 'Marketing', tagline: 'Grade ad copy before you spend the budget',
-              desc: 'A great Google ad is not a great Facebook ad. AdScorer applies platform-specific grading for character limits, hook patterns, CTA effectiveness, and curiosity gaps. Catch weak copy before it eats your ad spend.' },
-            { name: 'ThreadGrader', cat: 'Content', tagline: 'Write threads that don\'t die on tweet 2',
-              desc: 'Most threads lose 80% of readers after the first tweet. ThreadGrader scores hook strength, retention flow, and engagement triggers. It analyzes structure, not just content — because a great insight in a boring thread is a great insight nobody sees.' },
-            { name: 'EmailForge', cat: 'Marketing', tagline: 'Craft emails that get opened and clicked',
-              desc: 'Subject line scoring, body copy analysis, and engagement prediction for cold outreach and newsletters. A/B subject line variants so you test instead of guess.' },
-            { name: 'Stepproof', cat: 'Dev Tools', tagline: 'Behavioral regression tests for AI pipelines',
-              desc: 'AI outputs aren\'t deterministic. Stepproof lets you write YAML scenarios, run them N times, and use LLM judges to assert quality. SARIF and JUnit output for CI. Like unit tests, but for agents.' },
-            { name: 'AgentTrace', cat: 'Dev Tools', tagline: 'Local observability for AI agents',
-              desc: 'When your agent runs for 3 minutes and produces garbage, you need to know why. OpenTelemetry spans, local SQLite storage, zero cloud dependency. Your data stays on your machine.' },
+            { name: 'HeadlineGrader', slug: 'headline-grader', cat: 'Content', tagline: 'Score headlines like a pro copywriter',
+              desc: 'Scores your headline against Masterson\'s Rule, Hormozi\'s Value Equation, and classic direct response frameworks. Specific scores, AI rewrites, reasons why it works or doesn\'t.', live: true },
+            { name: 'AdScorer', slug: 'ad-scorer', cat: 'Marketing', tagline: 'Grade ad copy before you spend the budget',
+              desc: 'Platform-specific grading for Facebook, Google, and LinkedIn. Scores hook, value prop, emotional architecture, and CTA. Rewrites included.', live: true },
+            { name: 'ThreadGrader', slug: 'thread-grader', cat: 'Content', tagline: 'Score threads that don\'t die on tweet 2',
+              desc: 'Scores hook strength, tension chain, payoff, and share triggers. Tweet-by-tweet breakdown shows exactly where readers drop off.', live: true },
+            { name: 'EmailForge', slug: 'email-forge', cat: 'Marketing', tagline: 'Generate email sequences that convert',
+              desc: 'Creates 5-email sequences using AIDA, PAS, Hormozi, Cialdini, and Storytelling frameworks. Full sequences with estimated open/click rates.', live: true },
+            { name: 'AudienceDecoder', slug: 'audience-decoder', cat: 'Content', tagline: 'Decode who actually follows you',
+              desc: 'Identifies audience archetypes, content patterns, engagement model, growth opportunities, and builds a content calendar. Your audience, decoded.', live: true },
+            { name: 'Stepproof', slug: 'stepproof', cat: 'Dev Tools', tagline: 'Regression tests for AI pipelines',
+              desc: 'Write YAML scenarios, run them N times, check assertions. Preset scenarios or BYOK. Like unit tests, but for LLMs.', live: true },
+            { name: 'AgentTrace', slug: 'agent-trace', cat: 'Dev Tools', tagline: 'Local observability for AI agents',
+              desc: 'When your agent runs for 3 minutes and produces garbage, you need to know why. OpenTelemetry spans, local SQLite, zero cloud. CLI tool — install via npm.', live: false },
           ].map(tool => (
-            <div key={tool.name} className="rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warm-200 text-warm-500">COMING SOON</span>
-                <span className="text-xs font-bold text-warm-400 uppercase tracking-wider">{tool.cat}</span>
+            tool.live ? (
+              <Link key={tool.name} to={`/projects/${tool.slug}`}
+                className="group rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all block">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">LIVE</span>
+                  <span className="text-xs font-bold text-warm-400 uppercase tracking-wider">{tool.cat}</span>
+                </div>
+                <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors mb-1">{tool.name}</h3>
+                <p className="text-sm font-medium text-warm-600 mb-2">{tool.tagline}</p>
+                <p className="text-sm text-warm-500 leading-relaxed">{tool.desc}</p>
+              </Link>
+            ) : (
+              <div key={tool.name} className="rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50 opacity-70">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-warm-200 text-warm-500">CLI ONLY</span>
+                  <span className="text-xs font-bold text-warm-400 uppercase tracking-wider">{tool.cat}</span>
+                </div>
+                <h3 className="font-bold text-warm-800 mb-1">{tool.name}</h3>
+                <p className="text-sm font-medium text-warm-600 mb-2">{tool.tagline}</p>
+                <p className="text-sm text-warm-500 leading-relaxed">{tool.desc}</p>
               </div>
-              <h3 className="font-bold text-warm-800 mb-1">{tool.name}</h3>
-              <p className="text-sm font-medium text-warm-600 mb-2">{tool.tagline}</p>
-              <p className="text-sm text-warm-500 leading-relaxed">{tool.desc}</p>
-            </div>
+            )
           ))}
         </div>
 

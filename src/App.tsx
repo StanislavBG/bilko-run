@@ -10,6 +10,7 @@ import { AdScorerPage } from './pages/AdScorerPage.js';
 import { ThreadGraderPage } from './pages/ThreadGraderPage.js';
 import { EmailForgePage } from './pages/EmailForgePage.js';
 import { AudienceDecoderPage } from './pages/AudienceDecoderPage.js';
+import { StepproofPage } from './pages/StepproofPage.js';
 import { PricingPage } from './pages/PricingPage.js';
 import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
@@ -92,6 +93,7 @@ function AppRoutes() {
             <Route path="/projects/thread-grader" element={<ThreadGraderPage />} />
             <Route path="/projects/email-forge" element={<EmailForgePage />} />
             <Route path="/projects/audience-decoder" element={<AudienceDecoderPage />} />
+            <Route path="/projects/stepproof" element={<StepproofPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />

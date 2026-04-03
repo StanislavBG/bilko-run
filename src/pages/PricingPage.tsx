@@ -56,11 +56,11 @@ export function PricingPage() {
               <span className="text-4xl font-black text-warm-900">$1</span>
               <span className="text-sm text-warm-400 ml-0.5">/ credit</span>
             </div>
-            <p className="text-sm text-warm-500 mb-5">Just need one roast? Done.</p>
+            <p className="text-sm text-warm-500 mb-5">Just need one analysis? Done.</p>
             <ul className="space-y-2.5 text-sm text-warm-600 mb-7">
               {[
                 'Everything in Free',
-                'PageRoast = 1 credit',
+                'All 7 tools = 1 credit each',
                 'A/B Compare = 2 credits',
                 'Credits never expire',
                 'Download results as JSON',
@@ -75,7 +75,7 @@ export function PricingPage() {
               to="/projects/page-roast"
               className="block w-full py-3 text-center text-sm font-bold text-fire-600 border-2 border-fire-200 hover:border-fire-400 rounded-xl transition-colors"
             >
-              Start roasting
+              Try any tool
             </Link>
           </div>
 
@@ -108,7 +108,7 @@ export function PricingPage() {
               to="/projects/page-roast"
               className="block w-full py-3 text-center text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-xl shadow-md shadow-fire-500/20 transition-all"
             >
-              Start roasting
+              Try any tool
             </Link>
           </div>
         </div>

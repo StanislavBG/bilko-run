@@ -69,11 +69,11 @@ const PROJECTS: Project[] = [
   {
     slug: 'stepproof',
     name: 'Stepproof',
-    tagline: 'Behavioral regression tests for AI workflows',
-    description: 'Write YAML scenarios, run them N times, assert outputs. Like unit tests, but for multi-step AI pipelines.',
-    status: 'coming-soon',
+    tagline: 'Regression tests for AI pipelines',
+    description: 'Write YAML scenarios, run them N times, check if your LLM can follow instructions. Preset scenarios or bring your own. Like unit tests, but for AI.',
+    status: 'live',
     category: 'devtools',
-    features: ['YAML scenarios', 'LLM judge assertions', 'SARIF/JUnit output', 'CI-ready'],
+    features: ['YAML scenarios', 'Preset library', 'LLM judge assertions', 'BYOK support'],
   },
   {
     slug: 'agent-trace',

@@ -11,6 +11,7 @@ const PROJECT_LINKS = [
   { to: '/projects/thread-grader', label: 'ThreadGrader' },
   { to: '/projects/email-forge', label: 'EmailForge' },
   { to: '/projects/audience-decoder', label: 'AudienceDecoder' },
+  { to: '/projects/stepproof', label: 'Stepproof' },
   { to: '/projects', label: 'All Projects' },
 ] as const;
 

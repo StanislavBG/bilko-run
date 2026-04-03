@@ -10,6 +10,7 @@ import { registerStripeRoutes } from './routes/stripe.js';
 import { registerLicenseRoutes } from './routes/license.js';
 import { registerSocialRoutes } from './routes/social.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
+import { registerStepproofRoutes } from './routes/stepproof.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -62,6 +63,7 @@ registerDemoRoutes(app);
 registerStripeRoutes(app);
 registerLicenseRoutes(app);
 registerSocialRoutes(app);
+registerStepproofRoutes(app);
 registerAnalyticsRoutes(app);
 
 // Health check
@@ -124,6 +126,11 @@ if (isProd) {
         title: 'AudienceDecoder — Decode Who Actually Follows You',
         description: 'Paste your social content. AI identifies audience archetypes, engagement patterns, and growth opportunities.',
         url: 'https://bilko.run/projects/audience-decoder',
+      },
+      '/projects/stepproof': {
+        title: 'Stepproof — Regression Tests for AI Pipelines',
+        description: 'Write a scenario. Run it N times. See if your LLM can follow instructions. Like unit tests, but for AI.',
+        url: 'https://bilko.run/projects/stepproof',
       },
       '/pricing': {
         title: 'Pricing — bilko.run',

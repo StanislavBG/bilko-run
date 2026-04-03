@@ -477,6 +477,15 @@ export function AudienceDecoderPage() {
             <Section title="Content Calendar" delay={500}>
               <CalendarSection calendar={r.content_calendar} />
             </Section>
+
+            <div className="text-center pt-4">
+              <button
+                onClick={() => { reset(); setContent(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all"
+              >
+                Decode Another Audience
+              </button>
+            </div>
           </>
         )}
       </div>

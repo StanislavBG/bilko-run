@@ -107,6 +107,11 @@ function EmailCard({ email, defaultOpen }: { email: EmailItem; defaultOpen: bool
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-bold text-warm-900 truncate">{email.subject_line}</span>
+            {email.subject_line.length > 40 && (
+              <span className="text-[9px] font-bold text-yellow-600 bg-yellow-100 px-1.5 py-0.5 rounded ml-1 flex-shrink-0">
+                {email.subject_line.length}ch — truncated on mobile
+              </span>
+            )}
             {frameworkBadge(email.framework_used)}
           </div>
           <p className="text-xs text-warm-500 italic truncate mt-0.5">{email.preview_text}</p>
@@ -292,6 +297,10 @@ export function EmailForgePage() {
               </div>
             );
           })()}
+
+          <div className="bg-warm-50 rounded-xl border border-warm-100 p-3 text-center text-xs text-warm-500 animate-slide-up">
+            2026 benchmark: 2-4 word subjects = 46% open rate &middot; Personalized subjects = +26% opens &middot; Mobile truncates at 40 chars
+          </div>
 
           {/* Deliverability warning */}
           {(() => {

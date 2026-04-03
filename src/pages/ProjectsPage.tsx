@@ -187,6 +187,30 @@ export function ProjectsPage() {
         </div>
       </section>
 
+      {/* Tool Picker */}
+      <section className="border-t border-warm-200/40 bg-warm-100/30">
+        <div className="max-w-3xl mx-auto px-6 py-12 md:py-16 text-center">
+          <h2 className="text-xl font-extrabold text-warm-900 mb-2">Not sure where to start?</h2>
+          <p className="text-warm-500 mb-6 text-sm">Pick your biggest problem. We'll point you to the right tool.</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-left">
+            {[
+              { problem: 'My landing page isn\'t converting', tool: 'PageRoast', slug: 'page-roast' },
+              { problem: 'My headline feels weak', tool: 'HeadlineGrader', slug: 'headline-grader' },
+              { problem: 'My ads aren\'t getting clicks', tool: 'AdScorer', slug: 'ad-scorer' },
+              { problem: 'My threads die on tweet 2', tool: 'ThreadGrader', slug: 'thread-grader' },
+              { problem: 'I need an email sequence', tool: 'EmailForge', slug: 'email-forge' },
+              { problem: 'I don\'t know my audience', tool: 'AudienceDecoder', slug: 'audience-decoder' },
+            ].map(({ problem, tool, slug }) => (
+              <Link key={slug} to={`/projects/${slug}`}
+                className="group bg-white rounded-xl p-4 border border-warm-200/60 hover:border-fire-300 hover:shadow-sm transition-all">
+                <p className="text-sm text-warm-800 font-medium mb-1">{problem}</p>
+                <p className="text-xs text-fire-500 font-semibold group-hover:text-fire-600">Try {tool} &rarr;</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="bg-warm-100/50 border-t border-warm-200/40">
         <div className="max-w-4xl mx-auto px-6 py-16 text-center">

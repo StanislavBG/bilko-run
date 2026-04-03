@@ -32,8 +32,8 @@ function checkDeliverability(text: string): string[] {
   return SPAM_TRIGGERS.filter(t => text.toLowerCase().includes(t.toLowerCase()));
 }
 
-const GOALS = ['cold_outreach', 'nurture', 'launch', 're-engagement'] as const;
-const GOAL_LABELS: Record<string, string> = { cold_outreach: 'Cold Outreach', nurture: 'Nurture', launch: 'Launch', 're-engagement': 'Re-engagement' };
+const GOALS = ['cold_outreach', 'nurture', 'launch', 're-engagement', 'win_back'] as const;
+const GOAL_LABELS: Record<string, string> = { cold_outreach: 'Cold Outreach', nurture: 'Nurture', launch: 'Launch', 're-engagement': 'Re-engagement', win_back: 'Win-back' };
 const TONES = ['professional', 'casual', 'urgent', 'storytelling'] as const;
 const TONE_LABELS: Record<string, string> = { professional: 'Professional', casual: 'Casual', urgent: 'Urgent', storytelling: 'Storytelling' };
 

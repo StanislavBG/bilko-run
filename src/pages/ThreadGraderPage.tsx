@@ -162,6 +162,28 @@ export function ThreadGraderPage() {
               </div>
             );
           })()}
+          {/* Algorithm Intel */}
+          <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '250ms' }}>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">X Algorithm Intel (2026)</h3>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-white rounded-lg p-3 border border-warm-100">
+                <span className="font-bold text-warm-800">Reply = 27x a like</span>
+                <p className="text-warm-500 mt-0.5">Replies are the strongest engagement signal. Write threads that provoke replies.</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-warm-100">
+                <span className="font-bold text-warm-800">Bookmark = 5x a like</span>
+                <p className="text-warm-500 mt-0.5">Bookmarks signal high-value content. Add a "save this" call-to-action.</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-warm-100">
+                <span className="font-bold text-warm-800">First 30 min = critical</span>
+                <p className="text-warm-500 mt-0.5">Engagement velocity in the first hour determines reach. Post when your audience is online.</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-warm-100">
+                <span className="font-bold text-warm-800">Links kill reach (-50-90%)</span>
+                <p className="text-warm-500 mt-0.5">External links are penalized. Put the link in a reply, not the thread.</p>
+              </div>
+            </div>
+          </div>
           <SectionBreakdown pillars={result.pillar_scores} labels={PILLAR_LABELS} />
 
           {/* Per-tweet breakdown */}

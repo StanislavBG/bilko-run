@@ -257,6 +257,25 @@ export function AdScorerPage() {
             <div className="bg-white rounded-2xl border border-warm-200/60 p-4 text-center animate-slide-up" style={{ animationDelay: '80ms' }}>
               <p className="text-sm font-semibold text-warm-700">{getBenchmark(result.total_score)}</p>
             </div>
+            {result && (() => {
+              const scores = result.pillar_scores;
+              const entries = Object.entries(scores) as [string, { score: number; max: number }][];
+              const weakest = entries.reduce((a, b) => (a[1].score / a[1].max) < (b[1].score / b[1].max) ? a : b);
+              const tips: Record<string, string> = {
+                hook: 'Your opening line blends in. Start with a question, bold claim, or pattern interrupt that stops the scroll.',
+                value_prop: 'What does the reader GET? Be specific: a number, a timeframe, a concrete result.',
+                emotional: 'Too rational. Lead with pain or desire before explaining features.',
+                cta_conversion: 'Your CTA is vague. Replace "Learn More" with what happens next: "Get your score" or "Start free trial".',
+              };
+              const labels: Record<string, string> = { hook: 'Hook', value_prop: 'Value Prop', emotional: 'Emotion', cta_conversion: 'CTA' };
+              return (
+                <div className="bg-fire-50 border border-fire-200 rounded-2xl p-5 animate-slide-up" style={{ animationDelay: '50ms' }}>
+                  <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-1">Quick win</p>
+                  <p className="text-sm font-bold text-warm-900">{labels[weakest[0]]}: {weakest[1].score}/{weakest[1].max}</p>
+                  <p className="text-sm text-warm-600 mt-1">{tips[weakest[0]]}</p>
+                </div>
+              );
+            })()}
             <SectionBreakdown pillars={result.pillar_scores} labels={PILLAR_LABELS} />
             {result.rewrites && result.rewrites.length > 0 && (
               <Rewrites rewrites={result.rewrites} noun="rewrite" />

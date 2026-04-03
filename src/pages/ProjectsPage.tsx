@@ -211,6 +211,15 @@ export function ProjectsPage() {
         </div>
       </section>
 
+      {/* Social proof */}
+      <section className="border-t border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-8 text-center">
+          <p className="text-sm text-warm-500">
+            Used by solo founders, indie hackers, and marketing teams who'd rather fix problems than sit in meetings about them.
+          </p>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="bg-warm-100/50 border-t border-warm-200/40">
         <div className="max-w-4xl mx-auto px-6 py-16 text-center">

@@ -248,6 +248,26 @@ export function HeadlineGraderPage() {
               verdict={result.diagnosis}
               toolName="Headline Grader"
             />
+            {/* Quick diagnosis — weakest pillar */}
+            {(() => {
+              const scores = result.framework_scores;
+              const entries = Object.entries(scores) as [string, { score: number; max: number }][];
+              const weakest = entries.reduce((a, b) => (a[1].score / a[1].max) < (b[1].score / b[1].max) ? a : b);
+              const tips: Record<string, string> = {
+                rule_of_one: 'Your headline tries to say too many things. Pick ONE idea and cut everything else.',
+                value_equation: 'The benefit isn\'t specific enough. Add a number, timeframe, or concrete outcome.',
+                readability: 'Too complex. Shorten words, cut jargon, aim for a 5th-grade reading level.',
+                proof_promise_plan: 'No proof element. Add a number, result, or credential to make it believable.',
+              };
+              const labels: Record<string, string> = { rule_of_one: 'Rule of One', value_equation: 'Value Equation', readability: 'Readability', proof_promise_plan: 'Proof + Promise' };
+              return (
+                <div className="bg-fire-50 border border-fire-200 rounded-2xl p-5 animate-slide-up" style={{ animationDelay: '50ms' }}>
+                  <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-1">Biggest opportunity</p>
+                  <p className="text-sm font-bold text-warm-900">{labels[weakest[0]]}: {weakest[1].score}/{weakest[1].max}</p>
+                  <p className="text-sm text-warm-600 mt-1">{tips[weakest[0]]}</p>
+                </div>
+              );
+            })()}
             <SectionBreakdown pillars={result.framework_scores} labels={PILLAR_LABELS} />
             {result.rewrites && result.rewrites.length > 0 && (
               <Rewrites rewrites={result.rewrites} noun="rewrite" />

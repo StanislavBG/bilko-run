@@ -142,14 +142,14 @@ if (isProd) {
     function serveWithOg(path: string): string {
       const override = OG_OVERRIDES[path];
       if (!override) return indexHtml;
-      return indexHtml
-        .replace(/<title>[^<]*<\/title>/, `<title>${override.title}</title>`)
-        .replace(/content="Bilko\.run — Tools for Makers Who Ship"/, `content="${override.title}"`)
-        .replace(/content="Free AI-powered tools for solopreneurs[^"]*"/, `content="${override.description}"`)
-        .replace(/content="AI tools for solopreneurs\.[^"]*"/, `content="${override.description}"`)
-        .replace(/content="https:\/\/bilko\.run"/, `content="${override.url}"`)
-        .replace(/content="PageRoast — Get Your Landing Page Roasted by AI"/, `content="${override.title}"`)
-        .replace(/content="Paste a URL\. AI scores your page across 4 CRO frameworks and delivers a savage one-liner\. Free\."/, `content="${override.description}"`);
+      let html = indexHtml;
+      // Replace title
+      html = html.replace(/<title>[^<]*<\/title>/, `<title>${override.title}</title>`);
+      // Replace all OG/Twitter title, description, url content attributes
+      html = html.replace(/(<meta\s+(?:property="og:title"|name="twitter:title")\s+content=")[^"]*(")/g, `$1${override.title}$2`);
+      html = html.replace(/(<meta\s+(?:property="og:description"|name="twitter:description"|name="description")\s+content=")[^"]*(")/g, `$1${override.description}$2`);
+      html = html.replace(/(<meta\s+property="og:url"\s+content=")[^"]*(")/g, `$1${override.url}$2`);
+      return html;
     }
 
     // SPA fallback — inject route-specific OG tags for social crawlers

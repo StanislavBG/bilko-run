@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#1a1613"/>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#glow)" opacity="0.4"/>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="40%">
+      <stop offset="0%" stop-color="#ff6b1a" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#1a1613" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <text x="600" y="240" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="72" fill="#ffffff">bilko.run</text>
+  <text x="600" y="310" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="28" fill="#a89478">AI Tools for Makers Who Ship</text>
+  <text x="600" y="400" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="18" fill="#6b5a49">PageRoast · HeadlineGrader · AdScorer · ThreadGrader</text>
+  <text x="600" y="435" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="18" fill="#6b5a49">EmailForge · AudienceDecoder · Stepproof</text>
+  <rect x="460" y="480" width="280" height="44" rx="12" fill="#ff6b1a"/>
+  <text x="600" y="508" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="16" fill="#ffffff">7 Tools · All Free to Start</text>
+</svg>

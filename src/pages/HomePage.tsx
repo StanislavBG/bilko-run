@@ -58,11 +58,10 @@ export function HomePage() {
             I build AI tools for founders, marketers, and developers who make
             things on the internet and don't have time to be bad at marketing.
           </p>
-          <p className="text-warm-600 leading-relaxed">
-            This is my corner of the internet. I use it to share what I'm building,
-            what I've learned, and what I think about building software alone
-            in the age of AI. If you're here, you're probably building something too.
-            Good. Keep reading.
+          <p className="mt-5 text-lg text-warm-600 max-w-xl leading-relaxed">
+            I'm Bilko. I build AI tools for developers and founders who can ship
+            code but can't figure out why nobody's signing up. If you're great at
+            building and terrible at marketing, you're in the right place.
           </p>
           <p className="mt-4 text-sm text-warm-400">
             10 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed

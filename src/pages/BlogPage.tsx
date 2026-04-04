@@ -74,8 +74,7 @@ export function BlogPage() {
               same content, different format. Read it or listen to it. Your call.
             </p>
             <p className="text-sm text-warm-700 font-semibold">
-              First up: How PageRoast went from "I need feedback on my landing page" to a
-              tool that scores pages across 4 CRO frameworks and roasts them for fun.
+              Three posts live: the <Link to="/blog/how-pageroast-went-from-frustration-to-product" className="text-fire-500 hover:underline">PageRoast origin story</Link>, how <Link to="/blog/we-built-stackaudit-because-reddit-told-us-to" className="text-fire-500 hover:underline">Reddit research built StackAudit</Link>, and why <Link to="/blog/localscore-browser-ai-that-never-sees-your-data" className="text-fire-500 hover:underline">LocalScore never sees your data</Link>.
             </p>
           </div>
         </div>

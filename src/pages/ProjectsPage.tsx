@@ -88,7 +88,7 @@ const PROJECTS: Project[] = [
     slug: 'local-score',
     name: 'LocalScore',
     tagline: 'Private document analysis — runs in your browser',
-    description: 'Analyze contracts, financials, meeting notes, and sensitive documents with AI that runs entirely in your browser. Your data never leaves your device. Powered by Gemma via WebGPU. Free.',
+    description: 'FREE — Analyze contracts, financials, meeting notes, and sensitive documents with AI that runs entirely in your browser. Your data never leaves your device. Zero cost, zero servers, zero risk.',
     status: 'live' as const,
     category: 'devtools' as const,
     features: ['100% local', 'Zero API costs', 'Works offline', 'GDPR-friendly'],
@@ -254,7 +254,7 @@ export function ProjectsPage() {
             Start with the one that matters most
           </h2>
           <p className="mt-3 text-warm-500">
-            PageRoast is live and free. Paste a URL, get scored in 60 seconds.
+            PageRoast is live and free to start. Or try <Link to="/projects/local-score" className="text-fire-500 hover:underline font-semibold">LocalScore</Link> — the only AI tool where your data never leaves your browser.
           </p>
           <Link
             to="/projects/page-roast"

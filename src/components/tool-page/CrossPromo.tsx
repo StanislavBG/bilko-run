@@ -31,6 +31,14 @@ const PROMOS: Record<string, Promo[]> = {
     { slug: 'page-roast', name: 'PageRoast', hook: 'Tests passing? Celebrate by roasting your landing page.' },
     { slug: 'headline-grader', name: 'HeadlineGrader', hook: 'Pipeline works. Now make sure the headline selling it works too.' },
   ],
+  'stack-audit': [
+    { slug: 'launch-grader', name: 'LaunchGrader', hook: 'Stack optimized. Now audit your launch readiness.' },
+    { slug: 'local-score', name: 'LocalScore', hook: 'Need to analyze sensitive contracts? Do it privately in your browser.' },
+  ],
+  'local-score': [
+    { slug: 'stack-audit', name: 'StackAudit', hook: 'Analyzed your docs. Now find waste in your SaaS stack.' },
+    { slug: 'page-roast', name: 'PageRoast', hook: 'Documents done. Now roast your landing page.' },
+  ],
 };
 
 export function CrossPromo({ currentTool }: { currentTool: string }) {

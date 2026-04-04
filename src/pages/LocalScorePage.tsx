@@ -232,7 +232,7 @@ export function LocalScorePage() {
             </button>
           </div>
 
-          <CrossPromo currentTool="page-roast" />
+          <CrossPromo currentTool="local-score" />
         </div>
       )}
 
@@ -255,6 +255,17 @@ export function LocalScorePage() {
                     <p className="text-sm text-warm-500 mt-1">{desc}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="max-w-2xl mx-auto px-6 py-12">
+            <div className="bg-warm-900 rounded-2xl p-6">
+              <h3 className="text-lg font-black text-white mb-3">Don't trust us. Verify it.</h3>
+              <div className="space-y-3 text-sm text-warm-400">
+                <p>Open your browser's DevTools (F12) → Network tab → run an analysis. You'll see <strong className="text-white">zero network requests</strong> during processing. The AI model runs on your GPU, not our servers.</p>
+                <p>This is the strongest possible privacy architecture: there is no server to breach, no logs to subpoena, no API call to intercept. Your document exists only in your browser's memory.</p>
+                <p className="text-warm-500 text-xs">Technical: Gemma 2B runs via WebLLM + WebGPU. Model weights cached in IndexedDB. Inference on your device's GPU. Apache 2.0 licensed.</p>
               </div>
             </div>
           </section>

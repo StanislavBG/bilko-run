@@ -142,7 +142,7 @@ export function StackAuditPage() {
             Enterprise stack audit tools charge $10,000+/year. You just paid $1.
           </div>
 
-          <CrossPromo currentTool="page-roast" />
+          <CrossPromo currentTool="stack-audit" />
 
           <div className="text-center pt-4">
             <button onClick={() => { reset(); setTools(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}

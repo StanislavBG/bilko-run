@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
 import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
@@ -267,6 +268,7 @@ export function HeadlineGraderPage() {
                 placeholder="Describe your product, service, or page... e.g. 'AI tool that scores landing pages and gives conversion feedback in 30 seconds'"
                 rows={4}
                 className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleGenerate(e as any); } }}
               />
             </div>
             <div className="flex items-center gap-3">
@@ -281,7 +283,7 @@ export function HeadlineGraderPage() {
                 {generating ? 'Generating...' : '\u2728 Generate 5 Headlines'}
               </button>
             </div>
-            <p className="text-xs text-warm-500 text-center">Describe what you're selling. AI generates headlines optimized for 4 frameworks.</p>
+            <p className="text-xs text-warm-500 text-center">Describe what you're selling. AI generates headlines optimized for 4 frameworks. &middot; Cmd+Enter to generate</p>
           </form>
         )}
       </ToolHero>
@@ -417,6 +419,20 @@ export function HeadlineGraderPage() {
                 ))}
               </div>
             </div>
+            {generateResult?.headlines?.length > 0 && (
+              <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-5 animate-slide-up" style={{ animationDelay: '200ms' }}>
+                <p className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-2">Next step</p>
+                <Link to="/projects/ad-scorer"
+                  className="group flex items-center gap-3 p-3 rounded-xl border border-warm-200/60 bg-white hover:border-fire-300 hover:shadow-sm transition-all">
+                  <span className="text-lg">📊</span>
+                  <div className="flex-1">
+                    <span className="text-sm font-bold text-warm-800 group-hover:text-fire-600 transition-colors">Turn this into ad copy</span>
+                    <p className="text-xs text-warm-500 mt-0.5">Take your best headline to AdScorer and generate platform-specific ad variants.</p>
+                  </div>
+                  <svg className="w-4 h-4 text-warm-400 group-hover:text-fire-500 group-hover:translate-x-0.5 transition-all" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </Link>
+              </div>
+            )}
           </>
         )}
 

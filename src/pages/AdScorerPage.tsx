@@ -270,6 +270,7 @@ export function AdScorerPage() {
                 placeholder="Describe your product or service... e.g. 'AI tool that scores ad copy and suggests rewrites for Facebook, Google, and LinkedIn'"
                 rows={4}
                 className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleGenerate(e as any); } }}
               />
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -279,7 +280,7 @@ export function AdScorerPage() {
                 {generating ? 'Generating...' : '\u2728 Generate 3 Ads'}
               </button>
             </div>
-            <p className="text-xs text-warm-500 text-center">Describe what you're selling. AI generates ad copy optimized for your platform.</p>
+            <p className="text-xs text-warm-500 text-center">Describe what you're selling. AI generates ad copy optimized for your platform. &middot; Cmd+Enter to generate</p>
           </form>
         )}
       </ToolHero>

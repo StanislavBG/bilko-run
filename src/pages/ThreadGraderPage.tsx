@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
 import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
@@ -190,6 +191,7 @@ export function ThreadGraderPage() {
                 placeholder="What should the thread be about? e.g. '7 lessons from building a SaaS to $10k MRR' or 'Why most landing pages fail (and how to fix yours)'"
                 rows={4}
                 className="w-full px-4 py-3 rounded-xl border-0 bg-white text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-400 shadow-inner resize-none"
+                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleGenerate(e as any); } }}
               />
             </div>
             <div>
@@ -213,7 +215,7 @@ export function ThreadGraderPage() {
               className="w-full py-3.5 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 disabled:from-warm-500 disabled:to-warm-600 text-white font-black rounded-xl shadow-lg transition-all disabled:shadow-none">
               {generating ? 'Generating...' : '\u2728 Generate Thread'}
             </button>
-            <p className="text-xs text-warm-500 text-center">Describe your topic. AI generates a full thread with hook, tension, and payoff.</p>
+            <p className="text-xs text-warm-500 text-center">Describe your topic. AI generates a full thread with hook, tension, and payoff. &middot; Cmd+Enter to generate</p>
           </form>
         )}
       </ToolHero>
@@ -327,6 +329,21 @@ export function ThreadGraderPage() {
               Score it
             </button>
           </div>
+
+          {generateResult?.thread?.length > 0 && (
+            <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-5 animate-slide-up" style={{ animationDelay: '200ms' }}>
+              <p className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-2">Keep the momentum</p>
+              <Link to="/projects/email-forge"
+                className="group flex items-center gap-3 p-3 rounded-xl border border-warm-200/60 bg-white hover:border-fire-300 hover:shadow-sm transition-all">
+                <span className="text-lg">✉️</span>
+                <div className="flex-1">
+                  <span className="text-sm font-bold text-warm-800 group-hover:text-fire-600 transition-colors">Generate an email sequence on this topic</span>
+                  <p className="text-xs text-warm-500 mt-0.5">Thread converts followers. Emails convert leads. Take this topic to EmailForge.</p>
+                </div>
+                <svg className="w-4 h-4 text-warm-400 group-hover:text-fire-500 group-hover:translate-x-0.5 transition-all" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </Link>
+            </div>
+          )}
         </div>
       )}
 

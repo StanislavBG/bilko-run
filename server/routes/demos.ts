@@ -594,7 +594,7 @@ Respond ONLY with valid JSON:
       if (!deduction.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deduction.balance }; }
     }
 
-    const teamSize = body?.teamSize ?? 5;
+    const teamSize = Math.max(1, Math.min(200, Math.floor(Number(body?.teamSize) || 5)));
 
     const systemPrompt = `You are a SaaS cost optimization expert. Analyze this software stack for a team of ${teamSize} people and identify waste, overlap, and savings opportunities.
 
@@ -678,6 +678,8 @@ Respond ONLY with valid JSON:
     const description = (body?.description ?? '').trim();
     if (!rawUrl) { reply.status(400); return { error: 'URL is required.' }; }
     if (!description || description.length < 10) { reply.status(400); return { error: 'Describe your product in at least 10 characters.' }; }
+    if (description.length > 2000) { reply.status(400); return { error: 'Description must be under 2000 characters.' }; }
+    if (rawUrl.length > 2000) { reply.status(400); return { error: 'URL must be under 2000 characters.' }; }
 
     const clerkEmail = await verifyClerkToken(req.headers.authorization);
     const bodyEmail = (body?.email ?? '').trim().toLowerCase();

@@ -29,8 +29,6 @@ export function LocalScorePage() {
     return () => { window.document.title = 'Bilko.run — Tools for Makers Who Ship'; };
   }, []);
 
-  const docText = docInput;
-
   useEffect(() => {
     if (result && resultRef.current) resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [result]);
@@ -69,7 +67,7 @@ export function LocalScorePage() {
   }, []);
 
   async function analyze() {
-    if (!engineRef.current || !docText.trim()) return;
+    if (!engineRef.current || !docInput.trim()) return;
 
     setStatus('analyzing');
     setResult('');
@@ -81,7 +79,7 @@ export function LocalScorePage() {
       const response = await engineRef.current.chat.completions.create({
         messages: [
           { role: 'system', content: `You are a document analysis expert. ${selectedMode.prompt}` },
-          { role: 'user', content: `Analyze this document:\n\n${docText.slice(0, 8000)}` },
+          { role: 'user', content: `Analyze this document:\n\n${docInput.slice(0, 8000)}` },
         ],
         max_tokens: 2048,
         temperature: 0.3,
@@ -157,7 +155,7 @@ export function LocalScorePage() {
               </div>
 
               <textarea
-                value={docText}
+                value={docInput}
                 onChange={e => setDocInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); analyze(); } }}
                 placeholder="Paste your document here... contracts, financial statements, meeting notes, or any text you want analyzed privately."
@@ -166,7 +164,7 @@ export function LocalScorePage() {
               />
 
               <button onClick={analyze}
-                disabled={!docText.trim()}
+                disabled={!docInput.trim()}
                 className="w-full mt-3 py-3.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-warm-500 disabled:to-warm-600 text-white font-black rounded-xl shadow-lg transition-all disabled:shadow-none">
                 🔒 Analyze Privately
               </button>

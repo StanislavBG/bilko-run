@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://bilko.run/</loc><priority>1.0</priority></url>
-  <url><loc>https://bilko.run/projects</loc><priority>0.8</priority></url>
-  <url><loc>https://bilko.run/projects/page-roast</loc><priority>0.9</priority></url>
-  <url><loc>https://bilko.run/pricing</loc><priority>0.7</priority></url>
-  <url><loc>https://bilko.run/privacy</loc><priority>0.3</priority></url>
-  <url><loc>https://bilko.run/terms</loc><priority>0.3</priority></url>
+  <url><loc>https://bilko.run/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://bilko.run/projects</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://bilko.run/projects/page-roast</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/headline-grader</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/ad-scorer</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/thread-grader</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/email-forge</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/audience-decoder</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/launch-grader</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/stack-audit</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/local-score</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/projects/stepproof</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bilko.run/blog</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://bilko.run/blog/how-pageroast-went-from-frustration-to-product</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://bilko.run/blog/we-built-stackaudit-because-reddit-told-us-to</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://bilko.run/pricing</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
 </urlset>

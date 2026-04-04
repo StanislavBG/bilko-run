@@ -321,6 +321,31 @@ export function HomePage() {
 
       <Divider />
 
+      {/* ── From the Blog ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-3">From the blog</h2>
+        <p className="text-warm-500 mb-6 text-sm">Lessons from building 7 AI tools solo. New posts weekly.</p>
+        <Link to="/blog/how-pageroast-went-from-frustration-to-product"
+          className="group block rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Product</span>
+            <span className="text-xs text-warm-400">Latest post</span>
+          </div>
+          <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors mb-1">
+            How PageRoast Went From "I Need Feedback" to a Product That Roasts Landing Pages for Fun
+          </h3>
+          <p className="text-sm text-warm-500 leading-relaxed line-clamp-2">
+            The story of building PageRoast — from launching to zero signups, learning CRO the hard way, and turning frustration into a tool.
+          </p>
+          <p className="mt-2 text-sm font-semibold text-fire-500 group-hover:text-fire-600">Read the full story &rarr;</p>
+        </Link>
+        <div className="mt-4 text-center">
+          <Link to="/blog" className="text-sm font-semibold text-fire-500 hover:text-fire-600">View all posts &rarr;</Link>
+        </div>
+      </section>
+
+      <Divider />
+
       {/* ── CTA / Connect ── */}
       <section className="py-12 md:py-16">
         <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-4">If you've read this far</h2>

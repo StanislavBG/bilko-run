@@ -226,6 +226,7 @@ export function Layout() {
                 <div className="flex flex-col gap-2">
                   <Link to="/projects/page-roast" className="text-warm-500 hover:text-fire-600 transition-colors">PageRoast</Link>
                   <Link to="/projects" className="text-warm-500 hover:text-fire-600 transition-colors">All Projects</Link>
+                  <Link to="/blog" className="text-warm-500 hover:text-fire-600 transition-colors">Blog</Link>
                   <Link to="/pricing" className="text-warm-500 hover:text-fire-600 transition-colors">Pricing</Link>
                 </div>
               </div>

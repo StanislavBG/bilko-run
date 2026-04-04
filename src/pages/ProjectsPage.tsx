@@ -236,6 +236,9 @@ export function ProjectsPage() {
             Roast My Page
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
           </Link>
+          <p className="mt-4 text-sm text-warm-400">
+            Or <Link to="/blog" className="text-fire-500 hover:text-fire-600 font-semibold">read the blog</Link> — lessons from building these tools solo.
+          </p>
         </div>
       </section>
     </>

@@ -379,6 +379,25 @@ export function AdminPage() {
                 )}
               </div>
 
+              {/* Referrers → Tools */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">
+                  Top Referrers ({days}d)
+                </h2>
+                {stats.byReferrer && stats.byReferrer.length > 0 ? (
+                  <div className="space-y-2">
+                    {stats.byReferrer.slice(0, 10).map((r: any) => (
+                      <div key={r.referrer} className="flex items-center justify-between">
+                        <span className="text-sm text-warm-700 truncate">{r.referrer.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+                        <span className="text-sm font-bold text-warm-900 ml-3">{r.views}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-warm-400">No referrer data yet</p>
+                )}
+              </div>
+
               {/* Tool Health Summary */}
               <div className="bg-white rounded-xl border border-warm-200/60 p-5">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">All Projects</h2>

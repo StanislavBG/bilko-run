@@ -416,6 +416,12 @@ export function AdScorerPage() {
               );
             })()}
             <SectionBreakdown pillars={result.pillar_scores} labels={PILLAR_LABELS} />
+            {result && result.rewrites && result.rewrites.length > 0 && (
+              <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 animate-slide-up" style={{ animationDelay: '250ms' }}>
+                <p className="text-xs font-bold text-warm-700 mb-1">Brand voice check</p>
+                <p className="text-xs text-warm-500">AI rewrites optimize for conversion, not brand consistency. Before using a rewrite, check that the tone matches your brand. The best ad feels like YOUR brand wrote it, not an algorithm.</p>
+              </div>
+            )}
             {result.rewrites && result.rewrites.length > 0 && (
               <Rewrites rewrites={result.rewrites} noun="rewrite" />
             )}

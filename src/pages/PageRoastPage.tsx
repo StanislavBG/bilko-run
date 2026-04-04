@@ -983,6 +983,28 @@ export function PageRoastPage() {
             </div>
           </div>
 
+          {/* AI Visibility Check */}
+          <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '300ms' }}>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-3">AI Visibility</h3>
+            <p className="text-xs text-warm-500 mb-3">Would ChatGPT or Perplexity recommend this page? AI agents read differently than humans.</p>
+            <div className="space-y-2">
+              {[
+                { label: 'Clear product description in first paragraph', pass: result.section_scores.clarity.score >= 15 },
+                { label: 'Specific claims with numbers (not vague benefits)', pass: result.section_scores.hero.score >= 18 },
+                { label: 'Structured headings (H1 → H2 → H3)', pass: result.section_scores.clarity.score >= 12 },
+                { label: 'Trust signals AI can parse (logos, testimonials)', pass: result.section_scores.social_proof.score >= 15 },
+              ].map(({ label, pass }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold ${pass ? 'bg-green-100 text-green-600' : 'bg-warm-200 text-warm-500'}`}>
+                    {pass ? '✓' : '?'}
+                  </span>
+                  <span className="text-xs text-warm-600">{label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-warm-400 mt-3">In 2026, 40%+ of product discovery starts with AI. Your page needs to work for both humans and algorithms.</p>
+          </div>
+
           <CompetitorEdge text={result.competitor_edge} />
 
           {/* Data-driven CRO insight */}

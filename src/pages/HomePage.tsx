@@ -65,7 +65,7 @@ export function HomePage() {
             Good. Keep reading.
           </p>
           <p className="mt-4 text-sm text-warm-400">
-            7 tools live &middot; All free to start &middot; Built solo with AI
+            7 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
           </p>
         </div>
       </header>

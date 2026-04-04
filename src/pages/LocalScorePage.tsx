@@ -254,6 +254,9 @@ export function LocalScorePage() {
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-warm-400 mt-4 text-center">
+                Cloud AI tools anonymize your data before processing (and still send it to a server). LocalScore doesn't need anonymization — your data never touches a server in the first place.
+              </p>
             </div>
           </section>
 

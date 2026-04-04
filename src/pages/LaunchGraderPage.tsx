@@ -149,6 +149,13 @@ export function LaunchGraderPage() {
 
           <SectionBreakdown pillars={result.section_scores} labels={PILLAR_LABELS} />
 
+          {result && (
+            <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 animate-slide-up" style={{ animationDelay: '300ms' }}>
+              <p className="text-xs font-bold text-warm-700 mb-1">Pre-launch checklist bonus</p>
+              <p className="text-xs text-warm-500">Before launch, audit your tool renewals. The average startup gets surprised by auto-renewals on tools they stopped using. Cancel or downgrade before launch day — every dollar matters in the first 90 days.</p>
+            </div>
+          )}
+
           {/* Value comparison */}
           <div className="bg-warm-50 rounded-xl border border-warm-100 p-3 text-center text-xs text-warm-500 animate-slide-up">
             Competitors charge $30-100/month for this analysis. You just paid $1.

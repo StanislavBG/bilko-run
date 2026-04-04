@@ -138,6 +138,13 @@ export function StackAuditPage() {
 
           <SectionBreakdown pillars={result.section_scores} labels={PILLAR_LABELS} />
 
+          {result && (
+            <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 animate-slide-up" style={{ animationDelay: '300ms' }}>
+              <p className="text-xs font-bold text-warm-700 mb-1">Compliance note</p>
+              <p className="text-xs text-warm-500">Beyond cost, check if your tools are SOC 2 and GDPR compliant. Non-compliant SaaS in your stack = liability. Ask each vendor for their compliance certifications — if they can't provide them, that's a red flag.</p>
+            </div>
+          )}
+
           <div className="bg-warm-50 rounded-xl border border-warm-100 p-3 text-center text-xs text-warm-500 animate-slide-up">
             Enterprise stack audit tools charge $10,000+/year. You just paid $1.
           </div>

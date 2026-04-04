@@ -245,6 +245,7 @@ export function Layout() {
           </div>
           <div className="mt-10 pt-6 border-t border-warm-200/40 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-warm-400">
             <span>Built with unreasonable ambition by Bilko.</span>
+            <p className="text-xs text-warm-400 mt-1">10 AI tools · Free to start · No subscriptions</p>
             <div className="flex items-center gap-4">
               <Link to="/privacy" className="hover:text-warm-600 transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="hover:text-warm-600 transition-colors">Terms of Service</Link>

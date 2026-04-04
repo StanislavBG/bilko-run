@@ -129,6 +129,11 @@ if (isProd) {
         description: 'Paste your social content. AI identifies audience archetypes, engagement patterns, and growth opportunities.',
         url: 'https://bilko.run/projects/audience-decoder',
       },
+      '/projects/launch-grader': {
+        title: 'LaunchGrader — Is Your Product Ready to Launch?',
+        description: 'AI audits your go-to-market readiness across 5 dimensions. Score, blockers, and a verdict. $1 vs $100/mo competitors.',
+        url: 'https://bilko.run/projects/launch-grader',
+      },
       '/projects/stepproof': {
         title: 'Stepproof — Regression Tests for AI Pipelines',
         description: 'Write a scenario. Run it N times. See if your LLM can follow instructions. Like unit tests, but for AI.',

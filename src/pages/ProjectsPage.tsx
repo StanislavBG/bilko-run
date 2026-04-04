@@ -67,6 +67,15 @@ const PROJECTS: Project[] = [
     features: ['Audience archetypes', 'Engagement scoring', 'Growth opportunities', 'Content calendar'],
   },
   {
+    slug: 'launch-grader',
+    name: 'LaunchGrader',
+    tagline: 'Is your product ready to launch?',
+    description: 'AI audits your go-to-market readiness across 5 dimensions: value prop, pricing, social proof, onboarding, and competitive positioning. Get a score, blockers, and a verdict.',
+    status: 'live' as const,
+    category: 'marketing' as const,
+    features: ['5-dimension audit', 'Launch blockers', 'Readiness verdict', 'Competitor comparison'],
+  },
+  {
     slug: 'stepproof',
     name: 'Stepproof',
     tagline: 'Regression tests for AI pipelines',

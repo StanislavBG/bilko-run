@@ -5,10 +5,10 @@ import { ToolHero, CrossPromo } from '../components/tool-page/index.js';
 type AnalysisMode = 'contract' | 'financial' | 'meeting' | 'general';
 
 const MODES: Array<{ id: AnalysisMode; label: string; icon: string; prompt: string }> = [
-  { id: 'contract', label: 'Contract Review', icon: '📄', prompt: 'Analyze this contract/agreement. Extract: 1) Key terms and obligations for each party, 2) Important deadlines and dates, 3) Financial terms (payment amounts, penalties), 4) Unusual or risky clauses to watch out for, 5) Missing clauses that should be included. Format as a structured analysis with sections.' },
-  { id: 'financial', label: 'Financial Summary', icon: '💰', prompt: 'Analyze this financial document. Extract: 1) Key financial figures and metrics, 2) Trends (improving, declining, stable), 3) Risks or red flags, 4) Action items or decisions needed, 5) Comparison to industry standards if possible. Format as a structured summary.' },
-  { id: 'meeting', label: 'Meeting Notes', icon: '📋', prompt: 'Analyze these meeting notes/transcript. Extract: 1) Key decisions made, 2) Action items with owners and deadlines, 3) Open questions or unresolved issues, 4) Key takeaways and insights, 5) Follow-up items. Format as a structured summary with clear sections.' },
-  { id: 'general', label: 'General Analysis', icon: '🔍', prompt: 'Analyze this document thoroughly. Provide: 1) A concise summary (2-3 sentences), 2) Key points and findings, 3) Risks or concerns identified, 4) Recommended actions, 5) Any notable details that stand out. Format as a structured analysis.' },
+  { id: 'contract', label: 'Contract or Agreement', icon: '📄', prompt: 'Analyze this contract/agreement. Extract: 1) Key terms and obligations for each party, 2) Important deadlines and dates, 3) Financial terms (payment amounts, penalties), 4) Unusual or risky clauses to watch out for, 5) Missing clauses that should be included. Format as a structured analysis with sections.' },
+  { id: 'financial', label: 'Financial Document', icon: '💰', prompt: 'Analyze this financial document. Extract: 1) Key financial figures and metrics, 2) Trends (improving, declining, stable), 3) Risks or red flags, 4) Action items or decisions needed, 5) Comparison to industry standards if possible. Format as a structured summary.' },
+  { id: 'meeting', label: 'Meeting Notes or Transcript', icon: '📋', prompt: 'Analyze these meeting notes/transcript. Extract: 1) Key decisions made, 2) Action items with owners and deadlines, 3) Open questions or unresolved issues, 4) Key takeaways and insights, 5) Follow-up items. Format as a structured summary with clear sections.' },
+  { id: 'general', label: 'Something Else', icon: '🔍', prompt: 'Analyze this document thoroughly. Provide: 1) A concise summary (2-3 sentences), 2) Key points and findings, 3) Risks or concerns identified, 4) Recommended actions, 5) Any notable details that stand out. Format as a structured analysis.' },
 ];
 
 type Status = 'idle' | 'loading-model' | 'ready' | 'analyzing' | 'done' | 'error' | 'unsupported';
@@ -104,38 +104,44 @@ export function LocalScorePage() {
           {/* Status: Not loaded */}
           {status === 'idle' && (
             <div className="text-center py-6">
-              <p className="text-warm-300 text-sm mb-4">
-                LocalScore downloads a small AI model (~1.6GB) to your browser.
-                <br />After that, everything runs locally — your documents never leave your device.
+              <p className="text-warm-300 text-sm mb-2">
+                First time? We need to set up your private AI brain.
+              </p>
+              <p className="text-warm-400 text-xs mb-4">
+                A small AI downloads to your browser (like caching a large webpage).
+                <br />Takes 1-2 minutes. After that, everything works instantly — even offline.
               </p>
               <button onClick={loadModel}
-                className="px-8 py-4 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 text-white font-black rounded-xl shadow-lg transition-all text-base">
-                Load AI Model (one-time setup)
+                className="px-8 py-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-black rounded-xl shadow-lg transition-all text-base">
+                Get Started — One-Time Setup
               </button>
-              <p className="text-xs text-warm-500 mt-3">Requires Chrome 113+, Edge 113+, or any WebGPU-enabled browser. ~1.6GB download, cached for future visits.</p>
+              <p className="text-xs text-warm-500 mt-3">Works in Chrome and Edge. Your data stays on your device.</p>
             </div>
           )}
 
           {/* Status: Loading model */}
           {status === 'loading-model' && (
             <div className="text-center py-8">
-              <div className="h-6 w-6 rounded-full border-2 border-fire-500 border-t-transparent animate-spin mx-auto mb-4" />
-              <p className="text-sm text-warm-300 mb-2">{progress || 'Downloading model...'}</p>
+              <div className="h-6 w-6 rounded-full border-2 border-green-500 border-t-transparent animate-spin mx-auto mb-4" />
+              <p className="text-sm text-warm-300 mb-2">{progress || 'Setting up your private AI...'}</p>
               {progressPct > 0 && (
-                <div className="max-w-xs mx-auto h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-fire-500 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+                <div className="max-w-xs mx-auto h-3 bg-white/10 rounded-full overflow-hidden mb-2">
+                  <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
                 </div>
               )}
-              <p className="text-xs text-warm-500 mt-3">First time takes 1-3 minutes. Model is cached for future visits.</p>
+              <p className="text-xs text-warm-500">This only happens once. Next time it loads instantly.</p>
             </div>
           )}
 
           {/* Status: Unsupported */}
           {status === 'unsupported' && (
             <div className="text-center py-6">
-              <p className="text-red-400 text-sm mb-2">WebGPU not supported</p>
-              <p className="text-warm-500 text-xs">{error}</p>
-              <p className="text-warm-500 text-xs mt-2">Try <a href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer" className="text-fire-400 underline">Chrome</a> or <a href="https://www.microsoft.com/edge" target="_blank" rel="noopener noreferrer" className="text-fire-400 underline">Edge</a>.</p>
+              <p className="text-yellow-400 text-sm mb-2">Your browser doesn't support this yet</p>
+              <p className="text-warm-500 text-xs mb-3">LocalScore needs a modern browser with GPU support.</p>
+              <div className="flex gap-3 justify-center">
+                <a href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-white/10 text-warm-300 hover:text-white rounded-lg text-sm font-medium transition-colors">Get Chrome</a>
+                <a href="https://www.microsoft.com/edge" target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-white/10 text-warm-300 hover:text-white rounded-lg text-sm font-medium transition-colors">Get Edge</a>
+              </div>
             </div>
           )}
 
@@ -166,7 +172,7 @@ export function LocalScorePage() {
               <button onClick={analyze}
                 disabled={!docInput.trim()}
                 className="w-full mt-3 py-3.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-warm-500 disabled:to-warm-600 text-white font-black rounded-xl shadow-lg transition-all disabled:shadow-none">
-                🔒 Analyze Privately
+                Analyze — stays on your device
               </button>
 
               <div className="flex items-center justify-center gap-2 mt-2">

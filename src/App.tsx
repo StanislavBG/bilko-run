@@ -11,6 +11,8 @@ import { ThreadGraderPage } from './pages/ThreadGraderPage.js';
 import { EmailForgePage } from './pages/EmailForgePage.js';
 import { AudienceDecoderPage } from './pages/AudienceDecoderPage.js';
 import { StepproofPage } from './pages/StepproofPage.js';
+import { BlogPage } from './pages/BlogPage.js';
+import { BlogPostPage } from './pages/BlogPostPage.js';
 import { PricingPage } from './pages/PricingPage.js';
 import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
@@ -94,6 +96,8 @@ function AppRoutes() {
             <Route path="/projects/email-forge" element={<EmailForgePage />} />
             <Route path="/projects/audience-decoder" element={<AudienceDecoderPage />} />
             <Route path="/projects/stepproof" element={<StepproofPage />} />
+            <Route path="/blog" element={<BlogPage />} />
+            <Route path="/blog/:slug" element={<BlogPostPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />

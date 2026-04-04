@@ -88,6 +88,19 @@ export function Layout() {
             <ProjectsDropdown />
 
             <NavLink
+              to="/blog"
+              className={({ isActive }) =>
+                `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  isActive
+                    ? 'bg-warm-200/60 text-warm-900'
+                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
+                }`
+              }
+            >
+              Blog
+            </NavLink>
+
+            <NavLink
               to="/pricing"
               className={({ isActive }) =>
                 `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
@@ -165,6 +178,7 @@ export function Layout() {
             {[
               { to: '/projects/page-roast', label: 'PageRoast' },
               { to: '/projects', label: 'All Projects' },
+              { to: '/blog', label: 'Blog' },
               { to: '/pricing', label: 'Pricing' },
               ...(isAdmin ? [{ to: '/admin', label: 'Admin' }] : []),
             ].map(({ to, label }) => (

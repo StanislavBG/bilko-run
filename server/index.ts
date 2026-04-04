@@ -11,6 +11,7 @@ import { registerLicenseRoutes } from './routes/license.js';
 import { registerSocialRoutes } from './routes/social.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerStepproofRoutes } from './routes/stepproof.js';
+import { registerBlogRoutes } from './routes/blog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -64,6 +65,7 @@ registerStripeRoutes(app);
 registerLicenseRoutes(app);
 registerSocialRoutes(app);
 registerStepproofRoutes(app);
+registerBlogRoutes(app);
 registerAnalyticsRoutes(app);
 
 // Health check
@@ -131,6 +133,11 @@ if (isProd) {
         title: 'Stepproof — Regression Tests for AI Pipelines',
         description: 'Write a scenario. Run it N times. See if your LLM can follow instructions. Like unit tests, but for AI.',
         url: 'https://bilko.run/projects/stepproof',
+      },
+      '/blog': {
+        title: 'Blog — bilko.run',
+        description: 'Lessons from building AI tools solo. Build logs, technical deep dives, and honest takes on shipping software in 2026.',
+        url: 'https://bilko.run/blog',
       },
       '/pricing': {
         title: 'Pricing — bilko.run',

@@ -5,7 +5,7 @@ export function ScoreCard({ score, grade, verdict, toolName }: {
   score: number; grade: string; verdict: string; toolName: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const shareText = `My ${toolName} score: ${score}/100 (${grade})\n\n"${verdict}"\n\nhttps://bilko.run/projects`;
+  const shareText = `Just scored ${score}/100 (${grade}) on ${toolName} 🔥\n\n"${verdict}"\n\nFree at bilko.run`;
 
   return (
     <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 md:p-8 text-center relative overflow-hidden animate-slide-up">

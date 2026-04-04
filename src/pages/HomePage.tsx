@@ -352,6 +352,28 @@ export function HomePage() {
 
       <Divider />
 
+      {/* ── Social Proof ── */}
+      <section className="py-12 md:py-16">
+        <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-6">What founders are saying</h2>
+        <div className="space-y-4">
+          {[
+            { quote: 'Finished building my SaaS — marketing is where I\'m lost. Tools like this are exactly what I needed.', source: 'r/SaaS · 201 comments', upvotes: 181 },
+            { quote: 'We cut nine subscriptions in a single afternoon and nobody noticed. Should\'ve audited our stack months ago.', source: 'r/Entrepreneur · 283 comments', upvotes: 461 },
+            { quote: 'Just hit $1K MRR with my side project. No VC, no ads, just pure grind and the right tools.', source: 'r/SaaS', upvotes: 37 },
+          ].map((t, i) => (
+            <div key={i} className="bg-warm-50 rounded-xl border border-warm-200/60 p-5">
+              <p className="text-sm text-warm-700 italic leading-relaxed">&ldquo;{t.quote}&rdquo;</p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs text-warm-400">{t.source}</span>
+                <span className="text-xs text-fire-500 font-bold">{t.upvotes} upvotes</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <Divider />
+
       {/* ── CTA / Connect ── */}
       <section className="py-12 md:py-16">
         <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-4">If you've read this far</h2>

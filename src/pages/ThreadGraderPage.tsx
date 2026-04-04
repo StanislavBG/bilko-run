@@ -43,20 +43,59 @@ function viralPotential(score: number) {
 }
 
 export function ThreadGraderPage() {
-  const { result, compareResult, loading, error, needsTokens, submit, submitCompare, reset, signInRef } = useToolApi<GraderResult>('thread-grader');
+  const { result, compareResult, loading, error, needsTokens, email, isSignedIn, submit, submitCompare, reset, signInRef } = useToolApi<GraderResult>('thread-grader');
 
-  const [tab, setTab] = useState<'score' | 'compare'>('score');
+  const [tab, setTab] = useState<'score' | 'compare' | 'generate'>('score');
   const [thread, setThread] = useState('');
   const [threadA, setThreadA] = useState('');
   const [threadB, setThreadB] = useState('');
   const resultRef = useRef<HTMLDivElement>(null);
   const [hooks, setHooks] = useState<HookEntry[]>(loadHooks);
+  const [topic, setTopic] = useState('');
+  const [genTweetCount, setGenTweetCount] = useState(7);
+  const [generateResult, setGenerateResult] = useState<{ thread: Array<{ position: number; text: string; purpose: string }>; hook_technique: string; predicted_viral_score: number; strategy_note: string } | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   function saveHook(rw: { text: string; label: string }) {
     const entry: HookEntry = { text: rw.text, label: rw.label, date: new Date().toISOString() };
     const updated = [entry, ...hooks.filter(h => h.text !== rw.text)].slice(0, 20);
     localStorage.setItem(HOOKS_KEY, JSON.stringify(updated));
     setHooks(updated);
+  }
+
+  const API = import.meta.env.VITE_API_URL || '/api';
+
+  function handleTabChange(next: 'score' | 'compare' | 'generate') {
+    setTab(next);
+    reset();
+    setGenerateResult(null);
+    setGenError(null);
+  }
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!topic.trim() || !isSignedIn) {
+      signInRef.current?.click();
+      return;
+    }
+    setGenerating(true);
+    setGenerateResult(null);
+    setGenError(null);
+    try {
+      const res = await fetch(`${API}/demos/thread-grader/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim(), tweetCount: genTweetCount, email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      setGenerateResult(data);
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   useEffect(() => {
@@ -79,12 +118,21 @@ export function ThreadGraderPage() {
       </SignInButton>
 
       <ToolHero
-        title="Grade your thread"
-        tagline="AI scores hook strength, tension flow, and share triggers"
-        tab={tab}
-        onTabChange={t => { setTab(t); reset(); }}
-        hasCompare
+        title="Grade or generate threads"
+        tagline="AI scores hook strength, tension flow, and share triggers — or writes threads for you"
       >
+        {/* 3-way tab toggle */}
+        <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
+          {(['score', 'compare', 'generate'] as const).map(t => (
+            <button key={t} onClick={() => handleTabChange(t)}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${
+                tab === t ? 'bg-white text-warm-900 shadow-sm' : 'text-warm-400 hover:text-white'
+              }`}>
+              {t === 'generate' ? '\u2728 Generate' : t === 'compare' ? 'A/B Compare' : 'Score'}
+            </button>
+          ))}
+        </div>
+
         {tab === 'score' ? (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl max-w-2xl mx-auto">
             <div className="relative">
@@ -111,7 +159,7 @@ export function ThreadGraderPage() {
             </button>
             <p className="mt-2 text-xs text-warm-500">Separate tweets with --- or blank lines &middot; Cmd+Enter to submit</p>
           </div>
-        ) : (
+        ) : tab === 'compare' ? (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl max-w-3xl mx-auto">
             <div className="grid md:grid-cols-2 gap-3 mb-3">
               <div>
@@ -133,6 +181,40 @@ export function ThreadGraderPage() {
               {loading ? 'Comparing...' : 'Compare Threads'}
             </button>
           </div>
+        ) : (
+          <form onSubmit={handleGenerate} className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl max-w-2xl mx-auto space-y-4">
+            <div>
+              <textarea
+                value={topic}
+                onChange={e => setTopic(e.target.value)}
+                placeholder="What should the thread be about? e.g. '7 lessons from building a SaaS to $10k MRR' or 'Why most landing pages fail (and how to fix yours)'"
+                rows={4}
+                className="w-full px-4 py-3 rounded-xl border-0 bg-white text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-400 shadow-inner resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-2 block text-left">
+                Tweet count: {genTweetCount}
+              </label>
+              <input
+                type="range"
+                min={3}
+                max={15}
+                value={genTweetCount}
+                onChange={e => setGenTweetCount(Number(e.target.value))}
+                className="w-full accent-fire-500"
+              />
+              <div className="flex justify-between text-[10px] text-warm-500 mt-1">
+                <span>3</span>
+                <span>15</span>
+              </div>
+            </div>
+            <button type="submit" disabled={generating || !topic.trim()}
+              className="w-full py-3.5 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 disabled:from-warm-500 disabled:to-warm-600 text-white font-black rounded-xl shadow-lg transition-all disabled:shadow-none">
+              {generating ? 'Generating...' : '\u2728 Generate Thread'}
+            </button>
+            <p className="text-xs text-warm-500 text-center">Describe your topic. AI generates a full thread with hook, tension, and payoff.</p>
+          </form>
         )}
       </ToolHero>
 
@@ -147,6 +229,103 @@ export function ThreadGraderPage() {
           <div className="bg-fire-50 border border-fire-200 rounded-2xl p-6 text-center">
             <p className="text-warm-800 font-semibold mb-1">Out of free credits</p>
             <p className="text-sm text-warm-600"><a href="/pricing" className="text-fire-500 hover:underline font-bold">Grab tokens</a> to keep grading.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Generate error */}
+      {genError && (
+        <div className="max-w-2xl mx-auto px-6 mb-6">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{genError}</div>
+        </div>
+      )}
+
+      {/* Generate loading */}
+      {generating && (
+        <div className="max-w-2xl mx-auto px-6 py-8 flex items-center justify-center gap-3">
+          <div className="h-5 w-5 rounded-full border-2 border-fire-500 border-t-transparent animate-spin" />
+          <span className="text-sm text-warm-500 font-medium">Generating thread...</span>
+        </div>
+      )}
+
+      {/* Generate results */}
+      {generateResult && !generating && (
+        <div className="max-w-2xl mx-auto px-6 pt-10 space-y-6 pb-16 animate-slide-up">
+          {/* Viral score card */}
+          {(() => {
+            const score = generateResult.predicted_viral_score;
+            const color = score >= 80 ? 'text-green-600 bg-green-50 border-green-200' :
+              score >= 60 ? 'text-blue-600 bg-blue-50 border-blue-200' :
+              score >= 40 ? 'text-yellow-600 bg-yellow-50 border-yellow-200' :
+              'text-red-600 bg-red-50 border-red-200';
+            return (
+              <div className={`rounded-2xl border p-5 ${color}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest opacity-70">Predicted Viral Score</p>
+                    <p className="text-3xl font-black mt-1">{score}/100</p>
+                  </div>
+                  {generateResult.hook_technique && (
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-white/60">{generateResult.hook_technique}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Strategy note */}
+          {generateResult.strategy_note && (
+            <div className="bg-fire-50 border border-fire-200 rounded-2xl p-5">
+              <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-1">Strategy Note</p>
+              <p className="text-sm text-warm-700">{generateResult.strategy_note}</p>
+            </div>
+          )}
+
+          {/* Thread display */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Generated Thread ({generateResult.thread.length} tweets)</h3>
+            {generateResult.thread.map((tweet, i) => {
+              const purposeColors: Record<string, string> = {
+                hook: 'bg-fire-50 text-fire-600',
+                tension: 'bg-yellow-50 text-yellow-700',
+                payoff: 'bg-green-50 text-green-700',
+                cta: 'bg-blue-50 text-blue-700',
+              };
+              const badgeColor = purposeColors[tweet.purpose?.toLowerCase()] || 'bg-warm-50 text-warm-600';
+              return (
+                <div key={i} className="flex items-start gap-3 p-3 border border-warm-100 rounded-xl">
+                  <span className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs bg-warm-100 text-warm-600">
+                    {tweet.position}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${badgeColor}`}>{tweet.purpose}</span>
+                    </div>
+                    <p className="text-sm text-warm-800 whitespace-pre-wrap">{tweet.text}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => navigator.clipboard.writeText(generateResult.thread.map(t => t.text).join('\n\n'))}
+              className="px-5 py-2.5 border border-warm-200 text-warm-700 hover:bg-warm-50 font-bold rounded-xl transition-colors text-sm"
+            >
+              Copy Full Thread
+            </button>
+            <button
+              onClick={() => {
+                setThread(generateResult.thread.map(t => t.text).join('\n\n---\n\n'));
+                handleTabChange('score');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-5 py-2.5 border border-fire-200 text-fire-600 hover:bg-fire-50 font-bold rounded-xl transition-colors text-sm"
+            >
+              Score it
+            </button>
           </div>
         </div>
       )}
@@ -250,7 +429,7 @@ export function ThreadGraderPage() {
       )}
 
       {/* ── Below-fold engagement content ────────────────────────────── */}
-      {!result && !compareResult && !loading && (
+      {!result && !compareResult && !generateResult && !loading && !generating && (
         <>
           {/* What we grade */}
           <div className="bg-white border-y border-warm-200/40">

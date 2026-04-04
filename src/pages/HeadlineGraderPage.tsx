@@ -70,12 +70,16 @@ export function HeadlineGraderPage() {
     email, isSignedIn, submit, submitCompare, reset, signInRef, SignInButton: ClerkSignIn,
   } = useToolApi<GradeResult>('headline-grader');
 
-  const [tab, setTab] = useState<'score' | 'compare'>('score');
+  const [tab, setTab] = useState<'score' | 'compare' | 'generate'>('score');
   const [headline, setHeadline] = useState('');
   const [headlineA, setHeadlineA] = useState('');
   const [headlineB, setHeadlineB] = useState('');
   const [context, setContext] = useState('general');
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
+  const [description, setDescription] = useState('');
+  const [generateResult, setGenerateResult] = useState<any | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   useEffect(() => { document.title = 'Headline Grader — bilko.run'; }, []);
 
@@ -88,9 +92,11 @@ export function HeadlineGraderPage() {
     }
   }, [result]);
 
-  function handleTabChange(next: 'score' | 'compare') {
+  function handleTabChange(next: 'score' | 'compare' | 'generate') {
     setTab(next);
     reset();
+    setGenerateResult(null);
+    setGenError(null);
   }
 
   function handleScore(e: React.FormEvent) {
@@ -103,6 +109,33 @@ export function HeadlineGraderPage() {
     e.preventDefault();
     if (!headlineA.trim() || !headlineB.trim()) return;
     submitCompare({ headlineA: headlineA.trim(), headlineB: headlineB.trim() });
+  }
+
+  const API = import.meta.env.VITE_API_URL || '/api';
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!description.trim() || !isSignedIn) {
+      signInRef.current?.click();
+      return;
+    }
+    setGenerating(true);
+    setGenerateResult(null);
+    setGenError(null);
+    try {
+      const res = await fetch(`${API}/demos/headline-grader/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: description.trim(), context, count: 5, email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      setGenerateResult(data);
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   const compare = compareResult as CompareResponse | null;
@@ -119,12 +152,21 @@ export function HeadlineGraderPage() {
 
       {/* ── Hero + Input ─────────────────────────────────────────────── */}
       <ToolHero
-        title="Score your headline"
-        tagline="AI grades it against 4 proven copywriting frameworks"
-        tab={tab}
-        onTabChange={handleTabChange}
-        hasCompare
+        title="Score or generate headlines"
+        tagline="AI grades your headlines — or writes new ones from your description"
       >
+        {/* 3-way tab toggle */}
+        <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
+          {(['score', 'compare', 'generate'] as const).map(t => (
+            <button key={t} onClick={() => handleTabChange(t)}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${
+                tab === t ? 'bg-white text-warm-900 shadow-sm' : 'text-warm-400 hover:text-white'
+              }`}>
+              {t === 'generate' ? '\u2728 Generate' : t === 'compare' ? 'A/B Compare' : 'Score'}
+            </button>
+          ))}
+        </div>
+
         {tab === 'score' ? (
           <form onSubmit={handleScore} className="max-w-xl mx-auto text-left space-y-4">
             <div>
@@ -179,7 +221,7 @@ export function HeadlineGraderPage() {
               </button>
             </div>
           </form>
-        ) : (
+        ) : tab === 'compare' ? (
           <form onSubmit={handleCompare} className="max-w-xl mx-auto text-left space-y-4">
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1 block">Headline A</label>
@@ -215,6 +257,31 @@ export function HeadlineGraderPage() {
             >
               {loading ? 'Comparing...' : 'Compare Headlines'}
             </button>
+          </form>
+        ) : (
+          <form onSubmit={handleGenerate} className="max-w-xl mx-auto text-left space-y-4">
+            <div>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Describe your product, service, or page... e.g. 'AI tool that scores landing pages and gives conversion feedback in 30 seconds'"
+                rows={4}
+                className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <select value={context} onChange={e => setContext(e.target.value)}
+                className="rounded-lg bg-white/10 border border-white/20 text-warm-300 text-sm px-3 py-2 focus:outline-none">
+                {CONTEXT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value} className="bg-warm-900 text-white">{o.label}</option>
+                ))}
+              </select>
+              <button type="submit" disabled={generating || !description.trim()}
+                className="flex-1 bg-fire-500 hover:bg-fire-600 disabled:opacity-50 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm">
+                {generating ? 'Generating...' : '\u2728 Generate 5 Headlines'}
+              </button>
+            </div>
+            <p className="text-xs text-warm-500 text-center">Describe what you're selling. AI generates headlines optimized for 4 frameworks.</p>
           </form>
         )}
       </ToolHero>
@@ -315,13 +382,61 @@ export function HeadlineGraderPage() {
             pillarLabels={PILLAR_LABELS}
           />
         )}
+
+        {/* Generate results */}
+        {generateResult && !generating && (
+          <>
+            {generateResult.strategy_note && (
+              <div className="bg-fire-50 border border-fire-200 rounded-2xl p-5 animate-slide-up">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-1">Strategy</p>
+                <p className="text-sm text-warm-700">{generateResult.strategy_note}</p>
+              </div>
+            )}
+            <div className="bg-white rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '100ms' }}>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Generated Headlines ({generateResult.headlines?.length ?? 0})</h3>
+              <div className="space-y-3">
+                {(generateResult.headlines ?? []).map((h: any, i: number) => (
+                  <div key={i} className="border border-warm-100 rounded-xl p-4 hover:border-fire-200 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-warm-900 font-bold leading-relaxed">{h.text}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-[10px] font-bold text-fire-500 uppercase bg-fire-50 px-2 py-0.5 rounded">{h.technique}</span>
+                          <span className="text-[10px] text-warm-400">Strongest: {h.framework_strength}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">~{h.predicted_score}</span>
+                        <button onClick={() => { navigator.clipboard.writeText(h.text); }}
+                          className="text-xs text-warm-400 hover:text-fire-500 transition-colors">Copy</button>
+                        <button onClick={() => { setHeadline(h.text); setTab('score'); }}
+                          className="text-xs text-fire-500 hover:text-fire-600 font-semibold transition-colors">Score it</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {genError && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700 animate-slide-up">{genError}</div>
+        )}
+
+        {generating && (
+          <div className="flex items-center justify-center gap-3 py-8 animate-slide-up">
+            <div className="h-5 w-5 rounded-full border-2 border-fire-500 border-t-transparent animate-spin" />
+            <span className="text-sm text-warm-500 font-medium">Generating headlines...</span>
+          </div>
+        )}
       </div>
 
       {/* ── Cross Promo ──────────────────────────────────────────────── */}
       <CrossPromo currentTool="headline-grader" />
 
       {/* ── Below-fold engagement content ────────────────────────────── */}
-      {!result && !compareResult && !loading && (
+      {!result && !compareResult && !generateResult && !loading && !generating && (
         <>
           {/* How it scores */}
           <div className="bg-white border-y border-warm-200/40">

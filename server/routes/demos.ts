@@ -404,6 +404,187 @@ Write the verdict and suggested hybrid.`;
     }
   });
 
+  // ── Headline Generator (inverse mode) ──────────────────────────
+  app.post('/api/demos/headline-grader/generate', async (req, reply) => {
+    const body = req.body as { description?: string; context?: string; count?: number; email?: string } | null;
+    const description = (body?.description ?? '').trim();
+    if (!description || description.length < 10) {
+      reply.status(400);
+      return { error: 'Describe your product or page in at least 10 characters.' };
+    }
+    if (description.length > 2000) {
+      reply.status(400);
+      return { error: 'Description must be under 2000 characters.' };
+    }
+
+    const clerkEmail = await verifyClerkToken(req.headers.authorization);
+    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
+    if (!email || !EMAIL_RE.test(email)) {
+      reply.status(401);
+      return { error: 'Sign in required.', requiresEmail: true };
+    }
+
+    const context = body?.context ?? 'landing';
+    const count = Math.min(Math.max(body?.count ?? 5, 3), 10);
+    const ipHash = hashIp(req.ip);
+    const rate = await checkRateLimit(ipHash, HEADLINE_GRADER_ENDPOINT, email);
+    if (!rate.allowed) {
+      reply.status(429);
+      return { gated: true, remaining: 0, limit: rate.limit, isPro: rate.isPro, message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg('headline generation') };
+    }
+
+    const systemPrompt = `You are a world-class direct response copywriter. Generate ${count} high-converting headlines for the given product/page description.
+
+CONTEXT: ${context} headline
+
+Each headline should score 75+ on these frameworks:
+- Rule of One: single dominant idea, urgent, unique, ultra-specific
+- Hormozi Value Equation: dream outcome × likelihood / time × effort
+- Readability: grade-5 level, short, no jargon
+- Proof + Promise + Plan: credibility signal + specific benefit + method hint
+
+Generate DIVERSE headlines using different techniques:
+1. Number + specific result ("How 2,347 founders...")
+2. Curiosity gap ("The one thing your landing page is missing...")
+3. Bold claim ("Cut your bounce rate by 40% in 30 seconds")
+4. Question hook ("Still wondering why nobody converts?")
+5. Before/after contrast ("From 2% to 12% conversion — here's what changed")
+
+Respond ONLY with valid JSON:
+{
+  "headlines": [
+    { "text": "<headline>", "predicted_score": <75-95>, "technique": "<technique used>", "framework_strength": "<which framework this headline excels at>" }
+  ],
+  "strategy_note": "<1 sentence: what makes these headlines work for this specific product>"
+}`;
+
+    try {
+      const raw = await askGemini(`Generate ${count} high-converting headlines for this:\n\n${description}`, { systemPrompt });
+      const parsed = parseResult(raw);
+      await incrementUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
+      return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
+    } catch (err: any) {
+      console.error('headline_generator', err);
+      reply.status(500);
+      return { error: `Generation failed: ${err.message}` };
+    }
+  });
+
+  // ── Ad Copy Generator (inverse mode) ──────────────────────────
+  app.post('/api/demos/ad-scorer/generate', async (req, reply) => {
+    const body = req.body as { description?: string; platform?: string; count?: number; email?: string } | null;
+    const description = (body?.description ?? '').trim();
+    if (!description || description.length < 10) {
+      reply.status(400);
+      return { error: 'Describe your product in at least 10 characters.' };
+    }
+
+    const clerkEmail = await verifyClerkToken(req.headers.authorization);
+    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
+    if (!email || !EMAIL_RE.test(email)) {
+      reply.status(401);
+      return { error: 'Sign in required.', requiresEmail: true };
+    }
+
+    const platform = body?.platform ?? 'facebook';
+    const count = Math.min(Math.max(body?.count ?? 3, 2), 5);
+    const ipHash = hashIp(req.ip);
+    const rate = await checkRateLimit(ipHash, 'ad-scorer', email);
+    if (!rate.allowed) {
+      reply.status(429);
+      return { gated: true, remaining: 0, limit: rate.limit, isPro: rate.isPro, message: freeGateMsg('ad generation') };
+    }
+
+    const platformLimits: Record<string, string> = {
+      facebook: 'Primary text: 125 chars, Headline: 40 chars, Description: 30 chars',
+      google: 'Headline: 30 chars x3, Description: 90 chars x2',
+      linkedin: 'Intro text: 150 chars, Headline: 70 chars',
+    };
+
+    const systemPrompt = `You are an expert performance marketer. Generate ${count} high-converting ad copy variants for ${platform}.
+
+PLATFORM CONSTRAINTS: ${platformLimits[platform] ?? platformLimits.facebook}
+
+Each ad should score 80+ on: Hook Strength, Value Proposition, Emotional Architecture, CTA & Conversion.
+
+Use diverse approaches: pain-point lead, benefit-first, social proof, curiosity, urgency.
+
+Respond ONLY with valid JSON:
+{
+  "ads": [
+    { "primary_text": "<main ad copy>", "headline": "<ad headline>", "cta": "<call to action text>", "predicted_score": <75-95>, "approach": "<technique used>" }
+  ],
+  "strategy_note": "<1 sentence: what makes these ads work for this product on ${platform}>"
+}`;
+
+    try {
+      const raw = await askGemini(`Generate ${count} ${platform} ad variants for:\n\n${description}`, { systemPrompt });
+      const parsed = parseResult(raw);
+      await incrementUsage(ipHash, 'ad-scorer');
+      return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
+    } catch (err: any) {
+      console.error('ad_generator', err);
+      reply.status(500);
+      return { error: `Generation failed: ${err.message}` };
+    }
+  });
+
+  // ── Thread Generator (inverse mode) ───────────────────────────
+  app.post('/api/demos/thread-grader/generate', async (req, reply) => {
+    const body = req.body as { topic?: string; tweetCount?: number; email?: string } | null;
+    const topic = (body?.topic ?? '').trim();
+    if (!topic || topic.length < 10) {
+      reply.status(400);
+      return { error: 'Describe your topic in at least 10 characters.' };
+    }
+
+    const clerkEmail = await verifyClerkToken(req.headers.authorization);
+    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
+    if (!email || !EMAIL_RE.test(email)) {
+      reply.status(401);
+      return { error: 'Sign in required.', requiresEmail: true };
+    }
+
+    const tweetCount = Math.min(Math.max(body?.tweetCount ?? 7, 3), 15);
+    const ipHash = hashIp(req.ip);
+    const rate = await checkRateLimit(ipHash, 'thread-grader', email);
+    if (!rate.allowed) {
+      reply.status(429);
+      return { gated: true, remaining: 0, limit: rate.limit, isPro: rate.isPro, message: freeGateMsg('thread generation') };
+    }
+
+    const systemPrompt = `You are a viral X/Twitter thread writer. Generate a ${tweetCount}-tweet thread on the given topic.
+
+RULES FOR VIRAL THREADS:
+- Tweet 1 (Hook): Must stop the scroll. Use a bold claim, surprising stat, or curiosity gap. This tweet determines if anyone reads the rest.
+- Middle tweets: Build tension. Each tweet should make the reader NEED the next one.
+- Final tweet: Strong payoff + CTA (follow, bookmark, share).
+- Each tweet: Max 280 chars. No hashtags (algorithm doesn't boost them). No external links (kills reach).
+- Reply = 27x a like. Write tweets that provoke replies.
+- Bookmark = 5x a like. Include a "save this" moment.
+
+Respond ONLY with valid JSON:
+{
+  "thread": [
+    { "position": 1, "text": "<tweet text under 280 chars>", "purpose": "<hook|tension|payoff|cta>" }
+  ],
+  "hook_technique": "<technique used for tweet 1>",
+  "predicted_viral_score": <60-95>,
+  "strategy_note": "<1 sentence: why this thread structure works>"
+}`;
+
+    try {
+      const raw = await askGemini(`Write a ${tweetCount}-tweet viral thread about:\n\n${topic}`, { systemPrompt });
+      const parsed = parseResult(raw);
+      await incrementUsage(ipHash, 'thread-grader');
+      return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
+    } catch (err: any) {
+      console.error('thread_generator', err);
+      reply.status(500);
+      return { error: `Generation failed: ${err.message}` };
+    }
+  });
+
   // ── Page Roast ──────────────────────────────────────
 
   // ── Public stats (for social proof) ─────────────────────────────

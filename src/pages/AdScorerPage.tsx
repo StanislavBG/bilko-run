@@ -61,12 +61,16 @@ export function AdScorerPage() {
     email, isSignedIn, submit, submitCompare, reset, signInRef, SignInButton: ClerkSignIn,
   } = useToolApi<ScorerResult>('ad-scorer');
 
-  const [tab, setTab] = useState<'score' | 'compare'>('score');
+  const [tab, setTab] = useState<'score' | 'compare' | 'generate'>('score');
   const [adCopy, setAdCopy] = useState('');
   const [adCopyA, setAdCopyA] = useState('');
   const [adCopyB, setAdCopyB] = useState('');
   const [platform, setPlatform] = useState<Platform>('facebook');
   const [swipeFile, setSwipeFile] = useState<SwipeEntry[]>(loadSwipe);
+  const [description, setDescription] = useState('');
+  const [generateResult, setGenerateResult] = useState<{ ads: Array<{ primary_text: string; headline: string; cta: string; predicted_score: number; approach: string }>; strategy_note: string } | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   function saveToSwipe(rw: { text: string; predicted_score: number; optimized_for: string }) {
     const entry: SwipeEntry = { ...rw, platform, date: new Date().toISOString() };
@@ -79,9 +83,13 @@ export function AdScorerPage() {
 
   const activePlatform = PLATFORMS.find((p) => p.value === platform)!;
 
-  function handleTabChange(next: 'score' | 'compare') {
+  const API = import.meta.env.VITE_API_URL || '/api';
+
+  function handleTabChange(next: 'score' | 'compare' | 'generate') {
     setTab(next);
     reset();
+    setGenerateResult(null);
+    setGenError(null);
   }
 
   function handleScore(e: React.FormEvent) {
@@ -94,6 +102,31 @@ export function AdScorerPage() {
     e.preventDefault();
     if (!adCopyA.trim() || !adCopyB.trim()) return;
     submitCompare({ adCopyA: adCopyA.trim(), adCopyB: adCopyB.trim(), platform });
+  }
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!description.trim() || !isSignedIn) {
+      signInRef.current?.click();
+      return;
+    }
+    setGenerating(true);
+    setGenerateResult(null);
+    setGenError(null);
+    try {
+      const res = await fetch(`${API}/demos/ad-scorer/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: description.trim(), platform, count: 3, email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      setGenerateResult(data);
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   const compare = compareResult as CompareResponse | null;
@@ -130,13 +163,22 @@ export function AdScorerPage() {
 
       {/* ── Hero + Input ─────────────────────────────────────────────── */}
       <ToolHero
-        title="Score your ad copy"
-        tagline="AI grades hook, value prop, emotion, and CTA in seconds"
-        tab={tab}
-        onTabChange={handleTabChange}
-        hasCompare
+        title="Score or generate ad copy"
+        tagline="AI grades hook, value prop, emotion, and CTA — or writes ads from your description"
       >
-        {tab === 'score' ? (
+        {/* 3-way tab toggle */}
+        <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
+          {(['score', 'compare', 'generate'] as const).map(t => (
+            <button key={t} onClick={() => handleTabChange(t)}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${
+                tab === t ? 'bg-white text-warm-900 shadow-sm' : 'text-warm-400 hover:text-white'
+              }`}>
+              {t === 'generate' ? '\u2728 Generate' : t === 'compare' ? 'A/B Compare' : 'Score'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'score' && (
           <form onSubmit={handleScore} className="max-w-xl mx-auto text-left space-y-4">
             <div>
               <textarea
@@ -176,7 +218,8 @@ export function AdScorerPage() {
               </button>
             </div>
           </form>
-        ) : (
+        )}
+        {tab === 'compare' && (
           <form onSubmit={handleCompare} className="max-w-xl mx-auto text-left space-y-4">
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1 block">Ad Copy A</label>
@@ -218,6 +261,27 @@ export function AdScorerPage() {
             </div>
           </form>
         )}
+        {tab === 'generate' && (
+          <form onSubmit={handleGenerate} className="max-w-xl mx-auto text-left space-y-4">
+            <div>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Describe your product or service... e.g. 'AI tool that scores ad copy and suggests rewrites for Facebook, Google, and LinkedIn'"
+                rows={4}
+                className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+              />
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <PlatformPills />
+              <button type="submit" disabled={generating || !description.trim()}
+                className="flex-1 bg-fire-500 hover:bg-fire-600 disabled:opacity-50 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm">
+                {generating ? 'Generating...' : '\u2728 Generate 3 Ads'}
+              </button>
+            </div>
+            <p className="text-xs text-warm-500 text-center">Describe what you're selling. AI generates ad copy optimized for your platform.</p>
+          </form>
+        )}
       </ToolHero>
 
       {/* ── Results ──────────────────────────────────────────────────── */}
@@ -244,6 +308,78 @@ export function AdScorerPage() {
           <div className="flex items-center justify-center gap-3 py-8 animate-slide-up">
             <div className="h-5 w-5 rounded-full border-2 border-fire-500 border-t-transparent animate-spin" />
             <span className="text-sm text-warm-500 font-medium">Analyzing...</span>
+          </div>
+        )}
+
+        {/* Generate error */}
+        {genError && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700 animate-slide-up">
+            {genError}
+          </div>
+        )}
+
+        {/* Generate loading */}
+        {generating && (
+          <div className="flex items-center justify-center gap-3 py-8 animate-slide-up">
+            <div className="h-5 w-5 rounded-full border-2 border-fire-500 border-t-transparent animate-spin" />
+            <span className="text-sm text-warm-500 font-medium">Generating ads...</span>
+          </div>
+        )}
+
+        {/* Generate results */}
+        {generateResult && !generating && (
+          <div className="space-y-4 animate-slide-up">
+            {generateResult.strategy_note && (
+              <div className="bg-fire-50 border border-fire-200 rounded-2xl p-5">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-1">Strategy Note</p>
+                <p className="text-sm text-warm-700">{generateResult.strategy_note}</p>
+              </div>
+            )}
+            {generateResult.ads.map((ad, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-warm-200/60 p-5 space-y-3" style={{ animationDelay: `${i * 80}ms` }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-widest text-warm-400">Ad {i + 1}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-fire-50 text-fire-600">{ad.approach}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      ad.predicted_score >= 80 ? 'bg-green-50 text-green-700' :
+                      ad.predicted_score >= 60 ? 'bg-blue-50 text-blue-700' :
+                      'bg-yellow-50 text-yellow-700'
+                    }`}>~{ad.predicted_score}</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1">Primary Text</p>
+                  <p className="text-sm text-warm-800">{ad.primary_text}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1">Headline</p>
+                  <p className="text-sm font-bold text-warm-900">{ad.headline}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1">CTA</p>
+                  <p className="text-sm text-warm-700">{ad.cta}</p>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`${ad.primary_text}\n\n${ad.headline}\n\n${ad.cta}`)}
+                    className="text-xs px-3 py-1.5 border border-warm-200 text-warm-600 hover:bg-warm-50 rounded-lg transition-colors"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAdCopy(`${ad.primary_text}\n\n${ad.headline}\n\n${ad.cta}`);
+                      handleTabChange('score');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="text-xs px-3 py-1.5 border border-fire-200 text-fire-600 hover:bg-fire-50 rounded-lg transition-colors"
+                  >
+                    Score it
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -321,7 +457,7 @@ export function AdScorerPage() {
       </div>
 
       {/* ── Below-fold engagement content ────────────────────────────── */}
-      {!result && !compareResult && !loading && (
+      {!result && !compareResult && !generateResult && !loading && !generating && (
         <>
           {/* What we check */}
           <div className="bg-white border-y border-warm-200/40">

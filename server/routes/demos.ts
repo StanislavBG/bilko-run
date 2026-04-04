@@ -582,10 +582,8 @@ Respond ONLY with valid JSON:
     if (!tools || tools.length < 10) { reply.status(400); return { error: 'List your tools (at least 10 characters).' }; }
     if (tools.length > 5000) { reply.status(400); return { error: 'Input must be under 5000 characters.' }; }
 
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const bodyEmail = (body?.email ?? '').trim().toLowerCase();
-    const email = clerkEmail || bodyEmail;
-    if (!email || !EMAIL_RE.test(email)) { reply.status(401); return { error: 'Sign in required.', requiresEmail: true }; }
+    const email = await requireAuth(req, reply);
+    if (!email) return;
 
     if (!(await hasTokenAccount(email))) { await grantFreeTokens(email); }
     const sub = await getActiveSubscriptionLive(email);
@@ -681,10 +679,8 @@ Respond ONLY with valid JSON:
     if (description.length > 2000) { reply.status(400); return { error: 'Description must be under 2000 characters.' }; }
     if (rawUrl.length > 2000) { reply.status(400); return { error: 'URL must be under 2000 characters.' }; }
 
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const bodyEmail = (body?.email ?? '').trim().toLowerCase();
-    const email = clerkEmail || bodyEmail;
-    if (!email || !EMAIL_RE.test(email)) { reply.status(401); return { error: 'Sign in required.', requiresEmail: true }; }
+    const email = await requireAuth(req, reply);
+    if (!email) return;
 
     let parsedUrl: URL;
     try { parsedUrl = validatePublicUrl(rawUrl); } catch (err: any) { reply.status(400); return { error: err.message || 'Invalid URL.' }; }
@@ -814,11 +810,9 @@ Respond ONLY with valid JSON:
 
   // ── Token balance endpoint ──────────────────────────────────────
   app.get('/api/tokens/balance', async (req, reply) => {
-    const email = ((req.query as any)?.email ?? '').trim().toLowerCase();
-    if (!email || !EMAIL_RE.test(email)) {
-      reply.status(400);
-      return { error: 'Valid email required.' };
-    }
+    const email = await requireAuth(req, reply);
+    if (!email) return;
+
     const account = await hasTokenAccount(email);
     if (!account) {
       await grantFreeTokens(email);
@@ -834,14 +828,8 @@ Respond ONLY with valid JSON:
       return { error: 'URL is required.' };
     }
 
-    // Prefer Clerk-verified email; fall back to body email if no valid token
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const bodyEmail = (body?.email ?? '').trim().toLowerCase();
-    const email = clerkEmail || bodyEmail;
-    if (!email || !EMAIL_RE.test(email)) {
-      reply.status(401);
-      return { error: 'Sign in required to use PageRoast.', requiresEmail: true };
-    }
+    const email = await requireAuth(req, reply);
+    if (!email) return;
 
     let parsedUrl: URL;
     try {
@@ -971,14 +959,8 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Both URLs are required.' };
     }
 
-    // Prefer Clerk-verified email; fall back to body email if no valid token
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const bodyEmail = (body?.email ?? '').trim().toLowerCase();
-    const email = clerkEmail || bodyEmail;
-    if (!email || !EMAIL_RE.test(email)) {
-      reply.status(401);
-      return { error: 'Sign in required to use PageRoast.', requiresEmail: true };
-    }
+    const email = await requireAuth(req, reply);
+    if (!email) return;
 
     // Auto-grant free tokens for new users
     if (!(await hasTokenAccount(email))) {
@@ -1644,9 +1626,17 @@ Write the verdict, suggested hybrid hook, and strategic analysis.`;
       reply.status(400);
       return { error: 'Product description must be at least 10 characters.' };
     }
+    if (product.length > 2000) {
+      reply.status(400);
+      return { error: 'Product description must be under 2000 characters.' };
+    }
     if (!audience || audience.length < 5) {
       reply.status(400);
       return { error: 'Audience must be at least 5 characters.' };
+    }
+    if (audience.length > 500) {
+      reply.status(400);
+      return { error: 'Audience must be under 500 characters.' };
     }
 
     const _efIpHash = hashIp(req.ip);
@@ -1765,9 +1755,17 @@ Make each email feel distinct — different frameworks, different emotional leve
       reply.status(400);
       return { error: 'Both product descriptions must be at least 10 characters.' };
     }
+    if (productA.length > 2000 || productB.length > 2000) {
+      reply.status(400);
+      return { error: 'Product descriptions must be under 2000 characters each.' };
+    }
     if (!audienceA || audienceA.length < 5 || !audienceB || audienceB.length < 5) {
       reply.status(400);
       return { error: 'Both audience fields must be at least 5 characters.' };
+    }
+    if (audienceA.length > 500 || audienceB.length > 500) {
+      reply.status(400);
+      return { error: 'Audience fields must be under 500 characters each.' };
     }
 
     const efcIpHash = hashIp(req.ip);

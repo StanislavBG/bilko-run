@@ -98,6 +98,11 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       }
 
       const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
+      const allowedOrigin = new URL(publicUrl).origin;
+      const safeUrl = (raw: string | undefined, fallback: string): string => {
+        if (!raw) return fallback;
+        try { return new URL(raw).origin === allowedOrigin ? raw : fallback; } catch { return fallback; }
+      };
       const defaultSuccessUrl = (priceType === 'pageroast_tokens' || priceType === 'pageroast_token_single')
         ? `${publicUrl}/projects/page-roast?tokens=purchased`
         : `${publicUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -106,8 +111,8 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         customer: stripeCustomerId,
         client_reference_id: email,
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: body?.successUrl ?? defaultSuccessUrl,
-        cancel_url: body?.cancelUrl ?? `${publicUrl}?checkout=cancel`,
+        success_url: safeUrl(body?.successUrl, defaultSuccessUrl),
+        cancel_url: safeUrl(body?.cancelUrl, `${publicUrl}?checkout=cancel`),
       });
 
       return { url: session.url };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
 import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
@@ -57,8 +57,9 @@ function getBenchmark(score: number): string {
 
 export function AdScorerPage() {
   const {
-    result, compareResult, loading, error, needsTokens,
-    email, isSignedIn, submit, submitCompare, reset, signInRef, SignInButton: ClerkSignIn,
+    result, compareResult, generateResult, generating, genError,
+    loading, error, needsTokens,
+    email, isSignedIn, submit, submitCompare, submitGenerate, reset, signInRef, SignInButton: ClerkSignIn,
   } = useToolApi<ScorerResult>('ad-scorer');
 
   const [tab, setTab] = useState<'score' | 'compare' | 'generate'>('score');
@@ -68,9 +69,6 @@ export function AdScorerPage() {
   const [platform, setPlatform] = useState<Platform>('facebook');
   const [swipeFile, setSwipeFile] = useState<SwipeEntry[]>(loadSwipe);
   const [description, setDescription] = useState('');
-  const [generateResult, setGenerateResult] = useState<{ ads: Array<{ primary_text: string; headline: string; cta: string; predicted_score: number; approach: string }>; strategy_note: string } | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
 
   function saveToSwipe(rw: { text: string; predicted_score: number; optimized_for: string }) {
     const entry: SwipeEntry = { ...rw, platform, date: new Date().toISOString() };
@@ -83,13 +81,9 @@ export function AdScorerPage() {
 
   const activePlatform = PLATFORMS.find((p) => p.value === platform)!;
 
-  const API = import.meta.env.VITE_API_URL || '/api';
-
   function handleTabChange(next: 'score' | 'compare' | 'generate') {
     setTab(next);
     reset();
-    setGenerateResult(null);
-    setGenError(null);
   }
 
   function handleScore(e: React.FormEvent) {
@@ -104,29 +98,10 @@ export function AdScorerPage() {
     submitCompare({ adCopyA: adCopyA.trim(), adCopyB: adCopyB.trim(), platform });
   }
 
-  async function handleGenerate(e: React.FormEvent) {
+  function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
-    if (!description.trim() || !isSignedIn) {
-      signInRef.current?.click();
-      return;
-    }
-    setGenerating(true);
-    setGenerateResult(null);
-    setGenError(null);
-    try {
-      const res = await fetch(`${API}/demos/ad-scorer/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: description.trim(), platform, count: 3, email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
-      setGenerateResult(data);
-    } catch (err: any) {
-      setGenError(err.message);
-    } finally {
-      setGenerating(false);
-    }
+    if (!description.trim()) return;
+    submitGenerate({ description: description.trim(), platform, count: 3 });
   }
 
   const compare = compareResult as CompareResponse | null;
@@ -336,7 +311,7 @@ export function AdScorerPage() {
                 <p className="text-sm text-warm-700">{generateResult.strategy_note}</p>
               </div>
             )}
-            {generateResult.ads.map((ad, i) => (
+            {generateResult.ads.map((ad: { primary_text: string; headline: string; cta: string; predicted_score: number; approach: string }, i: number) => (
               <div key={i} className="bg-white rounded-2xl border border-warm-200/60 p-5 space-y-3" style={{ animationDelay: `${i * 80}ms` }}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-widest text-warm-400">Ad {i + 1}</span>

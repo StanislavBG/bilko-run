@@ -10,8 +10,11 @@ export function useToolApi<TResult>(endpoint: string) {
 
   const [result, setResult] = useState<TResult | null>(null);
   const [compareResult, setCompareResult] = useState<any | null>(null);
+  const [generateResult, setGenerateResult] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
   const [needsTokens, setNeedsTokens] = useState(false);
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
   const signInRef = useRef<HTMLButtonElement>(null);
@@ -55,17 +58,49 @@ export function useToolApi<TResult>(endpoint: string) {
   const submitCompare = (body: Record<string, unknown>) =>
     fetchEndpoint('/compare', body, setCompareResult);
 
+  async function submitGenerate(body: Record<string, unknown>) {
+    if (!isSignedIn) {
+      signInRef.current?.click();
+      return;
+    }
+    setGenerating(true);
+    setGenerateResult(null);
+    setGenError(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/demos/${endpoint}/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ ...body, email }),
+      });
+      const data = await res.json();
+      if (data.gated) { setGenError(data.message || 'Rate limit reached.'); return; }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setGenerateResult(data);
+    } catch (e: unknown) {
+      setGenError(e instanceof Error ? e.message : 'Generation failed.');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   function reset() {
     setResult(null);
     setCompareResult(null);
+    setGenerateResult(null);
     setError(null);
+    setGenError(null);
     setNeedsTokens(false);
   }
 
   return {
-    result, compareResult, loading, error, needsTokens, tokenBalance,
+    result, compareResult, generateResult, generating, genError,
+    loading, error, needsTokens, tokenBalance,
     email, isSignedIn,
-    submit, submitCompare, reset,
+    submit, submitCompare, submitGenerate, reset,
     signInRef, SignInButton,
   };
 }

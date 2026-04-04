@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
@@ -67,8 +67,9 @@ function analyzeHeadline(text: string) {
 
 export function HeadlineGraderPage() {
   const {
-    result, compareResult, loading, error, needsTokens,
-    email, isSignedIn, submit, submitCompare, reset, signInRef, SignInButton: ClerkSignIn,
+    result, compareResult, generateResult, generating, genError,
+    loading, error, needsTokens,
+    email, isSignedIn, submit, submitCompare, submitGenerate, reset, signInRef, SignInButton: ClerkSignIn,
   } = useToolApi<GradeResult>('headline-grader');
 
   const [tab, setTab] = useState<'score' | 'compare' | 'generate'>('score');
@@ -78,9 +79,6 @@ export function HeadlineGraderPage() {
   const [context, setContext] = useState('general');
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
   const [description, setDescription] = useState('');
-  const [generateResult, setGenerateResult] = useState<any | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
 
   useEffect(() => { document.title = 'Headline Grader — bilko.run'; }, []);
 
@@ -96,8 +94,6 @@ export function HeadlineGraderPage() {
   function handleTabChange(next: 'score' | 'compare' | 'generate') {
     setTab(next);
     reset();
-    setGenerateResult(null);
-    setGenError(null);
   }
 
   function handleScore(e: React.FormEvent) {
@@ -112,31 +108,10 @@ export function HeadlineGraderPage() {
     submitCompare({ headlineA: headlineA.trim(), headlineB: headlineB.trim() });
   }
 
-  const API = import.meta.env.VITE_API_URL || '/api';
-
-  async function handleGenerate(e: React.FormEvent) {
+  function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
-    if (!description.trim() || !isSignedIn) {
-      signInRef.current?.click();
-      return;
-    }
-    setGenerating(true);
-    setGenerateResult(null);
-    setGenError(null);
-    try {
-      const res = await fetch(`${API}/demos/headline-grader/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: description.trim(), context, count: 5, email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
-      setGenerateResult(data);
-    } catch (err: any) {
-      setGenError(err.message);
-    } finally {
-      setGenerating(false);
-    }
+    if (!description.trim()) return;
+    submitGenerate({ description: description.trim(), context, count: 5 });
   }
 
   const compare = compareResult as CompareResponse | null;

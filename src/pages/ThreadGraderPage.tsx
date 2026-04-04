@@ -44,7 +44,11 @@ function viralPotential(score: number) {
 }
 
 export function ThreadGraderPage() {
-  const { result, compareResult, loading, error, needsTokens, email, isSignedIn, submit, submitCompare, reset, signInRef } = useToolApi<GraderResult>('thread-grader');
+  const {
+    result, compareResult, generateResult, generating, genError,
+    loading, error, needsTokens, email, isSignedIn,
+    submit, submitCompare, submitGenerate, reset, signInRef,
+  } = useToolApi<GraderResult>('thread-grader');
 
   const [tab, setTab] = useState<'score' | 'compare' | 'generate'>('score');
   const [thread, setThread] = useState('');
@@ -54,9 +58,6 @@ export function ThreadGraderPage() {
   const [hooks, setHooks] = useState<HookEntry[]>(loadHooks);
   const [topic, setTopic] = useState('');
   const [genTweetCount, setGenTweetCount] = useState(7);
-  const [generateResult, setGenerateResult] = useState<{ thread: Array<{ position: number; text: string; purpose: string }>; hook_technique: string; predicted_viral_score: number; strategy_note: string } | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
 
   function saveHook(rw: { text: string; label: string }) {
     const entry: HookEntry = { text: rw.text, label: rw.label, date: new Date().toISOString() };
@@ -65,38 +66,15 @@ export function ThreadGraderPage() {
     setHooks(updated);
   }
 
-  const API = import.meta.env.VITE_API_URL || '/api';
-
   function handleTabChange(next: 'score' | 'compare' | 'generate') {
     setTab(next);
     reset();
-    setGenerateResult(null);
-    setGenError(null);
   }
 
-  async function handleGenerate(e: React.FormEvent) {
+  function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
-    if (!topic.trim() || !isSignedIn) {
-      signInRef.current?.click();
-      return;
-    }
-    setGenerating(true);
-    setGenerateResult(null);
-    setGenError(null);
-    try {
-      const res = await fetch(`${API}/demos/thread-grader/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.trim(), tweetCount: genTweetCount, email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
-      setGenerateResult(data);
-    } catch (err: any) {
-      setGenError(err.message);
-    } finally {
-      setGenerating(false);
-    }
+    if (!topic.trim()) return;
+    submitGenerate({ topic: topic.trim(), tweetCount: genTweetCount });
   }
 
   useEffect(() => {
@@ -286,7 +264,7 @@ export function ThreadGraderPage() {
           {/* Thread display */}
           <div className="bg-white rounded-2xl border border-warm-200/60 p-6 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Generated Thread ({generateResult.thread.length} tweets)</h3>
-            {generateResult.thread.map((tweet, i) => {
+            {generateResult.thread.map((tweet: { position: number; text: string; purpose: string }, i: number) => {
               const purposeColors: Record<string, string> = {
                 hook: 'bg-fire-50 text-fire-600',
                 tension: 'bg-yellow-50 text-yellow-700',
@@ -313,14 +291,14 @@ export function ThreadGraderPage() {
           {/* Action buttons */}
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => navigator.clipboard.writeText(generateResult.thread.map(t => t.text).join('\n\n'))}
+              onClick={() => navigator.clipboard.writeText(generateResult.thread.map((t: { text: string }) => t.text).join('\n\n'))}
               className="px-5 py-2.5 border border-warm-200 text-warm-700 hover:bg-warm-50 font-bold rounded-xl transition-colors text-sm"
             >
               Copy Full Thread
             </button>
             <button
               onClick={() => {
-                setThread(generateResult.thread.map(t => t.text).join('\n\n---\n\n'));
+                setThread(generateResult.thread.map((t: { text: string }) => t.text).join('\n\n---\n\n'));
                 handleTabChange('score');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}

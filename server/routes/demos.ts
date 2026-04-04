@@ -404,34 +404,62 @@ Write the verdict and suggested hybrid.`;
     }
   });
 
-  // ── Headline Generator (inverse mode) ──────────────────────────
-  app.post('/api/demos/headline-grader/generate', async (req, reply) => {
-    const body = req.body as { description?: string; context?: string; count?: number; email?: string } | null;
-    const description = (body?.description ?? '').trim();
-    if (!description || description.length < 10) {
+  // ── Shared generate endpoint helper ────────────────────────────
+  async function handleGenerateEndpoint(
+    req: import('fastify').FastifyRequest,
+    reply: import('fastify').FastifyReply,
+    opts: {
+      endpoint: string;
+      inputField: string;
+      inputText: string;
+      bodyEmail?: string; // unused — auth via Clerk JWT only
+      systemPrompt: string;
+      userPrompt: string;
+      logTag: string;
+      maxInputLen?: number;
+    },
+  ) {
+    const input = opts.inputText;
+    if (!input || input.length < 10) {
       reply.status(400);
-      return { error: 'Describe your product or page in at least 10 characters.' };
+      return { error: `Describe your ${opts.inputField} in at least 10 characters.` };
     }
-    if (description.length > 2000) {
+    if (input.length > (opts.maxInputLen ?? 2000)) {
       reply.status(400);
-      return { error: 'Description must be under 2000 characters.' };
+      return { error: `Input must be under ${opts.maxInputLen ?? 2000} characters.` };
     }
 
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
-    if (!email || !EMAIL_RE.test(email)) {
+    const email = await verifyClerkToken(req.headers.authorization);
+    if (!email) {
       reply.status(401);
       return { error: 'Sign in required.', requiresEmail: true };
     }
 
-    const context = body?.context ?? 'landing';
-    const count = Math.min(Math.max(body?.count ?? 5, 3), 10);
     const ipHash = hashIp(req.ip);
-    const rate = await checkRateLimit(ipHash, HEADLINE_GRADER_ENDPOINT, email);
+    const rate = await checkRateLimit(ipHash, opts.endpoint, email);
     if (!rate.allowed) {
       reply.status(429);
-      return { gated: true, remaining: 0, limit: rate.limit, isPro: rate.isPro, message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg('headline generation') };
+      return { gated: true, remaining: 0, limit: rate.limit, isPro: rate.isPro, message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg(`${opts.inputField} generation`) };
     }
+
+    try {
+      const raw = await askGemini(opts.userPrompt, { systemPrompt: opts.systemPrompt });
+      const parsed = parseResult(raw);
+      await incrementUsage(ipHash, opts.endpoint);
+      return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
+    } catch (err: any) {
+      console.error(opts.logTag, err);
+      reply.status(500);
+      return { error: `Generation failed: ${err.message}` };
+    }
+  }
+
+  // ── Headline Generator (inverse mode) ──────────────────────────
+  app.post('/api/demos/headline-grader/generate', async (req, reply) => {
+    const body = req.body as { description?: string; context?: string; count?: number; email?: string } | null;
+    const description = (body?.description ?? '').trim();
+    const context = body?.context ?? 'landing';
+    const count = Math.min(Math.max(body?.count ?? 5, 3), 10);
 
     const systemPrompt = `You are a world-class direct response copywriter. Generate ${count} high-converting headlines for the given product/page description.
 
@@ -458,42 +486,24 @@ Respond ONLY with valid JSON:
   "strategy_note": "<1 sentence: what makes these headlines work for this specific product>"
 }`;
 
-    try {
-      const raw = await askGemini(`Generate ${count} high-converting headlines for this:\n\n${description}`, { systemPrompt });
-      const parsed = parseResult(raw);
-      await incrementUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
-      return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
-    } catch (err: any) {
-      console.error('headline_generator', err);
-      reply.status(500);
-      return { error: `Generation failed: ${err.message}` };
-    }
+    return handleGenerateEndpoint(req, reply, {
+      endpoint: HEADLINE_GRADER_ENDPOINT,
+      inputField: 'product or page',
+      inputText: description,
+      bodyEmail: body?.email,
+      systemPrompt,
+      userPrompt: `Generate ${count} high-converting headlines for this:\n\n${description}`,
+      logTag: 'headline_generator',
+    });
   });
 
   // ── Ad Copy Generator (inverse mode) ──────────────────────────
   app.post('/api/demos/ad-scorer/generate', async (req, reply) => {
     const body = req.body as { description?: string; platform?: string; count?: number; email?: string } | null;
     const description = (body?.description ?? '').trim();
-    if (!description || description.length < 10) {
-      reply.status(400);
-      return { error: 'Describe your product in at least 10 characters.' };
-    }
-
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
-    if (!email || !EMAIL_RE.test(email)) {
-      reply.status(401);
-      return { error: 'Sign in required.', requiresEmail: true };
-    }
-
-    const platform = body?.platform ?? 'facebook';
+    const validPlatforms = ['facebook', 'google', 'linkedin'] as const;
+    const platform = validPlatforms.includes(body?.platform as any) ? body!.platform! : 'facebook';
     const count = Math.min(Math.max(body?.count ?? 3, 2), 5);
-    const ipHash = hashIp(req.ip);
-    const rate = await checkRateLimit(ipHash, 'ad-scorer', email);
-    if (!rate.allowed) {
-      reply.status(429);
-      return { gated: true, remaining: 0, limit: rate.limit, isPro: rate.isPro, message: freeGateMsg('ad generation') };
-    }
 
     const platformLimits: Record<string, string> = {
       facebook: 'Primary text: 125 chars, Headline: 40 chars, Description: 30 chars',
@@ -517,41 +527,22 @@ Respond ONLY with valid JSON:
   "strategy_note": "<1 sentence: what makes these ads work for this product on ${platform}>"
 }`;
 
-    try {
-      const raw = await askGemini(`Generate ${count} ${platform} ad variants for:\n\n${description}`, { systemPrompt });
-      const parsed = parseResult(raw);
-      await incrementUsage(ipHash, 'ad-scorer');
-      return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
-    } catch (err: any) {
-      console.error('ad_generator', err);
-      reply.status(500);
-      return { error: `Generation failed: ${err.message}` };
-    }
+    return handleGenerateEndpoint(req, reply, {
+      endpoint: 'ad-scorer',
+      inputField: 'product',
+      inputText: description,
+      bodyEmail: body?.email,
+      systemPrompt,
+      userPrompt: `Generate ${count} ${platform} ad variants for:\n\n${description}`,
+      logTag: 'ad_generator',
+    });
   });
 
   // ── Thread Generator (inverse mode) ───────────────────────────
   app.post('/api/demos/thread-grader/generate', async (req, reply) => {
     const body = req.body as { topic?: string; tweetCount?: number; email?: string } | null;
     const topic = (body?.topic ?? '').trim();
-    if (!topic || topic.length < 10) {
-      reply.status(400);
-      return { error: 'Describe your topic in at least 10 characters.' };
-    }
-
-    const clerkEmail = await verifyClerkToken(req.headers.authorization);
-    const email = clerkEmail || (body?.email ?? '').trim().toLowerCase();
-    if (!email || !EMAIL_RE.test(email)) {
-      reply.status(401);
-      return { error: 'Sign in required.', requiresEmail: true };
-    }
-
     const tweetCount = Math.min(Math.max(body?.tweetCount ?? 7, 3), 15);
-    const ipHash = hashIp(req.ip);
-    const rate = await checkRateLimit(ipHash, 'thread-grader', email);
-    if (!rate.allowed) {
-      reply.status(429);
-      return { gated: true, remaining: 0, limit: rate.limit, isPro: rate.isPro, message: freeGateMsg('thread generation') };
-    }
 
     const systemPrompt = `You are a viral X/Twitter thread writer. Generate a ${tweetCount}-tweet thread on the given topic.
 
@@ -573,16 +564,15 @@ Respond ONLY with valid JSON:
   "strategy_note": "<1 sentence: why this thread structure works>"
 }`;
 
-    try {
-      const raw = await askGemini(`Write a ${tweetCount}-tweet viral thread about:\n\n${topic}`, { systemPrompt });
-      const parsed = parseResult(raw);
-      await incrementUsage(ipHash, 'thread-grader');
-      return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
-    } catch (err: any) {
-      console.error('thread_generator', err);
-      reply.status(500);
-      return { error: `Generation failed: ${err.message}` };
-    }
+    return handleGenerateEndpoint(req, reply, {
+      endpoint: 'thread-grader',
+      inputField: 'topic',
+      inputText: topic,
+      bodyEmail: body?.email,
+      systemPrompt,
+      userPrompt: `Write a ${tweetCount}-tweet viral thread about:\n\n${topic}`,
+      logTag: 'thread_generator',
+    });
   });
 
   // ── Page Roast ──────────────────────────────────────

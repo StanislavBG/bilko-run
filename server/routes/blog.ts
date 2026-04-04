@@ -48,6 +48,11 @@ export function registerBlogRoutes(app: FastifyInstance): void {
   app.put('/api/blog/admin/:id', async (req, reply) => {
     if (!await requireAdmin(req, reply)) return;
     const { id } = req.params as { id: string };
+    const numericId = parseInt(id, 10);
+    if (!Number.isFinite(numericId) || numericId < 1) {
+      reply.status(400);
+      return { error: 'Invalid post id' };
+    }
     const body = req.body as any;
     const { title, excerpt, content, category, cover_image, published } = body;
     await dbRun(
@@ -56,7 +61,7 @@ export function registerBlogRoutes(app: FastifyInstance): void {
        updated_at = ? WHERE id = ?`,
       title, excerpt, content, category, cover_image,
       published ? 1 : 0, published ? 1 : 0, new Date().toISOString(),
-      new Date().toISOString(), parseInt(id, 10),
+      new Date().toISOString(), numericId,
     );
     return { ok: true };
   });

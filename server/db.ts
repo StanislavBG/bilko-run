@@ -22,14 +22,6 @@ export function getClient(): Client {
   return _client;
 }
 
-/** Reset the DB singleton — used in tests. */
-export function _resetDbForTests(): void {
-  if (_client) {
-    _client.close();
-    _client = null;
-  }
-}
-
 // ── Query helpers ───────────────────────────────────────────────────────────
 
 type Executor = { execute(stmt: { sql: string; args: any[] }): Promise<any> };

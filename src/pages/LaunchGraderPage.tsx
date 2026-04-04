@@ -154,7 +154,7 @@ export function LaunchGraderPage() {
             Competitors charge $30-100/month for this analysis. You just paid $1.
           </div>
 
-          <CrossPromo currentTool="page-roast" />
+          <CrossPromo currentTool="launch-grader" />
 
           <div className="text-center pt-4">
             <button

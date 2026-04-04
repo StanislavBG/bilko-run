@@ -391,6 +391,9 @@ export function AdminPage() {
                     { name: 'EmailForge', status: 'live', path: '/projects/email-forge' },
                     { name: 'AudienceDecoder', status: 'live', path: '/projects/audience-decoder' },
                     { name: 'Stepproof', status: 'live', path: '/projects/stepproof' },
+                    { name: 'LaunchGrader', status: 'live', path: '/projects/launch-grader' },
+                    { name: 'StackAudit', status: 'live', path: '/projects/stack-audit' },
+                    { name: 'LocalScore', status: 'live', path: '/projects/local-score' },
                     { name: 'AgentTrace', status: 'cli', path: '' },
                   ].map(p => (
                     <div key={p.name} className="border border-warm-100 rounded-lg p-3">

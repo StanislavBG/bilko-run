@@ -14,7 +14,7 @@ export function TermsPage() {
       <div className="prose-warm space-y-8 text-warm-700 text-sm leading-relaxed">
         <div>
           <h2 className="text-lg font-bold text-warm-900 mb-2">1. Acceptance</h2>
-          <p>By using bilko.run and its tools (PageRoast, HeadlineGrader, AdScorer, ThreadGrader, EmailForge, AudienceDecoder, Stepproof), you agree to these terms. If you don't agree, don't use the service.</p>
+          <p>By using bilko.run and its tools (PageRoast, HeadlineGrader, AdScorer, ThreadGrader, EmailForge, AudienceDecoder, Stepproof, LaunchGrader, StackAudit, LocalScore), you agree to these terms. If you don't agree, don't use the service.</p>
         </div>
 
         <div>

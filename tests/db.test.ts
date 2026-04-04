@@ -1,17 +1,23 @@
-import { describe, it, expect } from 'vitest';
-import { getDb } from '../server/db.js';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { dbGet, dbAll, initDb } from '../server/db.js';
+
+beforeAll(async () => {
+  // Use local file DB (TURSO_DATABASE_URL unset in dev)
+  await initDb();
+});
 
 describe('Database', () => {
-  it('initializes without errors', () => {
-    const db = getDb();
-    expect(db).toBeDefined();
+  it('initializes without errors', async () => {
+    // initDb already ran in beforeAll — just verify we can query
+    const row = await dbGet<{ n: number }>('SELECT 1 as n');
+    expect(row).toBeDefined();
+    expect(row!.n).toBe(1);
   });
 
-  it('has all required tables', () => {
-    const db = getDb();
-    const tables = db.prepare(
+  it('has all required tables', async () => {
+    const tables = await dbAll<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    ).all() as Array<{ name: string }>;
+    );
     const names = tables.map(t => t.name);
 
     expect(names).toContain('token_balances');
@@ -25,16 +31,9 @@ describe('Database', () => {
     expect(names).toContain('stripe_subscriptions');
   });
 
-  it('seeds Wall of Shame with sample roasts', () => {
-    const db = getDb();
-    const count = db.prepare('SELECT COUNT(*) as n FROM roast_history').get() as { n: number };
-    expect(count.n).toBeGreaterThanOrEqual(6);
-  });
-
-  it('uses WAL mode in non-memory DB', () => {
-    // In-memory DBs use 'memory' journal mode, WAL only applies to file-based DBs
-    const db = getDb();
-    const mode = db.pragma('journal_mode') as Array<{ journal_mode: string }>;
-    expect(['wal', 'memory']).toContain(mode[0].journal_mode);
+  it('seeds Wall of Shame with sample roasts', async () => {
+    const count = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history');
+    expect(count).toBeDefined();
+    expect(count!.n).toBeGreaterThanOrEqual(6);
   });
 });

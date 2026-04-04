@@ -4,23 +4,25 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-do
 import { Layout } from './components/Layout.js';
 import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
-import { PageRoastPage } from './pages/PageRoastPage.js';
-import { HeadlineGraderPage } from './pages/HeadlineGraderPage.js';
-import { AdScorerPage } from './pages/AdScorerPage.js';
-import { ThreadGraderPage } from './pages/ThreadGraderPage.js';
-import { EmailForgePage } from './pages/EmailForgePage.js';
-import { AudienceDecoderPage } from './pages/AudienceDecoderPage.js';
-import { StepproofPage } from './pages/StepproofPage.js';
-import { LaunchGraderPage } from './pages/LaunchGraderPage.js';
-import { StackAuditPage } from './pages/StackAuditPage.js';
-import { LocalScorePage } from './pages/LocalScorePage.js';
 import { BlogPage } from './pages/BlogPage.js';
-import { BlogPostPage } from './pages/BlogPostPage.js';
 import { PricingPage } from './pages/PricingPage.js';
 import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
+
+// Lazy-loaded tool pages (code-split for smaller initial bundle)
+const PageRoastPage = React.lazy(() => import('./pages/PageRoastPage.js').then(m => ({ default: m.PageRoastPage })));
+const HeadlineGraderPage = React.lazy(() => import('./pages/HeadlineGraderPage.js').then(m => ({ default: m.HeadlineGraderPage })));
+const AdScorerPage = React.lazy(() => import('./pages/AdScorerPage.js').then(m => ({ default: m.AdScorerPage })));
+const ThreadGraderPage = React.lazy(() => import('./pages/ThreadGraderPage.js').then(m => ({ default: m.ThreadGraderPage })));
+const EmailForgePage = React.lazy(() => import('./pages/EmailForgePage.js').then(m => ({ default: m.EmailForgePage })));
+const AudienceDecoderPage = React.lazy(() => import('./pages/AudienceDecoderPage.js').then(m => ({ default: m.AudienceDecoderPage })));
+const StepproofPage = React.lazy(() => import('./pages/StepproofPage.js').then(m => ({ default: m.StepproofPage })));
+const LaunchGraderPage = React.lazy(() => import('./pages/LaunchGraderPage.js').then(m => ({ default: m.LaunchGraderPage })));
+const StackAuditPage = React.lazy(() => import('./pages/StackAuditPage.js').then(m => ({ default: m.StackAuditPage })));
+const LocalScorePage = React.lazy(() => import('./pages/LocalScorePage.js').then(m => ({ default: m.LocalScorePage })));
+const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
 
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
@@ -92,18 +94,18 @@ function AppRoutes() {
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/page-roast" element={<PageRoastPage />} />
-            <Route path="/projects/headline-grader" element={<HeadlineGraderPage />} />
-            <Route path="/projects/ad-scorer" element={<AdScorerPage />} />
-            <Route path="/projects/thread-grader" element={<ThreadGraderPage />} />
-            <Route path="/projects/email-forge" element={<EmailForgePage />} />
-            <Route path="/projects/audience-decoder" element={<AudienceDecoderPage />} />
-            <Route path="/projects/stepproof" element={<StepproofPage />} />
-            <Route path="/projects/launch-grader" element={<LaunchGraderPage />} />
-            <Route path="/projects/stack-audit" element={<StackAuditPage />} />
-            <Route path="/projects/local-score" element={<LocalScorePage />} />
+            <Route path="/projects/page-roast" element={<React.Suspense fallback={null}><PageRoastPage /></React.Suspense>} />
+            <Route path="/projects/headline-grader" element={<React.Suspense fallback={null}><HeadlineGraderPage /></React.Suspense>} />
+            <Route path="/projects/ad-scorer" element={<React.Suspense fallback={null}><AdScorerPage /></React.Suspense>} />
+            <Route path="/projects/thread-grader" element={<React.Suspense fallback={null}><ThreadGraderPage /></React.Suspense>} />
+            <Route path="/projects/email-forge" element={<React.Suspense fallback={null}><EmailForgePage /></React.Suspense>} />
+            <Route path="/projects/audience-decoder" element={<React.Suspense fallback={null}><AudienceDecoderPage /></React.Suspense>} />
+            <Route path="/projects/stepproof" element={<React.Suspense fallback={null}><StepproofPage /></React.Suspense>} />
+            <Route path="/projects/launch-grader" element={<React.Suspense fallback={null}><LaunchGraderPage /></React.Suspense>} />
+            <Route path="/projects/stack-audit" element={<React.Suspense fallback={null}><StackAuditPage /></React.Suspense>} />
+            <Route path="/projects/local-score" element={<React.Suspense fallback={null}><LocalScorePage /></React.Suspense>} />
             <Route path="/blog" element={<BlogPage />} />
-            <Route path="/blog/:slug" element={<BlogPostPage />} />
+            <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />

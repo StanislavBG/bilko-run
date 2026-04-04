@@ -65,7 +65,7 @@ export function HomePage() {
             Good. Keep reading.
           </p>
           <p className="mt-4 text-sm text-warm-400">
-            9 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
+            10 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
           </p>
         </div>
       </header>
@@ -227,6 +227,8 @@ export function HomePage() {
               desc: 'AI audits go-to-market readiness across 5 dimensions: value prop, pricing, social proof, onboarding, and positioning. Get a score, blockers, and a verdict.', live: true },
             { name: 'StackAudit', slug: 'stack-audit', cat: 'Operations', tagline: 'Find waste in your SaaS stack',
               desc: 'Paste your tool list. AI finds overlap, cheaper alternatives, self-hosted options, and calculates exactly how much you\'d save. Enterprise audit for $1.', live: true },
+            { name: 'LocalScore', slug: 'local-score', cat: 'Privacy', tagline: 'Private document analysis — in your browser',
+              desc: 'Analyze contracts, financials, and sensitive docs with AI that runs entirely in your browser. Your data never leaves your device. Free. Powered by Gemma via WebGPU.', live: true },
             { name: 'Stepproof', slug: 'stepproof', cat: 'Dev Tools', tagline: 'Regression tests for AI pipelines',
               desc: 'Write YAML scenarios, run them N times, check assertions. Preset scenarios or BYOK. Like unit tests, but for LLMs.', live: true },
             { name: 'AgentTrace', slug: 'agent-trace', cat: 'Dev Tools', tagline: 'Local observability for AI agents',

@@ -85,6 +85,15 @@ const PROJECTS: Project[] = [
     features: ['Cost analysis', 'Overlap detection', 'Alternative suggestions', 'Savings calculator'],
   },
   {
+    slug: 'local-score',
+    name: 'LocalScore',
+    tagline: 'Private document analysis — runs in your browser',
+    description: 'Analyze contracts, financials, meeting notes, and sensitive documents with AI that runs entirely in your browser. Your data never leaves your device. Powered by Gemma via WebGPU. Free.',
+    status: 'live' as const,
+    category: 'devtools' as const,
+    features: ['100% local', 'Zero API costs', 'Works offline', 'GDPR-friendly'],
+  },
+  {
     slug: 'stepproof',
     name: 'Stepproof',
     tagline: 'Regression tests for AI pipelines',

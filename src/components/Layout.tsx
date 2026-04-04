@@ -13,6 +13,7 @@ const PROJECT_LINKS = [
   { to: '/projects/audience-decoder', label: 'AudienceDecoder' },
   { to: '/projects/launch-grader', label: 'LaunchGrader' },
   { to: '/projects/stack-audit', label: 'StackAudit' },
+  { to: '/projects/local-score', label: 'LocalScore', badge: '🔒' },
   { to: '/projects/stepproof', label: 'Stepproof' },
   { to: '/projects', label: 'All Projects' },
 ] as const;

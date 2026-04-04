@@ -129,6 +129,11 @@ if (isProd) {
         description: 'Paste your social content. AI identifies audience archetypes, engagement patterns, and growth opportunities.',
         url: 'https://bilko.run/projects/audience-decoder',
       },
+      '/projects/local-score': {
+        title: 'LocalScore — Private Document Analyzer (Runs in Your Browser)',
+        description: 'AI analyzes your documents locally via WebGPU. Your data never leaves your device. Contracts, financials, meeting notes. Free. Powered by Gemma.',
+        url: 'https://bilko.run/projects/local-score',
+      },
       '/projects/stack-audit': {
         title: 'StackAudit — Find Waste in Your SaaS Stack',
         description: 'AI analyzes your tool stack for overlap, cheaper alternatives, and savings. Enterprise-grade audit for $1. No integration required.',

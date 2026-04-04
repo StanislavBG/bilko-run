@@ -89,6 +89,9 @@ export function LaunchGraderPage() {
           <p className="mt-2 text-xs text-warm-500 text-center">
             Paste your URL + describe what it does &middot; ~30 seconds &middot; Cmd+Enter to submit
           </p>
+          <p className="text-xs text-warm-400 text-center mt-1">
+            Pro tip: Audit a competitor's product to benchmark your readiness against theirs.
+          </p>
         </div>
       </ToolHero>
 

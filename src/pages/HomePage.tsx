@@ -65,7 +65,7 @@ export function HomePage() {
             Good. Keep reading.
           </p>
           <p className="mt-4 text-sm text-warm-400">
-            7 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
+            8 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
           </p>
         </div>
       </header>
@@ -223,6 +223,8 @@ export function HomePage() {
               desc: 'Creates 5-email sequences using AIDA, PAS, Hormozi, Cialdini, and Storytelling frameworks. Full sequences with estimated open/click rates.', live: true },
             { name: 'AudienceDecoder', slug: 'audience-decoder', cat: 'Content', tagline: 'Decode who actually follows you',
               desc: 'Identifies audience archetypes, content patterns, engagement model, growth opportunities, and builds a content calendar. Your audience, decoded.', live: true },
+            { name: 'LaunchGrader', slug: 'launch-grader', cat: 'Marketing', tagline: 'Is your product ready to launch?',
+              desc: 'AI audits go-to-market readiness across 5 dimensions: value prop, pricing, social proof, onboarding, and positioning. Get a score, blockers, and a verdict.', live: true },
             { name: 'Stepproof', slug: 'stepproof', cat: 'Dev Tools', tagline: 'Regression tests for AI pipelines',
               desc: 'Write YAML scenarios, run them N times, check assertions. Preset scenarios or BYOK. Like unit tests, but for LLMs.', live: true },
             { name: 'AgentTrace', slug: 'agent-trace', cat: 'Dev Tools', tagline: 'Local observability for AI agents',

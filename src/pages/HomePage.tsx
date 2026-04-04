@@ -66,6 +66,25 @@ export function HomePage() {
           <p className="mt-4 text-sm text-warm-400">
             10 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
           </p>
+
+          {/* Quick start */}
+          <div className="mt-8 bg-warm-50 rounded-2xl border border-warm-200/60 p-5 text-left max-w-lg">
+            <p className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-3">Start here</p>
+            <div className="space-y-2">
+              {[
+                { emoji: '🔥', text: 'Landing page not converting?', to: '/projects/page-roast' },
+                { emoji: '✍️', text: 'Need better copy?', to: '/projects/headline-grader' },
+                { emoji: '💸', text: 'Spending too much on SaaS?', to: '/projects/stack-audit' },
+                { emoji: '🔒', text: 'Sensitive docs to analyze?', to: '/projects/local-score' },
+              ].map(({ emoji, text, to }) => (
+                <Link key={to} to={to} className="flex items-center gap-3 p-2 rounded-lg hover:bg-warm-100 transition-colors group">
+                  <span className="text-lg">{emoji}</span>
+                  <span className="text-sm text-warm-700 group-hover:text-fire-600 font-medium">{text}</span>
+                  <svg className="w-3.5 h-3.5 text-warm-300 group-hover:text-fire-500 ml-auto" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </header>
 

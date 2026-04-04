@@ -167,66 +167,269 @@ export function StepproofPage() {
       {/* Below-fold engagement content — only when idle */}
       {!report && !running && (
         <div className="max-w-2xl mx-auto px-6 pt-10 pb-8 space-y-10">
-          {/* How it works */}
+
+          {/* 1. Example result */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">Example Result</h3>
+            <p className="text-sm text-warm-500 mb-4">What a passing test run looks like.</p>
+            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-5 text-center mb-4">
+              <p className="text-2xl font-black text-green-700">ALL PASSED</p>
+              <p className="text-sm text-green-600 mt-1">Sentiment Classifier &middot; 3 iterations &middot; 4.2s</p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-warm-100">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center font-black text-xs">&#10003;</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-warm-800">classify_sentiment</span>
+                    <span className="text-xs text-warm-400">3/3 passed</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 h-1.5 bg-warm-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-green-500 w-full" /></div>
+                    <span className="text-xs font-bold text-warm-600">100%</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-warm-100">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center font-black text-xs">&#10003;</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-warm-800">validate_format</span>
+                    <span className="text-xs text-warm-400">3/3 passed</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 h-1.5 bg-warm-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-green-500 w-full" /></div>
+                    <span className="text-xs font-bold text-warm-600">100%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-warm-400 mt-3 text-center">2 steps, 3 iterations each, all assertions passed in 4.2 seconds.</p>
+          </div>
+
+          {/* 2. Assertion types with YAML examples */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">5 Assertion Types</h3>
+            <div className="space-y-4">
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900 font-mono">contains</p>
+                <p className="text-sm text-warm-600 mt-1">Check that the output includes a specific substring. Case-insensitive.</p>
+                <pre className="mt-2 text-xs text-warm-500 bg-white rounded-lg p-2.5 font-mono overflow-x-auto">{'- type: contains\n  value: "positive"'}</pre>
+              </div>
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900 font-mono">not_contains</p>
+                <p className="text-sm text-warm-600 mt-1">Fail if the output includes a forbidden substring.</p>
+                <pre className="mt-2 text-xs text-warm-500 bg-white rounded-lg p-2.5 font-mono overflow-x-auto">{'- type: not_contains\n  value: "I cannot"'}</pre>
+              </div>
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900 font-mono">regex</p>
+                <p className="text-sm text-warm-600 mt-1">Match the output against a regular expression pattern.</p>
+                <pre className="mt-2 text-xs text-warm-500 bg-white rounded-lg p-2.5 font-mono overflow-x-auto">{'- type: regex\n  value: "^(positive|negative|neutral)$"'}</pre>
+              </div>
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900 font-mono">json_schema</p>
+                <p className="text-sm text-warm-600 mt-1">Validate that the output is valid JSON matching a given schema.</p>
+                <pre className="mt-2 text-xs text-warm-500 bg-white rounded-lg p-2.5 font-mono overflow-x-auto">{'- type: json_schema\n  value:\n    type: object\n    required: [sentiment, confidence]'}</pre>
+              </div>
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900 font-mono">llm_judge</p>
+                <p className="text-sm text-warm-600 mt-1">Ask another LLM to evaluate the output against a rubric. The meta-assertion.</p>
+                <pre className="mt-2 text-xs text-warm-500 bg-white rounded-lg p-2.5 font-mono overflow-x-auto">{'- type: llm_judge\n  value: "Is the response helpful and on-topic?"'}</pre>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Preset library */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">Preset Library</h3>
+            <p className="text-sm text-warm-500 mb-5">Ready-made scenarios. Click and run — no YAML required.</p>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black">1</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Sentiment Classifier</p>
+                  <p className="text-sm text-warm-600">Tests whether your LLM can classify text as positive, negative, or neutral — and return valid JSON.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">2</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Multi-Step Pipeline</p>
+                  <p className="text-sm text-warm-600">Chains two steps together — the output of step 1 feeds into step 2. Tests variable passing and pipeline coherence.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-black">3</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">JSON Format Guard</p>
+                  <p className="text-sm text-warm-600">Validates that LLM output is well-formed JSON matching a strict schema. Catches the "almost JSON" problem.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-black">4</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Safety Guard</p>
+                  <p className="text-sm text-warm-600">Sends adversarial prompts and checks that the model refuses appropriately. Tests your guardrails under pressure.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-xs font-black">5</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">Structured Output</p>
+                  <p className="text-sm text-warm-600">Tests multi-field structured generation — names, dates, categories — with regex and schema validation.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. BYOK explained */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">Bring Your Own Keys</h3>
+            <p className="text-sm text-warm-600 mt-2">
+              Presets use <span className="font-bold text-warm-800">Gemini</span> — completely free, no API key needed.
+              Custom YAML can target <span className="font-bold text-warm-800">OpenAI</span> or <span className="font-bold text-warm-800">Anthropic</span> models — just paste your key before running.
+            </p>
+            <p className="text-sm text-warm-600 mt-2">
+              Keys are sent with the request only. They are <span className="font-bold text-warm-800">never stored</span>, never logged, never leave the server process.
+            </p>
+          </div>
+
+          {/* 5. Who uses this */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Who Uses This</h3>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900">AI Engineers</p>
+                <p className="text-xs text-warm-600 mt-1">Regression-test prompt changes before deploying to production.</p>
+              </div>
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900">Prompt Engineers</p>
+                <p className="text-xs text-warm-600 mt-1">Validate that prompt tweaks don't break downstream behavior.</p>
+              </div>
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900">QA Teams</p>
+                <p className="text-xs text-warm-600 mt-1">Run repeatable checks on AI features the same way you test APIs.</p>
+              </div>
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                <p className="text-sm font-bold text-warm-900">Founders Testing AI Features</p>
+                <p className="text-xs text-warm-600 mt-1">Ship AI features with confidence, not crossed fingers.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 6. vs Alternatives */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Stepproof vs Alternatives</h3>
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-warm-900">Promptfoo</p>
+                  <span className="text-[10px] font-bold text-warm-400 uppercase">OpenAI-owned</span>
+                </div>
+                <p className="text-xs text-warm-600 mt-1">Acquired by OpenAI. Great CLI, but now vendor-locked. Stepproof is provider-independent — test any model.</p>
+              </div>
+              <div className="p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-warm-900">DeepEval</p>
+                  <span className="text-[10px] font-bold text-warm-400 uppercase">50+ metrics</span>
+                </div>
+                <p className="text-xs text-warm-600 mt-1">Powerful but complex — 50+ metrics, steep learning curve. Stepproof: 5 assertion types, one YAML file, done.</p>
+              </div>
+              <div className="p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-warm-900">Confident AI</p>
+                  <span className="text-[10px] font-bold text-warm-400 uppercase">$49/mo</span>
+                </div>
+                <p className="text-xs text-warm-600 mt-1">SaaS platform with dashboards and teams. Stepproof is $1 per run — no subscription, no seat licenses.</p>
+              </div>
+              <div className="p-3 rounded-xl border border-warm-100 bg-warm-50/50">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-warm-900">Braintrust</p>
+                  <span className="text-[10px] font-bold text-warm-400 uppercase">$249/mo</span>
+                </div>
+                <p className="text-xs text-warm-600 mt-1">Enterprise eval platform. Great for teams of 20+. Overkill for a solo dev testing a prompt chain.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 7. Stats bar */}
+          <div className="bg-warm-900 rounded-2xl p-6">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-2xl font-black text-white">5</p>
+                <p className="text-xs text-warm-400 mt-0.5">Presets</p>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-white">5</p>
+                <p className="text-xs text-warm-400 mt-0.5">Assertion Types</p>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-white">3</p>
+                <p className="text-xs text-warm-400 mt-0.5">Providers</p>
+              </div>
+            </div>
+            <p className="text-xs text-warm-500 text-center mt-3">Gemini, OpenAI, Anthropic — same YAML, any model.</p>
+          </div>
+
+          {/* 8. How it works */}
           <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
             <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">How It Works</h3>
-            <p className="text-sm text-warm-500 mb-5">Three steps. No PhD required.</p>
+            <p className="text-sm text-warm-500 mb-5">Four steps. No PhD required.</p>
             <div className="space-y-4">
               <div className="flex items-start gap-3">
                 <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black">1</span>
                 <div>
-                  <p className="text-sm font-bold text-warm-900">Write a scenario</p>
-                  <p className="text-sm text-warm-600">YAML file. Name, steps, assertions. If you can write a GitHub Action, you can write a Stepproof scenario.</p>
+                  <p className="text-sm font-bold text-warm-900">Pick a preset or paste YAML</p>
+                  <p className="text-sm text-warm-600">Choose from 5 ready-made scenarios, or write your own with custom providers, prompts, and assertions.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">2</span>
                 <div>
-                  <p className="text-sm font-bold text-warm-900">Run N iterations</p>
-                  <p className="text-sm text-warm-600">Same prompt, N times. Because AI outputs aren't deterministic and your test suite shouldn't pretend they are.</p>
+                  <p className="text-sm font-bold text-warm-900">Set iterations</p>
+                  <p className="text-sm text-warm-600">Pick 1-5 iterations. More iterations = higher confidence that your prompt is actually reliable.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-xs font-black">3</span>
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-black">3</span>
                 <div>
-                  <p className="text-sm font-bold text-warm-900">Check assertions</p>
-                  <p className="text-sm text-warm-600">contains, regex, json_schema, llm_judge. From "does it mention X" to "is this output actually good."</p>
+                  <p className="text-sm font-bold text-warm-900">Run</p>
+                  <p className="text-sm text-warm-600">Each iteration calls the LLM, captures the output, and runs every assertion against it.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-xs font-black">4</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">See pass/fail per step</p>
+                  <p className="text-sm text-warm-600">Get a breakdown per step — pass rate, individual iteration results, and assertion-level detail.</p>
                 </div>
               </div>
             </div>
-            <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 mt-4">
-              <p className="text-sm text-warm-800 font-medium">Provider-independent</p>
-              <p className="text-xs text-warm-600 mt-0.5">
-                Unlike tools acquired by specific AI companies, Stepproof works with any LLM provider.
-                Gemini, OpenAI, Anthropic — test them all with the same scenarios. No vendor lock-in.
-              </p>
-            </div>
           </div>
 
-          {/* Assertion types */}
+          {/* 9. Pricing */}
           <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Assertion Types</h3>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
-                <p className="text-sm font-bold text-warm-900 font-mono">contains / not_contains</p>
-                <p className="text-sm text-warm-600 mt-1">Substring check. Case-insensitive.</p>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Pricing</h3>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100 text-center">
+                <p className="text-2xl font-black text-warm-900">Free</p>
+                <p className="text-xs text-warm-600 mt-1">Preset scenarios</p>
+                <p className="text-[10px] text-warm-400 mt-2">Uses Gemini. No key needed.</p>
               </div>
-              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
-                <p className="text-sm font-bold text-warm-900 font-mono">regex</p>
-                <p className="text-sm text-warm-600 mt-1">Full regex. For when substring isn't enough.</p>
+              <div className="bg-fire-50 rounded-xl p-4 border border-fire-200 text-center">
+                <p className="text-2xl font-black text-fire-700">$1</p>
+                <p className="text-xs text-warm-600 mt-1">1 credit — custom YAML</p>
+                <p className="text-[10px] text-warm-400 mt-2">Any provider, any model.</p>
               </div>
-              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
-                <p className="text-sm font-bold text-warm-900 font-mono">json_schema</p>
-                <p className="text-sm text-warm-600 mt-1">Validates output against JSON Schema. For structured output testing.</p>
-              </div>
-              <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
-                <p className="text-sm font-bold text-warm-900 font-mono">llm_judge</p>
-                <p className="text-sm text-warm-600 mt-1">Ask another LLM to evaluate the output. "Is this response helpful?" &rarr; yes/no.</p>
+              <div className="bg-fire-50 rounded-xl p-4 border border-fire-200 text-center">
+                <p className="text-2xl font-black text-fire-700">$5</p>
+                <p className="text-xs text-warm-600 mt-1">7 credits</p>
+                <p className="text-[10px] text-warm-400 mt-2">Best value. No expiry.</p>
               </div>
             </div>
           </div>
 
-          {/* FAQ */}
+          {/* 10. FAQ */}
           <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
             <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Frequently Asked Questions</h3>
             <div className="space-y-4">
@@ -236,7 +439,7 @@ export function StepproofPage() {
               </div>
               <div>
                 <p className="text-sm font-bold text-warm-900">Why only 5 iterations?</p>
-                <p className="text-sm text-warm-600">Web-based testing is for quick validation. For heavy CI runs, use the Stepproof CLI: npx stepproof run.</p>
+                <p className="text-sm text-warm-600">Web-based testing is for quick validation. 5 iterations is enough to catch flaky prompts. For heavier CI runs, use the Stepproof CLI.</p>
               </div>
               <div>
                 <p className="text-sm font-bold text-warm-900">What's a good pass rate?</p>
@@ -246,15 +449,31 @@ export function StepproofPage() {
                 <p className="text-sm font-bold text-warm-900">Can I chain steps?</p>
                 <p className="text-sm text-warm-600">{"Yes. Use {{step_id.output}} in later prompts. Multi-step pipelines are the whole point."}</p>
               </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Is this like unit tests for prompts?</p>
+                <p className="text-sm text-warm-600">Exactly. Define inputs, expected behaviors, and assertions — then run them repeatedly to catch regressions before your users do.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">Can I test multi-step chains?</p>
+                <p className="text-sm text-warm-600">{"Yes. Define multiple steps in your YAML — each step can reference previous outputs via {{step_id.output}}. The Multi-Step Pipeline preset demonstrates this."}</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">What models can I test?</p>
+                <p className="text-sm text-warm-600">Any model from Gemini, OpenAI, or Anthropic. Presets default to Gemini 2.0 Flash. Custom YAML lets you specify any supported model per step.</p>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-warm-900">How many iterations should I run?</p>
+                <p className="text-sm text-warm-600">Start with 3. If you see inconsistent results, bump to 5. One iteration tells you nothing — LLMs are non-deterministic by design.</p>
+              </div>
             </div>
           </div>
 
-          {/* Bottom CTA */}
+          {/* 11. Final CTA */}
           <div className="text-center">
             <p className="text-lg font-bold text-warm-800 mb-3">Your prompts break in production. Catch it here first.</p>
             <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="px-6 py-3 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 text-white font-bold rounded-xl shadow-lg transition-all text-sm">
-              Back to top
+              Run your first test
             </button>
           </div>
         </div>

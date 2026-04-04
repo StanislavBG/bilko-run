@@ -444,66 +444,263 @@ export function AdScorerPage() {
       {/* ── Below-fold engagement content ────────────────────────────── */}
       {!result && !compareResult && !generateResult && !loading && !generating && (
         <>
-          {/* What we check */}
-          <div className="bg-white border-y border-warm-200/40">
-            <div className="max-w-2xl mx-auto px-6 py-12">
-              <h2 className="text-lg font-black text-warm-900 mb-6">What we check</h2>
-              <div className="space-y-5">
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Hook <span className="text-warm-400 font-normal">(25 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Does your first line make someone stop scrolling? Or does it sound like every other ad in their feed?</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Value Prop <span className="text-warm-400 font-normal">(25 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Can someone understand what they get in 3 seconds? If you need a paragraph to explain it, you've already lost.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Emotional <span className="text-warm-400 font-normal">(25 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">People buy on emotion and justify with logic. Your ad should make them feel something before asking for a click.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">CTA & Conversion <span className="text-warm-400 font-normal">(25 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Is the button clear? Is there urgency? Or are you hoping people will figure out what to do next?</p>
+          {/* 1. Example result */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-2">Here's what you'll get</h2>
+              <p className="text-center text-warm-500 mb-8 text-sm">Real output from a real ad. Yours will be different.</p>
+              <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 text-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.12),transparent_60%)]" />
+                <div className="relative">
+                  <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-3">Sample Score</p>
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <span className="text-5xl font-black text-white">72</span>
+                    <div className="text-left">
+                      <div className="text-2xl font-black text-blue-400">B</div>
+                      <div className="text-xs text-warm-500">/100</div>
+                    </div>
+                  </div>
+                  <p className="text-fire-300 font-bold italic text-sm max-w-sm mx-auto">
+                    &ldquo;Strong value prop but the hook blends into the feed. Lead with the result, not the feature.&rdquo;
+                  </p>
+                  <p className="text-xs text-warm-600 mt-3 font-mono">"Stop wasting ad spend. Our AI finds your winning audiences in 48 hours. Start free."</p>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* FAQ */}
-          <div className="max-w-2xl mx-auto px-6 py-12">
-            <h2 className="text-lg font-black text-warm-900 mb-6">Frequently asked questions</h2>
-            <div className="space-y-5">
-              <div>
-                <p className="text-sm font-bold text-warm-900">Why does the platform matter?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Facebook gives you images + 125 chars. Google gives you 90 chars, no images. LinkedIn is professional. Different rules, different scores.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Will this work for display ads?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Text ads only for now. Display/video scoring is coming. But your copy still matters even with a great image.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">How do I use the rewrites?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Copy the best one. Test it as a new variant. Don't delete your original -- A/B test both.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Same credits as PageRoast?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Same credits, same wallet. 1 per score, 2 for compare.</p>
+          {/* 2. Three modes explained */}
+          <section className="max-w-3xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">Three ways to use it</h2>
+            <div className="grid md:grid-cols-3 gap-6">
+              {[
+                { icon: '\ud83d\udcca', title: 'Score', desc: 'Paste ad copy, pick a platform, get a score out of 100 with pillar-by-pillar feedback and specific rewrites. Takes 10 seconds.' },
+                { icon: '\u2694\ufe0f', title: 'A/B Compare', desc: 'Paste two ad variations. We score both, pick a winner, and tell you exactly which pillar each one wins on. Stop guessing which version to run.' },
+                { icon: '\u2728', title: 'Generate', desc: 'Describe your product. AI generates 3 ads optimized for your platform -- Facebook, Google, or LinkedIn. Each comes with a predicted score.' },
+              ].map(({ icon, title, desc }) => (
+                <div key={title} className="text-center">
+                  <span className="text-3xl">{icon}</span>
+                  <h3 className="font-bold text-warm-900 mt-3 mb-2">{title}</h3>
+                  <p className="text-sm text-warm-500 leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 3. The 4 pillars -- deep explanation */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 mb-3">We judge ads on 4 pillars</h2>
+              <p className="text-warm-500 mb-8 text-sm">Not vibes. Not character counts. Real ad psychology used by performance marketers who spend real money.</p>
+              <div className="space-y-8">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">25</span>
+                    <h3 className="font-bold text-warm-900">Hook Strength</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Does your first line make someone stop scrolling? Or does it sound like every other ad in their feed? The hook has to interrupt the pattern -- a question, a bold claim, a number that doesn't seem right. If it doesn't stop the thumb, nothing else matters.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Facebook: "You're spending $47/day on ads that don't convert." Google: "47% of ad spend is wasted." LinkedIn: "Your team is burning $47/day on underperforming campaigns."</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm">25</span>
+                    <h3 className="font-bold text-warm-900">Value Proposition</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Can someone understand what they get in 3 seconds? If you need a paragraph to explain it, you've already lost. The best ads communicate a specific outcome -- not a feature list, not a mission statement. A number, a timeframe, a concrete result.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Weak: "Improve your marketing." Strong: "Cut your cost-per-lead by 40% in 30 days." The second one is specific enough to believe.</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center font-black text-sm">25</span>
+                    <h3 className="font-bold text-warm-900">Emotional Architecture</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">People buy on emotion and justify with logic. Your ad should make them feel something before asking for a click. Pain, desire, fear of missing out, frustration with the status quo. The emotion has to match the platform -- Facebook is personal, LinkedIn is professional anxiety, Google is intent-driven urgency.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Facebook: "Tired of watching competitors outrank you?" LinkedIn: "Your competitors already adopted this." Google: "Stop losing leads to slow landing pages."</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">25</span>
+                    <h3 className="font-bold text-warm-900">CTA & Conversion</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Is the button clear? Is there urgency? Or are you hoping people will figure out what to do next? "Learn More" is a conversion killer. Tell them what happens when they click. "Get your free audit," "See your score," "Start your trial" -- specific, action-oriented, low-friction.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Weak: "Learn More." Strong: "Get your free audit in 60 seconds." The second one answers "what happens next?" before the reader can ask it.</p>
+                </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Bottom CTA */}
-          <div className="bg-white border-y border-warm-200/40">
-            <div className="max-w-2xl mx-auto px-6 py-10 text-center">
-              <p className="text-warm-900 font-bold text-base mb-3">Your ad budget is waiting. Score the copy first.</p>
-              <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="bg-fire-500 hover:bg-fire-600 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
-              >
-                Back to top
+          {/* 4. Platform differences */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-3">Why Facebook &#8800; Google &#8800; LinkedIn</h2>
+            <p className="text-center text-warm-500 mb-8 text-sm">Same ad copy on three platforms = three different results. Here's why.</p>
+            <div className="space-y-4">
+              {[
+                { platform: 'Facebook', chars: '125 primary text', format: 'Image/video + text overlay', audience: 'Interruption-based. They\'re watching cat videos. You need to stop the scroll with emotion, not logic. Casual tone wins.' },
+                { platform: 'Google', chars: '90 description chars', format: 'Text only, headline + description', audience: 'Intent-based. They\'re searching for a solution. Be direct, match their query, prove you have the answer. No fluff allowed.' },
+                { platform: 'LinkedIn', chars: '150 intro text', format: 'Professional feed + rich media', audience: 'Status-driven. They care about career outcomes and competitive advantage. Professional urgency > emotional urgency. Credibility markers matter.' },
+              ].map(({ platform, chars, format, audience }) => (
+                <div key={platform} className="bg-white rounded-xl border border-warm-200/60 p-5">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-bold text-warm-900">{platform}</h3>
+                    <span className="text-xs text-warm-400">{chars} &middot; {format}</span>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">{audience}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 5. Who uses this */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Who uses AdScorer</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                {[
+                  { role: 'Solo founders', desc: 'You wrote the ad yourself at midnight. Score it before you spend $500 finding out it doesn\'t convert. A 10-point improvement can double your CTR.' },
+                  { role: 'Ad teams', desc: 'Score 5 variations in 2 minutes instead of waiting for A/B test data that takes a week and $2,000 in ad spend to reach significance.' },
+                  { role: 'Agencies', desc: 'Show clients a score breakdown before the campaign launches. "Here\'s why we chose this version" hits different with data behind it.' },
+                  { role: 'Freelancers', desc: 'Deliver ad copy with a quality score attached. Clients pay more when they see framework-validated output, not just "I think this sounds good."' },
+                ].map(({ role, desc }) => (
+                  <div key={role} className="flex items-start gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black flex-shrink-0">&#x2713;</span>
+                    <div>
+                      <h3 className="font-bold text-warm-900 text-sm">{role}</h3>
+                      <p className="text-sm text-warm-500 mt-0.5">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* 6. AdScorer vs alternatives */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-xl font-black text-warm-900 text-center mb-8">Why not just use Pencil, AdCreative, or Jasper?</h2>
+            <div className="space-y-4">
+              {[
+                { them: 'Pencil ($14/mo) generates ad creative', us: 'We score YOUR copy against 4 conversion pillars -- hook, value prop, emotion, CTA -- with specific fixes, not just alternatives' },
+                { them: 'AdCreative.ai ($29/mo) is a monthly subscription', us: '$1 per score, no subscription. Score one ad or fifty. Pay for what you use, not what you forget to cancel' },
+                { them: 'Jasper ($69/mo) writes generic ad copy', us: 'We score platform-specific. Facebook scoring is different from Google scoring is different from LinkedIn. Same ad, different rules' },
+                { them: 'ChatGPT says "looks good!"', us: 'We give a score out of 100, a grade, per-pillar breakdown, and 3 rewrites with predicted scores. Data, not compliments' },
+              ].map(({ them, us }, i) => (
+                <div key={i} className="grid grid-cols-2 gap-3">
+                  <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                    <p className="text-[10px] font-bold uppercase text-warm-400 mb-1">Others</p>
+                    <p className="text-sm text-warm-600">{them}</p>
+                  </div>
+                  <div className="bg-fire-50 rounded-xl p-4 border border-fire-200">
+                    <p className="text-[10px] font-bold uppercase text-fire-500 mb-1">AdScorer</p>
+                    <p className="text-sm text-warm-700">{us}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 7. Stats bar */}
+          <section className="bg-warm-900">
+            <div className="max-w-3xl mx-auto px-6 py-14 text-center">
+              <p className="text-warm-400 text-sm mb-6">Built for people who spend real money on ads</p>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-3xl font-black text-white">3</p>
+                  <p className="text-xs text-warm-500 mt-1">Platforms scored</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">4</p>
+                  <p className="text-xs text-warm-500 mt-1">Conversion pillars</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per score</p>
+                </div>
+              </div>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="mt-8 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl transition-colors text-sm">
+                Score your ad
               </button>
             </div>
-          </div>
+          </section>
+
+          {/* 8. How it works */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">How it works</h2>
+            <div className="space-y-8">
+              {[
+                { step: '1', title: 'Paste your ad copy', desc: 'Any text ad -- Facebook primary text, Google description, LinkedIn intro. Pick the platform so scoring adjusts for character limits and audience expectations.' },
+                { step: '2', title: 'Get scored in 10 seconds', desc: 'AI evaluates your ad against 4 conversion pillars. You get a score out of 100, a letter grade, a benchmark comparison, and specific feedback for each pillar.' },
+                { step: '3', title: 'See your weakest pillar', desc: 'The "Quick Win" card shows exactly which pillar pulled your score down and what to fix. "CTA: 12/25 -- replace Learn More with what happens next." No guessing.' },
+                { step: '4', title: 'Get AI rewrites', desc: 'Three rewritten versions, each optimized for a different weakness. With predicted scores so you know which rewrite to A/B test. Save the best ones to your Swipe File.' },
+                { step: '5', title: 'Generate from scratch', desc: 'Switch to Generate mode. Describe your product. Get 3 platform-optimized ads with different approaches -- urgency, social proof, curiosity. Click "Score it" to validate.' },
+              ].map(({ step, title, desc }) => (
+                <div key={step} className="flex items-start gap-4">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black">{step}</span>
+                  <div>
+                    <h3 className="font-bold text-warm-900">{title}</h3>
+                    <p className="text-sm text-warm-500 mt-1 leading-relaxed">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 9. Pricing */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+              <h2 className="text-2xl font-black text-warm-900 mb-2">Simple pricing</h2>
+              <p className="text-warm-500 mb-6 text-sm">No subscription. No monthly fee. Pay for what you use.</p>
+              <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">Free</p>
+                  <p className="text-xs text-warm-500 mt-1">First analysis</p>
+                </div>
+                <div className="bg-fire-50 rounded-xl p-4 border-2 border-fire-300">
+                  <p className="text-2xl font-black text-warm-900">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per credit</p>
+                </div>
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">$5</p>
+                  <p className="text-xs text-warm-500 mt-1">7 credits</p>
+                </div>
+              </div>
+              <p className="text-xs text-warm-400 mt-4">Same credits work across all 10 bilko.run tools. Credits never expire.</p>
+            </div>
+          </section>
+
+          {/* 10. FAQ -- expanded */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Frequently asked questions</h2>
+            <div className="space-y-5">
+              {[
+                { q: 'Why does the platform matter?', a: 'Facebook gives you images + 125 chars of primary text. Google gives you 90 chars, no images, pure search intent. LinkedIn is professional anxiety + status signaling. Same ad copy on all three is like wearing a swimsuit to a board meeting -- technically clothing, strategically wrong.' },
+                { q: 'How is scoring calibrated?', a: 'We use reference ads with known performance data. "Click here to learn more" scores below 30. "47% of ad spend is wasted -- here\'s how to find yours in 60 seconds" scores 80+. The AI compares your ad against these anchors, then adjusts based on platform-specific pillar analysis.' },
+                { q: 'Are the AI rewrites good?', a: 'They\'re optimized starting points, not finished copy. Each rewrite targets a specific pillar weakness -- added a hook, sharpened the value prop, strengthened the CTA. Use them as variants to A/B test against your original. Don\'t just copy-paste blindly.' },
+                { q: 'Same credits as PageRoast?', a: 'Same credits, same wallet. 1 per score, 2 for A/B compare, 1 for generate. Credits work across all 10 bilko.run tools and never expire.' },
+                { q: 'Does platform matter for scoring?', a: 'Massively. A great Facebook ad (emotional, conversational, scroll-stopping) would bomb as a Google ad (intent-matching, direct, keyword-relevant). We adjust scoring weights, character limits, and feedback based on platform. Always pick the right one.' },
+                { q: 'How do I use the rewrites?', a: 'Copy the best one. Run it as a new ad variant alongside your original. Don\'t delete your original -- A/B test both. The rewrite with the highest predicted score isn\'t always the winner in the real world. Let data decide.' },
+                { q: 'Can I test video ad scripts?', a: 'Paste the spoken script or on-screen text. We\'ll score it like text ad copy. The hook pillar is especially relevant for video -- if your first 3 seconds don\'t stop the scroll, nobody sees second 4. Full video scoring (pacing, visual hooks) is on the roadmap.' },
+                { q: 'What about display ads?', a: 'Text ads only for now. Display ads are 80% visual, 20% copy -- scoring just the text wouldn\'t tell the full story. But your headline and CTA still matter even with a great image. Paste those elements and score them.' },
+              ].map(({ q, a }) => (
+                <div key={q}>
+                  <h3 className="font-bold text-warm-900 text-sm">{q}</h3>
+                  <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 11. Final CTA */}
+          <section className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900">
+            <div className="max-w-2xl mx-auto px-6 py-16 text-center">
+              <h2 className="text-2xl font-black text-white mb-3">Your ad budget is either working or it isn't.</h2>
+              <p className="text-warm-400 mb-6 text-sm">Score the copy before you spend the money. First one's free.</p>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-black rounded-xl shadow-lg shadow-fire-600/30 transition-all text-base">
+                Score Your Ad
+              </button>
+              <p className="text-xs text-warm-600 mt-4">No signup required. Results in ~10 seconds.</p>
+            </div>
+          </section>
         </>
       )}
 

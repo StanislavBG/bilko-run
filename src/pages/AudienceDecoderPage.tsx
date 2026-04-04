@@ -497,84 +497,304 @@ export function AudienceDecoderPage() {
 
       {r && <CrossPromo currentTool="audience-decoder" />}
 
-      {/* Below-fold engagement content — only when idle */}
+      {/* ── Long-form below-fold content ──────────────────────────── */}
       {!r && !cr && !loading && (
-        <div className="max-w-3xl mx-auto px-6 pb-8 space-y-10">
-          {/* What you'll learn */}
-          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">What You'll Learn</h3>
-            <p className="text-sm text-warm-500 mb-5">Five areas of insight. Zero hand-waving.</p>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black">1</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Audience Archetypes</p>
-                  <p className="text-sm text-warm-600">Who actually follows you — not who you think follows you. Names, percentages, evidence.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-xs font-black">2</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Content Patterns</p>
-                  <p className="text-sm text-warm-600">What's working, what's flopping, and what you should stop posting entirely.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">3</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Engagement Model</p>
-                  <p className="text-sm text-warm-600">Hook effectiveness, CTA quality, controversy risk, shareability. Four numbers that explain your reach.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-black">4</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Growth Opportunities</p>
-                  <p className="text-sm text-warm-600">Impact x effort matrix. Because "post more" isn't a strategy.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-black">5</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Content Calendar</p>
-                  <p className="text-sm text-warm-600">Weekly mix, theme rotation, gaps to fill. An actual plan, not vibes.</p>
+        <>
+          {/* 1. Example result — sample archetype cards */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-2">Here's what you'll get</h2>
+              <p className="text-center text-warm-500 mb-8 text-sm">Real output from a real decode. Yours will be different.</p>
+              <div className="space-y-3">
+                <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.12),transparent_60%)]" />
+                  <div className="relative space-y-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-4 text-center">Sample Archetypes</p>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-bold text-white">The Builder</span>
+                          <span className="text-sm font-semibold text-fire-400">45%</span>
+                        </div>
+                        <div className="h-2 bg-warm-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-fire-400 to-fire-500 rounded-full" style={{ width: '45%' }} />
+                        </div>
+                        <p className="text-xs text-warm-500 mt-1">Ships fast, learns in public, follows for tactical advice and build logs.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-bold text-white">The Lurker</span>
+                          <span className="text-sm font-semibold text-fire-400">30%</span>
+                        </div>
+                        <div className="h-2 bg-warm-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-fire-400 to-fire-500 rounded-full" style={{ width: '30%' }} />
+                        </div>
+                        <p className="text-xs text-warm-500 mt-1">Reads everything, shares nothing. Saves posts for later. Converts quietly.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-bold text-white">The Aspirant</span>
+                          <span className="text-sm font-semibold text-fire-400">25%</span>
+                        </div>
+                        <div className="h-2 bg-warm-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-fire-400 to-fire-500 rounded-full" style={{ width: '25%' }} />
+                        </div>
+                        <p className="text-xs text-warm-500 mt-1">Wants to be where you are. Engages with transformation stories and roadmaps.</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* FAQ */}
-          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Frequently Asked Questions</h3>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-bold text-warm-900">How much content should I paste?</p>
-                <p className="text-sm text-warm-600">10-20 posts minimum. More data = better archetypes. Paste your last month of content.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Can I decode a competitor?</p>
-                <p className="text-sm text-warm-600">Paste their public content instead of yours. Use Compare mode to see how your audiences differ.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Is this the same as audience analytics?</p>
-                <p className="text-sm text-warm-600">No. Analytics tells you demographics. This tells you psychographics — who they are, what they care about, why they follow you.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">How often should I re-decode?</p>
-                <p className="text-sm text-warm-600">Monthly. Save snapshots to track how your audience evolves as your content strategy shifts.</p>
+          {/* 2. Five insights explained */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 mb-3">Five areas of insight. Zero hand-waving.</h2>
+              <p className="text-warm-500 mb-8 text-sm">Each decode gives you a full picture of who follows you and why. Here's what each section reveals.</p>
+              <div className="space-y-8">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">1</span>
+                    <h3 className="font-bold text-warm-900">Audience Archetypes</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it reveals:</strong> Who actually follows you — not who you think follows you. Named archetypes with percentages, descriptions, and evidence pulled directly from your content patterns. You'll see "The Builder — 45%" not "males 25-34."</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center font-black text-sm">2</span>
+                    <h3 className="font-bold text-warm-900">Content Patterns</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it reveals:</strong> Which themes are working, which are flopping, and what you should stop posting entirely. Plus your optimal format (threads vs. singles), ideal length, and a voice analysis of your tone and brand words.</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm">3</span>
+                    <h3 className="font-bold text-warm-900">Engagement Model</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it reveals:</strong> Four scores that explain your reach — Hook Effectiveness, CTA Effectiveness, Controversy Index, and Shareability. If your hooks score 80 but CTAs score 30, you're entertaining people who never convert.</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-yellow-100 text-yellow-700 flex items-center justify-center font-black text-sm">4</span>
+                    <h3 className="font-bold text-warm-900">Growth Opportunities</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it reveals:</strong> Specific moves ranked by impact and effort. Not "post more" — actual opportunities like "Your audience responds to contrarian takes but you only post 1/month. Increase to weekly." Each one comes with an explanation.</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">5</span>
+                    <h3 className="font-bold text-warm-900">Content Calendar</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it reveals:</strong> A recommended weekly mix (threads, posts, questions), theme rotation schedule, and content gaps you're not filling. An actual plan you can execute, not vibes about "consistency."</p>
+                </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Bottom CTA */}
-          <div className="text-center">
-            <p className="text-lg font-bold text-warm-800 mb-3">Your audience is already telling you what they want. Decode it.</p>
-            <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="px-6 py-3 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 text-white font-bold rounded-xl shadow-lg transition-all text-sm">
-              Back to top
-            </button>
-          </div>
-        </div>
+          {/* 3. Personality types */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-3">Your creator personality type</h2>
+            <p className="text-center text-warm-500 mb-8 text-sm">Based on your engagement scores, we assign one of five personality types. Here's what each means.</p>
+            <div className="space-y-4">
+              {[
+                { type: 'The Provocateur', desc: 'High hook effectiveness + high controversy. You start debates and people can\'t look away. Your content polarizes — that\'s a feature, not a bug. Lean into it but watch the ratio.', color: 'bg-red-50 border-red-200' },
+                { type: 'The Amplifier', desc: 'High hooks + high shareability. Your content spreads because people share you to look smart. You\'re the "have you seen this?" account. Double down on original insights.', color: 'bg-blue-50 border-blue-200' },
+                { type: 'The Educator', desc: 'High shareability + low controversy. Trusted voice. People save your posts for later and send them to colleagues. You teach. Build courses, guides, and paid communities.', color: 'bg-green-50 border-green-200' },
+                { type: 'The Slow Burn', desc: 'Low hook effectiveness but high retention. People who find you stay — but not enough people find you. Fix the top of funnel. Better hooks, punchier openers, more curiosity gaps.', color: 'bg-yellow-50 border-yellow-200' },
+                { type: 'The Generalist', desc: 'Solid across the board but nothing stands out. Jack of all trades. Pick one dimension to 10x and the others will follow. Specialization beats consistency.', color: 'bg-purple-50 border-purple-200' },
+              ].map(({ type, desc, color }) => (
+                <div key={type} className={`rounded-xl border p-4 ${color}`}>
+                  <h3 className="font-bold text-warm-900 text-sm">{type}</h3>
+                  <p className="text-sm text-warm-600 mt-1 leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 4. Compare mode explained */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 mb-3">Compare mode: decode your competition</h2>
+              <p className="text-warm-500 mb-6 text-sm">Paste a competitor's public content as Creator B. Here's what you get.</p>
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-warm-50 rounded-xl border border-warm-100 p-4">
+                    <h4 className="font-bold text-warm-900 text-sm mb-1">Audience overlap</h4>
+                    <p className="text-sm text-warm-600">See which archetypes you share and which are unique to each creator. If their Builders are your Lurkers, you're attracting the same people differently.</p>
+                  </div>
+                  <div className="bg-warm-50 rounded-xl border border-warm-100 p-4">
+                    <h4 className="font-bold text-warm-900 text-sm mb-1">Engagement comparison</h4>
+                    <p className="text-sm text-warm-600">Side-by-side Hook, CTA, Controversy, and Shareability scores. See exactly where they beat you and where you beat them.</p>
+                  </div>
+                </div>
+                <div className="bg-fire-50 rounded-xl border border-fire-200 p-4">
+                  <h4 className="font-bold text-warm-900 text-sm mb-1">Winner + verdict</h4>
+                  <p className="text-sm text-warm-600">We pick a winner with a point margin and a written verdict explaining why. No hand-waving — specific framework differences with actionable takeaways.</p>
+                </div>
+                <div className="bg-green-50 rounded-xl border border-green-200 p-4">
+                  <p className="text-sm text-warm-700"><strong>Pro tip:</strong> Decode 3-4 competitors over time. Save snapshots. You'll start to see which audience segments nobody in your niche is serving well.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 5. Who uses this */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Who uses AudienceDecoder</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                {[
+                  { role: 'Creators', desc: 'You post consistently but don\'t know who\'s actually reading. AudienceDecoder turns "I think my audience likes X" into "45% of your audience are Builders who engage with tactical content."' },
+                  { role: 'Founders building audience', desc: 'You\'re building in public and need to know if you\'re attracting buyers or spectators. The archetype breakdown tells you if your audience will convert or just clap.' },
+                  { role: 'Marketing teams', desc: 'Decode your brand\'s social presence and your competitors\'. Compare mode shows audience overlap so you can find underserved segments.' },
+                  { role: 'Ghostwriters', desc: 'Decode your client\'s audience before writing a single word. Show them the archetype breakdown in the pitch. Data beats "trust me, I\'m good at Twitter."' },
+                ].map(({ role, desc }) => (
+                  <div key={role} className="flex items-start gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black flex-shrink-0">&#x2713;</span>
+                    <div>
+                      <h3 className="font-bold text-warm-900 text-sm">{role}</h3>
+                      <p className="text-sm text-warm-500 mt-0.5">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* 6. vs Alternatives */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-xl font-black text-warm-900 text-center mb-8">Why not just use SparkToro or Audiense?</h2>
+            <div className="space-y-4">
+              {[
+                { them: 'SparkToro ($38/mo) — shows where your audience hangs out', us: 'We decode who your audience actually is from your content. Psychographics, not demographics. Archetypes with evidence, not pie charts.' },
+                { them: 'Audiense ($696/mo) — enterprise audience segmentation', us: '$1 per decode vs $696/month. We give you archetypes, engagement scores, growth opportunities, and a content calendar. No enterprise contract needed.' },
+                { them: 'Brand24 ($79/mo) — brand monitoring + sentiment', us: 'We don\'t monitor mentions. We decode your content to tell you who\'s reading it and what they want. Different question, different tool.' },
+                { them: 'Twitter Analytics — free demographic data', us: 'Analytics shows you age and location. We show you "The Builder — 45% — ships fast, follows for tactical advice." One is data. The other is insight.' },
+              ].map(({ them, us }, i) => (
+                <div key={i} className="grid grid-cols-2 gap-3">
+                  <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                    <p className="text-[10px] font-bold uppercase text-warm-400 mb-1">Others</p>
+                    <p className="text-sm text-warm-600">{them}</p>
+                  </div>
+                  <div className="bg-fire-50 rounded-xl p-4 border border-fire-200">
+                    <p className="text-[10px] font-bold uppercase text-fire-500 mb-1">AudienceDecoder</p>
+                    <p className="text-sm text-warm-700">{us}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 7. Stats bar */}
+          <section className="bg-warm-900">
+            <div className="max-w-3xl mx-auto px-6 py-14 text-center">
+              <p className="text-warm-400 text-sm mb-6">Built for people who take their audience seriously</p>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-3xl font-black text-white">5</p>
+                  <p className="text-xs text-warm-500 mt-1">Insight areas</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">5</p>
+                  <p className="text-xs text-warm-500 mt-1">Personality types</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per decode</p>
+                </div>
+              </div>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="mt-8 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl transition-colors text-sm">
+                Decode your audience
+              </button>
+            </div>
+          </section>
+
+          {/* 8. How it works — 4 steps */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">How it works</h2>
+            <div className="space-y-8">
+              {[
+                { step: '1', title: 'Paste your content', desc: 'Grab 10-20 of your recent social posts, threads, or bio content. More data means sharper archetypes. Your last month of content is ideal.' },
+                { step: '2', title: 'Get decoded in ~15 seconds', desc: 'AI analyzes your content patterns, voice, engagement signals, and implied audience. You get archetypes, scores, and a full breakdown.' },
+                { step: '3', title: 'Review your audience archetypes', desc: 'Named segments with percentages and evidence. "The Builder — 45%" with specific quotes from your content that attract this group. Not vibes — receipts.' },
+                { step: '4', title: 'Execute the content calendar', desc: 'Get a weekly posting plan with theme rotation, format mix, and content gaps to fill. Save a snapshot and re-decode monthly to track audience shifts.' },
+              ].map(({ step, title, desc }) => (
+                <div key={step} className="flex items-start gap-4">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black">{step}</span>
+                  <div>
+                    <h3 className="font-bold text-warm-900">{title}</h3>
+                    <p className="text-sm text-warm-500 mt-1 leading-relaxed">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 9. Pricing */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+              <h2 className="text-2xl font-black text-warm-900 mb-2">Simple pricing</h2>
+              <p className="text-warm-500 mb-6 text-sm">No subscription. No monthly fee. Pay for what you use.</p>
+              <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">Free</p>
+                  <p className="text-xs text-warm-500 mt-1">First decode</p>
+                </div>
+                <div className="bg-fire-50 rounded-xl p-4 border-2 border-fire-300">
+                  <p className="text-2xl font-black text-warm-900">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per credit</p>
+                </div>
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">$5</p>
+                  <p className="text-xs text-warm-500 mt-1">7 credits</p>
+                </div>
+              </div>
+              <p className="text-xs text-warm-400 mt-4">1 credit per decode, 2 for Compare mode. Same credits work across all 10 bilko.run tools. Credits never expire.</p>
+            </div>
+          </section>
+
+          {/* 10. FAQ — 8 questions */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Frequently asked questions</h2>
+            <div className="space-y-5">
+              {[
+                { q: 'How much content should I paste?', a: '10-20 posts minimum. More data = better archetypes. Paste your last month of content — threads, single posts, replies, bio. The more signals, the sharper the decode.' },
+                { q: 'Can I decode a competitor?', a: 'Absolutely. Paste their public content instead of yours. Use Compare mode to see how your audiences differ. It\'s the fastest competitive research you\'ll ever do.' },
+                { q: 'Is this the same as audience analytics?', a: 'No. Analytics tells you demographics — age, location, gender. AudienceDecoder tells you psychographics — who they are, what they care about, why they follow you, and what content makes them engage.' },
+                { q: 'How often should I re-decode?', a: 'Monthly. Save snapshots to track how your audience evolves as your content strategy shifts. If you pivot topics or formats, re-decode immediately to see the audience impact.' },
+                { q: 'What\'s the personality type?', a: 'Based on your engagement scores (hooks, controversy, shareability), we assign one of five creator personality types — Provocateur, Amplifier, Educator, Slow Burn, or Generalist. It tells you your natural content superpower.' },
+                { q: 'Can I decode a competitor?', a: 'Yes. Paste their public posts as Creator B in Compare mode. You\'ll see audience overlap, engagement differences, and a written verdict on who\'s winning and why.' },
+                { q: 'Do credits work across tools?', a: '1 credit = 1 decode. Same credits work on PageRoast, HeadlineGrader, AdScorer, ThreadGrader, EmailForge, LaunchGrader, StackAudit, and Stepproof. LocalScore is free.' },
+                { q: 'What if my content is mixed-platform?', a: 'That\'s fine. Paste tweets, LinkedIn posts, newsletter intros — the AI adapts. Mixed-platform content actually produces richer archetypes because it sees your audience from multiple angles.' },
+              ].map(({ q, a }) => (
+                <div key={q}>
+                  <h3 className="font-bold text-warm-900 text-sm">{q}</h3>
+                  <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 11. Final CTA */}
+          <section className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900">
+            <div className="max-w-2xl mx-auto px-6 py-16 text-center">
+              <h2 className="text-2xl font-black text-white mb-3">Your audience is already telling you what they want. Decode it.</h2>
+              <p className="text-warm-400 mb-6 text-sm">Five insight areas. Personality typing. Actionable calendar. First one's free.</p>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-black rounded-xl shadow-lg shadow-fire-600/30 transition-all text-base">
+                Decode Your Audience
+              </button>
+              <p className="text-xs text-warm-600 mt-4">No signup required. Results in ~15 seconds.</p>
+            </div>
+          </section>
+        </>
       )}
 
       {/* Audience Snapshots */}

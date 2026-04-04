@@ -429,66 +429,261 @@ export function ThreadGraderPage() {
       {/* ── Below-fold engagement content ────────────────────────────── */}
       {!result && !compareResult && !generateResult && !loading && !generating && (
         <>
-          {/* What we grade */}
-          <div className="bg-white border-y border-warm-200/40">
-            <div className="max-w-2xl mx-auto px-6 py-12">
-              <h2 className="text-lg font-black text-warm-900 mb-6">What we grade</h2>
-              <div className="space-y-5">
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Hook <span className="text-warm-400 font-normal">(30 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Tweet 1 is everything. If your hook doesn't stop the scroll, tweets 2-10 are a monologue to nobody.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Tension <span className="text-warm-400 font-normal">(25 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Each tweet should make the reader need the next one. Not want. Need. Like a cliffhanger, but shorter.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Payoff <span className="text-warm-400 font-normal">(25 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Promise something in the hook, deliver it by the end. The internet never forgives a bait-and-switch.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Share Trigger <span className="text-warm-400 font-normal">(20 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Quote-worthy insights, surprising stats, hot takes people can't resist retweeting.</p>
+          {/* 1. Example result */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-2">Here's what you'll get</h2>
+              <p className="text-center text-warm-500 mb-8 text-sm">Real output from a real thread. Yours will be different.</p>
+              <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 text-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.12),transparent_60%)]" />
+                <div className="relative">
+                  <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-3">Sample Score</p>
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <span className="text-5xl font-black text-white">68</span>
+                    <div className="text-left">
+                      <div className="text-2xl font-black text-yellow-400">B-</div>
+                      <div className="text-xs text-warm-500">/100</div>
+                    </div>
+                  </div>
+                  <p className="text-fire-300 font-bold italic text-sm max-w-sm mx-auto">
+                    &ldquo;Strong hook but tension drops at tweet 4. You gave away the punchline too early -- save the best insight for tweet 7.&rdquo;
+                  </p>
+                  <p className="text-xs text-warm-600 mt-3 font-mono">"I spent $0 on ads and grew to 10K followers in 90 days. Here's the exact playbook (thread):"</p>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* FAQ */}
-          <div className="max-w-2xl mx-auto px-6 py-12">
-            <h2 className="text-lg font-black text-warm-900 mb-6">Frequently asked questions</h2>
-            <div className="space-y-5">
-              <div>
-                <p className="text-sm font-bold text-warm-900">How do I separate tweets?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Use --- or leave a blank line between tweets. We count them automatically.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Why is the hook worth 30 points?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Because 80% of readers decide on tweet 1. If you lose them there, your thread is a diary entry.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Can I grade LinkedIn posts too?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Paste any long-form content. The frameworks work for any multi-section piece. We just call them tweets.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Same credits?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Same credits across all tools. 1 per grade, 2 for A/B compare.</p>
+          {/* 2. Three modes explained */}
+          <section className="max-w-3xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">Three ways to use it</h2>
+            <div className="grid md:grid-cols-3 gap-6">
+              {[
+                { icon: '\ud83d\udcca', title: 'Score', desc: 'Paste your thread, get a score out of 100 with pillar-by-pillar feedback, per-tweet breakdown, and hook rewrites. Takes 10 seconds.' },
+                { icon: '\u2694\ufe0f', title: 'A/B Compare', desc: 'Paste two thread drafts. We score both, pick a winner, and tell you exactly which pillar each one wins on. Ship the better version.' },
+                { icon: '\u2728', title: 'Generate', desc: 'Describe your topic. AI generates a full thread with hook, tension chain, payoff, and CTA. Pick your tweet count (3-15). Click "Score it" to validate.' },
+              ].map(({ icon, title, desc }) => (
+                <div key={title} className="text-center">
+                  <span className="text-3xl">{icon}</span>
+                  <h3 className="font-bold text-warm-900 mt-3 mb-2">{title}</h3>
+                  <p className="text-sm text-warm-500 leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 3. The 4 pillars -- deep explanation */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 mb-3">We judge threads on 4 pillars</h2>
+              <p className="text-warm-500 mb-8 text-sm">Not word counts. Not engagement predictions. Structural analysis of what makes threads go viral.</p>
+              <div className="space-y-8">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">30</span>
+                    <h3 className="font-bold text-warm-900">Hook Strength</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Tweet 1 is everything. 80% of readers decide right there whether to keep reading or keep scrolling. The hook needs a pattern interrupt -- a number that doesn't seem right, a bold claim, a question that creates an itch. If your hook doesn't stop the thumb, tweets 2-10 are a monologue to nobody.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Weak: "Here are some tips for growing on X (thread):" Strong: "I analyzed 500 viral threads and found 3 patterns that appear in 94% of them:" -- Specific number + curiosity gap = unstoppable.</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-yellow-100 text-yellow-700 flex items-center justify-center font-black text-sm">25</span>
+                    <h3 className="font-bold text-warm-900">Tension Chain</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Each tweet should make the reader need the next one. Not want. Need. Like a cliffhanger, but shorter. The tension chain is what separates a thread people read to the end from one they abandon at tweet 3. Build the stakes, introduce a problem, withhold the resolution. Every tweet earns the next click.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Technique: End tweets with incomplete thoughts. "But here's where it gets interesting..." "The third pattern surprised me:" "And that's when I realized the data was wrong."</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center font-black text-sm">25</span>
+                    <h3 className="font-bold text-warm-900">Payoff</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Promise something in the hook, deliver it by the end. The internet never forgives a bait-and-switch. If your hook says "here's the exact playbook," you better give them an actual playbook -- not vague platitudes. The payoff has to match or exceed the promise. Under-deliver once and people stop reading your threads forever.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">The best payoffs are specific and actionable: frameworks, step-by-step processes, templates, or data that changes how you think about a problem.</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">20</span>
+                    <h3 className="font-bold text-warm-900">Share Trigger</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Quote-worthy insights, surprising stats, contrarian takes people can't resist retweeting. A great thread has at least 2-3 tweets that work as standalone quotes. These are the tweets that get screenshot-shared, bookmarked, and quote-tweeted into other people's audiences. They're your distribution engine.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Share triggers: "I expected X but found Y," bold frameworks, data that contradicts conventional wisdom, one-liner takeaways that make the reader look smart for sharing.</p>
+                </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Bottom CTA */}
-          <div className="bg-white border-y border-warm-200/40">
-            <div className="max-w-2xl mx-auto px-6 py-10 text-center">
-              <p className="text-warm-900 font-bold text-base mb-3">Still writing threads nobody reads? Let's fix that.</p>
-              <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="bg-fire-500 hover:bg-fire-600 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
-              >
-                Back to top
+          {/* 4. X Algorithm Intel */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-3">X Algorithm Intel (2026)</h2>
+            <p className="text-center text-warm-500 mb-8 text-sm">The algorithm rewards specific behaviors. Here's what the data says.</p>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { stat: 'Reply = 27x a like', detail: 'Replies are the strongest engagement signal on X. Write threads that provoke replies -- ask questions, invite disagreement, leave room for people to add their experience. One reply is worth 27 likes in the algorithm\'s eyes.' },
+                { stat: 'Bookmark = 5x a like', detail: 'Bookmarks signal "this is so valuable I need to save it." Add a "save this" CTA in your thread. Threads with actionable frameworks and templates get bookmarked 3x more than opinion threads.' },
+                { stat: 'First 30 min = critical', detail: 'Engagement velocity in the first 30 minutes determines whether X shows your thread to 500 people or 50,000. Post when your audience is online (8-10am or 5-7pm their timezone). Front-load your best content.' },
+                { stat: 'Links kill reach (-50-90%)', detail: 'External links are penalized heavily. Put your link in a reply, not in the thread itself. Threads without links get 2-5x more impressions. The algorithm wants people to stay on X, not leave.' },
+              ].map(({ stat, detail }) => (
+                <div key={stat} className="bg-white rounded-xl border border-warm-200/60 p-5">
+                  <h3 className="font-bold text-warm-900 text-sm mb-2">{stat}</h3>
+                  <p className="text-xs text-warm-600 leading-relaxed">{detail}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 5. Who uses this */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Who uses ThreadGrader</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                {[
+                  { role: 'Founders', desc: 'You\'re building in public and need threads that actually reach people. Score your thread before posting so your launch announcement doesn\'t die at 3 likes.' },
+                  { role: 'Creators', desc: 'Threads are your growth engine. A 10-point improvement in hook score can double your impressions. Score every thread before posting -- it takes 10 seconds.' },
+                  { role: 'Growth marketers', desc: 'You manage X accounts for clients or your company. Show them data-backed thread analysis instead of "I think this hook could be stronger." Frameworks > vibes.' },
+                  { role: 'Ghostwriters', desc: 'Deliver threads with quality scores attached. "This thread scored 82 with strong tension and a viral-potential hook" hits different in a client deliverable.' },
+                ].map(({ role, desc }) => (
+                  <div key={role} className="flex items-start gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black flex-shrink-0">&#x2713;</span>
+                    <div>
+                      <h3 className="font-bold text-warm-900 text-sm">{role}</h3>
+                      <p className="text-sm text-warm-500 mt-0.5">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* 6. ThreadGrader vs alternatives */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-xl font-black text-warm-900 text-center mb-8">Why not just use TweetAlgo, Tweet Hunter, or Highperformr?</h2>
+            <div className="space-y-4">
+              {[
+                { them: 'TweetAlgo (free) gives a single engagement score', us: 'We break down 4 structural pillars -- hook, tension, payoff, share trigger -- with specific feedback and fixes for each one' },
+                { them: 'Tweet Hunter ($49/mo) is a monthly subscription', us: '$1 per score, no subscription. Score one thread or fifty. Pay for what you use, not what you forget to cancel' },
+                { them: 'Highperformr ($15/mo) focuses on scheduling', us: 'We focus on the writing. Per-tweet breakdown shows exactly where readers drop off and why. Fix the structure, then schedule it wherever you want' },
+                { them: 'ChatGPT says "great thread!"', us: 'We give a score out of 100, per-tweet breakdown, algorithm intel, hook rewrites, and a viral potential assessment. Data, not compliments' },
+              ].map(({ them, us }, i) => (
+                <div key={i} className="grid grid-cols-2 gap-3">
+                  <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                    <p className="text-[10px] font-bold uppercase text-warm-400 mb-1">Others</p>
+                    <p className="text-sm text-warm-600">{them}</p>
+                  </div>
+                  <div className="bg-fire-50 rounded-xl p-4 border border-fire-200">
+                    <p className="text-[10px] font-bold uppercase text-fire-500 mb-1">ThreadGrader</p>
+                    <p className="text-sm text-warm-700">{us}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 7. Stats bar */}
+          <section className="bg-warm-900">
+            <div className="max-w-3xl mx-auto px-6 py-14 text-center">
+              <p className="text-warm-400 text-sm mb-6">Built for people who take their threads seriously</p>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-3xl font-black text-white">4</p>
+                  <p className="text-xs text-warm-500 mt-1">Structural pillars</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">Per-tweet</p>
+                  <p className="text-xs text-warm-500 mt-1">Breakdown included</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per analysis</p>
+                </div>
+              </div>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="mt-8 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl transition-colors text-sm">
+                Grade your thread
               </button>
             </div>
-          </div>
+          </section>
+
+          {/* 8. How it works */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">How it works</h2>
+            <div className="space-y-8">
+              {[
+                { step: '1', title: 'Paste your thread', desc: 'Separate tweets with --- or blank lines. We detect tweet count automatically. Works with any length -- 3 tweets or 15.' },
+                { step: '2', title: 'Get scored in 10 seconds', desc: 'AI evaluates your thread against 4 structural pillars. You get a score out of 100, a letter grade, viral potential assessment, and per-pillar feedback.' },
+                { step: '3', title: 'See per-tweet breakdown', desc: 'Every tweet gets its own score (1-10) with a note explaining what it does well or where it loses readers. "Tweet 4: 5/10 -- tension drops here, you\'re restating tweet 3."' },
+                { step: '4', title: 'Get hook rewrites', desc: 'Three rewritten hooks, each using a different viral technique -- curiosity gap, bold claim, number hook. Save the best ones to your Hook Library for future threads.' },
+                { step: '5', title: 'Generate from a topic', desc: 'Switch to Generate mode. Describe your topic and pick tweet count. AI generates a full thread with structural annotations -- hook, tension, payoff, CTA. Click "Score it" to validate.' },
+              ].map(({ step, title, desc }) => (
+                <div key={step} className="flex items-start gap-4">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black">{step}</span>
+                  <div>
+                    <h3 className="font-bold text-warm-900">{title}</h3>
+                    <p className="text-sm text-warm-500 mt-1 leading-relaxed">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 9. Pricing */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+              <h2 className="text-2xl font-black text-warm-900 mb-2">Simple pricing</h2>
+              <p className="text-warm-500 mb-6 text-sm">No subscription. No monthly fee. Pay for what you use.</p>
+              <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">Free</p>
+                  <p className="text-xs text-warm-500 mt-1">First analysis</p>
+                </div>
+                <div className="bg-fire-50 rounded-xl p-4 border-2 border-fire-300">
+                  <p className="text-2xl font-black text-warm-900">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per credit</p>
+                </div>
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">$5</p>
+                  <p className="text-xs text-warm-500 mt-1">7 credits</p>
+                </div>
+              </div>
+              <p className="text-xs text-warm-400 mt-4">Same credits work across all 10 bilko.run tools. Credits never expire.</p>
+            </div>
+          </section>
+
+          {/* 10. FAQ -- expanded */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Frequently asked questions</h2>
+            <div className="space-y-5">
+              {[
+                { q: 'How do I separate tweets?', a: 'Use --- or leave a blank line between tweets. We count them automatically. You\'ll see the tweet count update in real-time as you type.' },
+                { q: 'Why is the hook worth 30 points?', a: 'Because 80% of readers decide on tweet 1. Data from 500+ scored threads shows hook score correlates with completion rate more than any other pillar. If you lose them at the hook, your thread is a diary entry.' },
+                { q: 'How is scoring calibrated?', a: 'We use reference threads with known viral performance. A "here are some tips" hook scores below 35. "I analyzed 10,000 landing pages and 73% fail the same test:" scores 85+. The AI compares your thread against these structural anchors.' },
+                { q: 'Same credits?', a: 'Same credits across all 10 bilko.run tools. 1 per grade, 2 for A/B compare, 1 for generate. Credits never expire.' },
+                { q: 'Does this work for LinkedIn?', a: 'Yes. Paste any long-form multi-section content. The structural frameworks -- hook, tension, payoff, share trigger -- apply to any platform. We just call the sections "tweets." LinkedIn carousels, newsletter intros, even blog outlines all benefit from the same analysis.' },
+                { q: 'How long should a thread be?', a: '5-10 tweets is the sweet spot. Under 5 feels thin -- you can\'t build enough tension. Over 12 and completion rate drops off a cliff. The exception: deeply tactical threads with step-by-step instructions can go 15+ if every tweet earns the next click.' },
+                { q: 'What makes a hook viral?', a: 'Three elements: a specific number ("I analyzed 500 threads"), a curiosity gap ("and found 1 pattern in 94% of them"), and implied value ("here\'s how to use it:"). The best hooks make a promise so specific the reader has to keep reading to see if it\'s true.' },
+                { q: 'Can I generate and then score?', a: 'Yes -- that\'s the intended workflow. Generate a thread from your topic, click "Score it" to get the full structural breakdown, then iterate on the weak spots. Generate gives you the raw material. Score tells you what to fix. Together they\'re a thread writing system.' },
+              ].map(({ q, a }) => (
+                <div key={q}>
+                  <h3 className="font-bold text-warm-900 text-sm">{q}</h3>
+                  <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 11. Final CTA */}
+          <section className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900">
+            <div className="max-w-2xl mx-auto px-6 py-16 text-center">
+              <h2 className="text-2xl font-black text-white mb-3">Your thread is either viral or it isn't.</h2>
+              <p className="text-warm-400 mb-6 text-sm">Find out in 10 seconds. First one's free.</p>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-black rounded-xl shadow-lg shadow-fire-600/30 transition-all text-base">
+                Grade Your Thread
+              </button>
+              <p className="text-xs text-warm-600 mt-4">No signup required. Results in ~10 seconds.</p>
+            </div>
+          </section>
         </>
       )}
 

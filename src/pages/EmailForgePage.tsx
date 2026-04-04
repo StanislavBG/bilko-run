@@ -386,92 +386,300 @@ export function EmailForgePage() {
         </div>
       )}
 
-      {/* Below-fold engagement content — only when idle */}
+      {/* ── Long-form below-fold content ──────────────────────────── */}
       {!result && !compareResult && !loading && (
-        <div className="max-w-2xl mx-auto px-6 pt-10 pb-8 space-y-10">
-          {/* How it generates */}
-          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">How It Generates</h3>
-            <p className="text-sm text-warm-500 mb-5">Five emails. Five proven persuasion frameworks. Here's what's under the hood.</p>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black">1</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">AIDA</p>
-                  <p className="text-sm text-warm-600">Attention-Interest-Desire-Action. The framework your marketing professor taught you. Still works.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-black">2</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">PAS</p>
-                  <p className="text-sm text-warm-600">Problem-Agitate-Solve. Find the wound, pour salt on it, then hand them the bandaid.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black">3</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Hormozi</p>
-                  <p className="text-sm text-warm-600">Dream Outcome x Perceived Likelihood / Time x Effort. Math that makes people buy.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center text-xs font-black">4</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Cialdini</p>
-                  <p className="text-sm text-warm-600">Give massive free value first. Then ask. Reciprocity is a hell of a drug.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-black">5</span>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Storytelling</p>
-                  <p className="text-sm text-warm-600">Setup &rarr; Conflict &rarr; Resolution &rarr; CTA. Because humans are wired for stories, not sales pitches.</p>
+        <>
+          {/* 1. Example result — show what they'll get */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-2">Here's what you'll get</h2>
+              <p className="text-center text-warm-500 mb-8 text-sm">Real output from a real sequence. Yours will be different.</p>
+              <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 text-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.12),transparent_60%)]" />
+                <div className="relative">
+                  <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-3">Sample Email Card</p>
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <span className="text-5xl font-black text-white">82</span>
+                    <div className="text-left">
+                      <div className="text-2xl font-black text-blue-400">B+</div>
+                      <div className="text-xs text-warm-500">/100</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100/20 text-blue-300">AIDA</span>
+                    <span className="text-[10px] font-semibold text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">42% est. open</span>
+                  </div>
+                  <p className="text-fire-300 font-bold italic text-sm max-w-sm mx-auto">
+                    &ldquo;Strong hook and clear value prop. Adding a specific number in the subject would push open rates higher.&rdquo;
+                  </p>
+                  <p className="text-xs text-warm-600 mt-3 font-mono">"Quick question about [company]'s Q2 pipeline"</p>
                 </div>
               </div>
             </div>
-            <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 mt-4">
-              <p className="text-sm text-warm-800 font-medium">Each email includes an optimized subject line</p>
-              <p className="text-xs text-warm-600 mt-0.5">
-                Subject lines are tuned per framework — AIDA hooks differ from PAS pain points.
-                2026 data: 2-4 word subjects get 46% open rates. Personalized subjects get +26% opens.
-                Check the mobile truncation badges to keep subjects under 40 characters.
-              </p>
-            </div>
-          </div>
+          </section>
 
-          {/* FAQ */}
-          <div className="bg-white rounded-2xl border border-warm-200/60 p-6">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-5">Frequently Asked Questions</h3>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-bold text-warm-900">Can I edit the emails?</p>
-                <p className="text-sm text-warm-600">Copy them, paste them, change everything. They're a starting point, not a straitjacket.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Why 5 emails?</p>
-                <p className="text-sm text-warm-600">Research says 5-7 touchpoints to convert a cold lead. We give you 5 with different frameworks so you're not repeating yourself.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Are the open rate estimates real?</p>
-                <p className="text-sm text-warm-600">They're AI estimates based on subject line patterns. Useful for comparison between emails, not as gospel truth.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Same credits?</p>
-                <p className="text-sm text-warm-600">Same wallet. 1 credit per sequence, 2 for A/B compare. Works across all bilko.run tools.</p>
+          {/* 2. Five frameworks explained */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 mb-3">Five frameworks. Five angles of attack.</h2>
+              <p className="text-warm-500 mb-8 text-sm">Each email in your sequence uses a different persuasion framework. No repeating yourself. No one-trick pony.</p>
+              <div className="space-y-8">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm">1</span>
+                    <h3 className="font-bold text-warm-900">AIDA</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it does:</strong> Attention-Interest-Desire-Action. The classic funnel in a single email. Grabs them, builds curiosity, creates want, then asks for the click.</p>
+                  <p className="text-sm text-warm-600 mt-1"><strong>When to use it:</strong> Email #1 in any sequence. The opener. Sets the tone before the reader has any context about you.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example subject: "The 3-minute fix for [pain point] that 2,000 founders missed"</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center font-black text-sm">2</span>
+                    <h3 className="font-bold text-warm-900">PAS</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it does:</strong> Problem-Agitate-Solve. Find the wound, pour salt on it, then hand them the bandaid. The most reliable cold email framework in existence.</p>
+                  <p className="text-sm text-warm-600 mt-1"><strong>When to use it:</strong> When your reader doesn't know they have a problem yet. Or knows but hasn't felt the urgency.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example subject: "Your competitors are doing this. You're not."</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">3</span>
+                    <h3 className="font-bold text-warm-900">Hormozi Value</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it does:</strong> Dream Outcome x Perceived Likelihood / Time x Effort. Math that makes people buy. Maximize the numerator, minimize the denominator.</p>
+                  <p className="text-sm text-warm-600 mt-1"><strong>When to use it:</strong> Mid-sequence when the reader is considering options. This email makes your offer feel like a no-brainer.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example subject: "40% more pipeline in 14 days (no new hires)"</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center font-black text-sm">4</span>
+                    <h3 className="font-bold text-warm-900">Cialdini Reciprocity</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it does:</strong> Give massive free value first. Then ask. Reciprocity is a hell of a drug. The reader feels they owe you before you even pitch.</p>
+                  <p className="text-sm text-warm-600 mt-1"><strong>When to use it:</strong> Email #3 or #4. After you've established the problem, give them something genuinely useful for free.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example subject: "Free: the exact template we used for [result]"</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">5</span>
+                    <h3 className="font-bold text-warm-900">Storytelling Arc</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed"><strong>What it does:</strong> Setup, Conflict, Resolution, CTA. Humans are wired for stories, not sales pitches. This email reads like a mini-case study.</p>
+                  <p className="text-sm text-warm-600 mt-1"><strong>When to use it:</strong> The closer. Email #5. By now they've seen data, value, and proof. The story makes it personal.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example subject: "How [name] went from 2 replies to 47 in one week"</p>
+                </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Bottom CTA */}
-          <div className="text-center">
-            <p className="text-lg font-bold text-warm-800 mb-3">Your next email sequence is one prompt away.</p>
-            <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="px-6 py-3 bg-gradient-to-r from-fire-500 to-fire-600 hover:from-fire-600 hover:to-fire-700 text-white font-bold rounded-xl shadow-lg transition-all text-sm">
-              Back to top
-            </button>
-          </div>
-        </div>
+          {/* 3. Four goals — when to pick each */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-3">Pick the right goal</h2>
+            <p className="text-center text-warm-500 mb-8 text-sm">Different goals produce different sequences. Here's when to use each one.</p>
+            <div className="space-y-4">
+              {[
+                { goal: 'Cold Outreach', desc: 'You\'re emailing strangers. The sequence builds trust from zero — light first touch, value in the middle, direct ask at the end. Expect 15-25% open rates if your subject lines are tight.', color: 'bg-blue-50 border-blue-200' },
+                { goal: 'Nurture', desc: 'They already know you. The sequence deepens the relationship — educational content, case studies, gentle CTAs. No hard sells. Think weekly drip, not daily bombardment.', color: 'bg-green-50 border-green-200' },
+                { goal: 'Launch', desc: 'You\'re shipping something. The sequence builds anticipation — tease, reveal, social proof, urgency, last call. Compressed timeline. Higher energy.', color: 'bg-fire-50 border-fire-200' },
+                { goal: 'Re-engagement', desc: 'They went quiet. The sequence re-activates — "miss you" opener, value bomb, what\'s new, final ultimatum. If they don\'t respond after 5, clean your list.', color: 'bg-yellow-50 border-yellow-200' },
+                { goal: 'Win-back', desc: 'They cancelled or churned. The sequence acknowledges the breakup, shows what\'s changed, offers a comeback incentive. Honest, not desperate.', color: 'bg-purple-50 border-purple-200' },
+              ].map(({ goal, desc, color }) => (
+                <div key={goal} className={`rounded-xl border p-4 ${color}`}>
+                  <h3 className="font-bold text-warm-900 text-sm">{goal}</h3>
+                  <p className="text-sm text-warm-600 mt-1 leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 4. Deliverability guide */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 mb-3">Don't land in spam</h2>
+              <p className="text-warm-500 mb-8 text-sm">The best email in the world is useless if it hits the promotions tab. Here's what to watch.</p>
+              <div className="space-y-6">
+                <div>
+                  <h3 className="font-bold text-warm-900 text-sm mb-2">Spam trigger words to avoid</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['free', 'act now', 'limited time', 'click here', 'buy now', 'order now', 'urgent', '!!!', 'ALL CAPS', '$$$', 'winner', 'congratulations', 'guarantee', 'no obligation'].map(w => (
+                      <span key={w} className="px-2 py-1 bg-red-50 text-red-600 border border-red-200 rounded-full text-xs font-semibold">{w}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-warm-50 rounded-xl border border-warm-100 p-4">
+                    <h4 className="font-bold text-warm-900 text-sm mb-1">Subject line length</h4>
+                    <p className="text-sm text-warm-600">Mobile truncates at <strong>40 characters</strong>. Desktop shows ~60. Aim for 4-7 words. 2-4 word subjects hit 46% open rates in 2026 data.</p>
+                  </div>
+                  <div className="bg-warm-50 rounded-xl border border-warm-100 p-4">
+                    <h4 className="font-bold text-warm-900 text-sm mb-1">Personalization stats</h4>
+                    <p className="text-sm text-warm-600">Emails with <strong>2+ merge fields</strong> get 142% more replies. Use <code className="bg-warm-200 px-1 rounded text-fire-700 text-xs">{'{{first_name}}'}</code>, <code className="bg-warm-200 px-1 rounded text-fire-700 text-xs">{'{{company}}'}</code>, <code className="bg-warm-200 px-1 rounded text-fire-700 text-xs">{'{{pain_point}}'}</code>.</p>
+                  </div>
+                </div>
+                <div className="bg-green-50 rounded-xl border border-green-200 p-4">
+                  <p className="text-sm text-warm-700"><strong>Pro tip:</strong> Personalized subjects get +26% opens. But don't fake it — "Hey {'{{first_name}}'}, quick question" only works if the rest of the email is actually personalized too.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 5. Who uses this */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Who uses EmailForge</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                {[
+                  { role: 'Founders doing outreach', desc: 'You\'re emailing prospects yourself. No sales team, no SDR. You need sequences that sound human and convert — not templates that scream "I bought a list."' },
+                  { role: 'Sales teams', desc: 'A/B test framework combinations before loading into your sequencer. Generate 5 emails in 10 seconds instead of 2 hours of copywriting.' },
+                  { role: 'Newsletter creators', desc: 'Welcome sequences, re-engagement flows, launch announcements. Every subscriber touchpoint is an email sequence problem.' },
+                  { role: 'Product launchers', desc: 'Pre-launch hype, launch day blast, post-launch follow-up. The Launch goal generates sequences built for compressed timelines.' },
+                ].map(({ role, desc }) => (
+                  <div key={role} className="flex items-start gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black flex-shrink-0">&#x2713;</span>
+                    <div>
+                      <h3 className="font-bold text-warm-900 text-sm">{role}</h3>
+                      <p className="text-sm text-warm-500 mt-0.5">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* 6. vs Alternatives */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-xl font-black text-warm-900 text-center mb-8">Why not just use Instantly or Reply.io?</h2>
+            <div className="space-y-4">
+              {[
+                { them: 'Instantly ($30/mo) — sends emails at scale', us: 'EmailForge generates the emails. Use Instantly to send them. We\'re the copywriter, they\'re the mailman.' },
+                { them: 'Reply.io ($49/mo) — sequence automation + AI writer', us: 'We use 5 proven persuasion frameworks, not generic AI rewrites. Each email has a different angle. Plus we score deliverability.' },
+                { them: 'Smartlead ($39/mo) — multi-inbox warmup + sending', us: '$1 per sequence vs $39/month. Generate sequences on demand, load them into any tool. No subscription lock-in.' },
+                { them: 'ChatGPT — "write me 5 cold emails"', us: 'ChatGPT gives you 5 variations of the same email. We give you 5 different frameworks with scoring, open rate estimates, and deliverability checks.' },
+              ].map(({ them, us }, i) => (
+                <div key={i} className="grid grid-cols-2 gap-3">
+                  <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                    <p className="text-[10px] font-bold uppercase text-warm-400 mb-1">Others</p>
+                    <p className="text-sm text-warm-600">{them}</p>
+                  </div>
+                  <div className="bg-fire-50 rounded-xl p-4 border border-fire-200">
+                    <p className="text-[10px] font-bold uppercase text-fire-500 mb-1">EmailForge</p>
+                    <p className="text-sm text-warm-700">{us}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 7. Stats bar */}
+          <section className="bg-warm-900">
+            <div className="max-w-3xl mx-auto px-6 py-14 text-center">
+              <p className="text-warm-400 text-sm mb-6">Built for people who take their outreach seriously</p>
+              <div className="grid grid-cols-4 gap-6">
+                <div>
+                  <p className="text-3xl font-black text-white">5</p>
+                  <p className="text-xs text-warm-500 mt-1">Persuasion frameworks</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">5</p>
+                  <p className="text-xs text-warm-500 mt-1">Email sequences</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">Est.</p>
+                  <p className="text-xs text-warm-500 mt-1">Open rates per email</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per sequence</p>
+                </div>
+              </div>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="mt-8 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl transition-colors text-sm">
+                Forge your sequence
+              </button>
+            </div>
+          </section>
+
+          {/* 8. How it works — 5 steps */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">How it works</h2>
+            <div className="space-y-8">
+              {[
+                { step: '1', title: 'Describe your product', desc: 'Tell us what you sell and who you\'re selling to. The more specific, the better the emails. "B2B SaaS for HR teams" beats "software."' },
+                { step: '2', title: 'Pick your goal and tone', desc: 'Cold outreach? Launch? Win-back? Each goal produces a different sequence structure. Tone adjusts the voice — professional, casual, urgent, or storytelling.' },
+                { step: '3', title: 'Get 5 emails in ~15 seconds', desc: 'AI generates a full sequence using AIDA, PAS, Hormozi, Cialdini, and Storytelling frameworks. Each email has a unique angle.' },
+                { step: '4', title: 'Review scores and deliverability', desc: 'Overall sequence score, per-email open rate estimates, subject line length warnings, and spam trigger detection. Fix issues before sending.' },
+                { step: '5', title: 'Copy, customize, send', desc: 'Copy individual emails or the full sequence. Replace merge fields with real data. Load into your email tool and start sending.' },
+              ].map(({ step, title, desc }) => (
+                <div key={step} className="flex items-start gap-4">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black">{step}</span>
+                  <div>
+                    <h3 className="font-bold text-warm-900">{title}</h3>
+                    <p className="text-sm text-warm-500 mt-1 leading-relaxed">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 9. Pricing */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+              <h2 className="text-2xl font-black text-warm-900 mb-2">Simple pricing</h2>
+              <p className="text-warm-500 mb-6 text-sm">No subscription. No monthly fee. Pay for what you use.</p>
+              <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">Free</p>
+                  <p className="text-xs text-warm-500 mt-1">First sequence</p>
+                </div>
+                <div className="bg-fire-50 rounded-xl p-4 border-2 border-fire-300">
+                  <p className="text-2xl font-black text-warm-900">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per credit</p>
+                </div>
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">$5</p>
+                  <p className="text-xs text-warm-500 mt-1">7 credits</p>
+                </div>
+              </div>
+              <p className="text-xs text-warm-400 mt-4">1 credit per sequence, 2 for A/B compare. Same credits work across all 10 bilko.run tools. Credits never expire.</p>
+            </div>
+          </section>
+
+          {/* 10. FAQ — 8 questions */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Frequently asked questions</h2>
+            <div className="space-y-5">
+              {[
+                { q: 'Can I edit the emails?', a: 'Copy them, paste them, change everything. They\'re a starting point, not a straitjacket. The best cold emails are 80% template, 20% personal touch.' },
+                { q: 'Why 5 emails?', a: 'Research says 5-7 touchpoints to convert a cold lead. We give you 5 with different frameworks so you\'re not repeating yourself. Each email has a unique psychological angle.' },
+                { q: 'Are open rate estimates accurate?', a: 'They\'re AI estimates based on subject line patterns, length, and personalization signals. Useful for comparing emails within a sequence — not as gospel truth. Real open rates depend on your list quality, sender reputation, and send time.' },
+                { q: 'What\'s the best goal for cold outreach?', a: 'Use "Cold Outreach." It generates sequences that build trust from zero — light first touch, value in the middle, direct ask at the end. The tone and framework order are optimized for strangers who have no idea who you are.' },
+                { q: 'How do I personalize?', a: 'Replace generic greetings with merge fields: {{first_name}}, {{company}}, {{pain_point}}. The emails include placeholder markers where personalization fits naturally. Emails with 2+ custom fields get 142% more replies.' },
+                { q: 'Can I compare two sequences?', a: 'Yes. Switch to Compare mode, enter two different product/audience combos, and we\'ll generate both sequences and pick a winner. Costs 2 credits.' },
+                { q: 'Do credits work across tools?', a: '1 credit = 1 sequence. Same credits work on PageRoast, HeadlineGrader, AdScorer, ThreadGrader, AudienceDecoder, LaunchGrader, StackAudit, and Stepproof. LocalScore is free.' },
+                { q: 'What about deliverability scoring?', a: 'We check every email for spam trigger words, excessive caps, too many exclamation marks, and subject line length. You get a deliverability score out of 100 with specific issues flagged. Fix them before loading into your sequencer.' },
+              ].map(({ q, a }) => (
+                <div key={q}>
+                  <h3 className="font-bold text-warm-900 text-sm">{q}</h3>
+                  <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 11. Final CTA */}
+          <section className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900">
+            <div className="max-w-2xl mx-auto px-6 py-16 text-center">
+              <h2 className="text-2xl font-black text-white mb-3">Your next email sequence is one prompt away.</h2>
+              <p className="text-warm-400 mb-6 text-sm">Five frameworks. Five emails. Deliverability checked. First one's free.</p>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-black rounded-xl shadow-lg shadow-fire-600/30 transition-all text-base">
+                Forge Your Sequence
+              </button>
+              <p className="text-xs text-warm-600 mt-4">No signup required. Results in ~15 seconds.</p>
+            </div>
+          </section>
+        </>
       )}
 
       {/* Template Library */}

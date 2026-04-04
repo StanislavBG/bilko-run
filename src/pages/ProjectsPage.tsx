@@ -238,6 +238,46 @@ export function ProjectsPage() {
         </div>
       </section>
 
+      {/* Recommended Workflows */}
+      <section className="border-t border-warm-200/40">
+        <div className="max-w-4xl mx-auto px-6 py-12 md:py-16">
+          <h2 className="text-xl font-extrabold text-warm-900 text-center mb-2">Recommended workflows</h2>
+          <p className="text-warm-500 text-center mb-8 text-sm">Use multiple tools together for maximum impact.</p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                title: 'Launch a product',
+                steps: ['LaunchGrader → audit readiness', 'PageRoast → fix the landing page', 'HeadlineGrader → nail the headline', 'EmailForge → build launch sequence'],
+                time: '~10 minutes, 4 credits',
+              },
+              {
+                title: 'Run a campaign',
+                steps: ['AudienceDecoder → know your audience', 'AdScorer → grade your ad copy', 'ThreadGrader → write a viral thread', 'EmailForge → follow up with leads'],
+                time: '~15 minutes, 4 credits',
+              },
+              {
+                title: 'Optimize costs',
+                steps: ['StackAudit → find SaaS waste', 'LocalScore → review contracts privately', 'LaunchGrader → audit competitive positioning'],
+                time: '~10 minutes, 2 credits + free',
+              },
+            ].map(w => (
+              <div key={w.title} className="bg-white rounded-2xl border border-warm-200/60 p-6">
+                <h3 className="font-bold text-warm-900 mb-3">{w.title}</h3>
+                <div className="space-y-2 mb-4">
+                  {w.steps.map((step, i) => (
+                    <div key={i} className="flex items-start gap-2 text-sm">
+                      <span className="text-fire-500 font-bold flex-shrink-0">{i + 1}.</span>
+                      <span className="text-warm-600">{step}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-warm-400">{w.time}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Social proof */}
       <section className="border-t border-warm-200/40">
         <div className="max-w-3xl mx-auto px-6 py-8 text-center">

@@ -345,6 +345,16 @@ export function HomePage() {
           </p>
           <p className="mt-2 text-sm font-semibold text-fire-500 group-hover:text-fire-600">Read the full story &rarr;</p>
         </Link>
+        <div className="mt-3 space-y-2">
+          <Link to="/blog/we-built-stackaudit-because-reddit-told-us-to"
+            className="block text-sm text-warm-600 hover:text-fire-600 transition-colors">
+            We Built StackAudit Because Reddit Told Us To &rarr;
+          </Link>
+          <Link to="/blog/localscore-browser-ai-that-never-sees-your-data"
+            className="block text-sm text-warm-600 hover:text-fire-600 transition-colors">
+            LocalScore: The AI Tool That Never Sees Your Data &rarr;
+          </Link>
+        </div>
         <div className="mt-4 text-center">
           <Link to="/blog" className="text-sm font-semibold text-fire-500 hover:text-fire-600">View all posts &rarr;</Link>
         </div>

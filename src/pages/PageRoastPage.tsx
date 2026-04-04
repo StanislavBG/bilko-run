@@ -985,6 +985,27 @@ export function PageRoastPage() {
 
           <CompetitorEdge text={result.competitor_edge} />
 
+          {/* Data-driven CRO insight */}
+          <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '350ms' }}>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-3">What top-converting pages do differently</h3>
+            <div className="space-y-2 text-sm text-warm-600">
+              {[
+                result.section_scores.hero.score < 18 && 'Their headline communicates value in under 8 words. Yours needs tightening.',
+                result.section_scores.social_proof.score < 15 && 'They show 3+ testimonials with full names and photos. Anonymous quotes don\'t convert.',
+                result.section_scores.clarity.score < 15 && 'They lead with benefits, not features. "Save 10 hours/week" beats "AI-powered automation."',
+                result.section_scores.conversion.score < 18 && 'They have ONE primary CTA above the fold. Multiple CTAs reduce conversions by up to 266%.',
+              ].filter(Boolean).map((tip, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-fire-500 mt-0.5 flex-shrink-0">&#x2192;</span>
+                  <span>{tip}</span>
+                </div>
+              ))}
+              {result.total_score >= 75 && (
+                <p className="text-green-600 font-medium">Your page is already in the top tier. The fixes above are fine-tuning, not emergencies.</p>
+              )}
+            </div>
+          </div>
+
           {/* Post-result CTA */}
           <div className="text-center pt-4">
             {tokenBalance !== null && tokenBalance > 0 ? (

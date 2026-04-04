@@ -15,5 +15,7 @@
   <url><loc>https://bilko.run/blog</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://bilko.run/blog/how-pageroast-went-from-frustration-to-product</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://bilko.run/blog/we-built-stackaudit-because-reddit-told-us-to</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://bilko.run/blog/localscore-browser-ai-that-never-sees-your-data</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://bilko.run/blog/10-tools-solo-what-i-learned-shipping-bilko-run</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://bilko.run/pricing</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
 </urlset>

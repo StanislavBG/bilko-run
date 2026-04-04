@@ -177,17 +177,18 @@ export function HeadlineGraderPage() {
               })()}
             </div>
 
-            <div className="flex items-center gap-3">
-              <select
-                value={context}
-                onChange={(e) => setContext(e.target.value)}
-                className="rounded-lg bg-white/10 border border-white/20 text-warm-300 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fire-500/50"
-              >
-                {CONTEXT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value} className="bg-warm-900 text-white">{o.label}</option>
-                ))}
-              </select>
+            <div className="flex flex-wrap gap-1 mb-3">
+              {CONTEXT_OPTIONS.map(o => (
+                <button key={o.value} type="button" onClick={() => setContext(o.value)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    context === o.value ? 'bg-white text-warm-900 shadow-sm' : 'bg-white/10 text-warm-400 hover:text-white'
+                  }`}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
 
+            <div className="flex items-center gap-3">
               <button
                 type="submit"
                 disabled={loading || !headline.trim()}

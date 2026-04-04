@@ -16,6 +16,9 @@ export function PricingPage() {
         <p className="mt-4 text-lg text-warm-500">
           Your first roast is free. After that, credits start at $1. That's it.
         </p>
+        <p className="mt-2 text-sm text-warm-400">
+          It's like hiring a conversion copywriter — for $1 instead of $200/hour.
+        </p>
       </section>
 
       <section className="max-w-5xl mx-auto px-6 pb-12 md:pb-16">

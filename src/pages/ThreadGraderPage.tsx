@@ -359,6 +359,9 @@ export function ThreadGraderPage() {
               </div>
             </div>
           </div>
+          <div className="bg-warm-50 rounded-xl border border-warm-100 p-3 text-center text-xs text-warm-500 animate-slide-up">
+            Best posting times for X threads: 8-10am and 5-7pm in your audience's timezone. Engagement velocity in the first 30 minutes determines reach.
+          </div>
           <SectionBreakdown pillars={result.pillar_scores} labels={PILLAR_LABELS} />
 
           {/* Per-tweet breakdown */}

@@ -371,6 +371,9 @@ export function AdScorerPage() {
             <div className="bg-white rounded-2xl border border-warm-200/60 p-4 text-center animate-slide-up" style={{ animationDelay: '80ms' }}>
               <p className="text-sm font-semibold text-warm-700">{getBenchmark(result.total_score)}</p>
             </div>
+            <div className="bg-warm-50 rounded-xl border border-warm-100 p-3 text-center text-xs text-warm-500 animate-slide-up" style={{ animationDelay: '40ms' }}>
+              Similar analysis from an agency: $500-2,000/campaign. From bilko.run: $1.
+            </div>
             {result && (() => {
               const scores = result.pillar_scores;
               const entries = Object.entries(scores) as [string, { score: number; max: number }][];

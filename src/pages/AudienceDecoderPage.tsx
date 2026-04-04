@@ -398,6 +398,11 @@ export function AudienceDecoderPage() {
           >
             {loading ? 'Decoding...' : tab === 'compare' ? 'Compare Creators' : 'Decode My Audience'}
           </button>
+          {tab === 'compare' && (
+            <p className="mt-2 text-xs text-warm-500 text-center">
+              Pro tip: Paste a competitor's content as Creator B to see how your audiences differ.
+            </p>
+          )}
           {(r || cr) && (
             <button onClick={handleReset} className="px-5 py-3 border border-white/20 text-warm-400 hover:text-white rounded-xl text-sm font-semibold transition-colors">
               Start Over

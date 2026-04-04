@@ -298,6 +298,11 @@ export function EmailForgePage() {
             );
           })()}
 
+          <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 animate-slide-up">
+            <p className="text-xs font-bold text-warm-700 mb-1">Personalization tip</p>
+            <p className="text-xs text-warm-500">Replace generic greetings with merge fields: <code className="bg-warm-200 px-1 rounded text-fire-700">{'{{first_name}}'}</code>, <code className="bg-warm-200 px-1 rounded text-fire-700">{'{{company}}'}</code>, <code className="bg-warm-200 px-1 rounded text-fire-700">{'{{pain_point}}'}</code>. Emails with 2+ custom fields get 142% more replies.</p>
+          </div>
+
           <div className="bg-warm-50 rounded-xl border border-warm-100 p-3 text-center text-xs text-warm-500 animate-slide-up">
             2026 benchmark: 2-4 word subjects = 46% open rate &middot; Personalized subjects = +26% opens &middot; Mobile truncates at 40 chars
           </div>

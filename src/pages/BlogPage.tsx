@@ -139,6 +139,34 @@ export function BlogPage() {
         </div>
       </section>
 
+      {/* Newsletter signup */}
+      <section className="border-t border-warm-200/40 py-12 mb-8">
+        <div className="bg-gradient-to-r from-fire-50 to-warm-50 rounded-2xl border border-fire-200 p-6 text-center">
+          <h3 className="text-lg font-black text-warm-900 mb-2">Get new posts in your inbox</h3>
+          <p className="text-sm text-warm-600 mb-4">Weekly lessons from building AI tools solo. No spam. Unsubscribe anytime.</p>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const input = (e.target as HTMLFormElement).querySelector('input');
+            const email = input?.value?.trim();
+            if (!email) return;
+            fetch(`${API}/demos/email-capture`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, tool: 'blog-newsletter', score: '', source: 'blog' }),
+            }).catch(() => {});
+            input!.value = '';
+            alert('Subscribed! You\'ll get new posts weekly.');
+          }} className="flex gap-2 max-w-sm mx-auto">
+            <input type="email" placeholder="you@example.com" required
+              className="flex-1 px-4 py-2.5 rounded-xl border border-warm-200 text-sm focus:outline-none focus:ring-2 focus:ring-fire-400" />
+            <button type="submit" className="px-5 py-2.5 bg-fire-500 hover:bg-fire-600 text-white font-bold text-sm rounded-xl transition-colors">
+              Subscribe
+            </button>
+          </form>
+          <p className="text-xs text-warm-400 mt-2">Join the builders. No marketing fluff.</p>
+        </div>
+      </section>
+
       {/* Podcast teaser */}
       <section className="border-t border-warm-200/40 py-12 mb-8">
         <div className="bg-warm-900 rounded-2xl p-6 text-center">

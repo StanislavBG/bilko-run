@@ -12,6 +12,7 @@ import { EmailForgePage } from './pages/EmailForgePage.js';
 import { AudienceDecoderPage } from './pages/AudienceDecoderPage.js';
 import { StepproofPage } from './pages/StepproofPage.js';
 import { LaunchGraderPage } from './pages/LaunchGraderPage.js';
+import { StackAuditPage } from './pages/StackAuditPage.js';
 import { BlogPage } from './pages/BlogPage.js';
 import { BlogPostPage } from './pages/BlogPostPage.js';
 import { PricingPage } from './pages/PricingPage.js';
@@ -98,6 +99,7 @@ function AppRoutes() {
             <Route path="/projects/audience-decoder" element={<AudienceDecoderPage />} />
             <Route path="/projects/stepproof" element={<StepproofPage />} />
             <Route path="/projects/launch-grader" element={<LaunchGraderPage />} />
+            <Route path="/projects/stack-audit" element={<StackAuditPage />} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<BlogPostPage />} />
             <Route path="/pricing" element={<PricingPage />} />

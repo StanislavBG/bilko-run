@@ -65,7 +65,7 @@ export function HomePage() {
             Good. Keep reading.
           </p>
           <p className="mt-4 text-sm text-warm-400">
-            8 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
+            9 AI tools live &middot; Score, generate, and compare &middot; Free to start &middot; No agency needed
           </p>
         </div>
       </header>
@@ -225,6 +225,8 @@ export function HomePage() {
               desc: 'Identifies audience archetypes, content patterns, engagement model, growth opportunities, and builds a content calendar. Your audience, decoded.', live: true },
             { name: 'LaunchGrader', slug: 'launch-grader', cat: 'Marketing', tagline: 'Is your product ready to launch?',
               desc: 'AI audits go-to-market readiness across 5 dimensions: value prop, pricing, social proof, onboarding, and positioning. Get a score, blockers, and a verdict.', live: true },
+            { name: 'StackAudit', slug: 'stack-audit', cat: 'Operations', tagline: 'Find waste in your SaaS stack',
+              desc: 'Paste your tool list. AI finds overlap, cheaper alternatives, self-hosted options, and calculates exactly how much you\'d save. Enterprise audit for $1.', live: true },
             { name: 'Stepproof', slug: 'stepproof', cat: 'Dev Tools', tagline: 'Regression tests for AI pipelines',
               desc: 'Write YAML scenarios, run them N times, check assertions. Preset scenarios or BYOK. Like unit tests, but for LLMs.', live: true },
             { name: 'AgentTrace', slug: 'agent-trace', cat: 'Dev Tools', tagline: 'Local observability for AI agents',

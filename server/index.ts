@@ -129,6 +129,11 @@ if (isProd) {
         description: 'Paste your social content. AI identifies audience archetypes, engagement patterns, and growth opportunities.',
         url: 'https://bilko.run/projects/audience-decoder',
       },
+      '/projects/stack-audit': {
+        title: 'StackAudit — Find Waste in Your SaaS Stack',
+        description: 'AI analyzes your tool stack for overlap, cheaper alternatives, and savings. Enterprise-grade audit for $1. No integration required.',
+        url: 'https://bilko.run/projects/stack-audit',
+      },
       '/projects/launch-grader': {
         title: 'LaunchGrader — Is Your Product Ready to Launch?',
         description: 'AI audits your go-to-market readiness across 5 dimensions. Score, blockers, and a verdict. $1 vs $100/mo competitors.',

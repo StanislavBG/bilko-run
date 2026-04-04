@@ -76,6 +76,15 @@ const PROJECTS: Project[] = [
     features: ['5-dimension audit', 'Launch blockers', 'Readiness verdict', 'Competitor comparison'],
   },
   {
+    slug: 'stack-audit',
+    name: 'StackAudit',
+    tagline: 'Find waste in your SaaS stack',
+    description: 'Paste your tool list. AI finds overlap, cheaper alternatives, self-hosted options, and calculates exactly how much you can save. Enterprise audit for $1.',
+    status: 'live' as const,
+    category: 'devtools' as const,
+    features: ['Cost analysis', 'Overlap detection', 'Alternative suggestions', 'Savings calculator'],
+  },
+  {
     slug: 'stepproof',
     name: 'Stepproof',
     tagline: 'Regression tests for AI pipelines',

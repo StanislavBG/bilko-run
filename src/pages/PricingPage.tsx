@@ -63,7 +63,7 @@ export function PricingPage() {
             <ul className="space-y-2.5 text-sm text-warm-600 mb-7">
               {[
                 'Everything in Free',
-                'All 8 tools = 1 credit each',
+                'All 9 tools = 1 credit each',
                 'A/B Compare = 2 credits',
                 'Credits never expire',
                 'Download results as JSON',
@@ -128,7 +128,7 @@ export function PricingPage() {
               { q: 'Can I get a refund?', a: 'Credits are consumed instantly on analysis. All purchases are final — but your first roast is free, so you know what you\'re getting.' },
               { q: 'Is my payment secure?', a: 'Payments are processed by Stripe. We never see your card number.' },
               { q: 'What\'s the A/B Compare?', a: 'Paste two URLs — your page vs. a competitor. We score both and pick a winner. Costs 2 credits because we\'re working twice as hard.' },
-              { q: 'How does this compare to other tools?', a: 'Tools like Bestever ($99/mo), AdCreative.ai ($29/mo), and Lapis ($99/mo) charge monthly subscriptions for similar analysis. bilko.run gives you 8 tools for $1/credit with no subscription. Score a headline, grade an ad, roast a landing page — all from the same wallet.' },
+              { q: 'How does this compare to other tools?', a: 'Tools like Bestever ($99/mo), AdCreative.ai ($29/mo), and Lapis ($99/mo) charge monthly subscriptions for similar analysis. bilko.run gives you 9 tools for $1/credit with no subscription. Score a headline, grade an ad, roast a landing page — all from the same wallet.' },
             ].map(({ q, a }) => (
               <div key={q}>
                 <h3 className="font-bold text-warm-900 mb-1 text-sm">{q}</h3>

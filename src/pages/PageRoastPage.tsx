@@ -983,6 +983,24 @@ export function PageRoastPage() {
             </div>
           </div>
 
+          {/* Conversion propensity */}
+          {(() => {
+            const hero = result.section_scores.hero.score;
+            const cro = result.section_scores.conversion.score;
+            const proof = result.section_scores.social_proof.score;
+            const propensity = Math.round(((hero / 25) * 0.35 + (cro / 25) * 0.4 + (proof / 25) * 0.25) * 100);
+            const level = propensity >= 70 ? { label: 'High', color: 'text-green-700 bg-green-50 border-green-200' } :
+              propensity >= 45 ? { label: 'Moderate', color: 'text-yellow-700 bg-yellow-50 border-yellow-200' } :
+              { label: 'Low', color: 'text-red-700 bg-red-50 border-red-200' };
+            return (
+              <div className={`rounded-2xl border-2 p-5 text-center animate-slide-up ${level.color}`} style={{ animationDelay: '275ms' }}>
+                <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-1">Propensity to Convert</p>
+                <p className="text-2xl font-black">{propensity}%</p>
+                <p className="text-xs mt-1 opacity-80">{level.label} — based on hero clarity, CTA effectiveness, and social proof strength</p>
+              </div>
+            );
+          })()}
+
           {/* AI Visibility Check */}
           <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '300ms' }}>
             <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-3">AI Visibility</h3>

@@ -189,6 +189,7 @@ export function StackAuditPage() {
               <p>"I run a 12 person company and I just did our annual software audit and the number genuinely startled me. We are paying for 23 separate software subscriptions." — r/Entrepreneur, 461 upvotes</p>
               <p>"We cut nine subscriptions in a single afternoon and nobody noticed." — reply with 283 comments</p>
               <p>Enterprise audit tools (Zylo, Zluri) cost $10,000+/year. StackAudit costs $1.</p>
+              <p className="text-sm text-warm-700 font-semibold mt-4">Industry data: 25-30% of SaaS licenses go unused across all companies. Proper auditing reduces waste to 8-12%. (Source: Zylo 2026 SaaS Management Index)</p>
             </div>
           </section>
 

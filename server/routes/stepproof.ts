@@ -102,7 +102,7 @@ async function callLLM(provider: Provider, model: string, prompt: string, system
 // ── Scenario Parser ─────────────────────────────────────────────────────────
 
 function parseScenario(yamlContent: string): Scenario {
-  const doc = yaml.load(yamlContent) as any;
+  const doc = yaml.load(yamlContent, { schema: yaml.CORE_SCHEMA }) as any;
   if (!doc?.name) throw new Error('Scenario must have a "name" field');
   if (!Array.isArray(doc.steps) || doc.steps.length === 0) throw new Error('Scenario must have at least one step');
 
@@ -152,8 +152,14 @@ async function runAssertions(output: string, assertions: Assertion[], keys: ApiK
       passed = !output.toLowerCase().includes((a.value ?? '').toLowerCase());
       message = passed ? 'Correctly absent' : `Found unwanted: "${a.value}"`;
     } else if (a.type === 'regex') {
-      passed = new RegExp(a.value ?? '', 'i').test(output);
-      message = passed ? 'Regex match' : `No match: /${a.value}/`;
+      try {
+        const re = new RegExp(a.value ?? '', 'i');
+        // Test against truncated output to limit ReDoS exposure
+        passed = re.test(output.slice(0, 5000));
+        message = passed ? 'Regex match' : `No match: /${a.value}/`;
+      } catch (e: any) {
+        message = `Invalid regex: ${e.message}`;
+      }
     } else if (a.type === 'json_schema') {
       try {
         const parsed = JSON.parse(output);

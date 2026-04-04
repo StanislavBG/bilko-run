@@ -30,6 +30,16 @@ export function ScoreCard({ score, grade, verdict, toolName }: {
             {copied ? 'Copied!' : 'Copy Result'}
           </button>
           <button
+            onClick={() => {
+              const blob = new Blob([JSON.stringify({ score, grade, verdict, tool: toolName }, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a'); a.href = url; a.download = `${toolName.toLowerCase().replace(/\s+/g, '-')}-result.json`; a.click(); URL.revokeObjectURL(url);
+            }}
+            className="px-4 py-2 border border-warm-700 hover:border-warm-500 text-warm-400 hover:text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            Download JSON
+          </button>
+          <button
             onClick={() => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}`, '_blank', 'width=550,height=420')}
             className="px-4 py-2 bg-warm-800 hover:bg-warm-700 text-white text-xs font-semibold rounded-lg transition-colors"
           >

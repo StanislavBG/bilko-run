@@ -14,7 +14,7 @@ export function PricingPage() {
           No subscriptions. No BS.
         </h1>
         <p className="mt-4 text-lg text-warm-500">
-          Your first roast is free. After that, credits start at $1. That's it.
+          Your first analysis is free. After that, credits start at $1. That's it.
         </p>
         <p className="mt-2 text-sm text-warm-400">
           It's like hiring a conversion copywriter — for $1 instead of $200/hour.
@@ -32,7 +32,7 @@ export function PricingPage() {
             <p className="text-sm text-warm-500 mb-5">See what you're missing</p>
             <ul className="space-y-2.5 text-sm text-warm-600 mb-7">
               {[
-                '1 free roast on sign-up',
+                '1 free analysis on sign-up',
                 'Full 4-section score breakdown',
                 'The savage one-liner',
                 '3 highest-impact fixes',
@@ -45,10 +45,10 @@ export function PricingPage() {
               ))}
             </ul>
             <Link
-              to="/projects/page-roast"
+              to="/projects"
               className="block w-full py-3 text-center text-sm font-bold text-warm-600 border border-warm-200 hover:border-warm-300 rounded-xl transition-colors"
             >
-              Get your free roast
+              Try for free
             </Link>
           </div>
 
@@ -75,7 +75,7 @@ export function PricingPage() {
               ))}
             </ul>
             <Link
-              to="/projects/page-roast"
+              to="/projects"
               className="block w-full py-3 text-center text-sm font-bold text-fire-600 border-2 border-fire-200 hover:border-fire-400 rounded-xl transition-colors"
             >
               Try any tool
@@ -92,11 +92,11 @@ export function PricingPage() {
               <span className="text-4xl font-black text-warm-900">$5</span>
               <span className="text-sm text-warm-400 ml-0.5">/ 7 credits</span>
             </div>
-            <p className="text-sm text-warm-500 mb-5">$0.71 per roast — save 29%</p>
+            <p className="text-sm text-warm-500 mb-5">$0.71 per analysis — save 29%</p>
             <ul className="space-y-2.5 text-sm text-warm-600 mb-7">
               {[
                 'Everything in Free',
-                'PageRoast = 1 credit',
+                'All 10 tools = 1 credit each',
                 'A/B Compare = 2 credits',
                 'Credits never expire',
                 'Download results as JSON',
@@ -108,7 +108,7 @@ export function PricingPage() {
               ))}
             </ul>
             <Link
-              to="/projects/page-roast"
+              to="/projects"
               className="block w-full py-3 text-center text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-xl shadow-md shadow-fire-500/20 transition-all"
             >
               Try any tool
@@ -123,9 +123,9 @@ export function PricingPage() {
           <h2 className="text-xl font-extrabold text-warm-900 text-center mb-8">Common questions</h2>
           <div className="space-y-5">
             {[
-              { q: 'Why not a subscription?', a: 'Because you don\'t roast pages every day. Pay for what you use, not what you don\'t.' },
+              { q: 'Why not a subscription?', a: 'Because you don\'t analyze pages every day. Pay for what you use, not what you don\'t.' },
               { q: 'What if I don\'t use all my credits?', a: 'They never expire. Buy today, use the last one next year. No pressure.' },
-              { q: 'Can I get a refund?', a: 'Credits are consumed instantly on analysis. All purchases are final — but your first roast is free, so you know what you\'re getting.' },
+              { q: 'Can I get a refund?', a: 'Credits are consumed instantly on analysis. All purchases are final — but your first analysis is free, so you know what you\'re getting.' },
               { q: 'Is my payment secure?', a: 'Payments are processed by Stripe. We never see your card number.' },
               { q: 'What\'s the A/B Compare?', a: 'Paste two URLs — your page vs. a competitor. We score both and pick a winner. Costs 2 credits because we\'re working twice as hard.' },
               { q: 'How does this compare to other tools?', a: 'Tools like Bestever ($99/mo), AdCreative.ai ($29/mo), and Lapis ($99/mo) charge monthly subscriptions for similar analysis. bilko.run gives you 10 tools for $1/credit (LocalScore is free) with no subscription. Score a headline, grade an ad, roast a landing page — all from the same wallet.' },

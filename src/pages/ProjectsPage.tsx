@@ -294,13 +294,13 @@ export function ProjectsPage() {
             Start with the one that matters most
           </h2>
           <p className="mt-3 text-warm-500">
-            PageRoast is live and free to start. Or try <Link to="/projects/local-score" className="text-fire-500 hover:underline font-semibold">LocalScore</Link> — the only AI tool where your data never leaves your browser.
+            Every tool has a free first analysis. Or try <Link to="/projects/local-score" className="text-fire-500 hover:underline font-semibold">LocalScore</Link> — completely free, runs in your browser.
           </p>
           <Link
             to="/projects/page-roast"
             className="inline-flex items-center justify-center gap-2 mt-6 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5"
           >
-            Roast My Page
+            Try PageRoast
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
           </Link>
           <p className="mt-4 text-sm text-warm-400">

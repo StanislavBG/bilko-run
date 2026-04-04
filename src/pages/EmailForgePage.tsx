@@ -430,6 +430,14 @@ export function EmailForgePage() {
                 </div>
               </div>
             </div>
+            <div className="bg-warm-50 rounded-xl border border-warm-100 p-4 mt-4">
+              <p className="text-sm text-warm-800 font-medium">Each email includes an optimized subject line</p>
+              <p className="text-xs text-warm-600 mt-0.5">
+                Subject lines are tuned per framework — AIDA hooks differ from PAS pain points.
+                2026 data: 2-4 word subjects get 46% open rates. Personalized subjects get +26% opens.
+                Check the mobile truncation badges to keep subjects under 40 characters.
+              </p>
+            </div>
           </div>
 
           {/* FAQ */}

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth, useUser, SignInButton } from '@clerk/clerk-react';
 
 const API = import.meta.env.VITE_API_URL || '/api';
@@ -68,4 +68,9 @@ export function useToolApi<TResult>(endpoint: string) {
     submit, submitCompare, reset,
     signInRef, SignInButton,
   };
+}
+
+/** Handler for Cmd/Ctrl+Enter keyboard shortcut on inputs */
+export function onCmdEnter(e: React.KeyboardEvent, fn: () => void) {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); fn(); }
 }

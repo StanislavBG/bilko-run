@@ -960,6 +960,29 @@ export function PageRoastPage() {
 
           <TopFixes fixes={result.top_fixes} />
           <SectionBreakdown result={result} />
+
+          {/* CRO Checklist */}
+          <div className="bg-white rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '250ms' }}>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Quick CRO Checklist</h3>
+            <div className="space-y-2">
+              {[
+                { label: 'Clear headline above the fold', pass: result.section_scores.hero.score >= 15 },
+                { label: 'Visible CTA without scrolling', pass: result.section_scores.conversion.score >= 15 },
+                { label: 'Social proof present', pass: result.section_scores.social_proof.score >= 12 },
+                { label: 'Benefit-driven copy (not features)', pass: result.section_scores.clarity.score >= 15 },
+                { label: 'Single primary action', pass: result.section_scores.conversion.score >= 18 },
+                { label: 'Trust signals (logos, testimonials)', pass: result.section_scores.social_proof.score >= 18 },
+              ].map(({ label, pass }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <span className={`flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${pass ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-500'}`}>
+                    {pass ? '\u2713' : '\u2717'}
+                  </span>
+                  <span className={`text-sm ${pass ? 'text-warm-600' : 'text-warm-800 font-medium'}`}>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <CompetitorEdge text={result.competitor_edge} />
 
           {/* Post-result CTA */}

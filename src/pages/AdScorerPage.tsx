@@ -145,6 +145,7 @@ export function AdScorerPage() {
                 placeholder="Paste your ad copy here..."
                 rows={4}
                 className="w-full rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-warm-500 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-fire-500/50 resize-none"
+                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit({ adCopy: adCopy.trim(), platform }); } }}
               />
               {(() => {
                 const charUsed = adCopy.length;
@@ -160,6 +161,7 @@ export function AdScorerPage() {
                   </div>
                 );
               })()}
+              <p className="mt-1 text-xs text-warm-500">Cmd+Enter to submit</p>
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
@@ -281,6 +283,14 @@ export function AdScorerPage() {
               <Rewrites rewrites={result.rewrites} noun="rewrite" />
             )}
             <CrossPromo currentTool="ad-scorer" />
+            <div className="text-center pt-4">
+              <button
+                onClick={() => { reset(); setAdCopy(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-md shadow-fire-500/20 transition-all"
+              >
+                Score Another Ad
+              </button>
+            </div>
           </>
         )}
 

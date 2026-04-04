@@ -94,6 +94,7 @@ export function ThreadGraderPage() {
                 placeholder={"Tweet 1: Your hook goes here...\n\n---\n\nTweet 2: Build tension...\n\n---\n\nTweet 3: Deliver the payoff..."}
                 rows={8}
                 className="w-full px-4 py-3 rounded-xl border-0 bg-white text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-fire-400 shadow-inner resize-none"
+                onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit({ threadText: thread }); } }}
               />
               {thread.length > 0 && (
                 <span className="absolute bottom-3 right-3 text-xs font-semibold text-warm-400 bg-white/80 px-2 py-0.5 rounded">
@@ -108,7 +109,7 @@ export function ThreadGraderPage() {
             >
               {loading ? 'Grading...' : 'Grade Thread'}
             </button>
-            <p className="mt-2 text-xs text-warm-500">Separate tweets with --- or blank lines</p>
+            <p className="mt-2 text-xs text-warm-500">Separate tweets with --- or blank lines &middot; Cmd+Enter to submit</p>
           </div>
         ) : (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl max-w-3xl mx-auto">

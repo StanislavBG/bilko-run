@@ -24,6 +24,11 @@ interface Stats {
   activityFeed: Array<{ type: string; email: string; detail: string; created_at: string }>;
   toolUsage: Array<{ endpoint: string; uses: number }>;
   toolVisits: Array<{ path: string; visits: number }>;
+  uniqueVisitors: number;
+  topLandingPages: Array<{ path: string; unique_users: number }>;
+  referrerToTool: Array<{ referrer: string; path: string; visits: number }>;
+  dailyActiveUsers: Array<{ date: string; users: number }>;
+  blogTraffic: Array<{ path: string; views: number }>;
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -134,9 +139,10 @@ export function AdminPage() {
       {stats && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
             <StatCard label="Views Today" value={stats.todayViews} />
             <StatCard label={`Views (${days}d)`} value={stats.views} />
+            <StatCard label="Unique Visitors" value={stats.uniqueVisitors} sub={`${days}d with email`} />
             <StatCard label="Total Roasts" value={stats.totalRoasts} />
             <StatCard label="Total Users" value={stats.totalUsers} />
             <StatCard label="Purchases" value={stats.tokenPurchases} sub={`${stats.revenue.single} single + ${stats.revenue.bundle} bundle`} />
@@ -175,6 +181,12 @@ export function AdminPage() {
                     color="bg-fire-500"
                   />
                 </div>
+              </div>
+
+              {/* Daily Active Users */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5 mb-6">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Daily Active Users</h2>
+                <BarChart data={(stats.dailyActiveUsers ?? []).map(d => ({ key: d.date.slice(5), value: d.users }))} label="users" color="bg-purple-400" />
               </div>
 
               {/* Pages + Referrers */}
@@ -395,6 +407,54 @@ export function AdminPage() {
                   </div>
                 ) : (
                   <p className="text-sm text-warm-400">No referrer data yet</p>
+                )}
+              </div>
+
+              {/* Referrer → Tool Mapping */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">
+                  Referrer → Tool ({days}d)
+                </h2>
+                {stats.referrerToTool && stats.referrerToTool.length > 0 ? (
+                  <div className="space-y-2 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-warm-100">
+                          <th className="text-left py-1 px-2 text-xs font-bold text-warm-400">Referrer</th>
+                          <th className="text-left py-1 px-2 text-xs font-bold text-warm-400">Tool</th>
+                          <th className="text-right py-1 px-2 text-xs font-bold text-warm-400">Visits</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.referrerToTool.map((r: any, i: number) => (
+                          <tr key={i} className="border-b border-warm-50">
+                            <td className="py-1.5 px-2 text-warm-600 truncate max-w-[150px]">{r.referrer.replace(/^https?:\/\//, '').replace(/\/$/, '')}</td>
+                            <td className="py-1.5 px-2 text-warm-800 font-medium">{r.path.replace('/projects/', '').replace(/-/g, ' ')}</td>
+                            <td className="py-1.5 px-2 text-right font-bold text-warm-900">{r.visits}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-warm-400">No referrer→tool data yet</p>
+                )}
+              </div>
+
+              {/* Blog Traffic */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Blog Traffic ({days}d)</h2>
+                {stats.blogTraffic && stats.blogTraffic.length > 0 ? (
+                  <div className="space-y-2">
+                    {stats.blogTraffic.map((b: any) => (
+                      <div key={b.path} className="flex items-center justify-between">
+                        <span className="text-sm text-warm-700 truncate">{b.path.replace('/blog/', '').replace(/-/g, ' ')}</span>
+                        <span className="text-sm font-bold text-warm-900 ml-3">{b.views}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-warm-400">No blog traffic yet</p>
                 )}
               </div>
 

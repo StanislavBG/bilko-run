@@ -40,6 +40,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       totalRoasts, totalUsers, topUsers, tokenPurchases,
       signupsByDay, roastsByDay, recentUserRoasts, activityFeed,
       revenueSingle, revenueBundle, toolUsage, toolVisits,
+      uniqueVisitors, topLandingPages, referrerToTool, dailyActiveUsers, blogTraffic,
     ] = await Promise.all([
       dbGet<{ n: number }>('SELECT COUNT(*) as n FROM page_views WHERE date >= ?', since),
       dbAll('SELECT date, COUNT(*) as views FROM page_views WHERE date >= ? GROUP BY date ORDER BY date', since),
@@ -78,6 +79,16 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       dbAll(`SELECT endpoint, SUM(count) as uses FROM usage_tracking WHERE date >= ? GROUP BY endpoint ORDER BY uses DESC`, since),
       // Per-tool page visits
       dbAll(`SELECT path, COUNT(*) as visits FROM page_views WHERE date >= ? AND path LIKE '/projects/%' GROUP BY path ORDER BY visits DESC`, since),
+      // Unique visitors (distinct emails)
+      dbGet<{ n: number }>(`SELECT COUNT(DISTINCT email) as n FROM page_views WHERE date >= ? AND email IS NOT NULL`, since),
+      // Top landing pages (first page in session — approximate via distinct email+date)
+      dbAll(`SELECT path, COUNT(DISTINCT email) as unique_users FROM page_views WHERE date >= ? AND email IS NOT NULL GROUP BY path ORDER BY unique_users DESC LIMIT 15`, since),
+      // Referrer → tool conversion (which referrers lead to tool pages)
+      dbAll(`SELECT referrer, path, COUNT(*) as visits FROM page_views WHERE date >= ? AND referrer IS NOT NULL AND referrer != '' AND path LIKE '/projects/%' GROUP BY referrer, path ORDER BY visits DESC LIMIT 20`, since),
+      // Daily active users
+      dbAll(`SELECT date, COUNT(DISTINCT email) as users FROM page_views WHERE date >= ? AND email IS NOT NULL GROUP BY date ORDER BY date`, since),
+      // Blog traffic
+      dbAll(`SELECT path, COUNT(*) as views FROM page_views WHERE date >= ? AND path LIKE '/blog%' GROUP BY path ORDER BY views DESC LIMIT 10`, since),
     ]);
 
     const singleCount = revenueSingle?.n ?? 0;
@@ -101,6 +112,11 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       roastsByDay,
       recentUserRoasts,
       activityFeed,
+      uniqueVisitors: uniqueVisitors?.n ?? 0,
+      topLandingPages,
+      referrerToTool,
+      dailyActiveUsers,
+      blogTraffic,
     };
   });
 }

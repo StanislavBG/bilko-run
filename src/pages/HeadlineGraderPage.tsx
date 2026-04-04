@@ -427,69 +427,264 @@ export function HeadlineGraderPage() {
       {/* ── Cross Promo ──────────────────────────────────────────────── */}
       <CrossPromo currentTool="headline-grader" />
 
-      {/* ── Below-fold engagement content ────────────────────────────── */}
+      {/* ── Long-form below-fold content ──────────────────────────── */}
       {!result && !compareResult && !generateResult && !loading && !generating && (
         <>
-          {/* How it scores */}
-          <div className="bg-white border-y border-warm-200/40">
-            <div className="max-w-2xl mx-auto px-6 py-12">
-              <h2 className="text-lg font-black text-warm-900 mb-6">How it scores</h2>
-              <div className="space-y-5">
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Rule of One <span className="text-warm-400 font-normal">(30 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">One dominant idea. Not three competing ones crammed into a run-on sentence.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Value Equation <span className="text-warm-400 font-normal">(30 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Dream outcome x likelihood / time x effort. Hormozi math applied to your 12 words.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Readability <span className="text-warm-400 font-normal">(20 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Grade-5 reading level is the goal. Your headline isn't a PhD thesis.</p>
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-warm-900">Proof + Promise + Plan <span className="text-warm-400 font-normal">(20 pts)</span></p>
-                  <p className="text-sm text-warm-500 mt-0.5">Promise something specific. Prove it's possible. Hint at the plan.</p>
+          {/* 1. Example result — show what they'll get */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-2">Here's what you'll get</h2>
+              <p className="text-center text-warm-500 mb-8 text-sm">Real output from a real headline. Yours will be different.</p>
+              <div className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900 rounded-2xl p-6 text-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(255,107,26,0.12),transparent_60%)]" />
+                <div className="relative">
+                  <p className="text-xs font-bold uppercase tracking-widest text-fire-400 mb-3">Sample Score</p>
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <span className="text-5xl font-black text-white">78</span>
+                    <div className="text-left">
+                      <div className="text-2xl font-black text-blue-400">B+</div>
+                      <div className="text-xs text-warm-500">/100</div>
+                    </div>
+                  </div>
+                  <p className="text-fire-300 font-bold italic text-sm max-w-sm mx-auto">
+                    &ldquo;Clear value proposition but the urgency is missing. Add a timeframe and this jumps 15 points.&rdquo;
+                  </p>
+                  <p className="text-xs text-warm-600 mt-3 font-mono">"Cut Your AWS Bill by 40% — No Migration Required"</p>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* FAQ */}
-          <div className="max-w-2xl mx-auto px-6 py-12">
-            <h2 className="text-lg font-black text-warm-900 mb-6">Frequently asked questions</h2>
-            <div className="space-y-5">
-              <div>
-                <p className="text-sm font-bold text-warm-900">What makes a good headline?</p>
-                <p className="text-sm text-warm-600 mt-0.5">One idea, specific benefit, emotional hook, under 60 characters. That's it. Most headlines fail at "one idea."</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Why 60 characters?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Google truncates at 60. If your headline gets cut off, you just wasted the most important piece of copy on your page.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Are the rewrites any good?</p>
-                <p className="text-sm text-warm-600 mt-0.5">They're a starting point. AI rewrites optimize for specific framework weaknesses. Use them as inspiration, not gospel.</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold text-warm-900">Do I use the same credits?</p>
-                <p className="text-sm text-warm-600 mt-0.5">Yep. 1 credit per score, 2 for A/B compare. Same credits work across all bilko.run tools.</p>
+          {/* 2. Three modes explained */}
+          <section className="max-w-3xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">Three ways to use it</h2>
+            <div className="grid md:grid-cols-3 gap-6">
+              {[
+                { icon: '📊', title: 'Score', desc: 'Paste a headline, get a score out of 100 with framework-by-framework feedback and specific fixes. Takes 10 seconds.' },
+                { icon: '⚔️', title: 'A/B Compare', desc: 'Paste two headlines. We score both, pick a winner, and tell you exactly which frameworks each one wins on.' },
+                { icon: '✨', title: 'Generate', desc: 'Describe your product. AI generates 5 headlines using proven techniques — curiosity gaps, bold claims, number hooks.' },
+              ].map(({ icon, title, desc }) => (
+                <div key={title} className="text-center">
+                  <span className="text-3xl">{icon}</span>
+                  <h3 className="font-bold text-warm-900 mt-3 mb-2">{title}</h3>
+                  <p className="text-sm text-warm-500 leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 3. The 4 frameworks — deep explanation */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 mb-3">We judge headlines on 4 things</h2>
+              <p className="text-warm-500 mb-8 text-sm">Not vibes. Not word counts. Real conversion frameworks used by professional copywriters.</p>
+              <div className="space-y-8">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">30</span>
+                    <h3 className="font-bold text-warm-900">Masterson's Rule of One + 4 U's</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">One dominant idea — not three competing ones crammed into a run-on sentence. Is it Urgent? Unique? Ultra-Specific? These aren't buzzwords. A headline that scores high here has a single promise that makes the reader need to click.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example: "I analyzed 10,000 landing pages and found that 73% fail the same test" → Single idea, specific number, curiosity gap = 28/30</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm">30</span>
+                    <h3 className="font-bold text-warm-900">Hormozi's Value Equation</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Value = (Dream Outcome × Perceived Likelihood) / (Time Delay × Effort). Your headline needs to communicate what the reader gets (dream outcome), why they should believe it (likelihood), how fast (time), and how easy (effort). The best headlines maximize the top and minimize the bottom.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example: "Cut Your AWS Bill by 40% in 30 Days — No Migration Required" → Big outcome, credible, fast, easy = 26/30</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center font-black text-sm">20</span>
+                    <h3 className="font-bold text-warm-900">Readability & Clarity</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">Target a 5th-grade reading level. Short words, clear structure, no jargon. The best headlines in the world are simple enough for anyone to understand instantly. If your reader needs to re-read it, you've already lost them.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Ideal length: 6-12 words for web, 4-9 for email subjects, 6-14 for blog posts</p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm">20</span>
+                    <h3 className="font-bold text-warm-900">Proof + Promise + Plan</h3>
+                  </div>
+                  <p className="text-sm text-warm-600 leading-relaxed">A promise without proof is just a claim. The strongest headlines include a proof element (number, credential, named source), a specific promise (not vague "better results"), and a hint at the method. All three in one headline is how you score 18+/20.</p>
+                  <p className="text-xs text-warm-400 mt-2 italic">Example: "2,347 SaaS founders tried this → 40% more signups in 14 days" → Proof (2,347), Promise (40%), Plan (14 days)</p>
+                </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Bottom CTA */}
-          <div className="bg-white border-y border-warm-200/40">
-            <div className="max-w-2xl mx-auto px-6 py-10 text-center">
-              <p className="text-warm-900 font-bold text-base mb-3">Still tweaking your headline? That's the right instinct. Score it.</p>
-              <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="bg-fire-500 hover:bg-fire-600 text-white font-bold py-2.5 px-6 rounded-xl transition-colors text-sm"
-              >
-                Back to top
+          {/* 4. The grading scale */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-xl font-black text-warm-900 text-center mb-6">The scale</h2>
+            <div className="flex flex-wrap justify-center gap-2">
+              {[
+                { grade: 'A+', range: '90-100', label: 'Professional-grade', color: 'bg-green-100 text-green-700 border-green-200' },
+                { grade: 'A', range: '85-89', label: 'Excellent', color: 'bg-green-50 text-green-600 border-green-200' },
+                { grade: 'B+', range: '75-79', label: 'Strong', color: 'bg-blue-50 text-blue-600 border-blue-200' },
+                { grade: 'C+', range: '60-64', label: 'Needs work', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+                { grade: 'D', range: '40-49', label: 'Weak', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+                { grade: 'F', range: '0-39', label: 'Rewrite it', color: 'bg-red-100 text-red-700 border-red-200' },
+              ].map(({ grade, range, label, color }) => (
+                <div key={grade} className={`px-3 py-2 rounded-lg border text-sm font-bold ${color}`}>
+                  {grade} <span className="font-normal text-xs opacity-70">{range} — {label}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 5. Who uses this */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14">
+              <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Who uses HeadlineGrader</h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                {[
+                  { role: 'Founders', desc: 'Score your landing page headline before launch. A 10-point improvement in headline score can mean 20-30% more signups.' },
+                  { role: 'Copywriters', desc: 'Validate headline options against proven frameworks instead of gut feeling. Show clients data, not opinions.' },
+                  { role: 'Content creators', desc: 'Test blog titles before publishing. The headline determines 80% of whether someone clicks.' },
+                  { role: 'Ad teams', desc: 'Score ad headlines before spending budget. Then use Generate mode to create high-scoring variants.' },
+                ].map(({ role, desc }) => (
+                  <div key={role} className="flex items-start gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-fire-100 text-fire-700 flex items-center justify-center text-xs font-black flex-shrink-0">&#x2713;</span>
+                    <div>
+                      <h3 className="font-bold text-warm-900 text-sm">{role}</h3>
+                      <p className="text-sm text-warm-500 mt-0.5">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* 6. HeadlineGrader vs alternatives */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-xl font-black text-warm-900 text-center mb-8">Why not just use CoSchedule or ChatGPT?</h2>
+            <div className="space-y-4">
+              {[
+                { them: 'CoSchedule counts word types', us: 'We score against 4 proven conversion frameworks — Rule of One, Value Equation, Readability, Proof+Promise+Plan' },
+                { them: 'ChatGPT says "great headline!"', us: 'We give a score out of 100 with specific feedback per framework and actionable fixes' },
+                { them: 'AMI Institute gives one EMV number', us: 'We break down exactly which framework is weak and why, with calibrated scoring against reference headlines' },
+                { them: 'Free tools score everything 60-80', us: 'Our scoring uses the full 0-100 range with calibration anchors — "Tips for Better Marketing" scores below 35, not 65' },
+              ].map(({ them, us }, i) => (
+                <div key={i} className="grid grid-cols-2 gap-3">
+                  <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                    <p className="text-[10px] font-bold uppercase text-warm-400 mb-1">Others</p>
+                    <p className="text-sm text-warm-600">{them}</p>
+                  </div>
+                  <div className="bg-fire-50 rounded-xl p-4 border border-fire-200">
+                    <p className="text-[10px] font-bold uppercase text-fire-500 mb-1">HeadlineGrader</p>
+                    <p className="text-sm text-warm-700">{us}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 7. Social proof / stats */}
+          <section className="bg-warm-900">
+            <div className="max-w-3xl mx-auto px-6 py-14 text-center">
+              <p className="text-warm-400 text-sm mb-6">Built for people who take their words seriously</p>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-3xl font-black text-white">4</p>
+                  <p className="text-xs text-warm-500 mt-1">Proven frameworks</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">100</p>
+                  <p className="text-xs text-warm-500 mt-1">Point scoring scale</p>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-white">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per analysis</p>
+                </div>
+              </div>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="mt-8 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl transition-colors text-sm">
+                Score your headline
               </button>
             </div>
-          </div>
+          </section>
+
+          {/* 8. How it works step by step */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-10">How it works</h2>
+            <div className="space-y-8">
+              {[
+                { step: '1', title: 'Paste your headline', desc: 'Any headline — landing page, email subject, ad copy, blog title, social post. Pick the context type for more accurate scoring.' },
+                { step: '2', title: 'Get scored in 10 seconds', desc: 'AI evaluates it against 4 conversion frameworks. You get a score out of 100, a letter grade, and specific feedback for each framework.' },
+                { step: '3', title: 'See exactly what\'s weak', desc: 'The breakdown shows which framework pulled your score down. "Rule of One: 12/30 — too many competing ideas." No guessing.' },
+                { step: '4', title: 'Get AI rewrites', desc: 'Three rewritten versions, each optimized for a different weakness. With predicted scores so you know which rewrite to test.' },
+                { step: '5', title: 'Generate fresh options', desc: 'Switch to Generate mode. Describe your product. Get 5 new headlines using different techniques — curiosity gaps, bold claims, number hooks.' },
+              ].map(({ step, title, desc }) => (
+                <div key={step} className="flex items-start gap-4">
+                  <span className="flex-shrink-0 w-10 h-10 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black">{step}</span>
+                  <div>
+                    <h3 className="font-bold text-warm-900">{title}</h3>
+                    <p className="text-sm text-warm-500 mt-1 leading-relaxed">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 9. Pricing — clear and simple */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-2xl mx-auto px-6 py-14 text-center">
+              <h2 className="text-2xl font-black text-warm-900 mb-2">Simple pricing</h2>
+              <p className="text-warm-500 mb-6 text-sm">No subscription. No monthly fee. Pay for what you use.</p>
+              <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">Free</p>
+                  <p className="text-xs text-warm-500 mt-1">First analysis</p>
+                </div>
+                <div className="bg-fire-50 rounded-xl p-4 border-2 border-fire-300">
+                  <p className="text-2xl font-black text-warm-900">$1</p>
+                  <p className="text-xs text-warm-500 mt-1">Per credit</p>
+                </div>
+                <div className="bg-warm-50 rounded-xl p-4 border border-warm-100">
+                  <p className="text-2xl font-black text-warm-900">$5</p>
+                  <p className="text-xs text-warm-500 mt-1">7 credits</p>
+                </div>
+              </div>
+              <p className="text-xs text-warm-400 mt-4">Same credits work across all 10 bilko.run tools. Credits never expire.</p>
+            </div>
+          </section>
+
+          {/* 10. FAQ — expanded */}
+          <section className="max-w-2xl mx-auto px-6 py-14">
+            <h2 className="text-2xl font-black text-warm-900 text-center mb-8">Frequently asked questions</h2>
+            <div className="space-y-5">
+              {[
+                { q: 'What makes a good headline?', a: 'One idea, specific benefit, emotional hook, under 60 characters. That\'s it. Most headlines fail at "one idea" — they try to say three things and end up saying nothing.' },
+                { q: 'Why 60 characters?', a: 'Google truncates search results at ~60 characters. If your headline gets cut off, you just lost the most important piece of copy on your page. Email subjects truncate at 35-40 on mobile.' },
+                { q: 'How is scoring calibrated?', a: 'We use reference headlines with known scores. "Tips for Better Marketing" → below 35. "I analyzed 10,000 landing pages and found 73% fail the same test" → 88-92. The AI compares your headline against these anchors, then adjusts ±5 based on framework analysis.' },
+                { q: 'Are the AI rewrites good?', a: 'They\'re optimized starting points, not finished copy. Each rewrite targets a specific framework weakness with a specific technique (added number, shortened words, added proof element). Use them as inspiration, test them, iterate.' },
+                { q: 'What\'s Generate mode?', a: 'Describe your product in a few sentences. AI generates 5 headlines using different techniques — curiosity gaps, bold claims, number hooks, before/after contrasts. Each comes with a predicted score. Click "Score it" to get the full framework breakdown.' },
+                { q: 'Can I test email subject lines?', a: 'Yes. Pick "Email Subject" as the context. Scoring adjusts for email-specific standards — shorter length (4-9 words ideal), higher urgency weight, open-rate correlation.' },
+                { q: 'Do credits work across tools?', a: 'Yes. 1 credit = 1 headline score. Same credits work on PageRoast, AdScorer, ThreadGrader, EmailForge, AudienceDecoder, LaunchGrader, StackAudit, and Stepproof. LocalScore is free.' },
+                { q: 'Is my headline stored?', a: 'Your recent headlines are saved locally in your browser for convenience (the "Recent Headlines" section). We don\'t store your headlines on our servers beyond the analysis session.' },
+              ].map(({ q, a }) => (
+                <div key={q}>
+                  <h3 className="font-bold text-warm-900 text-sm">{q}</h3>
+                  <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 11. Final CTA */}
+          <section className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900">
+            <div className="max-w-2xl mx-auto px-6 py-16 text-center">
+              <h2 className="text-2xl font-black text-white mb-3">Your headline is either working or it isn't.</h2>
+              <p className="text-warm-400 mb-6 text-sm">Find out in 10 seconds. First one's free.</p>
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-black rounded-xl shadow-lg shadow-fire-600/30 transition-all text-base">
+                Score Your Headline
+              </button>
+              <p className="text-xs text-warm-600 mt-4">No signup required. Results in ~10 seconds.</p>
+            </div>
+          </section>
         </>
       )}
 

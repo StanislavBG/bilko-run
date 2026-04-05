@@ -2,6 +2,7 @@ import React from 'react';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
 import { Layout } from './components/Layout.js';
+import { ToolErrorBoundary } from './components/ErrorBoundary.js';
 import { usePageView } from './hooks/usePageView.js';
 import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
@@ -87,6 +88,14 @@ function LegacyDashboard({ children }: { children: React.ReactNode }) {
   );
 }
 
+function lazyRoute(El: React.ComponentType) {
+  return (
+    <ToolErrorBoundary>
+      <React.Suspense fallback={null}><El /></React.Suspense>
+    </ToolErrorBoundary>
+  );
+}
+
 function AppRoutes() {
   return (
     <AuthProvider>
@@ -96,16 +105,16 @@ function AppRoutes() {
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/page-roast" element={<React.Suspense fallback={null}><PageRoastPage /></React.Suspense>} />
-            <Route path="/projects/headline-grader" element={<React.Suspense fallback={null}><HeadlineGraderPage /></React.Suspense>} />
-            <Route path="/projects/ad-scorer" element={<React.Suspense fallback={null}><AdScorerPage /></React.Suspense>} />
-            <Route path="/projects/thread-grader" element={<React.Suspense fallback={null}><ThreadGraderPage /></React.Suspense>} />
-            <Route path="/projects/email-forge" element={<React.Suspense fallback={null}><EmailForgePage /></React.Suspense>} />
-            <Route path="/projects/audience-decoder" element={<React.Suspense fallback={null}><AudienceDecoderPage /></React.Suspense>} />
-            <Route path="/projects/stepproof" element={<React.Suspense fallback={null}><StepproofPage /></React.Suspense>} />
-            <Route path="/projects/launch-grader" element={<React.Suspense fallback={null}><LaunchGraderPage /></React.Suspense>} />
-            <Route path="/projects/stack-audit" element={<React.Suspense fallback={null}><StackAuditPage /></React.Suspense>} />
-            <Route path="/projects/local-score" element={<React.Suspense fallback={null}><LocalScorePage /></React.Suspense>} />
+            <Route path="/projects/page-roast" element={lazyRoute(PageRoastPage)} />
+            <Route path="/projects/headline-grader" element={lazyRoute(HeadlineGraderPage)} />
+            <Route path="/projects/ad-scorer" element={lazyRoute(AdScorerPage)} />
+            <Route path="/projects/thread-grader" element={lazyRoute(ThreadGraderPage)} />
+            <Route path="/projects/email-forge" element={lazyRoute(EmailForgePage)} />
+            <Route path="/projects/audience-decoder" element={lazyRoute(AudienceDecoderPage)} />
+            <Route path="/projects/stepproof" element={lazyRoute(StepproofPage)} />
+            <Route path="/projects/launch-grader" element={lazyRoute(LaunchGraderPage)} />
+            <Route path="/projects/stack-audit" element={lazyRoute(StackAuditPage)} />
+            <Route path="/projects/local-score" element={lazyRoute(LocalScorePage)} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />
             <Route path="/pricing" element={<PricingPage />} />

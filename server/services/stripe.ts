@@ -108,6 +108,20 @@ export async function hasPurchased(email: string, productKey: string): Promise<b
 const _subCache = new Map<string, { isPro: boolean; tier: string; expiresAt: number }>();
 const SUB_CACHE_TTL_MS = 5 * 60 * 1000;
 const SUB_CACHE_ERROR_TTL_MS = 60 * 1000;
+const SUB_CACHE_MAX = 5000;
+
+function setSubCache(email: string, entry: { isPro: boolean; tier: string; expiresAt: number }): void {
+  if (_subCache.size >= SUB_CACHE_MAX) {
+    // Evict first expired entry, or oldest if none expired (Map preserves insertion order).
+    const now = Date.now();
+    let evicted = false;
+    for (const [k, v] of _subCache) {
+      if (v.expiresAt <= now) { _subCache.delete(k); evicted = true; break; }
+    }
+    if (!evicted) _subCache.delete(_subCache.keys().next().value as string);
+  }
+  _subCache.set(email, entry);
+}
 
 export async function hasActiveSubscriptionLive(email: string): Promise<boolean> {
   const result = await getActiveSubscriptionLive(email);
@@ -142,7 +156,7 @@ export async function getActiveSubscriptionLive(email: string): Promise<{ isPro:
   }
 
   if (!customerId) {
-    _subCache.set(email, { isPro: false, tier: 'free', expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
+    setSubCache(email, { isPro: false, tier: 'free', expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
     return { isPro: false, tier: 'free' };
   }
 
@@ -168,13 +182,13 @@ export async function getActiveSubscriptionLive(email: string): Promise<{ isPro:
         });
       }
     }
-    _subCache.set(email, { isPro, tier, expiresAt: Date.now() + SUB_CACHE_TTL_MS });
+    setSubCache(email, { isPro, tier, expiresAt: Date.now() + SUB_CACHE_TTL_MS });
     return { isPro, tier };
   } catch (err) {
     console.error('[stripe] Live subscription check failed, falling back to DB:', err);
     const tier = await getSubscriptionTier(email);
     const isPro = tier !== 'free';
-    _subCache.set(email, { isPro, tier, expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
+    setSubCache(email, { isPro, tier, expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
     return { isPro, tier };
   }
 }

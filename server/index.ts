@@ -29,6 +29,10 @@ try {
 const app = Fastify({
   logger: { level: 'warn' },
   bodyLimit: 2 * 1024 * 1024, // 2MB max body
+  // Render puts clients behind a proxy; trust X-Forwarded-For so req.ip is the real
+  // client IP. Without this, all clients share the proxy IP and rate limiting is
+  // effectively a single global bucket.
+  trustProxy: true,
 });
 
 // Raw body for Stripe webhook signature verification

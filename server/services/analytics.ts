@@ -5,19 +5,23 @@ import { dbAll } from '../db.js';
 interface ReferrerRule { host_pattern: string; bucket: string; source_name: string; }
 
 let _rulesCache: ReferrerRule[] | null = null;
+let _rulesCacheAt = 0;
+const RULES_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 
 async function getRules(): Promise<ReferrerRule[]> {
-  if (_rulesCache) return _rulesCache;
+  const now = Date.now();
+  if (_rulesCache && now - _rulesCacheAt < RULES_CACHE_TTL_MS) return _rulesCache;
   try {
     _rulesCache = await dbAll<ReferrerRule>('SELECT host_pattern, bucket, source_name FROM referrer_rules');
+    _rulesCacheAt = now;
   } catch {
-    _rulesCache = [];
+    _rulesCache ??= [];
   }
   return _rulesCache;
 }
 
 /** Clear the referrer rules cache (call after inserts if admin mutates table). */
-export function refreshReferrerRules(): void { _rulesCache = null; }
+export function refreshReferrerRules(): void { _rulesCache = null; _rulesCacheAt = 0; }
 
 function hostMatches(host: string, pattern: string): boolean {
   if (host === pattern) return true;

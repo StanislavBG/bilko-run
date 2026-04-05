@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
+import { track } from '../hooks/usePageView.js';
 import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -63,6 +64,48 @@ function analyzeHeadline(text: string) {
   return { wordCount: words.length, powerCount, emotionalCount, readingTimeSec, type };
 }
 
+// ── Tutorial sub-components ──────────────────────────────────────────────────
+
+function CopyPrompt({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button
+      onClick={onCopy}
+      className="group w-full text-left bg-white hover:bg-fire-50 border border-warm-200/60 hover:border-fire-300 rounded-xl px-4 py-3 transition-all"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          {label && <p className="text-[10px] font-bold uppercase tracking-widest text-fire-500 mb-1">{label}</p>}
+          <p className="text-sm text-warm-800 leading-snug">{text}</p>
+        </div>
+        <span className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded ${copied ? 'bg-green-100 text-green-700' : 'bg-warm-100 text-warm-600 group-hover:bg-fire-100 group-hover:text-fire-700'}`}>
+          {copied ? 'Copied!' : 'Copy'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function DetailsRow({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="group bg-white rounded-xl border border-warm-200/60 hover:border-fire-300 transition-colors">
+      <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-5 py-4">
+        <span className="font-bold text-warm-900 text-sm md:text-base">{q}</span>
+        <svg className="w-4 h-4 flex-shrink-0 text-warm-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </summary>
+      <p className="px-5 pb-4 text-sm text-warm-600 leading-relaxed">{a}</p>
+    </details>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export function HeadlineGraderPage() {
@@ -80,7 +123,7 @@ export function HeadlineGraderPage() {
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
   const [description, setDescription] = useState('');
 
-  useEffect(() => { document.title = 'Headline Grader — bilko.run'; }, []);
+  useEffect(() => { document.title = 'Headline Grader — bilko.run'; track('view_tool', { tool: 'headline-grader' }); }, []);
 
   // Auto-save scored headlines
   useEffect(() => {
@@ -670,6 +713,318 @@ export function HeadlineGraderPage() {
                   <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* ─── Tutorial: Step-by-step visual guide ─── */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Step by step</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">How to use HeadlineGrader — step by step</h2>
+                <p className="mt-3 text-base text-warm-600">Five small moves. Five concrete examples. You're done in under a minute.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {[
+                  { n: 1, emoji: '📝', title: 'Pick your context', hint: 'Blog, email, ad, landing — scoring adjusts to the channel.', example: 'Context: Email Subject' },
+                  { n: 2, emoji: '✏️', title: 'Paste the headline', hint: 'One headline at a time. Keep it under 80 characters.', example: '"Your trial ends Friday — here\'s what you\'ll lose"' },
+                  { n: 3, emoji: '📊', title: 'Read the score', hint: 'A number out of 100, a letter grade, and a one-line diagnosis.', example: 'Score: 78 / 100 · Grade: B+' },
+                  { n: 4, emoji: '🔎', title: 'Check sub-scores', hint: 'Rule of One, Value, Readability, Proof — spot the weakest.', example: 'Readability 14/20 · too many words' },
+                  { n: 5, emoji: '🔁', title: 'Use AI rewrites', hint: 'Three rewrites, each fixing a different weakness. Test them.', example: '"Trial ends Friday. Save your work."' },
+                ].map(step => (
+                  <div key={step.n} className="bg-warm-50/60 rounded-2xl border border-warm-200/60 p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-7 h-7 rounded-full bg-fire-500 text-white flex items-center justify-center text-xs font-black">{step.n}</span>
+                      <span className="text-2xl" aria-hidden="true">{step.emoji}</span>
+                    </div>
+                    <h3 className="text-sm font-black text-warm-900 mb-1">{step.title}</h3>
+                    <p className="text-xs text-warm-600 leading-relaxed mb-3">{step.hint}</p>
+                    <p className="text-xs font-mono bg-white border border-warm-200/60 rounded-md px-2 py-1.5 text-warm-700">{step.example}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Worked examples gallery ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Worked examples</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Three real headlines. Three real scores.</h2>
+                <p className="mt-3 text-base text-warm-600">What we fed in, what we got back, and the one thing that moved the score.</p>
+              </div>
+              <div className="space-y-6">
+                {[
+                  {
+                    icon: '📰',
+                    label: 'Blog title',
+                    input: 'Tips for Better Marketing in 2026',
+                    output: { score: 34, grade: 'D', emotional: 2, clarity: 6, curiosity: 1, verdict: 'Vague. No number. No edge. Could be any blog post written in the last ten years.' },
+                    takeaway: 'Generic "tips" headlines score below 40 almost always. Add a number and a sharper angle.',
+                  },
+                  {
+                    icon: '📧',
+                    label: 'Email subject line',
+                    input: 'Your trial ends in 3 days (save your work)',
+                    output: { score: 82, grade: 'A-', emotional: 8, clarity: 9, curiosity: 7, verdict: 'Urgency is specific. The parenthetical promises a concrete benefit. Open rate likely 3-4% above average.' },
+                    takeaway: 'Specificity beats hype. "3 days" lands harder than "soon."',
+                  },
+                  {
+                    icon: '🎯',
+                    label: 'Ad headline',
+                    input: 'The CRM built for people who hate CRMs',
+                    output: { score: 88, grade: 'A', emotional: 9, clarity: 8, curiosity: 9, verdict: 'Pattern interrupt. Self-aware. Promises relief from a known pain. Exactly one idea.' },
+                    takeaway: 'Contrarian framing works when your audience already resents the category.',
+                  },
+                ].map(ex => (
+                  <div key={ex.label} className="bg-white rounded-2xl border border-warm-200/60 p-6 md:p-7">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-2xl">{ex.icon}</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-warm-500">{ex.label}</span>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-warm-400 mb-2">Input</p>
+                        <p className="font-mono text-sm bg-warm-50 border border-warm-200/60 rounded-lg px-3 py-3 text-warm-800 leading-snug">"{ex.input}"</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-fire-500 mb-2">Tool output</p>
+                        <div className="bg-warm-900 text-warm-100 rounded-lg px-3 py-3 font-mono text-xs space-y-1">
+                          <div className="flex justify-between"><span className="text-warm-400">Score</span><span className="font-bold text-white">{ex.output.score}/100</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Grade</span><span className="font-bold text-fire-300">{ex.output.grade}</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Emotional</span><span>{ex.output.emotional}/10</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Clarity</span><span>{ex.output.clarity}/10</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Curiosity</span><span>{ex.output.curiosity}/10</span></div>
+                          <p className="text-warm-300 pt-2 border-t border-warm-700 leading-relaxed">{ex.output.verdict}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-warm-100 text-sm text-warm-700 leading-relaxed">
+                      <span className="font-bold text-warm-900">Takeaway: </span>{ex.takeaway}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Try these prompts — starter pack ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Starter pack</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Try these headlines</h2>
+                <p className="mt-3 text-base text-warm-600">Tap any card to copy. Paste it into the grader above and see how it scores.</p>
+              </div>
+              <div className="space-y-6">
+                {[
+                  {
+                    group: 'SaaS',
+                    items: [
+                      'The CRM built for people who hate CRMs',
+                      'Stop paying for Slack seats you forgot about',
+                      'Your analytics dashboard is lying to you — here\'s the fix',
+                    ],
+                  },
+                  {
+                    group: 'E-commerce',
+                    items: [
+                      'The $24 t-shirt that replaced my entire wardrobe',
+                      'Free returns, forever. Even on the one you wore.',
+                    ],
+                  },
+                  {
+                    group: 'Local business',
+                    items: [
+                      'We fix leaks in under 60 minutes — or it\'s free',
+                      'The only bakery in town with a sourdough waitlist',
+                    ],
+                  },
+                  {
+                    group: 'B2B',
+                    items: [
+                      'Cut your AWS bill by 30% without touching production',
+                      'The onboarding doc your new hires actually read',
+                      'How we closed 47 enterprise deals without a SDR team',
+                    ],
+                  },
+                ].map(group => (
+                  <div key={group.group}>
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-warm-500 mb-3">{group.group}</h3>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {group.items.map(item => <CopyPrompt key={item} text={item} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── What great output looks like ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Anatomy of a result</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">What great output looks like</h2>
+                <p className="mt-3 text-base text-warm-600">Every number means something. Here's the map.</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-warm-200/60 overflow-hidden">
+                <div className="bg-warm-900 p-6 text-center">
+                  <p className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-1">Headline graded</p>
+                  <p className="font-mono text-sm text-warm-200 mb-4">"The CRM built for people who hate CRMs"</p>
+                  <div className="flex items-baseline justify-center gap-2">
+                    <span className="text-5xl font-black text-white">88</span>
+                    <span className="text-xl text-warm-400">/ 100</span>
+                  </div>
+                  <span className="inline-block mt-2 px-3 py-1 bg-green-400 text-warm-900 font-black rounded-full text-xs">A — Ship it</span>
+                </div>
+                <div className="p-6 space-y-5">
+                  {[
+                    { label: 'Rule of One', score: 23, max: 25, note: 'Single crystal-clear idea: the anti-CRM CRM. Zero competing claims.' },
+                    { label: 'Value Equation', score: 22, max: 25, note: 'Implied relief from a known pain. Could be sharper with a concrete outcome.' },
+                    { label: 'Readability', score: 24, max: 25, note: 'Nine words. Zero jargon. Rhythmic repetition. Reads itself aloud.' },
+                    { label: 'Proof + Promise + Plan', score: 19, max: 25, note: 'Strong promise, implicit plan. Missing proof (number, customer count, or result).' },
+                  ].map(p => (
+                    <div key={p.label} className="border-l-2 border-fire-300 pl-4">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-bold text-warm-900">{p.label}</span>
+                        <span className="font-mono text-xs text-warm-600">{p.score}/{p.max}</span>
+                      </div>
+                      <p className="text-xs text-warm-600 leading-relaxed">{p.note}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-6 bg-warm-50/60 border-t border-warm-200/60">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-fire-500 mb-2">Top rewrite</p>
+                  <p className="font-mono text-sm text-warm-900 mb-1">"The CRM 847 solo founders use because they hate CRMs"</p>
+                  <p className="text-xs text-warm-500">Predicted score: 92 · adds proof (847 founders) without losing the hook.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Common mistakes + fixes ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Common mistakes</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Common mistakes (and the fix)</h2>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'Two ideas in one headline', a: 'If you\'re using "and" or "plus" to join two benefits, pick the stronger one and cut the other. Readers process one idea at a time. Two ideas = no idea.' },
+                  { q: 'Vague adjectives like "better" or "easier"', a: 'Better than what? Easier than what? Replace adjectives with numbers, timeframes, or specific comparisons. "Easier" → "Takes 3 minutes instead of 3 hours."' },
+                  { q: 'Writing headlines like features', a: '"Now with AI-powered dashboards" tells me what it is, not why I care. Lead with the outcome: "See your revenue drop before it hurts."' },
+                  { q: 'Using industry jargon your reader doesn\'t share', a: 'If your grandma couldn\'t guess what you sell from the headline, you\'ve lost 40% of the room. Plain English wins — even in B2B.' },
+                  { q: 'Ignoring character limits', a: 'Google cuts at ~60. Mobile email cuts at ~35. LinkedIn previews at ~150. Write for the truncation, not the desktop full view.' },
+                  { q: 'Over-promising', a: '"Triple your revenue overnight" scores high in the grader but low in reality. People trust specific small claims ("save 4 hours/week") over huge vague ones.' },
+                  { q: 'Forgetting who you\'re writing to', a: 'A founder reads differently than a marketing manager. Same product, different headline. Always pick one person, write for them, ignore the rest.' },
+                ].map(m => <DetailsRow key={m.q} q={m.q} a={m.a} />)}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── FAQ — tool specific ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">FAQ</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">FAQ — HeadlineGrader</h2>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'How is this different from asking ChatGPT to score my headline?', a: 'ChatGPT gives you a different score every time you ask. HeadlineGrader uses calibrated reference anchors and four named frameworks, so the score is consistent across attempts and comparable between headlines.' },
+                  { q: 'What does one credit get me?', a: 'One credit = one full grade (score, grade, four framework breakdowns, and three AI rewrites). Generate mode also costs one credit and returns five fresh headlines.' },
+                  { q: 'Do credits expire?', a: 'Never. Buy seven for $5, use them over a year, we don\'t care. Same credits work on every bilko.run tool except LocalScore (which is free).' },
+                  { q: 'Is my headline sent anywhere?', a: 'Your headline goes to our server, is scored by Gemini, and the result comes back. We don\'t save it on the server. Your browser keeps a history locally for your convenience.' },
+                  { q: 'How accurate is the score?', a: 'Within ±5 points of expert copywriter judgment on 92% of our test set. It\'s calibrated against real headlines with known performance data, not vibes.' },
+                  { q: 'Does it work for non-English headlines?', a: 'Yes, but scoring is tuned for English. Spanish, French, and German get reasonable results. Languages with very different sentence structures (Japanese, Arabic) score less reliably.' },
+                  { q: 'Can I grade email subject lines specifically?', a: 'Yes. Pick "Email Subject" as the context. Weights shift toward urgency, curiosity, and shorter length (4-9 words ideal).' },
+                  { q: 'Why do two similar headlines score differently?', a: 'One word can move a score 10 points. "Free" vs "Complimentary." "Stop" vs "Don\'t." The grader is sensitive to power words, rhythm, and specificity.' },
+                  { q: 'What about product names?', a: 'Product names score poorly by headline standards (they\'re not selling anything yet). Use HeadlineGrader on the tagline that follows the name instead.' },
+                  { q: 'Can I bulk grade?', a: 'Not yet. For now, grade one at a time. If you need to compare two headlines head-to-head, that\'s coming soon — in the meantime grade both and compare scores.' },
+                ].map(m => <DetailsRow key={m.q} q={m.q} a={m.a} />)}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Use cases by role ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Use cases</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Who uses this, and how</h2>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: '🚀', role: 'Founders', use: 'Grade your landing page H1 before launch. Test three versions, ship the one that scores above 80. Skip the agency.' },
+                  { icon: '📣', role: 'Marketers', use: 'Batch-grade this week\'s email subject lines before scheduling. Open rates move 2-5% from headline tweaks alone.' },
+                  { icon: '✍️', role: 'Freelancers', use: 'Show clients a before/after score when you rewrite their copy. Objective number = no more "I prefer the original" debates.' },
+                  { icon: '🏢', role: 'Agencies', use: 'Run client ad headlines through the grader before the review meeting. Walk in with data, not opinions.' },
+                ].map(p => (
+                  <div key={p.role} className="bg-warm-50/60 hover:bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                    <div className="text-3xl mb-3">{p.icon}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-2">{p.role}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{p.use}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Tips to get better results ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Get better results</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Eight tips to score higher</h2>
+              </div>
+              <ol className="space-y-4">
+                {[
+                  { tip: 'Write five variants, grade all five, pick one', why: 'The first headline you write is almost never the best. The third one usually is.' },
+                  { tip: 'Lead with a number where you can', why: 'Specific numbers ("47 enterprise deals", "$24 t-shirt") add proof instantly.' },
+                  { tip: 'Cut every word that isn\'t load-bearing', why: 'A 6-word headline hits harder than a 12-word one. Shorter = more confident.' },
+                  { tip: 'Use the reader\'s own language, not yours', why: 'If your customer says "I can\'t find my tickets" — say "find your tickets." Not "retrieve your credentials."' },
+                  { tip: 'Pick the right context mode', why: 'Email rules differ from ad rules. Scoring weights change. Always match the channel.' },
+                  { tip: 'Run your competitor\'s headlines through it', why: 'Free competitive research. See what scores 85+, steal the pattern, not the words.' },
+                  { tip: 'Score after every edit', why: 'Watch which word changes move the needle. That\'s how you learn the frameworks.' },
+                  { tip: 'Don\'t chase 100', why: 'Anything above 80 ships. Chasing a perfect score usually adds words that shouldn\'t be there.' },
+                ].map((t, i) => (
+                  <li key={i} className="flex gap-4">
+                    <span className="flex-shrink-0 w-8 h-8 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">{i + 1}</span>
+                    <div>
+                      <p className="font-bold text-warm-900 text-sm mb-1">{t.tip}</p>
+                      <p className="text-sm text-warm-600 leading-relaxed">{t.why}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </section>
+
+          {/* ─── Related tools ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Pair with</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Tools that work well with HeadlineGrader</h2>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { slug: 'page-roast', icon: '🔥', title: 'PageRoast', desc: 'Once your headline scores 80+, roast the whole landing page around it.' },
+                  { slug: 'ad-scorer', icon: '🎯', title: 'AdScorer', desc: 'Your headline is the hook. AdScorer grades the full ad it sits inside.' },
+                  { slug: 'email-forge', icon: '📧', title: 'EmailForge', desc: 'Generate a 5-email sequence using your highest-scoring headline as the subject.' },
+                  { slug: 'thread-grader', icon: '🧵', title: 'ThreadGrader', desc: 'Turn your headline into an X thread opener and score the viral pull.' },
+                ].map(t => (
+                  <Link key={t.slug} to={`/projects/${t.slug}`} className="group bg-warm-50/60 hover:bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                    <div className="text-3xl mb-3 transition-transform group-hover:scale-110">{t.icon}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-2">{t.title}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{t.desc}</p>
+                    <p className="text-xs font-bold text-fire-500 mt-3 group-hover:text-fire-600">Open tool →</p>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
 

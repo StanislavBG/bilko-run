@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
+import { track } from '../hooks/usePageView.js';
 import { ToolHero, CrossPromo } from '../components/tool-page/index.js';
 
 interface EmailItem {
@@ -147,6 +149,366 @@ function EmailCard({ email, defaultOpen }: { email: EmailItem; defaultOpen: bool
   );
 }
 
+// ── Tutorial content block ──────────────────────────────────────────────────
+
+const EF_PROMPTS: Array<{ category: string; label: string; text: string }> = [
+  { category: 'SaaS', label: 'Cold outreach to HR ops', text: 'Product: B2B onboarding platform that cuts new-hire admin from 8 hours to 40 minutes. Audience: HR ops leaders at 50–500 person companies who just hired 10+ people this quarter. Goal: book a 20-min demo. Tone: casual professional.' },
+  { category: 'SaaS', label: 'Newsletter intro series', text: 'Product: a weekly newsletter on product analytics for PMs at Series A–C startups. Audience: growth PMs managing a funnel they didn\'t build. Goal: 5-email welcome sequence that teaches + retains. Tone: conversational, nerdy.' },
+  { category: 'E-commerce', label: 'Re-engagement for lapsed buyers', text: 'Product: $48 premium pour-over coffee kit, 3-month subscription. Audience: past customers who cancelled after 2 shipments. Goal: win them back with a 15% returning-customer offer. Tone: warm and specific.' },
+  { category: 'E-commerce', label: 'Launch sequence for new product', text: 'Product: launching a $129 minimalist leather wallet with RFID blocking. Audience: existing email list that bought bags from us in the last 12 months. Goal: drive first 500 pre-orders. Tone: confident, no fluff.' },
+  { category: 'Local biz', label: 'New client welcome', text: 'Product: 4-chair barbershop offering $35 cuts and $50 fade + beard combos. Audience: first-time clients who just booked their first appointment online. Goal: 5-email welcome that turns them into monthly regulars. Tone: friendly neighborhood.' },
+  { category: 'Local biz', label: 'Seasonal promo', text: 'Product: house cleaning service, $180 for standard 3-bedroom. Audience: past clients within 5 miles who haven\'t booked in 90+ days. Goal: fill 20 open slots in the next 2 weeks. Tone: warm, urgency without pressure.' },
+  { category: 'B2B', label: 'Sales follow-up after demo', text: 'Product: sales enablement platform, $12K ACV. Audience: RevOps directors who took a demo 10 days ago and went silent. Goal: revive the deal with a tailored 5-touch sequence. Tone: helpful, not needy.' },
+  { category: 'B2B', label: 'Partnership outreach', text: 'Product: API for fraud detection. Audience: Head of Partnerships at fintech startups we don\'t compete with. Goal: 15-min intro call to explore referral partnership. Tone: peer-to-peer, specific.' },
+  { category: 'Creator', label: 'Course launch sequence', text: 'Product: $297 self-paced course on cold email copywriting. Audience: email list of 4,000 freelance marketers who opted in for a free template. Goal: 300 enrollments in 7-day launch. Tone: Hormozi-style value stacking.' },
+  { category: 'Creator', label: 'Free tool upsell to paid', text: 'Product: paid tier of a free resume scoring tool, $19/mo. Audience: users who scored their resume free 2+ weeks ago. Goal: convert 5% to paid. Tone: helpful with a clear ask.' },
+];
+
+const EF_MISTAKES: Array<{ mistake: string; fix: string }> = [
+  { mistake: 'Product description is too vague ("software for teams")', fix: 'Describe the specific job it does and who does that job today. "Replaces the 14-tab HR onboarding spreadsheet" beats "onboarding software."' },
+  { mistake: 'Audience is too broad ("small businesses")', fix: 'Narrow to role + stage + trigger. "HR ops leads at 50–500-person companies who hired 10+ last quarter" produces sequences 3x sharper.' },
+  { mistake: 'Sending the full 5-email sequence in 5 days', fix: 'Space them over 10–14 days. Day 1, 3, 6, 10, 14 is a well-tested cadence. Back-to-back emails feel like a siege.' },
+  { mistake: 'Leaving merge fields as {{placeholder}}', fix: 'Personalize at least 2 fields per email before sending. Raw merge tags scream "blast" and tank reply rates.' },
+  { mistake: 'Using the same subject style across all 5 emails', fix: 'Rotate subject formats: question, stat, short, curiosity, direct. The sequence was built with variety on purpose.' },
+  { mistake: 'Ignoring deliverability warnings', fix: 'Fix every flagged spam word and subject-length warning before loading into your sender. One flagged email drags the whole sequence.' },
+  { mistake: 'Shipping without A/B testing the opener', fix: 'Use Compare mode to test two different opening emails. Ship the winner as email 1. 10 seconds of work, measurable lift.' },
+];
+
+const EF_FAQ: Array<{ q: string; a: string }> = [
+  { q: 'How is EmailForge different from ChatGPT?', a: 'ChatGPT writes one email at a time. EmailForge generates a full 5-email sequence using 5 different frameworks (AIDA, PAS, Hormozi, Cialdini, Storytelling), then scores each for subject strength, opener, CTA, and deliverability.' },
+  { q: 'How much does one sequence cost?', a: '$1 per sequence (1 credit). $5 buys 7 credits. 2 credits for Compare mode. Credits never expire and work across all 10 bilko.run tools. First sequence is free.' },
+  { q: 'Are the open-rate estimates accurate?', a: 'They\'re directional estimates based on subject-line patterns, length, and personalization signals — useful for comparing emails within a sequence. Real open rates depend on list quality, sender reputation, and send time.' },
+  { q: 'Is my product/audience data private?', a: 'Your inputs are sent to Gemini to generate the sequence, then discarded. We don\'t store your product info or train on it. Only anonymous usage metrics are kept.' },
+  { q: 'Does it work for B2C and B2B?', a: 'Both. Tone + goal combinations handle B2B cold outreach, B2C launches, newsletters, and win-back equally well. The framework rotation adapts to context.' },
+  { q: 'Can I edit the emails?', a: 'Yes — they\'re a starting point. Copy, paste, rewrite anything. The sweet spot is 80% template, 20% personalization per recipient.' },
+  { q: 'What goal should I pick for cold outreach?', a: 'Pick "Cold Outreach." It builds trust from zero — light first touch, value in the middle, direct ask last. The framework order is optimized for strangers.' },
+  { q: 'Will these avoid spam filters?', a: 'Every email gets a deliverability score with specific issues flagged — spam triggers, excessive caps, too many exclamation marks, subject-line length. Fix flags before sending.' },
+  { q: 'Does it work for non-English campaigns?', a: 'Yes — English, Spanish, Portuguese, German, French, and Italian. State the target language in the product description field.' },
+  { q: 'Can I save sequences for later?', a: 'Yes. Every generated sequence saves to your Templates library automatically with its score and grade. Re-generate any template with one click.' },
+];
+
+const EF_TIPS: Array<{ tip: string; why: string }> = [
+  { tip: 'Be ruthlessly specific about audience', why: 'The quality of your sequence rises and falls on the audience line. "VP Sales at 200-person SaaS" gives 3x sharper emails than "sales leaders."' },
+  { tip: 'State the desired action explicitly', why: 'Goal = book demo, reply, click, buy? State it in the prompt. Vague goals produce vague CTAs.' },
+  { tip: 'Run Compare mode before shipping', why: 'Two sequences, side by side, for 2 credits. You will often ship the opposite of what you planned.' },
+  { tip: 'Rotate subject-line formats', why: 'Open-rate lift comes from variety. Stat → question → short → curiosity → direct keeps the reader guessing.' },
+  { tip: 'Add a concrete number or example per email', why: 'Specificity is trust. "Cut onboarding from 8 hours to 40 minutes" beats "save time onboarding."' },
+  { tip: 'Send at the right cadence', why: 'Day 1, 3, 6, 10, 14. Back-to-back emails feel desperate; weekly cadence loses momentum. The 2-week sequence is the sweet spot.' },
+  { tip: 'Personalize 2+ fields per email', why: 'One personalized field reads templated. Two fields reads bespoke. Replies jump with every additional signal.' },
+  { tip: 'Save wins to your Templates library', why: 'Every 80+ sequence is a reusable asset. Your best cold opener becomes the baseline for your next 10 campaigns.' },
+];
+
+function EmailForgeTutorial() {
+  const [copied, setCopied] = useState<number | null>(null);
+
+  async function copyPrompt(text: string, idx: number) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(idx);
+      setTimeout(() => setCopied(null), 1800);
+    } catch {
+      /* noop */
+    }
+  }
+
+  return (
+    <>
+      {/* Step-by-step guide */}
+      <section className="bg-warm-100/40 border-y border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Step by step</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">How to use EmailForge — step by step</h2>
+            <p className="mt-3 text-base text-warm-600">Five steps from blank page to ready-to-send sequence.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[
+              { n: 1, emoji: '🎯', title: 'Describe the product', desc: 'One sentence on what it is and who does the job today.', example: '"Onboarding platform that cuts new-hire admin from 8 hours to 40 minutes."' },
+              { n: 2, emoji: '👥', title: 'Nail the audience', desc: 'Role + stage + recent trigger. Be ruthless.', example: '"HR ops leads at 50–500 person companies who hired 10+ last quarter."' },
+              { n: 3, emoji: '⚙️', title: 'Pick goal + tone', desc: 'Each goal reshapes the 5-email arc entirely.', example: 'Goal: book demo. Tone: casual professional.' },
+              { n: 4, emoji: '🔥', title: 'Forge the sequence', desc: 'Get 5 emails in ~15 seconds with scores + deliverability flags.', example: 'Overall 84/100 · subject: 18/25 · opener: 22/25 · CTA: 20/25' },
+              { n: 5, emoji: '✉️', title: 'Personalize and send', desc: 'Swap merge fields, fix any deliverability flags, load into sender.', example: 'Day 1, 3, 6, 10, 14 cadence.' },
+            ].map(step => (
+              <div key={step.n} className="bg-white rounded-2xl border border-warm-200/60 p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="w-8 h-8 rounded-full bg-fire-500 text-white flex items-center justify-center text-sm font-black">{step.n}</span>
+                  <span className="text-2xl" aria-hidden="true" aria-label={step.title}>{step.emoji}</span>
+                </div>
+                <h3 className="text-sm font-black text-warm-900 mb-1">{step.title}</h3>
+                <p className="text-xs text-warm-600 leading-relaxed mb-3">{step.desc}</p>
+                <div className="bg-warm-50 border border-warm-200/60 rounded-lg px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-warm-400 mb-1">Example</p>
+                  <p className="text-xs text-warm-700 font-mono whitespace-pre-wrap leading-snug">{step.example}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Worked examples */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-4xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Worked examples</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Three real sequences, input to output</h2>
+            <p className="mt-3 text-base text-warm-600">What you paste, what EmailForge returns, and why the score landed where it did.</p>
+          </div>
+          <div className="space-y-8">
+            {[
+              {
+                title: 'Cold outreach — B2B SaaS → HR ops',
+                input: 'Product: onboarding platform that cuts new-hire admin from 8 hours to 40 minutes.\nAudience: HR ops leads at 50–500 person companies who hired 10+ people last quarter.\nGoal: book a 20-minute demo.\nTone: casual professional.',
+                output: 'Overall: 87/100 (A)\n\nEmail 1 — Subject: "40 min vs 8 hours (onboarding)"\n  Subject: 24/25 · Opener: 23/25 · CTA: 21/25\nEmail 2 (PAS) — Subject: "Is your Q2 onboarding already behind?"\n  Subject: 22/25 · Opener: 24/25 · CTA: 22/25\nEmail 3 (Hormozi) — Subject: "7 HR leads said this fixed Q1"\n  Subject: 23/25 · Opener: 22/25 · CTA: 23/25\nEmail 4 (Cialdini) — Subject: "Used by the HR team at [similar co]"\n  Subject: 21/25 · Opener: 23/25 · CTA: 24/25\nEmail 5 (Story) — Subject: "The week we almost missed 12 start dates"\n  Subject: 25/25 · Opener: 24/25 · CTA: 22/25\n\nDeliverability: 94/100 · 0 spam triggers',
+                takeaway: 'Tight audience + specific product claim produced an A-grade sequence with strong subject variety across all 5 emails. Ship as-is after 2 personalization fields.',
+              },
+              {
+                title: 'Re-engagement — DTC coffee subscription',
+                input: 'Product: $48 premium pour-over coffee kit, 3-month subscription.\nAudience: past customers who cancelled after 2 shipments.\nGoal: win them back with a 15% returning-customer offer.\nTone: warm and specific.',
+                output: 'Overall: 78/100 (B+)\n\nEmail 1 — Subject: "we noticed you left (and we get it)"\n  Subject: 21/25 · Opener: 24/25 · CTA: 18/25\nEmail 2 (PAS) — Subject: "what your cup tastes like now"\n  Subject: 22/25 · Opener: 22/25 · CTA: 19/25\nEmail 3 (Hormozi) — Subject: "15% off + the two bags you haven\'t tried"\n  Subject: 24/25 · Opener: 20/25 · CTA: 23/25\nEmail 4 (Cialdini) — Subject: "3,200 returners last month said:"\n  Subject: 22/25 · Opener: 21/25 · CTA: 22/25\nEmail 5 (Story) — Subject: "the farmer who asked about you"\n  Subject: 25/25 · Opener: 24/25 · CTA: 20/25\n\nDeliverability: 91/100 · 1 flag (email 3: "15%")',
+                takeaway: 'Solid B+ sequence. Email 1 CTA is too soft ("come see what\'s new") — tighten to "take 15% back" and overall score jumps to 84.',
+              },
+              {
+                title: 'Launch — DTC leather wallet',
+                input: 'Product: $129 minimalist leather wallet with RFID blocking.\nAudience: existing list that bought bags from us in last 12 months.\nGoal: drive first 500 pre-orders.\nTone: confident, no fluff.',
+                output: 'Overall: 82/100 (B+)\n\nEmail 1 — Subject: "500 pre-orders. 7 days. The wallet."\n  Subject: 25/25 · Opener: 23/25 · CTA: 22/25\nEmail 2 (PAS) — Subject: "your wallet is the thing you touch 40x a day"\n  Subject: 22/25 · Opener: 24/25 · CTA: 20/25\nEmail 3 (Hormozi) — Subject: "Pre-order = $20 off + free monogram"\n  Subject: 24/25 · Opener: 21/25 · CTA: 24/25\nEmail 4 (Cialdini) — Subject: "312 pre-ordered. 188 left."\n  Subject: 25/25 · Opener: 22/25 · CTA: 23/25\nEmail 5 (Story) — Subject: "the leather I rejected 11 times"\n  Subject: 24/25 · Opener: 25/25 · CTA: 19/25\n\nDeliverability: 96/100',
+                takeaway: 'Strong subjects, strong story. Email 5 CTA was too reflective — adding "reserve yours before midnight" would add ~4 points.',
+              },
+            ].map((ex) => (
+              <div key={ex.title} className="bg-warm-50/60 rounded-2xl border border-warm-200/60 overflow-hidden">
+                <div className="px-6 py-4 bg-white border-b border-warm-200/60">
+                  <h3 className="text-base font-black text-warm-900">{ex.title}</h3>
+                </div>
+                <div className="grid md:grid-cols-2 gap-0 border-b border-warm-200/60">
+                  <div className="p-5 md:border-r border-warm-200/60">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-warm-400 mb-2">Input</p>
+                    <pre className="text-xs text-warm-700 font-mono whitespace-pre-wrap leading-relaxed">{ex.input}</pre>
+                  </div>
+                  <div className="p-5 bg-white">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-fire-500 mb-2">EmailForge output</p>
+                    <pre className="text-xs text-warm-700 font-mono whitespace-pre-wrap leading-relaxed">{ex.output}</pre>
+                  </div>
+                </div>
+                <div className="p-5 bg-green-50/60">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-green-600 mb-1">Takeaway</p>
+                  <p className="text-sm text-warm-800 leading-relaxed">{ex.takeaway}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Try these prompts */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Starter pack</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Try these prompts</h2>
+            <p className="mt-3 text-base text-warm-600">Ten copy-ready inputs by use case. Click to copy, paste into the tool.</p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            {EF_PROMPTS.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => copyPrompt(p.text, i)}
+                className="group text-left bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 p-5 transition-all"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-fire-600 bg-fire-50 px-2 py-0.5 rounded-full">{p.category}</span>
+                  <span className={`text-xs font-bold transition-colors ${copied === i ? 'text-green-600' : 'text-warm-400 group-hover:text-fire-500'}`}>
+                    {copied === i ? 'Copied!' : 'Copy'}
+                  </span>
+                </div>
+                <p className="text-sm font-bold text-warm-900 mb-2">{p.label}</p>
+                <p className="text-xs text-warm-600 font-mono whitespace-pre-wrap leading-relaxed line-clamp-4">{p.text}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* What great output looks like */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Calibrate your expectations</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">What great output looks like</h2>
+            <p className="mt-3 text-base text-warm-600">A sample sequence result, annotated.</p>
+          </div>
+          <div className="bg-warm-50/60 rounded-2xl border border-warm-200/60 p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-warm-200/60">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-warm-400">Sequence Score</p>
+                <p className="text-4xl font-black text-warm-900">84<span className="text-base text-warm-500">/100</span></p>
+              </div>
+              <span className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-green-100 text-green-700 text-2xl font-black">A-</span>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-24 flex-shrink-0 text-[11px] font-bold uppercase tracking-wider text-fire-500 mt-1">Subjects</span>
+                <div className="flex-1">
+                  <p className="font-bold text-warm-900">Avg 23/25 — strong variety</p>
+                  <p className="text-warm-600 text-xs mt-0.5">Each subject uses a different format: stat, question, short, curiosity, direct. No repeats.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-24 flex-shrink-0 text-[11px] font-bold uppercase tracking-wider text-fire-500 mt-1">Openers</span>
+                <div className="flex-1">
+                  <p className="font-bold text-warm-900">Avg 22/25 — personalized feel</p>
+                  <p className="text-warm-600 text-xs mt-0.5">First line mentions a trigger event or recent move. No "Hope this email finds you well."</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-24 flex-shrink-0 text-[11px] font-bold uppercase tracking-wider text-fire-500 mt-1">CTAs</span>
+                <div className="flex-1">
+                  <p className="font-bold text-warm-900">Avg 21/25 — specific actions</p>
+                  <p className="text-warm-600 text-xs mt-0.5">Every CTA names a concrete action and timeframe. "Book 15 min Thursday" beats "let me know."</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-24 flex-shrink-0 text-[11px] font-bold uppercase tracking-wider text-fire-500 mt-1">Deliverability</span>
+                <div className="flex-1">
+                  <p className="font-bold text-warm-900">94/100 — 0 spam triggers</p>
+                  <p className="text-warm-600 text-xs mt-0.5">No spam words, subject lengths under 50 chars, acceptable punctuation density.</p>
+                </div>
+              </div>
+            </div>
+            <div className="pt-3 border-t border-warm-200/60">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-warm-400 mb-1">Verdict</p>
+              <p className="text-sm text-warm-700 leading-relaxed">"Ship-ready sequence. Personalize 2 fields per email and load into your sender."</p>
+            </div>
+          </div>
+          <p className="text-xs text-warm-500 mt-4 text-center italic">Read sub-scores before the total. A 78 with strong CTAs converts better than an 88 with vague ones.</p>
+        </div>
+      </section>
+
+      {/* Common mistakes + fixes */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Common mistakes</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Common mistakes + fixes</h2>
+            <p className="mt-3 text-base text-warm-600">The seven errors that tank sequence performance most often.</p>
+          </div>
+          <div className="space-y-3">
+            {EF_MISTAKES.map((m, i) => (
+              <details key={i} className="group bg-white rounded-xl border border-warm-200/60 open:border-fire-200">
+                <summary className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer list-none">
+                  <span className="flex items-center gap-3">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-50 text-red-600 text-xs font-black">{i + 1}</span>
+                    <span className="text-sm font-bold text-warm-900">{m.mistake}</span>
+                  </span>
+                  <svg className="w-4 h-4 flex-shrink-0 text-warm-500 transition-transform group-open:rotate-180 group-open:text-fire-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </summary>
+                <div className="px-5 pb-4 -mt-1">
+                  <p className="text-sm text-warm-600 leading-relaxed"><span className="font-bold text-green-700">Fix: </span>{m.fix}</p>
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">FAQ</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">EmailForge FAQ</h2>
+            <p className="mt-3 text-base text-warm-600">Pricing, privacy, accuracy, and how it differs from ChatGPT.</p>
+          </div>
+          <div className="space-y-3">
+            {EF_FAQ.map((f, i) => (
+              <details key={i} className="group bg-warm-50/60 rounded-xl border border-warm-200/60 open:bg-white open:border-fire-200">
+                <summary className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer list-none">
+                  <span className="text-sm font-bold text-warm-900">{f.q}</span>
+                  <svg className="w-4 h-4 flex-shrink-0 text-warm-500 transition-transform group-open:rotate-180 group-open:text-fire-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </summary>
+                <div className="px-5 pb-4 -mt-1">
+                  <p className="text-sm text-warm-600 leading-relaxed">{f.a}</p>
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Use cases by role */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Who uses it</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Use cases by role</h2>
+            <p className="mt-3 text-base text-warm-600">Four roles, four workflows, same tool.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { icon: '🚀', role: 'Founder', use: 'Write cold outreach that does not sound like cold outreach. Five angles in 15 seconds means you stop rewriting for 40 minutes.' },
+              { icon: '📣', role: 'Marketer', use: 'Generate launch, win-back, and nurture sequences in one afternoon. Compare variants, ship the winners into your sender.' },
+              { icon: '✍️', role: 'Freelancer', use: 'Deliver email sequences with deliverability scores attached. Clients pay more when they see the receipts.' },
+              { icon: '🏢', role: 'Agency', use: 'Spin up client sequences across industries without hiring more copywriters. Same credits, any vertical.' },
+            ].map(p => (
+              <div key={p.role} className="bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 p-5 transition-all">
+                <div className="text-3xl mb-3" aria-hidden="true">{p.icon}</div>
+                <h3 className="text-base font-black text-warm-900 mb-2">{p.role}</h3>
+                <p className="text-sm text-warm-600 leading-relaxed">{p.use}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Tips */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Pro tips</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Tips to get better results</h2>
+            <p className="mt-3 text-base text-warm-600">Eight moves that raise sequence scores fast.</p>
+          </div>
+          <ol className="space-y-4">
+            {EF_TIPS.map((t, i) => (
+              <li key={i} className="flex gap-4">
+                <span className="flex-shrink-0 w-8 h-8 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">{i + 1}</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">{t.tip}</p>
+                  <p className="text-sm text-warm-600 leading-relaxed mt-0.5">{t.why}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* Related tools */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Related tools</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Pair EmailForge with these</h2>
+            <p className="mt-3 text-base text-warm-600">Four sibling bilko.run tools that stack naturally with email writing.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { slug: 'headline-grader', emoji: '📰', name: 'HeadlineGrader', desc: 'Grade every subject line before you ship. Tight subjects lift open rates 20–40%.' },
+              { slug: 'audience-decoder', emoji: '🎯', name: 'AudienceDecoder', desc: 'Decode your list before you write to it. Better archetype = better tone.' },
+              { slug: 'thread-grader', emoji: '🧵', name: 'ThreadGrader', desc: 'Turn your top-performing thread into an email sequence. Same angle, different channel.' },
+              { slug: 'page-roast', emoji: '🔥', name: 'PageRoast', desc: 'Where your email sends traffic matters. Roast the landing page before you blast 5,000 opens at it.' },
+            ].map(t => (
+              <Link key={t.slug} to={`/projects/${t.slug}`} className="group bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                <div className="text-3xl mb-3" aria-hidden="true">{t.emoji}</div>
+                <h3 className="text-base font-black text-warm-900 mb-1 group-hover:text-fire-600 transition-colors">{t.name}</h3>
+                <p className="text-sm text-warm-600 leading-relaxed">{t.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function EmailForgePage() {
   const { result, compareResult, loading, error, needsTokens, submit, submitCompare, reset, signInRef } = useToolApi<SequenceResult>('email-forge');
 
@@ -182,6 +544,7 @@ export function EmailForgePage() {
 
   useEffect(() => {
     document.title = 'EmailForge — AI Email Sequence Generator';
+    track('view_tool', { tool: 'email-forge' });
     return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
   }, []);
 
@@ -666,6 +1029,8 @@ export function EmailForgePage() {
               ))}
             </div>
           </section>
+
+          <EmailForgeTutorial />
 
           {/* 11. Final CTA */}
           <section className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900">

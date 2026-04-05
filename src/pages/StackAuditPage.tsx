@@ -1,7 +1,33 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
+import { track } from '../hooks/usePageView.js';
 import { ToolHero, ScoreCard, SectionBreakdown, CrossPromo } from '../components/tool-page/index.js';
+
+// ── Inline sub-components for tutorial sections ──────────────────────────────
+
+function CopyPromptCard({ label, text }: { label: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }).catch(() => {});
+  }
+  return (
+    <button onClick={copy}
+      className="group text-left bg-white hover:bg-fire-50 border border-warm-200/60 hover:border-fire-300 rounded-xl p-4 transition-all w-full">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-fire-500">{label}</span>
+        <span className={`text-[10px] font-bold uppercase transition-colors ${copied ? 'text-green-600' : 'text-warm-400 group-hover:text-fire-500'}`}>
+          {copied ? 'Copied!' : 'Copy'}
+        </span>
+      </div>
+      <pre className="text-xs text-warm-700 font-mono leading-relaxed whitespace-pre-wrap">{text}</pre>
+    </button>
+  );
+}
 
 interface ToolVerdict { name: string; monthly_cost: number; verdict: 'KEEP' | 'SWITCH' | 'CUT'; reason: string; alternative: string | null; savings: number; }
 interface SectionScore { score: number; max: number; feedback: string; }
@@ -43,6 +69,7 @@ export function StackAuditPage() {
 
   useEffect(() => {
     document.title = 'StackAudit — Find Waste in Your SaaS Stack';
+    track('view_tool', { tool: 'stack-audit' });
     return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
   }, []);
 
@@ -414,6 +441,329 @@ export function StackAuditPage() {
                   <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* ── Tutorial & example-heavy sections ──────────────────────── */}
+
+          {/* Step-by-step guide */}
+          <section className="bg-warm-100/40 border-y border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Step by step</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">How to use StackAudit — step by step</h2>
+                <p className="mt-3 text-base text-warm-600">Five steps. No integrations, no SSO, no sales calls.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {[
+                  { n: 1, icon: '📋', title: 'Export your tool list', desc: 'Pull from your billing dashboard or bank statement.', ex: 'Slack, Notion, Vercel, Figma, Zapier...' },
+                  { n: 2, icon: '💸', title: 'Add prices if you know them', desc: 'Format: Name - $X/user/month - Y users.', ex: 'Slack - $12/user/month - 8 users' },
+                  { n: 3, icon: '👥', title: 'Set your team size', desc: 'Slide the bar. Affects per-seat right-sizing.', ex: 'Team of 8 → 8 on the slider' },
+                  { n: 4, icon: '🔍', title: 'Run the audit', desc: 'We score overlap, cost, complexity, self-host, risk.', ex: '~30 seconds to analyze 15-20 tools' },
+                  { n: 5, icon: '✂️', title: 'Act on KEEP/SWITCH/CUT', desc: 'Work the CUT list first — fastest savings.', ex: 'Cancel 2 tools → save $340/mo' },
+                ].map(s => (
+                  <div key={s.n} className="bg-white rounded-2xl border border-warm-200/60 p-5 relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-fire-500 text-white flex items-center justify-center text-sm font-black shadow-md">{s.n}</span>
+                    <div className="text-3xl mb-3" aria-hidden="true">{s.icon}</div>
+                    <h3 className="text-sm font-black text-warm-900 mb-1">{s.title}</h3>
+                    <p className="text-xs text-warm-600 leading-relaxed mb-3">{s.desc}</p>
+                    <div className="bg-warm-50 rounded-lg px-3 py-2 border border-warm-100">
+                      <p className="text-[10px] font-bold uppercase text-warm-400 mb-0.5">Example</p>
+                      <p className="text-xs text-warm-700 font-mono leading-snug">{s.ex}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Worked examples gallery */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Worked examples</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Four real stacks, audited</h2>
+                <p className="mt-3 text-base text-warm-600">Realistic inputs. Real savings. See where the waste hides.</p>
+              </div>
+              <div className="space-y-6">
+                {[
+                  {
+                    tag: '5-person startup',
+                    icon: '🚀',
+                    name: 'Seed-stage B2B SaaS',
+                    input: 'Slack - $12/user/month - 5 users\nNotion - $10/user/month - 5 users\nLinear - $8/user/month - 5 users\nGitHub Team - $4/user/month - 4 users\nVercel Pro - $20/month\nSupabase Pro - $25/month\nFigma Pro - $15/user/month - 3 users\nZoom Pro - $16/user/month - 5 users\nLoom Business - $12/user/month - 5 users\nMailchimp - $35/month\nMixpanel Growth - $25/month\nZapier Pro - $49/month',
+                    output: 'Monthly spend: $642  |  Annual: $7,704\nPotential savings: $284/mo  ($3,408/yr)\n\nKEEP:   Slack, GitHub, Vercel, Supabase, Figma (5)\nSWITCH: Mailchimp → Resend ($20/mo → $0), Mixpanel → PostHog\nCUT:    Loom (overlap w/ Slack huddles), Zapier (low usage),\n        Zoom Pro (Google Meet already in use)\n\nTop savings:\n  1. Cut Loom Business: save $60/mo (5 seats, barely used)\n  2. Switch Mailchimp → Resend: save $35/mo (under 1k contacts)\n  3. Drop Zapier: save $49/mo (replace w/ 3 Supabase edge fns)',
+                    takeaway: 'Classic overlap pattern: Loom + Slack huddles, Zoom + Meet, Mixpanel + PostHog. $284/mo = ~1 month of runway per quarter.',
+                  },
+                  {
+                    tag: 'Solo consultant',
+                    icon: '💼',
+                    name: 'Fractional CMO (1 person)',
+                    input: 'Google Workspace - $18/month\nNotion - $10/month\nCalendly Pro - $12/month\nZoom Pro - $16/month\nLoom Business - $12/month\nCanva Pro - $15/month\nGrammarly Premium - $12/month\nAhrefs Lite - $99/month\nBuffer Essentials - $15/month\nStripe Atlas - $0 (one-time paid)\nMercury - $0 (free tier)',
+                    output: 'Monthly spend: $209  |  Annual: $2,508\nPotential savings: $127/mo  ($1,524/yr)\n\nKEEP:   Google Workspace, Mercury, Stripe, Calendly\nSWITCH: Loom → Granola (free), Ahrefs Lite → SEranking ($39/mo),\n        Buffer → free Bluesky/LinkedIn manual\nCUT:    Grammarly (Apple built-in writes fine),\n        Zoom Pro (Google Meet covers 1:1s)\n\nTop savings:\n  1. Downgrade Ahrefs → SEranking: save $60/mo\n  2. Cut Grammarly + Zoom Pro: save $28/mo\n  3. Replace Loom: save $12/mo',
+                    takeaway: 'Solo operators over-tool. $127/mo is nearly a Mercury credit card payment. Ahrefs downgrade alone covers 6 months of all other tools.',
+                  },
+                  {
+                    tag: 'Agency',
+                    icon: '🏢',
+                    name: '12-person marketing agency',
+                    input: 'Google Workspace - $18/user/month - 12 users\nSlack Pro - $7.25/user/month - 12 users\nNotion Team - $10/user/month - 12 users\nClickUp Business - $12/user/month - 12 users\nAsana Premium - $11/user/month - 8 users\nHubSpot Professional - $800/month\nAhrefs Standard - $199/month\nSEMrush Guru - $229/month\nCanva Teams - $30/month\nFigma Pro - $15/user/month - 6 users\nLoom Business - $12/user/month - 12 users\nHarvest - $12/user/month - 12 users\nDropbox Business - $20/user/month - 12 users',
+                    output: 'Monthly spend: $2,873  |  Annual: $34,476\nPotential savings: $891/mo  ($10,692/yr)\n\nKEEP:   Google Workspace, Slack, HubSpot, Figma, Harvest\nSWITCH: ClickUp + Asana → just Asana (save $144/mo),\n        Dropbox → Google Drive (save $240/mo)\nCUT:    Ahrefs OR SEMrush (overlap), Loom (Slack huddles)\n\nTop savings:\n  1. Pick one PM tool: save $144/mo (two overlapping for 8+ users)\n  2. Drop Dropbox: save $240/mo (Google Drive already paid)\n  3. Consolidate Ahrefs/SEMrush: save $229/mo\n  4. Cut Loom seats: save $144/mo',
+                    takeaway: 'Agencies accumulate tools during client campaigns that never get cancelled. Overlap between PM tools + SEO tools = biggest wins.',
+                  },
+                  {
+                    tag: 'E-commerce operator',
+                    icon: '🛒',
+                    name: 'DTC Shopify store (3 people)',
+                    input: 'Shopify Advanced - $299/month\nKlaviyo - $150/month\nGorgias Basic - $60/month\nJudge.me - $15/month\nRecharge - $60/month\nReturnly - $149/month\nTripleWhale - $129/month\nNorthbeam - $500/month\nAfterShip - $119/month\nCanva Pro - $15/month\nGoogle Workspace - $18/user - 3 users\nNotion - $10/user - 3 users',
+                    output: 'Monthly spend: $1,580  |  Annual: $18,960\nPotential savings: $608/mo  ($7,296/yr)\n\nKEEP:   Shopify, Klaviyo, Gorgias, Judge.me, Recharge\nSWITCH: Northbeam → TripleWhale only (save $500/mo — overlap),\n        Returnly → Loop ($59/mo, save $90/mo)\nCUT:    AfterShip (Shopify Shipping covers it for your volume)\n\nTop savings:\n  1. Pick ONE attribution tool: save $500/mo (TripleWhale OR Northbeam)\n  2. Cut AfterShip: save $119/mo at your volume\n  3. Switch Returnly: save $90/mo',
+                    takeaway: 'E-commerce stacks accumulate attribution tools during ad-scaling phases. One attribution platform is enough — pick the cheaper one.',
+                  },
+                ].map((ex, i) => (
+                  <div key={i} className="bg-warm-50/60 rounded-2xl border border-warm-200/60 overflow-hidden">
+                    <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-warm-200/60">
+                      <span className="text-2xl" aria-hidden="true">{ex.icon}</span>
+                      <div className="flex-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-fire-500">{ex.tag}</span>
+                        <h3 className="text-base font-black text-warm-900">{ex.name}</h3>
+                      </div>
+                    </div>
+                    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-warm-200/60">
+                      <div className="p-5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-warm-400 mb-2">Input stack</p>
+                        <pre className="text-xs text-warm-700 font-mono leading-relaxed whitespace-pre-wrap">{ex.input}</pre>
+                      </div>
+                      <div className="p-5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-fire-500 mb-2">StackAudit output</p>
+                        <pre className="text-xs text-warm-800 font-mono leading-relaxed whitespace-pre-wrap">{ex.output}</pre>
+                      </div>
+                    </div>
+                    <div className="px-5 py-4 bg-fire-50/60 border-t border-fire-100">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-fire-600 mb-1">Key takeaway</p>
+                      <p className="text-sm text-warm-800 leading-relaxed">{ex.takeaway}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Try these prompts */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Starter pack</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Try these stacks</h2>
+                <p className="mt-3 text-base text-warm-600">Click any card to copy. Paste into the tools field above.</p>
+              </div>
+              <div className="grid md:grid-cols-2 gap-3">
+                {[
+                  { label: 'Indie SaaS', text: 'Vercel Pro - $20/month\nSupabase Pro - $25/month\nGitHub Pro - $4/month\nLinear - $8/month\nStripe - $0\nPostHog - $0\nResend - $20/month' },
+                  { label: '5-person startup', text: 'Slack - $12/user/month - 5 users\nNotion - $10/user/month - 5 users\nLinear - $8/user/month - 5 users\nGitHub Team - $4/user/month - 5 users\nVercel Pro - $20/month\nFigma Pro - $15/user/month - 3 users\nZoom Pro - $16/user/month - 5 users\nMailchimp - $35/month' },
+                  { label: 'Solo consultant', text: 'Google Workspace - $18/month\nNotion - $10/month\nCalendly Pro - $12/month\nZoom Pro - $16/month\nLoom - $12/month\nCanva Pro - $15/month\nGrammarly - $12/month\nAhrefs Lite - $99/month' },
+                  { label: 'Agency (10)', text: 'Google Workspace - $18/user/month - 10 users\nSlack Pro - $7.25/user/month - 10 users\nClickUp Business - $12/user/month - 10 users\nHubSpot Pro - $800/month\nAhrefs Standard - $199/month\nSEMrush Guru - $229/month\nFigma Pro - $15/user/month - 5 users\nCanva Teams - $30/month' },
+                  { label: 'E-commerce', text: 'Shopify Advanced - $299/month\nKlaviyo - $150/month\nGorgias - $60/month\nRecharge - $60/month\nTripleWhale - $129/month\nNorthbeam - $500/month\nReturnly - $149/month\nJudge.me - $15/month' },
+                  { label: 'Bootstrap dev', text: 'GitHub Pro - $4/month\nNetlify - $0\nRender - $7/month\nTurso - $0\nCloudflare - $0\nSentry - $26/month\nPlausible - $9/month' },
+                  { label: 'Design studio', text: 'Figma Pro - $15/user/month - 4 users\nAdobe CC - $60/user/month - 4 users\nDropbox Business - $20/user/month - 4 users\nNotion - $10/user/month - 4 users\nCanva Teams - $30/month\nMiro Team - $10/user/month - 4 users' },
+                  { label: 'Content team', text: 'Notion Team - $10/user/month - 6 users\nGrammarly Business - $15/user/month - 6 users\nAhrefs Standard - $199/month\nSurferSEO - $89/month\nCanva Pro - $15/month\nFrase - $45/month\nMailerLite - $15/month' },
+                ].map((p, i) => (
+                  <CopyPromptCard key={i} label={p.label} text={p.text} />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* What great output looks like */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Calibrate your expectations</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">What great output looks like</h2>
+                <p className="mt-3 text-base text-warm-600">An annotated audit so you know what to act on first.</p>
+              </div>
+              <div className="bg-warm-50/60 rounded-2xl border border-warm-200/60 p-6 space-y-5">
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">💰</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Savings banner (big green number)</p>
+                    <p className="text-sm text-warm-700">Your potential monthly + annual savings. This is the most important number on the page. Track the delta across audits.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">🏆</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Top savings opportunities (numbered)</p>
+                    <p className="text-sm text-warm-700">The 3-5 highest-impact moves, ordered by dollar savings. Start here. Each one has a concrete action and an estimated monthly save.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">🏷️</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">KEEP / SWITCH / CUT verdict per tool</p>
+                    <p className="text-sm text-warm-700">Every tool gets a verdict with reasoning. KEEP = worth it. SWITCH = there\'s a better/cheaper alternative. CUT = redundant or underused. The explanation matters as much as the verdict.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">📊</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">5-dimension score breakdown</p>
+                    <p className="text-sm text-warm-700">Cost (30), Overlap (25), Self-Host (20), Complexity (15), Future Risk (10). Your lowest-scoring dimension tells you the pattern behind your waste.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">🔥</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Roast line + compliance note</p>
+                    <p className="text-sm text-warm-700">A witty one-liner that captures the biggest pattern, plus a reminder to verify SOC 2 / GDPR on the tools you keep.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Common mistakes + fixes */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Don't do these</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Common mistakes + fixes</h2>
+                <p className="mt-3 text-base text-warm-600">The patterns that leave real money on the table.</p>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'Only listing tools you remember paying for', a: 'Pull your last 3 months of credit card statements. You\'ll find 2-4 subscriptions you completely forgot about. The forgotten ones are almost always 100% waste.' },
+                  { q: 'Not listing unused seats', a: 'A tool at $12/user billed for 10 users when only 4 use it = $72/month waste. Always list actual active users vs billed seats. The audit finds more savings when you\'re honest about usage.' },
+                  { q: 'Keeping tools "just in case"', a: '"Just in case" is the most expensive phrase in SaaS. If you haven\'t used it in 60 days, cancel it. You can re-sign up in 5 minutes if you need it back.' },
+                  { q: 'Ignoring overlap because each tool has "one unique feature"', a: 'Every tool has one unique feature. That\'s how they stay alive. But if you have 3 PM tools and you mostly use the task list in each, pick one and migrate.' },
+                  { q: 'Auditing once per year instead of quarterly', a: 'SaaS pricing increases and new subscriptions both compound. Audit quarterly — at $1 per audit, it costs less than a coffee and catches creep before it becomes a budget meeting.' },
+                  { q: 'Cancelling without migrating data first', a: 'Export first. Then wait 30 days. Then cancel. Many tools will offer a retention discount when you start the cancellation flow — take it or leave it on your terms.' },
+                  { q: 'Chasing self-host savings that cost more in engineering time', a: 'Self-hosting Plausible saves $9/mo but costs 3 hours/month in maintenance. At any dev rate, that\'s a loss. Only self-host where the engineering time is negligible.' },
+                ].map((m, i) => (
+                  <details key={i} className="group bg-white rounded-xl border border-warm-200/60 hover:border-fire-300 transition-colors">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-5 py-4">
+                      <span className="text-sm font-bold text-warm-900">{m.q}</span>
+                      <svg className="w-4 h-4 text-warm-400 transition-transform group-open:rotate-180 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </summary>
+                    <p className="px-5 pb-4 text-sm text-warm-600 leading-relaxed">{m.a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* FAQ accordion */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">FAQ</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Questions about StackAudit</h2>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'What does StackAudit actually check?', a: 'We run your tool list through 5 dimensions: Cost Efficiency (30pts), Tool Overlap (25pts), Self-Host Potential (20pts), Stack Complexity (15pts), Future Risk (10pts). Each tool gets a KEEP/SWITCH/CUT verdict with reasoning.' },
+                  { q: 'How much does it cost?', a: '$1 per audit (1 credit). Or 7 credits for $5. Credits work across all 10 bilko.run tools and never expire. First audit is free while you try the tool out.' },
+                  { q: 'Is my tool list stored?', a: 'We log the list + verdicts for analytics only. We never share your stack with anyone. No vendor ever sees what tools you listed. Keep secrets out of the field — list tool names, not API keys.' },
+                  { q: 'How accurate are the savings estimates?', a: 'Directionally correct within ±20-30%. Alternative pricing is based on public pricing pages as of 2026. Your actual savings depend on your negotiation, usage, and migration effort.' },
+                  { q: 'How is this different from ChatGPT?', a: 'ChatGPT gives you a generic "here are cheaper alternatives" answer. StackAudit runs a structured 5-dimension rubric, gives specific dollar savings per tool, and returns KEEP/SWITCH/CUT verdicts you can act on immediately.' },
+                  { q: 'Does it work for my industry?', a: 'Works well for: SaaS, agencies, consultancies, e-commerce, marketing teams, dev teams. Less useful for: heavily-regulated industries (banking, healthcare) where tool choice is compliance-constrained.' },
+                  { q: 'Will you recommend cancelling everything?', a: 'No. Most audits result in 2-5 tools getting SWITCH or CUT — not your whole stack. Some tools are genuinely worth every penny. We only flag waste, not purity.' },
+                  { q: 'Can I export the audit?', a: 'Yes. Use the download button on your results to get a JSON file with all verdicts, scores, and reasoning. Share with your team or use as your cancellation checklist.' },
+                  { q: 'How often should I re-audit?', a: 'Quarterly. SaaS pricing increases + new subscriptions both compound silently. A quarterly audit catches creep before your annual budget review.' },
+                  { q: 'Does it check SOC 2 / GDPR?', a: 'Not directly. We flag vendor lock-in and future risk, but compliance verification is out of scope. The compliance note in your results reminds you to check separately.' },
+                ].map((f, i) => (
+                  <details key={i} className="group bg-warm-50/60 rounded-xl border border-warm-200/60 hover:border-fire-300 transition-colors">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-5 py-4">
+                      <span className="text-sm font-bold text-warm-900">{f.q}</span>
+                      <svg className="w-4 h-4 text-warm-400 transition-transform group-open:rotate-180 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </summary>
+                    <p className="px-5 pb-4 text-sm text-warm-600 leading-relaxed">{f.a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Use cases by role */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">By role</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Use cases by role</h2>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: '🧑‍💻', role: 'Founder', desc: 'Audit your stack before your next fundraise or budget review. Cut $200-500/mo before the board meeting. Extend runway without hiring freezes.' },
+                  { icon: '📣', role: 'Marketer', desc: 'Audit your martech stack (Mailchimp, HubSpot, ad platforms). Find overlapping analytics tools. Consolidate vendor logos in your budget line.' },
+                  { icon: '💼', role: 'Freelancer', desc: 'Solo operators over-tool. Audit once per quarter, cancel what you forgot. Offer stack audits to clients as a deliverable in your engagement.' },
+                  { icon: '🏢', role: 'Agency', desc: 'Every client engagement adds tools. Audit quarterly to cancel old client access. Use audits as a discovery deliverable for new clients.' },
+                ].map(p => (
+                  <div key={p.role} className="bg-white rounded-2xl border border-warm-200/60 p-5 hover:border-fire-300 transition-colors">
+                    <div className="text-3xl mb-3" aria-hidden="true">{p.icon}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-2">{p.role}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{p.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Tips to get better results */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Better inputs, better savings</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Tips to get better results</h2>
+              </div>
+              <ol className="space-y-5">
+                {[
+                  { t: 'Pull from your billing dashboard, not memory.', d: 'The tools you forget about are the ones bleeding money. Export your subscriptions from your bank or Stripe/PayPal billing history.' },
+                  { t: 'List actual active users, not billed seats.', d: 'Unused seats are the fastest savings. "Billed for 10, 4 actually use it" flags as a CUT opportunity.' },
+                  { t: 'Include price per user explicitly.', d: 'Format: "Slack - $12/user/month - 8 users" gives us the best analysis. Ambiguous price strings get ambiguous verdicts.' },
+                  { t: 'Audit quarterly, not annually.', d: 'SaaS creep is a slow leak. Catching it every 3 months prevents the panic budget meeting.' },
+                  { t: 'Act on CUTs first, SWITCHes second.', d: 'CUTs are free — cancel and done. SWITCHes cost migration time. Prioritize by savings-per-hour-of-effort.' },
+                  { t: 'Do the cancellation dance.', d: 'Click "cancel" in each tool before actually cancelling. 60% of tools offer 20-40% retention discounts. Take the discount or cancel anyway.' },
+                  { t: 'Keep a "cut list" between audits.', d: 'If you\'re not sure about a tool, pause it for 30 days. If no one screams, cancel. If they do, you know it\'s a KEEP.' },
+                  { t: 'Share the audit with your finance person.', d: 'The savings number is the conversation-starter. Download the JSON and send it — they\'ll approve the cuts faster than a slide deck.' },
+                ].map((tip, i) => (
+                  <li key={i} className="flex items-start gap-4">
+                    <span className="flex-shrink-0 w-8 h-8 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center text-sm font-black">{i + 1}</span>
+                    <div>
+                      <p className="text-sm font-bold text-warm-900">{tip.t}</p>
+                      <p className="text-sm text-warm-600 mt-1 leading-relaxed">{tip.d}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </section>
+
+          {/* Related tools */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Tools that pair with this</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Related tools</h2>
+                <p className="mt-3 text-base text-warm-600">Same credits. Different problem.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { slug: 'launch-grader', emoji: '🚀', name: 'LaunchGrader', desc: 'Audit your go-to-market readiness. Combine with StackAudit to cut costs before launch day.' },
+                  { slug: 'page-roast', emoji: '🔥', name: 'PageRoast', desc: 'Landing page CRO audit. Trim the stack, then trim the page.' },
+                  { slug: 'email-forge', emoji: '✉️', name: 'EmailForge', desc: 'Replace your $150/mo Mailchimp copywriter with a 5-email generator. Stack savings compound.' },
+                  { slug: 'ad-scorer', emoji: '🎯', name: 'AdScorer', desc: 'Grade your ads before you spend on them. Stack savings + better ads = better unit economics.' },
+                ].map(t => (
+                  <Link key={t.slug} to={`/projects/${t.slug}`} className="group bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                    <div className="text-3xl mb-3" aria-hidden="true">{t.emoji}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-1 group-hover:text-fire-600 transition-colors">{t.name}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{t.desc}</p>
+                    <p className="mt-3 text-xs font-bold text-fire-500 group-hover:text-fire-600">Open tool &rarr;</p>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
 

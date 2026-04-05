@@ -224,6 +224,53 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_funnel_events_event ON funnel_events(event)`,
   `CREATE INDEX IF NOT EXISTS idx_funnel_events_created ON funnel_events(created_at)`,
+  `CREATE TABLE IF NOT EXISTS referrer_rules (
+    host_pattern TEXT PRIMARY KEY,
+    bucket TEXT NOT NULL,
+    source_name TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    visitor_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER NOT NULL,
+    landing_path TEXT,
+    exit_path TEXT,
+    page_count INTEGER DEFAULT 1,
+    utm_source TEXT,
+    utm_medium TEXT,
+    utm_campaign TEXT,
+    source_bucket TEXT,
+    referrer_host TEXT,
+    country TEXT,
+    device TEXT,
+    email TEXT,
+    converted INTEGER DEFAULT 0,
+    purchased INTEGER DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_sessions_visitor ON sessions(visitor_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)`,
+];
+
+const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [
+  // pattern, bucket, source_name
+  ['twitter.com', 'social', 'twitter'],
+  ['x.com', 'social', 'twitter'],
+  ['t.co', 'social', 'twitter'],
+  ['linkedin.com', 'social', 'linkedin'],
+  ['lnkd.in', 'social', 'linkedin'],
+  ['reddit.com', 'social', 'reddit'],
+  ['old.reddit.com', 'social', 'reddit'],
+  ['news.ycombinator.com', 'social', 'hackernews'],
+  ['producthunt.com', 'social', 'producthunt'],
+  ['facebook.com', 'social', 'facebook'],
+  ['fb.com', 'social', 'facebook'],
+  ['instagram.com', 'social', 'instagram'],
+  ['google.com', 'organic', 'google'],
+  ['bing.com', 'organic', 'bing'],
+  ['duckduckgo.com', 'organic', 'duckduckgo'],
+  ['github.com', 'referral', 'github'],
+  ['bilko.run', 'internal', 'internal'],
 ];
 
 const SEEDS = [
@@ -244,8 +291,40 @@ export async function initDb(): Promise<void> {
   // Additive migrations for existing DBs (safe to re-run)
   for (const sql of [
     'ALTER TABLE page_views ADD COLUMN email TEXT',
+    'ALTER TABLE page_views ADD COLUMN utm_source TEXT',
+    'ALTER TABLE page_views ADD COLUMN utm_medium TEXT',
+    'ALTER TABLE page_views ADD COLUMN utm_campaign TEXT',
+    'ALTER TABLE page_views ADD COLUMN utm_term TEXT',
+    'ALTER TABLE page_views ADD COLUMN utm_content TEXT',
+    'ALTER TABLE page_views ADD COLUMN visitor_id TEXT',
+    'ALTER TABLE page_views ADD COLUMN session_id TEXT',
+    'ALTER TABLE page_views ADD COLUMN is_new_visitor INTEGER DEFAULT 0',
+    'ALTER TABLE page_views ADD COLUMN referrer_host TEXT',
+    'ALTER TABLE page_views ADD COLUMN source_bucket TEXT',
+    'ALTER TABLE page_views ADD COLUMN device TEXT',
+    'ALTER TABLE page_views ADD COLUMN browser TEXT',
+    'ALTER TABLE page_views ADD COLUMN os TEXT',
+    'ALTER TABLE page_views ADD COLUMN is_bot INTEGER DEFAULT 0',
+    'ALTER TABLE page_views ADD COLUMN is_admin INTEGER DEFAULT 0',
+    'ALTER TABLE page_views ADD COLUMN created_at_ms INTEGER',
+    'CREATE INDEX IF NOT EXISTS idx_page_views_visitor ON page_views(visitor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_page_views_session ON page_views(session_id)',
+    'CREATE INDEX IF NOT EXISTS idx_page_views_source_bucket ON page_views(source_bucket)',
+    'ALTER TABLE funnel_events ADD COLUMN session_id TEXT',
+    'ALTER TABLE funnel_events ADD COLUMN visitor_id TEXT',
+    'ALTER TABLE funnel_events ADD COLUMN path TEXT',
   ]) {
-    try { await client.execute(sql); } catch { /* column already exists */ }
+    try { await client.execute(sql); } catch { /* column/index already exists */ }
+  }
+
+  // Seed referrer_rules (idempotent)
+  for (const [pattern, bucket, source] of REFERRER_RULES_SEED) {
+    try {
+      await client.execute({
+        sql: 'INSERT OR IGNORE INTO referrer_rules (host_pattern, bucket, source_name) VALUES (?, ?, ?)',
+        args: [pattern, bucket, source],
+      });
+    } catch { /* ignore */ }
   }
 
   // Seed Wall of Shame with sample roasts (only if empty)

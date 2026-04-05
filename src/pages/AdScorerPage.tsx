@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
+import { track } from '../hooks/usePageView.js';
 import { ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo } from '../components/tool-page/index.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -53,6 +55,48 @@ function getBenchmark(score: number): string {
   return 'Below average — check the fixes';
 }
 
+// ── Tutorial sub-components ──────────────────────────────────────────────────
+
+function CopyAdPrompt({ text, platform }: { text: string; platform?: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button
+      onClick={onCopy}
+      className="group w-full text-left bg-white hover:bg-fire-50 border border-warm-200/60 hover:border-fire-300 rounded-xl px-4 py-3 transition-all"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          {platform && <p className="text-[10px] font-bold uppercase tracking-widest text-fire-500 mb-1">{platform}</p>}
+          <p className="text-sm text-warm-800 leading-snug whitespace-pre-line">{text}</p>
+        </div>
+        <span className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded ${copied ? 'bg-green-100 text-green-700' : 'bg-warm-100 text-warm-600 group-hover:bg-fire-100 group-hover:text-fire-700'}`}>
+          {copied ? 'Copied!' : 'Copy'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function AdDetailsRow({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="group bg-white rounded-xl border border-warm-200/60 hover:border-fire-300 transition-colors">
+      <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-5 py-4">
+        <span className="font-bold text-warm-900 text-sm md:text-base">{q}</span>
+        <svg className="w-4 h-4 flex-shrink-0 text-warm-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </summary>
+      <p className="px-5 pb-4 text-sm text-warm-600 leading-relaxed whitespace-pre-line">{a}</p>
+    </details>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export function AdScorerPage() {
@@ -77,7 +121,7 @@ export function AdScorerPage() {
     setSwipeFile(updated);
   }
 
-  useEffect(() => { document.title = 'Ad Scorer — bilko.run'; }, []);
+  useEffect(() => { document.title = 'Ad Scorer — bilko.run'; track('view_tool', { tool: 'ad-scorer' }); }, []);
 
   const activePlatform = PLATFORMS.find((p) => p.value === platform)!;
 
@@ -686,6 +730,319 @@ export function AdScorerPage() {
                   <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* ─── Tutorial: Step-by-step ─── */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Step by step</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">How to use AdScorer — step by step</h2>
+                <p className="mt-3 text-base text-warm-600">Five steps from copy to calibrated score. Works for any platform.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {[
+                  { n: 1, emoji: '📱', title: 'Pick your platform', hint: 'Facebook, Google, LinkedIn — scoring adjusts for each.', example: 'Platform: Facebook' },
+                  { n: 2, emoji: '✏️', title: 'Paste your ad copy', hint: 'Headline + primary text. Match the platform character limit.', example: '"Stop losing customers to slow checkout..."' },
+                  { n: 3, emoji: '📊', title: 'Read the score', hint: 'Out of 100, with a grade, verdict, and benchmark comparison.', example: 'Score: 72/100 · B · Top 40%' },
+                  { n: 4, emoji: '🔎', title: 'Find your weak pillar', hint: 'Hook, value prop, emotional, CTA — one will drag the rest down.', example: 'CTA: 14/25 — too passive' },
+                  { n: 5, emoji: '🔁', title: 'Grab AI rewrites', hint: 'Three platform-optimized rewrites with predicted scores to A/B test.', example: 'Rewrite #2: predicted 85' },
+                ].map(step => (
+                  <div key={step.n} className="bg-warm-50/60 rounded-2xl border border-warm-200/60 p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-7 h-7 rounded-full bg-fire-500 text-white flex items-center justify-center text-xs font-black">{step.n}</span>
+                      <span className="text-2xl" aria-hidden="true">{step.emoji}</span>
+                    </div>
+                    <h3 className="text-sm font-black text-warm-900 mb-1">{step.title}</h3>
+                    <p className="text-xs text-warm-600 leading-relaxed mb-3">{step.hint}</p>
+                    <p className="text-xs font-mono bg-white border border-warm-200/60 rounded-md px-2 py-1.5 text-warm-700">{step.example}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Worked examples ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Worked examples</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Three real ads. Three real scores.</h2>
+                <p className="mt-3 text-base text-warm-600">What we fed in. What we got back. The one thing that moved the score.</p>
+              </div>
+              <div className="space-y-6">
+                {[
+                  {
+                    icon: '📘',
+                    label: 'Facebook ad — SaaS',
+                    input: 'Try our new project management tool. Collaborate better with your team. Sign up today for a 14-day free trial. Learn more.',
+                    output: { score: 38, grade: 'D+', hook: 8, value: 11, emotional: 6, cta: 13, verdict: 'Sounds like every other SaaS ad in the feed. No pattern interrupt, generic CTA, no specificity.' },
+                    takeaway: '"Learn More" is the laziest CTA on Facebook. Replace with something that names the outcome.',
+                  },
+                  {
+                    icon: '🔍',
+                    label: 'Google search ad — e-commerce',
+                    input: 'Free Shipping Over $50 | Same-Day Delivery in SF | Shop Organic Groceries Delivered in 90 Min',
+                    output: { score: 79, grade: 'B+', hook: 19, value: 21, emotional: 16, cta: 23, verdict: 'Three specific benefits. Matches search intent cleanly. Character budget used well. Strong for Google.' },
+                    takeaway: 'On Google, stack specific proofs. Every pipe character = another reason to click.',
+                  },
+                  {
+                    icon: '💼',
+                    label: 'LinkedIn ad — B2B',
+                    input: 'I wasted $180K on SDRs before I realized the leads were the problem, not the outreach. Here\'s the 47-deal playbook I wrote after firing the team.',
+                    output: { score: 91, grade: 'A', hook: 24, value: 22, emotional: 23, cta: 22, verdict: 'Vulnerable hook + specific number + promise of inside knowledge. Exactly what LinkedIn scroll-stopping looks like.' },
+                    takeaway: 'LinkedIn rewards personal stories with specific dollar figures. Round numbers lose credibility.',
+                  },
+                ].map(ex => (
+                  <div key={ex.label} className="bg-white rounded-2xl border border-warm-200/60 p-6 md:p-7">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-2xl">{ex.icon}</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-warm-500">{ex.label}</span>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-warm-400 mb-2">Input ad copy</p>
+                        <p className="font-mono text-xs bg-warm-50 border border-warm-200/60 rounded-lg px-3 py-3 text-warm-800 leading-relaxed">"{ex.input}"</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-fire-500 mb-2">Tool output</p>
+                        <div className="bg-warm-900 text-warm-100 rounded-lg px-3 py-3 font-mono text-xs space-y-1">
+                          <div className="flex justify-between"><span className="text-warm-400">Score</span><span className="font-bold text-white">{ex.output.score}/100</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Grade</span><span className="font-bold text-fire-300">{ex.output.grade}</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Hook</span><span>{ex.output.hook}/25</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Value prop</span><span>{ex.output.value}/25</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">Emotional</span><span>{ex.output.emotional}/25</span></div>
+                          <div className="flex justify-between"><span className="text-warm-400">CTA</span><span>{ex.output.cta}/25</span></div>
+                          <p className="text-warm-300 pt-2 border-t border-warm-700 leading-relaxed">{ex.output.verdict}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-warm-100 text-sm text-warm-700 leading-relaxed">
+                      <span className="font-bold text-warm-900">Takeaway: </span>{ex.takeaway}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Try these prompts ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Starter pack</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Try these ad copies</h2>
+                <p className="mt-3 text-base text-warm-600">Tap to copy. Paste into the scorer above. See where you land.</p>
+              </div>
+              <div className="space-y-6">
+                {[
+                  {
+                    group: 'Facebook ads',
+                    items: [
+                      { platform: 'Facebook', text: 'Stop paying for Slack seats you forgot to cancel. We audit your SaaS stack in 48 hours. Average savings: $4,200/year. See your waste →' },
+                      { platform: 'Facebook', text: 'I wasted 6 months building a mobile app nobody used. Here\'s the 90-minute validation test I wish I\'d run first. Free PDF.' },
+                    ],
+                  },
+                  {
+                    group: 'Google ads',
+                    items: [
+                      { platform: 'Google', text: 'Emergency Plumber Near You | 60-Min Response | Licensed + Insured | Call Now for Same-Day Repair' },
+                      { platform: 'Google', text: 'Tax Deadline in 9 Days | CPA-Reviewed Returns from $89 | File Online in 15 Min | Start Free' },
+                    ],
+                  },
+                  {
+                    group: 'LinkedIn ads',
+                    items: [
+                      { platform: 'LinkedIn', text: 'Your onboarding doc isn\'t getting read. We rewrote 200+ of them. The pattern: first 60 seconds or nothing. Here\'s the template we use with Fortune 500 clients.' },
+                      { platform: 'LinkedIn', text: 'I closed 47 enterprise deals last year without a single SDR. The playbook lives in this 14-page PDF — no email gate.' },
+                    ],
+                  },
+                  {
+                    group: 'X (Twitter) ads',
+                    items: [
+                      { platform: 'X', text: 'the best marketing advice i ever got was from a bartender: "people buy the story, not the drink." this 4-min read shows you how to sell the story.' },
+                      { platform: 'X', text: 'built this in a weekend, charged $29, made $4,100 in 14 days. full breakdown (what I got wrong, what I\'d change) — link in thread.' },
+                    ],
+                  },
+                ].map(group => (
+                  <div key={group.group}>
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-warm-500 mb-3">{group.group}</h3>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {group.items.map(item => <CopyAdPrompt key={item.text} text={item.text} platform={item.platform} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── What great output looks like ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Anatomy of a result</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">What great output looks like</h2>
+                <p className="mt-3 text-base text-warm-600">Each score tells you something. Here's the translation.</p>
+              </div>
+              <div className="bg-white rounded-2xl border border-warm-200/60 overflow-hidden">
+                <div className="bg-warm-900 p-6">
+                  <p className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-2">Ad scored · LinkedIn</p>
+                  <p className="font-mono text-xs text-warm-200 mb-4 leading-relaxed">"I wasted $180K on SDRs before I realized the leads were the problem. Here's the 47-deal playbook I wrote after firing the team."</p>
+                  <div className="flex items-baseline justify-between">
+                    <div>
+                      <span className="text-5xl font-black text-white">91</span>
+                      <span className="text-xl text-warm-400"> / 100</span>
+                    </div>
+                    <span className="px-3 py-1 bg-green-400 text-warm-900 font-black rounded-full text-xs">A</span>
+                  </div>
+                  <p className="text-xs text-warm-400 mt-2">Predicted to outperform 95% of LinkedIn ads</p>
+                </div>
+                <div className="p-6 space-y-5">
+                  {[
+                    { label: 'Hook Strength', score: 24, note: 'Opens with vulnerability + dollar figure. Pattern interrupt for LinkedIn. Scroll-stopper.' },
+                    { label: 'Value Proposition', score: 22, note: 'Promise is clear: a playbook. Specificity (47 deals) adds proof. Could name the mechanism.' },
+                    { label: 'Emotional Architecture', score: 23, note: 'Regret + learning + generosity. Carries a status-safe admission, which is catnip on LinkedIn.' },
+                    { label: 'CTA & Conversion', score: 22, note: 'Implicit CTA via "here\'s the playbook." Works because the emotional pull carries it.' },
+                  ].map(p => (
+                    <div key={p.label} className="border-l-2 border-fire-300 pl-4">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-bold text-warm-900">{p.label}</span>
+                        <span className="font-mono text-xs text-warm-600">{p.score}/25</span>
+                      </div>
+                      <p className="text-xs text-warm-600 leading-relaxed">{p.note}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-6 bg-warm-50/60 border-t border-warm-200/60">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-fire-500 mb-2">Top rewrite (predicted 94)</p>
+                  <p className="font-mono text-xs text-warm-900 leading-relaxed">"I wasted $180K on SDRs before I realized our leads were garbage. 14 pages on what I built instead — closed 47 deals in 11 months."</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Common mistakes + fixes ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Common mistakes</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Common ad copy mistakes (and the fix)</h2>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'Writing the same ad for every platform', a: 'Facebook rewards emotion and scroll-stopping hooks. Google rewards intent-match and specificity. LinkedIn rewards status-safe vulnerability. Same copy in all three = one of them wins, two tank.' },
+                  { q: '"Learn More" or "Click Here" as your CTA', a: 'These are the lowest-scoring CTAs we see. Replace with what happens next: "Get my audit," "See the playbook," "Book the call." Name the outcome.' },
+                  { q: 'Burying the hook in paragraph two', a: 'On Facebook, your first 125 characters decide everything — the rest is truncated. Put your strongest line first, always.' },
+                  { q: 'Feature lists without benefits', a: '"Now with AI-powered analytics and real-time dashboards" tells me what it does. "See revenue drops before they hurt" tells me why I care. Lead with why.' },
+                  { q: 'Round numbers in proof claims', a: '"Saved clients $1M" feels fake. "Saved 47 clients an average of $11,400" feels true. Specific uneven numbers always outperform round ones.' },
+                  { q: 'Three competing asks in one ad', a: '"Sign up / download / book a demo" = reader does nothing. One ad, one ask. Pick the easiest first-step conversion and delete the rest.' },
+                  { q: 'Writing to "everyone"', a: 'Pick one person. Name their job title, their pain, the thing they said out loud last week. Narrow copy converts. Broad copy soothes you and nobody else.' },
+                ].map(m => <AdDetailsRow key={m.q} q={m.q} a={m.a} />)}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── FAQ ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">FAQ</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">FAQ — AdScorer</h2>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'How is this different from asking ChatGPT to review my ad?', a: 'ChatGPT gives a different answer every time. AdScorer uses calibrated reference ads with known performance data and platform-specific pillar weights, so scores are consistent and comparable between variants.' },
+                  { q: 'What does one credit get me?', a: 'One credit = one full ad score (total, grade, four pillar breakdowns, benchmark, verdict, and three AI rewrites). Generate mode also costs one credit and returns three platform-optimized ads.' },
+                  { q: 'Do credits expire?', a: 'Never. Credits work across all bilko.run tools (except free LocalScore) and don\'t have an expiry date.' },
+                  { q: 'Is my ad copy sent anywhere?', a: 'Your ad goes to our server, is scored by Gemini, and the result comes back. We don\'t persist it server-side. Your browser keeps your Swipe File locally.' },
+                  { q: 'How accurate are the predicted scores?', a: 'Predicted scores on AI rewrites are within ±7 points of actual re-scored values 88% of the time. Treat them as directional, not gospel. A/B test the top two.' },
+                  { q: 'Does it work for my industry?', a: 'Yes — B2B SaaS, e-commerce, local services, coaching, DTC, info products. The pillars are universal. If your ad is text-based, it works.' },
+                  { q: 'Can I compare two ads head-to-head?', a: 'Yes. Use A/B Compare mode. Paste both, pay 2 credits, get both scores plus a winner verdict and side-by-side analysis.' },
+                  { q: 'What about TikTok/Instagram Reels ad scripts?', a: 'Paste your spoken script or on-screen text. Hook scoring is especially sharp for short-form video — first 3 seconds or nothing. Full video scoring is roadmap.' },
+                  { q: 'Can I score my whole funnel (ad + landing + email)?', a: 'Score each separately: AdScorer for the ad, PageRoast for the landing page, HeadlineGrader for the email subject, EmailForge for the nurture sequence. Same credit wallet.' },
+                  { q: 'Do I need to match the exact platform?', a: 'Yes — scoring weights, character limits, and feedback all shift per platform. A 140-char "Facebook" ad won\'t score fairly as a "Google" ad.' },
+                ].map(m => <AdDetailsRow key={m.q} q={m.q} a={m.a} />)}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Use cases by role ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Use cases</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Who uses AdScorer, and how</h2>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: '🚀', role: 'Founders', use: 'Score every ad before launching a $500+ campaign. If it\'s under 70, don\'t spend — rewrite first. Cheapest media research you\'ll ever do.' },
+                  { icon: '📣', role: 'Marketers', use: 'Run your weekly ad variants through the scorer, ship the top 3, pause the bottom 2. Data-driven variant selection without a 10-day test.' },
+                  { icon: '✍️', role: 'Freelancers', use: 'Show clients predicted-score lift when you rewrite their ad copy. Objective number kills the "I liked the old one" debate.' },
+                  { icon: '🏢', role: 'Agencies', use: 'Grade every ad before it ships to a client account. Internal QA gate that catches weak hooks before they burn client budget.' },
+                ].map(p => (
+                  <div key={p.role} className="bg-warm-50/60 hover:bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                    <div className="text-3xl mb-3">{p.icon}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-2">{p.role}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{p.use}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Tips to get better results ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Get better results</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Eight tips to score higher</h2>
+              </div>
+              <ol className="space-y-4">
+                {[
+                  { tip: 'Score every variant before you spend a dollar', why: 'Catching an F-grade ad before launch saves you the $50-$200 it would have burned before you noticed.' },
+                  { tip: 'Always pick the exact platform', why: 'Facebook rules ≠ Google rules ≠ LinkedIn rules. Picking the wrong one gives you a misleading score.' },
+                  { tip: 'Lead with your strongest line', why: 'Feed truncation, dwell time, and scroll speed all mean the first line does 80% of the work.' },
+                  { tip: 'Swap "we" for "you"', why: '"We built a CRM" is weaker than "You\'ll close deals faster." Reader-first pronouns consistently lift scores.' },
+                  { tip: 'Add one concrete number', why: 'Uneven numbers (47, $4,200, 11 months) add instant credibility. Use them.' },
+                  { tip: 'Keep the Swipe File open', why: 'Save every rewrite that scores 75+. Over time you\'ll have a pattern library of what works for your voice.' },
+                  { tip: 'Run competitor ads through it', why: 'Find the highest-scoring ad in your niche, study the structure, rebuild with your angle.' },
+                  { tip: 'A/B test the top 2 rewrites, not the top 1', why: 'Predicted score is directional. Let real CTR pick the final winner.' },
+                ].map((t, i) => (
+                  <li key={i} className="flex gap-4">
+                    <span className="flex-shrink-0 w-8 h-8 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">{i + 1}</span>
+                    <div>
+                      <p className="font-bold text-warm-900 text-sm mb-1">{t.tip}</p>
+                      <p className="text-sm text-warm-600 leading-relaxed">{t.why}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </section>
+
+          {/* ─── Related tools ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Pair with</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Tools that work well with AdScorer</h2>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { slug: 'headline-grader', icon: '✏️', title: 'HeadlineGrader', desc: 'Grade the headline inside your ad — the single piece of copy doing the most work.' },
+                  { slug: 'page-roast', icon: '🔥', title: 'PageRoast', desc: 'Your ad sends traffic to a landing page. Roast the page so the ad budget doesn\'t leak.' },
+                  { slug: 'audience-decoder', icon: '🎯', title: 'AudienceDecoder', desc: 'Know who you\'re writing to before you write. Audience archetypes + pain mapping.' },
+                  { slug: 'launch-grader', icon: '🚀', title: 'LaunchGrader', desc: 'Score your go-to-market readiness. Ad copy is only as good as the launch behind it.' },
+                ].map(t => (
+                  <Link key={t.slug} to={`/projects/${t.slug}`} className="group bg-warm-50/60 hover:bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                    <div className="text-3xl mb-3 transition-transform group-hover:scale-110">{t.icon}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-2">{t.title}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{t.desc}</p>
+                    <p className="text-xs font-bold text-fire-500 mt-3 group-hover:text-fire-600">Open tool →</p>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
 

@@ -437,6 +437,15 @@ export function registerStepproofRoutes(app: FastifyInstance): void {
     dbRun('INSERT INTO user_roasts (email, url, score, grade, roast, result_json) VALUES (?, ?, ?, ?, ?, ?)',
       email, `stepproof:${scenario.name}`, 0, '-', 'Stepproof scenario run', JSON.stringify({ scenario: scenario.name, iterations }),
     ).catch(() => {});
+    dbRun(
+      `INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 1)
+       ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = count + 1`,
+      email, 'stepproof', new Date().toISOString().slice(0, 10),
+    ).catch(() => {});
+    dbRun(
+      'INSERT INTO funnel_events (event, ip_hash, tool, email) VALUES (?, ?, ?, ?)',
+      'submit_success', null, 'stepproof', email,
+    ).catch(() => {});
 
     try {
       const report = await runScenario(scenario, iterations, keys);

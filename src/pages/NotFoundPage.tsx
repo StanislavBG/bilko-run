@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { track } from '../hooks/usePageView.js';
 
 export function NotFoundPage() {
+  useEffect(() => { track('not_found'); }, []);
   return (
     <section className="max-w-2xl mx-auto px-6 py-20 text-center">
       <p className="text-6xl font-black text-warm-200 mb-4">404</p>

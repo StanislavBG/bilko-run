@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useAuth, useUser, SignInButton } from '@clerk/clerk-react';
+import { track } from './usePageView.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -29,6 +30,7 @@ export function useToolApi<TResult>(endpoint: string) {
     setCompareResult(null);
     setError(null);
     setNeedsTokens(false);
+    track('submit_start', { tool: endpoint, metadata: { mode: urlSuffix || 'submit' } });
     try {
       const token = await getToken();
       const res = await fetch(`${API}/demos/${endpoint}${urlSuffix}`, {
@@ -40,13 +42,25 @@ export function useToolApi<TResult>(endpoint: string) {
         body: JSON.stringify({ ...body, email }),
       });
       const data = await res.json();
-      if (data.requiresTokens) { setNeedsTokens(true); setTokenBalance(data.balance ?? 0); return; }
-      if (data.gated) { setError(data.message || 'Rate limit reached.'); return; }
+      if (data.requiresTokens) {
+        setNeedsTokens(true); setTokenBalance(data.balance ?? 0);
+        track('paywall_shown', { tool: endpoint });
+        return;
+      }
+      if (data.gated) {
+        setError(data.message || 'Rate limit reached.');
+        track('paywall_shown', { tool: endpoint, metadata: { gated: true } });
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       onSuccess(data);
       if (data.usage?.balance !== undefined) setTokenBalance(data.usage.balance);
+      track('submit_success', { tool: endpoint, metadata: { mode: urlSuffix || 'submit' } });
+      // Only flag credit_spent when the server confirmed a balance deduction (avoids false conversions on free/cached runs).
+      if (data.usage?.balance !== undefined) track('credit_spent', { tool: endpoint });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Request failed.');
+      track('submit_error', { tool: endpoint, metadata: { message: e instanceof Error ? e.message : 'error' } });
     } finally {
       setLoading(false);
     }
@@ -66,6 +80,7 @@ export function useToolApi<TResult>(endpoint: string) {
     setGenerating(true);
     setGenerateResult(null);
     setGenError(null);
+    track('submit_start', { tool: endpoint, metadata: { mode: 'generate' } });
     try {
       const token = await getToken();
       const res = await fetch(`${API}/demos/${endpoint}/generate`, {
@@ -77,11 +92,17 @@ export function useToolApi<TResult>(endpoint: string) {
         body: JSON.stringify({ ...body, email }),
       });
       const data = await res.json();
-      if (data.gated) { setGenError(data.message || 'Rate limit reached.'); return; }
+      if (data.gated) {
+        setGenError(data.message || 'Rate limit reached.');
+        track('paywall_shown', { tool: endpoint, metadata: { gated: true } });
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setGenerateResult(data);
+      track('submit_success', { tool: endpoint, metadata: { mode: 'generate' } });
     } catch (e: unknown) {
       setGenError(e instanceof Error ? e.message : 'Generation failed.');
+      track('submit_error', { tool: endpoint, metadata: { mode: 'generate', message: e instanceof Error ? e.message : 'error' } });
     } finally {
       setGenerating(false);
     }

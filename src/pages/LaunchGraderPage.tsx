@@ -1,7 +1,33 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
+import { track } from '../hooks/usePageView.js';
 import { ToolHero, ScoreCard, SectionBreakdown, CrossPromo } from '../components/tool-page/index.js';
+
+// ── Inline sub-components for tutorial sections ──────────────────────────────
+
+function CopyPromptCard({ label, text }: { label: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }).catch(() => {});
+  }
+  return (
+    <button onClick={copy}
+      className="group text-left bg-white hover:bg-fire-50 border border-warm-200/60 hover:border-fire-300 rounded-xl p-4 transition-all w-full">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-fire-500">{label}</span>
+        <span className={`text-[10px] font-bold uppercase transition-colors ${copied ? 'text-green-600' : 'text-warm-400 group-hover:text-fire-500'}`}>
+          {copied ? 'Copied!' : 'Copy'}
+        </span>
+      </div>
+      <p className="text-xs text-warm-700 font-mono leading-relaxed whitespace-pre-wrap">{text}</p>
+    </button>
+  );
+}
 
 interface SectionScore { score: number; max: number; feedback: string; }
 
@@ -43,6 +69,7 @@ export function LaunchGraderPage() {
 
   useEffect(() => {
     document.title = 'LaunchGrader — Is Your Product Ready to Launch?';
+    track('view_tool', { tool: 'launch-grader' });
     return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
   }, []);
 
@@ -414,6 +441,324 @@ export function LaunchGraderPage() {
                   <p className="text-sm text-warm-600 mt-1 leading-relaxed">{a}</p>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* ── Tutorial & example-heavy sections ──────────────────────── */}
+
+          {/* Step-by-step guide */}
+          <section className="bg-warm-100/40 border-y border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Step by step</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">How to use LaunchGrader — step by step</h2>
+                <p className="mt-3 text-base text-warm-600">Five clicks. Thirty seconds. One honest score.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {[
+                  { n: 1, icon: '🔗', title: 'Paste your URL', desc: 'The public page people land on first.', ex: 'https://your-saas.com' },
+                  { n: 2, icon: '📝', title: 'Describe the product', desc: 'One or two sentences. Plain English.', ex: 'AI that writes cold emails for B2B sales teams' },
+                  { n: 3, icon: '🚀', title: 'Click Audit', desc: 'We fetch the page and read it like a first-time visitor.', ex: 'Takes about 30 seconds to crunch' },
+                  { n: 4, icon: '📊', title: 'Read the 5 scores', desc: 'Value, pricing, social, onboarding, positioning.', ex: 'Pricing: 8/20 → biggest gap' },
+                  { n: 5, icon: '🔧', title: 'Fix the blockers', desc: 'Work through the numbered list top-to-bottom.', ex: 'Add pricing page → rescore → launch' },
+                ].map(s => (
+                  <div key={s.n} className="bg-white rounded-2xl border border-warm-200/60 p-5 relative">
+                    <span className="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-fire-500 text-white flex items-center justify-center text-sm font-black shadow-md">{s.n}</span>
+                    <div className="text-3xl mb-3" aria-hidden="true">{s.icon}</div>
+                    <h3 className="text-sm font-black text-warm-900 mb-1">{s.title}</h3>
+                    <p className="text-xs text-warm-600 leading-relaxed mb-3">{s.desc}</p>
+                    <div className="bg-warm-50 rounded-lg px-3 py-2 border border-warm-100">
+                      <p className="text-[10px] font-bold uppercase text-warm-400 mb-0.5">Example</p>
+                      <p className="text-xs text-warm-700 font-mono leading-snug">{s.ex}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Worked examples gallery */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Worked examples</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Three real audits, scored</h2>
+                <p className="mt-3 text-base text-warm-600">Real input. Realistic output. Exactly what LaunchGrader returns.</p>
+              </div>
+              <div className="space-y-6">
+                {[
+                  {
+                    tag: 'Pre-launch SaaS',
+                    icon: '🧪',
+                    name: 'InboxZeroAI (productivity tool)',
+                    input: 'URL: https://inboxzero-ai.com\nDescription: AI assistant that triages your Gmail inbox, drafts replies, and surfaces what matters. For busy founders.',
+                    output: 'SCORE: 62 / 100 — C+\nVerdict: Almost there\n\nValue Prop:       19/25  — Clear audience, benefit vague\nPricing:           7/20  — Hidden behind Contact Sales\nSocial Proof:     11/20  — 2 anonymous testimonials\nOnboarding:       16/20  — Live demo above the fold ✓\nPositioning:       9/15  — No comparison vs Superhuman\n\nBlockers:\n  1. Add a visible pricing page — $20/mo products shouldn\'t gate pricing\n  2. Replace "J.S." testimonials with named users + photos\n  3. Quantify the benefit: "save 40 min/day" beats "save time"',
+                    takeaway: 'Strong onboarding saved the score. Hidden pricing is the biggest blocker — fix that one thing and you jump 12 points.',
+                  },
+                  {
+                    tag: 'Indie product',
+                    icon: '🛠️',
+                    name: 'Tally Forms clone (indie)',
+                    input: 'URL: https://simpleform.app\nDescription: Typeform alternative for solo makers. Unlimited forms, $9/mo.',
+                    output: 'SCORE: 74 / 100 — B\nVerdict: Ready to launch\n\nValue Prop:       22/25  — Specific audience + clear alt\nPricing:          18/20  — Visible, simple, one tier\nSocial Proof:     12/20  — Needs named testimonials\nOnboarding:       15/20  — Signup requires credit card\nPositioning:      13/15  — Named comparison to Typeform\n\nBlockers:\n  1. Drop credit card from signup — convert 2-3× more trials\n  2. Add 3-5 named testimonials with photos before launch',
+                    takeaway: 'Strong positioning + transparent pricing = ready to ship. One signup change (drop CC) will measurably lift conversion.',
+                  },
+                  {
+                    tag: 'Consulting offer',
+                    icon: '💼',
+                    name: 'Fractional CMO service ($8k/mo)',
+                    input: 'URL: https://growthlab.consulting\nDescription: Fractional CMO for Series A B2B SaaS companies. 20 hrs/week, $8,000/month retainer.',
+                    output: 'SCORE: 51 / 100 — C\nVerdict: Almost there\n\nValue Prop:       14/25  — "Growth expertise" too generic\nPricing:           8/20  — Zero pricing visible\nSocial Proof:     14/20  — Logos present, no case studies\nOnboarding:        8/20  — "Book a call" is the only CTA\nPositioning:       7/15  — Unclear what makes you different\n\nBlockers:\n  1. Name your ICP in the hero: "Series A B2B SaaS CMOs"\n  2. Publish 2-3 case studies with real numbers\n  3. Add a pricing range — scares off wrong-fit leads, qualifies right ones',
+                    takeaway: 'High-ticket services still need visible pricing and case studies. "Book a call" is not a homepage strategy.',
+                  },
+                ].map((ex, i) => (
+                  <div key={i} className="bg-warm-50/60 rounded-2xl border border-warm-200/60 overflow-hidden">
+                    <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-warm-200/60">
+                      <span className="text-2xl" aria-hidden="true">{ex.icon}</span>
+                      <div className="flex-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-fire-500">{ex.tag}</span>
+                        <h3 className="text-base font-black text-warm-900">{ex.name}</h3>
+                      </div>
+                    </div>
+                    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-warm-200/60">
+                      <div className="p-5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-warm-400 mb-2">Input</p>
+                        <pre className="text-xs text-warm-700 font-mono leading-relaxed whitespace-pre-wrap">{ex.input}</pre>
+                      </div>
+                      <div className="p-5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-fire-500 mb-2">LaunchGrader output</p>
+                        <pre className="text-xs text-warm-800 font-mono leading-relaxed whitespace-pre-wrap">{ex.output}</pre>
+                      </div>
+                    </div>
+                    <div className="px-5 py-4 bg-fire-50/60 border-t border-fire-100">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-fire-600 mb-1">Key takeaway</p>
+                      <p className="text-sm text-warm-800 leading-relaxed">{ex.takeaway}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Try these prompts */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Starter pack</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Try these prompts</h2>
+                <p className="mt-3 text-base text-warm-600">Click any card to copy. Paste into the description field above.</p>
+              </div>
+              <div className="grid md:grid-cols-2 gap-3">
+                {[
+                  { label: 'SaaS', text: 'AI writing assistant for B2B marketers. Generates SEO-optimized blog posts in your brand voice. $49/mo.' },
+                  { label: 'SaaS', text: 'Open-source analytics alternative to Google Analytics. Privacy-first, self-hostable, GDPR-compliant.' },
+                  { label: 'E-commerce', text: 'Subscription coffee delivery. Single-origin beans, roasted-to-order, ships weekly or monthly. $18 per bag.' },
+                  { label: 'E-commerce', text: 'DTC skincare brand. Clean ingredients, refillable packaging, built for sensitive skin.' },
+                  { label: 'Local business', text: 'Boutique personal training studio in Austin. Small-group strength classes for busy professionals 30+.' },
+                  { label: 'Local business', text: 'Mobile dog grooming service in Seattle. At-home appointments, eco-friendly products, online booking.' },
+                  { label: 'B2B', text: 'Fractional CFO for seed-stage SaaS founders. Monthly close, runway modeling, investor reporting. $4k/mo.' },
+                  { label: 'B2B', text: 'Outbound sales-as-a-service for early-stage startups. Build list, send sequences, book meetings. Flat rate.' },
+                  { label: 'Course', text: 'Six-week cohort on pricing strategy for SaaS founders. Live sessions + 1-on-1 teardowns. $1,200.' },
+                  { label: 'Newsletter', text: 'Weekly newsletter for indie hackers shipping AI tools. Interviews, teardowns, revenue reports. Free.' },
+                ].map((p, i) => (
+                  <CopyPromptCard key={i} label={p.label} text={p.text} />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* What great output looks like */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Calibrate your expectations</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">What great output looks like</h2>
+                <p className="mt-3 text-base text-warm-600">An annotated sample so you know what each piece means.</p>
+              </div>
+              <div className="bg-warm-50/60 rounded-2xl border border-warm-200/60 p-6 space-y-5">
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">🎯</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Total score + letter grade</p>
+                    <p className="text-sm text-warm-700">One number from 0-100 plus a letter (A–F). Above 80 = ready to launch. 65-80 = almost there. Below 65 = fix the blockers first. Use this as the headline number you track over time.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">⚖️</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Verdict banner</p>
+                    <p className="text-sm text-warm-700">Three possible verdicts: "Ready to launch" / "Almost there" / "Not ready — major gaps". This is a human decision point, not just the number.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">📏</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Five dimension scores</p>
+                    <p className="text-sm text-warm-700">Value (25), Pricing (20), Social Proof (20), Onboarding (20), Positioning (15). Find your weakest dimension and fix that first — it gives you the biggest point swing.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">🚧</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Launch blockers (numbered)</p>
+                    <p className="text-sm text-warm-700">The 2-5 specific things most likely to sink your launch. Ordered by impact. Fix them top-to-bottom. Every blocker is a concrete, actionable instruction — not vague advice.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-3xl" aria-hidden="true">🔥</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-fire-500 mb-1">Roast line</p>
+                    <p className="text-sm text-warm-700">One witty one-liner summarizing the biggest issue. This is the line you screenshot and send to your cofounder.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Common mistakes + fixes */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Don't do these</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Common mistakes + fixes</h2>
+                <p className="mt-3 text-base text-warm-600">Patterns we see in low scores. Fix these and you move fast.</p>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'Hiding pricing behind "Contact Sales" for a low-ticket product', a: 'If your product is under $500/month, visible pricing always wins. Hidden pricing is the #1 launch blocker we flag — visitors assume you\'re expensive and leave. Show your tiers. Show a price. You can still negotiate with enterprise leads.' },
+                  { q: 'Anonymous or initial-only testimonials ("J.S.", "M.K.")', a: 'Anonymous testimonials look fake even when they\'re real. Get 3-5 named users with photos, titles, and companies. If they won\'t give permission, you need better customers or a better ask.' },
+                  { q: 'Vague value prop ("We help teams work better")', a: 'Specify the audience and quantify the benefit. "Cut meeting time by 40% for remote engineering teams" beats "collaborate better" every time. Name the WHO and the HOW MUCH.' },
+                  { q: 'Auditing once and never re-auditing', a: 'LaunchGrader is $1. Run it after every major change — new pricing, new positioning, new onboarding. The delta between audits is where the learning happens.' },
+                  { q: 'Fixing the wrong blocker first', a: 'Blockers are ordered by impact. Work top-to-bottom, not whichever feels easiest. The #1 blocker is usually the highest-leverage fix.' },
+                  { q: 'Treating the score as final instead of directional', a: 'The score is a snapshot, not a verdict from the universe. Use it as a baseline. The point is the movement between audits, not the absolute number.' },
+                  { q: 'Submitting a 404 page or login-walled URL', a: 'LaunchGrader reads the page like a first-time visitor. If the URL is behind auth, we see the login page — not your product. Submit your public landing page, not your dashboard.' },
+                ].map((m, i) => (
+                  <details key={i} className="group bg-white rounded-xl border border-warm-200/60 hover:border-fire-300 transition-colors">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-5 py-4">
+                      <span className="text-sm font-bold text-warm-900">{m.q}</span>
+                      <svg className="w-4 h-4 text-warm-400 transition-transform group-open:rotate-180 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </summary>
+                    <p className="px-5 pb-4 text-sm text-warm-600 leading-relaxed">{m.a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* FAQ accordion */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">FAQ</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Questions about LaunchGrader</h2>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { q: 'What does LaunchGrader actually check?', a: 'We fetch your public URL, read it like a first-time visitor, and score it across 5 go-to-market dimensions: Value Proposition (25pts), Pricing & Monetization (20pts), Social Proof & Trust (20pts), Onboarding & First Value (20pts), Competitive Positioning (15pts).' },
+                  { q: 'How much does it cost?', a: '$1 per audit (1 credit). Or 7 credits for $5. Credits work across all 10 bilko.run tools and never expire. First audit is free while you try the tool out.' },
+                  { q: 'Is my URL stored or tracked?', a: 'We fetch your URL once to generate the audit. We don\'t store the page content. We log the URL string + score for analytics purposes only. No crawling of logged-in pages, no data resale.' },
+                  { q: 'How accurate is it vs. a human expert?', a: 'It\'s directionally correct for ~85% of cases. It will catch the obvious blockers (hidden pricing, no testimonials, weak value prop) that a human strategist would also catch. It won\'t understand your specific domain nuance. Use it as a first pass.' },
+                  { q: 'How is this different from ChatGPT?', a: 'ChatGPT gives you a friendly generic analysis. LaunchGrader runs a structured 5-dimension rubric, returns a consistent score, fetches your actual page, and gives you numbered blockers in priority order. Same underlying LLM, very different output.' },
+                  { q: 'Does it work for my industry?', a: 'Works well for: SaaS, e-commerce, consulting, courses, newsletters, DTC, B2B services, local business. Works less well for: regulated industries (healthcare, finance) where we can\'t judge compliance, and very niche B2B where the benchmarks differ.' },
+                  { q: 'Should I audit before or after I launch?', a: 'Both. Audit 2 weeks before to find blockers. Audit 2 days before to confirm fixes. Audit 2 weeks after launch to see what real traffic revealed.' },
+                  { q: 'Can I audit my competitor?', a: 'Yes. Any public URL. Use their score as a benchmark — if they\'re at 82 and you\'re at 58, you know your relative position. This is one of the highest-leverage uses of the tool.' },
+                  { q: 'What if I disagree with the score?', a: 'Push back. The tool is wrong sometimes. Look at the blockers — if they ring true, act on them. If they feel off, discard them. You\'re the decision-maker.' },
+                  { q: 'Does it work on Webflow/Framer/Carrd pages?', a: 'Yes. Any public HTML page works. We don\'t need a specific CMS. As long as we can fetch the URL and read the DOM, we can audit it.' },
+                ].map((f, i) => (
+                  <details key={i} className="group bg-warm-50/60 rounded-xl border border-warm-200/60 hover:border-fire-300 transition-colors">
+                    <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-5 py-4">
+                      <span className="text-sm font-bold text-warm-900">{f.q}</span>
+                      <svg className="w-4 h-4 text-warm-400 transition-transform group-open:rotate-180 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </summary>
+                    <p className="px-5 pb-4 text-sm text-warm-600 leading-relaxed">{f.a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Use cases by role */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">By role</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Use cases by role</h2>
+                <p className="mt-3 text-base text-warm-600">How different people actually use LaunchGrader day-to-day.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { icon: '🧑‍💻', role: 'Founder', desc: 'Audit your landing page 2 weeks before Product Hunt launch. Fix the blockers. Rescore the day before. Ship with a score above 80.' },
+                  { icon: '📣', role: 'Marketer', desc: 'Benchmark your page against 3 competitors. Use their weak dimensions as your positioning angle. Re-audit after every copy refresh.' },
+                  { icon: '💼', role: 'Freelancer', desc: 'Audit your service page. Fix visible pricing + case studies. Use the before/after score in your own testimonials to prospects.' },
+                  { icon: '🏢', role: 'Agency', desc: 'Run audits on client sites as part of discovery. Share the score report in kickoff decks. Rescore quarterly to show progress.' },
+                ].map(p => (
+                  <div key={p.role} className="bg-white rounded-2xl border border-warm-200/60 p-5 hover:border-fire-300 transition-colors">
+                    <div className="text-3xl mb-3" aria-hidden="true">{p.icon}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-2">{p.role}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{p.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Tips to get better results */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Sharper inputs, sharper output</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Tips to get better results</h2>
+              </div>
+              <ol className="space-y-5">
+                {[
+                  { t: 'Write a specific description.', d: 'Include the audience, the outcome, and the rough price point. "AI tool for solo marketers that generates 5 ad variations in 30 seconds, $19/mo" beats "AI marketing assistant".' },
+                  { t: 'Audit your actual landing page, not your app.', d: 'We grade the page a cold visitor sees first. If you submit your logged-in dashboard URL, you\'ll get a weird score.' },
+                  { t: 'Audit a competitor before you audit yourself.', d: 'Benchmark first. Knowing a competitor scores 72 changes how you interpret your own 65.' },
+                  { t: 'Fix blockers top-to-bottom.', d: 'Blockers are ordered by impact. Don\'t skip around. The #1 blocker is almost always the highest-leverage fix.' },
+                  { t: 'Re-audit 48 hours after each fix.', d: 'See the score move. That movement is the feedback loop. If it doesn\'t move, you fixed the wrong thing.' },
+                  { t: 'Screenshot before/after scores.', d: 'Progress is motivation. Keep a running log. Send it to your cofounder when you need to celebrate.' },
+                  { t: 'Don\'t chase 100/100.', d: 'Above 80 ships. 100/100 is a perfectionism trap. Launch at 82, iterate after.' },
+                  { t: 'Pair with PageRoast for page-level CRO.', d: 'LaunchGrader asks "is this product ready?" PageRoast asks "is this page converting?" Run both.' },
+                ].map((tip, i) => (
+                  <li key={i} className="flex items-start gap-4">
+                    <span className="flex-shrink-0 w-8 h-8 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center text-sm font-black">{i + 1}</span>
+                    <div>
+                      <p className="text-sm font-bold text-warm-900">{tip.t}</p>
+                      <p className="text-sm text-warm-600 mt-1 leading-relaxed">{tip.d}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </section>
+
+          {/* Related tools */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-16">
+              <div className="max-w-2xl mx-auto text-center mb-10">
+                <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Tools that pair with this</p>
+                <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Related tools</h2>
+                <p className="mt-3 text-base text-warm-600">Same credits. Different angle.</p>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { slug: 'page-roast', emoji: '🔥', name: 'PageRoast', desc: 'Landing page CRO audit + a savage roast. Use alongside LaunchGrader for page-level conversion fixes.' },
+                  { slug: 'headline-grader', emoji: '📰', name: 'HeadlineGrader', desc: '4-framework headline scoring. Fix your hero headline before you re-audit your launch readiness.' },
+                  { slug: 'audience-decoder', emoji: '🎯', name: 'AudienceDecoder', desc: 'Archetype + engagement analysis. Know your audience before you write the value prop.' },
+                  { slug: 'stack-audit', emoji: '📊', name: 'StackAudit', desc: 'Find SaaS waste before launch. Every dollar saved extends your runway.' },
+                ].map(t => (
+                  <Link key={t.slug} to={`/projects/${t.slug}`} className="group bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                    <div className="text-3xl mb-3" aria-hidden="true">{t.emoji}</div>
+                    <h3 className="text-base font-black text-warm-900 mb-1 group-hover:text-fire-600 transition-colors">{t.name}</h3>
+                    <p className="text-sm text-warm-600 leading-relaxed">{t.desc}</p>
+                    <p className="mt-3 text-xs font-bold text-fire-500 group-hover:text-fire-600">Open tool &rarr;</p>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
 

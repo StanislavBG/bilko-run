@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
-import { usePageView } from '../hooks/usePageView.js';
+import { usePageView, track } from '../hooks/usePageView.js';
 import { ADMIN_EMAILS } from '../constants.js';
 
 const PROJECT_LINKS = [
@@ -141,7 +141,10 @@ export function Layout() {
             <div className="ml-2">
               <SignedOut>
                 <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
-                  <button className="px-4 py-2 text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 rounded-lg transition-all">
+                  <button
+                    onClick={() => track('signin_click')}
+                    className="px-4 py-2 text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 rounded-lg transition-all"
+                  >
                     Sign in
                   </button>
                 </SignInButton>
@@ -197,7 +200,7 @@ export function Layout() {
             <SignedOut>
               <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
                 <button
-                  onClick={() => setMobileOpen(false)}
+                  onClick={() => { setMobileOpen(false); track('signin_click'); }}
                   className="w-full px-4 py-2.5 text-sm font-medium text-fire-600 hover:bg-fire-50 rounded-lg transition-colors text-left"
                 >
                   Sign in

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useUser, SignInButton, useAuth, useClerk } from '@clerk/clerk-react';
 import { CrossPromo } from '../components/tool-page/index.js';
+import { track } from '../hooks/usePageView.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -74,6 +76,45 @@ function RoastingOverlay({ onCancel }: { onCancel: () => void }) {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Tutorial sub-components ──────────────────────────────────────────────────
+
+function CopyUrlPrompt({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button onClick={onCopy} className="group w-full text-left bg-white hover:bg-fire-50 border border-warm-200/60 hover:border-fire-300 rounded-xl px-4 py-3 transition-all">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          {label && <p className="text-[10px] font-bold uppercase tracking-widest text-fire-500 mb-1">{label}</p>}
+          <p className="font-mono text-sm text-warm-800 leading-snug truncate">{text}</p>
+        </div>
+        <span className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded ${copied ? 'bg-green-100 text-green-700' : 'bg-warm-100 text-warm-600 group-hover:bg-fire-100 group-hover:text-fire-700'}`}>
+          {copied ? 'Copied!' : 'Copy'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function RoastDetails({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="group bg-white rounded-xl border border-warm-200/60 hover:border-fire-300 transition-colors">
+      <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-5 py-4">
+        <span className="font-bold text-warm-900 text-sm md:text-base">{q}</span>
+        <svg className="w-4 h-4 flex-shrink-0 text-warm-400 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </summary>
+      <p className="px-5 pb-4 text-sm text-warm-600 leading-relaxed">{a}</p>
+    </details>
   );
 }
 
@@ -561,6 +602,7 @@ function BuyTokensCard({ email }: { email: string }) {
 
   async function buyTokens(priceType: 'pageroast_token_single' | 'pageroast_tokens') {
     setLoading(priceType === 'pageroast_token_single' ? 'single' : 'bundle');
+    track('checkout_start', { tool: 'page-roast', metadata: { priceType } });
     try {
       const res = await fetch(`${API}/stripe/create-checkout-session`, {
         method: 'POST',
@@ -619,6 +661,7 @@ export function PageRoastPage() {
   // Set page title
   useEffect(() => {
     document.title = 'PageRoast — Get Your Landing Page Roasted by AI 🔥';
+    track('view_tool', { tool: 'page-roast' });
     // Update OG tags for social sharing
     const setMeta = (property: string, content: string) => {
       let el = document.querySelector(`meta[property="${property}"]`) || document.querySelector(`meta[name="${property}"]`);
@@ -689,6 +732,7 @@ export function PageRoastPage() {
     setCompareResult(null);
     setError(null);
     setNeedsTokens(false);
+    track('submit_start', { tool: 'page-roast', metadata: { mode: 'submit' } });
     try {
       const headers = await authHeaders();
       const res = await fetch(`${API}/demos/page-roast`, {
@@ -697,12 +741,19 @@ export function PageRoastPage() {
         body: JSON.stringify({ url: url.trim(), email }),
       });
       const data = await res.json();
-      if (data.requiresTokens) { setNeedsTokens(true); setTokenBalance(data.balance ?? 0); return; }
+      if (data.requiresTokens) {
+        setNeedsTokens(true); setTokenBalance(data.balance ?? 0);
+        track('paywall_shown', { tool: 'page-roast' });
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setResult(data as RoastResult);
       if (data.usage?.balance !== undefined) setTokenBalance(data.usage.balance);
+      track('submit_success', { tool: 'page-roast', metadata: { mode: 'submit' } });
+      track('credit_spent', { tool: 'page-roast' });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Roast failed.');
+      track('submit_error', { tool: 'page-roast', metadata: { message: e instanceof Error ? e.message : 'error' } });
     } finally {
       setLoading(false);
     }
@@ -715,6 +766,7 @@ export function PageRoastPage() {
     setCompareResult(null);
     setError(null);
     setNeedsTokens(false);
+    track('submit_start', { tool: 'page-roast', metadata: { mode: 'compare' } });
     try {
       const headers = await authHeaders();
       const res = await fetch(`${API}/demos/page-roast/compare`, {
@@ -723,12 +775,19 @@ export function PageRoastPage() {
         body: JSON.stringify({ url_a: urlA.trim(), url_b: urlB.trim(), email }),
       });
       const data = await res.json();
-      if (data.requiresTokens) { setNeedsTokens(true); setTokenBalance(data.balance ?? 0); return; }
+      if (data.requiresTokens) {
+        setNeedsTokens(true); setTokenBalance(data.balance ?? 0);
+        track('paywall_shown', { tool: 'page-roast' });
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setCompareResult(data as CompareResult);
       if (data.usage?.balance !== undefined) setTokenBalance(data.usage.balance);
+      track('submit_success', { tool: 'page-roast', metadata: { mode: 'compare' } });
+      track('credit_spent', { tool: 'page-roast' });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Comparison failed.');
+      track('submit_error', { tool: 'page-roast', metadata: { mode: 'compare', message: e instanceof Error ? e.message : 'error' } });
     } finally {
       setLoading(false);
     }
@@ -1219,6 +1278,201 @@ export function PageRoastPage() {
                     <h3 className="font-bold text-warm-900 mb-1">{q}</h3>
                     <p className="text-sm text-warm-600 leading-relaxed">{a}</p>
                   </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Tutorial: Step-by-step ─── */}
+          <section className="bg-white border-y border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-2">How to use PageRoast — step by step</h2>
+              <p className="text-center text-warm-600 mb-8">Five steps. No fluff. Works on any public landing page.</p>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {[
+                  { n: 1, emoji: '🔗', title: 'Drop your URL', hint: 'Any public page. Homepage, pricing, product.', example: 'https://acme.com/pricing' },
+                  { n: 2, emoji: '⏳', title: 'Wait ~30 seconds', hint: 'We fetch, read, roast. Watch the flames.', example: '"Counting your exclamation marks..."' },
+                  { n: 3, emoji: '📊', title: 'Read your score', hint: 'Out of 100 across four pillars.', example: 'Score: 54/100 · C-' },
+                  { n: 4, emoji: '💀', title: 'Screenshot the roast', hint: 'A one-liner savage enough to tweet.', example: '"Three CTAs, zero clarity."' },
+                  { n: 5, emoji: '🛠️', title: 'Work the top fixes', hint: 'Three changes. Ship this week. Rescore Monday.', example: 'Move CTA above the fold' },
+                ].map(step => (
+                  <div key={step.n} className="bg-warm-50/60 rounded-xl border border-warm-200/60 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-6 h-6 rounded-full bg-fire-500 text-white flex items-center justify-center text-xs font-black">{step.n}</span>
+                      <span className="text-xl" aria-hidden="true">{step.emoji}</span>
+                    </div>
+                    <h3 className="text-sm font-black text-warm-900 mb-1">{step.title}</h3>
+                    <p className="text-xs text-warm-600 leading-relaxed mb-2">{step.hint}</p>
+                    <p className="text-[10px] font-mono bg-white border border-warm-200/60 rounded px-2 py-1 text-warm-700 truncate">{step.example}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Worked examples ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-2">Three pages. Three roasts.</h2>
+              <p className="text-center text-warm-600 mb-8">Real-feeling landing pages, real-feeling scores, real takeaways.</p>
+              <div className="space-y-6">
+                {[
+                  { icon: '💻', label: 'SaaS homepage', input: 'Hero: "The All-in-One Platform for Modern Teams." CTA: "Learn More." No testimonials above fold. 6 features listed. Pricing in footer.', output: { score: 41, grade: 'D+', hero: 9, social: 6, clarity: 12, conv: 14, roast: 'Your hero could be describing a Slack competitor, a Notion competitor, or a toaster. Pick a lane.' }, takeaway: '"All-in-one" means "for nobody." Name the person, name the pain, name the win.' },
+                  { icon: '🛍️', label: 'E-com product page', input: 'Hero: "Merino Wool Crew — $89." 8 photos. Reviews (4.8, 1,247). Size guide inline. CTA: "Add to Cart" sticky.', output: { score: 83, grade: 'A-', hero: 21, social: 22, clarity: 20, conv: 20, roast: 'Respectable. You\'re selling a t-shirt like a serious person. Also: nice sticky CTA.' }, takeaway: 'Sticky CTA + inline proof + concrete price = top-quartile e-com page.' },
+                  { icon: '🧑‍🎨', label: 'Coach landing page', input: 'Hero: "Unlock Your Inner Potential!" 3 paragraphs of backstory. CTA below the fold. No pricing.', output: { score: 28, grade: 'F', hero: 4, social: 8, clarity: 7, conv: 9, roast: 'Three paragraphs about you before one word about me. I came to buy, not to read your memoir.' }, takeaway: 'Lead with the reader\'s outcome, not your story. Move CTA above the fold.' },
+                ].map(ex => (
+                  <div key={ex.label} className="bg-white rounded-2xl border border-warm-200/60 p-6">
+                    <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                      <div className="flex items-center gap-3"><span className="text-2xl">{ex.icon}</span><span className="text-xs font-bold uppercase tracking-wider text-warm-500">{ex.label}</span></div>
+                      <span className="font-mono text-xs bg-warm-900 text-white px-3 py-1 rounded-full font-bold">{ex.output.score}/100 · {ex.output.grade}</span>
+                    </div>
+                    <p className="text-xs bg-warm-50 border border-warm-200/60 rounded-lg px-3 py-2.5 text-warm-800 leading-relaxed mb-3"><span className="font-bold">Page: </span>{ex.input}</p>
+                    <p className="font-mono text-[11px] text-warm-600 mb-3">Hero {ex.output.hero}/25 · Social {ex.output.social}/25 · Clarity {ex.output.clarity}/25 · Conv {ex.output.conv}/25</p>
+                    <p className="text-sm text-fire-600 italic leading-relaxed mb-3">"{ex.output.roast}"</p>
+                    <p className="text-sm text-warm-700 leading-relaxed pt-3 border-t border-warm-100"><span className="font-bold text-warm-900">Takeaway: </span>{ex.takeaway}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Try these URLs ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-4xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-2">Try roasting these</h2>
+              <p className="text-center text-warm-600 mb-8">Click to copy, paste at the top. No wrong answers.</p>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { group: 'SaaS', url: 'https://stripe.com' },
+                  { group: 'SaaS', url: 'https://linear.app' },
+                  { group: 'E-commerce', url: 'https://allbirds.com' },
+                  { group: 'E-commerce', url: 'https://away.com' },
+                  { group: 'Local', url: 'https://tartine.com' },
+                  { group: 'Local', url: 'https://www.joespizzanyc.com' },
+                  { group: 'Agency', url: 'https://basecamp.com' },
+                  { group: 'Agency', url: 'https://bilko.run' },
+                ].map(item => <CopyUrlPrompt key={item.url} text={item.url} label={item.group} />)}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Anatomy of a roast ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-2">Every piece has a job</h2>
+              <p className="text-center text-warm-600 mb-8">The roast card up top shows a full result. Here's how to read each part.</p>
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                {[
+                  { label: 'Total score', note: 'Out of 100. Under 65 = don\'t buy ads yet.' },
+                  { label: 'Letter grade', note: 'A-F with personality. A+ = ship. F = start over.' },
+                  { label: 'Four pillar scores', note: 'Hero, social proof, clarity, conversion. 25 each. Weakest = this week\'s target.' },
+                  { label: 'Roast one-liner', note: 'The savage line built for screenshots. Share for accountability.' },
+                  { label: 'Top 3 fixes', note: 'Concrete, shippable this week. Actual words to change.' },
+                  { label: 'Per-section feedback', note: 'Expand each pillar for the exact reason it dragged down the score.' },
+                ].map(item => (
+                  <div key={item.label} className="bg-white rounded-xl border border-warm-200/60 p-3">
+                    <p className="font-bold text-warm-900 text-sm mb-0.5">{item.label}</p>
+                    <p className="text-xs text-warm-600 leading-relaxed">{item.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Common mistakes ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-8">Common landing-page mistakes (and the fix)</h2>
+              <div className="space-y-3">
+                {[
+                  { q: 'Your hero could describe 40 other companies', a: 'If "all-in-one platform for modern teams" could mean Notion, Monday, Asana, or ClickUp, it\'s meaningless. Name the person, name the pain, name the outcome. Specificity wins.' },
+                  { q: 'Three competing CTAs in the hero', a: '"Book a demo / Start free trial / Watch video" = reader does nothing. Pick the easiest first step. Make it 2x bigger than anything else. Delete the rest.' },
+                  { q: 'Testimonials with initials and no photos', a: '"J. from Company A" reads fake even when it isn\'t. Real names + real photos + a specific number = trustable quote.' },
+                  { q: 'Pricing hidden in the footer', a: 'If you\'re afraid to show price, the page can\'t do its job. Put it on the page, let readers self-qualify.' },
+                  { q: 'Features listed as features, not benefits', a: '"Real-time collaboration" = feature. "See edits as your team types them" = benefit. Lead with the outcome, then the mechanism. If your page were a billboard, could a driver still get the point?' },
+                  { q: 'Social proof with zero numbers', a: '"Trusted by teams everywhere" = nothing. "Used by 4,800+ engineering teams across 47 countries" = credible. Count things.' },
+                ].map(m => <RoastDetails key={m.q} q={m.q} a={m.a} />)}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── FAQ ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-8">FAQ — PageRoast</h2>
+              <div className="space-y-3">
+                {[
+                  { q: 'How is this different from ChatGPT?', a: 'ChatGPT gives a different answer every time. PageRoast fetches real HTML, scores four named pillars against calibrated references, returns a consistent 100-point score you can track over time.' },
+                  { q: 'What does one credit get me?', a: 'One full roast — score, grade, four breakdowns, roast line, top 3 fixes. A/B compare = 2 credits. First roast free. Credits never expire and work across all bilko.run tools.' },
+                  { q: 'How accurate is the score, and is my data stored?', a: 'Calibrated against 200+ real landing pages — within ±6 points of expert CRO judgment 90% of the time. Results stored temporarily (download to save). Page content isn\'t persisted.' },
+                  { q: 'Does it work for my industry?', a: 'Yes — SaaS, e-commerce, local services, agencies, coaches, DTC, info products. The four pillars are universal CRO principles.' },
+                  { q: 'What\'s A/B Compare?', a: 'Paste your page and a competitor\'s. We score both, pick a winner, explain the margin. 2 credits. Faster than a CRO consultant.' },
+                  { q: 'The roast was mean. Can you tone it down?', a: 'No. The roast line is built for screenshots — the score and fixes are the useful part. Share, fix, rescore. Most users rescore 2-3 times as they iterate (1 credit each).' },
+                ].map(m => <RoastDetails key={m.q} q={m.q} a={m.a} />)}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Use cases by role ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-8">Who roasts pages, and why</h2>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { icon: '🚀', role: 'Founders', use: 'Roast before launch. Score under 65? Don\'t buy ads yet — fix the page first.' },
+                  { icon: '📣', role: 'Marketers', use: 'Roast the competitor scoring 85+. Steal the structural patterns, not the words.' },
+                  { icon: '✍️', role: 'Freelancers', use: 'Send prospects a before-score of their current page. Score + 3 fixes = sales pitch.' },
+                  { icon: '🏢', role: 'Agencies', use: 'Roast every client page before kickoff. Walk in with a CRO baseline, not vibes.' },
+                ].map(p => (
+                  <div key={p.role} className="bg-warm-50/60 rounded-2xl border border-warm-200/60 p-4">
+                    <div className="text-2xl mb-2">{p.icon}</div>
+                    <h3 className="text-sm font-black text-warm-900 mb-1">{p.role}</h3>
+                    <p className="text-xs text-warm-600 leading-relaxed">{p.use}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ─── Tips ─── */}
+          <section className="bg-warm-100/40 border-b border-warm-200/40">
+            <div className="max-w-3xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-8">Seven tips to score higher</h2>
+              <ol className="space-y-3">
+                {[
+                  { tip: 'Roast before you spend ad budget', why: 'Every ad dollar lands on a better page. ROI compounds.' },
+                  { tip: 'Fix one pillar per week', why: 'Hero → social → clarity → conversion. Sustainable beats frantic.' },
+                  { tip: 'Rescore after every change', why: 'Watching the number move is the dopamine. Small wins build momentum.' },
+                  { tip: 'Roast your competitors', why: 'Find what scores 85+. Steal the structure, not the words.' },
+                  { tip: 'Use A/B Compare for real decisions', why: '2 credits ends a week of debate.' },
+                  { tip: 'Share the roast before you fix', why: 'Screenshots create accountability. Accountability ships changes. (Download to save — server storage is temporary.)' },
+                ].map((t, i) => (
+                  <li key={i} className="flex gap-3 items-start">
+                    <span className="flex-shrink-0 w-7 h-7 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black text-xs mt-0.5">{i + 1}</span>
+                    <p className="text-sm text-warm-700 leading-relaxed"><span className="font-bold text-warm-900">{t.tip}.</span> {t.why}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </section>
+
+          {/* ─── Related tools ─── */}
+          <section className="bg-white border-b border-warm-200/40">
+            <div className="max-w-5xl mx-auto px-6 py-14">
+              <h2 className="text-2xl md:text-3xl font-black text-warm-900 text-center leading-tight mb-8">Tools that pair with PageRoast</h2>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { slug: 'headline-grader', icon: '✏️', title: 'HeadlineGrader', desc: 'Grade your hero headline — the biggest single lever on the page.' },
+                  { slug: 'ad-scorer', icon: '🎯', title: 'AdScorer', desc: 'Score the ads driving traffic to the page you just roasted.' },
+                  { slug: 'audience-decoder', icon: '🧩', title: 'AudienceDecoder', desc: 'Know who you\'re writing to before rewriting the page.' },
+                  { slug: 'launch-grader', icon: '🚀', title: 'LaunchGrader', desc: 'Roast covers the page. LaunchGrader covers the GTM around it.' },
+                ].map(t => (
+                  <Link key={t.slug} to={`/projects/${t.slug}`} className="group bg-warm-50/60 hover:bg-white rounded-xl border border-warm-200/60 hover:border-fire-300 p-4 transition-all">
+                    <div className="text-2xl mb-2">{t.icon}</div>
+                    <h3 className="text-sm font-black text-warm-900 mb-1">{t.title}</h3>
+                    <p className="text-xs text-warm-600 leading-relaxed">{t.desc}</p>
+                    <p className="text-xs font-bold text-fire-500 mt-2">Open →</p>
+                  </Link>
                 ))}
               </div>
             </div>

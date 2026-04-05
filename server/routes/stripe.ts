@@ -8,6 +8,7 @@ import {
 } from '../services/stripe.js';
 import { upsertLicenseKey, getLicenseKeysForEmail, validateLicenseKey } from '../services/license.js';
 import { creditTokens, grantFreeTokens, hasTokenAccount, TOKENS_PER_SINGLE, TOKENS_PER_BUNDLE } from '../services/tokens.js';
+import { dbRun } from '../db.js';
 
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -212,6 +213,15 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             await creditTokens(email, tokenAmount, data.payment_intent as string);
             console.log(`[stripe] Credited ${tokenAmount} tokens for ${email}`);
           }
+
+          // Mark most recent analytics session for this email as purchased (server-side attribution).
+          try {
+            await dbRun(
+              `UPDATE sessions SET purchased = 1
+               WHERE session_id = (SELECT session_id FROM sessions WHERE email = ? ORDER BY started_at DESC LIMIT 1)`,
+              email,
+            );
+          } catch { /* analytics best-effort */ }
         }
       } else if (event.type === 'customer.subscription.updated') {
         await updateSubscriptionPeriod(data.id, data.status, data.current_period_end);

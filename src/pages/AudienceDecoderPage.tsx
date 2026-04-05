@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton } from '@clerk/clerk-react';
 import { useToolApi } from '../hooks/useToolApi.js';
+import { track } from '../hooks/usePageView.js';
 import { ToolHero, ScoreCard, CrossPromo } from '../components/tool-page/index.js';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -306,6 +308,357 @@ function CompareResult({ data }: { data: CompareResponse }) {
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 
+// ── Tutorial content block ──────────────────────────────────────────────────
+
+const AD_PROMPTS: Array<{ category: string; label: string; text: string }> = [
+  { category: 'B2B SaaS', label: 'Describe a SaaS buyer', text: 'I sell a B2B observability platform to engineering directors at 100–1,000-person SaaS companies. They buy after an incident costs them a big customer. They use Datadog + PagerDuty today. They trust peers, dev conference talks, and case studies from similar-stage companies. Budget: $30k–$120k/yr.' },
+  { category: 'B2B SaaS', label: 'Describe a buyer through content', text: '(paste 10–20 of your last tweets, newsletter intros, or LinkedIn posts. Add: Product = X. Audience hypothesis = Y.)' },
+  { category: 'E-commerce', label: 'Describe a DTC shopper', text: 'I sell $48 premium pour-over coffee subscriptions. Customers are 28–42, urban, bought 1–2 specialty coffee items in the last 90 days, follow coffee creators on Instagram. Cancel rate is 18% in month 2. I want to know who stays vs. churns and why.' },
+  { category: 'E-commerce', label: 'Brand tone audit', text: '(paste 10–15 of your recent product descriptions, email subject lines, and IG captions.) Product: minimalist leather goods, $80–$250. Audience hypothesis: design-conscious men 30–50.' },
+  { category: 'Creator', label: 'Decode your own audience', text: '(paste 15–20 of your last tweets or LinkedIn posts.) Goal: tell me which archetype dominates, which engagement signal is strongest, and what content format I should double down on.' },
+  { category: 'Creator', label: 'Compare yourself to a competitor', text: 'Creator A: me (paste 15 posts).\nCreator B: (paste 15 posts from competitor).\nGoal: audience overlap, tone difference, and who is winning the shared segment.' },
+  { category: 'Course creator', label: 'Describe a student', text: 'I sell a $297 self-paced course on cold email copywriting. Students are freelance marketers 1–3 years into freelancing who want to add email as a service. They have 5–15 clients. They\'ve tried courses before and not finished them. They buy after a free tool converts them.' },
+  { category: 'Local biz', label: 'Describe a local customer', text: 'I own a 4-chair barbershop in a town of 18,000. Customers are men 20–55, 60% repeat monthly. They find us on Google Maps and Instagram. I want to know which 20% of customers drive 80% of revenue and what I should say to the other 80% to convert them to regulars.' },
+  { category: 'Local biz', label: 'Decode repeat buyers', text: '(paste 10–15 of the reviews you got this year + your Google Business description.) Product: residential cleaning service, $180 standard. Goal: describe the person who books us 3+ times.' },
+  { category: 'Agency', label: 'Decode a client\'s audience', text: '(paste 20 posts or blog intros from your client\'s account.) Client: B2B payroll software for restaurants. Audience hypothesis: multi-location restaurant operators. Goal: confirm or redirect their content strategy.' },
+];
+
+const AD_MISTAKES: Array<{ mistake: string; fix: string }> = [
+  { mistake: 'Pasting only 2–3 posts for decoding', fix: 'Paste 10–20. Three posts produce noise; ten posts produce signal. Your last month of content is the sweet spot.' },
+  { mistake: 'Mixing voices (multiple authors in one decode)', fix: 'Only paste content from one author. If your account has two voices, decode them separately and compare results.' },
+  { mistake: 'Describing audience by demographics only', fix: 'Demographics tell you who. Psychographics tell you why. Add motivation, trigger, objections, and where they hang out.' },
+  { mistake: 'Ignoring the personality type result', fix: 'The 5 creator personality types (Provocateur, Amplifier, Educator, Slow Burn, Generalist) are content strategy gold. Read yours and weight your calendar accordingly.' },
+  { mistake: 'Not re-decoding monthly', fix: 'Audiences shift as your content shifts. Save snapshots, re-decode monthly, and compare. It\'s the only way to see the audience drift before it hurts you.' },
+  { mistake: 'Treating archetypes as fixed identities', fix: 'Archetypes describe current pull, not permanent audience. Change your content angle and the archetypes shift in 2–4 weeks.' },
+  { mistake: 'Skipping Compare mode', fix: 'Comparing yourself to a competitor takes 30 seconds and produces the single most actionable output — the shared segment you should both be fighting over.' },
+];
+
+const AD_FAQ: Array<{ q: string; a: string }> = [
+  { q: 'How is this different from X/Twitter analytics?', a: 'Analytics gives demographics — age, location, gender. AudienceDecoder gives psychographics — what they care about, why they follow you, what hooks they respond to, and which content format to double down on.' },
+  { q: 'How much content should I paste?', a: '10–20 posts minimum. More data = sharper archetypes. Your last month of content is the sweet spot. Fewer than 5 posts produces noise.' },
+  { q: 'How much does one decode cost?', a: '$1 per decode (1 credit). $5 buys 7 credits. 2 credits for Compare mode. Credits never expire and work across all 10 bilko.run tools. First decode is free.' },
+  { q: 'Is my content private?', a: 'Your pasted content is sent to Gemini for analysis, then discarded. We don\'t store the text or train on it. Only anonymous snapshots of scores are kept.' },
+  { q: 'How is this different from ChatGPT?', a: 'ChatGPT describes audience generically. AudienceDecoder returns structured archetypes with percentages, evidence quotes from your actual content, a personality type, and a weekly content calendar — not vibes, receipts.' },
+  { q: 'Can I decode a competitor?', a: 'Yes. Paste their public posts. In Compare mode you can paste two creators and see audience overlap, tone differences, and who is winning the shared segment.' },
+  { q: 'Does this work for B2B / niche industries?', a: 'Yes. The archetype engine is domain-agnostic — it reads the language patterns and engagement signals in your content, not the industry. Niche B2B accounts often get the sharpest decodes.' },
+  { q: 'What are the 5 personality types?', a: 'Provocateur, Amplifier, Educator, Slow Burn, and Generalist. Each one has a content strategy that fits naturally. You get your type plus a calendar weighted to your strengths.' },
+  { q: 'How often should I re-decode?', a: 'Monthly. Save snapshots to track audience drift. If you change topics, formats, or tone, re-decode immediately to see the audience impact.' },
+  { q: 'Can I decode podcast or YouTube content?', a: 'Yes — paste transcripts or episode descriptions. Text-first analysis works on any long-form content, not just social posts.' },
+];
+
+const AD_TIPS: Array<{ tip: string; why: string }> = [
+  { tip: 'Paste 15–20 posts for the sharpest decode', why: 'Signal rises with volume. Ten posts beats five by a wide margin. Twenty posts beats ten by less, but still worth it.' },
+  { tip: 'Describe your audience hypothesis first', why: 'Giving the model your hypothesis lets it confirm or redirect. A blank decode is useful; a directed decode is actionable.' },
+  { tip: 'Pay attention to the evidence quotes', why: 'Every archetype is backed by quotes pulled from your content. Read them — they tell you exactly which lines attract that segment.' },
+  { tip: 'Use Compare mode on competitors', why: 'The shared segment is where the competitive battle lives. It\'s the single highest-leverage output the tool produces.' },
+  { tip: 'Re-decode after any strategy shift', why: 'Changing topics or formats moves the archetype mix in 2–4 weeks. Monthly snapshots let you see the shift before it hurts.' },
+  { tip: 'Use the weekly calendar as a default', why: 'The generated calendar is a format + theme rotation. Use it as a floor — fill 80% with it, leave 20% for experiments.' },
+  { tip: 'Focus content on one archetype at a time', why: 'Writing to "everyone" dilutes all archetypes. Writing to the top archetype grows it fast, which usually pulls adjacent ones with it.' },
+  { tip: 'Save snapshots before experiments', why: 'You need a baseline to measure against. Snapshot, experiment, re-decode, compare. That\'s the loop.' },
+];
+
+function AudienceDecoderTutorial() {
+  const [copied, setCopied] = useState<number | null>(null);
+
+  async function copyPrompt(text: string, idx: number) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(idx);
+      setTimeout(() => setCopied(null), 1800);
+    } catch {
+      /* noop */
+    }
+  }
+
+  return (
+    <>
+      {/* Step-by-step guide */}
+      <section className="bg-warm-100/40 border-y border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Step by step</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">How to use AudienceDecoder — step by step</h2>
+            <p className="mt-3 text-base text-warm-600">Five steps from raw content to a usable content calendar.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[
+              { n: 1, emoji: '📥', title: 'Gather content', desc: 'Collect 10–20 of your recent posts, threads, or bio.', example: 'Your last month of tweets + LinkedIn posts.' },
+              { n: 2, emoji: '📝', title: 'Add a hypothesis', desc: 'State who you think your audience is. Model will confirm or redirect.', example: '"B2B growth PMs, Series A–C, building SaaS funnels."' },
+              { n: 3, emoji: '🎯', title: 'Click Decode', desc: 'Get archetypes, personality type, and calendar in ~15 seconds.', example: 'Primary: The Builder 45% · Secondary: The Operator 28%' },
+              { n: 4, emoji: '🔍', title: 'Read the evidence quotes', desc: 'Every archetype cites actual lines from your content. Read them.', example: '"This specific tweet pulled Builders: …"' },
+              { n: 5, emoji: '📆', title: 'Run the calendar', desc: 'Weekly posting plan with theme rotation and format mix.', example: 'Mon: educational · Wed: story · Fri: take' },
+            ].map(step => (
+              <div key={step.n} className="bg-white rounded-2xl border border-warm-200/60 p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="w-8 h-8 rounded-full bg-fire-500 text-white flex items-center justify-center text-sm font-black">{step.n}</span>
+                  <span className="text-2xl" aria-hidden="true" aria-label={step.title}>{step.emoji}</span>
+                </div>
+                <h3 className="text-sm font-black text-warm-900 mb-1">{step.title}</h3>
+                <p className="text-xs text-warm-600 leading-relaxed mb-3">{step.desc}</p>
+                <div className="bg-warm-50 border border-warm-200/60 rounded-lg px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-warm-400 mb-1">Example</p>
+                  <p className="text-xs text-warm-700 font-mono whitespace-pre-wrap leading-snug">{step.example}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Worked examples */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-4xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Worked examples</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Three real decodes, input to output</h2>
+            <p className="mt-3 text-base text-warm-600">What you paste, what AudienceDecoder returned, and the takeaway.</p>
+          </div>
+          <div className="space-y-8">
+            {[
+              {
+                title: 'B2B SaaS buyer (described)',
+                input: 'Product: B2B observability platform, $30k–$120k/yr ACV.\nAudience hypothesis: engineering directors at 100–1,000 person SaaS companies.\nTrigger: bought after an incident cost a key customer.\nTools today: Datadog, PagerDuty.\nTrust signals: peers, dev conference talks, case studies.',
+                output: 'Score: 84/100 (A-)\nPersonality type: Educator\n\nArchetypes:\n  1. The Incident Survivor — 42% · "we lost $2M in MRR after one outage"\n  2. The Quiet Evaluator — 31% · reads case studies 3x before replying\n  3. The Peer-Led Buyer — 27% · buys after a peer mentions on Slack\n\nContent gaps:\n  - No post-incident retrospective content\n  - No peer quotes on "we tried X and moved to you" angle\n\nCalendar:\n  Mon: post-incident war story (Builder voice)\n  Wed: peer case study quote\n  Fri: tactical "detect X in Y minutes" how-to',
+                takeaway: 'Strong decode. The Incident Survivor is the biggest archetype — lean into war-story content and peer quotes. The Educator type matches — keep the tactical how-tos.',
+              },
+              {
+                title: 'E-commerce shopper (described)',
+                input: 'Product: $48 premium pour-over coffee subscription, 3-month cadence.\nAudience: 28–42, urban, bought 1–2 specialty coffee items in 90 days, follow coffee creators.\nCancel rate: 18% in month 2.\nGoal: decode who stays vs. who churns.',
+                output: 'Score: 76/100 (B+)\nPersonality type: Slow Burn\n\nArchetypes:\n  1. The Ritual Keeper — 38% · stays, buys 6+ months\n  2. The Experimenter — 34% · tries, churns month 2\n  3. The Gift Buyer — 28% · buys for others, high reorder on holidays\n\nRetention insight:\n  - Ritual Keepers respond to brew-method education\n  - Experimenters churn because variety saturates by month 2\n  - Gift Buyers need seasonal re-engagement emails\n\nCalendar:\n  Week 1: brewing ritual content (for Keepers)\n  Week 2: origin story of the week (for Experimenters)\n  Week 3: gift guide format (for Gift Buyers)\n  Week 4: customer ritual spotlight',
+                takeaway: '18% churn is concentrated in the Experimenter segment. Introducing rotating origins in month 2 would likely cut churn meaningfully.',
+              },
+              {
+                title: 'Course student (decoded from content)',
+                input: '(15 LinkedIn posts pasted, example excerpts:)\n"I left agency life to freelance and made every mistake you can make in year 1."\n"Your cold email is boring because you\'re writing to yourself."\n"Templates got me my first 3 clients. Voice got me the next 20."\nProduct: $297 cold email copywriting course.',
+                output: 'Score: 81/100 (A-)\nPersonality type: Amplifier\n\nArchetypes:\n  1. The Reluctant Freelancer — 48% · left a job, feels underqualified\n  2. The Template Graduate — 29% · past template stage, building voice\n  3. The Quiet Learner — 23% · reads everything, buys rarely\n\nEvidence quotes:\n  Reluctant Freelancer: "I left agency life… made every mistake"\n  Template Graduate: "Templates got me 3. Voice got me 20."\n\nCalendar:\n  Mon: year-1-mistake post (Reluctant Freelancer)\n  Wed: voice-vs-template breakdown (Template Graduate)\n  Fri: quiet-win case study (Quiet Learner)\n\nLaunch angle: lead with Reluctant Freelancer in week 1, Template Graduate in week 2.',
+                takeaway: 'Decode matches creator\'s strongest content. The Reluctant Freelancer archetype is 48% — launch sequence should lead with that angle for highest conversion.',
+              },
+            ].map((ex) => (
+              <div key={ex.title} className="bg-warm-50/60 rounded-2xl border border-warm-200/60 overflow-hidden">
+                <div className="px-6 py-4 bg-white border-b border-warm-200/60">
+                  <h3 className="text-base font-black text-warm-900">{ex.title}</h3>
+                </div>
+                <div className="grid md:grid-cols-2 gap-0 border-b border-warm-200/60">
+                  <div className="p-5 md:border-r border-warm-200/60">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-warm-400 mb-2">Input</p>
+                    <pre className="text-xs text-warm-700 font-mono whitespace-pre-wrap leading-relaxed">{ex.input}</pre>
+                  </div>
+                  <div className="p-5 bg-white">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-fire-500 mb-2">AudienceDecoder output</p>
+                    <pre className="text-xs text-warm-700 font-mono whitespace-pre-wrap leading-relaxed">{ex.output}</pre>
+                  </div>
+                </div>
+                <div className="p-5 bg-green-50/60">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-green-600 mb-1">Takeaway</p>
+                  <p className="text-sm text-warm-800 leading-relaxed">{ex.takeaway}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Try these prompts */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Starter pack</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Try these prompts</h2>
+            <p className="mt-3 text-base text-warm-600">Ten copy-ready inputs by use case. Click to copy.</p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            {AD_PROMPTS.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => copyPrompt(p.text, i)}
+                className="group text-left bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 p-5 transition-all"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-fire-600 bg-fire-50 px-2 py-0.5 rounded-full">{p.category}</span>
+                  <span className={`text-xs font-bold transition-colors ${copied === i ? 'text-green-600' : 'text-warm-400 group-hover:text-fire-500'}`}>
+                    {copied === i ? 'Copied!' : 'Copy'}
+                  </span>
+                </div>
+                <p className="text-sm font-bold text-warm-900 mb-2">{p.label}</p>
+                <p className="text-xs text-warm-600 font-mono whitespace-pre-wrap leading-relaxed line-clamp-4">{p.text}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* What great output looks like */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Calibrate your expectations</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">What great output looks like</h2>
+            <p className="mt-3 text-base text-warm-600">A sample decode result, annotated.</p>
+          </div>
+          <div className="bg-warm-50/60 rounded-2xl border border-warm-200/60 p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-warm-200/60">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-warm-400">Decode Score</p>
+                <p className="text-4xl font-black text-warm-900">84<span className="text-base text-warm-500">/100</span></p>
+              </div>
+              <span className="inline-flex items-center justify-center px-4 h-14 rounded-xl bg-green-100 text-green-700 text-sm font-black">Educator</span>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-fire-500 mb-1">Primary archetype — 42%</p>
+                <p className="font-bold text-warm-900">The Incident Survivor</p>
+                <p className="text-warm-600 text-xs mt-0.5">Backed by quotes like "we lost $2M in MRR after one outage." Responds to war-story content and post-incident retrospectives.</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-fire-500 mb-1">Secondary archetype — 31%</p>
+                <p className="font-bold text-warm-900">The Quiet Evaluator</p>
+                <p className="text-warm-600 text-xs mt-0.5">Reads 3+ case studies before replying. Responds to peer quotes and specific ROI numbers.</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-fire-500 mb-1">Tertiary archetype — 27%</p>
+                <p className="font-bold text-warm-900">The Peer-Led Buyer</p>
+                <p className="text-warm-600 text-xs mt-0.5">Buys after a peer mentions the product on Slack. Responds to peer-quote content.</p>
+              </div>
+              <div className="pt-2 border-t border-warm-200/60">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-warm-400 mb-1">Content gaps detected</p>
+                <p className="text-warm-600 text-xs">No post-incident retrospectives. No "we moved from X to you" peer quotes. Both would pull the primary archetype harder.</p>
+              </div>
+              <div className="pt-2 border-t border-warm-200/60">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-warm-400 mb-1">Weekly calendar</p>
+                <p className="text-warm-600 text-xs">Mon: post-incident war story · Wed: peer case study · Fri: tactical how-to</p>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-warm-500 mt-4 text-center italic">Read the archetype percentages + evidence quotes first. They tell you exactly which lines in your content attract which people.</p>
+        </div>
+      </section>
+
+      {/* Common mistakes + fixes */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Common mistakes</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Common mistakes + fixes</h2>
+            <p className="mt-3 text-base text-warm-600">The seven errors that produce weak decodes.</p>
+          </div>
+          <div className="space-y-3">
+            {AD_MISTAKES.map((m, i) => (
+              <details key={i} className="group bg-white rounded-xl border border-warm-200/60 open:border-fire-200">
+                <summary className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer list-none">
+                  <span className="flex items-center gap-3">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-50 text-red-600 text-xs font-black">{i + 1}</span>
+                    <span className="text-sm font-bold text-warm-900">{m.mistake}</span>
+                  </span>
+                  <svg className="w-4 h-4 flex-shrink-0 text-warm-500 transition-transform group-open:rotate-180 group-open:text-fire-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </summary>
+                <div className="px-5 pb-4 -mt-1">
+                  <p className="text-sm text-warm-600 leading-relaxed"><span className="font-bold text-green-700">Fix: </span>{m.fix}</p>
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">FAQ</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">AudienceDecoder FAQ</h2>
+            <p className="mt-3 text-base text-warm-600">Pricing, privacy, accuracy, and how it differs from ChatGPT.</p>
+          </div>
+          <div className="space-y-3">
+            {AD_FAQ.map((f, i) => (
+              <details key={i} className="group bg-warm-50/60 rounded-xl border border-warm-200/60 open:bg-white open:border-fire-200">
+                <summary className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer list-none">
+                  <span className="text-sm font-bold text-warm-900">{f.q}</span>
+                  <svg className="w-4 h-4 flex-shrink-0 text-warm-500 transition-transform group-open:rotate-180 group-open:text-fire-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </summary>
+                <div className="px-5 pb-4 -mt-1">
+                  <p className="text-sm text-warm-600 leading-relaxed">{f.a}</p>
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Use cases by role */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Who uses it</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Use cases by role</h2>
+            <p className="mt-3 text-base text-warm-600">Four roles, four workflows, same tool.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { icon: '🚀', role: 'Founder', use: 'Decode your own X/LinkedIn content monthly. See which archetype you are pulling and which product angle will convert them.' },
+              { icon: '📣', role: 'Marketer', use: 'Decode your list before writing to it. Build email + content calendars around the dominant archetype instead of guessing.' },
+              { icon: '✍️', role: 'Freelancer', use: 'Decode a client\'s audience in 15 seconds. Hand them a calendar. Bill more because you arrived with the strategy, not for it.' },
+              { icon: '🏢', role: 'Agency', use: 'Run Compare mode on client vs. top competitor. The shared-segment output is the highest-leverage deliverable in the pitch deck.' },
+            ].map(p => (
+              <div key={p.role} className="bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 p-5 transition-all">
+                <div className="text-3xl mb-3" aria-hidden="true">{p.icon}</div>
+                <h3 className="text-base font-black text-warm-900 mb-2">{p.role}</h3>
+                <p className="text-sm text-warm-600 leading-relaxed">{p.use}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Tips */}
+      <section className="bg-white border-b border-warm-200/40">
+        <div className="max-w-3xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Pro tips</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Tips to get better results</h2>
+            <p className="mt-3 text-base text-warm-600">Eight practical moves for sharper decodes.</p>
+          </div>
+          <ol className="space-y-4">
+            {AD_TIPS.map((t, i) => (
+              <li key={i} className="flex gap-4">
+                <span className="flex-shrink-0 w-8 h-8 rounded-full bg-fire-100 text-fire-700 flex items-center justify-center font-black text-sm">{i + 1}</span>
+                <div>
+                  <p className="text-sm font-bold text-warm-900">{t.tip}</p>
+                  <p className="text-sm text-warm-600 leading-relaxed mt-0.5">{t.why}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* Related tools */}
+      <section className="bg-warm-100/40 border-b border-warm-200/40">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-2">Related tools</p>
+            <h2 className="text-2xl md:text-3xl font-black text-warm-900 leading-tight">Pair AudienceDecoder with these</h2>
+            <p className="mt-3 text-base text-warm-600">Four sibling bilko.run tools that stack naturally with audience research.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { slug: 'thread-grader', emoji: '🧵', name: 'ThreadGrader', desc: 'Decode your audience, then grade a thread written specifically to the primary archetype.' },
+              { slug: 'email-forge', emoji: '📧', name: 'EmailForge', desc: 'Feed archetype insights into your email sequence. Better targeting, higher reply rates.' },
+              { slug: 'headline-grader', emoji: '📰', name: 'HeadlineGrader', desc: 'Score headlines against the voice patterns your archetypes respond to.' },
+              { slug: 'launch-grader', emoji: '🚀', name: 'LaunchGrader', desc: 'Use your decoded archetypes to audit go-to-market positioning across 5 dimensions.' },
+            ].map(t => (
+              <Link key={t.slug} to={`/projects/${t.slug}`} className="group bg-white rounded-2xl border border-warm-200/60 hover:border-fire-300 hover:shadow-md p-5 transition-all">
+                <div className="text-3xl mb-3" aria-hidden="true">{t.emoji}</div>
+                <h3 className="text-base font-black text-warm-900 mb-1 group-hover:text-fire-600 transition-colors">{t.name}</h3>
+                <p className="text-sm text-warm-600 leading-relaxed">{t.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function AudienceDecoderPage() {
   const { result, compareResult, loading, error, needsTokens, isSignedIn, submit, submitCompare, reset, signInRef } = useToolApi<AnalysisResult>('audience-decoder');
   const [tab, setTab] = useState<'score' | 'compare'>('score');
@@ -334,6 +687,8 @@ export function AudienceDecoderPage() {
       resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [r, cr]);
+
+  useEffect(() => { track('view_tool', { tool: 'audience-decoder' }); }, []);
 
   function handleSubmit() {
     if (tab === 'compare') {
@@ -781,6 +1136,8 @@ export function AudienceDecoderPage() {
               ))}
             </div>
           </section>
+
+          <AudienceDecoderTutorial />
 
           {/* 11. Final CTA */}
           <section className="bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900">

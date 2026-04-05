@@ -2,6 +2,7 @@ import React from 'react';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
 import { Layout } from './components/Layout.js';
+import { usePageView } from './hooks/usePageView.js';
 import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
@@ -77,6 +78,7 @@ function LegacyNav() {
 }
 
 function LegacyDashboard({ children }: { children: React.ReactNode }) {
+  usePageView();
   return (
     <div style={{ background: '#0a0a0f', color: '#e0e0e0', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
       <LegacyNav />

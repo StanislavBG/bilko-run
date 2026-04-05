@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 
@@ -107,8 +107,13 @@ export function usePageView() {
   const location = useLocation();
   const { user } = useUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
+  const lastPathRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // Dedup: skip StrictMode double-fires and re-fires triggered purely by email change.
+    if (lastPathRef.current === location.pathname) return;
+    lastPathRef.current = location.pathname;
+
     const utms = getOrCaptureUtms();
     const visitorId = getOrCreateVisitorId();
     const sessionId = getOrCreateSessionId();

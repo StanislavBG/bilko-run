@@ -37,32 +37,42 @@ export async function classifyReferrer(refHost: string | null): Promise<{ bucket
   return { bucket: 'referral', source: host, host };
 }
 
-// ── UA parsing (no deps) ───────────────────────────────────────────────────
+// ── UA parsing (no deps, precompiled regexes) ─────────────────────────────
+
+const RE_OS_WINDOWS = /Windows/i;
+const RE_OS_IOS = /iPhone|iPad|iPod|iOS/i;
+const RE_OS_MAC = /Mac OS X|Macintosh/i;
+const RE_OS_ANDROID = /Android/i;
+const RE_OS_LINUX = /Linux/i;
+const RE_DEV_TABLET = /iPad|Tablet/i;
+const RE_DEV_MOBILE = /Mobile|iPhone|Android|iPod/i;
+const RE_BR_EDGE = /Edg\//i;
+const RE_BR_OPERA = /OPR\/|Opera/i;
+const RE_BR_FIREFOX = /Firefox/i;
+const RE_BR_CHROME = /Chrome/i;
+const RE_BR_SAFARI = /Safari/i;
 
 export function parseUa(ua: string): { device: string; browser: string; os: string } {
   if (!ua) return { device: 'other', browser: 'other', os: 'other' };
-  const u = ua;
 
-  // OS
   let os = 'other';
-  if (/Windows/i.test(u)) os = 'Windows';
-  else if (/iPhone|iPad|iPod|iOS/i.test(u)) os = 'iOS';
-  else if (/Mac OS X|Macintosh/i.test(u)) os = 'Mac';
-  else if (/Android/i.test(u)) os = 'Android';
-  else if (/Linux/i.test(u)) os = 'Linux';
+  if (RE_OS_WINDOWS.test(ua)) os = 'Windows';
+  else if (RE_OS_IOS.test(ua)) os = 'iOS';
+  else if (RE_OS_MAC.test(ua)) os = 'Mac';
+  else if (RE_OS_ANDROID.test(ua)) os = 'Android';
+  else if (RE_OS_LINUX.test(ua)) os = 'Linux';
 
-  // Device
   let device = 'desktop';
-  if (/iPad|Tablet/i.test(u)) device = 'tablet';
-  else if (/Mobile|iPhone|Android|iPod/i.test(u)) device = 'mobile';
+  if (RE_DEV_TABLET.test(ua)) device = 'tablet';
+  else if (RE_DEV_MOBILE.test(ua)) device = 'mobile';
 
-  // Browser (order matters: Edge before Chrome, Chrome before Safari)
+  // Order matters: Edge before Chrome, Chrome before Safari (Chrome UA contains "Safari").
   let browser = 'other';
-  if (/Edg\//i.test(u)) browser = 'Edge';
-  else if (/OPR\/|Opera/i.test(u)) browser = 'Opera';
-  else if (/Firefox/i.test(u)) browser = 'Firefox';
-  else if (/Chrome/i.test(u)) browser = 'Chrome';
-  else if (/Safari/i.test(u)) browser = 'Safari';
+  if (RE_BR_EDGE.test(ua)) browser = 'Edge';
+  else if (RE_BR_OPERA.test(ua)) browser = 'Opera';
+  else if (RE_BR_FIREFOX.test(ua)) browser = 'Firefox';
+  else if (RE_BR_CHROME.test(ua)) browser = 'Chrome';
+  else if (RE_BR_SAFARI.test(ua)) browser = 'Safari';
 
   return { device, browser, os };
 }

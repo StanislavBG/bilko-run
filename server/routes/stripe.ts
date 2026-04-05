@@ -233,7 +233,11 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         }
       }
     } catch (err: any) {
+      // Return 500 so Stripe retries. creditTokens is idempotent on payment_intent_id
+      // and saveOneTimePurchase UPSERTs on the same key, so retries are safe.
       console.error('[stripe_webhook]', err);
+      reply.status(500);
+      return { error: 'webhook processing failed' };
     }
 
     return { received: true };

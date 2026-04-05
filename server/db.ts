@@ -313,6 +313,12 @@ export async function initDb(): Promise<void> {
     'ALTER TABLE funnel_events ADD COLUMN session_id TEXT',
     'ALTER TABLE funnel_events ADD COLUMN visitor_id TEXT',
     'ALTER TABLE funnel_events ADD COLUMN path TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_funnel_events_tool ON funnel_events(tool)',
+    'CREATE INDEX IF NOT EXISTS idx_funnel_events_session ON funnel_events(session_id)',
+    'CREATE INDEX IF NOT EXISTS idx_page_views_email ON page_views(email)',
+    'CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email)',
+    'CREATE INDEX IF NOT EXISTS idx_token_transactions_reason ON token_transactions(reason)',
+    'CREATE INDEX IF NOT EXISTS idx_stripe_one_time_purchases_created ON stripe_one_time_purchases(created_at)',
   ]) {
     try { await client.execute(sql); } catch { /* column/index already exists */ }
   }

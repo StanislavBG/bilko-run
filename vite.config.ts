@@ -15,5 +15,16 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // WebLLM ships ~2MB gzipped of runtime + wasm glue; only LocalScore uses it.
+          // Split it off the main chunk so every other page loads faster.
+          webllm: ['@mlc-ai/web-llm'],
+          // Clerk is heavy and loads on every page; keep it in its own chunk for caching.
+          clerk: ['@clerk/clerk-react'],
+        },
+      },
+    },
   },
 });

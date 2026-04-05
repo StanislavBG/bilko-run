@@ -43,6 +43,17 @@ function checkEventRate(visitorId: string | null, ip: string | null): boolean {
   return ipOk && vOk;
 }
 
+// Cap the whole dashboard Promise.all — if any underlying query stalls, the
+// admin sees a 504 instead of a spinner that never returns.
+async function raceTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try { return await Promise.race([p, timeout]); }
+  finally { clearTimeout(timer!); }
+}
+
 function parseRefHost(raw: string | null): string | null {
   if (!raw) return null;
   try {
@@ -194,7 +205,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       priorTotalViews, priorTodayViews, priorUniqueVisitors,
       priorTotalRoasts, priorTotalUsers, priorTokenPurchases,
       priorRevenueSingle, priorRevenueBundle,
-    ] = await Promise.all([
+    ] = await raceTimeout(Promise.all([
       dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ?${excludeAdmins}`, since, ...adminArgs),
       dbAll(`SELECT date, COUNT(*) as views FROM page_views WHERE date >= ?${excludeAdmins} GROUP BY date ORDER BY date`, since, ...adminArgs),
       dbAll(`SELECT path, COUNT(*) as views FROM page_views WHERE date >= ?${excludeAdmins} GROUP BY path ORDER BY views DESC LIMIT 20`, since, ...adminArgs),
@@ -255,7 +266,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       dbGet<{ count: number }>("SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = 'pageroast_tokens' AND date(created_at) >= ? AND date(created_at) < ?", priorSince, priorUntil),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1 AND date(p.created_at) >= ? AND date(p.created_at) < ?", priorSince, priorUntil),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7 AND date(p.created_at) >= ? AND date(p.created_at) < ?", priorSince, priorUntil),
-    ]);
+    ]), 15000, 'admin /stats');
 
     const singleCount = revenueSingle?.n ?? 0;
     const bundleCount = revenueBundle?.n ?? 0;

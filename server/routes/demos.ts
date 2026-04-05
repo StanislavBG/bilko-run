@@ -588,8 +588,8 @@ Respond ONLY with valid JSON:
     if (!(await hasTokenAccount(email))) { await grantFreeTokens(email); }
     const sub = await getActiveSubscriptionLive(email);
     if (!sub.isPro) {
-      const deduction = await deductToken(email, 1, 'stack_audit');
-      if (!deduction.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deduction.balance }; }
+      const balance = await getTokenBalance(email);
+      if (balance < 1) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance }; }
     }
 
     const teamSize = Math.max(1, Math.min(200, Math.floor(Number(body?.teamSize) || 5)));
@@ -660,7 +660,7 @@ Respond ONLY with valid JSON:
           email, 'stack-audit', parsed.total_score, parsed.grade, parsed.roast ?? '', JSON.stringify(parsed));
       } catch { /* best effort */ }
 
-      const balance = await getTokenBalance(email);
+      const balance = sub.isPro ? await getTokenBalance(email) : (await deductToken(email, 1, 'stack_audit')).balance;
       return { ...parsed, usage: { balance, gated: false } };
     } catch (err: any) {
       console.error('stack_audit', err);
@@ -688,8 +688,8 @@ Respond ONLY with valid JSON:
     if (!(await hasTokenAccount(email))) { await grantFreeTokens(email); }
     const sub = await getActiveSubscriptionLive(email);
     if (!sub.isPro) {
-      const deduction = await deductToken(email, 1, 'launch_grader');
-      if (!deduction.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deduction.balance }; }
+      const balance = await getTokenBalance(email);
+      if (balance < 1) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance }; }
     }
 
     let pageText: string;
@@ -766,7 +766,7 @@ Respond ONLY with valid JSON:
           email, parsedUrl.toString(), parsed.total_score, parsed.grade, parsed.roast ?? '', JSON.stringify(parsed));
       } catch { /* best effort */ }
 
-      const balance = await getTokenBalance(email);
+      const balance = sub.isPro ? await getTokenBalance(email) : (await deductToken(email, 1, 'launch_grader')).balance;
       return { ...parsed, usage: { balance, gated: false } };
     } catch (err: any) {
       console.error('launch_grader', err);
@@ -844,13 +844,13 @@ Respond ONLY with valid JSON:
       await grantFreeTokens(email);
     }
 
-    // Pro subscribers skip token deduction
+    // Pro subscribers skip token deduction. Free users pay AFTER success — see bottom of handler.
     const sub = await getActiveSubscriptionLive(email);
     if (!sub.isPro) {
-      const deduction = await deductToken(email, 1, 'page_roast');
-      if (!deduction.success) {
+      const balance = await getTokenBalance(email);
+      if (balance < 1) {
         reply.status(402);
-        return { error: 'No tokens remaining.', requiresTokens: true, balance: deduction.balance };
+        return { error: 'No tokens remaining.', requiresTokens: true, balance };
       }
     }
 
@@ -941,7 +941,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         );
       } catch { /* best effort */ }
 
-      const balance = await getTokenBalance(email);
+      const balance = sub.isPro ? await getTokenBalance(email) : (await deductToken(email, 1, 'page_roast')).balance;
       return { ...parsed, usage: { balance, gated: false } };
     } catch (err: any) {
       console.error('page_roast_demo', err);
@@ -967,13 +967,13 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       await grantFreeTokens(email);
     }
 
-    // A/B compare requires purchased tokens (free grant not enough) — costs 2
+    // A/B compare costs 2 — charge AFTER success.
     const sub = await getActiveSubscriptionLive(email);
     if (!sub.isPro) {
-      const deduction = await deductToken(email, 2, 'page_roast_compare');
-      if (!deduction.success) {
+      const balance = await getTokenBalance(email);
+      if (balance < 2) {
         reply.status(402);
-        return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance: deduction.balance };
+        return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance };
       }
     }
 
@@ -1099,7 +1099,7 @@ Write the verdict and analysis.`;
         verdict: compParsed.verdict ?? '',
       };
 
-      const balance = await getTokenBalance(email);
+      const balance = sub.isPro ? await getTokenBalance(email) : (await deductToken(email, 2, 'page_roast_compare')).balance;
       return { score_a: scoreA, score_b: scoreB, comparison, usage: { balance, gated: false } };
     } catch (err: any) {
       console.error('page_roast_compare', err);

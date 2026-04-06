@@ -4,37 +4,33 @@ import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/c
 import { usePageView, track } from '../hooks/usePageView.js';
 import { ADMIN_EMAILS } from '../constants.js';
 
-const PRODUCT_GROUPS = [
+const PRODUCTS = [
   {
     title: 'Content & Copy',
-    description: 'Analyze and improve your writing',
+    desc: 'AI-powered writing analysis — headlines, ads, threads, email sequences, audience insights. One tool, five modes.',
     to: '/products/content-tools',
-    tools: [
-      { to: '/products/headline-grader', label: 'HeadlineGrader', desc: 'Score & rewrite headlines' },
-      { to: '/products/ad-scorer', label: 'AdScorer', desc: 'Grade ad copy' },
-      { to: '/products/thread-grader', label: 'ThreadGrader', desc: 'Score X/Twitter threads' },
-      { to: '/products/email-forge', label: 'EmailForge', desc: 'Generate email sequences' },
-      { to: '/products/audience-decoder', label: 'AudienceDecoder', desc: 'Decode your audience' },
-    ],
+    features: ['Headlines', 'Ads', 'Threads', 'Email', 'Audience'],
   },
   {
-    title: 'Business',
-    description: 'Audit and optimize your business',
-    to: '/products',
-    tools: [
-      { to: '/products/page-roast', label: 'PageRoast', desc: 'Landing page CRO audit' },
-      { to: '/products/launch-grader', label: 'LaunchGrader', desc: 'Go-to-market readiness' },
-      { to: '/products/stack-audit', label: 'StackAudit', desc: 'Find SaaS waste' },
-      { to: '/products/local-score', label: 'LocalScore', desc: 'Private doc analysis' },
-    ],
+    title: 'PageRoast',
+    desc: 'Paste any URL. Get a scored landing page audit with actionable fixes in 30 seconds.',
+    to: '/products/page-roast',
   },
   {
-    title: 'Developer',
-    description: 'Test and observe AI pipelines',
-    to: '/products',
-    tools: [
-      { to: '/products/stepproof', label: 'Stepproof', desc: 'AI regression tests' },
-    ],
+    title: 'LaunchGrader',
+    desc: 'Is your product ready to launch? AI audits your go-to-market across 5 dimensions.',
+    to: '/products/launch-grader',
+  },
+  {
+    title: 'StackAudit',
+    desc: 'Find overlap and waste in your SaaS subscriptions. See exactly how much you can save.',
+    to: '/products/stack-audit',
+  },
+  {
+    title: 'LocalScore',
+    desc: 'Analyze sensitive documents with AI that runs entirely in your browser. Nothing leaves your device.',
+    to: '/products/local-score',
+    badge: 'Free',
   },
 ] as const;
 
@@ -66,42 +62,36 @@ function ProductsDropdown() {
       </button>
 
       {open && (
-        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[640px] bg-white rounded-2xl border border-warm-200/60 shadow-xl shadow-warm-200/40 p-5 animate-fade-in z-50">
-          <div className="grid grid-cols-3 gap-5">
-            {PRODUCT_GROUPS.map(group => (
-              <div key={group.title}>
-                <Link
-                  to={group.to}
-                  onClick={() => setOpen(false)}
-                  className="block mb-3 group"
-                >
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-warm-400 group-hover:text-fire-500 transition-colors">{group.title}</h3>
-                  <p className="text-[11px] text-warm-400 mt-0.5">{group.description}</p>
-                </Link>
-                <div className="space-y-1">
-                  {group.tools.map(tool => (
-                    <Link
-                      key={tool.to}
-                      to={tool.to}
-                      onClick={() => setOpen(false)}
-                      className="block rounded-lg px-3 py-2.5 hover:bg-warm-50 transition-colors group/item"
-                    >
-                      <p className="text-sm font-semibold text-warm-800 group-hover/item:text-fire-600 transition-colors">{tool.label}</p>
-                      <p className="text-xs text-warm-400 mt-0.5">{tool.desc}</p>
-                    </Link>
-                  ))}
+        <div className="absolute top-full right-0 mt-2 w-[520px] bg-white rounded-2xl border border-warm-200/60 shadow-xl shadow-warm-200/40 p-4 animate-fade-in z-50">
+          <div className="space-y-1">
+            {PRODUCTS.map(product => (
+              <Link
+                key={product.title}
+                to={product.to}
+                onClick={() => setOpen(false)}
+                className="flex items-start gap-4 rounded-xl px-4 py-4 hover:bg-warm-50 transition-colors group"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-warm-900 group-hover:text-fire-600 transition-colors">{product.title}</h3>
+                    {'badge' in product && product.badge && (
+                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-green-100 text-green-700">{product.badge}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-warm-500 mt-1 leading-relaxed">{product.desc}</p>
+                  {'features' in product && product.features && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {product.features.map(f => (
+                        <span key={f} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-warm-100 text-warm-600">{f}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+                <svg className="w-4 h-4 text-warm-300 group-hover:text-fire-400 flex-shrink-0 mt-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </Link>
             ))}
-          </div>
-          <div className="mt-4 pt-3 border-t border-warm-100">
-            <Link
-              to="/products"
-              onClick={() => setOpen(false)}
-              className="text-xs font-semibold text-fire-500 hover:text-fire-600 transition-colors"
-            >
-              All products &rarr;
-            </Link>
           </div>
         </div>
       )}

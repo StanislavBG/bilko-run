@@ -147,44 +147,47 @@ export function HomePage() {
       <section className="py-12 md:py-16">
         <h2 className="text-xl md:text-2xl font-extrabold text-warm-900 mb-3">Products</h2>
         <p className="text-warm-500 mb-8">
-          AI tools I've built for real problems. Grouped by what they do.
+          AI tools I've built for real problems. Free to try.
         </p>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
+          {/* Content & Copy — flagship product */}
           <Link to="/products/content-tools"
-            className="group block rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors text-lg">Content & Copy Tools</h3>
-                <p className="text-sm text-warm-500 mt-1">HeadlineGrader, AdScorer, ThreadGrader, EmailForge, AudienceDecoder</p>
-                <p className="text-sm text-warm-600 mt-2">AI tools that analyze and improve your content. Free to try.</p>
-              </div>
-              <svg className="w-5 h-5 text-warm-300 group-hover:text-fire-500 flex-shrink-0 ml-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+            className="group block rounded-2xl p-6 border-2 border-fire-200 bg-gradient-to-r from-fire-50/50 to-warm-50 hover:border-fire-400 hover:shadow-lg hover:shadow-fire-100/40 transition-all">
+            <h3 className="font-bold text-warm-900 group-hover:text-fire-600 transition-colors text-lg">Content & Copy</h3>
+            <p className="text-sm text-warm-600 mt-1">Score and improve your writing — headlines, ads, threads, email sequences, audience analysis. One product, five modes.</p>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {['Headlines', 'Ads', 'Threads', 'Email', 'Audience'].map(f => (
+                <span key={f} className="text-xs font-medium px-2.5 py-1 rounded-full bg-white/80 text-warm-600 border border-warm-200/60">{f}</span>
+              ))}
             </div>
           </Link>
 
-          <Link to="/products/business-tools"
-            className="group block rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors text-lg">Business Tools</h3>
-                <p className="text-sm text-warm-500 mt-1">PageRoast, LaunchGrader, StackAudit, LocalScore</p>
-                <p className="text-sm text-warm-600 mt-2">Audit your landing page, launch readiness, SaaS stack, or sensitive documents.</p>
-              </div>
-              <svg className="w-5 h-5 text-warm-300 group-hover:text-fire-500 flex-shrink-0 ml-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-            </div>
+          <Link to="/products/page-roast"
+            className="group block rounded-2xl p-5 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
+            <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors">PageRoast</h3>
+            <p className="text-sm text-warm-500 mt-1">Paste any URL. Get a scored landing page audit with actionable fixes.</p>
           </Link>
 
-          <Link to="/products/dev-tools"
-            className="group block rounded-2xl p-6 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors text-lg">Developer Tools</h3>
-                <p className="text-sm text-warm-500 mt-1">Stepproof, AgentTrace</p>
-                <p className="text-sm text-warm-600 mt-2">Testing and observability for AI pipelines.</p>
-              </div>
-              <svg className="w-5 h-5 text-warm-300 group-hover:text-fire-500 flex-shrink-0 ml-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          <Link to="/products/launch-grader"
+            className="group block rounded-2xl p-5 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
+            <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors">LaunchGrader</h3>
+            <p className="text-sm text-warm-500 mt-1">Is your product ready to launch? AI audits your go-to-market across 5 dimensions.</p>
+          </Link>
+
+          <Link to="/products/stack-audit"
+            className="group block rounded-2xl p-5 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
+            <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors">StackAudit</h3>
+            <p className="text-sm text-warm-500 mt-1">Find overlap and waste in your SaaS subscriptions.</p>
+          </Link>
+
+          <Link to="/products/local-score"
+            className="group block rounded-2xl p-5 border border-warm-200/60 bg-warm-50/50 hover:border-fire-300 hover:shadow-md transition-all">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-warm-800 group-hover:text-fire-600 transition-colors">LocalScore</h3>
+              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-green-100 text-green-700">Free</span>
             </div>
+            <p className="text-sm text-warm-500 mt-1">Analyze sensitive documents with AI that runs entirely in your browser. Nothing leaves your device.</p>
           </Link>
         </div>
       </section>

@@ -1,24 +1,24 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
-interface Project {
+interface Product {
   slug: string;
   name: string;
   tagline: string;
   description: string;
   status: 'live' | 'coming-soon' | 'beta';
-  category: 'content' | 'devtools' | 'marketing';
+  category: 'content' | 'business' | 'devtools';
   features: string[];
 }
 
-const PROJECTS: Project[] = [
+const PRODUCTS: Product[] = [
   {
     slug: 'page-roast',
     name: 'PageRoast',
     tagline: 'Brutally honest landing page audits',
     description: 'Paste any URL. Get a scored CRO audit across 4 frameworks — hero, social proof, clarity, and conversion architecture. Plus a savage roast line you\'ll want to screenshot.',
     status: 'live',
-    category: 'content',
+    category: 'business',
     features: ['CRO scoring (0-100)', 'A/B Compare mode', 'Shareable results', 'Actionable fixes'],
   },
   {
@@ -36,7 +36,7 @@ const PROJECTS: Project[] = [
     tagline: 'Grade ads before you spend the budget',
     description: 'Platform-specific ad copy grading for Google, Meta, and LinkedIn. Scores hook strength, value prop, emotional architecture, and CTA conversion.',
     status: 'live',
-    category: 'marketing',
+    category: 'content',
     features: ['Platform-specific rules', 'Copy rewrites', 'A/B Compare', '4-pillar scoring'],
   },
   {
@@ -54,7 +54,7 @@ const PROJECTS: Project[] = [
     tagline: 'Generate email sequences that convert',
     description: 'AI creates 5-email sequences using AIDA, PAS, Hormozi, Cialdini, and Storytelling frameworks. Cold outreach, nurture, launch, or re-engagement.',
     status: 'live',
-    category: 'marketing',
+    category: 'content',
     features: ['5-email sequences', '5 frameworks', 'Open/click estimates', 'A/B Compare'],
   },
   {
@@ -71,8 +71,8 @@ const PROJECTS: Project[] = [
     name: 'LaunchGrader',
     tagline: 'Is your product ready to launch?',
     description: 'AI audits your go-to-market readiness across 5 dimensions: value prop, pricing, social proof, onboarding, and competitive positioning. Get a score, blockers, and a verdict.',
-    status: 'live' as const,
-    category: 'marketing' as const,
+    status: 'live',
+    category: 'business',
     features: ['5-dimension audit', 'Launch blockers', 'Readiness verdict', 'Competitor comparison'],
   },
   {
@@ -80,8 +80,8 @@ const PROJECTS: Project[] = [
     name: 'StackAudit',
     tagline: 'Find waste in your SaaS stack',
     description: 'Paste your tool list. AI finds overlap, cheaper alternatives, self-hosted options, and calculates exactly how much you can save. Enterprise audit for $1.',
-    status: 'live' as const,
-    category: 'devtools' as const,
+    status: 'live',
+    category: 'business',
     features: ['Cost analysis', 'Overlap detection', 'Alternative suggestions', 'Savings calculator'],
   },
   {
@@ -89,8 +89,8 @@ const PROJECTS: Project[] = [
     name: 'LocalScore',
     tagline: 'Private document analysis — runs in your browser',
     description: 'FREE — Analyze contracts, financials, meeting notes, and sensitive documents with AI that runs entirely in your browser. Your data never leaves your device. Zero cost, zero servers, zero risk.',
-    status: 'live' as const,
-    category: 'devtools' as const,
+    status: 'live',
+    category: 'business',
     features: ['100% local', 'Zero API costs', 'Works offline', 'GDPR-friendly'],
   },
   {
@@ -126,15 +126,15 @@ const STATUS_LABELS = {
 } as const;
 
 const CATEGORY_LABELS = {
-  content: 'Content',
-  devtools: 'Dev Tools',
-  marketing: 'Marketing',
+  content: 'Content & Copy',
+  business: 'Business',
+  devtools: 'Developer Tools',
 } as const;
 
 export function ProjectsPage() {
   useEffect(() => {
-    document.title = 'Projects — bilko.run';
-    return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
+    document.title = 'Products — bilko.run';
+    return () => { document.title = 'Bilko — AI Advisory for Small Business'; };
   }, []);
 
   return (
@@ -143,28 +143,27 @@ export function ProjectsPage() {
       <section className="bg-gradient-to-b from-warm-100/50 to-warm-50 border-b border-warm-200/40">
         <div className="max-w-6xl mx-auto px-6 pt-16 pb-12 md:pt-20 md:pb-16">
           <h1 className="text-4xl md:text-5xl font-extrabold text-warm-900 tracking-tight">
-            Projects
+            Products
           </h1>
           <p className="mt-4 text-lg text-warm-500 max-w-2xl">
-            AI-powered tools I've built and shipped. All free to start, most open source.
-            Built with Claude, deployed for anyone who makes things on the internet.
+            AI-powered tools I've built. All free to start.
           </p>
         </div>
       </section>
 
-      {/* Project Grid */}
+      {/* Product Grid */}
       <section className="max-w-6xl mx-auto px-6 py-12 md:py-16">
         <div className="grid md:grid-cols-2 gap-6 stagger-children">
-          {PROJECTS.map((project) => {
-            const isLive = project.status === 'live';
+          {PRODUCTS.map((product) => {
+            const isLive = product.status === 'live';
             const Wrapper = isLive ? Link : 'div';
             const wrapperProps = isLive
-              ? { to: `/projects/${project.slug}` as string }
+              ? { to: `/products/${product.slug}` as string }
               : {};
 
             return (
               <Wrapper
-                key={project.slug}
+                key={product.slug}
                 {...wrapperProps as any}
                 className={`group relative bg-white rounded-2xl p-6 border transition-all ${
                   isLive
@@ -175,24 +174,24 @@ export function ProjectsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-warm-400">
-                      {CATEGORY_LABELS[project.category]}
+                      {CATEGORY_LABELS[product.category]}
                     </span>
                   </div>
-                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_STYLES[project.status]}`}>
-                    {STATUS_LABELS[project.status]}
+                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_STYLES[product.status]}`}>
+                    {STATUS_LABELS[product.status]}
                   </span>
                 </div>
 
                 <h3 className={`text-xl font-bold mb-1 ${isLive ? 'text-warm-900 group-hover:text-fire-600 transition-colors' : 'text-warm-700'}`}>
-                  {project.name}
+                  {product.name}
                 </h3>
-                <p className="text-sm font-medium text-warm-600 mb-3">{project.tagline}</p>
+                <p className="text-sm font-medium text-warm-600 mb-3">{product.tagline}</p>
                 <p className="text-sm text-warm-500 leading-relaxed mb-4">
-                  {project.description}
+                  {product.description}
                 </p>
 
                 <div className="flex flex-wrap gap-2">
-                  {project.features.map((feature) => (
+                  {product.features.map((feature) => (
                     <span
                       key={feature}
                       className="text-xs px-2.5 py-1 rounded-lg bg-warm-100 text-warm-600 border border-warm-200/60"
@@ -214,79 +213,6 @@ export function ProjectsPage() {
         </div>
       </section>
 
-      {/* Tool Picker */}
-      <section className="border-t border-warm-200/40 bg-warm-100/30">
-        <div className="max-w-3xl mx-auto px-6 py-12 md:py-16 text-center">
-          <h2 className="text-xl font-extrabold text-warm-900 mb-2">Not sure where to start?</h2>
-          <p className="text-warm-500 mb-6 text-sm">Pick your biggest problem. We'll point you to the right tool.</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-left">
-            {[
-              { problem: 'My landing page isn\'t converting', tool: 'PageRoast', slug: 'page-roast' },
-              { problem: 'My headline feels weak', tool: 'HeadlineGrader', slug: 'headline-grader' },
-              { problem: 'My ads aren\'t getting clicks', tool: 'AdScorer', slug: 'ad-scorer' },
-              { problem: 'My threads die on tweet 2', tool: 'ThreadGrader', slug: 'thread-grader' },
-              { problem: 'I need an email sequence', tool: 'EmailForge', slug: 'email-forge' },
-              { problem: 'I don\'t know my audience', tool: 'AudienceDecoder', slug: 'audience-decoder' },
-            ].map(({ problem, tool, slug }) => (
-              <Link key={slug} to={`/projects/${slug}`}
-                className="group bg-white rounded-xl p-4 border border-warm-200/60 hover:border-fire-300 hover:shadow-sm transition-all">
-                <p className="text-sm text-warm-800 font-medium mb-1">{problem}</p>
-                <p className="text-xs text-fire-500 font-semibold group-hover:text-fire-600">Try {tool} &rarr;</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Recommended Workflows */}
-      <section className="border-t border-warm-200/40">
-        <div className="max-w-4xl mx-auto px-6 py-12 md:py-16">
-          <h2 className="text-xl font-extrabold text-warm-900 text-center mb-2">Recommended workflows</h2>
-          <p className="text-warm-500 text-center mb-8 text-sm">Use multiple tools together for maximum impact.</p>
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                title: 'Launch a product',
-                steps: ['LaunchGrader → audit readiness', 'PageRoast → fix the landing page', 'HeadlineGrader → nail the headline', 'EmailForge → build launch sequence'],
-                time: '~10 minutes, 4 credits',
-              },
-              {
-                title: 'Run a campaign',
-                steps: ['AudienceDecoder → know your audience', 'AdScorer → grade your ad copy', 'ThreadGrader → write a viral thread', 'EmailForge → follow up with leads'],
-                time: '~15 minutes, 4 credits',
-              },
-              {
-                title: 'Optimize costs',
-                steps: ['StackAudit → find SaaS waste', 'LocalScore → review contracts privately', 'LaunchGrader → audit competitive positioning'],
-                time: '~10 minutes, 2 credits + free',
-              },
-            ].map(w => (
-              <div key={w.title} className="bg-white rounded-2xl border border-warm-200/60 p-6">
-                <h3 className="font-bold text-warm-900 mb-3">{w.title}</h3>
-                <div className="space-y-2 mb-4">
-                  {w.steps.map((step, i) => (
-                    <div key={i} className="flex items-start gap-2 text-sm">
-                      <span className="text-fire-500 font-bold flex-shrink-0">{i + 1}.</span>
-                      <span className="text-warm-600">{step}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-warm-400">{w.time}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Social proof */}
-      <section className="border-t border-warm-200/40">
-        <div className="max-w-3xl mx-auto px-6 py-8 text-center">
-          <p className="text-sm text-warm-500">
-            Used by solo founders, indie hackers, and marketing teams who'd rather fix problems than sit in meetings about them.
-          </p>
-        </div>
-      </section>
-
       {/* CTA */}
       <section className="bg-warm-100/50 border-t border-warm-200/40">
         <div className="max-w-4xl mx-auto px-6 py-16 text-center">
@@ -294,18 +220,15 @@ export function ProjectsPage() {
             Start with the one that matters most
           </h2>
           <p className="mt-3 text-warm-500">
-            Every tool has a free first analysis. Or try <Link to="/projects/local-score" className="text-fire-500 hover:underline font-semibold">LocalScore</Link> — completely free, runs in your browser.
+            Every tool has a free first analysis. Or try <Link to="/products/local-score" className="text-fire-500 hover:underline font-semibold">LocalScore</Link> — completely free, runs in your browser.
           </p>
           <Link
-            to="/projects/page-roast"
+            to="/products/page-roast"
             className="inline-flex items-center justify-center gap-2 mt-6 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5"
           >
             Try PageRoast
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
           </Link>
-          <p className="mt-4 text-sm text-warm-400">
-            Or <Link to="/blog" className="text-fire-500 hover:text-fire-600 font-semibold">read the blog</Link> — lessons from building these tools solo.
-          </p>
         </div>
       </section>
     </>

@@ -25,6 +25,7 @@ const LaunchGraderPage = React.lazy(() => import('./pages/LaunchGraderPage.js').
 const StackAuditPage = React.lazy(() => import('./pages/StackAuditPage.js').then(m => ({ default: m.StackAuditPage })));
 const LocalScorePage = React.lazy(() => import('./pages/LocalScorePage.js').then(m => ({ default: m.LocalScorePage })));
 const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
+const ContentToolsPage = React.lazy(() => import('./pages/ContentToolsPage.js').then(m => ({ default: m.ContentToolsPage })));
 
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
@@ -96,6 +97,25 @@ function lazyRoute(El: React.ComponentType) {
   );
 }
 
+/** Tool routes shared between /projects/* and /products/* */
+function toolRoutes() {
+  return (
+    <>
+      <Route path="page-roast" element={lazyRoute(PageRoastPage)} />
+      <Route path="headline-grader" element={lazyRoute(HeadlineGraderPage)} />
+      <Route path="ad-scorer" element={lazyRoute(AdScorerPage)} />
+      <Route path="thread-grader" element={lazyRoute(ThreadGraderPage)} />
+      <Route path="email-forge" element={lazyRoute(EmailForgePage)} />
+      <Route path="audience-decoder" element={lazyRoute(AudienceDecoderPage)} />
+      <Route path="stepproof" element={lazyRoute(StepproofPage)} />
+      <Route path="launch-grader" element={lazyRoute(LaunchGraderPage)} />
+      <Route path="stack-audit" element={lazyRoute(StackAuditPage)} />
+      <Route path="local-score" element={lazyRoute(LocalScorePage)} />
+      <Route path="content-tools" element={lazyRoute(ContentToolsPage)} />
+    </>
+  );
+}
+
 function AppRoutes() {
   return (
     <AuthProvider>
@@ -104,17 +124,19 @@ function AppRoutes() {
           {/* ── bilko.run public pages ── */}
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
+
+            {/* /products/* — canonical */}
+            <Route path="/products" element={<ProjectsPage />} />
+            <Route path="/products/*">
+              {toolRoutes()}
+            </Route>
+
+            {/* /projects/* — backward compat aliases */}
             <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/page-roast" element={lazyRoute(PageRoastPage)} />
-            <Route path="/projects/headline-grader" element={lazyRoute(HeadlineGraderPage)} />
-            <Route path="/projects/ad-scorer" element={lazyRoute(AdScorerPage)} />
-            <Route path="/projects/thread-grader" element={lazyRoute(ThreadGraderPage)} />
-            <Route path="/projects/email-forge" element={lazyRoute(EmailForgePage)} />
-            <Route path="/projects/audience-decoder" element={lazyRoute(AudienceDecoderPage)} />
-            <Route path="/projects/stepproof" element={lazyRoute(StepproofPage)} />
-            <Route path="/projects/launch-grader" element={lazyRoute(LaunchGraderPage)} />
-            <Route path="/projects/stack-audit" element={lazyRoute(StackAuditPage)} />
-            <Route path="/projects/local-score" element={lazyRoute(LocalScorePage)} />
+            <Route path="/projects/*">
+              {toolRoutes()}
+            </Route>
+
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />
             <Route path="/pricing" element={<PricingPage />} />

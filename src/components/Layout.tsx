@@ -5,20 +5,20 @@ import { usePageView, track } from '../hooks/usePageView.js';
 import { ADMIN_EMAILS } from '../constants.js';
 
 const PROJECT_LINKS = [
-  { to: '/projects/page-roast', label: 'PageRoast', badge: '🔥' },
-  { to: '/projects/headline-grader', label: 'HeadlineGrader' },
-  { to: '/projects/ad-scorer', label: 'AdScorer' },
-  { to: '/projects/thread-grader', label: 'ThreadGrader' },
-  { to: '/projects/email-forge', label: 'EmailForge' },
-  { to: '/projects/audience-decoder', label: 'AudienceDecoder' },
-  { to: '/projects/launch-grader', label: 'LaunchGrader' },
-  { to: '/projects/stack-audit', label: 'StackAudit' },
-  { to: '/projects/local-score', label: 'LocalScore', badge: '🔒' },
-  { to: '/projects/stepproof', label: 'Stepproof' },
-  { to: '/projects', label: 'All Projects' },
+  { to: '/products/page-roast', label: 'PageRoast', badge: '🔥' },
+  { to: '/products/headline-grader', label: 'HeadlineGrader' },
+  { to: '/products/ad-scorer', label: 'AdScorer' },
+  { to: '/products/thread-grader', label: 'ThreadGrader' },
+  { to: '/products/email-forge', label: 'EmailForge' },
+  { to: '/products/audience-decoder', label: 'AudienceDecoder' },
+  { to: '/products/launch-grader', label: 'LaunchGrader' },
+  { to: '/products/stack-audit', label: 'StackAudit' },
+  { to: '/products/local-score', label: 'LocalScore', badge: '🔒' },
+  { to: '/products/stepproof', label: 'Stepproof' },
+  { to: '/products', label: 'All Products' },
 ] as const;
 
-function ProjectsDropdown() {
+function ProductsDropdown() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -40,7 +40,7 @@ function ProjectsDropdown() {
           open ? 'bg-warm-200/60 text-warm-900' : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
         }`}
       >
-        Projects
+        Products
         <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
         </svg>
@@ -88,7 +88,7 @@ export function Layout() {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-1">
-            <ProjectsDropdown />
+            <ProductsDropdown />
 
             <NavLink
               to="/blog"
@@ -117,7 +117,7 @@ export function Layout() {
             </NavLink>
 
             <Link
-              to="/projects/page-roast"
+              to="/products/page-roast"
               className="px-4 py-2 text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-lg shadow-sm shadow-fire-500/20 transition-all"
             >
               Try Free
@@ -182,8 +182,8 @@ export function Layout() {
         {mobileOpen && (
           <div className="md:hidden border-t border-warm-200/60 bg-warm-50/95 backdrop-blur-md px-6 py-4 space-y-1 animate-fade-in">
             {[
-              { to: '/projects/page-roast', label: 'PageRoast' },
-              { to: '/projects', label: 'All Projects' },
+              { to: '/products/page-roast', label: 'PageRoast' },
+              { to: '/products', label: 'All Products' },
               { to: '/blog', label: 'Blog' },
               { to: '/pricing', label: 'Pricing' },
               ...(isAdmin ? [{ to: '/admin', label: 'Admin' }] : []),
@@ -223,15 +223,15 @@ export function Layout() {
                 bilko<span className="text-fire-500">.run</span>
               </span>
               <p className="mt-2 text-sm text-warm-500 max-w-xs">
-                Free AI-powered tools for people who make things on the internet.
+                AI tools and advisory for small businesses.
               </p>
             </div>
             <div className="flex gap-12 text-sm">
               <div>
-                <h4 className="font-semibold text-warm-700 mb-3">Tools</h4>
+                <h4 className="font-semibold text-warm-700 mb-3">Products</h4>
                 <div className="flex flex-col gap-2">
-                  <Link to="/projects/page-roast" className="text-warm-500 hover:text-fire-600 transition-colors">PageRoast</Link>
-                  <Link to="/projects" className="text-warm-500 hover:text-fire-600 transition-colors">All Projects</Link>
+                  <Link to="/products/page-roast" className="text-warm-500 hover:text-fire-600 transition-colors">PageRoast</Link>
+                  <Link to="/products" className="text-warm-500 hover:text-fire-600 transition-colors">All Products</Link>
                   <Link to="/blog" className="text-warm-500 hover:text-fire-600 transition-colors">Blog</Link>
                   <Link to="/pricing" className="text-warm-500 hover:text-fire-600 transition-colors">Pricing</Link>
                 </div>
@@ -248,7 +248,7 @@ export function Layout() {
           </div>
           <div className="mt-10 pt-6 border-t border-warm-200/40 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-warm-400">
             <span>Built with unreasonable ambition by Bilko.</span>
-            <p className="text-xs text-warm-400 mt-1">10 AI tools · Free to start · No subscriptions</p>
+            <p className="text-xs text-warm-400 mt-1">AI advisory · Free tools · No retainers</p>
             <div className="flex items-center gap-4">
               <Link to="/privacy" className="hover:text-warm-600 transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="hover:text-warm-600 transition-colors">Terms of Service</Link>

@@ -4,25 +4,44 @@ import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/c
 import { usePageView, track } from '../hooks/usePageView.js';
 import { ADMIN_EMAILS } from '../constants.js';
 
-const PROJECT_LINKS = [
-  { to: '/products/page-roast', label: 'PageRoast', badge: '🔥' },
-  { to: '/products/headline-grader', label: 'HeadlineGrader' },
-  { to: '/products/ad-scorer', label: 'AdScorer' },
-  { to: '/products/thread-grader', label: 'ThreadGrader' },
-  { to: '/products/email-forge', label: 'EmailForge' },
-  { to: '/products/audience-decoder', label: 'AudienceDecoder' },
-  { to: '/products/launch-grader', label: 'LaunchGrader' },
-  { to: '/products/stack-audit', label: 'StackAudit' },
-  { to: '/products/local-score', label: 'LocalScore', badge: '🔒' },
-  { to: '/products/stepproof', label: 'Stepproof' },
-  { to: '/products', label: 'All Products' },
+const PRODUCT_GROUPS = [
+  {
+    title: 'Content & Copy',
+    description: 'Analyze and improve your writing',
+    to: '/products/content-tools',
+    tools: [
+      { to: '/products/headline-grader', label: 'HeadlineGrader', desc: 'Score & rewrite headlines' },
+      { to: '/products/ad-scorer', label: 'AdScorer', desc: 'Grade ad copy' },
+      { to: '/products/thread-grader', label: 'ThreadGrader', desc: 'Score X/Twitter threads' },
+      { to: '/products/email-forge', label: 'EmailForge', desc: 'Generate email sequences' },
+      { to: '/products/audience-decoder', label: 'AudienceDecoder', desc: 'Decode your audience' },
+    ],
+  },
+  {
+    title: 'Business',
+    description: 'Audit and optimize your business',
+    to: '/products',
+    tools: [
+      { to: '/products/page-roast', label: 'PageRoast', desc: 'Landing page CRO audit' },
+      { to: '/products/launch-grader', label: 'LaunchGrader', desc: 'Go-to-market readiness' },
+      { to: '/products/stack-audit', label: 'StackAudit', desc: 'Find SaaS waste' },
+      { to: '/products/local-score', label: 'LocalScore', desc: 'Private doc analysis' },
+    ],
+  },
+  {
+    title: 'Developer',
+    description: 'Test and observe AI pipelines',
+    to: '/products',
+    tools: [
+      { to: '/products/stepproof', label: 'Stepproof', desc: 'AI regression tests' },
+    ],
+  },
 ] as const;
 
 function ProductsDropdown() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
@@ -47,18 +66,43 @@ function ProductsDropdown() {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-52 bg-white rounded-xl border border-warm-200/60 shadow-lg shadow-warm-200/30 py-1.5 animate-fade-in z-50">
-          {PROJECT_LINKS.map(({ to, label, ...rest }) => (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[640px] bg-white rounded-2xl border border-warm-200/60 shadow-xl shadow-warm-200/40 p-5 animate-fade-in z-50">
+          <div className="grid grid-cols-3 gap-5">
+            {PRODUCT_GROUPS.map(group => (
+              <div key={group.title}>
+                <Link
+                  to={group.to}
+                  onClick={() => setOpen(false)}
+                  className="block mb-3 group"
+                >
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-warm-400 group-hover:text-fire-500 transition-colors">{group.title}</h3>
+                  <p className="text-[11px] text-warm-400 mt-0.5">{group.description}</p>
+                </Link>
+                <div className="space-y-1">
+                  {group.tools.map(tool => (
+                    <Link
+                      key={tool.to}
+                      to={tool.to}
+                      onClick={() => setOpen(false)}
+                      className="block rounded-lg px-3 py-2.5 hover:bg-warm-50 transition-colors group/item"
+                    >
+                      <p className="text-sm font-semibold text-warm-800 group-hover/item:text-fire-600 transition-colors">{tool.label}</p>
+                      <p className="text-xs text-warm-400 mt-0.5">{tool.desc}</p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-warm-100">
             <Link
-              key={to}
-              to={to}
+              to="/products"
               onClick={() => setOpen(false)}
-              className="flex items-center justify-between px-4 py-2.5 text-sm text-warm-700 hover:bg-warm-50 hover:text-fire-600 transition-colors"
+              className="text-xs font-semibold text-fire-500 hover:text-fire-600 transition-colors"
             >
-              {label}
-              {'badge' in rest && <span className="text-xs">{(rest as any).badge}</span>}
+              All products &rarr;
             </Link>
-          ))}
+          </div>
         </div>
       )}
     </div>

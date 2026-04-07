@@ -173,6 +173,7 @@ export function HeadlineGraderPage() {
       <ToolHero
         title="Score or generate headlines"
         tagline="AI grades your headlines — or writes new ones from your description"
+        toolSlug="headline-grader"
       >
         {/* 3-way tab toggle */}
         <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
@@ -342,6 +343,7 @@ export function HeadlineGraderPage() {
               grade={result.grade}
               verdict={result.diagnosis}
               toolName="Headline Grader"
+              toolSlug="headline-grader"
             />
             {/* Quick diagnosis — weakest pillar */}
             {(() => {

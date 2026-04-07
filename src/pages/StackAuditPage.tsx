@@ -83,7 +83,7 @@ export function StackAuditPage() {
         <button ref={signInRef} className="hidden" aria-hidden="true" />
       </SignInButton>
 
-      <ToolHero title="Find waste in your SaaS stack" tagline="Paste your tools. AI finds overlap, cheaper alternatives, and exactly how much you can save.">
+      <ToolHero title="Find waste in your SaaS stack" tagline="Paste your tools. AI finds overlap, cheaper alternatives, and exactly how much you can save." toolSlug="stack-audit">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl max-w-2xl mx-auto">
           <textarea
             value={tools}
@@ -116,7 +116,7 @@ export function StackAuditPage() {
 
       {result && (
         <div ref={resultRef} className="max-w-2xl mx-auto px-6 pt-10 space-y-6 pb-16">
-          <ScoreCard score={result.total_score} grade={result.grade} verdict={result.roast} toolName="StackAudit" />
+          <ScoreCard score={result.total_score} grade={result.grade} verdict={result.roast} toolName="StackAudit" toolSlug="stack-audit" />
 
           {/* Savings banner */}
           <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-6 text-center animate-slide-up">

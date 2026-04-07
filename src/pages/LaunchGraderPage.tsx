@@ -86,6 +86,7 @@ export function LaunchGraderPage() {
       <ToolHero
         title="Is your product ready to launch?"
         tagline="AI audits your go-to-market readiness across 5 dimensions. Get a score, blockers, and a verdict."
+        toolSlug="launch-grader"
       >
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl max-w-2xl mx-auto">
           <div className="space-y-3">
@@ -148,7 +149,7 @@ export function LaunchGraderPage() {
 
       {result && (
         <div ref={resultRef} className="max-w-2xl mx-auto px-6 pt-10 space-y-6 pb-16">
-          <ScoreCard score={result.total_score} grade={result.grade} verdict={result.roast} toolName="LaunchGrader" />
+          <ScoreCard score={result.total_score} grade={result.grade} verdict={result.roast} toolName="LaunchGrader" toolSlug="launch-grader" />
 
           {/* Verdict Banner */}
           {result.verdict && (

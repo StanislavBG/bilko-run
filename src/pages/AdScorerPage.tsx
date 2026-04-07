@@ -184,6 +184,7 @@ export function AdScorerPage() {
       <ToolHero
         title="Score or generate ad copy"
         tagline="AI grades hook, value prop, emotion, and CTA — or writes ads from your description"
+        toolSlug="ad-scorer"
       >
         {/* 3-way tab toggle */}
         <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
@@ -411,6 +412,7 @@ export function AdScorerPage() {
               grade={result.grade}
               verdict={result.verdict}
               toolName="Ad Scorer"
+              toolSlug="ad-scorer"
             />
             <div className="bg-white rounded-2xl border border-warm-200/60 p-4 text-center animate-slide-up" style={{ animationDelay: '80ms' }}>
               <p className="text-sm font-semibold text-warm-700">{getBenchmark(result.total_score)}</p>

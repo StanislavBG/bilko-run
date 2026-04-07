@@ -7,30 +7,35 @@ import { ADMIN_EMAILS } from '../constants.js';
 const PRODUCTS = [
   {
     title: 'Content & Copy',
-    desc: 'AI-powered writing analysis — headlines, ads, threads, email sequences, audience insights. One tool, five modes.',
+    desc: 'AI-powered writing analysis — headlines, ads, threads, email sequences, audience insights.',
     to: '/products/content-tools',
     features: ['Headlines', 'Ads', 'Threads', 'Email', 'Audience'],
+    accent: 'bg-fire-500',
   },
   {
     title: 'PageRoast',
     desc: 'Paste any URL. Get a scored landing page audit with actionable fixes in 30 seconds.',
     to: '/products/page-roast',
+    accent: 'bg-fire-500',
   },
   {
     title: 'LaunchGrader',
     desc: 'Is your product ready to launch? AI audits your go-to-market across 5 dimensions.',
     to: '/products/launch-grader',
+    accent: 'bg-teal-500',
   },
   {
     title: 'StackAudit',
     desc: 'Find overlap and waste in your SaaS subscriptions. See exactly how much you can save.',
     to: '/products/stack-audit',
+    accent: 'bg-slate-500',
   },
   {
     title: 'LocalScore',
     desc: 'Analyze sensitive documents with AI that runs entirely in your browser. Nothing leaves your device.',
     to: '/products/local-score',
     badge: 'Free',
+    accent: 'bg-green-500',
   },
 ] as const;
 
@@ -51,43 +56,44 @@ function ProductsDropdown() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-          open ? 'bg-warm-200/60 text-warm-900' : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
+        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+          open ? 'bg-warm-200/60 text-warm-900' : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100/80'
         }`}
       >
         Products
-        <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+        <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
         </svg>
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 mt-2 w-[520px] bg-white rounded-2xl border border-warm-200/60 shadow-xl shadow-warm-200/40 p-4 animate-fade-in z-50">
-          <div className="space-y-1">
+        <div className="absolute top-full right-0 mt-2 w-[520px] bg-white rounded-2xl shadow-elevation-3 p-3 animate-fade-in z-50">
+          <div className="space-y-0.5">
             {PRODUCTS.map(product => (
               <Link
                 key={product.title}
                 to={product.to}
                 onClick={() => setOpen(false)}
-                className="flex items-start gap-4 rounded-xl px-4 py-4 hover:bg-warm-50 transition-colors group"
+                className="flex items-start gap-4 rounded-xl px-4 py-3.5 hover:bg-warm-50 transition-colors group"
               >
+                <div className={`w-2 h-2 rounded-full ${product.accent} mt-1.5 shrink-0`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-warm-900 group-hover:text-fire-600 transition-colors">{product.title}</h3>
+                    <h3 className="text-sm font-semibold text-warm-900 group-hover:text-fire-600 transition-colors">{product.title}</h3>
                     {'badge' in product && product.badge && (
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-green-100 text-green-700">{product.badge}</span>
+                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-green-50 text-green-600">{product.badge}</span>
                     )}
                   </div>
-                  <p className="text-xs text-warm-500 mt-1 leading-relaxed">{product.desc}</p>
+                  <p className="text-xs text-warm-500 mt-0.5 leading-relaxed">{product.desc}</p>
                   {'features' in product && product.features && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {product.features.map(f => (
-                        <span key={f} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-warm-100 text-warm-600">{f}</span>
+                        <span key={f} className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-warm-100/80 text-warm-500">{f}</span>
                       ))}
                     </div>
                   )}
                 </div>
-                <svg className="w-4 h-4 text-warm-300 group-hover:text-fire-400 flex-shrink-0 mt-1" viewBox="0 0 20 20" fill="currentColor">
+                <svg className="w-4 h-4 text-warm-300 group-hover:text-fire-400 flex-shrink-0 mt-1 transition-colors" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </Link>
@@ -112,7 +118,7 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-warm-50 flex flex-col">
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-warm-50/80 border-b border-warm-200/60">
+      <header className="sticky top-0 z-50 backdrop-blur-lg bg-warm-50/85 border-b border-warm-200/50">
         <nav className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 group" onClick={() => setMobileOpen(false)}>
             <span className="text-xl font-extrabold tracking-tight text-warm-900 group-hover:text-fire-600 transition-colors">
@@ -130,7 +136,7 @@ export function Layout() {
                 `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                   isActive
                     ? 'bg-warm-200/60 text-warm-900'
-                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
+                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100/80'
                 }`
               }
             >
@@ -143,7 +149,7 @@ export function Layout() {
                 `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
                   isActive
                     ? 'bg-warm-200/60 text-warm-900'
-                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100'
+                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100/80'
                 }`
               }
             >
@@ -152,7 +158,7 @@ export function Layout() {
 
             <Link
               to="/products/page-roast"
-              className="px-4 py-2 text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-lg shadow-sm shadow-fire-500/20 transition-all"
+              className="ml-1 px-5 py-2 text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-lg shadow-sm shadow-fire-500/20 hover:shadow-md hover:shadow-fire-500/25 transition-all"
             >
               Try Free
             </Link>
@@ -177,7 +183,7 @@ export function Layout() {
                 <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
                   <button
                     onClick={() => track('signin_click')}
-                    className="px-4 py-2 text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100 rounded-lg transition-all"
+                    className="px-4 py-2 text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100/80 rounded-lg transition-all"
                   >
                     Sign in
                   </button>
@@ -214,7 +220,7 @@ export function Layout() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden border-t border-warm-200/60 bg-warm-50/95 backdrop-blur-md px-6 py-4 space-y-1 animate-fade-in">
+          <div className="md:hidden border-t border-warm-200/50 bg-warm-50/98 backdrop-blur-lg px-6 py-4 space-y-1 animate-fade-in">
             {[
               { to: '/products/page-roast', label: 'PageRoast' },
               { to: '/products', label: 'All Products' },
@@ -249,41 +255,40 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <footer className="border-t border-warm-200/60 bg-warm-100/50">
-        <div className="max-w-6xl mx-auto px-6 py-12">
-          <div className="flex flex-col md:flex-row justify-between items-start gap-8">
+      <footer className="border-t border-warm-200/50 bg-warm-100/40">
+        <div className="max-w-6xl mx-auto px-6 py-14">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-10">
             <div>
-              <span className="text-lg font-extrabold text-warm-900">
+              <span className="text-lg font-extrabold tracking-tight text-warm-900">
                 bilko<span className="text-fire-500">.run</span>
               </span>
-              <p className="mt-2 text-sm text-warm-500 max-w-xs">
+              <p className="mt-2 text-sm text-warm-500 max-w-xs leading-relaxed">
                 AI tools and advisory for small businesses.
               </p>
             </div>
-            <div className="flex gap-12 text-sm">
+            <div className="flex gap-14 text-sm">
               <div>
-                <h4 className="font-semibold text-warm-700 mb-3">Products</h4>
-                <div className="flex flex-col gap-2">
-                  <Link to="/products/page-roast" className="text-warm-500 hover:text-fire-600 transition-colors">PageRoast</Link>
-                  <Link to="/products" className="text-warm-500 hover:text-fire-600 transition-colors">All Products</Link>
-                  <Link to="/blog" className="text-warm-500 hover:text-fire-600 transition-colors">Blog</Link>
-                  <Link to="/pricing" className="text-warm-500 hover:text-fire-600 transition-colors">Pricing</Link>
+                <h4 className="text-label text-warm-600 mb-4">Products</h4>
+                <div className="flex flex-col gap-2.5">
+                  <Link to="/products/page-roast" className="text-warm-500 hover:text-warm-700 transition-colors">PageRoast</Link>
+                  <Link to="/products" className="text-warm-500 hover:text-warm-700 transition-colors">All Products</Link>
+                  <Link to="/blog" className="text-warm-500 hover:text-warm-700 transition-colors">Blog</Link>
+                  <Link to="/pricing" className="text-warm-500 hover:text-warm-700 transition-colors">Pricing</Link>
                 </div>
               </div>
               <div>
-                <h4 className="font-semibold text-warm-700 mb-3">Connect</h4>
-                <div className="flex flex-col gap-2">
-                  <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">X / Twitter</a>
-                  <a href="https://www.linkedin.com/in/bilko-bibitkov-23b5b13b1/" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">LinkedIn</a>
-                  <a href="https://github.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-fire-600 transition-colors">GitHub</a>
+                <h4 className="text-label text-warm-600 mb-4">Connect</h4>
+                <div className="flex flex-col gap-2.5">
+                  <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-warm-700 transition-colors">X / Twitter</a>
+                  <a href="https://www.linkedin.com/in/bilko-bibitkov-23b5b13b1/" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-warm-700 transition-colors">LinkedIn</a>
+                  <a href="https://github.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-warm-700 transition-colors">GitHub</a>
                 </div>
               </div>
             </div>
           </div>
-          <div className="mt-10 pt-6 border-t border-warm-200/40 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-warm-400">
+          <div className="mt-12 pt-6 border-t border-warm-200/40 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-warm-400">
             <span>Built with unreasonable ambition by Bilko.</span>
-            <p className="text-xs text-warm-400 mt-1">AI advisory · Free tools · No retainers</p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-5">
               <Link to="/privacy" className="hover:text-warm-600 transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="hover:text-warm-600 transition-colors">Terms of Service</Link>
             </div>

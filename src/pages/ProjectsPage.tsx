@@ -9,6 +9,8 @@ interface Product {
   status: 'live' | 'coming-soon' | 'beta';
   category: 'content' | 'business' | 'devtools';
   features: string[];
+  accent: string;
+  accentDot: string;
 }
 
 const PRODUCTS: Product[] = [
@@ -20,6 +22,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'business',
     features: ['CRO scoring (0-100)', 'A/B Compare mode', 'Shareable results', 'Actionable fixes'],
+    accent: 'hover:border-fire-300',
+    accentDot: 'bg-fire-500',
   },
   {
     slug: 'headline-grader',
@@ -29,6 +33,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'content',
     features: ['Framework-based scoring', 'AI rewrites', 'SERP preview', 'A/B Compare'],
+    accent: 'hover:border-indigo-300',
+    accentDot: 'bg-indigo-500',
   },
   {
     slug: 'ad-scorer',
@@ -38,6 +44,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'content',
     features: ['Platform-specific rules', 'Copy rewrites', 'A/B Compare', '4-pillar scoring'],
+    accent: 'hover:border-emerald-300',
+    accentDot: 'bg-emerald-500',
   },
   {
     slug: 'thread-grader',
@@ -47,6 +55,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'content',
     features: ['Hook analysis', 'Tweet breakdown', 'Hook rewrites', 'A/B Compare'],
+    accent: 'hover:border-sky-300',
+    accentDot: 'bg-sky-500',
   },
   {
     slug: 'email-forge',
@@ -56,6 +66,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'content',
     features: ['5-email sequences', '5 frameworks', 'Open/click estimates', 'A/B Compare'],
+    accent: 'hover:border-amber-300',
+    accentDot: 'bg-amber-500',
   },
   {
     slug: 'audience-decoder',
@@ -65,6 +77,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'content',
     features: ['Audience archetypes', 'Engagement scoring', 'Growth opportunities', 'Content calendar'],
+    accent: 'hover:border-purple-300',
+    accentDot: 'bg-purple-500',
   },
   {
     slug: 'launch-grader',
@@ -74,6 +88,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'business',
     features: ['5-dimension audit', 'Launch blockers', 'Readiness verdict', 'Competitor comparison'],
+    accent: 'hover:border-teal-300',
+    accentDot: 'bg-teal-500',
   },
   {
     slug: 'stack-audit',
@@ -83,6 +99,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'business',
     features: ['Cost analysis', 'Overlap detection', 'Alternative suggestions', 'Savings calculator'],
+    accent: 'hover:border-slate-300',
+    accentDot: 'bg-slate-500',
   },
   {
     slug: 'local-score',
@@ -92,6 +110,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'business',
     features: ['100% local', 'Zero API costs', 'Works offline', 'GDPR-friendly'],
+    accent: 'hover:border-green-300',
+    accentDot: 'bg-green-500',
   },
   {
     slug: 'stepproof',
@@ -101,6 +121,8 @@ const PRODUCTS: Product[] = [
     status: 'live',
     category: 'devtools',
     features: ['YAML scenarios', 'Preset library', 'LLM judge assertions', 'BYOK support'],
+    accent: 'hover:border-cyan-300',
+    accentDot: 'bg-cyan-500',
   },
   {
     slug: 'agent-trace',
@@ -110,13 +132,15 @@ const PRODUCTS: Product[] = [
     status: 'coming-soon',
     category: 'devtools',
     features: ['OpenTelemetry GenAI spans', 'Local SQLite storage', 'Zero cloud', 'CLI interface'],
+    accent: 'hover:border-warm-300',
+    accentDot: 'bg-warm-400',
   },
 ];
 
 const STATUS_STYLES = {
-  live: 'bg-green-100 text-green-700 border-green-200',
-  beta: 'bg-amber-100 text-amber-700 border-amber-200',
-  'coming-soon': 'bg-warm-200 text-warm-500 border-warm-300',
+  live: 'bg-green-50 text-green-600',
+  beta: 'bg-amber-50 text-amber-600',
+  'coming-soon': 'bg-warm-100 text-warm-400',
 } as const;
 
 const STATUS_LABELS = {
@@ -140,12 +164,12 @@ export function ProjectsPage() {
   return (
     <>
       {/* Header */}
-      <section className="bg-gradient-to-b from-warm-100/50 to-warm-50 border-b border-warm-200/40">
+      <section className="border-b border-warm-200/40">
         <div className="max-w-6xl mx-auto px-6 pt-16 pb-12 md:pt-20 md:pb-16">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-warm-900 tracking-tight">
+          <h1 className="text-display-xl text-warm-900">
             Products
           </h1>
-          <p className="mt-4 text-lg text-warm-500 max-w-2xl">
+          <p className="mt-4 text-lg text-warm-500 max-w-2xl leading-relaxed">
             AI-powered tools I've built. All free to start.
           </p>
         </div>
@@ -153,7 +177,7 @@ export function ProjectsPage() {
 
       {/* Product Grid */}
       <section className="max-w-6xl mx-auto px-6 py-12 md:py-16">
-        <div className="grid md:grid-cols-2 gap-6 stagger-children">
+        <div className="grid md:grid-cols-2 gap-5 stagger-children">
           {PRODUCTS.map((product) => {
             const isLive = product.status === 'live';
             const Wrapper = isLive ? Link : 'div';
@@ -165,24 +189,25 @@ export function ProjectsPage() {
               <Wrapper
                 key={product.slug}
                 {...wrapperProps as any}
-                className={`group relative bg-white rounded-2xl p-6 border transition-all ${
+                className={`group relative bg-white rounded-2xl p-6 transition-all ${
                   isLive
-                    ? 'border-warm-200/60 hover:border-fire-300 hover:shadow-lg hover:shadow-fire-100/50 hover:-translate-y-1 cursor-pointer'
-                    : 'border-warm-200/40 opacity-75'
+                    ? `card-base ${product.accent} hover:shadow-elevation-2 hover:-translate-y-1 cursor-pointer`
+                    : 'border border-warm-200/40 opacity-60'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-warm-400">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-2 h-2 rounded-full ${product.accentDot}`} />
+                    <span className="text-label text-warm-400">
                       {CATEGORY_LABELS[product.category]}
                     </span>
                   </div>
-                  <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_STYLES[product.status]}`}>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md ${STATUS_STYLES[product.status]}`}>
                     {STATUS_LABELS[product.status]}
                   </span>
                 </div>
 
-                <h3 className={`text-xl font-bold mb-1 ${isLive ? 'text-warm-900 group-hover:text-fire-600 transition-colors' : 'text-warm-700'}`}>
+                <h3 className={`text-xl font-bold mb-1 ${isLive ? 'text-warm-900 group-hover:text-warm-950 transition-colors' : 'text-warm-700'}`}>
                   {product.name}
                 </h3>
                 <p className="text-sm font-medium text-warm-600 mb-3">{product.tagline}</p>
@@ -194,7 +219,7 @@ export function ProjectsPage() {
                   {product.features.map((feature) => (
                     <span
                       key={feature}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-warm-100 text-warm-600 border border-warm-200/60"
+                      className="text-xs px-2.5 py-1 rounded-lg bg-warm-50 text-warm-500 border border-warm-100/80"
                     >
                       {feature}
                     </span>
@@ -202,7 +227,7 @@ export function ProjectsPage() {
                 </div>
 
                 {isLive && (
-                  <div className="mt-4 text-sm font-semibold text-fire-500 group-hover:text-fire-600 flex items-center gap-1">
+                  <div className="mt-5 text-sm font-semibold text-warm-600 group-hover:text-warm-800 flex items-center gap-1 transition-colors">
                     Try it free
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                   </div>
@@ -214,17 +239,17 @@ export function ProjectsPage() {
       </section>
 
       {/* CTA */}
-      <section className="bg-warm-100/50 border-t border-warm-200/40">
-        <div className="max-w-4xl mx-auto px-6 py-16 text-center">
-          <h2 className="text-2xl font-extrabold text-warm-900">
+      <section className="border-t border-warm-200/40">
+        <div className="max-w-4xl mx-auto px-6 py-20 text-center">
+          <h2 className="text-display-md text-warm-900">
             Start with the one that matters most
           </h2>
-          <p className="mt-3 text-warm-500">
-            Every tool has a free first analysis. Or try <Link to="/products/local-score" className="text-fire-500 hover:underline font-semibold">LocalScore</Link> — completely free, runs in your browser.
+          <p className="mt-4 text-warm-500 max-w-lg mx-auto leading-relaxed">
+            Every tool has a free first analysis. Or try <Link to="/products/local-score" className="text-green-600 hover:underline font-semibold">LocalScore</Link> — completely free, runs in your browser.
           </p>
           <Link
             to="/products/page-roast"
-            className="inline-flex items-center justify-center gap-2 mt-6 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5"
+            className="inline-flex items-center justify-center gap-2 mt-8 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-fire-500/25"
           >
             Try PageRoast
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>

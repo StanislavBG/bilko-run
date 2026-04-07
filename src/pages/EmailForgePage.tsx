@@ -574,6 +574,7 @@ export function EmailForgePage() {
         tab={tab}
         onTabChange={t => { setTab(t); reset(); }}
         hasCompare
+        toolSlug="email-forge"
       >
         {tab === 'score' ? (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-5 shadow-2xl max-w-2xl mx-auto">

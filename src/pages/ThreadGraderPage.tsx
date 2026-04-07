@@ -461,6 +461,7 @@ export function ThreadGraderPage() {
       <ToolHero
         title="Grade or generate threads"
         tagline="AI scores hook strength, tension flow, and share triggers — or writes threads for you"
+        toolSlug="thread-grader"
       >
         {/* 3-way tab toggle */}
         <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
@@ -689,7 +690,7 @@ export function ThreadGraderPage() {
 
       {result && (
         <div ref={resultRef} className="max-w-2xl mx-auto px-6 pt-10 space-y-6 pb-16">
-          <ScoreCard score={result.total_score} grade={result.grade} verdict={result.verdict} toolName="ThreadGrader" />
+          <ScoreCard score={result.total_score} grade={result.grade} verdict={result.verdict} toolName="ThreadGrader" toolSlug="thread-grader" />
           {(() => {
             const vp = viralPotential(result.total_score);
             return (

@@ -11,8 +11,8 @@ export function SectionBreakdown({ pillars, labels }: {
   labels: Record<string, string>;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '100ms' }}>
-      <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-6">Score Breakdown</h3>
+    <div className="bg-white rounded-2xl shadow-elevation-1 p-6 animate-slide-up" style={{ animationDelay: '100ms' }}>
+      <h3 className="text-label text-warm-400 mb-6">Score Breakdown</h3>
       <div className="space-y-6">
         {Object.entries(pillars).map(([key, pillar]) => {
           const pct = Math.round((pillar.score / pillar.max) * 100);
@@ -20,7 +20,7 @@ export function SectionBreakdown({ pillars, labels }: {
             <div key={key}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-warm-800">{labels[key] ?? key}</span>
-                <span className="text-sm font-bold text-warm-700">{pillar.score}/{pillar.max}</span>
+                <span className="text-sm font-bold text-warm-700 tabular-nums">{pillar.score}/{pillar.max}</span>
               </div>
               <div className="h-2 bg-warm-100 rounded-full overflow-hidden mb-2">
                 <div

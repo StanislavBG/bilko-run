@@ -717,6 +717,7 @@ export function AudienceDecoderPage() {
         tab={tab}
         onTabChange={(t) => { setTab(t); reset(); }}
         hasCompare
+        toolSlug="audience-decoder"
       >
         {tab === 'score' ? (
           <textarea
@@ -796,7 +797,7 @@ export function AudienceDecoderPage() {
         {/* Single result */}
         {r && (
           <>
-            <ScoreCard score={r.overall_score} grade={r.grade} verdict={r.headline} toolName="Audience Decoder" />
+            <ScoreCard score={r.overall_score} grade={r.grade} verdict={r.headline} toolName="Audience Decoder" toolSlug="audience-decoder" />
             <div className="text-center">
               <button onClick={saveSnapshot} className="text-xs px-4 py-2 border border-fire-200 text-fire-600 hover:bg-fire-50 rounded-lg transition-colors">
                 Save Audience Snapshot

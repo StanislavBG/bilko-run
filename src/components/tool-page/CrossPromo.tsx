@@ -51,14 +51,14 @@ export function CrossPromo({ currentTool }: { currentTool: string }) {
 
   return (
     <div className="max-w-2xl mx-auto px-6 pb-12">
-      <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-6">
-        <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">Next up</h3>
+      <div className="bg-warm-50/80 rounded-2xl shadow-elevation-1 p-6">
+        <h3 className="text-label text-warm-400 mb-4">Next up</h3>
         <div className="space-y-3">
           {promos.map(p => (
             <Link key={p.slug} to={`/projects/${p.slug}`}
-              className="group flex items-center gap-3 p-3 rounded-xl border border-warm-200/60 bg-white hover:border-fire-300 hover:shadow-sm transition-all">
+              className="group flex items-center gap-3 p-3 rounded-xl bg-white shadow-elevation-1 hover:shadow-elevation-2 hover:-translate-y-0.5 transition-all">
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-bold text-warm-800 group-hover:text-fire-600 transition-colors">{p.name}</span>
+                <span className="text-sm font-bold text-warm-800 group-hover:text-warm-900 transition-colors">{p.name}</span>
                 <p className="text-xs text-warm-500 mt-0.5">{p.hook}</p>
               </div>
               <svg className="w-4 h-4 text-warm-400 group-hover:text-fire-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">

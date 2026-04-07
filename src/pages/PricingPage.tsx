@@ -9,11 +9,11 @@ export function PricingPage() {
 
   return (
     <>
-      <section className="max-w-4xl mx-auto px-6 pt-16 pb-8 md:pt-24 md:pb-12 text-center">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-warm-900 tracking-tight">
+      <section className="max-w-4xl mx-auto px-6 pt-16 pb-10 md:pt-24 md:pb-14 text-center">
+        <h1 className="text-display-xl text-warm-900">
           No subscriptions. No BS.
         </h1>
-        <p className="mt-4 text-lg text-warm-500">
+        <p className="mt-5 text-lg text-warm-500 leading-relaxed">
           Your first analysis is free. After that, credits start at $1. That's it.
         </p>
         <p className="mt-2 text-sm text-warm-400">
@@ -21,16 +21,16 @@ export function PricingPage() {
         </p>
       </section>
 
-      <section className="max-w-5xl mx-auto px-6 pb-12 md:pb-16">
+      <section className="max-w-5xl mx-auto px-6 pb-16 md:pb-20">
         <div className="grid md:grid-cols-3 gap-5 items-start">
           {/* Free */}
-          <div className="bg-white rounded-2xl border border-warm-200/60 p-7">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-3">Free</h2>
-            <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-4xl font-black text-warm-900">$0</span>
+          <div className="bg-white rounded-2xl shadow-elevation-1 p-7">
+            <span className="text-label text-warm-400">Free</span>
+            <div className="flex items-baseline gap-1 mt-3 mb-1">
+              <span className="text-4xl font-black text-warm-900" style={{ letterSpacing: '-0.03em' }}>$0</span>
             </div>
-            <p className="text-sm text-warm-500 mb-5">See what you're missing</p>
-            <ul className="space-y-2.5 text-sm text-warm-600 mb-7">
+            <p className="text-sm text-warm-500 mb-6">See what you're missing</p>
+            <ul className="space-y-3 text-sm text-warm-600 mb-8">
               {[
                 '1 free analysis on sign-up',
                 'Full 4-section score breakdown',
@@ -38,29 +38,29 @@ export function PricingPage() {
                 '3 highest-impact fixes',
                 'Shareable score card',
               ].map(f => (
-                <li key={f} className="flex items-start gap-2">
-                  <span className="text-warm-400 mt-0.5 flex-shrink-0">&#x2713;</span>
+                <li key={f} className="flex items-start gap-2.5">
+                  <span className="text-warm-300 mt-0.5 flex-shrink-0">&#x2713;</span>
                   {f}
                 </li>
               ))}
             </ul>
             <Link
               to="/projects"
-              className="block w-full py-3 text-center text-sm font-bold text-warm-600 border border-warm-200 hover:border-warm-300 rounded-xl transition-colors"
+              className="block w-full py-3 text-center text-sm font-bold text-warm-600 bg-warm-50 hover:bg-warm-100 rounded-xl transition-colors"
             >
               Try for free
             </Link>
           </div>
 
           {/* 1 Credit */}
-          <div className="bg-white rounded-2xl border border-warm-200/60 p-7">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-3">Pay as you go</h2>
-            <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-4xl font-black text-warm-900">$1</span>
+          <div className="bg-white rounded-2xl shadow-elevation-1 p-7">
+            <span className="text-label text-fire-500">Pay as you go</span>
+            <div className="flex items-baseline gap-1 mt-3 mb-1">
+              <span className="text-4xl font-black text-warm-900" style={{ letterSpacing: '-0.03em' }}>$1</span>
               <span className="text-sm text-warm-400 ml-0.5">/ credit</span>
             </div>
-            <p className="text-sm text-warm-500 mb-5">Just need one analysis? Done.</p>
-            <ul className="space-y-2.5 text-sm text-warm-600 mb-7">
+            <p className="text-sm text-warm-500 mb-6">Just need one analysis? Done.</p>
+            <ul className="space-y-3 text-sm text-warm-600 mb-8">
               {[
                 'Everything in Free',
                 'All 10 tools = 1 credit each',
@@ -68,7 +68,7 @@ export function PricingPage() {
                 'Credits never expire',
                 'Download results as JSON',
               ].map(f => (
-                <li key={f} className="flex items-start gap-2">
+                <li key={f} className="flex items-start gap-2.5">
                   <span className="text-fire-400 mt-0.5 flex-shrink-0">&#x2713;</span>
                   {f}
                 </li>
@@ -76,24 +76,24 @@ export function PricingPage() {
             </ul>
             <Link
               to="/projects"
-              className="block w-full py-3 text-center text-sm font-bold text-fire-600 border-2 border-fire-200 hover:border-fire-400 rounded-xl transition-colors"
+              className="block w-full py-3 text-center text-sm font-bold text-fire-600 bg-fire-50 hover:bg-fire-100 rounded-xl transition-colors"
             >
               Try any tool
             </Link>
           </div>
 
           {/* 7 Credits — Best Value */}
-          <div className="bg-white rounded-2xl border-2 border-fire-400 p-7 relative shadow-lg shadow-fire-100/40 md:-mt-2 md:mb-[-8px]">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-fire-500 text-white text-[11px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap">
+          <div className="bg-white rounded-2xl shadow-elevation-3 p-7 relative md:-mt-2 md:mb-[-8px]">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-fire-500 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full whitespace-nowrap">
               Best Value
             </div>
-            <h2 className="text-xs font-bold uppercase tracking-widest text-fire-500 mb-3 mt-1">Credit Bundle</h2>
-            <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-4xl font-black text-warm-900">$5</span>
+            <span className="text-label text-fire-500 mt-1 block">Credit Bundle</span>
+            <div className="flex items-baseline gap-1 mt-3 mb-1">
+              <span className="text-4xl font-black text-warm-900" style={{ letterSpacing: '-0.03em' }}>$5</span>
               <span className="text-sm text-warm-400 ml-0.5">/ 7 credits</span>
             </div>
-            <p className="text-sm text-warm-500 mb-5">$0.71 per analysis — save 29%</p>
-            <ul className="space-y-2.5 text-sm text-warm-600 mb-7">
+            <p className="text-sm text-warm-500 mb-6">$0.71 per analysis — save 29%</p>
+            <ul className="space-y-3 text-sm text-warm-600 mb-8">
               {[
                 'Everything in Free',
                 'All 10 tools = 1 credit each',
@@ -101,7 +101,7 @@ export function PricingPage() {
                 'Credits never expire',
                 'Download results as JSON',
               ].map(f => (
-                <li key={f} className="flex items-start gap-2">
+                <li key={f} className="flex items-start gap-2.5">
                   <span className="text-fire-500 mt-0.5 flex-shrink-0">&#x2713;</span>
                   {f}
                 </li>
@@ -118,10 +118,10 @@ export function PricingPage() {
       </section>
 
       {/* FAQ */}
-      <section className="border-t border-warm-200/40 bg-warm-100/30">
-        <div className="max-w-2xl mx-auto px-6 py-12 md:py-16">
-          <h2 className="text-xl font-extrabold text-warm-900 text-center mb-8">Common questions</h2>
-          <div className="space-y-5">
+      <section className="border-t border-warm-200/40">
+        <div className="max-w-2xl mx-auto px-6 py-16 md:py-20">
+          <h2 className="text-display-md text-warm-900 text-center mb-10">Common questions</h2>
+          <div className="space-y-6">
             {[
               { q: 'Why not a subscription?', a: 'Because you don\'t analyze pages every day. Pay for what you use, not what you don\'t.' },
               { q: 'What if I don\'t use all my credits?', a: 'They never expire. Buy today, use the last one next year. No pressure.' },
@@ -132,7 +132,7 @@ export function PricingPage() {
               { q: 'What does each tool cost?', a: 'PageRoast, HeadlineGrader, AdScorer, ThreadGrader, EmailForge, AudienceDecoder, LaunchGrader, StackAudit, and Stepproof all cost 1 credit per analysis (2 for A/B compare). LocalScore is completely free — it runs in your browser, so there are no server costs.' },
             ].map(({ q, a }) => (
               <div key={q}>
-                <h3 className="font-bold text-warm-900 mb-1 text-sm">{q}</h3>
+                <h3 className="font-bold text-warm-900 mb-1.5 text-sm">{q}</h3>
                 <p className="text-sm text-warm-500 leading-relaxed">{a}</p>
               </div>
             ))}

@@ -15,13 +15,13 @@ export function Rewrites({ rewrites, noun = 'rewrite' }: { rewrites: Rewrite[]; 
   if (!rewrites || rewrites.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-2xl border border-warm-200/60 p-6 animate-slide-up" style={{ animationDelay: '200ms' }}>
-      <h3 className="text-xs font-bold uppercase tracking-widest text-warm-400 mb-4">
+    <div className="bg-white rounded-2xl shadow-elevation-1 p-6 animate-slide-up" style={{ animationDelay: '200ms' }}>
+      <h3 className="text-label text-warm-400 mb-4">
         AI {noun}s ({rewrites.length})
       </h3>
       <div className="space-y-3">
         {rewrites.map((rw, i) => (
-          <div key={i} className="border border-warm-100 rounded-xl p-4 hover:border-fire-200 transition-colors">
+          <div key={i} className="border border-warm-100/80 rounded-xl p-4 hover:border-warm-200 transition-colors">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 {(rw.label || rw.optimized_for) && (
@@ -31,7 +31,7 @@ export function Rewrites({ rewrites, noun = 'rewrite' }: { rewrites: Rewrite[]; 
                 )}
                 <p className="text-sm text-warm-800 font-medium leading-relaxed">{rw.text}</p>
                 {rw.why_better && (
-                  <p className="text-xs text-warm-500 mt-1 italic">{rw.why_better}</p>
+                  <p className="text-xs text-warm-500 mt-1.5 italic">{rw.why_better}</p>
                 )}
                 {rw.technique && (
                   <p className="text-xs text-warm-400 mt-1">{rw.technique}</p>
@@ -39,7 +39,7 @@ export function Rewrites({ rewrites, noun = 'rewrite' }: { rewrites: Rewrite[]; 
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {rw.predicted_score !== undefined && (
-                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md tabular-nums">
                     ~{rw.predicted_score}
                   </span>
                 )}
@@ -49,7 +49,7 @@ export function Rewrites({ rewrites, noun = 'rewrite' }: { rewrites: Rewrite[]; 
                     setCopiedIdx(i);
                     setTimeout(() => setCopiedIdx(null), 1500);
                   }}
-                  className="text-xs text-warm-400 hover:text-fire-500 transition-colors"
+                  className="text-xs font-medium text-warm-400 hover:text-warm-700 transition-colors"
                 >
                   {copiedIdx === i ? 'Copied!' : 'Copy'}
                 </button>

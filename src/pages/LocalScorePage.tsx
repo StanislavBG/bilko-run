@@ -260,6 +260,7 @@ export function LocalScorePage() {
         <ToolHero
           title="Score your business online — privately"
           tagline="Paste your website copy, menu, or business description. A little AI on your own computer tells you what's strong, what's weak, and what to fix next. Nothing ever leaves your device."
+          toolSlug="local-score"
         >
           <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-5 md:p-6 shadow-2xl max-w-2xl mx-auto">
             {/* Step 1: Welcome */}

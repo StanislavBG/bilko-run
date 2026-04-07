@@ -1,29 +1,39 @@
 import { type ReactNode } from 'react';
+import { type ToolTheme, getToolTheme } from './themes.js';
 
-export function ToolHero({ title, tagline, children, tab, onTabChange, hasCompare }: {
+export function ToolHero({ title, tagline, children, tab, onTabChange, hasCompare, toolSlug }: {
   title: string;
   tagline: string;
   children: ReactNode;
   tab?: 'score' | 'compare';
   onTabChange?: (tab: 'score' | 'compare') => void;
   hasCompare?: boolean;
+  /** Tool slug for theme colors — e.g. 'headline-grader', 'ad-scorer' */
+  toolSlug?: string;
 }) {
+  const theme: ToolTheme = getToolTheme(toolSlug ?? 'page-roast');
+
   return (
     <section className="relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-warm-900 via-warm-950 to-warm-900" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,107,26,0.12),transparent_70%)]" />
+      <div className={`absolute inset-0 bg-gradient-to-br ${theme.heroGradient}`} />
+      <div
+        className="absolute inset-0"
+        style={{ background: `radial-gradient(ellipse at center, ${theme.glowColor}, transparent 70%)` }}
+      />
+      {/* Subtle top highlight for depth (Stripe-style inset) */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
 
       <div className="relative max-w-3xl mx-auto px-6 py-16 md:py-24 text-center">
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-black tracking-tight text-white leading-[1.1] animate-slide-up">
+        <h1 className="text-display-lg text-white animate-slide-up">
           {title}
         </h1>
-        <p className="mt-3 text-base md:text-lg text-warm-400 max-w-lg mx-auto animate-slide-up" style={{ animationDelay: '60ms' }}>
+        <p className="mt-4 text-base md:text-lg text-warm-400 max-w-lg mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '60ms' }}>
           {tagline}
         </p>
 
         {hasCompare && tab && onTabChange && (
           <div className="mt-8 animate-slide-up" style={{ animationDelay: '120ms' }}>
-            <div className="flex gap-1 bg-white/10 backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
+            <div className="flex gap-1 bg-white/[0.08] backdrop-blur-sm rounded-xl p-1 mb-5 w-fit mx-auto">
               <button
                 onClick={() => onTabChange('score')}
                 className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${

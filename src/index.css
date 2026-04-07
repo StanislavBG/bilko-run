@@ -38,6 +38,54 @@
   --color-teal-600: #0d9488;
   --color-teal-700: #0f766e;
 
+  /* ── Tool-specific accent colors ─────────────────────────── */
+  /* Each tool gets its own personality while sharing warm base */
+
+  /* PageRoast — fire (inherited default) */
+
+  /* HeadlineGrader — indigo/violet (cerebral, copywriting) */
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #4f46e5;
+
+  /* AdScorer — emerald (money/ROI) */
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+
+  /* ThreadGrader — sky (social/twitter) */
+  --color-sky-400: #38bdf8;
+  --color-sky-500: #0ea5e9;
+  --color-sky-600: #0284c7;
+
+  /* EmailForge — amber (warm/conversion) */
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+
+  /* AudienceDecoder — purple (insights/psychology) */
+  --color-purple-400: #c084fc;
+  --color-purple-500: #a855f7;
+  --color-purple-600: #9333ea;
+
+  /* LaunchGrader — teal (readiness/go) */
+  /* uses teal palette above */
+
+  /* StackAudit — slate (enterprise/ops) */
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+
+  /* Stepproof — cyan (dev/testing) */
+  --color-cyan-400: #22d3ee;
+  --color-cyan-500: #06b6d4;
+  --color-cyan-600: #0891b2;
+
+  /* LocalScore — green (privacy/security) */
+  --color-green-400: #4ade80;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+
   /* Grade colors */
   --color-grade-a: #16a34a;
   --color-grade-b: #2563eb;
@@ -51,7 +99,8 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-/* Smooth scrolling */
+/* ── Base ───────────────────────────────────────────────────── */
+
 html {
   scroll-behavior: smooth;
 }
@@ -61,7 +110,125 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Score animation */
+/* ── Typography: negative letter-spacing at display sizes ──── */
+/* Inspired by Vercel/Linear/Stripe — creates authority at large sizes */
+
+.text-display-xl {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  font-weight: 900;
+}
+
+.text-display-lg {
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  font-weight: 900;
+}
+
+.text-display-md {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.text-display-sm {
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
+/* Label / overline style — consistent across all pages */
+.text-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+/* ── Shadow System ─────────────────────────────────────────── */
+/* Multi-layer shadows inspired by Stripe/Notion — border + elevation + ambient */
+
+.shadow-elevation-1 {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-elevation-2 {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 8px 16px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-elevation-3 {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 16px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* Fire-tinted shadow for CTAs and hover states */
+.shadow-fire-glow {
+  box-shadow:
+    0 0 0 1px rgba(255, 107, 26, 0.12),
+    0 4px 12px rgba(255, 107, 26, 0.15),
+    0 12px 24px rgba(255, 107, 26, 0.08);
+}
+
+/* Shadow-as-border pattern (Vercel-style) */
+.border-shadow {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  border: none;
+}
+
+/* Dark surface elevation (for dark cards/heroes) */
+.shadow-dark-elevation {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Card Styles ───────────────────────────────────────────── */
+
+.card-base {
+  background: white;
+  border-radius: 1rem;
+  border: 1px solid rgba(224, 213, 197, 0.5);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-base:hover {
+  border-color: rgba(224, 213, 197, 0.8);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 16px 32px rgba(0, 0, 0, 0.06);
+}
+
+.card-interactive {
+  background: white;
+  border-radius: 1rem;
+  border: 1px solid rgba(224, 213, 197, 0.5);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-interactive:hover {
+  border-color: #ffb380;
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px rgba(255, 107, 26, 0.08),
+    0 4px 12px rgba(255, 107, 26, 0.1),
+    0 16px 32px rgba(255, 107, 26, 0.06);
+}
+
+/* ── Score animation ───────────────────────────────────────── */
 @keyframes score-count {
   from { opacity: 0; transform: scale(0.5); }
   to { opacity: 1; transform: scale(1); }
@@ -80,6 +247,12 @@ body {
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 20px rgba(255, 107, 26, 0.2); }
   50% { box-shadow: 0 0 40px rgba(255, 107, 26, 0.4); }
+}
+
+/* Subtle shimmer for premium feel */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 .animate-score { animation: score-count 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }

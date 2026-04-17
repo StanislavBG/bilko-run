@@ -181,7 +181,7 @@ export function LocalScorePage() {
   }, [result]);
 
   const loadModel = useCallback(async () => {
-    if ((window as any).__LOCALSCORE_MOCK_ENGINE) {
+    if (__TEST_SEAMS__ && (window as any).__LOCALSCORE_MOCK_ENGINE) {
       engineRef.current = (window as any).__LOCALSCORE_MOCK_ENGINE;
       setStatus('pick-mode');
       return;

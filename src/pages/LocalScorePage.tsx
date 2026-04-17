@@ -181,9 +181,7 @@ export function LocalScorePage() {
   }, [result]);
 
   const loadModel = useCallback(async () => {
-    // Test seam: skip WebGPU check + model download when mock engine is injected
     if ((window as any).__LOCALSCORE_MOCK_ENGINE) {
-      setStatus('loading-model');
       engineRef.current = (window as any).__LOCALSCORE_MOCK_ENGINE;
       setStatus('pick-mode');
       return;

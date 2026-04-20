@@ -3,8 +3,19 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { usePageView, track } from '../hooks/usePageView.js';
 import { ADMIN_EMAILS } from '../constants.js';
+import { NAV_TOOLS } from '../config/tools.js';
 
-const PRODUCTS = [
+interface ProductLink {
+  title: string;
+  desc: string;
+  to: string;
+  accent: string;
+  badge?: string;
+  features?: readonly string[];
+}
+
+// Category landing pages — not single tools, so not in the registry.
+const CATEGORY_LINKS: readonly ProductLink[] = [
   {
     title: 'Content & Copy',
     desc: 'AI-powered writing analysis — headlines, ads, threads, email sequences, audience insights.',
@@ -12,32 +23,22 @@ const PRODUCTS = [
     features: ['Headlines', 'Ads', 'Threads', 'Email', 'Audience'],
     accent: 'bg-fire-500',
   },
-  {
-    title: 'PageRoast',
-    desc: 'Paste any URL. Get a scored landing page audit with actionable fixes in 30 seconds.',
-    to: '/products/page-roast',
-    accent: 'bg-fire-500',
-  },
-  {
-    title: 'LaunchGrader',
-    desc: 'Is your product ready to launch? AI audits your go-to-market across 5 dimensions.',
-    to: '/products/launch-grader',
-    accent: 'bg-teal-500',
-  },
-  {
-    title: 'StackAudit',
-    desc: 'Find overlap and waste in your SaaS subscriptions. See exactly how much you can save.',
-    to: '/products/stack-audit',
-    accent: 'bg-slate-500',
-  },
-  {
-    title: 'LocalScore',
-    desc: 'Analyze sensitive documents with AI that runs entirely in your browser. Nothing leaves your device.',
-    to: '/products/local-score',
-    badge: 'Free',
-    accent: 'bg-green-500',
-  },
-] as const;
+];
+
+const PRODUCTS: readonly ProductLink[] = [
+  ...CATEGORY_LINKS,
+  ...NAV_TOOLS.map<ProductLink>(t => {
+    const dd = t.nav!.dropdown!;
+    return {
+      title: t.name,
+      desc: dd.desc ?? t.tagline,
+      to: `/products/${t.slug}`,
+      accent: t.accent.bg,
+      badge: dd.badge,
+      features: dd.features,
+    };
+  }),
+];
 
 function ProductsDropdown() {
   const [open, setOpen] = useState(false);

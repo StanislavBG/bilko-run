@@ -12,20 +12,17 @@ import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
+import { ROUTABLE_TOOLS } from './config/tools.js';
 
-// Lazy-loaded tool pages (code-split for smaller initial bundle)
-const PageRoastPage = React.lazy(() => import('./pages/PageRoastPage.js').then(m => ({ default: m.PageRoastPage })));
-const HeadlineGraderPage = React.lazy(() => import('./pages/HeadlineGraderPage.js').then(m => ({ default: m.HeadlineGraderPage })));
-const AdScorerPage = React.lazy(() => import('./pages/AdScorerPage.js').then(m => ({ default: m.AdScorerPage })));
-const ThreadGraderPage = React.lazy(() => import('./pages/ThreadGraderPage.js').then(m => ({ default: m.ThreadGraderPage })));
-const EmailForgePage = React.lazy(() => import('./pages/EmailForgePage.js').then(m => ({ default: m.EmailForgePage })));
-const AudienceDecoderPage = React.lazy(() => import('./pages/AudienceDecoderPage.js').then(m => ({ default: m.AudienceDecoderPage })));
-const StepproofPage = React.lazy(() => import('./pages/StepproofPage.js').then(m => ({ default: m.StepproofPage })));
-const LaunchGraderPage = React.lazy(() => import('./pages/LaunchGraderPage.js').then(m => ({ default: m.LaunchGraderPage })));
-const StackAuditPage = React.lazy(() => import('./pages/StackAuditPage.js').then(m => ({ default: m.StackAuditPage })));
-const LocalScorePage = React.lazy(() => import('./pages/LocalScorePage.js').then(m => ({ default: m.LocalScorePage })));
+// Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
+// only non-tool landing pages are declared here.
 const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
 const ContentToolsPage = React.lazy(() => import('./pages/ContentToolsPage.js').then(m => ({ default: m.ContentToolsPage })));
+
+// Build one React.lazy component per registered tool so code-splitting still works.
+const TOOL_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentType>> = Object.fromEntries(
+  ROUTABLE_TOOLS.map(t => [t.slug, React.lazy(t.loader)]),
+);
 
 // Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
@@ -101,16 +98,9 @@ function lazyRoute(El: React.ComponentType) {
 function toolRoutes() {
   return (
     <>
-      <Route path="page-roast" element={lazyRoute(PageRoastPage)} />
-      <Route path="headline-grader" element={lazyRoute(HeadlineGraderPage)} />
-      <Route path="ad-scorer" element={lazyRoute(AdScorerPage)} />
-      <Route path="thread-grader" element={lazyRoute(ThreadGraderPage)} />
-      <Route path="email-forge" element={lazyRoute(EmailForgePage)} />
-      <Route path="audience-decoder" element={lazyRoute(AudienceDecoderPage)} />
-      <Route path="stepproof" element={lazyRoute(StepproofPage)} />
-      <Route path="launch-grader" element={lazyRoute(LaunchGraderPage)} />
-      <Route path="stack-audit" element={lazyRoute(StackAuditPage)} />
-      <Route path="local-score" element={lazyRoute(LocalScorePage)} />
+      {ROUTABLE_TOOLS.map(t => (
+        <Route key={t.slug} path={t.slug} element={lazyRoute(TOOL_COMPONENTS[t.slug])} />
+      ))}
       <Route path="content-tools" element={lazyRoute(ContentToolsPage)} />
     </>
   );

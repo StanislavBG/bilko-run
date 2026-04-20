@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun } from '../db.js';
 import { requireAdmin, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBot } from '../services/analytics.js';
+import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
 // Event allowlist (must match client-side enum).
 // `checkout_success` is intentionally NOT client-settable — only the Stripe
@@ -220,7 +221,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
           (SELECT SUM(amount) FROM token_transactions tt WHERE tt.email = tb.email AND tt.reason = 'stripe_purchase') AS purchased
         FROM token_balances tb ORDER BY roasts DESC LIMIT 50
       `),
-      dbGet<{ count: number }>("SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = 'pageroast_tokens'"),
+      dbGet<{ count: number }>('SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = ?', PRODUCT_KEYS.PAGEROAST_TOKENS),
       dbAll('SELECT date(created_at) as date, COUNT(*) as signups FROM token_balances WHERE date(created_at) >= ? GROUP BY date(created_at) ORDER BY date', since),
       // Roasts by day (for chart)
       dbAll('SELECT date(created_at) as date, COUNT(*) as roasts FROM user_roasts WHERE date(created_at) >= ? GROUP BY date(created_at) ORDER BY date', since),
@@ -263,7 +264,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       dbGet<{ n: number }>(`SELECT COUNT(DISTINCT email) as n FROM page_views WHERE date >= ? AND date < ? AND email IS NOT NULL${excludeAdmins}`, priorSince, priorUntil, ...adminArgs),
       dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history WHERE date(created_at) >= ? AND date(created_at) < ?', priorSince, priorUntil),
       dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances WHERE date(created_at) >= ? AND date(created_at) < ?', priorSince, priorUntil),
-      dbGet<{ count: number }>("SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = 'pageroast_tokens' AND date(created_at) >= ? AND date(created_at) < ?", priorSince, priorUntil),
+      dbGet<{ count: number }>('SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = ? AND date(created_at) >= ? AND date(created_at) < ?', PRODUCT_KEYS.PAGEROAST_TOKENS, priorSince, priorUntil),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1 AND date(p.created_at) >= ? AND date(p.created_at) < ?", priorSince, priorUntil),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7 AND date(p.created_at) >= ? AND date(p.created_at) < ?", priorSince, priorUntil),
     ]), 15000, 'admin /stats');

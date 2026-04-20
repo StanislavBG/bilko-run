@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { type ToolTheme, getToolTheme } from './themes.js';
+import { type ToolTheme, getToolTheme } from '../../config/tools.js';
 
 export function ToolHero({ title, tagline, children, tab, onTabChange, hasCompare, toolSlug }: {
   title: string;

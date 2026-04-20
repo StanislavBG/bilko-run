@@ -1,4 +1,20 @@
-# bilko.run
+# Bilko
+
+## Project Ecosystem
+
+Bilko's workspace lives in `~/Projects/` with this structure:
+
+```
+~/Projects/
+  Bilko/                    ← THIS REPO — bilko.run site + 10 AI tools
+  Local-Browser-Automation/ ← Social media ops, marketing, networking
+  BGLabs/                   ← bglabs.app — AI canvas animation platform
+  Provocations/             ← AI-augmented thinking workspace (14 personas)
+  review-pilot/             ← Google review response SaaS ($49-79/mo)
+  Preflight/                ← Monorepo: stepproof, agent-comply, agent-gate,
+                               agent-shift, agent-trace, license, site
+  Archive/                  ← Bilko-Archive, AIQA, Content-Grade, experiments
+```
 
 ## Main URLs
 

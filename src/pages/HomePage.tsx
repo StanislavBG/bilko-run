@@ -1,5 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { HOME_TOOLS, TAG_COLORS } from '../config/tools.js';
+
+const HOME_TOOL_CARDS = HOME_TOOLS.map(t => {
+  const home = t.nav!.home!;
+  return {
+    name: t.name,
+    desc: home.desc ?? t.tagline,
+    path: `/products/${t.slug}`,
+    tag: home.tag,
+    tagColor: home.free ? TAG_COLORS.Free : TAG_COLORS[home.tag],
+    accent: t.accent.bg,
+  };
+});
 
 function SocialIcon({ type }: { type: string }) {
   if (type === 'x') return (
@@ -42,18 +55,7 @@ export function HomePage() {
     }
   }
 
-  const tools = [
-    { name: 'PageRoast', desc: 'Landing page CRO audit + savage roast', path: '/products/page-roast', tag: 'Marketing', accent: 'bg-fire-500' },
-    { name: 'HeadlineGrader', desc: '4-framework headline scoring', path: '/products/headline-grader', tag: 'Marketing', accent: 'bg-indigo-500' },
-    { name: 'AdScorer', desc: 'Platform-specific ad grading', path: '/products/ad-scorer', tag: 'Marketing', accent: 'bg-emerald-500' },
-    { name: 'ThreadGrader', desc: 'X/Twitter thread viral analysis', path: '/products/thread-grader', tag: 'Marketing', accent: 'bg-sky-500' },
-    { name: 'EmailForge', desc: '5-email sequence generator', path: '/products/email-forge', tag: 'Marketing', accent: 'bg-amber-500' },
-    { name: 'AudienceDecoder', desc: 'Audience archetype + engagement', path: '/products/audience-decoder', tag: 'Marketing', accent: 'bg-purple-500' },
-    { name: 'LaunchGrader', desc: 'Go-to-market readiness audit', path: '/products/launch-grader', tag: 'Marketing', accent: 'bg-teal-500' },
-    { name: 'StackAudit', desc: 'SaaS tool stack cost + waste finder', path: '/products/stack-audit', tag: 'Ops', accent: 'bg-slate-500' },
-    { name: 'Stepproof', desc: 'YAML scenario tests for AI pipelines', path: '/products/stepproof', tag: 'Dev', accent: 'bg-cyan-500' },
-    { name: 'LocalScore', desc: 'Private doc analysis via WebGPU', path: '/products/local-score', tag: 'Free', free: true, accent: 'bg-green-500' },
-  ];
+  const tools = HOME_TOOL_CARDS;
 
   return (
     <article className="max-w-5xl mx-auto px-6">
@@ -158,12 +160,7 @@ export function HomePage() {
             <Link key={tool.name} to={tool.path}
               className={`group flex items-center gap-4 px-5 py-4 hover:bg-warm-50 transition-colors ${i < tools.length - 1 ? 'border-b border-warm-100/80' : ''}`}>
               <span className={`w-2 h-2 rounded-full ${tool.accent} shrink-0`} />
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${
-                tool.free ? 'bg-green-50 text-green-600' :
-                tool.tag === 'Dev' ? 'bg-violet-50 text-violet-600' :
-                tool.tag === 'Ops' ? 'bg-sky-50 text-sky-600' :
-                'bg-warm-100/80 text-warm-500'
-              }`}>{tool.tag}</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${tool.tagColor}`}>{tool.tag}</span>
               <span className="font-semibold text-sm text-warm-800 group-hover:text-warm-900 transition-colors w-36 shrink-0">{tool.name}</span>
               <span className="text-sm text-warm-500 truncate">{tool.desc}</span>
               <svg className="w-4 h-4 text-warm-300 group-hover:text-fire-500 group-hover:translate-x-0.5 ml-auto shrink-0 transition-all" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" /></svg>

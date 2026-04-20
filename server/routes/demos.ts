@@ -7,6 +7,7 @@ import { getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount } from '
 import { verifyClerkToken, requireAuth, EMAIL_RE } from '../clerk.js';
 import { validatePublicUrl, fetchPageBounded } from '../services/page-fetch.js';
 import { parseJsonResponse } from '../utils.js';
+import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
 // ── Usage tracking utilities ──────────────────────────────────────
 
@@ -1942,7 +1943,7 @@ Overall winner: Sequence ${winner} by ${margin} points.`;
     // AudienceDecoder is a one-time purchase product — check hasPurchased instead of subscription
     const _adIpHash = hashIp(req.ip);
     const _adEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const _adRate = await checkRateLimit(_adIpHash, 'audience-decoder', _adEmail, 'audiencedecoder_report');
+    const _adRate = await checkRateLimit(_adIpHash, 'audience-decoder', _adEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
     if (!_adRate.allowed) {
       reply.status(429);
       return {
@@ -2045,7 +2046,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
 
     const adcIpHash = hashIp(req.ip);
     const adcEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const adcRate = await checkRateLimit(adcIpHash, 'audience-decoder', adcEmail, 'audiencedecoder_report');
+    const adcRate = await checkRateLimit(adcIpHash, 'audience-decoder', adcEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
     if (!adcRate.allowed) {
       reply.status(429);
       return {

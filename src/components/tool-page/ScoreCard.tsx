@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { gradeColorLight } from './colors.js';
-import { type ToolTheme, getToolTheme } from './themes.js';
+import { type ToolTheme, getToolTheme } from '../../config/tools.js';
 
 export function ScoreCard({ score, grade, verdict, toolName, toolSlug }: {
   score: number; grade: string; verdict: string; toolName: string;

@@ -1,8 +1,7 @@
 import { dbGet, dbRun, dbTransaction, txGet, txRun } from '../db.js';
+import { TOKENS_PER_SINGLE, TOKENS_PER_BUNDLE } from '../../shared/product-catalog.js';
 
 const FREE_TOKEN_GRANT = 1;
-const TOKENS_PER_SINGLE = 1;
-const TOKENS_PER_BUNDLE = 7;
 
 export { TOKENS_PER_SINGLE, TOKENS_PER_BUNDLE };
 

@@ -7,8 +7,14 @@ import {
   saveOneTimePurchase, priceToPlanTier, hasActiveSubscriptionLive,
 } from '../services/stripe.js';
 import { upsertLicenseKey, getLicenseKeysForEmail, validateLicenseKey } from '../services/license.js';
-import { creditTokens, grantFreeTokens, hasTokenAccount, TOKENS_PER_SINGLE, TOKENS_PER_BUNDLE } from '../services/tokens.js';
+import { creditTokens, grantFreeTokens, hasTokenAccount } from '../services/tokens.js';
 import { dbRun } from '../db.js';
+import {
+  PRODUCT_KEYS,
+  entryForPriceType,
+  entryForPriceId,
+  type PriceType,
+} from '../../shared/product-catalog.js';
 
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -43,7 +49,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
   app.post('/api/stripe/create-checkout-session', async (req, reply) => {
     const body = req.body as {
       email?: string;
-      priceType?: 'contentgrade_pro' | 'contentgrade_business' | 'contentgrade_team' | 'audiencedecoder_report' | 'pageroast_tokens' | 'pageroast_token_single';
+      priceType?: PriceType;
       successUrl?: string;
       cancelUrl?: string;
     } | null;
@@ -55,6 +61,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     }
 
     const priceType = body?.priceType ?? 'contentgrade_pro';
+    const catalogEntry = entryForPriceType(priceType);
     const stripe = getStripe();
 
     if (!stripe) {
@@ -62,28 +69,13 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       return { error: 'Stripe not configured' };
     }
 
-    let priceId: string | undefined;
-    let mode: 'subscription' | 'payment';
-
-    if (priceType === 'contentgrade_pro') {
-      priceId = process.env.STRIPE_PRICE_CONTENTGRADE_PRO;
-      mode = 'subscription';
-    } else if (priceType === 'contentgrade_business') {
-      priceId = process.env.STRIPE_PRICE_CONTENTGRADE_BUSINESS;
-      mode = 'subscription';
-    } else if (priceType === 'contentgrade_team') {
-      priceId = process.env.STRIPE_PRICE_CONTENTGRADE_TEAM;
-      mode = 'subscription';
-    } else if (priceType === 'pageroast_tokens') {
-      priceId = process.env.STRIPE_PRICE_TOKENS;
-      mode = 'payment';
-    } else if (priceType === 'pageroast_token_single') {
-      priceId = process.env.STRIPE_PRICE_TOKEN_SINGLE;
-      mode = 'payment';
-    } else {
-      priceId = process.env.STRIPE_PRICE_AUDIENCEDECODER;
-      mode = 'payment';
+    if (!catalogEntry) {
+      reply.status(400);
+      return { error: 'Unknown priceType' };
     }
+
+    const priceId = process.env[catalogEntry.envVar];
+    const mode = catalogEntry.mode;
 
     if (!priceId) {
       reply.status(503);
@@ -186,18 +178,15 @@ export function registerStripeRoutes(app: FastifyInstance): void {
           const licenseKey = await upsertLicenseKey(email, stripeCustomerId, 'contentgrade_pro');
           console.log(`[stripe] License key issued for ${email}: ${licenseKey.slice(0, 10)}...`);
         } else if (data.mode === 'payment' && email && stripeCustomerId) {
-          let productKey = 'audiencedecoder_report';
+          let productKey: string = PRODUCT_KEYS.AUDIENCEDECODER_REPORT;
           let tokenAmount = 0;
           try {
             const s = getStripe()!;
             const lineItems = await s.checkout.sessions.listLineItems(data.id, { limit: 1 });
-            const purchasedPriceId = lineItems.data[0]?.price?.id;
-            if (purchasedPriceId === process.env.STRIPE_PRICE_TOKENS) {
-              productKey = 'pageroast_tokens';
-              tokenAmount = TOKENS_PER_BUNDLE;
-            } else if (purchasedPriceId === process.env.STRIPE_PRICE_TOKEN_SINGLE) {
-              productKey = 'pageroast_tokens';
-              tokenAmount = TOKENS_PER_SINGLE;
+            const matched = entryForPriceId(lineItems.data[0]?.price?.id, process.env);
+            if (matched) {
+              productKey = matched.productKey;
+              tokenAmount = matched.tokenAmount ?? 0;
             }
           } catch { /* default to audiencedecoder */ }
 
@@ -208,7 +197,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             product_key: productKey,
           });
 
-          if (productKey === 'pageroast_tokens' && tokenAmount > 0) {
+          if (productKey === PRODUCT_KEYS.PAGEROAST_TOKENS && tokenAmount > 0) {
             if (!(await hasTokenAccount(email))) await grantFreeTokens(email, 0);
             await creditTokens(email, tokenAmount, data.payment_intent as string);
             console.log(`[stripe] Credited ${tokenAmount} tokens for ${email}`);
@@ -458,7 +447,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 
     return {
       active,
-      audiencedecoder: await hasPurchased(email, 'audiencedecoder_report'),
+      audiencedecoder: await hasPurchased(email, PRODUCT_KEYS.AUDIENCEDECODER_REPORT),
       plan: active ? 'contentgrade_pro' : null,
       licenseKey: activeLicenseKey,
       configured: isStripeConfigured(),

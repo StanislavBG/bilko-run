@@ -673,5 +673,415 @@ Early. The credit model means every use generates revenue. No free-tier subsidiz
     new Date().toISOString(),
   );
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Week-in-review: Apr 13-20, 2026 — one post per active project
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Seed OutdoorHours week-in-review post
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'building-outdoorhours-121-months-of-weather',
+    'Building OutdoorHours: 121 Months of Weather in Six Commits',
+    'We shipped a 10-year, six-county outdoor-comfort dashboard in a week — from a single-screen v1 to multi-range, multi-region bundles with 121 AI-written monthly narratives. Here is what actually happened.',
+    `## The question behind the tool
+
+"Was it comfortable to be outside?"
+
+Every climate dashboard I could find answers a different question — averages, anomalies, trend lines. None of them answer the one that matters if you're picking where to live, when to travel, or where to hold an outdoor event: **how many hours of the year can you actually be outside without sweating, shivering, squinting, or getting rained on?**
+
+So we built [OutdoorHours](/projects/outdoor-hours) (internal name KOUT-7). Six commits between April 17 and April 19. By the end of the week the dashboard covered 124 data files, 121 months of AI-written narratives, and four time ranges across six counties.
+
+## The four-rule model
+
+Every hour of the last 30 years is scored against four non-negotiable rules. All four must pass:
+
+- **Daytime** — the sun is up
+- **Temperature** — 45°F to 86°F
+- **UV index** — 6 or lower
+- **Rain** — 1 mm/h or less
+
+Hourly ERA5 reanalysis data for each region goes in. A single boolean comes out: comfortable or not. Sum the comfortable hours over a month, a year, a decade — and you have a ranking that survives comparison across climates that are nothing alike.
+
+The rules are strict on purpose. Loosen any one and the ranking collapses into "which region has more daylight." All four together isolate the thing people actually feel when they step outside.
+
+## v1 → v4 in three days
+
+**v1 (commit \`de324e3\`)** shipped the skeleton: two hard-coded regions (Bay Area vs. Seattle), Plotly charts, four grain levels (yearly → monthly → daily → hourly), and a single time range. About 1,134 lines of \`OutdoorHoursPage.tsx\` doing too much.
+
+**v2 (commit \`5348f5e\`)** rebuilt the Four Rules section as color-coded cards with a "4 of 4 must pass" badge, then added the thing people asked for in the first five minutes: **row-click drill-in**. Click a month, get the daily breakdown. Click a day, get the 24 hourly rows with the specific rule that failed on each one. The hourly schema surfaces the four drivers (day? / temp / UV / rain) alongside the score so you can see *why* an hour didn't count.
+
+**v3 (commit \`e8d2aca\`)** broke the two-region ceiling. Region metadata moved into the data bundles themselves — colors, default-on flags, display names — so adding a new region is a Python-side registry change plus a data export. Added San Francisco (Mission / Pacific Heights / Ocean Beach) and Snohomish County, WA. Time range picker (1y / 5y / 10y / 30y) with lazy-loaded bundles and a leaderboard that stars the leader in champagne. Post-v3 bundle sizes: **265 KB / 1.3 MB / 2.9 MB** for 1y / 5y / 10y.
+
+**v4 (commit \`7bd2292\`)** added the "Writer's Take" — an AI-generated one-sentence summary per bundle, rendered as an amber card to visually separate narrative from numbers. The narratives ship *pre-computed* inside the JSON; zero runtime LLM calls, zero latency, zero API cost per page view.
+
+## 121 months of narratives, zero server load
+
+The narratives commit (\`8b8d897\`) is the piece I'm most proud of. Every one of 121 monthly buckets now has an AI-written summary that compares all active regions on stay-outside hours — the leader, the laggard, and the weather driver that explains the gap. It appears inside the drill-in panel when a user opens a month.
+
+The trick: we generated all 121 narratives offline with a local \`claude -p\` pipeline, baked them into the data bundles at export time, and now they ship as static JSON. The entire OutdoorHours tool is a static SPA. No server-side AI. No per-request cost. No rate limits.
+
+Total narrative payload: about **21 KB** of metadata across all time ranges. That's the unit cost of adding an LLM-authored voice to a 30-year dataset.
+
+## The data refresh that doubled coverage
+
+Commit \`75bb766\` is unglamorous but mattered: 124 files touched, adding Charlotte County, FL (Punta Gorda / Port Charlotte / Englewood), partial coverage for Albemarle County, VA (Charlottesville / Crozet / Earlysville, limited by Open-Meteo quota), and completing Snohomish County with the missing Edmonds series. Westchester NY and Maui HI are registered in the pipeline but filtered out of the active bundle until their data backfills complete.
+
+Post-refresh bundle sizes: **509 KB / 2.5 MB / 5.0 MB**. Still comfortably under the "slow-3G fails" threshold even for the 10-year bundle.
+
+## What else shipped this week in the Bilko repo
+
+Three smaller wins that matter more than they look:
+
+- **LocalScore E2E tests (\`9141c44\`)** — 9 Playwright tests across all four analysis modes (contract, financial, meeting, general), driven by a mocked Anthropic Gemma engine injected via \`addInitScript\`. This unblocks refactors of the browser-AI tool without needing a GPU in CI.
+- **Simplify + parallelize (\`e5d8a80\`)** — extracted a 235-line fixtures file, removed a dead \`setStatus('loading-model')\` call React had already batched away, and flipped \`fullyParallel\` on in the Playwright config. Test suite went from **17.9s → 5.7s**.
+- **Security: gate the test seam (\`debab78\`)** — the \`window.__LOCALSCORE_MOCK_ENGINE\` hook we used to inject a fake AI in tests was shipping to production, meaning any browser extension or XSS in the page could swap our in-browser AI for one of theirs and exfiltrate user documents. Now gated behind a \`__TEST_SEAMS__\` Vite define that evaluates to \`false\` in production and gets dead-code-eliminated from the bundle. Verified: zero occurrences of \`__LOCALSCORE_MOCK_ENGINE\` in the production build.
+
+Plus **CardSpotter planning (\`aca9910\`)** — 10 agent-ready work packages (1,974 lines of markdown across 11 docs) for the next bilko.run tool: upload a card photo, get a structured list plus a poker-hand evaluation. Implementation lands next week.
+
+## What I'd do differently
+
+I'd build the N-region architecture in v1. We paid for "two hard-coded regions" twice — once in v1, once in v3 when we tore it out. If you're building a comparison tool, there is no such thing as "just two things" — there's always a third, and a fourth, and a sixth county in Florida that someone in the Discord wants added.
+
+I'd also pre-generate narratives earlier. Monthly narratives look like a late-game polish feature. They're actually the thing that makes the drill-in feel human. Adding them in v4 was fine; adding them in v2 would have been better.
+
+## Try it
+
+[OutdoorHours](/projects/outdoor-hours) is live with 1-year, 5-year, 10-year, and 30-year views across six regions. Free, no credits, no login. Drill into any month to see the hour-by-hour breakdown and the Writer's Take.
+
+If you want to see the broader platform, [the full tool list is here](/projects). And if you're running a landing page without clear data backing, [PageRoast](/projects/page-roast) will tell you exactly where it breaks.
+
+## FAQ
+
+**Why not just show average temperature?**
+Because average temperature lies. A city that averages 65°F year-round might do it by being 90°F all summer and 40°F all winter — zero comfortable hours. Hour-by-hour scoring catches that.
+
+**Where does the weather data come from?**
+Open-Meteo's ERA5 historical reanalysis. Hourly resolution going back to 1996.
+
+**Why pre-generate the narratives instead of calling an LLM live?**
+Cost and latency. 121 months × N regions × every page view = a bill. Baking them into the bundle at export time means the tool is static JSON + a React page. Zero per-request cost.`,
+    'build-log',
+    new Date().toISOString(),
+  );
+
+  // Seed Burrow week-in-review post
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'burrow-from-background-task-to-cron-orchestrated',
+    'Burrow, Week 16: From Crashing Background Task to Cron-Orchestrated',
+    'Our local-first social automation agent kept silently double-posting and losing settings on restart. Four commits later it is cron-orchestrated, traced, idempotent, and routing replies through a seven-mode tone palette. Here is what actually changed.',
+    `## Why this week mattered
+
+Burrow is our local-first social media agent — a FastAPI server that drives real Playwright-Chromium browsers to scroll, like, and reply across X, Reddit, LinkedIn, and Facebook. Everything runs on the laptop, nothing routes through a cloud API, and every action hits the same DOM a human would.
+
+Week 16 was the week Burrow graduated from "background task that occasionally crashes and silently double-posts" to something I trust to run unattended overnight. Four commits, 77 files in the largest one, and the stack ended the week with cron-level orchestration, Playwright tracing, a reply-tone doctrine, and atomic reply idempotency.
+
+## Commit 1 — The big refactor (\`07a85bc\`, +7,527 lines)
+
+Before this week, the orchestrator ran in-process as a background task inside the FastAPI server. Two problems: it crashed on malformed state, and running \`--status\` from the dashboard accidentally triggered spurious run markers because the engine and the status check shared a database.
+
+**The fix:** move orchestration out of the process entirely.
+
+- \`scripts/orchestrator-cron.sh\` runs every 5 minutes via \`flock\` (a Linux mutual-exclusion lock, so two ticks can't overlap).
+- The in-process \`OrchestratorEngine\` now runs with \`read_only=True\` — dashboard can read state, never write.
+- Dashboard write routes return **403 if \`engine.read_only\`**, **409 if another pipeline is mid-run**. No more races.
+
+The tradeoff is real: 5-minute granularity means sub-minute reactions are gone. For social posting that's fine. For a trading bot it wouldn't be.
+
+The other big move in this commit: **14 Claude prompts moved out of Python and into \`data/prompts/**/*.md\`**, loaded by a new \`app/shared/prompts.py\` using Python's \`string.Template\` with an LRU cache. Every pipeline — X, Reddit, LinkedIn, Facebook — now sources its drafting, planning, and review prompts from markdown. You can tune tone without a deploy.
+
+### The reply doctrine
+
+The most opinionated piece of the refactor is the tone doctrine. v2 had a single reply template and every response sounded like the same robot. v3 shipped \`data/x-reply-strategy.md\` with **seven modes**:
+
+- \`affirm_reinforce\` — "yes, and here's the other reason"
+- \`quiet_cosign\` — a minimal nod
+- \`lived_parallel\` — "same, different context"
+- \`specific_noticing\` — pick out a detail most readers missed
+- \`genuine_curiosity\` — one question, not interrogation
+- \`dry_oneliner\` — wit
+- \`resonance_close\` — validation on an emotional post
+
+Most modes ban ending on a question and ban opening with "actually" or "hot take." LinkedIn got its own stricter four-verb doctrine: commend → agree → expand → wish.
+
+The mode gets chosen per-candidate by the planner based on the tweet's content class. A venting post gets \`resonance_close\`. A witty observation gets \`dry_oneliner\`. One template → seven; the feed stops sounding like one person replying to everything the same way.
+
+### DeepResearch infographics
+
+Also slipped into this commit: a Step 6 that auto-generates infographics for research runs via Gemini Nanobanana, exports to \`.txt / .md / .docx / .pdf\`, and stores 50 runs in memory with a 24-hour TTL. Desktop gets a \`ResearchTab.tsx\` with a per-image gallery. This is the bridge between Burrow's Claude-driven research output and something visual you can actually share.
+
+## Commit 2 — Tracing and guards (\`7f3ae92\`)
+
+Cron was reporting "3 replies posted" when X was silently throttling 2 of them. Every action looked like a success in the logs because we weren't looking at the activity stream for error actions.
+
+Four things changed:
+
+- **Silent failure detection**: runs that finish but have error actions in \`activity_stream\` now flip to \`status='failed'\`, not \`completed\`. Dashboard stops lying to you.
+- **Playwright tracing** wraps every scroll session. On crash, we retain a \`.zip\` in \`downloads/traces/\` replayable via \`playwright show-trace\`. Forensics, not logs.
+- **Circuit breaker persistence**: the X tracker's \`session_state\` KV table now stores product-reply cooldown markers across sessions. 45-minute minimum gap survives process restarts.
+- **New-account warmup**: capture-threshold lowered from P50 → P25 for accounts with less than two weeks of history. A brand-new account was filtering 100% of tweets because the capture-policy weights were tuned on older data.
+
+## Commit 3 — Atomicity and schema v2 (\`b78a03c\`)
+
+The subtle bug was this: Burrow would start to reply, navigate to the tweet, X would force a logout or crash the tab, the process would restart, and on the next cron tick Burrow would reply *again* — because the interaction row hadn't been written yet.
+
+**Fix:** \`_post_reply\` now pre-writes a \`reply_pending\` interaction row **before** navigating. If the process dies, the pending row blocks the next session from re-attempting. The idempotency cache treats any row — pending or posted — as "already tried."
+
+Other atomicity wins:
+
+- **Settings persistence**: PUT \`/settings\` now writes \`interval\`, \`window\`, \`jitter\`, \`duration\` to \`schedule_state.config_overrides_json\`. Restarts no longer wipe tuning.
+- **Content calendar schema v2**: \`posts.category\` is now \`NOT NULL DEFAULT 'general'\` with a \`schema_version\` table so future migrations are tracked.
+- **High-opp hysteresis**: if the 24-hour success rate on high-opportunity replies drops below 60% (over 5+ attempts), the phase skips entirely. X is telling us to cool off; we listen.
+- **Tier-3 fallback**: classifier fallback bumped from "after 2 consecutive failures" to "after 3" with a warning on the third.
+- **\`/locator/wait\` endpoint**: pre-waits for a Playwright selector to become visible before extracting. Kills the "Execution context was destroyed" race that showed up when the feed re-rendered mid-extract. Costs 50–200 ms per extract; worth every millisecond.
+- **Timezone helper**: \`app/shared/tz.py\` surfaces \`*_local\` timestamps so the dashboard shows PDT instead of UTC.
+
+## Commit 4 — Dedup funnel, prompt escaping, high-opp caps (\`5164fbb\`)
+
+Three tight fixes that each unblocked a real run:
+
+**Dedup was over-aggressive.** \`_dedup_against_tracker\` was using the \`seen_tweets\` table (which records every tweet we ever *rendered*, 8K+ rows) as a deny-list. But the intent of dedup is "don't double-reply to the same tweet," not "never show a tweet we've ever seen." A run had 71 feed items, the old dedup killed it to 3 candidates, the planner had nothing to work with. The fix: dedup against the \`interactions\` table only. Same run, post-fix: **71 → 147 candidates after merge**. \`seen_tweets\` stays populated for analytics but no longer chokes the planner.
+
+**Prompt \`$\` escaping.** \`string.Template.safe_substitute\` treats \`$word\` as a placeholder. Tweets like "I love $Bitcoin" triggered false "unresolved placeholder" warnings and could leak a literal \`$$Bitcoin\` into the Claude prompt. Fix: escape literal \`$\` to \`$$\` before substitution, collapse back to \`$\` after. Claude sees \`$Bitcoin\` exactly as written.
+
+**High-opportunity cap bypass.** High-opp replies (crafted replies to high-visibility, low-reply-count tweets) were sharing a budget with organic replies. A run queued three high-opp candidates; all three got dropped because two organic replies had already eaten the 2-per-session cap. Now high-opp has its own \`daily_high_opp_limit=5\` budget, passed through as an \`is_high_opp\` flag. Five crafted replies plus two quick reactions per day, no fighting.
+
+## What shipped, in one line per commit
+
+| Commit  | Focus       | Outcome                                                                   |
+|---------|-------------|---------------------------------------------------------------------------|
+| 07a85bc | Architecture| Cron decoupling, 14 prompts externalized, 7-mode reply doctrine, infographics |
+| 7f3ae92 | Hardening   | Silent-failure detection, Playwright tracing, persistent circuit breakers |
+| b78a03c | Atomicity   | Pre-write pending rows, settings persistence, locator-wait, schema v2     |
+| 5164fbb | Fixes       | Dedup 71→147, prompt \\$ escaping, high-opp budget isolation              |
+
+## What I'd do differently
+
+I'd have moved prompts to files in week 2, not week 16. Every Python redeploy to tweak a one-line prompt tweak was a tax I paid for months. LRU-cached markdown loaders took 40 lines to add.
+
+I'd also have wired Playwright tracing before the first overnight run, not after watching three mystery failures with no forensic trail. Tracing is cheap. Post-hoc debugging from partial logs is not.
+
+## What's next
+
+Now that the cron loop is honest about failures, the next week is tuning: can we lower the 45-minute product cooldown (probably yes), can we raise the hysteresis floor (probably no), does the lowered capture P25 produce measurably better engagement on new accounts (unknown — need a week of data).
+
+Burrow isn't a [bilko.run](/projects) tool — it runs on my laptop, not in the cloud. But the reply doctrine work is interesting enough that we may spin out a scored version of it inside [ThreadGrader](/projects/thread-grader) or [AudienceDecoder](/projects/audience-decoder) next sprint.
+
+## FAQ
+
+**Is Burrow for sale?**
+No. It drives real browsers on real accounts, which is the opposite of what platforms want automated, and we run it against our own accounts only.
+
+**Why local-first instead of a cloud API?**
+Because every API path (X, LinkedIn, Reddit) is either rate-limited, stripped of the features we need, or both. Driving the actual DOM is the only way to do the full surface.
+
+**What's the reply success rate after the hardening?**
+Measurable after one more week of data. Before the hardening we literally didn't know — the logs lied. Now we do.`,
+    'build-log',
+    new Date().toISOString(),
+  );
+
+  // Seed npr-podcast week-in-review post
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'npr-ad-skipper-gemini-only-and-97-percent-agreement',
+    'The NPR Ad Skipper: Going Gemini-Only and Getting 97.5% Agreement with Claude',
+    'We ripped out 2,000 lines of OpenAI and Whisper code, moved the entire ad-detection pipeline onto Gemini, then ran it head-to-head against Claude Opus on a 15-episode corpus. 58 of 60 ad blocks matched. Here is why that matters.',
+    `## The tool
+
+[npr-podcast](https://github.com/StanislavBG) is an ad-free podcast player for NPR shows — The Indicator, Planet Money, Hidden Brain, Short Wave, Up First. It fetches the RSS feed, transcribes the audio, detects ad breaks, and auto-skips them during playback. Front-end is React; workflow is orchestrated through [bilko-flow](/projects) (our open-source pipeline library, more on that shortly); audio processing hits Gemini.
+
+This week the tool went through four real changes: a big architectural simplification, a bug that was freezing the UI on mobile, a full classifier evaluation, and a mobile-UX polish pass. Eleven commits in a single day on April 19.
+
+## 1. Ripping out OpenAI and Whisper (commit \`c1245f2\`)
+
+The pipeline used to have two speech-to-text paths (OpenAI Whisper + Gemini) and **18 regex heuristics** for ad-boundary detection (\`AD_PATTERNS\`, \`CONTINUE_BREAK_RE\`, \`extendEndBoundaries\`, and friends). It was a mess of fallbacks: if Whisper fails, use Gemini; if the LLM boundary looks off, run the regex extender.
+
+We deleted all of it. 2,000+ lines gone. The pipeline is now:
+
+- **Speech-to-text**: \`gemini-2.0-flash\` (fast, cheap, good enough)
+- **Ad classification**: \`gemini-2.5-pro\` (slower, smarter, $-per-episode tolerable)
+- **Boundary refinement**: the same classification call, no post-hoc regex
+
+The regex heuristics existed because our first classifier was bad at production credits. "This episode was produced by..." would end the transcript without flagging the sponsors that followed. Upgrading the prompt to explicitly mark credits as the *opening* of a post-roll break — plus moving classification to \`gemini-2.5-pro\` — killed the need for the regex extender entirely.
+
+When \`GEMINI_API_KEY\` isn't set, the pipeline now emits **zero ad blocks with a diagnostic message**. Previously it would silently fall back to regex-only detection and miss 30% of ads. Silent failure is worse than loud failure.
+
+## 2. The eval harness and 97.5% agreement (commits \`ff85712\`, \`8e42b6e\`, \`f31ba0a\`, \`351794d\`)
+
+Here's the question anyone building an LLM pipeline should ask but usually doesn't: **"How do I know this is actually working?"**
+
+We built an eval harness in \`scripts/eval-classifier.ts\` that runs two models — Gemini 2.5 Pro and Claude Opus 4.7 — over the same 15-episode fixture corpus and compares block-level agreement. The corpus spans all five podcasts, episodes ranging from 15 to 7,178 words of transcript, with 2–9 ad breaks each.
+
+Results: **58 of 60 ad blocks matched. Two false negatives. One false positive. 97.5% F1.**
+
+The two disagreements are policy questions, not capability gaps. The models disagreed on whether NPR live-tour promos count as ads — which is an editorial call, not a correctness question. On the 58 they both agreed on, the block boundaries match to within a few words.
+
+That number is load-bearing for the whole architecture: if the cheaper, faster model disagreed with the frontier model on actual ad detection, we'd have to pay for the frontier model at inference time. 97.5% agreement means we can run Gemini in production and trust Claude as an oracle for regression testing.
+
+The 15 fixtures — 42 to 334 events per episode, ~730 KB total — now live in \`tests/fixtures/runs/\`. Replay tests (\`tests/fixtures-replay.spec.ts\`) run the reducer against captured SSE event streams without any LLM calls. CI runs these offline. Fast, deterministic, free.
+
+## 3. The chunking-stuck bug (commit \`ffc84dc\`)
+
+User report: "UI freezes when playing online, chunks don't process properly."
+
+Three bugs, all of them mine, stacked on top of each other:
+
+**(a) SSE reconnect was a TODO comment.** On any network blip — mobile sleep/wake, proxy timeout, aggressive CGNAT — the UI froze while the server kept working. Fix: exponential backoff from 1s to 30s, snapshot re-fetch, resubscribe with the correct \`lastEventId\` so we don't replay events we've already applied.
+
+**(b) Reducer monotonicity.** The \`step_emit_skips\` event handler could *shrink* \`totalChunks\` because it took the \`min\` of the existing max and the event's value. If events arrived out of order (which they do under reconnect), the total would visibly tick downward. Fix: \`Math.max\`, not \`Math.min\`.
+
+**(c) RunPanel progress > 100%.** Displayed raw completion count without clamping. Under out-of-order events, the bar would show 103% and looked broken. Fix: clamp to \`[0, total]\`.
+
+Added 7 unit tests in \`tests/run-store.spec.ts\` covering idempotent replay, out-of-order completion, and monotonic chunk counts. Also fixed \`parseDuration()\` to accept numeric durations: Planet Money's feed sends numbers, Hidden Brain sends strings. One more case where "the real world is more annoying than the test fixtures" bit us.
+
+## 4. Mobile UX and a11y polish (commit \`3da5812\`)
+
+Nine small changes, each worth about 2% on its own, collectively noticeable:
+
+- Tap targets on play/skip bumped to **≥44px** (Apple HIG minimum).
+- \`focus-visible\` rings on every interactive control.
+- Semantic roles: \`role=switch\` on the auto-skip toggle, \`aria-label\` on player buttons, \`aria-expanded\` / \`aria-controls\` on RunPanel.
+- Episode tile labels bumped from 10–11px to 12px.
+- WebKit scrollbars styled to match Firefox's \`scrollbar-width: thin\` on sandbox detail panes.
+
+Accessibility work usually doesn't make it into build logs because it's not glamorous. It matters: screen readers now name the player controls correctly, and the tool stops failing \`axe-core\` audits.
+
+## 5. bilko-flow moves to npm (commits \`72a37ad\`, \`40bf848\`)
+
+The pipeline library — [bilko-flow](/projects) — used to ship via a Git URL in \`package.json\`. Deploys were brittle: Replit couldn't always reach the private repo, and \`npm install\` was slow because it cloned the whole history.
+
+We moved bilko-flow to the public npm registry. Two commits, because v0.3.0's published tarball didn't include \`src/\` (npr-podcast imports some paths directly from source), so we bumped to v0.3.1 and added \`src\` to the \`files\` whitelist. Fixed in one line.
+
+The broader story of that npm publish is [its own post](/blog/bilko-flow-v0-3-1-first-npm-release).
+
+## What I'd do differently
+
+I'd have written the eval harness before removing Whisper, not after. We ran the removal on faith and got lucky that 97.5% agreement held. If the eval had come back at 82%, we'd have reverted — but we wouldn't have known until a week of user reports came in.
+
+I'd also have built the fixture corpus from day one. 15 captured pipeline runs turn "does this change break anything" from a 20-minute manual test into a 9-second replay. Every LLM pipeline should ship with recorded fixtures before it ships anything else.
+
+## What's next
+
+Ad classification accuracy is high enough that we're moving to the playback layer: smoother skips, no audible glitch at boundaries, and optional "skip with a beep" for users who want to know an ad was there. Also investigating whether we can precompute ad blocks on the server when the episode first drops, so new listeners get zero-latency skips.
+
+## FAQ
+
+**Why Gemini and not Claude in production?**
+Cost and speed. \`gemini-2.0-flash\` is ~10× cheaper than Opus and ~3× faster for STT. The 97.5% agreement says we don't pay for the difference.
+
+**Does this work on podcasts that aren't NPR?**
+The RSS fetcher is NPR-flavored (handles their specific feed quirks). The classification pipeline would work on any podcast — NPR just has consistent ad structure so it's a good starting point.
+
+**Will this be a bilko.run tool?**
+Probably not — it's not really monetizable as a one-shot AI analysis. But the eval harness pattern and the bilko-flow-based pipeline are both going to show up in other bilko.run tools.`,
+    'build-log',
+    new Date().toISOString(),
+  );
+
+  // Seed bilko-flow week-in-review post
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'bilko-flow-v0-3-1-first-npm-release',
+    'Shipping bilko-flow v0.3.1: Our First Public npm Package',
+    'We open-sourced the workflow library that powers the NPR ad skipper. Two commits, one license change, one missing folder in the tarball — and a pile of lessons about what it actually takes to publish a usable package.',
+    `## What bilko-flow is
+
+[bilko-flow](https://www.npmjs.com/package/bilko-flow) is a TypeScript library for describing, validating, and executing deterministic workflows from natural language. It's the piece that sits between "a user describes what they want" and "an executor runs a reproducible pipeline."
+
+Three capabilities that matter:
+
+- **Text-to-pipeline**: an \`LLMPlanner\` turns a natural-language description into a validated DSL document
+- **Determinism grades**: every workflow declares itself \`Pure\`, \`Replayable\`, or \`Best-Effort\`, and the compiler enforces it
+- **Provenance**: the reference executor hashes inputs with SHA-256 and signs runs with HMAC, so you can prove what actually ran
+
+It also ships React components (\`FlowProgress\`, \`FlowCanvas\`, \`FlowTimeline\`) for visualizing running pipelines, and adapters for memory stores, Ollama, vLLM, TGI, and LocalAI.
+
+Internally, bilko-flow has been the backbone of the [NPR ad skipper](/blog/npr-ad-skipper-gemini-only-and-97-percent-agreement) pipeline for months. This week it graduated to a public npm package.
+
+## Commit 1: MIT license (\`40636a9\`)
+
+The previous license was a boilerplate "all rights reserved" — fine for internal use, broken for everything else. npm's ecosystem assumes permissive licensing; a proprietary package can't be a transitive dependency of anything open.
+
+Switching to MIT was a five-line change: license header, \`LICENSE\` file, \`"license": "MIT"\` in \`package.json\`, \`README\` badge, and removing \`"private": true\`. The important part isn't the lines — it's the decision that this library is worth more to us as something others can build on than as something we keep to ourselves.
+
+Not every internal library clears that bar. bilko-flow does because the contract (a typed DSL with determinism grades) is the sort of thing that's genuinely useful to other people building LLM pipelines, and nothing in it is specific to what we do with it.
+
+## Commit 2: The src/ tarball bug (\`581175f\`)
+
+v0.3.0 shipped to npm. The NPR ad skipper picked it up. Build broke.
+
+The reason: npm's default \`files\` whitelist includes \`package.json\`, \`LICENSE\`, and whatever \`main\` points to. It does *not* include \`src/\`. Our \`package.json\` had an explicit \`files\` list — which, because it was explicit, overrode the default — and \`src\` wasn't in it.
+
+The consumer (npr-podcast) does two things that needed source:
+
+1. **Vite import aliases** — imports resolve directly to \`node_modules/bilko-flow/src/*.ts\` instead of the compiled \`dist/\` exports, for hot reload during development.
+2. **\`patch-package\` patches** — specifically \`src/react/step-detail.tsx\` had a local override applied at install time.
+
+Without \`src\` in the tarball, both patterns silently break. The Vite alias resolves to a non-existent file; \`patch-package\` fails because there's nothing to patch.
+
+The fix was a single line:
+
+\`\`\`diff
+ "files": [
+   "dist",
+-  "README.md"
++  "README.md",
++  "src"
+ ]
+\`\`\`
+
+Bumped to v0.3.1. npr-podcast's \`package.json\` updated to \`"bilko-flow": "^0.3.1"\`. Build fixed.
+
+## Lessons from a two-commit release
+
+This is the kind of release people don't write build logs about. Two commits. No new features. No architecture. But it's the one that took the library from "something internal" to "something anyone can \`npm install\`," and the gap between those two states is full of exactly this kind of footgun.
+
+**Publish early so you find the footguns early.** We'd have caught the missing \`src/\` months ago if bilko-flow had been on npm in any form. Internal consumers using Git URLs don't exercise the tarball path. Your first external consumer is your first real test.
+
+**The \`files\` field is a fence, not a door.** If it's defined, npm uses it *instead of* the defaults. Every item you want shipped has to be listed.
+
+**License first, not last.** The MIT switch was technically trivial but unblocked everything downstream. We could have done it in week 1 of the project and saved ourselves the last-minute audit.
+
+## What bilko-flow is good for
+
+If you're building an LLM pipeline and you're tired of:
+
+- manually validating that the JSON your LLM emitted is a valid pipeline spec
+- reasoning about whether a step is reproducible or flaky
+- reimplementing the same React \`<ProgressBar />\` for every new workflow tool
+
+bilko-flow gives you a typed DSL, compiler-enforced determinism grades, and drop-in React components. It's Apache-licensed (well, MIT now) and on npm:
+
+\`\`\`bash
+npm install bilko-flow
+\`\`\`
+
+The [NPR ad skipper](/blog/npr-ad-skipper-gemini-only-and-97-percent-agreement) is the reference consumer. Four pipelines (fetch → parse → STT → classify → play) are orchestrated through bilko-flow, visualized with \`FlowProgress\`, and checkpoint their state so a crash mid-episode resumes cleanly.
+
+## What's next
+
+The short list for v0.4:
+
+- **\`proposeRepair\`** improvements — the planner protocol's four methods include \`proposeRepair\` for fixing broken runs, and it's the least-tested path
+- **Better adapter docs** — the Ollama / vLLM / TGI / LocalAI plug-ins all exist but their docs assume you already know how to configure each
+- **Streaming executor** — right now the reference executor is synchronous; streaming would unblock use cases where a long-running step wants to report progress
+
+And if you build something on bilko-flow, tell me. The whole reason it's public is that the contract is general enough to be worth sharing.
+
+## FAQ
+
+**Is bilko-flow competing with Temporal / Inngest / LangGraph?**
+No. Temporal and Inngest are managed workflow services; LangGraph is a graph-state library. bilko-flow is closer to a typed DSL with provenance — you could run it *inside* an Inngest function or alongside LangGraph.
+
+**Why the determinism grades?**
+Because "is this reproducible?" is the question every LLM pipeline eventually has to answer, and declaring it in the spec beats re-deriving it from the code.
+
+**Where do I read the full docs?**
+[bilko-flow on npm](https://www.npmjs.com/package/bilko-flow) — README is the canonical doc. Source is in the tarball (now) for anyone who wants to read the types directly.`,
+    'deep-dive',
+    new Date().toISOString(),
+  );
+
   console.log('[DB] Initialized' + (process.env.TURSO_DATABASE_URL ? ' (Turso)' : ' (local SQLite)'));
 }

@@ -1,43 +1,52 @@
 /**
  * OutdoorHours — KOUT-7 dashboard.
  *
- * Read-only data viz: 10 years of hourly ERA5 reanalysis collapsed into
- * "good-for-outdoors hours" via a four-rule classifier (daytime, comfortable
- * temp, safe UV, not pouring). Compares Santa Clara County, CA with Eastside
- * King County, WA.
+ * Compares an arbitrary number of counties on "was it comfortable outside?"
+ * across four rules (daytime, 45–86°F, UV ≤ 6, ≤1 mm/h rain).
  *
- * Fully static: fetches `/outdoor-hours/last10y.json` for rollups and
- * `/outdoor-hours/hourly/YYYY-MM.json` on-demand for hourly drill-ins. Plotly
- * is loaded once via CDN.
+ * Fully static:
+ *   /outdoor-hours/{tag}.json         — rollups per time range (1y/5y/10y/30y)
+ *   /outdoor-hours/hourly/YYYY-MM.json — hourly drill-in (lazy fetch)
+ *
+ * Plotly is loaded once via CDN. Region set is data-driven — add a county to
+ * the JSON bundle and it appears in the picker.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 declare global { interface Window { Plotly?: any; } }
 
 type Grain = 'yearly' | 'monthly' | 'daily';
-type RegionKey = 'santa_clara_ca' | 'eastside_king_wa';
+type RegionKey = string;
 
 interface MetricMeta { key: string; label: string; unit: string; kind: 'sum' | 'mean' | 'max' | 'pct'; }
 interface RegionGrainData { label: string; x: (string | number)[]; series: Record<string, (number | null)[]>; }
 interface GrainData { tag: string; grain: Grain; x_label: string; regions: Record<RegionKey, RegionGrainData>; }
+interface RegionInfo { label: string; short: string; color: string; ink: string; default_on: boolean; }
 interface Payload {
   tag: string;
   metrics: MetricMeta[];
   regions: Record<RegionKey, string>;
+  region_registry?: Record<RegionKey, RegionInfo>;
+  region_order?: RegionKey[];
   grains: Record<Grain, GrainData>;
   rule: { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number };
 }
 
-interface HourlyRow {
-  ts: string;
-  santa_clara_ca: Record<string, number | null>;
-  eastside_king_wa: Record<string, number | null>;
-}
+interface HourlyRow { ts: string; [region: string]: string | Record<string, number | null>; }
 interface HourlyMonth { month: string; rows: HourlyRow[]; }
 
-const REGION_COLOR: Record<RegionKey, string> = { santa_clara_ca: '#e45c3a', eastside_king_wa: '#0e8f74' };
-const REGION_ORDER: RegionKey[] = ['santa_clara_ca', 'eastside_king_wa'];
-const REGION_SHORT: Record<RegionKey, string> = { santa_clara_ca: 'SCC', eastside_king_wa: 'WA' };
+// Default palette (colorblind-safe, Wong-esque) used as fallback if a region
+// key arrives without a registry entry.
+const FALLBACK_PALETTE = ['#e45c3a', '#0e8f74', '#8e54c4', '#cc8a1a', '#3b82f6', '#db2777', '#16a34a', '#64748b'];
+
+const RANGE_ORDER: { tag: string; label: string }[] = [
+  { tag: 'last30y', label: '30 yrs' },
+  { tag: 'last10y', label: '10 yrs' },
+  { tag: 'last5y',  label: '5 yrs' },
+  { tag: 'last3y',  label: '3 yrs' },
+  { tag: 'last1y',  label: '1 yr' },
+];
+const DEFAULT_TAG = 'last10y';
 
 const PLOTLY_SRC = 'https://cdn.plot.ly/plotly-2.35.2.min.js';
 let plotlyPromise: Promise<void> | null = null;
@@ -76,16 +85,12 @@ function summarize(values: (number | null)[], kind: MetricMeta['kind']): number 
 }
 
 function findExtremes(xs: (string | number)[], ys: (number | null)[]) {
-  let hi = -Infinity, lo = Infinity, hiI = -1, loI = -1;
+  let hi = -Infinity, hiI = -1;
   ys.forEach((v, i) => {
     if (v == null || !Number.isFinite(v)) return;
     if (v > hi) { hi = v; hiI = i; }
-    if (v < lo) { lo = v; loI = i; }
   });
-  return {
-    hi: hiI >= 0 ? { x: xs[hiI], y: hi } : null,
-    lo: loI >= 0 ? { x: xs[loI], y: lo } : null,
-  };
+  return hiI >= 0 ? { x: xs[hiI], y: hi } : null;
 }
 
 function prettyBucket(x: string | number, grain: Grain | 'hourly'): string {
@@ -100,7 +105,7 @@ function prettyBucket(x: string | number, grain: Grain | 'hourly'): string {
   return day ? `${MONTHS[month]} ${day}, ${year}` : `${MONTHS[month]} ${year}`;
 }
 
-// ── Detail column schema ──────────────────────────────────────────────
+// ── Detail column schema ──
 
 type ColFmt = 'num0' | 'num1' | 'num2' | 'pts' | 'bool' | 'time';
 interface Col { key: string; label: string; fmt?: ColFmt; paired?: boolean; leading?: boolean; }
@@ -139,45 +144,57 @@ const DETAIL_COLS: Record<'hourly' | 'daily' | 'monthly', Col[]> = {
   ],
 };
 
-// ── Drill-down (all local compute, except hourly which lazy-fetches a month) ──
+// ── Local drill-down ──
 
-interface DetailRow { _x: string | number; santa_clara_ca: Record<string, number | null>; eastside_king_wa: Record<string, number | null>; shared: Record<string, string | number | null>; }
-interface DetailResult { detailGrain: 'hourly' | 'daily' | 'monthly'; rows: DetailRow[]; }
+interface DetailRow { _x: string | number; [region: string]: string | number | Record<string, number | null>; }
+interface DetailResult { detailGrain: 'hourly' | 'daily' | 'monthly'; rows: DetailRow[]; regions: RegionKey[]; }
 
-function pivotGrain(payload: Payload, fromGrain: Grain, bucket: string | number): DetailResult | null {
+function pivotGrain(payload: Payload, fromGrain: Grain, bucket: string | number, regionsOn: Set<string>): DetailResult | null {
   let detailGrain: 'daily' | 'monthly';
   let match: (x: string | number) => boolean;
   if (fromGrain === 'yearly') { detailGrain = 'monthly'; match = x => Number(String(x).slice(0, 4)) === Number(bucket); }
   else if (fromGrain === 'monthly') { detailGrain = 'daily'; match = x => String(x).slice(0, 7) === String(bucket).slice(0, 7); }
   else return null;
   const data = payload.grains[detailGrain];
-  const scc = data.regions.santa_clara_ca;
-  const king = data.regions.eastside_king_wa;
+  const regions = Object.keys(data.regions).filter(r => regionsOn.has(r));
+  if (!regions.length) return null;
+  const any = data.regions[regions[0]];
   const rows: DetailRow[] = [];
-  scc.x.forEach((x, i) => {
+  any.x.forEach((x, i) => {
     if (!match(x)) return;
-    const row: DetailRow = { _x: x, santa_clara_ca: {}, eastside_king_wa: {}, shared: { x } };
-    Object.entries(scc.series).forEach(([k, arr]) => { row.santa_clara_ca[k] = arr[i]; });
-    const kIdx = king.x.indexOf(x);
-    if (kIdx >= 0) Object.entries(king.series).forEach(([k, arr]) => { row.eastside_king_wa[k] = arr[kIdx]; });
+    const row: DetailRow = { _x: x };
+    regions.forEach(r => {
+      const rd = data.regions[r];
+      if (!rd) return;
+      const idx = rd.x.indexOf(x);
+      if (idx < 0) return;
+      const subset: Record<string, number | null> = {};
+      Object.entries(rd.series).forEach(([k, arr]) => { subset[k] = arr[idx]; });
+      row[r] = subset;
+    });
     rows.push(row);
   });
-  return { detailGrain, rows };
+  return { detailGrain, rows, regions };
 }
 
-async function fetchHourlyDay(bucket: string): Promise<DetailResult> {
+async function fetchHourlyDay(bucket: string, regionsOn: Set<string>): Promise<DetailResult> {
   const month = bucket.slice(0, 7);
   const r = await fetch(`/outdoor-hours/hourly/${month}.json`);
   if (!r.ok) throw new Error(`hourly fetch failed: ${r.status}`);
   const data: HourlyMonth = await r.json();
   const target = bucket.slice(0, 10);
   const rows = data.rows
-    .filter(row => row.ts.slice(0, 10) === target)
-    .map(row => ({ _x: row.ts, santa_clara_ca: row.santa_clara_ca, eastside_king_wa: row.eastside_king_wa, shared: { ts: row.ts } }));
-  return { detailGrain: 'hourly', rows };
+    .filter(row => String(row.ts).slice(0, 10) === target)
+    .map(row => {
+      const out: DetailRow = { _x: row.ts };
+      Object.keys(row).forEach(k => {
+        if (k === 'ts') return;
+        if (regionsOn.has(k)) out[k] = row[k] as Record<string, number | null>;
+      });
+      return out;
+    });
+  return { detailGrain: 'hourly', rows, regions: Array.from(regionsOn) };
 }
-
-// ── Formatting ───────────────────────────────────────────────────────
 
 function fmtCell(v: number | string | null | undefined, fmt?: ColFmt): string | JSX.Element {
   if (v == null || v === '') return '';
@@ -187,7 +204,7 @@ function fmtCell(v: number | string | null | undefined, fmt?: ColFmt): string | 
   }
   if (fmt === 'bool') {
     const n = Number(v);
-    return <span className={n ? 'text-[#0e8f74] font-bold' : 'text-[#c44]  font-bold'}>{n ? '✓' : '✗'}</span>;
+    return <span className={n ? 'text-[#0e8f74] font-bold' : 'text-[#c44] font-bold'}>{n ? '✓' : '✗'}</span>;
   }
   if (fmt === 'pts') {
     const n = Number(v);
@@ -200,49 +217,124 @@ function fmtCell(v: number | string | null | undefined, fmt?: ColFmt): string | 
   return num.toFixed(d);
 }
 
-function leadingWinner(row: DetailRow, key: string): RegionKey | null {
-  const vals = REGION_ORDER.map(r => row[r]?.[key]).filter((v): v is number => v != null && Number.isFinite(Number(v)));
+function leadingWinner(row: DetailRow, key: string, regions: RegionKey[]): RegionKey | null {
+  const vals = regions
+    .map(r => ({ r, v: (row[r] as Record<string, number | null> | undefined)?.[key] }))
+    .filter(e => e.v != null && Number.isFinite(Number(e.v)));
   if (vals.length < 2) return null;
-  const best = Math.max(...vals.map(Number));
-  return REGION_ORDER.find(r => Number(row[r]?.[key]) === best) || null;
+  return vals.reduce((a, b) => (Number(b.v) > Number(a.v) ? b : a)).r;
 }
 
-// ── Page component ───────────────────────────────────────────────────
+// ── Helpers keyed by region registry ──
+
+function registryColor(payload: Payload, region: RegionKey, idx: number): string {
+  return payload.region_registry?.[region]?.color || FALLBACK_PALETTE[idx % FALLBACK_PALETTE.length];
+}
+function registryInk(payload: Payload, region: RegionKey): string {
+  return payload.region_registry?.[region]?.ink || '#333';
+}
+function registryShort(payload: Payload, region: RegionKey): string {
+  return payload.region_registry?.[region]?.short || region.slice(0, 3).toUpperCase();
+}
+function registryLabel(payload: Payload, region: RegionKey): string {
+  return payload.region_registry?.[region]?.label || payload.regions[region] || region;
+}
+function registryOrder(payload: Payload): RegionKey[] {
+  return payload.region_order || Object.keys(payload.regions);
+}
+
+// ── Page component ──
 
 interface Crumb { grain: Grain | 'hourly-drill'; bucket: string | number; xLabel: string; }
 
 export function OutdoorHoursPage() {
+  // Cache of fetched payloads per tag
+  const payloadCache = useRef<Record<string, Payload>>({});
+  const [tag, setTag] = useState<string>(DEFAULT_TAG);
   const [payload, setPayload] = useState<Payload | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [availableTags, setAvailableTags] = useState<Set<string>>(new Set([DEFAULT_TAG]));
   const [grain, setGrain] = useState<Grain>('monthly');
   const [metricKey, setMetricKey] = useState<string>('stay_outside_hours');
+  const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set());
   const [drillStack, setDrillStack] = useState<Crumb[]>([]);
   const [detailResult, setDetailResult] = useState<DetailResult | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
 
+  // Load current tag's payload (cached).
   useEffect(() => {
-    fetch('/outdoor-hours/last10y.json')
-      .then(r => { if (!r.ok) throw new Error(`load failed: ${r.status}`); return r.json(); })
-      .then(setPayload)
-      .catch(e => setError(String(e)));
     loadPlotly().catch(e => setError(String(e)));
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      setLoading(true); setError(null);
+      if (payloadCache.current[tag]) {
+        if (!cancelled) { setPayload(payloadCache.current[tag]); setLoading(false); }
+        return;
+      }
+      try {
+        const r = await fetch(`/outdoor-hours/${tag}.json`);
+        if (!r.ok) throw new Error(`${tag}: ${r.status}`);
+        const p: Payload = await r.json();
+        payloadCache.current[tag] = p;
+        if (cancelled) return;
+        setPayload(p);
+        // First time: seed regionsOn from registry default_on.
+        if (!regionsOn.size) {
+          const on = new Set<string>(
+            (p.region_order || Object.keys(p.regions)).filter(r => p.region_registry?.[r]?.default_on)
+          );
+          if (on.size < 2) { Object.keys(p.regions).slice(0, 2).forEach(r => on.add(r)); }
+          setRegionsOn(on);
+        }
+        setLoading(false);
+      } catch (e) {
+        if (!cancelled) { setError(String(e)); setLoading(false); }
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tag]);
+
+  // Probe which tags are available on disk so we can dim unavailable ones.
+  useEffect(() => {
+    const run = async () => {
+      const tags = RANGE_ORDER.map(r => r.tag);
+      const checks = await Promise.all(tags.map(async t => {
+        try { const r = await fetch(`/outdoor-hours/${t}.json`, { method: 'HEAD' }); return r.ok ? t : null; }
+        catch { return null; }
+      }));
+      setAvailableTags(new Set(checks.filter((x): x is string => !!x)));
+    };
+    run();
+  }, []);
+
   const meta = payload?.metrics.find(m => m.key === metricKey);
+  const visibleRegions = useMemo(() => (payload ? registryOrder(payload).filter(r => regionsOn.has(r)) : []), [payload, regionsOn]);
 
   // ── Plotly ──
   useEffect(() => {
     if (!payload || !chartRef.current || !window.Plotly || !meta) return;
     const grainData = payload.grains[grain];
-    const traces = (Object.entries(grainData.regions) as [RegionKey, RegionGrainData][]).map(([region, s]) => ({
-      x: s.x, y: s.series[metricKey] ?? [], name: s.label, type: 'scatter', mode: 'lines+markers',
-      marker: { size: grain === 'yearly' ? 11 : 7, color: REGION_COLOR[region], line: { width: 1, color: 'white' } },
-      line: { width: 3, color: REGION_COLOR[region] },
-      meta: region,
-      hovertemplate: `<b>${s.label}</b><br>%{x}<br>${meta.label}: %{y:.2f} ${meta.unit}<br><i>(click to drill in)</i><extra></extra>`,
-    }));
+    const traces = visibleRegions
+      .filter(r => grainData.regions[r])
+      .map((r, idx) => {
+        const s = grainData.regions[r];
+        const color = registryColor(payload, r, idx);
+        return {
+          x: s.x, y: s.series[metricKey] ?? [], name: s.label, type: 'scatter', mode: 'lines+markers',
+          marker: { size: grain === 'yearly' ? 11 : 7, color, line: { width: 1, color: 'white' } },
+          line: { width: 3, color },
+          meta: r,
+          hovertemplate: `<b>${s.label}</b><br>%{x}<br>${meta.label}: %{y:.2f} ${meta.unit}<br><i>(click to drill in)</i><extra></extra>`,
+        };
+      });
     const inter = 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
     const grainWord = { yearly: 'year', monthly: 'month', daily: 'day' }[grain];
     const layout = {
@@ -263,19 +355,17 @@ export function OutdoorHoursPage() {
       if (!ev.points?.length) return;
       const p = ev.points[0];
       const rawX = p.data.x[p.pointIndex];
-      openDrill(grain, rawX);
+      if (grain !== 'daily') openDrill(grain, rawX);
     };
     node.on?.('plotly_click', onClick);
     return () => { node.removeAllListeners?.('plotly_click'); };
-  }, [payload, grain, metricKey, meta]);
+  }, [payload, grain, metricKey, meta, visibleRegions]);
 
-  // ── Drill management ──
   const openDrill = useCallback((g: Grain, bucket: string | number) => {
-    if (g === 'daily') return; // no drill for daily click from chart — we show hourly below via row-click chain
+    if (g === 'daily') return;
     setDrillStack([{ grain: g, bucket, xLabel: prettyBucket(bucket, g) }]);
   }, []);
 
-  // Fetch detail when drillStack changes.
   useEffect(() => {
     if (!payload || !drillStack.length) { setDetailResult(null); return; }
     const current = drillStack[drillStack.length - 1];
@@ -283,10 +373,10 @@ export function OutdoorHoursPage() {
     const run = async () => {
       try {
         if (current.grain === 'hourly-drill') {
-          const result = await fetchHourlyDay(String(current.bucket));
+          const result = await fetchHourlyDay(String(current.bucket), regionsOn);
           setDetailResult(result);
         } else {
-          const result = pivotGrain(payload, current.grain as Grain, current.bucket);
+          const result = pivotGrain(payload, current.grain as Grain, current.bucket, regionsOn);
           setDetailResult(result);
         }
       } catch (e) {
@@ -296,7 +386,7 @@ export function OutdoorHoursPage() {
       }
     };
     run();
-  }, [drillStack, payload]);
+  }, [drillStack, payload, regionsOn]);
 
   const drillFurther = useCallback((newGrain: Grain | 'hourly-drill', newBucket: string | number, newLabel: string) => {
     setDrillStack(prev => [...prev, { grain: newGrain, bucket: newBucket, xLabel: newLabel }]);
@@ -310,58 +400,90 @@ export function OutdoorHoursPage() {
     return () => document.removeEventListener('keydown', onKey);
   }, [drillStack, closeDetail]);
 
-  // ── Quick Take ──
-  const quickTake = useMemo(() => {
-    if (!payload || !meta) return null;
-    const g = payload.grains[grain];
-    const scc = g.regions.santa_clara_ca;
-    const king = g.regions.eastside_king_wa;
-    const sccVal = summarize(scc.series[metricKey] ?? [], meta.kind);
-    const kingVal = summarize(king.series[metricKey] ?? [], meta.kind);
-    const sccEx = findExtremes(scc.x, scc.series[metricKey] ?? []);
-    const kingEx = findExtremes(king.x, king.series[metricKey] ?? []);
-    let winnerShort = '—';
-    let headlineHtml = `<em>${meta.label}</em> looks identical across both counties.`;
-    if (sccVal != null && kingVal != null && sccVal !== kingVal) {
-      const sccWin = sccVal > kingVal;
-      const higher = sccWin ? 'Santa Clara' : 'Eastside King';
-      const lower = sccWin ? 'Eastside King' : 'Santa Clara';
-      const higherCls = sccWin ? 'text-[#b43f21]' : 'text-[#096a56]';
-      const lowerCls = sccWin ? 'text-[#096a56]' : 'text-[#b43f21]';
-      const higherVal = sccWin ? sccVal : kingVal;
-      const lowerVal = sccWin ? kingVal : sccVal;
-      const pct = Math.abs(higherVal - lowerVal) / Math.max(Math.abs(higherVal), Math.abs(lowerVal)) * 100;
-      if (HIGHER_BETTER.has(metricKey)) {
-        winnerShort = higher;
-        headlineHtml = `<span class="${higherCls} font-bold">${higher}</span> wins on <em>${meta.label.toLowerCase()}</em> — <span class="font-bold tabular-nums">${fmtValue(higherVal, meta.unit)}</span> vs. <span class="${lowerCls} font-bold tabular-nums">${fmtValue(lowerVal, meta.unit)}</span> on the ${lower.includes('East') ? 'Eastside' : 'South Bay'}, about <span class="font-bold tabular-nums">${pct.toFixed(0)}%</span> more.`;
-      } else if (LOWER_BETTER.has(metricKey)) {
-        winnerShort = lower;
-        headlineHtml = `<span class="${lowerCls} font-bold">${lower}</span> comes out ahead — less <em>${meta.label.toLowerCase()}</em> (<span class="font-bold tabular-nums">${fmtValue(lowerVal, meta.unit)}</span>) than ${higher} (<span class="font-bold tabular-nums">${fmtValue(higherVal, meta.unit)}</span>).`;
+  const toggleRegion = useCallback((r: RegionKey) => {
+    setRegionsOn(prev => {
+      const next = new Set(prev);
+      if (next.has(r)) {
+        if (next.size <= 1) return prev;
+        next.delete(r);
       } else {
-        headlineHtml = `<em>${meta.label}</em> came in at <span class="text-[#b43f21] font-bold tabular-nums">${fmtValue(sccVal, meta.unit)}</span> for Santa Clara and <span class="text-[#096a56] font-bold tabular-nums">${fmtValue(kingVal, meta.unit)}</span> on the Eastside.`;
+        next.add(r);
       }
+      return next;
+    });
+  }, []);
+
+  // ── Ranked leaderboard ──
+  const leaderboard = useMemo(() => {
+    if (!payload || !meta) return [];
+    const g = payload.grains[grain];
+    const kind = meta.kind;
+    return visibleRegions
+      .filter(r => g.regions[r])
+      .map((r, idx) => {
+        const s = g.regions[r];
+        return {
+          region: r,
+          label: registryLabel(payload, r),
+          short: registryShort(payload, r),
+          color: registryColor(payload, r, idx),
+          ink: registryInk(payload, r),
+          value: summarize(s.series[metricKey] ?? [], kind),
+          peak: findExtremes(s.x, s.series[metricKey] ?? []),
+        };
+      })
+      .filter(r => r.value != null && Number.isFinite(r.value))
+      .sort((a, b) => {
+        const hl = HIGHER_BETTER.has(metricKey);
+        const ll = LOWER_BETTER.has(metricKey);
+        return ll ? (a.value! - b.value!) : hl ? (b.value! - a.value!) : 0;
+      });
+  }, [payload, grain, metricKey, meta, visibleRegions]);
+
+  const hasDirection = HIGHER_BETTER.has(metricKey) || LOWER_BETTER.has(metricKey);
+
+  // ── Quick Take ──
+  const takeawayHtml = useMemo(() => {
+    if (!payload || !meta || leaderboard.length < 2) {
+      return `<em>${meta?.label ?? 'Measurement'}</em> shown for ${leaderboard.length ? leaderboard[0].label : 'no counties'}. Toggle another county below to compare.`;
     }
-    const auxBits: string[] = [];
-    if (sccEx.hi && kingEx.hi) {
-      auxBits.push(
-        `Highest: <span class="text-[#b43f21]">Santa Clara peaked at <span class="font-bold tabular-nums">${fmtValue(sccEx.hi.y, meta.unit)}</span> in ${prettyBucket(sccEx.hi.x, grain)}</span>; ` +
-        `<span class="text-[#096a56]">the Eastside peaked at <span class="font-bold tabular-nums">${fmtValue(kingEx.hi.y, meta.unit)}</span> in ${prettyBucket(kingEx.hi.x, grain)}</span>.`
-      );
+    const leader = leaderboard[0];
+    const trailer = leaderboard[leaderboard.length - 1];
+    const spread = Math.abs(leader.value! - trailer.value!);
+    const pct = spread / Math.max(Math.abs(leader.value!), Math.abs(trailer.value!)) * 100;
+    const verb = LOWER_BETTER.has(metricKey) ? 'the least' : HIGHER_BETTER.has(metricKey) ? 'the most' : null;
+    if (verb) {
+      let out = `<span style="color:${leader.ink}"><strong>${leader.label.replace(/,.*$/, '')}</strong></span> has ${verb} <em>${meta.label.toLowerCase()}</em> — <span class="font-bold tabular-nums">${fmtValue(leader.value!, meta.unit)}</span>`;
+      if (leaderboard.length > 2) out += ` (best of ${leaderboard.length} counties)`;
+      out += `. <span style="color:${trailer.ink}"><strong>${trailer.label.replace(/,.*$/, '')}</strong></span> comes last at <span class="font-bold tabular-nums">${fmtValue(trailer.value!, meta.unit)}</span> — a <span class="font-bold tabular-nums">${pct.toFixed(0)}%</span> gap.`;
+      return out;
     }
-    if (metricKey === 'stay_outside_hours' && sccVal != null && kingVal != null) {
-      const extraDays = Math.abs(sccVal - kingVal) / 8;
-      if (extraDays >= 1) auxBits.push(`That gap works out to roughly <span class="font-bold tabular-nums">${extraDays.toFixed(0)}</span> extra outdoor-friendly days (at 8 daylight hours each).`);
+    return `<em>${meta.label}</em> across ${leaderboard.length} counties: ` + leaderboard.map(r => `<span style="color:${r.ink}"><strong>${r.short}</strong> <span class="font-bold tabular-nums">${fmtValue(r.value!, meta.unit)}</span></span>`).join(', ') + '.';
+  }, [leaderboard, meta, payload, metricKey]);
+
+  const auxHtml = useMemo(() => {
+    if (!meta || !leaderboard.length) return '';
+    const bits: string[] = [];
+    if (leaderboard.every(r => r.peak)) {
+      bits.push('Peaks: ' + leaderboard.slice(0, 4).map(r =>
+        `<span style="color:${r.ink}">${r.short} hit <span class="font-bold tabular-nums">${fmtValue(r.peak!.y, meta.unit)}</span> in ${prettyBucket(r.peak!.x, grain)}</span>`
+      ).join(' · ') + '.');
     }
-    return { winnerShort, sccVal, kingVal, headlineHtml, auxHtml: auxBits.join(' ') };
-  }, [payload, grain, metricKey, meta]);
+    if (metricKey === 'stay_outside_hours' && leaderboard.length >= 2) {
+      const gap = Math.abs(leaderboard[0].value! - leaderboard[leaderboard.length - 1].value!);
+      const days = gap / 8;
+      if (days >= 1) bits.push(`Gap leader→last: roughly <span class="font-bold tabular-nums">${days.toFixed(0)}</span> extra outdoor-friendly days.`);
+    }
+    return bits.join(' ');
+  }, [leaderboard, meta, metricKey, grain]);
 
   // ── Render ──
 
   if (error) return <div className="p-8 text-red-600">Failed to load: {error}</div>;
-  if (!payload || !meta) return <div className="p-8 text-slate-500">Loading the last 10 years of weather…</div>;
+  if (loading || !payload || !meta) return <div className="p-8 text-slate-500">Loading the weather data…</div>;
 
-  // When drilling from a daily row, bucket is the ISO date → we want hourly.
-  // When drilling from a monthly row, bucket is "YYYY-MM" → we want the daily breakdown for that month.
+  const rangeBadge = RANGE_ORDER.find(r => r.tag === tag)?.label ?? tag;
+
   const nextStepFor = (detailGrain: 'hourly' | 'daily' | 'monthly', rawX: string | number): { grain: Grain | 'hourly-drill'; bucket: string | number; label: string } | null => {
     if (detailGrain === 'daily') {
       const day = String(rawX).slice(0, 10);
@@ -395,69 +517,117 @@ export function OutdoorHoursPage() {
       {/* Hero */}
       <header className="max-w-[1320px] mx-auto px-7 pt-12 pb-4">
         <div className="inline-flex items-center gap-3 px-4 py-2 bg-white border border-[#e3e6ef] rounded-full text-sm font-semibold text-[#39415a] shadow-sm">
-          <span className="w-3 h-3 rounded-full bg-[#e45c3a]" style={{ boxShadow: '0 0 0 4px rgba(228,92,58,0.18)' }} /> Santa Clara County, CA
-          <span className="text-[#6b7388] font-medium">vs.</span>
-          <span className="w-3 h-3 rounded-full bg-[#0e8f74]" style={{ boxShadow: '0 0 0 4px rgba(14,143,116,0.18)' }} /> Eastside King County, WA
+          {registryOrder(payload).filter(r => payload.region_registry?.[r]?.default_on).map((r, i, arr) => (
+            <span key={r} className="inline-flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full" style={{ background: registryColor(payload, r, i), boxShadow: `0 0 0 4px ${registryColor(payload, r, i)}33` }} />
+              {registryLabel(payload, r)}
+              {i < arr.length - 1 && <span className="text-[#6b7388] font-medium ml-1">vs.</span>}
+            </span>
+          ))}
         </div>
         <h1 className="mt-6 text-[clamp(42px,5.6vw,64px)] font-extrabold tracking-tight leading-[1.02] text-[#121726]">
           Where is the weather <span className="bg-gradient-to-r from-[#e45c3a] via-[#f2b046] to-[#0e8f74] bg-clip-text text-transparent">actually</span> better?
         </h1>
         <p className="mt-4 max-w-[760px] text-xl leading-snug text-[#39415a]">
-          We counted every hour of the last <strong className="text-[#121726]">ten years</strong> and asked one simple question — <em className="text-[#121726]">was it comfortable to be outside?</em>
-          Click any dot to drill in: year → month → day → hour, both counties side-by-side.
+          We counted every hour of the last <strong className="text-[#121726]">{rangeBadge}</strong> and asked one simple question — <em className="text-[#121726]">was it comfortable to be outside?</em>
+          Flip the time range, toggle counties to compare, click any dot to drop down to the days and hours behind it.
         </p>
 
-        {/* Stats */}
+        {/* Leaderboard stats */}
         <div className="flex gap-4 mt-8 flex-wrap">
-          <div className="px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm min-w-[180px] border-t-[3px] border-t-[#e45c3a]">
-            <div className="text-3xl font-extrabold tabular-nums text-[#121726] leading-tight">{fmtValue(quickTake?.sccVal ?? null, meta.unit)}</div>
-            <div className="text-xs uppercase tracking-wider font-bold mt-1" style={{ color: '#b43f21' }}>Santa Clara, CA</div>
-          </div>
-          <div className="px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm min-w-[180px] border-t-[3px] border-t-[#0e8f74]">
-            <div className="text-3xl font-extrabold tabular-nums text-[#121726] leading-tight">{fmtValue(quickTake?.kingVal ?? null, meta.unit)}</div>
-            <div className="text-xs uppercase tracking-wider font-bold mt-1" style={{ color: '#096a56' }}>Eastside King, WA</div>
-          </div>
-          <div className="px-5 py-4 bg-gradient-to-b from-white to-[#f4f6ff] border border-[#e3e6ef] rounded-xl shadow-sm min-w-[180px]">
-            <div className="text-3xl font-extrabold tabular-nums text-[#121726] leading-tight">{quickTake?.winnerShort ?? '—'}</div>
-            <div className="text-xs uppercase tracking-wider font-bold mt-1 text-[#6b7388]">Who&rsquo;s ahead</div>
-          </div>
-          <div className="px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm min-w-[180px]">
-            <div className="text-3xl font-extrabold tabular-nums text-[#121726] leading-tight">10 yrs</div>
-            <div className="text-xs uppercase tracking-wider font-bold mt-1 text-[#6b7388]">2016 → 2026</div>
+          {leaderboard.map((r, i) => (
+            <div key={r.region} className={`px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm min-w-[180px] border-t-[3px] ${hasDirection && i === 0 && leaderboard.length >= 2 ? 'bg-gradient-to-b from-white to-[#fff8d8]' : ''}`}
+                 style={{ borderTopColor: r.color }}>
+              <div className="text-3xl font-extrabold tabular-nums text-[#121726] leading-tight">{fmtValue(r.value, meta.unit)}</div>
+              <div className="text-xs uppercase tracking-wider font-bold mt-1" style={{ color: r.ink }}>
+                {r.label.replace(/\s*County/, '')}{hasDirection && i === 0 && leaderboard.length >= 2 ? ' ★' : ''}
+              </div>
+            </div>
+          ))}
+          <div className="px-5 py-4 bg-gradient-to-b from-[#f7f8fb] to-[#eef1f8] border border-[#e3e6ef] rounded-xl shadow-sm min-w-[130px]">
+            <div className="text-3xl font-extrabold tabular-nums text-[#121726] leading-tight">{rangeBadge}</div>
+            <div className="text-xs uppercase tracking-wider font-bold mt-1 text-[#6b7388]">Time range</div>
           </div>
         </div>
 
         {/* Quick Take */}
         <div className="mt-6 p-5 bg-gradient-to-br from-white to-[#fafbff] border border-[#e3e6ef] border-l-[6px] border-l-[#4055f1] rounded-xl shadow-md max-w-[1020px] text-xl leading-snug text-[#121726]">
           <span className="inline-block mr-3 px-3 py-1 rounded-full bg-[#4055f1] text-white text-xs font-bold uppercase tracking-widest align-middle">Quick take</span>
-          <span dangerouslySetInnerHTML={{ __html: quickTake?.headlineHtml ?? '' }} />
-          {quickTake?.auxHtml && <div className="mt-3 text-base text-[#39415a]" dangerouslySetInnerHTML={{ __html: quickTake.auxHtml }} />}
+          <span dangerouslySetInnerHTML={{ __html: takeawayHtml }} />
+          {auxHtml && <div className="mt-3 text-base text-[#39415a]" dangerouslySetInnerHTML={{ __html: auxHtml }} />}
         </div>
       </header>
 
       {/* Controls */}
-      <section className="max-w-[1320px] mx-auto mt-7 px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm flex gap-4 items-end flex-wrap relative">
+      <section className="max-w-[1320px] mx-auto mt-7 px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm flex flex-col gap-3 relative">
         <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l bg-gradient-to-b from-[#e45c3a] to-[#0e8f74]" />
-        <label className="flex flex-col gap-1.5 min-w-[200px]">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#6b7388]">Show by</span>
-          <select className="text-base font-semibold px-4 py-3 border border-[#e3e6ef] rounded-lg bg-white text-[#121726] cursor-pointer hover:border-[#c9cedb] focus:outline-none focus:border-[#4055f1] focus:ring-2 focus:ring-[#4055f1]/20"
-                  value={grain} onChange={e => setGrain(e.target.value as Grain)}>
-            <option value="yearly">Year</option>
-            <option value="monthly">Month</option>
-            <option value="daily">Day</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1.5 min-w-[320px] flex-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#6b7388]">Tell me about…</span>
-          <select className="text-base font-semibold px-4 py-3 border border-[#e3e6ef] rounded-lg bg-white text-[#121726] cursor-pointer hover:border-[#c9cedb] focus:outline-none focus:border-[#4055f1] focus:ring-2 focus:ring-[#4055f1]/20"
-                  value={metricKey} onChange={e => setMetricKey(e.target.value)}>
-            {payload.metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-          </select>
-        </label>
-        <span className="ml-auto text-sm font-medium text-[#6b7388] pb-2">Tip: click a dot on the chart — or a row in the drill-in table — to dig deeper.</span>
+
+        <div className="flex gap-4 items-end flex-wrap">
+          <div className="flex flex-col gap-1.5 min-w-[200px]">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#6b7388]">Time range</span>
+            <div className="inline-flex border border-[#e3e6ef] rounded-lg overflow-hidden bg-[#fafbff]">
+              {RANGE_ORDER.map(r => {
+                const active = r.tag === tag;
+                const disabled = !availableTags.has(r.tag);
+                return (
+                  <button key={r.tag} type="button" disabled={disabled}
+                          title={disabled ? 'Dataset not yet available' : `Switch to ${r.label}`}
+                          className={`text-sm font-semibold px-4 py-2.5 border-r border-[#e3e6ef] last:border-r-0 transition-colors tabular-nums whitespace-nowrap ${active ? 'bg-[#121726] text-white' : 'text-[#39415a] hover:bg-[#eef1f8] hover:text-[#121726]'} ${disabled ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer'}`}
+                          onClick={() => !disabled && !active && setTag(r.tag)}>
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <label className="flex flex-col gap-1.5 min-w-[200px]">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#6b7388]">Show by</span>
+            <select className="text-base font-semibold px-4 py-3 border border-[#e3e6ef] rounded-lg bg-white text-[#121726] cursor-pointer hover:border-[#c9cedb] focus:outline-none focus:border-[#4055f1] focus:ring-2 focus:ring-[#4055f1]/20"
+                    value={grain} onChange={e => setGrain(e.target.value as Grain)}>
+              <option value="yearly">Year</option>
+              <option value="monthly">Month</option>
+              <option value="daily">Day</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5 min-w-[320px] flex-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#6b7388]">Tell me about…</span>
+            <select className="text-base font-semibold px-4 py-3 border border-[#e3e6ef] rounded-lg bg-white text-[#121726] cursor-pointer hover:border-[#c9cedb] focus:outline-none focus:border-[#4055f1] focus:ring-2 focus:ring-[#4055f1]/20"
+                    value={metricKey} onChange={e => setMetricKey(e.target.value)}>
+              {payload.metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap pt-3 border-t border-dashed border-[#e3e6ef]">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#6b7388]">Compare counties</span>
+          <div className="inline-flex gap-2 flex-wrap">
+            {registryOrder(payload).map((r, idx) => {
+              const info = payload.region_registry?.[r];
+              const color = registryColor(payload, r, idx);
+              const active = regionsOn.has(r);
+              const isExperimental = info && !info.default_on;
+              return (
+                <button key={r} type="button" onClick={() => toggleRegion(r)}
+                        className={`inline-flex items-center gap-2 px-4 py-2 border-2 rounded-full text-sm font-semibold cursor-pointer transition-all select-none ${
+                          active ? 'bg-white text-[#121726]' : 'bg-white text-[#6b7388] hover:border-[#c9cedb]'
+                        }`}
+                        style={{
+                          borderColor: active ? color : '#e3e6ef',
+                          backgroundColor: active ? `${color}11` : 'white',
+                          boxShadow: active ? '0 2px 6px rgba(0,0,0,0.04)' : 'none',
+                        }}>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: color, boxShadow: active ? `0 0 0 3px ${color}33` : 'none' }} />
+                  {registryLabel(payload, r)}
+                  {isExperimental && <span className="text-[11.5px] text-[#6b7388] font-medium">{active ? '' : '(tap to compare)'}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <span className="ml-auto text-sm font-medium text-[#6b7388]">Tip: click a dot — or a row — to drill deeper.</span>
+        </div>
       </section>
 
-      {/* ── Rules card (four color-coded cards, AND between them) ────────────── */}
+      {/* Rules card */}
       <section className="max-w-[1320px] mx-auto mt-5 px-7 pt-6 pb-7 bg-gradient-to-b from-[#fffcf3] to-[#fdf6e0] border border-[#f0e6c6] rounded-xl shadow-sm text-[#3c2f0a]">
         <header className="flex items-end justify-between gap-6 flex-wrap pb-4 border-b border-dashed border-[#e4d9a8]">
           <div>
@@ -465,22 +635,21 @@ export function OutdoorHoursPage() {
             <h2 className="mt-1 text-[26px] font-extrabold tracking-tight text-[#2a1f07]">What counts as a comfortable hour?</h2>
           </div>
           <div className="inline-flex items-center gap-3.5 px-[18px] py-2.5 bg-[#3c2f0a] text-[#fbe389] rounded-xl shadow-md">
-            <span className="font-mono text-2xl font-extrabold tracking-wider text-white">{payload.metrics.length && '4 of 4'}</span>
+            <span className="font-mono text-2xl font-extrabold tracking-wider text-white">4 of 4</span>
             <span className="text-xs leading-tight font-semibold text-[#fbe389]">must pass<br />for the hour to count</span>
           </div>
         </header>
 
-        <ol className="mt-5 grid gap-3.5 items-stretch list-none p-0"
-            style={{ gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr)' }}>
+        <ol className="mt-5 grid gap-3.5 items-stretch list-none p-0 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] md:grid-cols-2 grid-cols-1">
           {[
-            { cls: 'from-[#fff6e0] text-[#8a5b0e] border-t-[#f5b041]', icon: '☀', name: 'Daytime', val: 'Sun is up', sub: 'Nighttime hours don\u2019t count.' },
-            { cls: 'from-[#fdeee8] text-[#a8311a] border-t-[#e85d3e]', icon: '🌡', name: 'Comfortable temp', val: `${payload.rule.temp_min_f}°\u2013${payload.rule.temp_max_f}°F`, sub: `That\u2019s ${payload.rule.temp_min_c}°\u2013${payload.rule.temp_max_c}°C \u2014 not too cold, not too hot.` },
-            { cls: 'from-[#f4ecf7] text-[#6d2d85] border-t-[#9b59b6]', icon: '⛅', name: 'Safe UV', val: `Index \u2264 ${payload.rule.uv_max}`, sub: 'Above that and dermatologists say cover up.' },
-            { cls: 'from-[#eaf2f9] text-[#1f5a82] border-t-[#3498db]', icon: '☂', name: 'Barely raining', val: `\u2264 ${payload.rule.rain_max_mm_h} mm/hr`, sub: 'Light drizzle is OK \u2014 a downpour isn\u2019t.' },
+            { color: '#f5b041', bg: '#fff6e0', ink: '#8a5b0e', icon: '☀', name: 'Daytime', val: 'Sun is up', sub: "Nighttime hours don\u2019t count." },
+            { color: '#e85d3e', bg: '#fdeee8', ink: '#a8311a', icon: '🌡', name: 'Comfortable temp', val: `${payload.rule.temp_min_f}°\u2013${payload.rule.temp_max_f}°F`, sub: `That\u2019s ${payload.rule.temp_min_c}°\u2013${payload.rule.temp_max_c}°C — not too cold, not too hot.` },
+            { color: '#9b59b6', bg: '#f4ecf7', ink: '#6d2d85', icon: '⛅', name: 'Safe UV', val: `Index \u2264 ${payload.rule.uv_max}`, sub: 'Above that and dermatologists say cover up.' },
+            { color: '#3498db', bg: '#eaf2f9', ink: '#1f5a82', icon: '☂', name: 'Barely raining', val: `\u2264 ${payload.rule.rain_max_mm_h} mm/hr`, sub: "Light drizzle is OK — a downpour isn\u2019t." },
           ].map((r, i, arr) => [
-            <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4" style={{ borderTopColor: r.cls.match(/border-t-\[(#[a-f0-9]+)\]/)?.[1] }}>
-              <div className={`w-[52px] h-[52px] rounded-xl inline-flex items-center justify-center text-[28px] leading-none bg-gradient-to-b ${r.cls.split(' ').slice(0,1).join(' ')} ${r.cls.split(' ').slice(1,2).join(' ')}`} style={{ background: r.cls.includes('#fff6e0') ? '#fff6e0' : r.cls.includes('#fdeee8') ? '#fdeee8' : r.cls.includes('#f4ecf7') ? '#f4ecf7' : '#eaf2f9' }}>{r.icon}</div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.1em] mt-1" style={{ color: r.cls.includes('#a8311a') ? '#a8311a' : r.cls.includes('#6d2d85') ? '#6d2d85' : r.cls.includes('#1f5a82') ? '#1f5a82' : '#8a5b0e' }}>{r.name}</div>
+            <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4" style={{ borderTopColor: r.color }}>
+              <div className="w-[52px] h-[52px] rounded-xl inline-flex items-center justify-center text-[28px] leading-none" style={{ background: r.bg, color: r.ink }}>{r.icon}</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.1em] mt-1" style={{ color: r.ink }}>{r.name}</div>
               <div className="text-[22px] font-extrabold text-[#1a150a] leading-tight tracking-tight">{r.val}</div>
               <div className="text-[13.5px] text-[#6e5e2c] leading-snug mt-0.5">{r.sub}</div>
             </li>,
@@ -489,7 +658,7 @@ export function OutdoorHoursPage() {
             ) : null,
           ])}
         </ol>
-        <p className="mt-4 text-sm italic text-[#7a6c3d]">Each county is the average of three sample neighborhoods. Every hour is scored independently.</p>
+        <p className="mt-4 text-sm italic text-[#7a6c3d]">Each county averages its sample neighborhoods. Every hour is scored independently.</p>
       </section>
 
       {/* Chart */}
@@ -521,19 +690,19 @@ export function OutdoorHoursPage() {
       <section className="max-w-[1320px] mx-auto mt-5 mb-8 px-8 py-7 bg-white border border-[#e3e6ef] rounded-xl shadow-sm text-[#39415a] text-base">
         <h3 className="text-xl font-bold text-[#121726] mb-3 tracking-tight">How to read the chart</h3>
         <ul className="list-disc pl-6 space-y-2 leading-relaxed">
-          <li><strong className="text-[#121726]">Each dot is a block of time</strong> — a year, month, or day depending on what you picked above.</li>
-          <li>The drill-in table shows <strong className="text-[#121726]">both counties side by side</strong>. Classification columns lead; the winner per row is starred.</li>
-          <li>In the hourly view you can see <strong className="text-[#121726]">why</strong> each hour passed or failed — the four driver columns (daytime, temp, UV, rain) sit next to the stay-out score.</li>
+          <li><strong className="text-[#121726]">Each dot is a block of time</strong> — a year, month, or day depending on what you picked above. Change the <strong>Time range</strong> to zoom out 1, 5, 10 or 30 years.</li>
+          <li><strong className="text-[#121726]">Toggle counties</strong> in the Compare Counties row to layer more regions on the same chart. The drill-in table adapts — one column group per visible region.</li>
+          <li>Every chart dot is clickable. From the table you can keep going — <strong className="text-[#121726]">monthly → daily → hourly</strong> — and breadcrumbs let you walk back up.</li>
         </ul>
         <h3 className="text-xl font-bold text-[#121726] mb-3 mt-6 tracking-tight">Where the numbers come from</h3>
         <ul className="list-disc pl-6 space-y-2 leading-relaxed">
-          <li>Hourly historical weather data from the global ERA5 record — the same archive meteorologists use, updated to within about five days of today.</li>
-          <li>Each county is represented by three sample neighborhoods (San Jose / Palo Alto / Morgan Hill in CA; Bellevue / Redmond / Woodinville in WA), then averaged.</li>
-          <li>UV is estimated from the sun&rsquo;s angle and cloud cover — close to a consumer UV index, but not a direct sensor reading.</li>
+          <li>Hourly historical weather data from the global ERA5 record — updated to within about five days of today.</li>
+          <li>Each county averages three sample neighborhoods. UV is estimated from solar angle × cloud cover.</li>
+          <li>Extra counties (San Francisco, Snohomish) are experimental — data coverage may lag the core two.</li>
         </ul>
         <div className="flex justify-between items-center gap-3 mt-5 pt-4 border-t border-[#e3e6ef] text-sm text-[#6b7388] flex-wrap">
-          <span>KOUT·7 Outdoor Hours · open weather data · all hours, no cherry-picking</span>
-          <span className="px-3 py-1.5 border border-[#e3e6ef] rounded-full bg-[#f4f5fa] text-[#39415a] font-semibold tabular-nums">last10y · {payload.grains.daily.regions.santa_clara_ca.x.length} days × 2 counties</span>
+          <span>KOUT·7 Outdoor Hours · open weather data · {rangeBadge} · {visibleRegions.length} counties</span>
+          <span className="px-3 py-1.5 border border-[#e3e6ef] rounded-full bg-[#f4f5fa] text-[#39415a] font-semibold tabular-nums">{tag} · {payload.grains.daily.regions[visibleRegions[0]]?.x.length ?? 0} days</span>
         </div>
       </section>
     </div>
@@ -542,7 +711,7 @@ export function OutdoorHoursPage() {
 
 export default OutdoorHoursPage;
 
-// ── Detail panel subcomponent ────────────────────────────────────────
+// ── Detail panel subcomponent (N-way paired table) ──
 
 interface DetailPanelProps {
   stack: Crumb[];
@@ -561,11 +730,11 @@ interface DetailPanelProps {
 function DetailPanel({ stack, onDrillTo, onClose, onRowDrill, fullscreen, setFullscreen, loading, result, payload, metricLabel, metricUnit }: DetailPanelProps) {
   const current = stack[stack.length - 1];
   const cols = result ? DETAIL_COLS[result.detailGrain] : [];
-  const paired = cols.filter(c => c.paired);
   const shared = cols.filter(c => !c.paired);
-  const leading = paired.filter(c => c.leading);
-  const trailing = paired.filter(c => !c.leading);
+  const leading = cols.filter(c => c.paired && c.leading);
+  const trailing = cols.filter(c => c.paired && !c.leading);
   const ordered = [...shared, ...leading, ...trailing];
+  const regions = result?.regions || [];
 
   const containerCls = `bg-white border border-[#e3e6ef] rounded-xl shadow-md overflow-hidden flex flex-col mt-5 ${
     fullscreen ? 'fixed inset-0 z-[1000] m-0 rounded-none border-0' : 'max-w-[1320px] mx-auto'
@@ -577,7 +746,7 @@ function DetailPanel({ stack, onDrillTo, onClose, onRowDrill, fullscreen, setFul
     <section className={containerCls}>
       <div className="flex justify-between items-center gap-3 px-6 py-3 bg-gradient-to-b from-[#fafbff] to-[#f5f6fb] border-b border-[#e3e6ef]">
         <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="font-bold text-lg text-[#121726]">{current.xLabel} — side-by-side</span>
+          <span className="font-bold text-lg text-[#121726]">{current.xLabel} — {regions.length} counties side-by-side</span>
           <span className="text-sm text-[#6b7388]">Drill by {metricLabel.toLowerCase()} · {metricUnit} where applicable</span>
         </div>
         <div className="flex gap-2 flex-shrink-0">
@@ -589,7 +758,6 @@ function DetailPanel({ stack, onDrillTo, onClose, onRowDrill, fullscreen, setFul
       </div>
 
       <div className={`p-5 overflow-auto ${fullscreen ? 'flex-1' : 'max-h-[640px]'}`}>
-        {/* Breadcrumbs */}
         <nav className="flex items-center gap-1.5 flex-wrap mb-3 px-3 py-1.5 bg-[#fafbff] border border-[#e8ebf3] rounded-md text-sm">
           {stack.map((c, i) => {
             const last = i === stack.length - 1;
@@ -616,61 +784,66 @@ function DetailPanel({ stack, onDrillTo, onClose, onRowDrill, fullscreen, setFul
           <>
             <div className="mb-3 p-3 px-3.5 bg-[#f0f4ff] border-l-4 border-[#4055f1] rounded text-[13.5px] leading-relaxed text-[#39415a]">
               {result.detailGrain === 'hourly' ? (
-                <><strong>Hourly view: {result.rows.length} rows.</strong> <strong>Stay-out</strong> is how many of the 3 sample neighborhoods passed <em>all four</em> rules that hour. The driver columns to the right (daytime, temp, UV, rain) show <em>why</em> — winner starred per row.</>
+                <><strong>Hourly view: {result.rows.length} rows.</strong> <strong>Stay-out</strong> = how many of 3 sample neighborhoods passed <em>all four</em> rules that hour. Driver columns to the right show <em>why</em>.</>
               ) : (
-                <><strong>{result.rows.length} {result.detailGrain} rows.</strong> Classification columns lead; the winner per row is starred. {drillable && <strong>Click any row</strong>} {drillable && (result.detailGrain === 'daily' ? 'to see the hour-by-hour breakdown.' : 'to see the day-by-day breakdown.')}</>
+                <><strong>{result.rows.length} {result.detailGrain} rows, {regions.length} counties.</strong> Classification columns lead; winner starred per row.{drillable && <><strong> Click a row</strong> to drop into the {result.detailGrain === 'daily' ? 'hour-by-hour' : 'day-by-day'} view.</>}</>
               )}
             </div>
 
-            <table className="border-collapse w-full text-[15px] tabular-nums">
-              <thead>
-                <tr>
-                  {ordered.map(c => {
-                    if (!c.paired) return <th key={c.key} rowSpan={2} className="sticky top-0 z-20 bg-[#f5f6fb] text-[#39415a] px-3 py-3 border-b border-[#e3e6ef] text-left font-bold text-xs uppercase tracking-wider whitespace-nowrap border-r-2 border-r-[#dde2ef]">{c.label}</th>;
-                    return <th key={c.key} colSpan={2} className={`sticky top-0 z-10 px-3 py-2.5 text-center border-b border-[#e3e6ef] text-xs uppercase tracking-wider whitespace-nowrap ${c.leading ? 'bg-gradient-to-b from-[#eef5ff] to-[#dfe9ff] text-[#4055f1] font-extrabold' : 'bg-[#eef1f8] text-[#39415a] font-bold'} border-r border-r-[#dde2ef]`}><span>{c.label}</span></th>;
+            <div className="overflow-x-auto">
+              <table className="border-collapse w-full text-[15px] tabular-nums">
+                <thead>
+                  <tr>
+                    {ordered.map(c => {
+                      if (!c.paired) return <th key={c.key} rowSpan={2} className="sticky top-0 z-20 bg-[#f5f6fb] text-[#39415a] px-3 py-3 border-b border-[#e3e6ef] text-left font-bold text-xs uppercase tracking-wider whitespace-nowrap border-r-2 border-r-[#dde2ef]">{c.label}</th>;
+                      return <th key={c.key} colSpan={regions.length} className={`sticky top-0 z-10 px-3 py-2.5 text-center border-b border-[#e3e6ef] text-xs uppercase tracking-wider whitespace-nowrap ${c.leading ? 'bg-gradient-to-b from-[#eef5ff] to-[#dfe9ff] text-[#4055f1] font-extrabold' : 'bg-[#eef1f8] text-[#39415a] font-bold'} border-r border-r-[#dde2ef]`}>{c.label}</th>;
+                    })}
+                  </tr>
+                  <tr>
+                    {ordered.map(c => {
+                      if (!c.paired) return null;
+                      return regions.map((r, idx) => {
+                        const color = registryColor(payload, r, idx);
+                        return (
+                          <th key={`${c.key}-${r}`} className={`sticky bg-[#f9fafd] px-3 py-1.5 text-[12px] text-[#6b7388] font-semibold border-b border-[#e3e6ef] text-left whitespace-nowrap ${c.leading ? 'font-bold text-[#121726]' : ''}`} style={{ top: '41px' }}>
+                            <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ background: color }} />{registryShort(payload, r)}
+                          </th>
+                        );
+                      });
+                    })}
+                  </tr>
+                </thead>
+                <tbody className={drillable ? 'cursor-pointer' : ''}>
+                  {result.rows.map((row, i) => {
+                    const winners: Record<string, RegionKey | null> = {};
+                    leading.forEach(c => { winners[c.key] = leadingWinner(row, c.key, regions); });
+                    return (
+                      <tr key={i}
+                          className={drillable ? 'hover:bg-[#eef4ff] transition-colors' : 'hover:bg-[#fafbff]'}
+                          onClick={drillable ? () => onRowDrill(result.detailGrain as 'daily' | 'monthly', row._x) : undefined}>
+                        {ordered.map(c => {
+                          if (!c.paired) {
+                            const val = c.key === 'x' ? row._x : (row as any)[c.key] ?? row._x;
+                            const display = c.key === 'x' ? prettyBucket(val, result.detailGrain as Grain) : fmtCell(val as any, c.fmt);
+                            return <td key={c.key} className="px-3 py-2.5 border-b border-[#eef0f5] whitespace-nowrap font-semibold text-[#121726] bg-[#fafbff] border-r-2 border-r-[#e3e6ef]">
+                              {drillable && <span className="text-[#6b7388] font-bold mr-1.5">›</span>}{display}
+                            </td>;
+                          }
+                          return regions.map((r, idx) => {
+                            const val = (row[r] as Record<string, number | null> | undefined)?.[c.key];
+                            const isWinner = c.leading && winners[c.key] === r;
+                            const tdCls = `px-3 py-2.5 border-b border-[#eef0f5] whitespace-nowrap ${c.fmt === 'bool' || c.fmt === 'pts' ? 'text-center' : 'text-right'} ${
+                              c.leading ? (isWinner ? 'bg-gradient-to-r from-[#4055f1]/15 to-[#4055f1]/5 font-bold text-[#121726]' : 'bg-[#4055f1]/5 font-semibold') : 'text-[#39415a]'
+                            } ${idx < regions.length - 1 ? 'border-r border-dashed border-[#e8ebf3]' : 'border-r border-[#dde2ef]'}`;
+                            return <td key={`${c.key}-${r}`} className={tdCls}>{fmtCell(val, c.fmt)}{isWinner && <span className="ml-1.5 text-[#4055f1] text-[11px] align-[2px]">★</span>}</td>;
+                          });
+                        })}
+                      </tr>
+                    );
                   })}
-                </tr>
-                <tr>
-                  {ordered.map(c => {
-                    if (!c.paired) return null;
-                    return REGION_ORDER.map(r => (
-                      <th key={`${c.key}-${r}`} className={`sticky bg-[#f9fafd] px-3 py-1.5 text-[12px] text-[#6b7388] font-semibold border-b border-[#e3e6ef] text-left whitespace-nowrap ${c.leading ? 'font-bold text-[#121726]' : ''}`} style={{ top: '41px' }}>
-                        <span className={`inline-block w-2 h-2 rounded-full mr-1.5 align-middle ${r === 'santa_clara_ca' ? 'bg-[#e45c3a]' : 'bg-[#0e8f74]'}`} />{REGION_SHORT[r]}
-                      </th>
-                    ));
-                  })}
-                </tr>
-              </thead>
-              <tbody className={drillable ? 'cursor-pointer' : ''}>
-                {result.rows.map((row, i) => {
-                  const winners: Record<string, RegionKey | null> = {};
-                  leading.forEach(c => { winners[c.key] = leadingWinner(row, c.key); });
-                  return (
-                    <tr key={i}
-                        className={drillable ? 'hover:bg-[#eef4ff] transition-colors' : 'hover:bg-[#fafbff]'}
-                        onClick={drillable ? () => onRowDrill(result.detailGrain as 'daily' | 'monthly', row._x) : undefined}>
-                      {ordered.map(c => {
-                        if (!c.paired) {
-                          const val = (row.shared as any)[c.key] ?? row._x;
-                          const display = c.key === 'x' ? prettyBucket(val, result.detailGrain as Grain) : fmtCell(val as any, c.fmt);
-                          return <td key={c.key} className="px-3 py-2.5 border-b border-[#eef0f5] whitespace-nowrap font-semibold text-[#121726] bg-[#fafbff] border-r-2 border-r-[#e3e6ef]">
-                            {drillable && <span className="text-[#6b7388] font-bold mr-1.5">›</span>}{display}
-                          </td>;
-                        }
-                        return REGION_ORDER.map(r => {
-                          const val = row[r]?.[c.key];
-                          const isWinner = c.leading && winners[c.key] === r;
-                          const tdCls = `px-3 py-2.5 border-b border-[#eef0f5] whitespace-nowrap ${c.fmt === 'bool' || c.fmt === 'pts' ? 'text-center' : 'text-right'} ${
-                            c.leading ? (isWinner ? 'bg-gradient-to-r from-[#4055f1]/15 to-[#4055f1]/5 font-bold text-[#121726]' : 'bg-[#4055f1]/5 font-semibold') : 'text-[#39415a]'
-                          } ${r === 'santa_clara_ca' ? 'border-r border-dashed border-[#e8ebf3]' : 'border-r border-[#dde2ef]'}`;
-                          return <td key={`${c.key}-${r}`} className={tdCls}>{fmtCell(val, c.fmt)}{isWinner && <span className="ml-1.5 text-[#4055f1] text-[11px] align-[2px]">★</span>}</td>;
-                        });
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>

@@ -30,6 +30,10 @@ interface Payload {
   region_order?: RegionKey[];
   grains: Record<Grain, GrainData>;
   rule: { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number };
+  summaries?: {
+    monthly?: Record<string, string>;      // key "YYYY-MM" → one-line narrative
+    range_overview?: Record<string, string>; // key = tag → overview sentence
+  };
 }
 
 interface HourlyRow { ts: string; [region: string]: string | Record<string, number | null>; }
@@ -556,6 +560,13 @@ export function OutdoorHoursPage() {
           <span dangerouslySetInnerHTML={{ __html: takeawayHtml }} />
           {auxHtml && <div className="mt-3 text-base text-[#39415a]" dangerouslySetInnerHTML={{ __html: auxHtml }} />}
         </div>
+
+        {payload.summaries?.range_overview?.[tag] && (
+          <div className="mt-3 p-4 bg-gradient-to-br from-[#fffbea] to-[#fff4d0] border border-[#f0dd95] border-l-[6px] border-l-[#d97706] rounded-xl shadow-sm max-w-[1020px] text-base leading-relaxed text-[#3c2f0a]">
+            <span className="inline-block mr-3 px-3 py-1 rounded-full bg-[#d97706] text-white text-[11px] font-bold uppercase tracking-widest align-middle">KOUT·7 writer</span>
+            {payload.summaries.range_overview[tag]}
+          </div>
+        )}
       </header>
 
       {/* Controls */}
@@ -736,6 +747,22 @@ function DetailPanel({ stack, onDrillTo, onClose, onRowDrill, fullscreen, setFul
   const ordered = [...shared, ...leading, ...trailing];
   const regions = result?.regions || [];
 
+  // Pull the LLM writer's take if this month is in the summaries bundle.
+  const writerTake = (() => {
+    if (!payload.summaries?.monthly) return null;
+    // We want the summary for the month we're viewing — that's the crumb with grain==='monthly'.
+    // If the current level is "monthly" (user picked a year, looking at months): no per-bucket summary yet.
+    // If the current level is "daily" (user picked a month, looking at days): show the summary for that month.
+    // If "hourly-drill": show the summary for the parent month.
+    let monthKey: string | null = null;
+    if (current.grain === 'daily' || current.grain === 'monthly') {
+      monthKey = String(current.bucket).slice(0, 7);
+    } else if (current.grain === 'hourly-drill') {
+      monthKey = String(current.bucket).slice(0, 7);
+    }
+    return monthKey ? payload.summaries.monthly[monthKey] ?? null : null;
+  })();
+
   const containerCls = `bg-white border border-[#e3e6ef] rounded-xl shadow-md overflow-hidden flex flex-col mt-5 ${
     fullscreen ? 'fixed inset-0 z-[1000] m-0 rounded-none border-0' : 'max-w-[1320px] mx-auto'
   }`;
@@ -782,6 +809,12 @@ function DetailPanel({ stack, onDrillTo, onClose, onRowDrill, fullscreen, setFul
           <p className="text-[#6b7388] text-[15px]">No underlying rows for this point.</p>
         ) : (
           <>
+            {writerTake && (
+              <div className="mb-3 p-3.5 bg-gradient-to-br from-[#fffbea] to-[#fff4d0] border border-[#f0dd95] border-l-4 border-l-[#d97706] rounded text-[15px] leading-relaxed text-[#3c2f0a]">
+                <span className="inline-block mr-2 px-2.5 py-0.5 rounded-full bg-[#d97706] text-white text-[10px] font-bold uppercase tracking-widest align-middle">Writer&rsquo;s take</span>
+                {writerTake}
+              </div>
+            )}
             <div className="mb-3 p-3 px-3.5 bg-[#f0f4ff] border-l-4 border-[#4055f1] rounded text-[13.5px] leading-relaxed text-[#39415a]">
               {result.detailGrain === 'hourly' ? (
                 <><strong>Hourly view: {result.rows.length} rows.</strong> <strong>Stay-out</strong> = how many of 3 sample neighborhoods passed <em>all four</em> rules that hour. Driver columns to the right show <em>why</em>.</>

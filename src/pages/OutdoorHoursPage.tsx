@@ -33,6 +33,7 @@ interface Payload {
   summaries?: {
     monthly?: Record<string, string>;      // key "YYYY-MM" → one-line narrative
     range_overview?: Record<string, string>; // key = tag → overview sentence
+    region_profiles?: Record<string, { best_time: string; strengths: string; watch_out: string }>;
   };
 }
 
@@ -524,6 +525,19 @@ export function OutdoorHoursPage() {
         .stat-value { animation: statCount 0.8s ease-out; }
         @keyframes takeFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .hero-take { animation: takeFade 0.6s ease-out; }
+        @keyframes profileCardIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .profile-card {
+          opacity: 0;
+          animation: profileCardIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .profile-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px -10px rgba(18,23,38,0.18);
+          transition: transform 0.18s, box-shadow 0.18s;
+        }
       `}</style>
       <div className="h-1 bg-gradient-to-r from-[#e45c3a] via-[#f2b046] to-[#0e8f74]" />
 
@@ -721,6 +735,53 @@ export function OutdoorHoursPage() {
           metricLabel={meta.label}
           metricUnit={meta.unit}
         />
+      )}
+
+      {/* Meet the Counties — per-region LLM-written character profiles */}
+      {payload.summaries?.region_profiles && Object.keys(payload.summaries.region_profiles).length > 0 && (
+        <section className="max-w-[1320px] mx-auto mt-5">
+          <header className="px-1 mb-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388]">Meet the Counties</div>
+            <h3 className="mt-1 text-[22px] font-extrabold tracking-tight text-[#121726]">When to go, when to stay home</h3>
+            <p className="text-sm text-[#6b7388] mt-0.5">Ten-year personality profiles, written by KOUT-7&rsquo;s in-house weather writer.</p>
+          </header>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {(payload.region_order || Object.keys(payload.regions))
+              .filter(r => payload.summaries?.region_profiles?.[r])
+              .map((r, idx) => {
+                const profile = payload.summaries!.region_profiles![r];
+                const color = registryColor(payload, r, idx);
+                const ink = registryInk(payload, r);
+                const label = registryLabel(payload, r);
+                return (
+                  <article
+                    key={r}
+                    className="bg-white border border-[#e3e6ef] rounded-xl shadow-sm overflow-hidden flex flex-col profile-card"
+                    style={{ animationDelay: `${idx * 70}ms` }}
+                  >
+                    <header className="px-4 py-3 border-b border-[#e3e6ef] flex items-center gap-2.5" style={{ background: `${color}10`, borderBottomColor: `${color}30` }}>
+                      <span className="w-3 h-3 rounded-full" style={{ background: color, boxShadow: `0 0 0 3px ${color}33` }} />
+                      <span className="font-bold text-[15px] leading-tight" style={{ color: ink }}>{label}</span>
+                    </header>
+                    <div className="px-4 py-4 flex flex-col gap-3 text-[14px] leading-relaxed text-[#39415a] flex-1">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#0e8f74] mb-1">★ Best time</div>
+                        <div className="text-[#121726]">{profile.best_time}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#4055f1] mb-1">＋ Strengths</div>
+                        <div className="text-[#121726]">{profile.strengths}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#c44a2a] mb-1">⚠ Watch out for</div>
+                        <div className="text-[#121726]">{profile.watch_out}</div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+          </div>
+        </section>
       )}
 
       {/* Notes */}

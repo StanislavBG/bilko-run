@@ -502,6 +502,29 @@ export function OutdoorHoursPage() {
 
   return (
     <div className="bg-[#f6f7fb] min-h-screen">
+      <style>{`
+        @keyframes leaderboardRowIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .leaderboard-row {
+          opacity: 0;
+          animation: leaderboardRowIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        @keyframes medalPulse {
+          0%, 100% { transform: scale(1) rotate(0deg); }
+          30%      { transform: scale(1.15) rotate(-6deg); }
+          60%      { transform: scale(1.1) rotate(4deg); }
+        }
+        .medal {
+          display: inline-block;
+          animation: medalPulse 2.8s ease-in-out 0.6s 2;
+        }
+        @keyframes statCount { from { opacity: 0.2; } to { opacity: 1; } }
+        .stat-value { animation: statCount 0.8s ease-out; }
+        @keyframes takeFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .hero-take { animation: takeFade 0.6s ease-out; }
+      `}</style>
       <div className="h-1 bg-gradient-to-r from-[#e45c3a] via-[#f2b046] to-[#0e8f74]" />
 
       {/* KOUT-7 station bar */}
@@ -567,6 +590,9 @@ export function OutdoorHoursPage() {
             {payload.summaries.range_overview[tag]}
           </div>
         )}
+
+        {/* County Leaderboard — ranked by good-for-outdoors hours */}
+        <Leaderboard payload={payload} grain={grain} tag={tag} />
       </header>
 
       {/* Controls */}
@@ -721,6 +747,116 @@ export function OutdoorHoursPage() {
 }
 
 export default OutdoorHoursPage;
+
+// ── Leaderboard (all counties, sorted by good-for-outdoors hours) ──
+
+interface LeaderboardProps { payload: Payload; grain: Grain; tag: string; }
+
+function Leaderboard({ payload, grain, tag }: LeaderboardProps) {
+  const rangeLabel = RANGE_ORDER.find(r => r.tag === tag)?.label ?? tag;
+
+  const rows = useMemo(() => {
+    const grainData = payload.grains[grain];
+    const all = Object.keys(grainData.regions);
+    return all.map((r, idx) => {
+      const s = grainData.regions[r];
+      return {
+        region: r,
+        label: registryLabel(payload, r),
+        short: registryShort(payload, r),
+        color: registryColor(payload, r, idx),
+        ink: registryInk(payload, r),
+        stay:      summarize(s.series.stay_outside_hours ?? [], 'sum'),
+        pct:       summarize(s.series.pct_daytime_outside ?? [], 'mean'),
+        tempMean:  summarize(s.series.temperature_2m_mean ?? [], 'mean'),
+        tempMax:   summarize(s.series.temperature_2m_max ?? [], 'max'),
+        tempMin:   summarize(s.series.temperature_2m_min ?? [], 'mean'),
+        uvMean:    summarize(s.series.uv_index_est_mean ?? [], 'mean'),
+        uvMax:     summarize(s.series.uv_index_est_max ?? [], 'max'),
+        rain:      summarize(s.series.precipitation_sum ?? [], 'sum'),
+        sun:       summarize(s.series.sunshine_hours ?? [], 'sum'),
+        cloud:     summarize(s.series.cloud_cover_mean ?? [], 'mean'),
+        gust:      summarize(s.series.wind_gusts_10m_max ?? [], 'max'),
+      };
+    })
+    .filter(r => r.stay != null && Number.isFinite(r.stay))
+    .sort((a, b) => (b.stay as number) - (a.stay as number));
+  }, [payload, grain]);
+
+  if (rows.length < 2) return null;
+
+  const medals = ['🥇', '🥈', '🥉'];
+
+  return (
+    <div className="mt-6 bg-white border border-[#e3e6ef] rounded-xl shadow-md overflow-hidden">
+      <header className="flex items-end justify-between gap-4 flex-wrap px-6 py-4 border-b border-[#e3e6ef] bg-gradient-to-b from-[#fafbff] to-white">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388]">County Leaderboard</div>
+          <h3 className="mt-1 text-[22px] font-extrabold tracking-tight text-[#121726]">
+            Good-for-outdoors hours — <span className="text-[#4055f1]">{rangeLabel}</span>
+          </h3>
+        </div>
+        <div className="text-sm text-[#6b7388]">
+          Ranked best-to-worst across <span className="font-bold text-[#121726] tabular-nums">{rows.length}</span> counties. All metrics are the average across the current time range.
+        </div>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[15px] tabular-nums">
+          <thead>
+            <tr className="bg-[#f5f6fb] text-[#39415a]">
+              <th className="text-center px-2 py-3 text-xs font-bold uppercase tracking-wider">#</th>
+              <th className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wider">County</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider text-[#4055f1]">Good-outdoor hrs</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">% daylight</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">Avg temp</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">Peak temp</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">Avg UV</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">Peak UV</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">Rain (mm)</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">Sunshine hrs</th>
+              <th className="text-right px-3 py-3 text-xs font-bold uppercase tracking-wider">Peak gust</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const isTop = i < 3;
+              const rankBg = i === 0 ? 'bg-gradient-to-r from-[#fff8d8] to-transparent' : '';
+              return (
+                <tr
+                  key={r.region}
+                  className={`leaderboard-row border-t border-[#eef0f5] hover:bg-[#fafbff] transition-colors ${rankBg}`}
+                  style={{ animationDelay: `${i * 60}ms` }}
+                >
+                  <td className="text-center px-2 py-4 text-[22px] font-bold">
+                    {isTop ? <span className="medal">{medals[i]}</span> : <span className="text-[#6b7388] font-extrabold tabular-nums text-[17px]">{i + 1}</span>}
+                  </td>
+                  <td className="text-left px-4 py-4 whitespace-nowrap">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full align-middle mr-2" style={{ background: r.color, boxShadow: `0 0 0 3px ${r.color}22` }} />
+                    <span className="font-bold text-[#121726]">{r.label}</span>
+                  </td>
+                  <td className="text-right px-3 py-4 font-extrabold text-[19px]" style={{ color: r.ink }}>
+                    {fmtValue(r.stay, 'hrs')}
+                  </td>
+                  <td className="text-right px-3 py-4 text-[#39415a] font-semibold">{r.pct != null ? `${r.pct.toFixed(0)}%` : '—'}</td>
+                  <td className="text-right px-3 py-4 text-[#39415a]">{r.tempMean != null ? `${r.tempMean.toFixed(1)}°C` : '—'}</td>
+                  <td className="text-right px-3 py-4 text-[#39415a]">{r.tempMax != null ? `${r.tempMax.toFixed(0)}°C` : '—'}</td>
+                  <td className="text-right px-3 py-4 text-[#39415a]">{r.uvMean != null ? r.uvMean.toFixed(1) : '—'}</td>
+                  <td className="text-right px-3 py-4 text-[#39415a]">{r.uvMax != null ? r.uvMax.toFixed(1) : '—'}</td>
+                  <td className="text-right px-3 py-4 text-[#39415a]">{r.rain != null ? r.rain.toFixed(0) : '—'}</td>
+                  <td className="text-right px-3 py-4 text-[#39415a]">{r.sun != null ? r.sun.toFixed(0) : '—'}</td>
+                  <td className="text-right px-3 py-4 text-[#39415a]">{r.gust != null ? `${r.gust.toFixed(1)} m/s` : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <footer className="px-6 py-2.5 text-[12px] text-[#6b7388] border-t border-[#e3e6ef] bg-[#fafbff]">
+        Ranking changes with the selected time range. Toggle counties in &ldquo;Compare counties&rdquo; below to show/hide them on the chart.
+      </footer>
+    </div>
+  );
+}
 
 // ── Detail panel subcomponent (N-way paired table) ──
 

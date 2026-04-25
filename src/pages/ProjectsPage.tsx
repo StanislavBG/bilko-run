@@ -40,6 +40,39 @@ export function ProjectsPage() {
         </div>
       </section>
 
+      {/* Bilko Game Academy — independent self-hosted game module
+          (Phaser 3 / Vite PWA), deployed under /projects/boat-shooter/.
+          Hand-coded tile rather than going through the LISTING_TOOLS
+          registry so the game stays its own codebase. */}
+      <section className="max-w-6xl mx-auto px-6 pt-8">
+        <a
+          href="/projects/boat-shooter/"
+          className="group relative block bg-gradient-to-br from-fire-500 via-orange-500 to-amber-500 rounded-2xl p-6 md:p-8 transition-all hover:-translate-y-1 hover:shadow-2xl shadow-lg"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-label text-white/80">Game · Roguelike Shmup</span>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-white/20 text-white">
+              New
+            </span>
+          </div>
+          <h3 className="text-2xl md:text-3xl font-bold mb-1 text-white">
+            ⛵ Boat Shooter
+          </h3>
+          <p className="text-base font-medium text-white/90 mb-3">
+            Pirate roguelike — pick a ship, sail through 15 stages, fight 9 bosses.
+          </p>
+          <p className="text-sm text-white/80 leading-relaxed mb-4 max-w-2xl">
+            5 elemental starting ships, 13 weapons + 8 passives + 8 evolutions, 14 enemies + 9 bosses across 3 acts. Plays in any browser; installs as a PWA on iPad.
+          </p>
+          <div className="mt-2 text-sm font-semibold text-white flex items-center gap-1">
+            Set sail
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          </div>
+        </a>
+      </section>
+
       {/* Product Grid */}
       <section className="max-w-6xl mx-auto px-6 py-12 md:py-16">
         <div className="grid md:grid-cols-2 gap-5 stagger-children">

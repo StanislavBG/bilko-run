@@ -93,6 +93,15 @@ if (isProd) {
     await app.register(staticPlugin, {
       root: distPath,
       prefix: '/',
+      // 301 missing-trailing-slash → with-slash for directory indexes.
+      // Without this, a request to `/projects/game-academy` looks for a
+      // file (not a dir), 404s, and falls through to the SPA which then
+      // routes via React Router → wrong page. With redirect:true the
+      // client gets a 301 to `/projects/game-academy/` and serves the
+      // game's `index.html` instead. Only triggers when an index.html
+      // exists in the corresponding dist directory, so other routes
+      // (e.g. `/products/page-roast`) are unaffected.
+      redirect: true,
     });
 
     // Route-specific OG meta tags for social sharing (crawlers don't run JS)

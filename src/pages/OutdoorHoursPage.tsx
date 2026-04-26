@@ -12,6 +12,7 @@
  * the JSON bundle and it appears in the picker.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 declare global { interface Window { Plotly?: any; } }
 
@@ -277,23 +278,55 @@ function registryOrder(payload: Payload): RegionKey[] {
 interface Crumb { grain: Grain | 'hourly-drill'; bucket: string | number; xLabel: string; }
 
 export function OutdoorHoursPage() {
+  // URL ↔ state sync. Sharable views: ?tag=last5y&metric=us_aqi_mean&profile=sun_seeker
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initial = {
+    tag: searchParams.get('tag') || DEFAULT_TAG,
+    grain: (searchParams.get('grain') as Grain) || 'monthly',
+    metric: searchParams.get('metric') || 'stay_outside_hours',
+    profile: searchParams.get('profile') || 'goldilocks',
+    regions: searchParams.get('regions')?.split(',').filter(Boolean) ?? null,
+    yoy: searchParams.get('yoy') === '1',
+  };
+
   // Cache of fetched payloads per tag
   const payloadCache = useRef<Record<string, Payload>>({});
-  const [tag, setTag] = useState<string>(DEFAULT_TAG);
+  const [tag, setTag] = useState<string>(initial.tag);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [availableTags, setAvailableTags] = useState<Set<string>>(new Set([DEFAULT_TAG]));
-  const [grain, setGrain] = useState<Grain>('monthly');
-  const [metricKey, setMetricKey] = useState<string>('stay_outside_hours');
-  const [profileId, setProfileId] = useState<string>('goldilocks');
-  const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set());
+  const [availableTags, setAvailableTags] = useState<Set<string>>(new Set([initial.tag]));
+  const [grain, setGrain] = useState<Grain>(initial.grain);
+  const [metricKey, setMetricKey] = useState<string>(initial.metric);
+  const [profileId, setProfileId] = useState<string>(initial.profile);
+  const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set(initial.regions ?? []));
+  const [yoy, setYoy] = useState<boolean>(initial.yoy);
   const [drillStack, setDrillStack] = useState<Crumb[]>([]);
   const [detailResult, setDetailResult] = useState<DetailResult | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [plotlyReady, setPlotlyReady] = useState<boolean>(typeof window !== 'undefined' && !!window.Plotly);
   const chartRef = useRef<HTMLDivElement>(null);
+  // True until regionsOn has been seeded from URL or default_on registry — prevents
+  // the initial empty Set from being written back to the URL as `regions=`.
+  const regionsSeeded = useRef<boolean>(initial.regions !== null);
+
+  // Push state → URL whenever any sharable state changes.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (tag !== DEFAULT_TAG) next.set('tag', tag);
+    if (grain !== 'monthly') next.set('grain', grain);
+    if (metricKey !== 'stay_outside_hours') next.set('metric', metricKey);
+    if (profileId !== 'goldilocks') next.set('profile', profileId);
+    if (yoy) next.set('yoy', '1');
+    if (regionsSeeded.current) {
+      const defaults = payload ? new Set(registryOrder(payload).filter(r => payload.region_registry?.[r]?.default_on)) : new Set();
+      const sortedOn = Array.from(regionsOn).sort();
+      const sortedDefault = Array.from(defaults).sort();
+      if (sortedOn.join(',') !== sortedDefault.join(',')) next.set('regions', sortedOn.join(','));
+    }
+    setSearchParams(next, { replace: true });
+  }, [tag, grain, metricKey, profileId, yoy, regionsOn, payload, setSearchParams]);
 
   // Load Plotly once. Track readiness in state so the chart effect re-runs
   // after the CDN script lands (necessary when payload loads first).
@@ -316,13 +349,17 @@ export function OutdoorHoursPage() {
         payloadCache.current[tag] = p;
         if (cancelled) return;
         setPayload(p);
-        // First time: seed regionsOn from registry default_on.
-        if (!regionsOn.size) {
+        // First time: seed regionsOn from registry default_on (unless URL pre-seeded).
+        if (!regionsSeeded.current && !regionsOn.size) {
           const on = new Set<string>(
             (p.region_order || Object.keys(p.regions)).filter(r => p.region_registry?.[r]?.default_on)
           );
           if (on.size < 2) { Object.keys(p.regions).slice(0, 2).forEach(r => on.add(r)); }
           setRegionsOn(on);
+          regionsSeeded.current = true;
+        } else if (!regionsSeeded.current) {
+          // URL provided regions but state was empty (race) — mark seeded.
+          regionsSeeded.current = true;
         }
         setLoading(false);
       } catch (e) {
@@ -351,31 +388,96 @@ export function OutdoorHoursPage() {
   const visibleRegions = useMemo(() => (payload ? registryOrder(payload).filter(r => regionsOn.has(r)) : []), [payload, regionsOn]);
 
   // ── Plotly ──
+  // YoY only meaningful for monthly/daily grains (not yearly).
+  const yoyActive = yoy && grain !== 'yearly' && visibleRegions.length > 0;
   useEffect(() => {
     if (!plotlyReady || !payload || !chartRef.current || !window.Plotly || !meta) return;
     const grainData = payload.grains[grain];
     const eKey = effectiveMetricKey(metricKey, profileId, payload.metrics);
-    const traces = visibleRegions
-      .filter(r => grainData.regions[r])
-      .map((r, idx) => {
-        const s = grainData.regions[r];
-        const color = registryColor(payload, r, idx);
-        return {
-          x: s.x, y: s.series[eKey] ?? [], name: s.label, type: 'scatter', mode: 'lines+markers',
-          marker: { size: grain === 'yearly' ? 11 : 7, color, line: { width: 1, color: 'white' } },
-          line: { width: 3, color },
-          meta: r,
-          hovertemplate: `<b>${s.label}</b><br>%{x}<br>${meta.label}: %{y:.2f} ${meta.unit}<br><i>(click to drill in)</i><extra></extra>`,
-        };
-      });
+
+    let traces: any[];
+    let xaxisCfg: any;
+
+    if (yoyActive) {
+      // Year-over-year: focus on the first visible region; one trace per year,
+      // x-axis collapsed to "month" (1-12) for monthly grain or "day-of-year"
+      // for daily grain. Color by year along a viridis-ish gradient.
+      const focusRegion = visibleRegions[0];
+      const s = grainData.regions[focusRegion];
+      const xs = s.x;
+      const ys = s.series[eKey] ?? [];
+      const byYear = new Map<number, { x: number[]; y: (number | null)[] }>();
+      for (let i = 0; i < xs.length; i++) {
+        const isoStr = String(xs[i]);
+        const m = isoStr.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+        if (!m) continue;
+        const yr = +m[1];
+        const xVal = grain === 'monthly' ? +m[2] : (() => {
+          const d = new Date(isoStr);
+          const start = Date.UTC(yr, 0, 1);
+          return Math.floor((d.getTime() - start) / 86400000) + 1;
+        })();
+        if (!byYear.has(yr)) byYear.set(yr, { x: [], y: [] });
+        const bucket = byYear.get(yr)!;
+        bucket.x.push(xVal);
+        bucket.y.push(ys[i] as number | null);
+      }
+      const years = Array.from(byYear.keys()).sort();
+      const yMin = years[0], yMax = years[years.length - 1];
+      const palette = (yr: number) => {
+        // viridis-ish: deep blue → teal → green → yellow
+        const t = years.length > 1 ? (yr - yMin) / (yMax - yMin) : 0.5;
+        const stops = [[68, 1, 84], [49, 104, 142], [33, 144, 141], [94, 201, 98], [253, 231, 37]];
+        const seg = t * (stops.length - 1);
+        const i = Math.min(Math.floor(seg), stops.length - 2);
+        const f = seg - i;
+        const a = stops[i], b = stops[i + 1];
+        const r = Math.round(a[0] + (b[0] - a[0]) * f);
+        const g = Math.round(a[1] + (b[1] - a[1]) * f);
+        const bl = Math.round(a[2] + (b[2] - a[2]) * f);
+        return `rgb(${r},${g},${bl})`;
+      };
+      traces = years.map(yr => ({
+        x: byYear.get(yr)!.x,
+        y: byYear.get(yr)!.y,
+        name: String(yr),
+        type: 'scatter', mode: grain === 'monthly' ? 'lines+markers' : 'lines',
+        line: { width: yr === yMax ? 3.2 : 1.6, color: palette(yr) },
+        marker: { size: grain === 'monthly' ? 7 : 4, color: palette(yr) },
+        opacity: yr === yMax ? 1 : 0.85,
+        hovertemplate: `<b>${yr}</b><br>${grain === 'monthly' ? 'Month %{x}' : 'Day %{x}'}<br>${meta.label}: %{y:.2f} ${meta.unit}<extra></extra>`,
+      }));
+      xaxisCfg = grain === 'monthly'
+        ? { title: { text: 'Month', font: { size: 15, color: '#6b7388' } }, tickmode: 'array', tickvals: [1,2,3,4,5,6,7,8,9,10,11,12], ticktext: MONTHS, showgrid: true, gridcolor: '#eef0f5', linecolor: '#c9cedb', tickcolor: '#c9cedb', tickfont: { size: 14 } }
+        : { title: { text: 'Day of year', font: { size: 15, color: '#6b7388' } }, showgrid: true, gridcolor: '#eef0f5', linecolor: '#c9cedb', tickcolor: '#c9cedb', tickfont: { size: 14 } };
+    } else {
+      traces = visibleRegions
+        .filter(r => grainData.regions[r])
+        .map((r, idx) => {
+          const s = grainData.regions[r];
+          const color = registryColor(payload, r, idx);
+          return {
+            x: s.x, y: s.series[eKey] ?? [], name: s.label, type: 'scatter', mode: 'lines+markers',
+            marker: { size: grain === 'yearly' ? 11 : 7, color, line: { width: 1, color: 'white' } },
+            line: { width: 3, color },
+            meta: r,
+            hovertemplate: `<b>${s.label}</b><br>%{x}<br>${meta.label}: %{y:.2f} ${meta.unit}<br><i>(click to drill in)</i><extra></extra>`,
+          };
+        });
+      xaxisCfg = { title: { text: grainData.x_label, font: { size: 15, color: '#6b7388' } }, type: grain === 'yearly' ? 'linear' : 'date', showgrid: true, gridcolor: '#eef0f5', linecolor: '#c9cedb', tickcolor: '#c9cedb', tickfont: { size: 14 } };
+    }
+
     const inter = 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
     const grainWord = { yearly: 'year', monthly: 'month', daily: 'day' }[grain];
+    const titleText = yoyActive
+      ? `${meta.label}  <span style="color:#6b7388;font-weight:500">year-over-year · ${registryLabel(payload, visibleRegions[0])}</span>`
+      : `${meta.label}  <span style="color:#6b7388;font-weight:500">per ${grainWord}</span>`;
     const layout = {
-      title: { text: `${meta.label}  <span style="color:#6b7388;font-weight:500">per ${grainWord}</span>`, font: { family: inter, size: 26, color: '#121726' }, x: 0.02, xanchor: 'left', y: 0.96 },
+      title: { text: titleText, font: { family: inter, size: 26, color: '#121726' }, x: 0.02, xanchor: 'left', y: 0.96 },
       font: { family: inter, color: '#39415a', size: 15 },
-      xaxis: { title: { text: grainData.x_label, font: { size: 15, color: '#6b7388' } }, type: grain === 'yearly' ? 'linear' : 'date', showgrid: true, gridcolor: '#eef0f5', linecolor: '#c9cedb', tickcolor: '#c9cedb', tickfont: { size: 14 } },
+      xaxis: xaxisCfg,
       yaxis: { title: { text: `${meta.label} (${meta.unit})`, font: { size: 15, color: '#6b7388' } }, showgrid: true, gridcolor: '#eef0f5', zerolinecolor: '#e3e6ef', linecolor: '#c9cedb', tickcolor: '#c9cedb', tickfont: { size: 14 }, rangemode: meta.key === 'stay_outside_hours' ? 'tozero' : undefined },
-      hovermode: 'x unified',
+      hovermode: yoyActive ? 'closest' : 'x unified',
       hoverlabel: { bgcolor: '#121726', bordercolor: '#121726', font: { color: 'white', family: inter, size: 15 } },
       legend: { orientation: 'h', y: -0.18, font: { size: 15, color: '#121726' }, bgcolor: 'rgba(0,0,0,0)' },
       margin: { l: 80, r: 32, t: 80, b: 80 },
@@ -385,14 +487,14 @@ export function OutdoorHoursPage() {
 
     const node: any = chartRef.current;
     const onClick = (ev: any) => {
-      if (!ev.points?.length) return;
+      if (!ev.points?.length || yoyActive) return;
       const p = ev.points[0];
       const rawX = p.data.x[p.pointIndex];
       if (grain !== 'daily') openDrill(grain, rawX);
     };
     node.on?.('plotly_click', onClick);
     return () => { node.removeAllListeners?.('plotly_click'); };
-  }, [plotlyReady, payload, grain, metricKey, profileId, meta, visibleRegions]);
+  }, [plotlyReady, payload, grain, metricKey, profileId, yoyActive, meta, visibleRegions]);
 
   const openDrill = useCallback((g: Grain, bucket: string | number) => {
     if (g === 'daily') return;
@@ -673,8 +775,8 @@ export function OutdoorHoursPage() {
         <Leaderboard payload={payload} grain={grain} tag={tag} profileId={profileId} />
       </header>
 
-      {/* Controls */}
-      <section className="max-w-[1320px] mx-auto mt-7 px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm flex flex-col gap-3 relative">
+      {/* Controls — sticky on scroll so range/grain/metric stay reachable while exploring deep dive */}
+      <section className="max-w-[1320px] mx-auto mt-7 px-5 py-4 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 border border-[#e3e6ef] rounded-xl shadow-sm flex flex-col gap-3 relative sticky top-0 z-30">
         <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l bg-gradient-to-b from-[#e45c3a] to-[#0e8f74]" />
 
         <div className="flex gap-4 items-end flex-wrap">
@@ -710,6 +812,17 @@ export function OutdoorHoursPage() {
                     value={metricKey} onChange={e => setMetricKey(e.target.value)}>
               {payload.metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
+          </label>
+          <label className="flex flex-col gap-1.5 justify-end" title={grain === 'yearly' ? 'Year-over-year only meaningful with monthly or daily grain' : 'One line per year for the first selected county'}>
+            <span className="text-xs font-bold uppercase tracking-wider text-[#6b7388]">Year-over-year</span>
+            <button
+              type="button"
+              disabled={grain === 'yearly'}
+              onClick={() => setYoy(v => !v)}
+              className={`px-4 py-3 rounded-lg text-sm font-bold border transition-colors ${grain === 'yearly' ? 'bg-[#f5f6fb] text-[#9aa1b3] border-[#e3e6ef] cursor-not-allowed' : yoy ? 'bg-[#121726] text-white border-[#121726] shadow-sm' : 'bg-white text-[#39415a] border-[#e3e6ef] hover:border-[#c9cedb]'}`}
+            >
+              {yoy && grain !== 'yearly' ? '📅 ON' : '📅 Off'}
+            </button>
           </label>
         </div>
 

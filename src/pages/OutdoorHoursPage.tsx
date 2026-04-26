@@ -269,11 +269,13 @@ export function OutdoorHoursPage() {
   const [detailResult, setDetailResult] = useState<DetailResult | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [plotlyReady, setPlotlyReady] = useState<boolean>(typeof window !== 'undefined' && !!window.Plotly);
   const chartRef = useRef<HTMLDivElement>(null);
 
-  // Load current tag's payload (cached).
+  // Load Plotly once. Track readiness in state so the chart effect re-runs
+  // after the CDN script lands (necessary when payload loads first).
   useEffect(() => {
-    loadPlotly().catch(e => setError(String(e)));
+    loadPlotly().then(() => setPlotlyReady(true)).catch(e => setError(String(e)));
   }, []);
 
   useEffect(() => {
@@ -327,7 +329,7 @@ export function OutdoorHoursPage() {
 
   // ── Plotly ──
   useEffect(() => {
-    if (!payload || !chartRef.current || !window.Plotly || !meta) return;
+    if (!plotlyReady || !payload || !chartRef.current || !window.Plotly || !meta) return;
     const grainData = payload.grains[grain];
     const traces = visibleRegions
       .filter(r => grainData.regions[r])
@@ -366,7 +368,7 @@ export function OutdoorHoursPage() {
     };
     node.on?.('plotly_click', onClick);
     return () => { node.removeAllListeners?.('plotly_click'); };
-  }, [payload, grain, metricKey, meta, visibleRegions]);
+  }, [plotlyReady, payload, grain, metricKey, meta, visibleRegions]);
 
   const openDrill = useCallback((g: Grain, bucket: string | number) => {
     if (g === 'daily') return;
@@ -698,7 +700,7 @@ export function OutdoorHoursPage() {
           </div>
         </header>
 
-        <ol className="mt-5 grid gap-3.5 items-stretch list-none p-0 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] md:grid-cols-2 grid-cols-1">
+        <ol className="mt-5 grid gap-3.5 items-stretch list-none p-0 lg:grid-cols-3 md:grid-cols-2 grid-cols-1">
           {[
             { color: '#f5b041', bg: '#fff6e0', ink: '#8a5b0e', icon: '☀', name: 'Daytime', val: 'Sun is up', sub: "Nighttime hours don\u2019t count." },
             { color: '#e85d3e', bg: '#fdeee8', ink: '#a8311a', icon: '🌡', name: 'Comfortable temp', val: `${payload.rule.temp_min_f}°\u2013${payload.rule.temp_max_f}°F`, sub: `That\u2019s ${payload.rule.temp_min_c}°\u2013${payload.rule.temp_max_c}°C — not too cold, not too hot.` },
@@ -706,17 +708,14 @@ export function OutdoorHoursPage() {
             { color: '#3498db', bg: '#eaf2f9', ink: '#1f5a82', icon: '☂', name: 'Barely raining', val: `\u2264 ${payload.rule.rain_max_mm_h} mm/hr`, sub: "Light drizzle is OK — a downpour isn\u2019t." },
             { color: '#7f8c8d', bg: '#eef0f2', ink: '#4a5557', icon: '☁', name: 'Not overcast', val: `Cloud \u2264 ${payload.rule.cloud_max_pct ?? 85}%`, sub: "Socked-in skies kill the vibe even when it\u2019s warm." },
             { color: '#16a085', bg: '#e6f4f1', ink: '#0e6655', icon: '💧', name: 'Not muggy', val: `Humidity \u2264 ${payload.rule.humidity_max_pct ?? 80}%`, sub: "Above this, sweat can\u2019t evaporate and the air feels heavy." },
-          ].map((r, i, arr) => [
-            <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4" style={{ borderTopColor: r.color }}>
+          ].map((r, i) => (
+            <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4 min-h-[180px]" style={{ borderTopColor: r.color }}>
               <div className="w-[52px] h-[52px] rounded-xl inline-flex items-center justify-center text-[28px] leading-none" style={{ background: r.bg, color: r.ink }}>{r.icon}</div>
               <div className="text-[11px] font-bold uppercase tracking-[0.1em] mt-1" style={{ color: r.ink }}>{r.name}</div>
               <div className="text-[22px] font-extrabold text-[#1a150a] leading-tight tracking-tight">{r.val}</div>
               <div className="text-[13.5px] text-[#6e5e2c] leading-snug mt-0.5">{r.sub}</div>
-            </li>,
-            i < arr.length - 1 ? (
-              <li key={`and-${i}`} className="hidden lg:flex self-center justify-self-center font-mono text-[13px] font-bold tracking-[0.1em] text-[#b89a3a] px-2.5 py-1.5 bg-white border border-dashed border-[#e4d9a8] rounded">AND</li>
-            ) : null,
-          ])}
+            </li>
+          ))}
         </ol>
         <p className="mt-4 text-sm italic text-[#7a6c3d]">Each county averages its sample neighborhoods. Every hour is scored independently.</p>
       </section>

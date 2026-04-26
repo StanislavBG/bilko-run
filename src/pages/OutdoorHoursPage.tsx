@@ -22,6 +22,15 @@ type RegionKey = string;
 interface MetricMeta { key: string; label: string; unit: string; kind: 'sum' | 'mean' | 'max' | 'pct'; profile_aware?: boolean; }
 interface ProfileRule { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number; cloud_max_pct: number | null; humidity_max_pct: number | null; aqi_max: number | null; }
 interface Profile { id: string; name: string; label: string; desc: string; rule: ProfileRule; }
+const CUSTOM_PROFILE_ID = 'custom';
+// Default custom rule = mid-permissive (matches Goldilocks exactly so first-tweak is intuitive).
+const DEFAULT_CUSTOM_RULE: ProfileRule = {
+  temp_min_c: 7, temp_max_c: 30, temp_min_f: 45, temp_max_f: 86,
+  uv_max: 6, rain_max_mm_h: 1, cloud_max_pct: 85, humidity_max_pct: 80, aqi_max: 100,
+};
+// CustomResults: per-grain → per-region → bucket-key → good-hour count (and daytime denominator for pct).
+type CustomGrainResult = Record<string, Record<string, { stay: number; daytime: number }>>;
+type CustomResults = Record<string, CustomGrainResult>;
 interface RegionGrainData { label: string; x: (string | number)[]; series: Record<string, (number | null)[]>; }
 interface GrainData { tag: string; grain: Grain; x_label: string; regions: Record<RegionKey, RegionGrainData>; }
 interface RegionInfo { label: string; short: string; color: string; ink: string; default_on: boolean; }
@@ -121,6 +130,72 @@ function effectiveMetricKey(metricKey: string, profileId: string, metrics: Metri
 function activeProfile(payload: Payload | null, profileId: string): Profile | null {
   if (!payload?.profiles) return null;
   return payload.profiles.find(p => p.id === profileId) ?? null;
+}
+
+// Top-level series read with custom-profile support. Used by the page chart,
+// leaderboard, deep-dive panels, and the standalone Leaderboard component.
+function readSeries(
+  payload: Payload | null,
+  region: string,
+  metricKey: string,
+  profileId: string,
+  grain: Grain,
+  customResults: CustomResults | null,
+): (number | null)[] {
+  if (!payload) return [];
+  const grainData = payload.grains[grain];
+  const regionData = grainData?.regions[region];
+  if (!regionData) return [];
+  const xs = regionData.x;
+  if (profileId === CUSTOM_PROFILE_ID && (metricKey === 'stay_outside_hours' || metricKey === 'pct_daytime_outside')) {
+    const bucketResults = customResults?.[grain]?.[region];
+    if (!bucketResults) return xs.map(() => null);
+    return xs.map((x: any) => {
+      const slot = bucketResults[String(x)];
+      if (!slot) return null;
+      if (metricKey === 'stay_outside_hours') return slot.stay;
+      return slot.daytime > 0 ? +(slot.stay / slot.daytime * 100).toFixed(2) : null;
+    });
+  }
+  const eKey = effectiveMetricKey(metricKey, profileId, payload.metrics);
+  return regionData.series[eKey] ?? [];
+}
+
+// Bucket key for the active grain (matches what the server-side rollup uses).
+// yearly = "YYYY", monthly = "YYYY-MM-01", daily = "YYYY-MM-DD".
+function bucketKeyFor(tsLocal: string, grain: Grain): string {
+  // tsLocal is an ISO local timestamp string like "2024-03-15T08:00:00-07:00".
+  if (grain === 'yearly') return tsLocal.slice(0, 4);
+  if (grain === 'monthly') return tsLocal.slice(0, 7) + '-01';
+  return tsLocal.slice(0, 10);
+}
+
+// Apply a custom rule to one hourly snapshot of regional metrics.
+function customRulePass(snap: any, rule: ProfileRule): boolean {
+  if (!snap || snap.ok_day !== 1) return false;
+  const t = snap.temperature_2m;
+  if (t == null || t < rule.temp_min_c || t > rule.temp_max_c) return false;
+  const uv = snap.uv_index_est ?? 0;
+  if (uv > rule.uv_max) return false;
+  const rain = snap.precipitation ?? 0;
+  if (rain > rule.rain_max_mm_h) return false;
+  if (rule.cloud_max_pct != null && (snap.cloud_cover ?? 0) > rule.cloud_max_pct) return false;
+  if (rule.humidity_max_pct != null && (snap.relative_humidity_2m ?? 0) > rule.humidity_max_pct) return false;
+  if (rule.aqi_max != null && snap.us_aqi != null && snap.us_aqi > rule.aqi_max) return false;
+  return true;
+}
+
+// Hourly drill schema embeds these fields per row.region; we read them through `any`
+// since the schema isn't strict TS-typed yet.
+interface HourSnapshot {
+  ok_day: number;
+  stay_outside_pts?: number;
+  temperature_2m?: number | null;
+  uv_index_est?: number | null;
+  precipitation?: number | null;
+  cloud_cover?: number | null;
+  relative_humidity_2m?: number | null;
+  us_aqi?: number | null;
 }
 
 function prettyBucket(x: string | number, grain: Grain | 'hourly'): string {
@@ -301,6 +376,10 @@ export function OutdoorHoursPage() {
   const [profileId, setProfileId] = useState<string>(initial.profile);
   const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set(initial.regions ?? []));
   const [yoy, setYoy] = useState<boolean>(initial.yoy);
+  const [customRule, setCustomRule] = useState<ProfileRule>(DEFAULT_CUSTOM_RULE);
+  const [customResults, setCustomResults] = useState<CustomResults | null>(null);
+  const [customComputing, setCustomComputing] = useState(false);
+  const [customComputedFor, setCustomComputedFor] = useState<string | null>(null);  // "tag|ruleHash"
   const [drillStack, setDrillStack] = useState<Crumb[]>([]);
   const [detailResult, setDetailResult] = useState<DetailResult | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -387,6 +466,68 @@ export function OutdoorHoursPage() {
   const meta = payload?.metrics.find(m => m.key === metricKey);
   const visibleRegions = useMemo(() => (payload ? registryOrder(payload).filter(r => regionsOn.has(r)) : []), [payload, regionsOn]);
 
+  // ── Custom-profile compute: re-aggregate hourly drill JSONs against the custom rule. ──
+  const customRuleHash = useMemo(() => JSON.stringify(customRule), [customRule]);
+  const customExpectedKey = `${tag}|${customRuleHash}`;
+  const customStale = customComputedFor !== customExpectedKey;
+
+  const recomputeCustom = useCallback(async () => {
+    if (!payload) return;
+    setCustomComputing(true);
+    try {
+      // Discover the months we need from the payload's daily x array (any region works).
+      const dailyData = payload.grains.daily;
+      const firstRegion = Object.keys(dailyData.regions)[0];
+      const dailyXs: string[] = (dailyData.regions[firstRegion]?.x ?? []).map((x: any) => String(x));
+      const months = Array.from(new Set(dailyXs.map(d => d.slice(0, 7)))).sort();
+      // Fetch all monthly hourly bundles in parallel (browser caches dedupe).
+      const fetched = await Promise.all(months.map(async m => {
+        try {
+          const r = await fetch(`/outdoor-hours/hourly/${m}.json`);
+          if (!r.ok) return null;
+          return await r.json();
+        } catch { return null; }
+      }));
+
+      // Aggregate per (grain × region × bucket).
+      const accum: CustomResults = { yearly: {}, monthly: {}, daily: {} };
+      for (const m of fetched) {
+        if (!m?.rows) continue;
+        for (const row of m.rows) {
+          const ts: string = row.ts;
+          for (const region of Object.keys(row)) {
+            if (region === 'ts') continue;
+            const snap = row[region] as HourSnapshot;
+            const pass = customRulePass(snap, customRule);
+            const isDay = snap?.ok_day === 1;
+            for (const g of (['yearly', 'monthly', 'daily'] as Grain[])) {
+              const key = bucketKeyFor(ts, g);
+              if (!accum[g][region]) accum[g][region] = {};
+              const slot = accum[g][region][key] ?? (accum[g][region][key] = { stay: 0, daytime: 0 });
+              if (isDay) slot.daytime += 1;
+              if (pass) slot.stay += 1;
+            }
+          }
+        }
+      }
+      setCustomResults(accum);
+      setCustomComputedFor(`${tag}|${customRuleHash}`);
+    } finally {
+      setCustomComputing(false);
+    }
+  }, [payload, tag, customRule, customRuleHash]);
+
+  // Auto-recompute when entering Custom mode for the first time on a tag, or when tag changes.
+  useEffect(() => {
+    if (profileId !== CUSTOM_PROFILE_ID) return;
+    if (customStale && !customComputing) recomputeCustom();
+  }, [profileId, customStale, customComputing, recomputeCustom]);
+
+  // Read helper alias bound to current closure (delegates to the top-level pure fn).
+  const seriesFor = useCallback((region: string, mKey: string, g: Grain): (number | null)[] => {
+    return readSeries(payload, region, mKey, profileId, g, customResults);
+  }, [payload, profileId, customResults]);
+
   // ── Plotly ──
   // YoY only meaningful for monthly/daily grains (not yearly).
   const yoyActive = yoy && grain !== 'yearly' && visibleRegions.length > 0;
@@ -405,7 +546,7 @@ export function OutdoorHoursPage() {
       const focusRegion = visibleRegions[0];
       const s = grainData.regions[focusRegion];
       const xs = s.x;
-      const ys = s.series[eKey] ?? [];
+      const ys = seriesFor(focusRegion, metricKey, grain);
       const byYear = new Map<number, { x: number[]; y: (number | null)[] }>();
       for (let i = 0; i < xs.length; i++) {
         const isoStr = String(xs[i]);
@@ -457,7 +598,7 @@ export function OutdoorHoursPage() {
           const s = grainData.regions[r];
           const color = registryColor(payload, r, idx);
           return {
-            x: s.x, y: s.series[eKey] ?? [], name: s.label, type: 'scatter', mode: 'lines+markers',
+            x: s.x, y: seriesFor(r, metricKey, grain), name: s.label, type: 'scatter', mode: 'lines+markers',
             marker: { size: grain === 'yearly' ? 11 : 7, color, line: { width: 1, color: 'white' } },
             line: { width: 3, color },
             meta: r,
@@ -494,7 +635,7 @@ export function OutdoorHoursPage() {
     };
     node.on?.('plotly_click', onClick);
     return () => { node.removeAllListeners?.('plotly_click'); };
-  }, [plotlyReady, payload, grain, metricKey, profileId, yoyActive, meta, visibleRegions]);
+  }, [plotlyReady, payload, grain, metricKey, profileId, yoyActive, meta, visibleRegions, seriesFor, customResults]);
 
   const openDrill = useCallback((g: Grain, bucket: string | number) => {
     if (g === 'daily') return;
@@ -553,19 +694,19 @@ export function OutdoorHoursPage() {
     if (!payload || !meta) return [];
     const g = payload.grains[grain];
     const kind = meta.kind;
-    const eKey = effectiveMetricKey(metricKey, profileId, payload.metrics);
     return visibleRegions
       .filter(r => g.regions[r])
       .map((r, idx) => {
         const s = g.regions[r];
+        const ys = seriesFor(r, metricKey, grain);
         return {
           region: r,
           label: registryLabel(payload, r),
           short: registryShort(payload, r),
           color: registryColor(payload, r, idx),
           ink: registryInk(payload, r),
-          value: summarize(s.series[eKey] ?? [], kind),
-          peak: findExtremes(s.x, s.series[eKey] ?? []),
+          value: summarize(ys, kind),
+          peak: findExtremes(s.x, ys),
         };
       })
       .filter(r => r.value != null && Number.isFinite(r.value))
@@ -574,7 +715,7 @@ export function OutdoorHoursPage() {
         const ll = LOWER_BETTER.has(metricKey);
         return ll ? (a.value! - b.value!) : hl ? (b.value! - a.value!) : 0;
       });
-  }, [payload, grain, metricKey, profileId, meta, visibleRegions]);
+  }, [payload, grain, metricKey, profileId, meta, visibleRegions, seriesFor]);
 
   const hasDirection = HIGHER_BETTER.has(metricKey) || LOWER_BETTER.has(metricKey);
 
@@ -708,11 +849,31 @@ export function OutdoorHoursPage() {
                   </button>
                 );
               })}
+              <button
+                key="custom"
+                type="button"
+                onClick={() => setProfileId(CUSTOM_PROFILE_ID)}
+                title="Tune your own thresholds"
+                className={`px-3 py-1.5 rounded-md text-sm font-bold transition-colors ${profileId === CUSTOM_PROFILE_ID ? 'bg-[#7c3aed] text-white shadow-sm' : 'text-[#39415a] hover:bg-white'}`}
+              >
+                ✨ Custom
+              </button>
             </div>
             <span className="text-sm text-[#6b7388] hidden md:inline-block">
-              {payload.profiles.find(p => p.id === profileId)?.desc}
+              {profileId === CUSTOM_PROFILE_ID
+                ? 'Tune the sliders below to define your own ideal day.'
+                : payload.profiles.find(p => p.id === profileId)?.desc}
             </span>
           </div>
+          {profileId === CUSTOM_PROFILE_ID && (
+            <CustomProfileDrawer
+              rule={customRule}
+              onChange={setCustomRule}
+              computing={customComputing}
+              stale={customStale}
+              onRecompute={recomputeCustom}
+            />
+          )}
         </div>
       )}
 
@@ -772,7 +933,7 @@ export function OutdoorHoursPage() {
         )}
 
         {/* County Leaderboard — ranked by good-for-outdoors hours */}
-        <Leaderboard payload={payload} grain={grain} tag={tag} profileId={profileId} />
+        <Leaderboard payload={payload} grain={grain} tag={tag} profileId={profileId} customResults={customResults} />
       </header>
 
       {/* Controls — sticky on scroll so range/grain/metric stay reachable while exploring deep dive */}
@@ -858,7 +1019,10 @@ export function OutdoorHoursPage() {
       {/* Rules card — dynamic per active profile */}
       {(() => {
         const activeP = activeProfile(payload, profileId);
-        const rule = activeP?.rule ?? payload.rule;
+        const isCustom = profileId === CUSTOM_PROFILE_ID;
+        const rule: ProfileRule = isCustom ? customRule : (activeP?.rule ?? payload.rule);
+        const labelOverride = isCustom ? '✨ Custom' : activeP?.label;
+        const descOverride = isCustom ? 'Your tuned thresholds — adjust the sliders at the top of the page.' : activeP?.desc;
         const cards: { color: string; bg: string; ink: string; icon: string; name: string; val: string; sub: string }[] = [
           { color: '#f5b041', bg: '#fff6e0', ink: '#8a5b0e', icon: '☀', name: 'Daytime',          val: 'Sun is up',                                              sub: "Nighttime hours don’t count." },
           { color: '#e85d3e', bg: '#fdeee8', ink: '#a8311a', icon: '🌡', name: 'Comfortable temp', val: `${rule.temp_min_f}°–${rule.temp_max_f}°F`,            sub: `That’s ${rule.temp_min_c}°–${rule.temp_max_c}°C.` },
@@ -873,9 +1037,9 @@ export function OutdoorHoursPage() {
           <section className="max-w-[1320px] mx-auto mt-5 px-7 pt-6 pb-7 bg-gradient-to-b from-[#fffcf3] to-[#fdf6e0] border border-[#f0e6c6] rounded-xl shadow-sm text-[#3c2f0a]">
             <header className="flex items-end justify-between gap-6 flex-wrap pb-4 border-b border-dashed border-[#e4d9a8]">
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#8a7330]">{activeP?.label ?? 'Rules'}</div>
+                <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#8a7330]">{labelOverride ?? 'Rules'}</div>
                 <h2 className="mt-1 text-[26px] font-extrabold tracking-tight text-[#2a1f07]">What counts as a comfortable hour?</h2>
-                {activeP?.desc && <p className="mt-1 text-sm text-[#7a6c3d]">{activeP.desc}</p>}
+                {descOverride && <p className="mt-1 text-sm text-[#7a6c3d]">{descOverride}</p>}
               </div>
               <div className="inline-flex items-center gap-3.5 px-[18px] py-2.5 bg-[#3c2f0a] text-[#fbe389] rounded-xl shadow-md">
                 <span className="font-mono text-2xl font-extrabold tracking-wider text-white">{n} of {n}</span>
@@ -904,7 +1068,7 @@ export function OutdoorHoursPage() {
       </main>
 
       {/* Region Deep Dive — every metric, focus on one region with overlays */}
-      <RegionDeepDive payload={payload} tag={tag} grain={grain} profileId={profileId} plotlyReady={plotlyReady} />
+      <RegionDeepDive payload={payload} tag={tag} grain={grain} profileId={profileId} plotlyReady={plotlyReady} customResults={customResults} />
 
       {/* Detail panel */}
       {drillStack.length > 0 && (
@@ -998,6 +1162,106 @@ export function OutdoorHoursPage() {
 
 export default OutdoorHoursPage;
 
+// ── Custom Profile Drawer ──
+
+interface CustomProfileDrawerProps {
+  rule: ProfileRule;
+  onChange: (r: ProfileRule) => void;
+  computing: boolean;
+  stale: boolean;
+  onRecompute: () => void;
+}
+
+function CustomProfileDrawer({ rule, onChange, computing, stale, onRecompute }: CustomProfileDrawerProps) {
+  const update = (patch: Partial<ProfileRule>) => onChange({ ...rule, ...patch });
+  const ruleCount = 4 + (rule.cloud_max_pct != null ? 1 : 0) + (rule.humidity_max_pct != null ? 1 : 0) + (rule.aqi_max != null ? 1 : 0);
+
+  return (
+    <div className="bg-gradient-to-b from-[#faf5ff] to-white border-t border-[#e3e6ef]">
+      <div className="max-w-[1320px] mx-auto px-7 py-4 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {/* Temp range */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388]">🌡 Temp range</span>
+          <div className="flex items-center gap-2">
+            <input type="number" step={1} value={rule.temp_min_c} onChange={e => update({ temp_min_c: +e.target.value, temp_min_f: Math.round(+e.target.value * 9 / 5 + 32) })} className="w-16 px-2 py-1 border border-[#e3e6ef] rounded text-sm font-semibold" />
+            <span className="text-sm text-[#6b7388]">to</span>
+            <input type="number" step={1} value={rule.temp_max_c} onChange={e => update({ temp_max_c: +e.target.value, temp_max_f: Math.round(+e.target.value * 9 / 5 + 32) })} className="w-16 px-2 py-1 border border-[#e3e6ef] rounded text-sm font-semibold" />
+            <span className="text-sm text-[#6b7388]">°C ({rule.temp_min_f}–{rule.temp_max_f}°F)</span>
+          </div>
+        </div>
+        {/* UV */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388]">⛅ UV max</span>
+          <input type="range" min={0} max={12} step={0.5} value={rule.uv_max} onChange={e => update({ uv_max: +e.target.value })} />
+          <span className="text-sm font-semibold text-[#121726]">≤ {rule.uv_max}</span>
+        </div>
+        {/* Rain */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388]">☂ Rain max</span>
+          <input type="range" min={0} max={5} step={0.1} value={rule.rain_max_mm_h} onChange={e => update({ rain_max_mm_h: +e.target.value })} />
+          <span className="text-sm font-semibold text-[#121726]">≤ {rule.rain_max_mm_h.toFixed(1)} mm/hr</span>
+        </div>
+        {/* Cloud */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388] flex items-center gap-2">
+            <input type="checkbox" checked={rule.cloud_max_pct != null} onChange={e => update({ cloud_max_pct: e.target.checked ? 85 : null })} />
+            ☁ Cloud cap
+          </label>
+          {rule.cloud_max_pct != null ? (
+            <>
+              <input type="range" min={0} max={100} step={5} value={rule.cloud_max_pct} onChange={e => update({ cloud_max_pct: +e.target.value })} />
+              <span className="text-sm font-semibold text-[#121726]">≤ {rule.cloud_max_pct}%</span>
+            </>
+          ) : <span className="text-sm text-[#9aa1b3] italic">no cloud constraint</span>}
+        </div>
+        {/* Humidity */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388] flex items-center gap-2">
+            <input type="checkbox" checked={rule.humidity_max_pct != null} onChange={e => update({ humidity_max_pct: e.target.checked ? 80 : null })} />
+            💧 Humidity cap
+          </label>
+          {rule.humidity_max_pct != null ? (
+            <>
+              <input type="range" min={0} max={100} step={5} value={rule.humidity_max_pct} onChange={e => update({ humidity_max_pct: +e.target.value })} />
+              <span className="text-sm font-semibold text-[#121726]">≤ {rule.humidity_max_pct}%</span>
+            </>
+          ) : <span className="text-sm text-[#9aa1b3] italic">no humidity constraint</span>}
+        </div>
+        {/* AQI */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388] flex items-center gap-2">
+            <input type="checkbox" checked={rule.aqi_max != null} onChange={e => update({ aqi_max: e.target.checked ? 100 : null })} />
+            🌫 AQI cap
+          </label>
+          {rule.aqi_max != null ? (
+            <>
+              <input type="range" min={0} max={300} step={10} value={rule.aqi_max} onChange={e => update({ aqi_max: +e.target.value })} />
+              <span className="text-sm font-semibold text-[#121726]">≤ {rule.aqi_max}</span>
+            </>
+          ) : <span className="text-sm text-[#9aa1b3] italic">no AQI constraint</span>}
+        </div>
+        {/* Recompute action */}
+        <div className="flex flex-col gap-1.5 lg:col-span-1 xl:col-span-2 items-stretch">
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388]">{ruleCount} of {ruleCount} must pass</span>
+          <button
+            type="button"
+            disabled={computing}
+            onClick={onRecompute}
+            className={`px-5 py-2.5 rounded-lg text-sm font-bold border transition-colors ${computing ? 'bg-[#f5f6fb] text-[#9aa1b3] border-[#e3e6ef] cursor-wait' : stale ? 'bg-[#7c3aed] text-white border-[#7c3aed] hover:bg-[#6d28d9] shadow-sm' : 'bg-white text-[#7c3aed] border-[#7c3aed]'}`}
+          >
+            {computing ? '⏳ Computing…' : stale ? '🔁 Recompute (sliders changed)' : '✓ Up to date'}
+          </button>
+          <span className="text-xs text-[#6b7388]">
+            Computes per-hour against {' '}
+            <strong>10 years</strong> of hourly data in your browser.
+            Pre-Aug-2022 hours have no AQ data → AQ rule is unconstrained for those hours.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Region Deep Dive: per-region small-multiples with overlay support ──
 
 interface RegionDeepDiveProps {
@@ -1006,9 +1270,10 @@ interface RegionDeepDiveProps {
   grain: Grain;
   profileId: string;
   plotlyReady: boolean;
+  customResults: CustomResults | null;
 }
 
-function RegionDeepDive({ payload, tag, grain, profileId, plotlyReady }: RegionDeepDiveProps) {
+function RegionDeepDive({ payload, tag, grain, profileId, plotlyReady, customResults }: RegionDeepDiveProps) {
   const allRegions = registryOrder(payload).filter(r => payload.grains[grain].regions[r]);
 
   // Default focus = first region with data (usually santa_clara_ca).
@@ -1105,6 +1370,7 @@ function RegionDeepDive({ payload, tag, grain, profileId, plotlyReady }: RegionD
             profileId={profileId}
             allRegions={allRegions}
             plotlyReady={plotlyReady}
+            customResults={customResults}
           />
         ))}
       </div>
@@ -1121,15 +1387,15 @@ interface MiniMetricChartProps {
   profileId: string;
   allRegions: string[];
   plotlyReady: boolean;
+  customResults: CustomResults | null;
 }
 
-function MiniMetricChart({ payload, grain, metric, focus, overlays, profileId, allRegions, plotlyReady }: MiniMetricChartProps) {
+function MiniMetricChart({ payload, grain, metric, focus, overlays, profileId, allRegions, plotlyReady, customResults }: MiniMetricChartProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!plotlyReady || !ref.current || !window.Plotly) return;
     const grainData = payload.grains[grain];
-    const eKey = effectiveMetricKey(metric.key, profileId, payload.metrics);
 
     const buildTrace = (regionId: string, isFocus: boolean) => {
       const s = grainData.regions[regionId];
@@ -1137,7 +1403,7 @@ function MiniMetricChart({ payload, grain, metric, focus, overlays, profileId, a
       const color = registryColor(payload, regionId, allRegions.indexOf(regionId));
       return {
         x: s.x,
-        y: s.series[eKey] ?? [],
+        y: readSeries(payload, regionId, metric.key, profileId, grain, customResults),
         name: registryShort(payload, regionId),
         type: 'scatter',
         mode: isFocus ? 'lines' : 'lines',
@@ -1166,7 +1432,7 @@ function MiniMetricChart({ payload, grain, metric, focus, overlays, profileId, a
       paper_bgcolor: 'white',
     };
     window.Plotly.newPlot(ref.current, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
-  }, [payload, grain, metric.key, focus, overlays, profileId, plotlyReady, allRegions]);
+  }, [payload, grain, metric.key, focus, overlays, profileId, plotlyReady, allRegions, customResults]);
 
   return (
     <div className="border border-[#eef0f5] rounded-lg p-2 bg-white">
@@ -1177,26 +1443,26 @@ function MiniMetricChart({ payload, grain, metric, focus, overlays, profileId, a
 
 // ── Leaderboard (all counties, sorted by good-for-outdoors hours) ──
 
-interface LeaderboardProps { payload: Payload; grain: Grain; tag: string; profileId: string; }
+interface LeaderboardProps { payload: Payload; grain: Grain; tag: string; profileId: string; customResults: CustomResults | null; }
 
-function Leaderboard({ payload, grain, tag, profileId }: LeaderboardProps) {
+function Leaderboard({ payload, grain, tag, profileId, customResults }: LeaderboardProps) {
   const rangeLabel = RANGE_ORDER.find(r => r.tag === tag)?.label ?? tag;
-  const stayKey = effectiveMetricKey('stay_outside_hours', profileId, payload.metrics);
-  const pctKey = effectiveMetricKey('pct_daytime_outside', profileId, payload.metrics);
 
   const rows = useMemo(() => {
     const grainData = payload.grains[grain];
     const all = Object.keys(grainData.regions);
     return all.map((r, idx) => {
       const s = grainData.regions[r];
+      const stayY = readSeries(payload, r, 'stay_outside_hours', profileId, grain, customResults);
+      const pctY = readSeries(payload, r, 'pct_daytime_outside', profileId, grain, customResults);
       return {
         region: r,
         label: registryLabel(payload, r),
         short: registryShort(payload, r),
         color: registryColor(payload, r, idx),
         ink: registryInk(payload, r),
-        stay:      summarize(s.series[stayKey] ?? [], 'sum'),
-        pct:       summarize(s.series[pctKey] ?? [], 'mean'),
+        stay:      summarize(stayY, 'sum'),
+        pct:       summarize(pctY, 'mean'),
         tempMean:  summarize(s.series.temperature_2m_mean ?? [], 'mean'),
         tempMax:   summarize(s.series.temperature_2m_max ?? [], 'max'),
         tempMin:   summarize(s.series.temperature_2m_min ?? [], 'mean'),
@@ -1210,7 +1476,7 @@ function Leaderboard({ payload, grain, tag, profileId }: LeaderboardProps) {
     })
     .filter(r => r.stay != null && Number.isFinite(r.stay))
     .sort((a, b) => (b.stay as number) - (a.stay as number));
-  }, [payload, grain, stayKey, pctKey]);
+  }, [payload, grain, profileId, customResults]);
 
   if (rows.length < 2) return null;
 

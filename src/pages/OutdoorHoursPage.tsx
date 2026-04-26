@@ -18,7 +18,9 @@ declare global { interface Window { Plotly?: any; } }
 type Grain = 'yearly' | 'monthly' | 'daily';
 type RegionKey = string;
 
-interface MetricMeta { key: string; label: string; unit: string; kind: 'sum' | 'mean' | 'max' | 'pct'; }
+interface MetricMeta { key: string; label: string; unit: string; kind: 'sum' | 'mean' | 'max' | 'pct'; profile_aware?: boolean; }
+interface ProfileRule { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number; cloud_max_pct: number | null; humidity_max_pct: number | null; }
+interface Profile { id: string; name: string; label: string; desc: string; rule: ProfileRule; }
 interface RegionGrainData { label: string; x: (string | number)[]; series: Record<string, (number | null)[]>; }
 interface GrainData { tag: string; grain: Grain; x_label: string; regions: Record<RegionKey, RegionGrainData>; }
 interface RegionInfo { label: string; short: string; color: string; ink: string; default_on: boolean; }
@@ -30,7 +32,9 @@ interface Payload {
   region_registry?: Record<RegionKey, RegionInfo>;
   region_order?: RegionKey[];
   grains: Record<Grain, GrainData>;
-  rule: { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number; cloud_max_pct?: number; humidity_max_pct?: number };
+  rule: ProfileRule;
+  profiles?: Profile[];
+  default_profile?: string;
   summaries?: {
     monthly?: Record<string, string>;      // key "YYYY-MM" → one-line narrative
     range_overview?: Record<string, string>; // key = tag → overview sentence
@@ -98,6 +102,24 @@ function findExtremes(xs: (string | number)[], ys: (number | null)[]) {
     if (v > hi) { hi = v; hiI = i; }
   });
   return hiI >= 0 ? { x: xs[hiI], y: hi } : null;
+}
+
+// Map a profile-aware metric key onto its per-profile column when the active
+// profile differs from default. Returns the original key when the metric is
+// not profile-aware or when the goldilocks profile is selected (which is
+// also exported under the legacy unsuffixed names).
+function effectiveMetricKey(metricKey: string, profileId: string, metrics: MetricMeta[] | undefined): string {
+  if (profileId === 'goldilocks') return metricKey;
+  const m = metrics?.find(x => x.key === metricKey);
+  if (!m?.profile_aware) return metricKey;
+  if (metricKey === 'stay_outside_hours') return `stay_outside_${profileId}_hours`;
+  if (metricKey === 'pct_daytime_outside') return `pct_daytime_outside_${profileId}`;
+  return metricKey;
+}
+
+function activeProfile(payload: Payload | null, profileId: string): Profile | null {
+  if (!payload?.profiles) return null;
+  return payload.profiles.find(p => p.id === profileId) ?? null;
 }
 
 function prettyBucket(x: string | number, grain: Grain | 'hourly'): string {
@@ -264,6 +286,7 @@ export function OutdoorHoursPage() {
   const [availableTags, setAvailableTags] = useState<Set<string>>(new Set([DEFAULT_TAG]));
   const [grain, setGrain] = useState<Grain>('monthly');
   const [metricKey, setMetricKey] = useState<string>('stay_outside_hours');
+  const [profileId, setProfileId] = useState<string>('goldilocks');
   const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set());
   const [drillStack, setDrillStack] = useState<Crumb[]>([]);
   const [detailResult, setDetailResult] = useState<DetailResult | null>(null);
@@ -331,13 +354,14 @@ export function OutdoorHoursPage() {
   useEffect(() => {
     if (!plotlyReady || !payload || !chartRef.current || !window.Plotly || !meta) return;
     const grainData = payload.grains[grain];
+    const eKey = effectiveMetricKey(metricKey, profileId, payload.metrics);
     const traces = visibleRegions
       .filter(r => grainData.regions[r])
       .map((r, idx) => {
         const s = grainData.regions[r];
         const color = registryColor(payload, r, idx);
         return {
-          x: s.x, y: s.series[metricKey] ?? [], name: s.label, type: 'scatter', mode: 'lines+markers',
+          x: s.x, y: s.series[eKey] ?? [], name: s.label, type: 'scatter', mode: 'lines+markers',
           marker: { size: grain === 'yearly' ? 11 : 7, color, line: { width: 1, color: 'white' } },
           line: { width: 3, color },
           meta: r,
@@ -368,7 +392,7 @@ export function OutdoorHoursPage() {
     };
     node.on?.('plotly_click', onClick);
     return () => { node.removeAllListeners?.('plotly_click'); };
-  }, [plotlyReady, payload, grain, metricKey, meta, visibleRegions]);
+  }, [plotlyReady, payload, grain, metricKey, profileId, meta, visibleRegions]);
 
   const openDrill = useCallback((g: Grain, bucket: string | number) => {
     if (g === 'daily') return;
@@ -427,6 +451,7 @@ export function OutdoorHoursPage() {
     if (!payload || !meta) return [];
     const g = payload.grains[grain];
     const kind = meta.kind;
+    const eKey = effectiveMetricKey(metricKey, profileId, payload.metrics);
     return visibleRegions
       .filter(r => g.regions[r])
       .map((r, idx) => {
@@ -437,8 +462,8 @@ export function OutdoorHoursPage() {
           short: registryShort(payload, r),
           color: registryColor(payload, r, idx),
           ink: registryInk(payload, r),
-          value: summarize(s.series[metricKey] ?? [], kind),
-          peak: findExtremes(s.x, s.series[metricKey] ?? []),
+          value: summarize(s.series[eKey] ?? [], kind),
+          peak: findExtremes(s.x, s.series[eKey] ?? []),
         };
       })
       .filter(r => r.value != null && Number.isFinite(r.value))
@@ -447,7 +472,7 @@ export function OutdoorHoursPage() {
         const ll = LOWER_BETTER.has(metricKey);
         return ll ? (a.value! - b.value!) : hl ? (b.value! - a.value!) : 0;
       });
-  }, [payload, grain, metricKey, meta, visibleRegions]);
+  }, [payload, grain, metricKey, profileId, meta, visibleRegions]);
 
   const hasDirection = HIGHER_BETTER.has(metricKey) || LOWER_BETTER.has(metricKey);
 
@@ -559,6 +584,36 @@ export function OutdoorHoursPage() {
         </div>
       </div>
 
+      {/* Global profile toggle — defines what "good to go outside" means. */}
+      {payload.profiles && payload.profiles.length > 0 && (
+        <div className="bg-white border-b border-[#e3e6ef] shadow-sm">
+          <div className="max-w-[1320px] mx-auto px-7 py-3 flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388] mr-1">
+              "Good to go outside" =
+            </span>
+            <div className="inline-flex flex-wrap gap-1.5 p-1 bg-[#f5f6fb] rounded-lg border border-[#e3e6ef]">
+              {payload.profiles.map(p => {
+                const active = p.id === profileId;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setProfileId(p.id)}
+                    title={p.desc}
+                    className={`px-3 py-1.5 rounded-md text-sm font-bold transition-colors ${active ? 'bg-[#121726] text-white shadow-sm' : 'text-[#39415a] hover:bg-white'}`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-sm text-[#6b7388] hidden md:inline-block">
+              {payload.profiles.find(p => p.id === profileId)?.desc}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
       <header className="max-w-[1320px] mx-auto px-7 pt-12 pb-4">
         <div className="inline-flex items-center gap-3 px-4 py-2 bg-white border border-[#e3e6ef] rounded-full text-sm font-semibold text-[#39415a] shadow-sm">
@@ -615,7 +670,7 @@ export function OutdoorHoursPage() {
         )}
 
         {/* County Leaderboard — ranked by good-for-outdoors hours */}
-        <Leaderboard payload={payload} grain={grain} tag={tag} />
+        <Leaderboard payload={payload} grain={grain} tag={tag} profileId={profileId} />
       </header>
 
       {/* Controls */}
@@ -687,38 +742,47 @@ export function OutdoorHoursPage() {
         </div>
       </section>
 
-      {/* Rules card */}
-      <section className="max-w-[1320px] mx-auto mt-5 px-7 pt-6 pb-7 bg-gradient-to-b from-[#fffcf3] to-[#fdf6e0] border border-[#f0e6c6] rounded-xl shadow-sm text-[#3c2f0a]">
-        <header className="flex items-end justify-between gap-6 flex-wrap pb-4 border-b border-dashed border-[#e4d9a8]">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#8a7330]">The Four Rules</div>
-            <h2 className="mt-1 text-[26px] font-extrabold tracking-tight text-[#2a1f07]">What counts as a comfortable hour?</h2>
-          </div>
-          <div className="inline-flex items-center gap-3.5 px-[18px] py-2.5 bg-[#3c2f0a] text-[#fbe389] rounded-xl shadow-md">
-            <span className="font-mono text-2xl font-extrabold tracking-wider text-white">6 of 6</span>
-            <span className="text-xs leading-tight font-semibold text-[#fbe389]">must pass<br />for the hour to count</span>
-          </div>
-        </header>
+      {/* Rules card — dynamic per active profile */}
+      {(() => {
+        const activeP = activeProfile(payload, profileId);
+        const rule = activeP?.rule ?? payload.rule;
+        const cards: { color: string; bg: string; ink: string; icon: string; name: string; val: string; sub: string }[] = [
+          { color: '#f5b041', bg: '#fff6e0', ink: '#8a5b0e', icon: '☀', name: 'Daytime',          val: 'Sun is up',                                              sub: "Nighttime hours don’t count." },
+          { color: '#e85d3e', bg: '#fdeee8', ink: '#a8311a', icon: '🌡', name: 'Comfortable temp', val: `${rule.temp_min_f}°–${rule.temp_max_f}°F`,            sub: `That’s ${rule.temp_min_c}°–${rule.temp_max_c}°C.` },
+          { color: '#9b59b6', bg: '#f4ecf7', ink: '#6d2d85', icon: '⛅', name: 'Safe UV',          val: `Index ≤ ${rule.uv_max}`,                            sub: 'Above that and dermatologists say cover up.' },
+          { color: '#3498db', bg: '#eaf2f9', ink: '#1f5a82', icon: '☂', name: 'Not raining',      val: `≤ ${rule.rain_max_mm_h} mm/hr`,                     sub: "Light drizzle is OK — a downpour isn’t." },
+        ];
+        if (rule.cloud_max_pct != null)    cards.push({ color: '#7f8c8d', bg: '#eef0f2', ink: '#4a5557', icon: '☁', name: 'Not overcast', val: `Cloud ≤ ${rule.cloud_max_pct}%`,    sub: "Socked-in skies kill the vibe even when it’s warm." });
+        if (rule.humidity_max_pct != null) cards.push({ color: '#16a085', bg: '#e6f4f1', ink: '#0e6655', icon: '💧', name: 'Not muggy',    val: `Humidity ≤ ${rule.humidity_max_pct}%`, sub: "Above this, sweat can’t evaporate and the air feels heavy." });
+        const n = cards.length;
+        return (
+          <section className="max-w-[1320px] mx-auto mt-5 px-7 pt-6 pb-7 bg-gradient-to-b from-[#fffcf3] to-[#fdf6e0] border border-[#f0e6c6] rounded-xl shadow-sm text-[#3c2f0a]">
+            <header className="flex items-end justify-between gap-6 flex-wrap pb-4 border-b border-dashed border-[#e4d9a8]">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#8a7330]">{activeP?.label ?? 'Rules'}</div>
+                <h2 className="mt-1 text-[26px] font-extrabold tracking-tight text-[#2a1f07]">What counts as a comfortable hour?</h2>
+                {activeP?.desc && <p className="mt-1 text-sm text-[#7a6c3d]">{activeP.desc}</p>}
+              </div>
+              <div className="inline-flex items-center gap-3.5 px-[18px] py-2.5 bg-[#3c2f0a] text-[#fbe389] rounded-xl shadow-md">
+                <span className="font-mono text-2xl font-extrabold tracking-wider text-white">{n} of {n}</span>
+                <span className="text-xs leading-tight font-semibold text-[#fbe389]">must pass<br />for the hour to count</span>
+              </div>
+            </header>
 
-        <ol className="mt-5 grid gap-3.5 items-stretch list-none p-0 lg:grid-cols-3 md:grid-cols-2 grid-cols-1">
-          {[
-            { color: '#f5b041', bg: '#fff6e0', ink: '#8a5b0e', icon: '☀', name: 'Daytime', val: 'Sun is up', sub: "Nighttime hours don\u2019t count." },
-            { color: '#e85d3e', bg: '#fdeee8', ink: '#a8311a', icon: '🌡', name: 'Comfortable temp', val: `${payload.rule.temp_min_f}°\u2013${payload.rule.temp_max_f}°F`, sub: `That\u2019s ${payload.rule.temp_min_c}°\u2013${payload.rule.temp_max_c}°C — not too cold, not too hot.` },
-            { color: '#9b59b6', bg: '#f4ecf7', ink: '#6d2d85', icon: '⛅', name: 'Safe UV', val: `Index \u2264 ${payload.rule.uv_max}`, sub: 'Above that and dermatologists say cover up.' },
-            { color: '#3498db', bg: '#eaf2f9', ink: '#1f5a82', icon: '☂', name: 'Barely raining', val: `\u2264 ${payload.rule.rain_max_mm_h} mm/hr`, sub: "Light drizzle is OK — a downpour isn\u2019t." },
-            { color: '#7f8c8d', bg: '#eef0f2', ink: '#4a5557', icon: '☁', name: 'Not overcast', val: `Cloud \u2264 ${payload.rule.cloud_max_pct ?? 85}%`, sub: "Socked-in skies kill the vibe even when it\u2019s warm." },
-            { color: '#16a085', bg: '#e6f4f1', ink: '#0e6655', icon: '💧', name: 'Not muggy', val: `Humidity \u2264 ${payload.rule.humidity_max_pct ?? 80}%`, sub: "Above this, sweat can\u2019t evaporate and the air feels heavy." },
-          ].map((r, i) => (
-            <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4 min-h-[180px]" style={{ borderTopColor: r.color }}>
-              <div className="w-[52px] h-[52px] rounded-xl inline-flex items-center justify-center text-[28px] leading-none" style={{ background: r.bg, color: r.ink }}>{r.icon}</div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.1em] mt-1" style={{ color: r.ink }}>{r.name}</div>
-              <div className="text-[22px] font-extrabold text-[#1a150a] leading-tight tracking-tight">{r.val}</div>
-              <div className="text-[13.5px] text-[#6e5e2c] leading-snug mt-0.5">{r.sub}</div>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-4 text-sm italic text-[#7a6c3d]">Each county averages its sample neighborhoods. Every hour is scored independently.</p>
-      </section>
+            <ol className="mt-5 grid gap-3.5 items-stretch list-none p-0 lg:grid-cols-3 md:grid-cols-2 grid-cols-1">
+              {cards.map((c, i) => (
+                <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4 min-h-[180px]" style={{ borderTopColor: c.color }}>
+                  <div className="w-[52px] h-[52px] rounded-xl inline-flex items-center justify-center text-[28px] leading-none" style={{ background: c.bg, color: c.ink }}>{c.icon}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.1em] mt-1" style={{ color: c.ink }}>{c.name}</div>
+                  <div className="text-[22px] font-extrabold text-[#1a150a] leading-tight tracking-tight">{c.val}</div>
+                  <div className="text-[13.5px] text-[#6e5e2c] leading-snug mt-0.5">{c.sub}</div>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-4 text-sm italic text-[#7a6c3d]">Each county averages its sample neighborhoods. Every hour is scored independently. Switch profiles at the top of the page.</p>
+          </section>
+        );
+      })()}
 
       {/* Chart */}
       <main className="max-w-[1320px] mx-auto mt-5 p-3 bg-white border border-[#e3e6ef] rounded-xl shadow-md" style={{ height: 'min(70vh, 640px)' }}>
@@ -819,10 +883,12 @@ export default OutdoorHoursPage;
 
 // ── Leaderboard (all counties, sorted by good-for-outdoors hours) ──
 
-interface LeaderboardProps { payload: Payload; grain: Grain; tag: string; }
+interface LeaderboardProps { payload: Payload; grain: Grain; tag: string; profileId: string; }
 
-function Leaderboard({ payload, grain, tag }: LeaderboardProps) {
+function Leaderboard({ payload, grain, tag, profileId }: LeaderboardProps) {
   const rangeLabel = RANGE_ORDER.find(r => r.tag === tag)?.label ?? tag;
+  const stayKey = effectiveMetricKey('stay_outside_hours', profileId, payload.metrics);
+  const pctKey = effectiveMetricKey('pct_daytime_outside', profileId, payload.metrics);
 
   const rows = useMemo(() => {
     const grainData = payload.grains[grain];
@@ -835,8 +901,8 @@ function Leaderboard({ payload, grain, tag }: LeaderboardProps) {
         short: registryShort(payload, r),
         color: registryColor(payload, r, idx),
         ink: registryInk(payload, r),
-        stay:      summarize(s.series.stay_outside_hours ?? [], 'sum'),
-        pct:       summarize(s.series.pct_daytime_outside ?? [], 'mean'),
+        stay:      summarize(s.series[stayKey] ?? [], 'sum'),
+        pct:       summarize(s.series[pctKey] ?? [], 'mean'),
         tempMean:  summarize(s.series.temperature_2m_mean ?? [], 'mean'),
         tempMax:   summarize(s.series.temperature_2m_max ?? [], 'max'),
         tempMin:   summarize(s.series.temperature_2m_min ?? [], 'mean'),
@@ -850,7 +916,7 @@ function Leaderboard({ payload, grain, tag }: LeaderboardProps) {
     })
     .filter(r => r.stay != null && Number.isFinite(r.stay))
     .sort((a, b) => (b.stay as number) - (a.stay as number));
-  }, [payload, grain]);
+  }, [payload, grain, stayKey, pctKey]);
 
   if (rows.length < 2) return null;
 

@@ -24,12 +24,13 @@ interface GrainData { tag: string; grain: Grain; x_label: string; regions: Recor
 interface RegionInfo { label: string; short: string; color: string; ink: string; default_on: boolean; }
 interface Payload {
   tag: string;
+  pubdate?: string;
   metrics: MetricMeta[];
   regions: Record<RegionKey, string>;
   region_registry?: Record<RegionKey, RegionInfo>;
   region_order?: RegionKey[];
   grains: Record<Grain, GrainData>;
-  rule: { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number };
+  rule: { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number; cloud_max_pct?: number; humidity_max_pct?: number };
   summaries?: {
     monthly?: Record<string, string>;      // key "YYYY-MM" → one-line narrative
     range_overview?: Record<string, string>; // key = tag → overview sentence
@@ -50,8 +51,9 @@ const RANGE_ORDER: { tag: string; label: string }[] = [
   { tag: 'last5y',  label: '5 yrs' },
   { tag: 'last3y',  label: '3 yrs' },
   { tag: 'last1y',  label: '1 yr' },
+  { tag: 'last1m',  label: '1 mo' },
 ];
-const DEFAULT_TAG = 'last10y';
+const DEFAULT_TAG = 'last1m';
 
 const PLOTLY_SRC = 'https://cdn.plot.ly/plotly-2.35.2.min.js';
 let plotlyPromise: Promise<void> | null = null;
@@ -260,7 +262,7 @@ export function OutdoorHoursPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [availableTags, setAvailableTags] = useState<Set<string>>(new Set([DEFAULT_TAG]));
-  const [grain, setGrain] = useState<Grain>('monthly');
+  const [grain, setGrain] = useState<Grain>('daily');
   const [metricKey, setMetricKey] = useState<string>('stay_outside_hours');
   const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set());
   const [drillStack, setDrillStack] = useState<Crumb[]>([]);
@@ -573,6 +575,11 @@ export function OutdoorHoursPage() {
           We counted every hour of the last <strong className="text-[#121726]">{rangeBadge}</strong> and asked one simple question — <em className="text-[#121726]">was it comfortable to be outside?</em>
           Flip the time range, toggle counties to compare, click any dot to drop down to the days and hours behind it.
         </p>
+        {payload.pubdate && (
+          <p className="mt-2 text-xs uppercase tracking-wider font-bold text-[#6b7388]">
+            Data updated {new Date(payload.pubdate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+          </p>
+        )}
 
         {/* Leaderboard stats */}
         <div className="flex gap-4 mt-8 flex-wrap">
@@ -686,7 +693,7 @@ export function OutdoorHoursPage() {
             <h2 className="mt-1 text-[26px] font-extrabold tracking-tight text-[#2a1f07]">What counts as a comfortable hour?</h2>
           </div>
           <div className="inline-flex items-center gap-3.5 px-[18px] py-2.5 bg-[#3c2f0a] text-[#fbe389] rounded-xl shadow-md">
-            <span className="font-mono text-2xl font-extrabold tracking-wider text-white">4 of 4</span>
+            <span className="font-mono text-2xl font-extrabold tracking-wider text-white">6 of 6</span>
             <span className="text-xs leading-tight font-semibold text-[#fbe389]">must pass<br />for the hour to count</span>
           </div>
         </header>
@@ -697,6 +704,8 @@ export function OutdoorHoursPage() {
             { color: '#e85d3e', bg: '#fdeee8', ink: '#a8311a', icon: '🌡', name: 'Comfortable temp', val: `${payload.rule.temp_min_f}°\u2013${payload.rule.temp_max_f}°F`, sub: `That\u2019s ${payload.rule.temp_min_c}°\u2013${payload.rule.temp_max_c}°C — not too cold, not too hot.` },
             { color: '#9b59b6', bg: '#f4ecf7', ink: '#6d2d85', icon: '⛅', name: 'Safe UV', val: `Index \u2264 ${payload.rule.uv_max}`, sub: 'Above that and dermatologists say cover up.' },
             { color: '#3498db', bg: '#eaf2f9', ink: '#1f5a82', icon: '☂', name: 'Barely raining', val: `\u2264 ${payload.rule.rain_max_mm_h} mm/hr`, sub: "Light drizzle is OK — a downpour isn\u2019t." },
+            { color: '#7f8c8d', bg: '#eef0f2', ink: '#4a5557', icon: '☁', name: 'Not overcast', val: `Cloud \u2264 ${payload.rule.cloud_max_pct ?? 85}%`, sub: "Socked-in skies kill the vibe even when it\u2019s warm." },
+            { color: '#16a085', bg: '#e6f4f1', ink: '#0e6655', icon: '💧', name: 'Not muggy', val: `Humidity \u2264 ${payload.rule.humidity_max_pct ?? 80}%`, sub: "Above this, sweat can\u2019t evaporate and the air feels heavy." },
           ].map((r, i, arr) => [
             <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4" style={{ borderTopColor: r.color }}>
               <div className="w-[52px] h-[52px] rounded-xl inline-flex items-center justify-center text-[28px] leading-none" style={{ background: r.bg, color: r.ink }}>{r.icon}</div>

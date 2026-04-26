@@ -53,7 +53,7 @@ const RANGE_ORDER: { tag: string; label: string }[] = [
   { tag: 'last1y',  label: '1 yr' },
   { tag: 'last1m',  label: '1 mo' },
 ];
-const DEFAULT_TAG = 'last1m';
+const DEFAULT_TAG = 'last10y';
 
 const PLOTLY_SRC = 'https://cdn.plot.ly/plotly-2.35.2.min.js';
 let plotlyPromise: Promise<void> | null = null;
@@ -262,7 +262,7 @@ export function OutdoorHoursPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [availableTags, setAvailableTags] = useState<Set<string>>(new Set([DEFAULT_TAG]));
-  const [grain, setGrain] = useState<Grain>('daily');
+  const [grain, setGrain] = useState<Grain>('monthly');
   const [metricKey, setMetricKey] = useState<string>('stay_outside_hours');
   const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set());
   const [drillStack, setDrillStack] = useState<Crumb[]>([]);

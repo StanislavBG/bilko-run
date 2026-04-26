@@ -19,7 +19,7 @@ type Grain = 'yearly' | 'monthly' | 'daily';
 type RegionKey = string;
 
 interface MetricMeta { key: string; label: string; unit: string; kind: 'sum' | 'mean' | 'max' | 'pct'; profile_aware?: boolean; }
-interface ProfileRule { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number; cloud_max_pct: number | null; humidity_max_pct: number | null; }
+interface ProfileRule { temp_min_c: number; temp_max_c: number; temp_min_f: number; temp_max_f: number; uv_max: number; rain_max_mm_h: number; cloud_max_pct: number | null; humidity_max_pct: number | null; aqi_max: number | null; }
 interface Profile { id: string; name: string; label: string; desc: string; rule: ProfileRule; }
 interface RegionGrainData { label: string; x: (string | number)[]; series: Record<string, (number | null)[]>; }
 interface GrainData { tag: string; grain: Grain; x_label: string; regions: Record<RegionKey, RegionGrainData>; }
@@ -754,6 +754,7 @@ export function OutdoorHoursPage() {
         ];
         if (rule.cloud_max_pct != null)    cards.push({ color: '#7f8c8d', bg: '#eef0f2', ink: '#4a5557', icon: '☁', name: 'Not overcast', val: `Cloud ≤ ${rule.cloud_max_pct}%`,    sub: "Socked-in skies kill the vibe even when it’s warm." });
         if (rule.humidity_max_pct != null) cards.push({ color: '#16a085', bg: '#e6f4f1', ink: '#0e6655', icon: '💧', name: 'Not muggy',    val: `Humidity ≤ ${rule.humidity_max_pct}%`, sub: "Above this, sweat can’t evaporate and the air feels heavy." });
+        if (rule.aqi_max != null)          cards.push({ color: '#dc2626', bg: '#fdecec', ink: '#991b1b', icon: '🌫', name: 'Clean air',    val: `US AQI ≤ ${rule.aqi_max}`,           sub: "Pre-Aug-2022 hours don’t fail this rule (no AQ data)." });
         const n = cards.length;
         return (
           <section className="max-w-[1320px] mx-auto mt-5 px-7 pt-6 pb-7 bg-gradient-to-b from-[#fffcf3] to-[#fdf6e0] border border-[#f0e6c6] rounded-xl shadow-sm text-[#3c2f0a]">

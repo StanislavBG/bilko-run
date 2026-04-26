@@ -790,6 +790,9 @@ export function OutdoorHoursPage() {
         <div ref={chartRef} className="w-full h-full" />
       </main>
 
+      {/* Region Deep Dive — every metric, focus on one region with overlays */}
+      <RegionDeepDive payload={payload} tag={tag} grain={grain} profileId={profileId} plotlyReady={plotlyReady} />
+
       {/* Detail panel */}
       {drillStack.length > 0 && (
         <DetailPanel
@@ -881,6 +884,183 @@ export function OutdoorHoursPage() {
 }
 
 export default OutdoorHoursPage;
+
+// ── Region Deep Dive: per-region small-multiples with overlay support ──
+
+interface RegionDeepDiveProps {
+  payload: Payload;
+  tag: string;
+  grain: Grain;
+  profileId: string;
+  plotlyReady: boolean;
+}
+
+function RegionDeepDive({ payload, tag, grain, profileId, plotlyReady }: RegionDeepDiveProps) {
+  const allRegions = registryOrder(payload).filter(r => payload.grains[grain].regions[r]);
+
+  // Default focus = first region with data (usually santa_clara_ca).
+  const [focus, setFocus] = useState<string>(() => allRegions[0] ?? '');
+  const [overlays, setOverlays] = useState<Set<string>>(new Set());
+
+  // If region list changes (e.g. tag swap) and focus is gone, reset.
+  useEffect(() => {
+    if (!allRegions.includes(focus) && allRegions.length) setFocus(allRegions[0]);
+  }, [allRegions, focus]);
+
+  const rangeLabel = RANGE_ORDER.find(r => r.tag === tag)?.label ?? tag;
+  const focusLabel = registryLabel(payload, focus);
+
+  const toggleOverlay = (r: string) => {
+    setOverlays(prev => {
+      const n = new Set(prev);
+      if (n.has(r)) n.delete(r); else n.add(r);
+      return n;
+    });
+  };
+
+  if (!focus) return null;
+
+  return (
+    <section className="max-w-[1320px] mx-auto mt-5 px-7 pt-6 pb-7 bg-white border border-[#e3e6ef] rounded-xl shadow-md">
+      <header className="flex items-end justify-between gap-6 flex-wrap pb-4 border-b border-[#eef0f5]">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#6b7388]">Region Deep Dive</div>
+          <h2 className="mt-1 text-[26px] font-extrabold tracking-tight text-[#121726]">
+            Every metric for <span style={{ color: registryInk(payload, focus) }}>{focusLabel}</span>
+          </h2>
+          <p className="mt-1 text-sm text-[#6b7388]">{rangeLabel} · {grain} grain · click any chip to overlay another county for direct comparison.</p>
+        </div>
+      </header>
+
+      {/* Focus picker */}
+      <div className="mt-4 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388] mr-1">Focus</span>
+        {allRegions.map(r => {
+          const active = r === focus;
+          const c = registryColor(payload, r, allRegions.indexOf(r));
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => { setFocus(r); setOverlays(prev => { const n = new Set(prev); n.delete(r); return n; }); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors border ${active ? 'text-white shadow-sm' : 'text-[#39415a] hover:bg-[#fafbff]'}`}
+              style={active ? { background: c, borderColor: c } : { background: 'white', borderColor: '#e3e6ef' }}
+            >
+              <span className={`inline-block w-2 h-2 rounded-full mr-1.5 align-middle ${active ? '' : ''}`} style={{ background: c, boxShadow: active ? '0 0 0 2px white' : `0 0 0 2px ${c}33` }} />
+              {registryLabel(payload, r).replace(/, [A-Z]{2}$/, '')}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Overlay picker */}
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388] mr-1">Overlay</span>
+        {allRegions.filter(r => r !== focus).map(r => {
+          const active = overlays.has(r);
+          const c = registryColor(payload, r, allRegions.indexOf(r));
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => toggleOverlay(r)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors border ${active ? 'text-white shadow-sm' : 'text-[#39415a] hover:bg-[#fafbff]'}`}
+              style={active ? { background: c, borderColor: c, opacity: 0.85 } : { background: 'white', borderColor: '#e3e6ef' }}
+            >
+              <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ background: c, boxShadow: `0 0 0 2px ${c}33` }} />
+              {registryLabel(payload, r).replace(/, [A-Z]{2}$/, '')}
+            </button>
+          );
+        })}
+        {overlays.size > 0 && (
+          <button type="button" onClick={() => setOverlays(new Set())} className="ml-1 px-2.5 py-1 text-xs font-bold text-[#6b7388] hover:text-[#121726]">
+            clear
+          </button>
+        )}
+      </div>
+
+      {/* Mini-chart grid */}
+      <div className="mt-5 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        {payload.metrics.map(m => (
+          <MiniMetricChart
+            key={m.key}
+            payload={payload}
+            grain={grain}
+            metric={m}
+            focus={focus}
+            overlays={overlays}
+            profileId={profileId}
+            allRegions={allRegions}
+            plotlyReady={plotlyReady}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+interface MiniMetricChartProps {
+  payload: Payload;
+  grain: Grain;
+  metric: MetricMeta;
+  focus: string;
+  overlays: Set<string>;
+  profileId: string;
+  allRegions: string[];
+  plotlyReady: boolean;
+}
+
+function MiniMetricChart({ payload, grain, metric, focus, overlays, profileId, allRegions, plotlyReady }: MiniMetricChartProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!plotlyReady || !ref.current || !window.Plotly) return;
+    const grainData = payload.grains[grain];
+    const eKey = effectiveMetricKey(metric.key, profileId, payload.metrics);
+
+    const buildTrace = (regionId: string, isFocus: boolean) => {
+      const s = grainData.regions[regionId];
+      if (!s) return null;
+      const color = registryColor(payload, regionId, allRegions.indexOf(regionId));
+      return {
+        x: s.x,
+        y: s.series[eKey] ?? [],
+        name: registryShort(payload, regionId),
+        type: 'scatter',
+        mode: isFocus ? 'lines' : 'lines',
+        line: { width: isFocus ? 2.5 : 1.2, color },
+        opacity: isFocus ? 1 : 0.55,
+        hovertemplate: `<b>${registryShort(payload, regionId)}</b><br>%{x}<br>%{y:.2f} ${metric.unit}<extra></extra>`,
+      };
+    };
+
+    const traces = [
+      buildTrace(focus, true),
+      ...Array.from(overlays).map(r => buildTrace(r, false)),
+    ].filter(Boolean);
+
+    const inter = 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+    const layout = {
+      title: { text: metric.label, font: { family: inter, size: 14, color: '#121726' }, x: 0.02, xanchor: 'left', y: 0.96 },
+      font: { family: inter, color: '#39415a', size: 11 },
+      xaxis: { type: grain === 'yearly' ? 'linear' : 'date', showgrid: false, linecolor: '#e3e6ef', tickcolor: '#e3e6ef', tickfont: { size: 10 } },
+      yaxis: { showgrid: true, gridcolor: '#f0f2f7', linecolor: '#e3e6ef', tickcolor: '#e3e6ef', tickfont: { size: 10 }, title: { text: metric.unit, font: { size: 10, color: '#9aa1b3' } }, rangemode: ['stay_outside_hours', 'pct_daytime_outside', 'sunshine_hours', 'precipitation_sum'].includes(metric.key) ? 'tozero' : undefined },
+      hovermode: 'x unified',
+      hoverlabel: { bgcolor: '#121726', bordercolor: '#121726', font: { color: 'white', family: inter, size: 12 } },
+      showlegend: false,
+      margin: { l: 48, r: 12, t: 32, b: 32 },
+      plot_bgcolor: 'white',
+      paper_bgcolor: 'white',
+    };
+    window.Plotly.newPlot(ref.current, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
+  }, [payload, grain, metric.key, focus, overlays, profileId, plotlyReady, allRegions]);
+
+  return (
+    <div className="border border-[#eef0f5] rounded-lg p-2 bg-white">
+      <div ref={ref} style={{ width: '100%', height: '220px' }} />
+    </div>
+  );
+}
 
 // ── Leaderboard (all counties, sorted by good-for-outdoors hours) ──
 

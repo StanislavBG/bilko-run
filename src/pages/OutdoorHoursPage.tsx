@@ -822,44 +822,158 @@ export function OutdoorHoursPage() {
   };
 
   return (
-    <div className="bg-[#f6f7fb] min-h-screen">
+    <div className="outdoor-atlas min-h-screen">
       <style>{`
-        @keyframes leaderboardRowIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
+        /* ───── Outdoor Atlas — editorial-meteorology theme ───── */
+        .outdoor-atlas {
+          --ink: oklch(0.97 0.015 85);
+          --ink-dim: oklch(0.78 0.02 85);
+          --ink-faint: oklch(0.55 0.02 85);
+          --bg: oklch(0.16 0.035 255);
+          --bg-2: oklch(0.20 0.045 255);
+          --bg-3: oklch(0.24 0.05 255);
+          --line: oklch(0.32 0.04 255);
+          --line-soft: oklch(0.28 0.035 255);
+          --accent: oklch(0.88 0.18 85);
+          background: var(--bg);
+          color: var(--ink);
+          position: relative;
+          overflow-x: hidden;
         }
-        .leaderboard-row {
-          opacity: 0;
-          animation: leaderboardRowIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        .outdoor-atlas .display { font-family: 'Instrument Serif', serif; font-weight: 400; letter-spacing: -0.01em; }
+        .outdoor-atlas .mono    { font-family: 'JetBrains Mono', monospace; }
+
+        /* Atmospheric backdrop */
+        .outdoor-atlas .atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .outdoor-atlas .atmos::before {
+          content:''; position:absolute; inset:-10%;
+          background:
+            radial-gradient(900px 500px at 18% 12%, oklch(0.32 0.10 260 / 0.55), transparent 60%),
+            radial-gradient(800px 600px at 85% 8%, oklch(0.30 0.10 200 / 0.45), transparent 60%),
+            radial-gradient(1100px 700px at 60% 90%, oklch(0.26 0.08 280 / 0.55), transparent 60%);
+          filter: blur(8px);
         }
+        .outdoor-atlas .atmos::after {
+          content:''; position:absolute; inset:0;
+          background-image: radial-gradient(circle at 50% 50%, oklch(1 0 0 / 0.04) 0.5px, transparent 1px);
+          background-size: 3px 3px; opacity:.35; mix-blend-mode: screen;
+        }
+        .outdoor-atlas .grid-overlay {
+          position: fixed; inset:0; z-index:0; pointer-events:none;
+          background-image: linear-gradient(to right, oklch(1 0 0 / 0.025) 1px, transparent 1px);
+          background-size: 80px 80px;
+          mask-image: linear-gradient(to bottom, black, black 60%, transparent);
+        }
+
+        /* Live weather */
+        .outdoor-atlas .live-weather { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .outdoor-atlas .lw-sun {
+          position: absolute; right: 8%; top: 60px; width: 220px; height: 220px; border-radius: 50%;
+          background: radial-gradient(circle, oklch(0.92 0.16 80 / 0.55) 0%, oklch(0.85 0.18 70 / 0.18) 40%, transparent 70%);
+          filter: blur(8px); animation: lw-sun-pulse 7s ease-in-out infinite;
+        }
+        @keyframes lw-sun-pulse { 0%,100% { transform: scale(1); opacity:.85; } 50% { transform: scale(1.06); opacity:1; } }
+        .outdoor-atlas .lw-cloud {
+          position: absolute; height: 40px; border-radius: 99px;
+          background: linear-gradient(180deg, oklch(0.95 0.02 250 / 0.13), oklch(0.85 0.02 250 / 0.05));
+          filter: blur(2px); animation: lw-drift linear infinite;
+        }
+        .outdoor-atlas .lw-cloud::before, .outdoor-atlas .lw-cloud::after { content:''; position:absolute; background: inherit; border-radius:50%; }
+        .outdoor-atlas .lw-cloud::before { width:60%; height:160%; left:10%; top:-50%; }
+        .outdoor-atlas .lw-cloud::after  { width:50%; height:140%; right:8%; top:-40%; }
+        @keyframes lw-drift { from { transform: translateX(-30vw); } to { transform: translateX(120vw); } }
+        .outdoor-atlas .lw-drop {
+          position: absolute; width: 1px; height: 26px;
+          background: linear-gradient(180deg, transparent, oklch(0.78 0.08 220 / 0.55));
+          animation: lw-rain linear infinite; opacity: .6;
+        }
+        @keyframes lw-rain { from { transform: translateY(-40px); } to { transform: translateY(110vh); } }
+        .outdoor-atlas .lw-flake {
+          position: absolute; width: 4px; height: 4px; border-radius: 50%;
+          background: oklch(0.95 0.01 250 / 0.7); animation: lw-snow linear infinite; box-shadow: 0 0 4px white;
+        }
+        @keyframes lw-snow { from { transform: translateY(-20px); } to { transform: translateY(110vh) translateX(40px); } }
+        .outdoor-atlas .lw-haze {
+          position: absolute; left:0; right:0; bottom:0; height: 140px;
+          background: linear-gradient(180deg, transparent, oklch(0.85 0.16 60 / 0.08));
+          animation: lw-haze 6s ease-in-out infinite;
+        }
+        @keyframes lw-haze { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        /* Stack: anything that's not a backdrop layer rides above. */
+        .outdoor-atlas > *:not(.atmos):not(.grid-overlay):not(.live-weather) { position: relative; z-index: 1; }
+
+        /* Sweeping color/border overrides for light surfaces → dark glass. */
+        .outdoor-atlas .bg-white,
+        .outdoor-atlas .bg-\\[\\#f9fafc\\],
+        .outdoor-atlas .bg-\\[\\#f5f6fb\\] { background-color: oklch(0.20 0.04 255 / 0.55) !important; backdrop-filter: blur(10px); }
+        .outdoor-atlas .bg-white\\/95,
+        .outdoor-atlas .bg-white\\/85 { background-color: oklch(0.18 0.04 255 / 0.6) !important; }
+        .outdoor-atlas .bg-\\[\\#f6f7fb\\] { background-color: transparent !important; }
+        .outdoor-atlas .bg-\\[\\#fafbff\\],
+        .outdoor-atlas .bg-\\[\\#eef1f8\\] { background-color: oklch(0.22 0.05 255 / 0.5) !important; }
+        .outdoor-atlas .bg-\\[\\#fffcf3\\],
+        .outdoor-atlas .bg-\\[\\#fdf6e0\\],
+        .outdoor-atlas .bg-\\[\\#fff8d8\\] { background-color: oklch(0.18 0.04 255 / 0.6) !important; }
+        .outdoor-atlas .bg-\\[\\#fffbea\\],
+        .outdoor-atlas .bg-\\[\\#fff4d0\\] { background-color: oklch(0.22 0.05 80 / 0.18) !important; }
+        .outdoor-atlas .bg-\\[\\#faf5ff\\] { background-color: oklch(0.22 0.06 300 / 0.30) !important; }
+
+        .outdoor-atlas .text-\\[\\#121726\\] { color: var(--ink) !important; }
+        .outdoor-atlas .text-\\[\\#39415a\\] { color: var(--ink-dim) !important; }
+        .outdoor-atlas .text-\\[\\#6b7388\\] { color: var(--ink-faint) !important; }
+        .outdoor-atlas .text-\\[\\#39415a\\]\\!,
+        .outdoor-atlas .text-\\[\\#1a150a\\] { color: var(--ink) !important; }
+        .outdoor-atlas .text-\\[\\#7a6c3d\\],
+        .outdoor-atlas .text-\\[\\#8a7330\\],
+        .outdoor-atlas .text-\\[\\#6e5e2c\\],
+        .outdoor-atlas .text-\\[\\#3c2f0a\\],
+        .outdoor-atlas .text-\\[\\#2a1f07\\] { color: var(--ink-dim) !important; }
+        .outdoor-atlas .text-\\[\\#9aa1b3\\] { color: var(--ink-faint) !important; }
+
+        .outdoor-atlas .border-\\[\\#e3e6ef\\],
+        .outdoor-atlas .border-\\[\\#eef0f5\\],
+        .outdoor-atlas .border-\\[\\#c9cedb\\],
+        .outdoor-atlas .border-\\[\\#f0e6c6\\],
+        .outdoor-atlas .border-\\[\\#e4d9a8\\],
+        .outdoor-atlas .border-\\[\\#f0dd95\\] { border-color: var(--line-soft) !important; }
+
+        /* Hero h1 — editorial display */
+        .outdoor-atlas h1.display-hero {
+          font-family: 'Instrument Serif', serif !important; font-weight: 400 !important;
+          letter-spacing: -0.025em !important; color: var(--ink);
+        }
+        .outdoor-atlas .accent-em { color: var(--accent); font-style: italic; }
+
+        /* Profile toggle — glow chips */
+        .outdoor-atlas .profile-chip-active { box-shadow: 0 0 22px var(--p-color, oklch(0.88 0.18 85 / 0.6)) !important; }
+
+        /* Make the gradient strip at top of page a thin atmospheric line */
+        .outdoor-atlas .gradient-strip { opacity: 0.55; }
+
+        /* Animations preserved from prior version. */
+        @keyframes leaderboardRowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .leaderboard-row { opacity: 0; animation: leaderboardRowIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
         @keyframes medalPulse {
           0%, 100% { transform: scale(1) rotate(0deg); }
           30%      { transform: scale(1.15) rotate(-6deg); }
           60%      { transform: scale(1.1) rotate(4deg); }
         }
-        .medal {
-          display: inline-block;
-          animation: medalPulse 2.8s ease-in-out 0.6s 2;
-        }
+        .medal { display: inline-block; animation: medalPulse 2.8s ease-in-out 0.6s 2; }
         @keyframes statCount { from { opacity: 0.2; } to { opacity: 1; } }
         .stat-value { animation: statCount 0.8s ease-out; }
         @keyframes takeFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .hero-take { animation: takeFade 0.6s ease-out; }
-        @keyframes profileCardIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .profile-card {
-          opacity: 0;
-          animation: profileCardIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        }
-        .profile-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px -10px rgba(18,23,38,0.18);
-          transition: transform 0.18s, box-shadow 0.18s;
-        }
+        @keyframes profileCardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .profile-card { opacity: 0; animation: profileCardIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        .profile-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -10px oklch(0 0 0 / 0.4); transition: transform 0.18s, box-shadow 0.18s; }
       `}</style>
-      <div className="h-1 bg-gradient-to-r from-[#e45c3a] via-[#f2b046] to-[#0e8f74]" />
+
+      <div className="atmos" aria-hidden="true" />
+      <div className="grid-overlay" aria-hidden="true" />
+      <LiveWeather profile={profileId} leaderRegion={visibleRegions[0]} />
+
+      <div className="h-1 bg-gradient-to-r from-[#e45c3a] via-[#f2b046] to-[#0e8f74] gradient-strip" />
 
       {/* KOUT-7 station bar */}
       <div className="bg-gradient-to-b from-[#0d1019] to-[#121726] border-b border-[#1c2033] shadow-sm">
@@ -945,8 +1059,8 @@ export function OutdoorHoursPage() {
             </span>
           ))}
         </div>
-        <h1 className="mt-6 text-[clamp(42px,5.6vw,64px)] font-extrabold tracking-tight leading-[1.02] text-[#121726]">
-          Where is the weather <span className="bg-gradient-to-r from-[#e45c3a] via-[#f2b046] to-[#0e8f74] bg-clip-text text-transparent">actually</span> better?
+        <h1 className="display-hero mt-6 text-[clamp(56px,8vw,132px)] tracking-tight leading-[0.95]">
+          Where is the weather <span className="accent-em">actually</span> better?
         </h1>
         <p className="mt-4 max-w-[760px] text-xl leading-snug text-[#39415a]">
           We counted every hour of the last <strong className="text-[#121726]">{rangeBadge}</strong> and asked one simple question — <em className="text-[#121726]">was it comfortable to be outside?</em>
@@ -1218,6 +1332,69 @@ export function OutdoorHoursPage() {
 }
 
 export default OutdoorHoursPage;
+
+// ── Live Weather Layer ──
+// A fixed-position decorative backdrop that shifts mood (sun / rain / clouds / snow / haze)
+// based on the active profile and the first-visible region's climate group. Cosmetic only.
+
+interface LiveWeatherProps { profile: string; leaderRegion: string | undefined; }
+
+function LiveWeather({ profile, leaderRegion }: LiveWeatherProps) {
+  const mood = useMemo(() => {
+    if (profile === 'cool_cloudy') return 'cloud';
+    if (profile === 'all_weather') return 'rain';
+    if (profile === 'sun_seeker') return 'sun';
+    if (!leaderRegion) return 'sun';
+    if (/king|snohomish/.test(leaderRegion)) return 'rain';
+    if (/maui/.test(leaderRegion)) return 'sun';
+    if (/florida|fl$|miami|charlotte_fl|st_johns/.test(leaderRegion)) return 'haze';
+    if (/westchester/.test(leaderRegion) && new Date().getMonth() < 3) return 'snow';
+    return 'sun';
+  }, [profile, leaderRegion]);
+
+  const layers = useMemo(() => {
+    const clouds = Array.from({ length: 6 }, (_, i) => ({
+      id: i,
+      top: 40 + Math.random() * 280,
+      width: 200 + Math.random() * 250,
+      dur: 60 + Math.random() * 80,
+      delay: -Math.random() * 80,
+      opacity: mood === 'cloud' ? 0.9 : (mood === 'rain' ? 0.7 : 0.35),
+    }));
+    const drops = mood === 'rain' ? Array.from({ length: 70 }, () => ({
+      left: Math.random() * 100,
+      dur: 0.6 + Math.random() * 0.8,
+      delay: Math.random() * 1.4,
+      opacity: 0.3 + Math.random() * 0.4,
+    })) : [];
+    const flakes = mood === 'snow' ? Array.from({ length: 60 }, () => ({
+      left: Math.random() * 100,
+      dur: 6 + Math.random() * 8,
+      delay: Math.random() * 8,
+      size: 2 + Math.random() * 4,
+    })) : [];
+    return { sun: mood === 'sun' || mood === 'haze', clouds, drops, flakes, haze: mood === 'haze' };
+  }, [mood]);
+
+  return (
+    <div className="live-weather" aria-hidden="true">
+      {layers.sun && <div className="lw-sun" />}
+      {layers.clouds.map(c => (
+        <div key={c.id} className="lw-cloud"
+             style={{ top: c.top, width: c.width, animationDuration: `${c.dur}s`, animationDelay: `${c.delay}s`, opacity: c.opacity }} />
+      ))}
+      {layers.drops.map((d, i) => (
+        <div key={i} className="lw-drop"
+             style={{ left: `${d.left}%`, animationDuration: `${d.dur}s`, animationDelay: `${d.delay}s`, opacity: d.opacity }} />
+      ))}
+      {layers.flakes.map((f, i) => (
+        <div key={i} className="lw-flake"
+             style={{ left: `${f.left}%`, width: f.size, height: f.size, animationDuration: `${f.dur}s`, animationDelay: `${f.delay}s` }} />
+      ))}
+      {layers.haze && <div className="lw-haze" />}
+    </div>
+  );
+}
 
 // ── Tutorial / Onboarding Tour ──
 

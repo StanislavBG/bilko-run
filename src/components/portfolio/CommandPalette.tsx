@@ -8,6 +8,8 @@ interface Item {
   name: string;
   desc: string;
   path: string;
+  /** True for in-repo React routes, false for static-path / external. */
+  internal: boolean;
 }
 
 interface Props {
@@ -31,13 +33,26 @@ export function CommandPalette({ open, onClose }: Props) {
 
   const items = useMemo<Item[]>(() => {
     const all: Item[] = [
-      ...SECTIONS.map(s => ({ kind: 'Section', ic: s.icon, name: s.label, desc: s.desc, path: s.path })),
-      ...PORTFOLIO_PROJECTS.map(p => ({ kind: p.status === 'Cooking' ? 'Cooking' : 'Project', ic: '◐', name: p.name, desc: p.kind, path: p.href })),
+      ...SECTIONS.map(s => ({ kind: 'Section', ic: s.icon, name: s.label, desc: s.desc, path: s.path, internal: true })),
+      ...PORTFOLIO_PROJECTS.map(p => ({
+        kind: p.status === 'Cooking' ? 'Cooking' : 'Project',
+        ic: '◐',
+        name: p.name,
+        desc: p.kind,
+        path: p.href,
+        internal: p.isInternal,
+      })),
     ];
     if (!query) return all.slice(0, 12);
     const q = query.toLowerCase();
     return all.filter(i => (i.name + ' ' + i.desc + ' ' + i.kind).toLowerCase().includes(q)).slice(0, 12);
   }, [query]);
+
+  const go = (it: Item) => {
+    if (it.internal) navigate(it.path);
+    else window.location.href = it.path;
+    onClose();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -45,10 +60,11 @@ export function CommandPalette({ open, onClose }: Props) {
       if (e.key === 'Escape') onClose();
       else if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(items.length - 1, a + 1)); }
       else if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(a => Math.max(0, a - 1)); }
-      else if (e.key === 'Enter')     { e.preventDefault(); const it = items[active]; if (it) { navigate(it.path); onClose(); } }
+      else if (e.key === 'Enter')     { e.preventDefault(); const it = items[active]; if (it) go(it); }
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, items, active, onClose, navigate]);
 
   if (!open) return null;
@@ -72,7 +88,7 @@ export function CommandPalette({ open, onClose }: Props) {
               key={i}
               className={'pf-row ' + (i === active ? 'active' : '')}
               onMouseEnter={() => setActive(i)}
-              onClick={() => { navigate(it.path); onClose(); }}
+              onClick={() => go(it)}
             >
               <span className="pf-ic">{it.ic}</span>
               <span className="pf-name">{it.name}</span>

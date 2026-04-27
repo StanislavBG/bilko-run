@@ -46,6 +46,26 @@ bilko.run is Bilko's personal brand site and AI tool platform. 10 independent to
 **Privacy (FREE — runs in browser):**
 10. **LocalScore** (`/projects/local-score`) — Document analyzer via Gemma/WebGPU, zero server
 
+## Projects hosting pattern
+
+`bilko.run` is a *hub*. Many projects live in their own sibling repos under `~/Projects/` (e.g. `~/Projects/Bilko-Game-Academy`) and are built in their own Claude sessions. This monorepo hosts them at paths and lists them in the portfolio.
+
+**Three host kinds**, declared in `src/data/projectsRegistry.ts`:
+
+1. **`react-route`** — In-repo React page. The 10 AI tools use this. Canonical URL is `/products/<slug>`. Tightly coupled to shared auth (Clerk), DB (Turso), payments (Stripe).
+
+2. **`static-path`** — Built externally, dropped into `public/projects/<slug>/`. Served as static assets at `/projects/<slug>/`. Boat Shooter (`game-academy`) is the reference example.
+
+3. **`external-url`** — Hosted on a different domain/subdomain.
+
+**Adding a new standalone project from another Claude session:**
+1. Build the project in its own repo (its own Claude session, its own git).
+2. Output static assets and copy/sync them into `public/projects/<slug>/` of *this* repo.
+3. Add one entry to `STANDALONE_PROJECTS` in `src/data/projectsRegistry.ts`.
+4. Commit and push (auto-deploys on Render).
+
+The portfolio (`/projects`, `/`, `⌘K`) reads from this registry, so once registered the project shows up everywhere automatically. Static-path and external projects trigger a full page load on click; React routes use SPA navigation.
+
 ## Tech Stack
 
 TypeScript everywhere. Always use TypeScript over JavaScript for new files.

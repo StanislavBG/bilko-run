@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ticker } from '../components/portfolio/Ticker.js';
+import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { SECTIONS, PORTFOLIO_PROJECTS, NOW_ITEMS } from '../data/portfolio.js';
 
 export function HomePage() {
@@ -116,7 +117,7 @@ export function HomePage() {
         </div>
         <div className="pf-proj-grid">
           {PORTFOLIO_PROJECTS.slice(0, 4).map((p, i) => (
-            <div key={p.id} className="pf-proj-card" onClick={() => navigate(p.href)}>
+            <div key={p.id} className="pf-proj-card" onClick={() => navigateProject(navigate, p)}>
               <div className={`pf-swatch ${p.color}`}></div>
               <div className="pf-head">
                 <span className="pf-ord">No. 0{i + 1}</span>

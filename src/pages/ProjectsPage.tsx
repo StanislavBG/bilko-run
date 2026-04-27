@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/portfolio/PageHeader.js';
+import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { PORTFOLIO_PROJECTS } from '../data/portfolio.js';
 
 const FILTERS = ['All', 'Live', 'Shipped', 'Cooking'] as const;
@@ -47,7 +48,7 @@ export function ProjectsPage() {
       </div>
       <div className="pf-proj-grid">
         {list.map((p, i) => (
-          <div key={p.id} className="pf-proj-card" onClick={() => navigate(p.href)}>
+          <div key={p.id} className="pf-proj-card" onClick={() => navigateProject(navigate, p)}>
             <div className={`pf-swatch ${p.color}`}></div>
             <div className="pf-head">
               <span className="pf-ord">No. {String(i + 1).padStart(2, '0')}</span>

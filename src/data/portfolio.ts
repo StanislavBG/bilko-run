@@ -1,4 +1,4 @@
-import { LISTING_TOOLS, type ToolDefinition } from '../config/tools.js';
+import { PROJECTS, type Project, projectHref, isReactRoute } from './projectsRegistry.js';
 
 export interface Section {
   id: string;
@@ -19,6 +19,8 @@ export interface PortfolioProject {
   tags: readonly string[];
   color: 'tang' | 'ink' | 'blue';
   href: string;
+  /** True for in-repo React routes, false for static paths / external URLs. */
+  isInternal: boolean;
 }
 
 export interface PortfolioGame {
@@ -50,42 +52,33 @@ export interface SkillGroup {
   items: readonly string[];
 }
 
-const KIND_LABELS: Record<string, string> = {
-  business: 'Productivity',
-  content: 'Content & Copy',
-  devtools: 'Developer Tool',
-};
-
 const COLORS: ReadonlyArray<'tang' | 'ink' | 'blue'> = ['tang', 'ink', 'blue'];
 
-function statusOf(t: ToolDefinition): PortfolioProject['status'] {
-  if (t.status === 'live') return 'Live';
-  if (t.status === 'beta') return 'Shipped';
-  return 'Cooking';
+function statusLabel(p: Project): PortfolioProject['status'] {
+  if (p.status === 'live')    return 'Live';
+  if (p.status === 'cooking') return 'Cooking';
+  return 'Shipped';
 }
 
-function tagsOf(t: ToolDefinition): readonly string[] {
-  if (t.features?.length) return t.features.slice(0, 2);
-  return [];
-}
-
-const PROJECT_COUNT = LISTING_TOOLS.length;
-
-export const PORTFOLIO_PROJECTS: readonly PortfolioProject[] = LISTING_TOOLS.map((t, i) => ({
-  id: t.slug,
-  name: t.name,
-  kind: KIND_LABELS[t.category] ?? t.category,
-  year: t.status === 'coming-soon' ? 2026 : 2025,
-  status: statusOf(t),
-  blurb: t.tagline,
-  tags: tagsOf(t),
+export const PORTFOLIO_PROJECTS: readonly PortfolioProject[] = PROJECTS.map((p, i) => ({
+  id: p.slug,
+  name: p.name,
+  kind: p.category,
+  year: p.year,
+  status: statusLabel(p),
+  blurb: p.tagline,
+  tags: p.tags ?? [],
   color: COLORS[i % COLORS.length],
-  href: `/products/${t.slug}`,
+  href: projectHref(p),
+  isInternal: isReactRoute(p),
 }));
+
+const PROJECT_COUNT = PORTFOLIO_PROJECTS.length;
+const LIVE_COUNT = PORTFOLIO_PROJECTS.filter(p => p.status === 'Live').length;
 
 export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
-  { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Shipped work — productivity tools, AI experiments, side quests.', tag: `${PROJECT_COUNT} shipped` },
+  { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Shipped work — productivity tools, AI experiments, side quests.', tag: `${LIVE_COUNT} live` },
   { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: '1 playable' },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
   { id: 'skills',    label: 'AI Skills',   path: '/skills',    icon: '◈', desc: 'What Bilko is fluent in — models, frameworks, patterns.', tag: 'the kit' },
@@ -95,9 +88,9 @@ export const SECTIONS: readonly Section[] = [
 ];
 
 export const GAMES: readonly PortfolioGame[] = [
-  { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade',     plays: 'live', blurb: 'Browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
-  { id: 'midnight-router', name: 'Midnight Router', genre: 'Puzzle',     plays: 'soon', blurb: 'Route signals across a sleeping city before sunrise.', color: 'blue' },
-  { id: 'echo-chamber',    name: 'Echo Chamber',    genre: 'Audio',      plays: 'soon', blurb: 'Match shapes by what they sound like.',                color: 'ink'  },
+  { id: 'game-academy',    name: 'Boat Shooter',    genre: 'Arcade', plays: 'live', blurb: 'Browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
+  { id: 'midnight-router', name: 'Midnight Router', genre: 'Puzzle', plays: 'soon', blurb: 'Route signals across a sleeping city before sunrise.',                  color: 'blue' },
+  { id: 'echo-chamber',    name: 'Echo Chamber',    genre: 'Audio',  plays: 'soon', blurb: 'Match shapes by what they sound like.',                                color: 'ink'  },
 ];
 
 export const SKILLS: readonly SkillGroup[] = [
@@ -125,14 +118,14 @@ export const WORKFLOWS: readonly Workflow[] = [
 ];
 
 export const NOW_ITEMS: readonly string[] = [
-  `Shipping the ${PROJECT_COUNT}-tool Bilko platform`,
+  `Shipping the ${PROJECT_COUNT}-project Bilko platform`,
   'Cooking AgentTrace (local agent observability)',
-  'Reading: "Designing Data-Intensive Applications"',
+  'Game Academy: Boat Shooter live, more on the way',
   'Building in public — see Blog',
 ];
 
 export const TICKER_ITEMS: readonly string[] = [
-  `${PROJECT_COUNT} AI tools shipped`,
+  `${LIVE_COUNT} projects live · ${PROJECT_COUNT} total`,
   'PageRoast — live',
   'OutdoorHours — KOUT-7 weather report',
   'LocalScore — runs in your browser, never sees data',

@@ -11,7 +11,7 @@
  * Plotly is loaded once via CDN. Region set is data-driven — add a county to
  * the JSON bundle and it appears in the picker.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 declare global { interface Window { Plotly?: any; } }
@@ -159,6 +159,36 @@ function readSeries(
   }
   const eKey = effectiveMetricKey(metricKey, profileId, payload.metrics);
   return regionData.series[eKey] ?? [];
+}
+
+// Compact URL encoding for the 7 custom-rule fields. Empty slot = null cap.
+// Format: t1,t2,uv,rain,cloud,hum,aqi  e.g. "7,30,6,1,85,80,100" or "7,30,6,1,,,100".
+function encodeCustomRuleParam(r: ProfileRule): string {
+  const parts = [r.temp_min_c, r.temp_max_c, r.uv_max, r.rain_max_mm_h, r.cloud_max_pct, r.humidity_max_pct, r.aqi_max];
+  return parts.map(v => v == null ? '' : String(v)).join(',');
+}
+function parseCustomRuleParam(raw: string | null): ProfileRule | null {
+  if (!raw) return null;
+  const p = raw.split(',');
+  if (p.length !== 7) return null;
+  const num = (s: string) => s === '' ? null : (Number.isFinite(+s) ? +s : NaN);
+  const temp_min_c = num(p[0]);
+  const temp_max_c = num(p[1]);
+  const uv_max = num(p[2]);
+  const rain_max_mm_h = num(p[3]);
+  if (temp_min_c == null || temp_max_c == null || uv_max == null || rain_max_mm_h == null) return null;
+  if ([temp_min_c, temp_max_c, uv_max, rain_max_mm_h].some(v => Number.isNaN(v as number))) return null;
+  return {
+    temp_min_c: temp_min_c as number,
+    temp_max_c: temp_max_c as number,
+    temp_min_f: Math.round((temp_min_c as number) * 9 / 5 + 32),
+    temp_max_f: Math.round((temp_max_c as number) * 9 / 5 + 32),
+    uv_max: uv_max as number,
+    rain_max_mm_h: rain_max_mm_h as number,
+    cloud_max_pct: num(p[4]),
+    humidity_max_pct: num(p[5]),
+    aqi_max: num(p[6]),
+  };
 }
 
 // Bucket key for the active grain (matches what the server-side rollup uses).
@@ -362,6 +392,7 @@ export function OutdoorHoursPage() {
     profile: searchParams.get('profile') || 'goldilocks',
     regions: searchParams.get('regions')?.split(',').filter(Boolean) ?? null,
     yoy: searchParams.get('yoy') === '1',
+    customRule: parseCustomRuleParam(searchParams.get('cr')),
   };
 
   // Cache of fetched payloads per tag
@@ -376,7 +407,7 @@ export function OutdoorHoursPage() {
   const [profileId, setProfileId] = useState<string>(initial.profile);
   const [regionsOn, setRegionsOn] = useState<Set<RegionKey>>(new Set(initial.regions ?? []));
   const [yoy, setYoy] = useState<boolean>(initial.yoy);
-  const [customRule, setCustomRule] = useState<ProfileRule>(DEFAULT_CUSTOM_RULE);
+  const [customRule, setCustomRule] = useState<ProfileRule>(initial.customRule ?? DEFAULT_CUSTOM_RULE);
   const [customResults, setCustomResults] = useState<CustomResults | null>(null);
   const [customComputing, setCustomComputing] = useState(false);
   const [customComputedFor, setCustomComputedFor] = useState<string | null>(null);  // "tag|ruleHash"
@@ -385,7 +416,20 @@ export function OutdoorHoursPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [plotlyReady, setPlotlyReady] = useState<boolean>(typeof window !== 'undefined' && !!window.Plotly);
+  const [tutorialOpen, setTutorialOpen] = useState<boolean>(false);
   const chartRef = useRef<HTMLDivElement>(null);
+
+  // First-visit auto-open the tour. Once dismissed, set localStorage flag so it stops.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (!window.localStorage.getItem('outdoor_hours_seen_tour_v1')) setTutorialOpen(true);
+    } catch { /* private mode etc — silently skip */ }
+  }, []);
+  const closeTutorial = useCallback(() => {
+    setTutorialOpen(false);
+    try { window.localStorage.setItem('outdoor_hours_seen_tour_v1', '1'); } catch { /* noop */ }
+  }, []);
   // True until regionsOn has been seeded from URL or default_on registry — prevents
   // the initial empty Set from being written back to the URL as `regions=`.
   const regionsSeeded = useRef<boolean>(initial.regions !== null);
@@ -398,6 +442,10 @@ export function OutdoorHoursPage() {
     if (metricKey !== 'stay_outside_hours') next.set('metric', metricKey);
     if (profileId !== 'goldilocks') next.set('profile', profileId);
     if (yoy) next.set('yoy', '1');
+    if (profileId === CUSTOM_PROFILE_ID) {
+      const cr = encodeCustomRuleParam(customRule);
+      if (cr !== encodeCustomRuleParam(DEFAULT_CUSTOM_RULE)) next.set('cr', cr);
+    }
     if (regionsSeeded.current) {
       const defaults = payload ? new Set(registryOrder(payload).filter(r => payload.region_registry?.[r]?.default_on)) : new Set();
       const sortedOn = Array.from(regionsOn).sort();
@@ -405,7 +453,7 @@ export function OutdoorHoursPage() {
       if (sortedOn.join(',') !== sortedDefault.join(',')) next.set('regions', sortedOn.join(','));
     }
     setSearchParams(next, { replace: true });
-  }, [tag, grain, metricKey, profileId, yoy, regionsOn, payload, setSearchParams]);
+  }, [tag, grain, metricKey, profileId, yoy, regionsOn, customRule, payload, setSearchParams]);
 
   // Load Plotly once. Track readiness in state so the chart effect re-runs
   // after the CDN script lands (necessary when payload loads first).
@@ -820,12 +868,21 @@ export function OutdoorHoursPage() {
                 style={{ background: 'linear-gradient(180deg,#e45c3a,#c44a2a)' }}>KOUT·7</span>
           <span className="w-px h-5 bg-[#2a3050]" />
           <span className="text-base text-[#d4d8e6]">The <strong className="text-white font-bold">Outdoor&nbsp;Hours</strong> Report</span>
-          <span className="ml-auto inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff4d4d]">
+          <button
+            type="button"
+            onClick={() => setTutorialOpen(true)}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#2a3050] bg-[#1c2033] text-[#d4d8e6] text-xs font-bold uppercase tracking-wider hover:bg-[#262d4a] hover:text-white transition-colors"
+          >
+            🎓 Tour
+          </button>
+          <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ff4d4d]">
             <span className="w-2 h-2 rounded-full bg-[#ff2a2a] animate-pulse" style={{ boxShadow: '0 0 0 4px rgba(255,42,42,0.25)' }} />
             On the air
           </span>
         </div>
       </div>
+
+      {tutorialOpen && <Tutorial onClose={closeTutorial} />}
 
       {/* Global profile toggle — defines what "good to go outside" means. */}
       {payload.profiles && payload.profiles.length > 0 && (
@@ -1161,6 +1218,156 @@ export function OutdoorHoursPage() {
 }
 
 export default OutdoorHoursPage;
+
+// ── Tutorial / Onboarding Tour ──
+
+interface TutorialStep { icon: string; title: string; body: React.ReactNode; }
+
+const TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    icon: '👋',
+    title: 'Welcome to KOUT-7 Outdoor Hours',
+    body: (
+      <>
+        <p>We took every hour of the last <strong>10 years</strong> of weather + air-quality data across <strong>12 counties</strong> (Bay Area, Seattle, Florida coasts, NYC, Maui, Sofia, Gabrovo) and asked one question:</p>
+        <p className="mt-3 text-lg italic text-[#7c3aed]">"Was it good to go outside?"</p>
+        <p className="mt-3">This 6-step tour shows you the controls. You can re-launch it anytime from the <strong>🎓 Tour</strong> button at the top.</p>
+      </>
+    ),
+  },
+  {
+    icon: '☀',
+    title: 'Pick a definition of "good"',
+    body: (
+      <>
+        <p>An hour scores when it passes a checklist: <strong>daytime</strong>, comfortable temp, low UV, not raining, not overcast, not muggy, clean air.</p>
+        <p className="mt-3">The <strong>profile bar</strong> at the top of the page lets you pick one of 5 presets:</p>
+        <ul className="mt-2 ml-5 list-disc space-y-0.5">
+          <li><strong>🔆 Sun Seeker</strong> — strict beach-day rules</li>
+          <li><strong>☀ Goldilocks</strong> — balanced, the default</li>
+          <li><strong>🌤 Classic</strong> — original 4-rule, no cloud/humidity</li>
+          <li><strong>🌥 Cool & Cloudy</strong> — likes brisk overcast days</li>
+          <li><strong>🥾 All-Weather</strong> — only true extremes count</li>
+        </ul>
+        <p className="mt-3">The chart, leaderboard, and rule cards all swap instantly to the active profile.</p>
+      </>
+    ),
+  },
+  {
+    icon: '✨',
+    title: 'Or build your own with Custom',
+    body: (
+      <>
+        <p>Click <strong>✨ Custom</strong> in the profile bar to open a slider drawer. Tune any threshold — temp range, UV, rain, optional caps for cloud / humidity / AQI.</p>
+        <p className="mt-3">The browser re-aggregates 10 years of hourly data against your rule on the fly. The chart updates to show <em>your</em> definition of good outdoor hours.</p>
+        <p className="mt-3 text-sm text-[#6b7388]">Pre-Aug 2022 hours don't have AQ data, so the AQI rule doesn't penalize older history.</p>
+      </>
+    ),
+  },
+  {
+    icon: '🎛',
+    title: 'Compare counties + drill in',
+    body: (
+      <>
+        <p>The <strong>Controls bar</strong> (sticky as you scroll) sets:</p>
+        <ul className="mt-2 ml-5 list-disc space-y-0.5">
+          <li><strong>Time range</strong> — 1mo / 1yr / 5yr / 10yr</li>
+          <li><strong>Show by</strong> — Year / Month / Day</li>
+          <li><strong>Tell me about…</strong> — pick any of 17 metrics</li>
+          <li><strong>📅 YoY</strong> — fold the chart into one line per year (great for spotting seasonal trends)</li>
+          <li><strong>Compare counties</strong> — toggle which counties show on the chart</li>
+        </ul>
+        <p className="mt-3">Click any dot in the main chart to <strong>drill</strong> from years → months → days → hours.</p>
+      </>
+    ),
+  },
+  {
+    icon: '🔬',
+    title: 'Region Deep Dive',
+    body: (
+      <>
+        <p>Below the main chart: <strong>every metric for one county</strong>, rendered as 17 mini-charts in a grid.</p>
+        <p className="mt-3">Pick the <strong>Focus</strong> county at the top of that section, then click any <strong>Overlay</strong> chip to add a comparison county to <em>every</em> mini-chart at once. Great for "how does Sofia's air quality compare to Miami's?".</p>
+      </>
+    ),
+  },
+  {
+    icon: '🔗',
+    title: 'Share any view',
+    body: (
+      <>
+        <p>Every choice you make encodes into the URL — including custom profile thresholds. Copy the link to share or bookmark a specific view.</p>
+        <p className="mt-3">Examples:</p>
+        <ul className="mt-2 ml-5 list-disc text-sm font-mono break-all space-y-1">
+          <li>?tag=last5y&metric=us_aqi_mean&profile=sun_seeker</li>
+          <li>?profile=custom&cr=10,28,5,0.5,60,75,75&tag=last1y</li>
+          <li>?regions=miami_dade_fl,sofia_bg&yoy=1</li>
+        </ul>
+        <p className="mt-3">That's the tour. Hit the <strong>🎓 Tour</strong> button anytime to re-watch it.</p>
+      </>
+    ),
+  },
+];
+
+interface TutorialProps { onClose: () => void; }
+
+function Tutorial({ onClose }: TutorialProps) {
+  const [step, setStep] = useState(0);
+  const max = TUTORIAL_STEPS.length;
+  const cur = TUTORIAL_STEPS[step];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight' && step < max - 1) setStep(s => s + 1);
+      if (e.key === 'ArrowLeft' && step > 0) setStep(s => s - 1);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [step, max, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0d1019]/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-[640px] w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <header className="px-7 pt-7 pb-3 border-b border-[#eef0f5] flex items-start gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#4055f1] inline-flex items-center justify-center text-3xl shrink-0">{cur.icon}</div>
+          <div className="flex-1">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6b7388]">Tour · Step {step + 1} of {max}</div>
+            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-[#121726]">{cur.title}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close tour" className="text-[#9aa1b3] hover:text-[#121726] text-2xl leading-none p-1">×</button>
+        </header>
+        <div className="px-7 py-5 text-[15.5px] leading-relaxed text-[#39415a]">
+          {cur.body}
+        </div>
+        <footer className="px-7 py-4 border-t border-[#eef0f5] bg-[#f9fafc] flex items-center gap-3">
+          <div className="flex gap-1.5 mr-auto">
+            {Array.from({ length: max }).map((_, i) => (
+              <button key={i} type="button" onClick={() => setStep(i)} aria-label={`Go to step ${i + 1}`} className={`h-2 rounded-full transition-all ${i === step ? 'bg-[#7c3aed] w-6' : 'bg-[#e3e6ef] w-2 hover:bg-[#c9cedb]'}`} />
+            ))}
+          </div>
+          <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm font-bold text-[#6b7388] hover:text-[#121726]">
+            Skip
+          </button>
+          {step > 0 && (
+            <button type="button" onClick={() => setStep(s => s - 1)} className="px-4 py-2 text-sm font-bold text-[#39415a] border border-[#e3e6ef] rounded-md hover:bg-white">
+              ← Back
+            </button>
+          )}
+          {step < max - 1 ? (
+            <button type="button" onClick={() => setStep(s => s + 1)} className="px-4 py-2 text-sm font-bold text-white bg-[#7c3aed] rounded-md hover:bg-[#6d28d9] shadow-sm">
+              Next →
+            </button>
+          ) : (
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-white bg-[#0e8f74] rounded-md hover:bg-[#0a755e] shadow-sm">
+              Done ✓
+            </button>
+          )}
+        </footer>
+      </div>
+    </div>
+  );
+}
 
 // ── Custom Profile Drawer ──
 

@@ -1283,7 +1283,7 @@ export function OutdoorHoursPage() {
                     className="bg-white border border-[#e3e6ef] rounded-xl shadow-sm overflow-hidden flex flex-col profile-card"
                     style={{ animationDelay: `${idx * 70}ms` }}
                   >
-                    <header className="px-4 py-3 border-b border-[#e3e6ef] flex items-center gap-2.5" style={{ background: `${color}10`, borderBottomColor: `${color}30` }}>
+                    <header className="px-4 py-3 border-b border-[#e3e6ef] flex items-center gap-2.5" style={{ background: `${color}26`, borderBottomColor: `${color}55` }}>
                       <span className="w-3 h-3 rounded-full" style={{ background: color, boxShadow: `0 0 0 3px ${color}33` }} />
                       <span className="font-bold text-[15px] leading-tight" style={{ color }}>{label}</span>
                     </header>

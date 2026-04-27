@@ -32,7 +32,7 @@ export function CommandPalette({ open, onClose }: Props) {
   const items = useMemo<Item[]>(() => {
     const all: Item[] = [
       ...SECTIONS.map(s => ({ kind: 'Section', ic: s.icon, name: s.label, desc: s.desc, path: s.path })),
-      ...PORTFOLIO_PROJECTS.map(p => ({ kind: 'Project', ic: '◐', name: p.name, desc: p.kind, path: `/work/${p.id}` })),
+      ...PORTFOLIO_PROJECTS.map(p => ({ kind: p.status === 'Cooking' ? 'Cooking' : 'Project', ic: '◐', name: p.name, desc: p.kind, path: p.href })),
     ];
     if (!query) return all.slice(0, 12);
     const q = query.toLowerCase();

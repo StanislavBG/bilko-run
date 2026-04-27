@@ -28,7 +28,15 @@ export function StudioPage() {
               </div>
               <h3>{g.name}</h3>
               <p>{g.blurb}</p>
-              <button className="pf-btn" style={{ width: '100%', justifyContent: 'center' }}>Play →</button>
+              {g.href ? (
+                <a className="pf-btn" href={g.href} style={{ width: '100%', justifyContent: 'center' }}>
+                  Play →
+                </a>
+              ) : (
+                <button className="pf-btn" disabled style={{ width: '100%', justifyContent: 'center', opacity: 0.5, cursor: 'not-allowed' }}>
+                  Soon
+                </button>
+              )}
             </div>
           </div>
         ))}

@@ -46,6 +46,10 @@ export function Layout() {
 
   const activePath = activeSectionPath(location.pathname);
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="portfolio-shell">
       <header className="pf-topbar">
@@ -97,8 +101,34 @@ export function Layout() {
               Admin
             </NavLink>
           )}
+          <button
+            className="pf-kbd pf-mobile-trigger"
+            onClick={() => setMobileOpen(o => !o)}
+            aria-label="Menu"
+          >
+            <span>Menu</span>
+          </button>
         </div>
       </header>
+
+      {mobileOpen && (
+        <div className="pf-mobile-menu" onClick={() => setMobileOpen(false)}>
+          <div className="pf-mobile-sheet" onClick={e => e.stopPropagation()}>
+            <div className="pf-eyebrow" style={{ marginBottom: 12 }}>Sections</div>
+            {SECTIONS.map(s => (
+              <Link key={s.id} to={s.path} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
+                <span className="pf-mobile-icon">{s.icon}</span>
+                <span>{s.label}</span>
+                <span className="pf-mobile-tag">{s.tag}</span>
+              </Link>
+            ))}
+            <div className="pf-eyebrow" style={{ marginTop: 24, marginBottom: 12 }}>Elsewhere</div>
+            <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" className="pf-mobile-link">GitHub ↗</a>
+            <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="pf-mobile-link">Twitter ↗</a>
+            <a href="mailto:bilko@bilko.run" className="pf-mobile-link">Email ↗</a>
+          </div>
+        </div>
+      )}
 
       <main>
         <Outlet />

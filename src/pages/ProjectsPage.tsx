@@ -47,7 +47,7 @@ export function ProjectsPage() {
       </div>
       <div className="pf-proj-grid">
         {list.map((p, i) => (
-          <div key={p.id} className="pf-proj-card" onClick={() => navigate(`/work/${p.id}`)}>
+          <div key={p.id} className="pf-proj-card" onClick={() => navigate(p.href)}>
             <div className={`pf-swatch ${p.color}`}></div>
             <div className="pf-head">
               <span className="pf-ord">No. {String(i + 1).padStart(2, '0')}</span>

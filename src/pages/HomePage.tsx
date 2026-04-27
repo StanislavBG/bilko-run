@@ -116,7 +116,7 @@ export function HomePage() {
         </div>
         <div className="pf-proj-grid">
           {PORTFOLIO_PROJECTS.slice(0, 4).map((p, i) => (
-            <div key={p.id} className="pf-proj-card" onClick={() => navigate(`/work/${p.id}`)}>
+            <div key={p.id} className="pf-proj-card" onClick={() => navigate(p.href)}>
               <div className={`pf-swatch ${p.color}`}></div>
               <div className="pf-head">
                 <span className="pf-ord">No. 0{i + 1}</span>

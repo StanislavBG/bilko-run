@@ -778,12 +778,12 @@ export function OutdoorHoursPage() {
     const pct = spread / Math.max(Math.abs(leader.value!), Math.abs(trailer.value!)) * 100;
     const verb = LOWER_BETTER.has(metricKey) ? 'the least' : HIGHER_BETTER.has(metricKey) ? 'the most' : null;
     if (verb) {
-      let out = `<span style="color:${leader.ink}"><strong>${leader.label.replace(/,.*$/, '')}</strong></span> has ${verb} <em>${meta.label.toLowerCase()}</em> — <span class="font-bold tabular-nums">${fmtValue(leader.value!, meta.unit)}</span>`;
+      let out = `<span style="color:${leader.color}"><strong>${leader.label.replace(/,.*$/, '')}</strong></span> has ${verb} <em>${meta.label.toLowerCase()}</em> — <span class="font-bold tabular-nums">${fmtValue(leader.value!, meta.unit)}</span>`;
       if (leaderboard.length > 2) out += ` (best of ${leaderboard.length} counties)`;
-      out += `. <span style="color:${trailer.ink}"><strong>${trailer.label.replace(/,.*$/, '')}</strong></span> comes last at <span class="font-bold tabular-nums">${fmtValue(trailer.value!, meta.unit)}</span> — a <span class="font-bold tabular-nums">${pct.toFixed(0)}%</span> gap.`;
+      out += `. <span style="color:${trailer.color}"><strong>${trailer.label.replace(/,.*$/, '')}</strong></span> comes last at <span class="font-bold tabular-nums">${fmtValue(trailer.value!, meta.unit)}</span> — a <span class="font-bold tabular-nums">${pct.toFixed(0)}%</span> gap.`;
       return out;
     }
-    return `<em>${meta.label}</em> across ${leaderboard.length} counties: ` + leaderboard.map(r => `<span style="color:${r.ink}"><strong>${r.short}</strong> <span class="font-bold tabular-nums">${fmtValue(r.value!, meta.unit)}</span></span>`).join(', ') + '.';
+    return `<em>${meta.label}</em> across ${leaderboard.length} counties: ` + leaderboard.map(r => `<span style="color:${r.color}"><strong>${r.short}</strong> <span class="font-bold tabular-nums">${fmtValue(r.value!, meta.unit)}</span></span>`).join(', ') + '.';
   }, [leaderboard, meta, payload, metricKey]);
 
   const auxHtml = useMemo(() => {
@@ -791,7 +791,7 @@ export function OutdoorHoursPage() {
     const bits: string[] = [];
     if (leaderboard.every(r => r.peak)) {
       bits.push('Peaks: ' + leaderboard.slice(0, 4).map(r =>
-        `<span style="color:${r.ink}">${r.short} hit <span class="font-bold tabular-nums">${fmtValue(r.peak!.y, meta.unit)}</span> in ${prettyBucket(r.peak!.x, grain)}</span>`
+        `<span style="color:${r.color}">${r.short} hit <span class="font-bold tabular-nums">${fmtValue(r.peak!.y, meta.unit)}</span> in ${prettyBucket(r.peak!.x, grain)}</span>`
       ).join(' · ') + '.');
     }
     if (metricKey === 'stay_outside_hours' && leaderboard.length >= 2) {
@@ -1078,7 +1078,7 @@ export function OutdoorHoursPage() {
             <div key={r.region} className={`px-5 py-4 bg-white border border-[#e3e6ef] rounded-xl shadow-sm min-w-[180px] border-t-[3px] ${hasDirection && i === 0 && leaderboard.length >= 2 ? 'bg-gradient-to-b from-white to-[#fff8d8]' : ''}`}
                  style={{ borderTopColor: r.color }}>
               <div className="text-3xl font-extrabold tabular-nums text-[#121726] leading-tight">{fmtValue(r.value, meta.unit)}</div>
-              <div className="text-xs uppercase tracking-wider font-bold mt-1" style={{ color: r.ink }}>
+              <div className="text-xs uppercase tracking-wider font-bold mt-1" style={{ color: r.color }}>
                 {r.label.replace(/\s*County/, '')}{hasDirection && i === 0 && leaderboard.length >= 2 ? ' ★' : ''}
               </div>
             </div>
@@ -1222,7 +1222,7 @@ export function OutdoorHoursPage() {
               {cards.map((c, i) => (
                 <li key={`r-${i}`} className="p-[18px] bg-white border border-[#f0e6c6] rounded-2xl shadow-sm flex flex-col gap-1.5 border-t-4 min-h-[180px]" style={{ borderTopColor: c.color }}>
                   <div className="w-[52px] h-[52px] rounded-xl inline-flex items-center justify-center text-[28px] leading-none" style={{ background: c.bg, color: c.ink }}>{c.icon}</div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.1em] mt-1" style={{ color: c.ink }}>{c.name}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.1em] mt-1" style={{ color: c.color }}>{c.name}</div>
                   <div className="text-[22px] font-extrabold text-[#1a150a] leading-tight tracking-tight">{c.val}</div>
                   <div className="text-[13.5px] text-[#6e5e2c] leading-snug mt-0.5">{c.sub}</div>
                 </li>
@@ -1285,7 +1285,7 @@ export function OutdoorHoursPage() {
                   >
                     <header className="px-4 py-3 border-b border-[#e3e6ef] flex items-center gap-2.5" style={{ background: `${color}10`, borderBottomColor: `${color}30` }}>
                       <span className="w-3 h-3 rounded-full" style={{ background: color, boxShadow: `0 0 0 3px ${color}33` }} />
-                      <span className="font-bold text-[15px] leading-tight" style={{ color: ink }}>{label}</span>
+                      <span className="font-bold text-[15px] leading-tight" style={{ color }}>{label}</span>
                     </header>
                     <div className="px-4 py-4 flex flex-col gap-3 text-[14px] leading-relaxed text-[#39415a] flex-1">
                       <div>
@@ -1688,7 +1688,7 @@ function RegionDeepDive({ payload, tag, grain, profileId, plotlyReady, customRes
         <div>
           <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#6b7388]">Region Deep Dive</div>
           <h2 className="mt-1 text-[26px] font-extrabold tracking-tight text-[#121726]">
-            Every metric for <span style={{ color: registryInk(payload, focus) }}>{focusLabel}</span>
+            Every metric for <span style={{ color: registryColor(payload, focus, allRegions.indexOf(focus)) }}>{focusLabel}</span>
           </h2>
           <p className="mt-1 text-sm text-[#6b7388]">{rangeLabel} · {grain} grain · click any chip to overlay another county for direct comparison.</p>
         </div>
@@ -1913,7 +1913,7 @@ function Leaderboard({ payload, grain, tag, profileId, customResults }: Leaderbo
                     <span className="inline-block w-2.5 h-2.5 rounded-full align-middle mr-2" style={{ background: r.color, boxShadow: `0 0 0 3px ${r.color}22` }} />
                     <span className="font-bold text-[#121726]">{r.label}</span>
                   </td>
-                  <td className="text-right px-3 py-4 font-extrabold text-[19px]" style={{ color: r.ink }}>
+                  <td className="text-right px-3 py-4 font-extrabold text-[19px]" style={{ color: r.color }}>
                     {fmtValue(r.stay, 'hrs')}
                   </td>
                   <td className="text-right px-3 py-4 text-[#39415a] font-semibold">{r.pct != null ? `${r.pct.toFixed(0)}%` : '—'}</td>

@@ -1,110 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { usePageView, track } from '../hooks/usePageView.js';
 import { ADMIN_EMAILS } from '../constants.js';
-import { NAV_TOOLS } from '../config/tools.js';
-
-interface ProductLink {
-  title: string;
-  desc: string;
-  to: string;
-  accent: string;
-  badge?: string;
-  features?: readonly string[];
-}
-
-// Category landing pages — not single tools, so not in the registry.
-const CATEGORY_LINKS: readonly ProductLink[] = [
-  {
-    title: 'Content & Copy',
-    desc: 'AI-powered writing analysis — headlines, ads, threads, email sequences, audience insights.',
-    to: '/products/content-tools',
-    features: ['Headlines', 'Ads', 'Threads', 'Email', 'Audience'],
-    accent: 'bg-fire-500',
-  },
-];
-
-const PRODUCTS: readonly ProductLink[] = [
-  ...CATEGORY_LINKS,
-  ...NAV_TOOLS.map<ProductLink>(t => {
-    const dd = t.nav!.dropdown!;
-    return {
-      title: t.name,
-      desc: dd.desc ?? t.tagline,
-      to: `/products/${t.slug}`,
-      accent: t.accent.bg,
-      badge: dd.badge,
-      features: dd.features,
-    };
-  }),
-];
-
-function ProductsDropdown() {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-          open ? 'bg-warm-200/60 text-warm-900' : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100/80'
-        }`}
-      >
-        Products
-        <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="absolute top-full right-0 mt-2 w-[520px] bg-white rounded-2xl shadow-elevation-3 p-3 animate-fade-in z-50">
-          <div className="space-y-0.5">
-            {PRODUCTS.map(product => (
-              <Link
-                key={product.title}
-                to={product.to}
-                onClick={() => setOpen(false)}
-                className="flex items-start gap-4 rounded-xl px-4 py-3.5 hover:bg-warm-50 transition-colors group"
-              >
-                <div className={`w-2 h-2 rounded-full ${product.accent} mt-1.5 shrink-0`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-warm-900 group-hover:text-fire-600 transition-colors">{product.title}</h3>
-                    {'badge' in product && product.badge && (
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-green-50 text-green-600">{product.badge}</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-warm-500 mt-0.5 leading-relaxed">{product.desc}</p>
-                  {'features' in product && product.features && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {product.features.map(f => (
-                        <span key={f} className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-warm-100/80 text-warm-500">{f}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <svg className="w-4 h-4 text-warm-300 group-hover:text-fire-400 flex-shrink-0 mt-1 transition-colors" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import { SECTIONS } from '../data/portfolio.js';
+import { CommandPalette } from './portfolio/CommandPalette.js';
 
 function useIsAdmin(): boolean {
   const { user } = useUser();
@@ -112,190 +12,129 @@ function useIsAdmin(): boolean {
   return ADMIN_EMAILS.includes(email);
 }
 
+function activeSectionPath(pathname: string): string {
+  if (pathname === '/' || pathname === '/home') return '/';
+  if (pathname.startsWith('/projects') || pathname.startsWith('/work')) return '/projects';
+  if (pathname.startsWith('/products')) return '/projects';
+  if (pathname.startsWith('/studio')) return '/studio';
+  if (pathname.startsWith('/blog')) return '/blog';
+  if (pathname.startsWith('/skills')) return '/skills';
+  if (pathname.startsWith('/academy')) return '/academy';
+  if (pathname.startsWith('/workflows')) return '/workflows';
+  if (pathname.startsWith('/contact')) return '/contact';
+  return pathname;
+}
+
 export function Layout() {
   usePageView();
   const isAdmin = useIsAdmin();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCmdOpen(o => !o);
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
+
+  const activePath = activeSectionPath(location.pathname);
+
   return (
-    <div className="min-h-screen bg-warm-50 flex flex-col">
-      <header className="sticky top-0 z-50 backdrop-blur-lg bg-warm-50/85 border-b border-warm-200/50">
-        <nav className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group" onClick={() => setMobileOpen(false)}>
-            <span className="text-xl font-extrabold tracking-tight text-warm-900 group-hover:text-fire-600 transition-colors">
-              bilko<span className="text-fire-500">.run</span>
-            </span>
-          </Link>
-
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-1">
-            <ProductsDropdown />
-
+    <div className="portfolio-shell">
+      <header className="pf-topbar">
+        <Link to="/" className="pf-brand" onClick={() => setMobileOpen(false)}>
+          <span className="pf-mark">B</span>
+          <span>Bilko Bibitkov</span>
+        </Link>
+        <nav>
+          {SECTIONS.map(s => (
             <NavLink
-              to="/blog"
-              className={({ isActive }) =>
-                `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                  isActive
-                    ? 'bg-warm-200/60 text-warm-900'
-                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100/80'
-                }`
-              }
+              key={s.id}
+              to={s.path}
+              className={() => (activePath === s.path ? 'active' : '')}
+              end={s.path === '/'}
             >
-              Blog
+              {s.label}
             </NavLink>
-
-            <NavLink
-              to="/pricing"
-              className={({ isActive }) =>
-                `px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                  isActive
-                    ? 'bg-warm-200/60 text-warm-900'
-                    : 'text-warm-600 hover:text-warm-900 hover:bg-warm-100/80'
-                }`
-              }
-            >
-              Pricing
-            </NavLink>
-
-            <Link
-              to="/products/page-roast"
-              className="ml-1 px-5 py-2 text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-lg shadow-sm shadow-fire-500/20 hover:shadow-md hover:shadow-fire-500/25 transition-all"
-            >
-              Try Free
-            </Link>
-
-            {isAdmin && (
-              <NavLink
-                to="/admin"
-                className={({ isActive }) =>
-                  `px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    isActive
-                      ? 'bg-fire-100 text-fire-700'
-                      : 'text-fire-400 hover:text-fire-600 hover:bg-fire-50'
-                  }`
-                }
-              >
-                Admin
-              </NavLink>
-            )}
-
-            <div className="ml-2">
-              <SignedOut>
-                <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
-                  <button
-                    onClick={() => track('signin_click')}
-                    className="px-4 py-2 text-sm font-medium text-warm-600 hover:text-warm-900 hover:bg-warm-100/80 rounded-lg transition-all"
-                  >
-                    Sign in
-                  </button>
-                </SignInButton>
-              </SignedOut>
-              <SignedIn>
-                <UserButton
-                  appearance={{
-                    elements: { avatarBox: 'w-8 h-8' }
-                  }}
-                />
-              </SignedIn>
-            </div>
-          </div>
-
-          {/* Mobile: auth + hamburger */}
-          <div className="flex md:hidden items-center gap-2">
-            <SignedIn>
-              <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
-            </SignedIn>
-            <button
-              onClick={() => setMobileOpen(!mobileOpen)}
-              className="p-2 text-warm-600 hover:text-warm-900 rounded-lg hover:bg-warm-100 transition-all"
-              aria-label="Menu"
-            >
-              {mobileOpen ? (
-                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-              ) : (
-                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
-              )}
-            </button>
-          </div>
+          ))}
         </nav>
-
-        {/* Mobile menu */}
-        {mobileOpen && (
-          <div className="md:hidden border-t border-warm-200/50 bg-warm-50/98 backdrop-blur-lg px-6 py-4 space-y-1 animate-fade-in">
-            {[
-              { to: '/products/page-roast', label: 'PageRoast' },
-              { to: '/products', label: 'All Products' },
-              { to: '/blog', label: 'Blog' },
-              { to: '/pricing', label: 'Pricing' },
-              ...(isAdmin ? [{ to: '/admin', label: 'Admin' }] : []),
-            ].map(({ to, label }) => (
-              <Link
-                key={to}
-                to={to}
-                onClick={() => setMobileOpen(false)}
-                className="block px-4 py-2.5 text-sm font-medium text-warm-700 hover:bg-warm-100 hover:text-fire-600 rounded-lg transition-colors"
+        <div className="pf-right">
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontFamily: 'var(--pf-font-mono)', fontSize: 11,
+            color: 'var(--pf-ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase',
+          }}>
+            <span className="pf-status-dot"></span>
+            Online
+          </span>
+          <button className="pf-kbd" onClick={() => setCmdOpen(true)} title="Search (⌘K)">
+            <span>Search</span>
+            <span style={{ opacity: 0.6 }}>⌘K</span>
+          </button>
+          <SignedOut>
+            <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
+              <button
+                onClick={() => track('signin_click')}
+                className="pf-kbd"
+                style={{ borderColor: 'var(--pf-ink)', color: 'var(--pf-ink)' }}
               >
-                {label}
-              </Link>
-            ))}
-            <SignedOut>
-              <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
-                <button
-                  onClick={() => { setMobileOpen(false); track('signin_click'); }}
-                  className="w-full px-4 py-2.5 text-sm font-medium text-fire-600 hover:bg-fire-50 rounded-lg transition-colors text-left"
-                >
-                  Sign in
-                </button>
-              </SignInButton>
-            </SignedOut>
-          </div>
-        )}
+                Sign in
+              </button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
+          </SignedIn>
+          {isAdmin && (
+            <NavLink to="/admin" className="pf-kbd" style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}>
+              Admin
+            </NavLink>
+          )}
+        </div>
       </header>
 
-      <main className="flex-1">
+      <main>
         <Outlet />
       </main>
 
-      <footer className="border-t border-warm-200/50 bg-warm-100/40">
-        <div className="max-w-6xl mx-auto px-6 py-14">
-          <div className="flex flex-col md:flex-row justify-between items-start gap-10">
-            <div>
-              <span className="text-lg font-extrabold tracking-tight text-warm-900">
-                bilko<span className="text-fire-500">.run</span>
-              </span>
-              <p className="mt-2 text-sm text-warm-500 max-w-xs leading-relaxed">
-                AI tools and advisory for small businesses.
-              </p>
-            </div>
-            <div className="flex gap-14 text-sm">
-              <div>
-                <h4 className="text-label text-warm-600 mb-4">Products</h4>
-                <div className="flex flex-col gap-2.5">
-                  <Link to="/products/page-roast" className="text-warm-500 hover:text-warm-700 transition-colors">PageRoast</Link>
-                  <Link to="/products" className="text-warm-500 hover:text-warm-700 transition-colors">All Products</Link>
-                  <Link to="/blog" className="text-warm-500 hover:text-warm-700 transition-colors">Blog</Link>
-                  <Link to="/pricing" className="text-warm-500 hover:text-warm-700 transition-colors">Pricing</Link>
-                </div>
-              </div>
-              <div>
-                <h4 className="text-label text-warm-600 mb-4">Connect</h4>
-                <div className="flex flex-col gap-2.5">
-                  <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-warm-700 transition-colors">X / Twitter</a>
-                  <a href="https://www.linkedin.com/in/bilko-bibitkov-23b5b13b1/" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-warm-700 transition-colors">LinkedIn</a>
-                  <a href="https://github.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="text-warm-500 hover:text-warm-700 transition-colors">GitHub</a>
-                </div>
-              </div>
-            </div>
+      <footer className="pf-footer">
+        <div className="pf-col">
+          <div className="pf-sig">Bilko <em>Bibitkov</em></div>
+          <div style={{ opacity: 0.7, maxWidth: 300 }}>
+            Relentless believer. Regular human. Building AI things from a small studio.
           </div>
-          <div className="mt-12 pt-6 border-t border-warm-200/40 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-warm-400">
-            <span>Built with unreasonable ambition by Bilko.</span>
-            <div className="flex items-center gap-5">
-              <Link to="/privacy" className="hover:text-warm-600 transition-colors">Privacy Policy</Link>
-              <Link to="/terms" className="hover:text-warm-600 transition-colors">Terms of Service</Link>
-            </div>
-          </div>
+          <div className="pf-meta-line">© {new Date().getFullYear()} · bilko.run</div>
+        </div>
+        <div className="pf-col">
+          <h4>Sections</h4>
+          {SECTIONS.slice(0, 4).map(s => (
+            <Link key={s.id} to={s.path}>{s.label}</Link>
+          ))}
+        </div>
+        <div className="pf-col">
+          <h4>More</h4>
+          {SECTIONS.slice(4).map(s => (
+            <Link key={s.id} to={s.path}>{s.label}</Link>
+          ))}
+        </div>
+        <div className="pf-col">
+          <h4>Elsewhere</h4>
+          <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer">GitHub →</a>
+          <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer">Twitter →</a>
+          <a href="mailto:bilko@bilko.run">Email →</a>
+          <Link to="/privacy">Privacy →</Link>
+          <Link to="/terms">Terms →</Link>
         </div>
       </footer>
+
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </div>
   );
 }

@@ -12,6 +12,12 @@ import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
+import { StudioPage } from './pages/StudioPage.js';
+import { SkillsPage } from './pages/SkillsPage.js';
+import { AcademyPage } from './pages/AcademyPage.js';
+import { WorkflowsPage } from './pages/WorkflowsPage.js';
+import { ContactPage } from './pages/ContactPage.js';
+import { PortfolioProjectDetailPage } from './pages/PortfolioProjectDetailPage.js';
 import { ROUTABLE_TOOLS } from './config/tools.js';
 
 // Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
@@ -133,6 +139,14 @@ function AppRoutes() {
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/admin" element={<AdminPage />} />
+
+            {/* ── Portfolio sections ── */}
+            <Route path="/studio" element={<StudioPage />} />
+            <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/academy" element={<AcademyPage />} />
+            <Route path="/workflows" element={<WorkflowsPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />
           </Route>
 
           {/* ── Legacy dashboard at /app ── */}

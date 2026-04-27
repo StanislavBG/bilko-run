@@ -1,159 +1,68 @@
-import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { LISTING_TOOLS, type ToolStatus, type ToolCategory } from '../config/tools.js';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '../components/portfolio/PageHeader.js';
+import { PORTFOLIO_PROJECTS } from '../data/portfolio.js';
 
-const STATUS_STYLES: Record<ToolStatus, string> = {
-  live: 'bg-green-50 text-green-600',
-  beta: 'bg-amber-50 text-amber-600',
-  'coming-soon': 'bg-warm-100 text-warm-400',
-};
-
-const STATUS_LABELS: Record<ToolStatus, string> = {
-  live: 'Live',
-  beta: 'Beta',
-  'coming-soon': 'Coming Soon',
-};
-
-const CATEGORY_LABELS: Record<ToolCategory, string> = {
-  content: 'Content & Copy',
-  business: 'Business',
-  devtools: 'Developer Tools',
-};
+const FILTERS = ['All', 'Live', 'Shipped', 'Cooking'] as const;
+type Filter = typeof FILTERS[number];
 
 export function ProjectsPage() {
+  const navigate = useNavigate();
+  const [filter, setFilter] = useState<Filter>('All');
+
   useEffect(() => {
-    document.title = 'Products — bilko.run';
-    return () => { document.title = 'Bilko — AI Advisory for Small Business'; };
+    document.title = 'Projects — Bilko Bibitkov';
   }, []);
 
+  const list = filter === 'All' ? PORTFOLIO_PROJECTS : PORTFOLIO_PROJECTS.filter(p => p.status === filter);
+
   return (
-    <>
-      {/* Header */}
-      <section className="border-b border-warm-200/40">
-        <div className="max-w-6xl mx-auto px-6 pt-16 pb-12 md:pt-20 md:pb-16">
-          <h1 className="text-display-xl text-warm-900">
-            Products
-          </h1>
-          <p className="mt-4 text-lg text-warm-500 max-w-2xl leading-relaxed">
-            AI-powered tools I've built. All free to start.
-          </p>
-        </div>
-      </section>
-
-      {/* Bilko Game Academy — independent self-hosted PWA library of 2D
-          games (Phaser 3 / Vite). Deployed under /projects/game-academy/.
-          Hand-coded tile rather than going through the LISTING_TOOLS
-          registry so the game academy stays its own codebase. */}
-      <section className="max-w-6xl mx-auto px-6 pt-8">
-        <a
-          href="/projects/game-academy/"
-          className="group relative block bg-gradient-to-br from-fire-500 via-orange-500 to-amber-500 rounded-2xl p-6 md:p-8 transition-all hover:-translate-y-1 hover:shadow-2xl shadow-lg"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
-              <span className="text-label text-white/80">Games · PWA</span>
+    <div className="pf-page">
+      <PageHeader
+        eyebrow="Section 02 · Portfolio"
+        title="Projects."
+        lede="Twelve shipped. Two cooking. Each one is a real attempt at making something useful with AI — not a demo, not a screenshot."
+        what="A grid of everything Bilko has built. Click any card for a detailed write-up: what it does, what was hard, what got cut. Filter by status."
+      />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        {FILTERS.map(f => {
+          const count = f === 'All' ? PORTFOLIO_PROJECTS.length : PORTFOLIO_PROJECTS.filter(p => p.status === f).length;
+          const isActive = filter === f;
+          return (
+            <button
+              key={f}
+              className="pf-chip"
+              onClick={() => setFilter(f)}
+              style={{
+                cursor: 'pointer',
+                background: isActive ? 'var(--pf-ink)' : 'transparent',
+                color: isActive ? 'var(--pf-bg)' : 'var(--pf-ink-2)',
+                borderColor: isActive ? 'var(--pf-ink)' : 'var(--pf-rule-2)',
+              }}
+            >
+              {f} <span style={{ opacity: 0.6 }}>· {count}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="pf-proj-grid">
+        {list.map((p, i) => (
+          <div key={p.id} className="pf-proj-card" onClick={() => navigate(`/work/${p.id}`)}>
+            <div className={`pf-swatch ${p.color}`}></div>
+            <div className="pf-head">
+              <span className="pf-ord">No. {String(i + 1).padStart(2, '0')}</span>
+              <span className="pf-ord">{p.year}</span>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-white/20 text-white">
-              New
-            </span>
+            <div className="pf-kind">{p.kind}</div>
+            <h3>{p.name}</h3>
+            <p className="pf-blurb">{p.blurb}</p>
+            <div className="pf-foot">
+              <span className={`pf-status ${p.status.toLowerCase()}`}>{p.status}</span>
+              {p.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}
+            </div>
           </div>
-          <h3 className="text-2xl md:text-3xl font-bold mb-1 text-white">
-            🎮 Bilko Game Academy
-          </h3>
-          <p className="text-base font-medium text-white/90 mb-3">
-            A growing library of painterly 2D games — first up: Boat Shooter, a 15-stage pirate roguelike shmup.
-          </p>
-          <p className="text-sm text-white/80 leading-relaxed mb-4 max-w-2xl">
-            5 elemental starting ships, 13 weapons + 8 passives + 8 evolutions, 14 enemies + 9 bosses across 3 acts. Plays in any browser; installs as a PWA on iPad.
-          </p>
-          <div className="mt-2 text-sm font-semibold text-white flex items-center gap-1">
-            Set sail
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-          </div>
-        </a>
-      </section>
-
-      {/* Product Grid */}
-      <section className="max-w-6xl mx-auto px-6 py-12 md:py-16">
-        <div className="grid md:grid-cols-2 gap-5 stagger-children">
-          {LISTING_TOOLS.map((tool) => {
-            const isLive = tool.status === 'live';
-            const Wrapper = isLive ? Link : 'div';
-            const wrapperProps = isLive
-              ? { to: `/products/${tool.slug}` as string }
-              : {};
-
-            return (
-              <Wrapper
-                key={tool.slug}
-                {...wrapperProps as any}
-                className={`group relative bg-white rounded-2xl p-6 transition-all ${
-                  isLive
-                    ? `card-base ${tool.accent.hoverBorder} hover:shadow-elevation-2 hover:-translate-y-1 cursor-pointer`
-                    : 'border border-warm-200/40 opacity-60'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className={`w-2 h-2 rounded-full ${tool.accent.bg}`} />
-                    <span className="text-label text-warm-400">
-                      {CATEGORY_LABELS[tool.category]}
-                    </span>
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md ${STATUS_STYLES[tool.status]}`}>
-                    {STATUS_LABELS[tool.status]}
-                  </span>
-                </div>
-
-                <h3 className={`text-xl font-bold mb-1 ${isLive ? 'text-warm-900 group-hover:text-warm-950 transition-colors' : 'text-warm-700'}`}>
-                  {tool.name}
-                </h3>
-                <p className="text-sm font-medium text-warm-600 mb-3">{tool.tagline}</p>
-                <p className="text-sm text-warm-500 leading-relaxed mb-4">
-                  {tool.description}
-                </p>
-
-                <div className="flex flex-wrap gap-2">
-                  {tool.features.map((feature) => (
-                    <span
-                      key={feature}
-                      className="text-xs px-2.5 py-1 rounded-lg bg-warm-50 text-warm-500 border border-warm-100/80"
-                    >
-                      {feature}
-                    </span>
-                  ))}
-                </div>
-
-                {isLive && (
-                  <div className="mt-5 text-sm font-semibold text-warm-600 group-hover:text-warm-800 flex items-center gap-1 transition-colors">
-                    Try it free
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 group-hover:translate-x-1 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-                  </div>
-                )}
-              </Wrapper>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="border-t border-warm-200/40">
-        <div className="max-w-4xl mx-auto px-6 py-20 text-center">
-          <h2 className="text-display-md text-warm-900">
-            Start with the one that matters most
-          </h2>
-          <p className="mt-4 text-warm-500 max-w-lg mx-auto leading-relaxed">
-            Every tool has a free first analysis. Or try <Link to="/products/local-score" className="text-green-600 hover:underline font-semibold">LocalScore</Link> — completely free, runs in your browser.
-          </p>
-          <Link
-            to="/products/page-roast"
-            className="inline-flex items-center justify-center gap-2 mt-8 px-8 py-4 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl shadow-lg shadow-fire-500/20 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-fire-500/25"
-          >
-            Try PageRoast
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-          </Link>
-        </div>
-      </section>
-    </>
+        ))}
+      </div>
+    </div>
   );
 }

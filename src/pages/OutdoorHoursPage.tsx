@@ -657,20 +657,26 @@ export function OutdoorHoursPage() {
     }
 
     const inter = 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+    const display = "'Instrument Serif', Georgia, serif";
+    const mono = "'JetBrains Mono', ui-monospace, monospace";
+    const ink = '#f7f4eb';        // matches --ink (cream)
+    const inkDim = '#cdc7b6';     // matches --ink-dim
+    const inkFaint = '#9c977d';   // matches --ink-faint
+    const lineSoft = 'rgba(255,255,255,0.08)';
     const grainWord = { yearly: 'year', monthly: 'month', daily: 'day' }[grain];
     const titleText = yoyActive
-      ? `${meta.label}  <span style="color:#6b7388;font-weight:500">year-over-year · ${registryLabel(payload, visibleRegions[0])}</span>`
-      : `${meta.label}  <span style="color:#6b7388;font-weight:500">per ${grainWord}</span>`;
+      ? `${meta.label}  <span style="color:${inkFaint};font-weight:400">year-over-year · ${registryLabel(payload, visibleRegions[0])}</span>`
+      : `${meta.label}  <span style="color:${inkFaint};font-weight:400">per ${grainWord}</span>`;
     const layout = {
-      title: { text: titleText, font: { family: inter, size: 26, color: '#121726' }, x: 0.02, xanchor: 'left', y: 0.96 },
-      font: { family: inter, color: '#39415a', size: 15 },
-      xaxis: xaxisCfg,
-      yaxis: { title: { text: `${meta.label} (${meta.unit})`, font: { size: 15, color: '#6b7388' } }, showgrid: true, gridcolor: '#eef0f5', zerolinecolor: '#e3e6ef', linecolor: '#c9cedb', tickcolor: '#c9cedb', tickfont: { size: 14 }, rangemode: meta.key === 'stay_outside_hours' ? 'tozero' : undefined },
+      title: { text: titleText, font: { family: display, size: 30, color: ink }, x: 0.02, xanchor: 'left', y: 0.96 },
+      font: { family: inter, color: inkDim, size: 13 },
+      xaxis: { ...xaxisCfg, tickfont: { ...(xaxisCfg.tickfont || {}), family: mono, size: 11, color: inkFaint }, title: xaxisCfg.title ? { ...xaxisCfg.title, font: { ...(xaxisCfg.title?.font || {}), family: mono, size: 11, color: inkFaint } } : undefined, gridcolor: lineSoft, linecolor: lineSoft, tickcolor: lineSoft },
+      yaxis: { title: { text: `${meta.label} (${meta.unit})`, font: { family: mono, size: 11, color: inkFaint } }, showgrid: true, gridcolor: lineSoft, zerolinecolor: lineSoft, linecolor: lineSoft, tickcolor: lineSoft, tickfont: { family: mono, size: 11, color: inkFaint }, rangemode: meta.key === 'stay_outside_hours' ? 'tozero' : undefined },
       hovermode: yoyActive ? 'closest' : 'x unified',
-      hoverlabel: { bgcolor: '#121726', bordercolor: '#121726', font: { color: 'white', family: inter, size: 15 } },
-      legend: { orientation: 'h', y: -0.18, font: { size: 15, color: '#121726' }, bgcolor: 'rgba(0,0,0,0)' },
+      hoverlabel: { bgcolor: 'rgba(20,26,46,0.95)', bordercolor: 'rgba(255,255,255,0.15)', font: { color: ink, family: inter, size: 13 } },
+      legend: { orientation: 'h', y: -0.18, font: { family: mono, size: 11, color: inkDim }, bgcolor: 'rgba(0,0,0,0)' },
       margin: { l: 80, r: 32, t: 80, b: 80 },
-      plot_bgcolor: 'white', paper_bgcolor: 'white',
+      plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
     };
     window.Plotly.newPlot(chartRef.current, traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d'] });
 
@@ -842,6 +848,46 @@ export function OutdoorHoursPage() {
         }
         .outdoor-atlas .display { font-family: 'Instrument Serif', serif; font-weight: 400; letter-spacing: -0.01em; }
         .outdoor-atlas .mono    { font-family: 'JetBrains Mono', monospace; }
+
+        /* ── Font roles (per design handoff) ───────────────────────────
+           Display = Instrument Serif (hero, h2/h3, big stat numbers, county names)
+           Mono    = JetBrains Mono   (eyebrows, units, axis ticks, badges)
+           UI/body = Inter            (default — already loaded site-wide) */
+
+        /* Editorial display: section headings + the big numerals in stat cards. */
+        .outdoor-atlas h1,
+        .outdoor-atlas h2,
+        .outdoor-atlas h3 {
+          font-family: 'Instrument Serif', Georgia, serif !important;
+          font-weight: 400 !important;
+          letter-spacing: -0.02em;
+        }
+        .outdoor-atlas h1 em,
+        .outdoor-atlas h2 em,
+        .outdoor-atlas h3 em,
+        .outdoor-atlas .display em { font-style: italic; color: var(--accent); }
+
+        /* Big stat numerals — Time-range badge, leader stat values, etc. */
+        .outdoor-atlas .text-3xl.tabular-nums,
+        .outdoor-atlas .text-2xl.tabular-nums,
+        .outdoor-atlas .text-\\[28px\\].tabular-nums,
+        .outdoor-atlas .text-\\[22px\\].font-extrabold,
+        .outdoor-atlas .text-\\[19px\\].font-extrabold {
+          font-family: 'Instrument Serif', Georgia, serif !important;
+          font-weight: 400 !important;
+          letter-spacing: -0.015em;
+        }
+
+        /* JetBrains Mono: eyebrows, badges, tags, tracked uppercase labels. */
+        .outdoor-atlas .uppercase.tracking-wider,
+        .outdoor-atlas .uppercase.tracking-widest,
+        .outdoor-atlas [class*="tracking-\\[0\\.1"],
+        .outdoor-atlas [class*="tracking-\\[0\\.14"],
+        .outdoor-atlas .font-mono,
+        .outdoor-atlas code, .outdoor-atlas kbd {
+          font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+          letter-spacing: 0.06em;
+        }
 
         /* Atmospheric backdrop */
         .outdoor-atlas .atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
@@ -1803,17 +1849,21 @@ function MiniMetricChart({ payload, grain, metric, focus, overlays, profileId, a
     ].filter(Boolean);
 
     const inter = 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+    const display = "'Instrument Serif', Georgia, serif";
+    const mono = "'JetBrains Mono', ui-monospace, monospace";
+    const ink = '#f7f4eb', inkFaint = '#9c977d';
+    const lineSoft = 'rgba(255,255,255,0.08)';
     const layout = {
-      title: { text: metric.label, font: { family: inter, size: 14, color: '#121726' }, x: 0.02, xanchor: 'left', y: 0.96 },
-      font: { family: inter, color: '#39415a', size: 11 },
-      xaxis: { type: grain === 'yearly' ? 'linear' : 'date', showgrid: false, linecolor: '#e3e6ef', tickcolor: '#e3e6ef', tickfont: { size: 10 } },
-      yaxis: { showgrid: true, gridcolor: '#f0f2f7', linecolor: '#e3e6ef', tickcolor: '#e3e6ef', tickfont: { size: 10 }, title: { text: metric.unit, font: { size: 10, color: '#9aa1b3' } }, rangemode: ['stay_outside_hours', 'pct_daytime_outside', 'sunshine_hours', 'precipitation_sum'].includes(metric.key) ? 'tozero' : undefined },
+      title: { text: metric.label, font: { family: display, size: 18, color: ink }, x: 0.02, xanchor: 'left', y: 0.96 },
+      font: { family: inter, color: inkFaint, size: 11 },
+      xaxis: { type: grain === 'yearly' ? 'linear' : 'date', showgrid: false, linecolor: lineSoft, tickcolor: lineSoft, tickfont: { family: mono, size: 10, color: inkFaint } },
+      yaxis: { showgrid: true, gridcolor: lineSoft, linecolor: lineSoft, tickcolor: lineSoft, tickfont: { family: mono, size: 10, color: inkFaint }, title: { text: metric.unit, font: { family: mono, size: 10, color: inkFaint } }, rangemode: ['stay_outside_hours', 'pct_daytime_outside', 'sunshine_hours', 'precipitation_sum'].includes(metric.key) ? 'tozero' : undefined },
       hovermode: 'x unified',
-      hoverlabel: { bgcolor: '#121726', bordercolor: '#121726', font: { color: 'white', family: inter, size: 12 } },
+      hoverlabel: { bgcolor: 'rgba(20,26,46,0.95)', bordercolor: 'rgba(255,255,255,0.15)', font: { color: ink, family: inter, size: 12 } },
       showlegend: false,
       margin: { l: 48, r: 12, t: 32, b: 32 },
-      plot_bgcolor: 'white',
-      paper_bgcolor: 'white',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      paper_bgcolor: 'rgba(0,0,0,0)',
     };
     window.Plotly.newPlot(ref.current, traces, layout, { responsive: true, displaylogo: false, displayModeBar: false });
   }, [payload, grain, metric.key, focus, overlays, profileId, plotlyReady, allRegions, customResults]);

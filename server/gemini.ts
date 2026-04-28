@@ -1,5 +1,9 @@
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_MODEL = 'gemini-2.0-flash';
+// Google publishes `gemini-flash-latest` as an auto-rolling alias to the newest
+// stable Flash model. Pinning a specific version (e.g. gemini-2.0-flash) means
+// quietly running on a deprecated/throttled model after Google promotes the next
+// one. Override via GEMINI_MODEL env var if you need to pin for testing.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
 export async function askGemini(prompt: string, opts?: {
   systemPrompt?: string;

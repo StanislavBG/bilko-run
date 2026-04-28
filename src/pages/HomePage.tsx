@@ -17,15 +17,15 @@ export function HomePage() {
     <div className="pf-page">
       <section className="pf-hero">
         <div>
+          <h1>
+            <span style={{ display: 'block' }}>I build <span className="pf-accent">AI things</span></span>
+            <span style={{ display: 'block' }}>for <span className="pf-strike">enterprises</span> humans.</span>
+          </h1>
           <div className="pf-who">
             <span>Sofia · Studio of one</span>
             <span className="pf-line"></span>
             <span>est. 2024</span>
           </div>
-          <h1>
-            <span style={{ display: 'block' }}>I build <span className="pf-accent">AI things</span></span>
-            <span style={{ display: 'block' }}>for <span className="pf-strike">enterprises</span> humans.</span>
-          </h1>
           <p className="pf-blurb">
             Hey, I'm Bilko. I believe in people — stubbornly, loudly, sometimes
             embarrassingly. My dream is simple: make AI feel like a buddy that
@@ -41,15 +41,50 @@ export function HomePage() {
         <div className="pf-hero-side">
           <div className="pf-portrait-card">
             <div className="pf-portrait">
-              <svg viewBox="0 0 200 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+              <svg viewBox="0 0 200 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                  <pattern id="pf-hero-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="0.5" />
+                  </pattern>
+                </defs>
                 <rect width="200" height="220" fill="var(--pf-accent)" />
-                <g style={{ mixBlendMode: 'multiply' }}>
-                  <circle cx="100" cy="92" r="54" fill="var(--pf-ink)" />
-                  <rect x="34" y="150" width="132" height="80" rx="0" fill="var(--pf-ink)" />
+                <rect width="200" height="220" fill="url(#pf-hero-grid)" />
+                {/* orbiting dots */}
+                <g style={{ transformOrigin: '100px 110px' }}>
+                  <circle cx="100" cy="40" r="4" fill="var(--pf-ink)">
+                    <animateTransform attributeName="transform" type="rotate" from="0 100 110" to="360 100 110" dur="14s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="100" cy="60" r="2.5" fill="var(--pf-ink)" opacity="0.5">
+                    <animateTransform attributeName="transform" type="rotate" from="120 100 110" to="480 100 110" dur="22s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="100" cy="20" r="3" fill="var(--pf-bg)">
+                    <animateTransform attributeName="transform" type="rotate" from="240 100 110" to="-120 100 110" dur="30s" repeatCount="indefinite" />
+                  </circle>
                 </g>
-                <circle cx="84" cy="86" r="5" fill="var(--pf-bg)" />
-                <circle cx="116" cy="86" r="5" fill="var(--pf-bg)" />
-                <path d="M 80 110 Q 100 122 120 110" stroke="var(--pf-bg)" strokeWidth="3" fill="none" strokeLinecap="round" />
+                {/* center monogram */}
+                <circle cx="100" cy="110" r="44" fill="var(--pf-ink)" />
+                <circle cx="100" cy="110" r="50" fill="none" stroke="var(--pf-ink)" strokeWidth="1" strokeDasharray="2 4" />
+                <text x="100" y="124" textAnchor="middle" fontFamily="var(--pf-font-display)" fontSize="56" fill="var(--pf-bg)" fontStyle="italic">B</text>
+                {/* signal line */}
+                <g stroke="var(--pf-ink)" strokeWidth="1.2" fill="none">
+                  <path d="M 20 180 L 60 180 L 70 170 L 90 190 L 110 175 L 130 185 L 180 180" opacity="0.6">
+                    <animate
+                      attributeName="d"
+                      values="M 20 180 L 60 180 L 70 170 L 90 190 L 110 175 L 130 185 L 180 180;
+                              M 20 180 L 60 175 L 70 188 L 90 172 L 110 190 L 130 178 L 180 180;
+                              M 20 180 L 60 180 L 70 170 L 90 190 L 110 175 L 130 185 L 180 180"
+                      dur="6s"
+                      repeatCount="indefinite"
+                    />
+                  </path>
+                </g>
+                {/* corner ticks */}
+                <g stroke="var(--pf-ink)" strokeWidth="1.5" opacity="0.5">
+                  <path d="M 12 12 L 22 12 M 12 12 L 12 22" />
+                  <path d="M 188 12 L 178 12 M 188 12 L 188 22" />
+                  <path d="M 12 208 L 22 208 M 12 208 L 12 198" />
+                  <path d="M 188 208 L 178 208 M 188 208 L 188 198" />
+                </g>
               </svg>
             </div>
             <div className="pf-portrait-meta">

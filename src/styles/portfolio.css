@@ -208,13 +208,16 @@
 
 /* ============ Hero ============ */
 .pf-hero {
-  padding: 60px 0 40px;
+  padding: 0 0 40px;
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 60px;
-  align-items: end;
+  align-items: start;
   border-bottom: 1px solid var(--pf-rule);
+  margin-top: 24px;
 }
+.pf-hero > div:first-child { padding-top: 0; }
+.pf-hero > div:first-child > h1:first-child { margin-top: 0; }
 .pf-hero h1 {
   font-family: var(--pf-font-display);
   font-weight: 400;
@@ -240,7 +243,7 @@
   display: flex; align-items: center; gap: 12px;
   font-family: var(--pf-font-mono); font-size: 12px;
   letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--pf-ink-3); margin-bottom: 8px;
+  color: var(--pf-ink-3); margin: 20px 0;
 }
 .pf-hero .pf-who .pf-line { flex: 1; height: 1px; background: var(--pf-rule-2); }
 .pf-hero .pf-blurb { font-size: 18px; color: var(--pf-ink-2); max-width: 560px; line-height: 1.5; text-wrap: pretty; }

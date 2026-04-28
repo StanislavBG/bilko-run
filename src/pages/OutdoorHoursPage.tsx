@@ -889,6 +889,39 @@ export function OutdoorHoursPage() {
           letter-spacing: 0.06em;
         }
 
+        /* ── Kill light gradient overlays — they paint white-to-pastel
+           ON TOP of bg-white (which is now dark glass), making text
+           invisible. Drop the gradient image; the dark base shows through. */
+        .outdoor-atlas [class*="from-white"],
+        .outdoor-atlas [class*="from-[#fff"],
+        .outdoor-atlas [class*="from-[#fa"],
+        .outdoor-atlas [class*="from-[#f7"],
+        .outdoor-atlas [class*="from-[#ee"],
+        .outdoor-atlas [class*="from-[#df"] {
+          background-image: none !important;
+        }
+        /* Leader stat card (white-to-soft-yellow): warm tinted bg so the
+           leader still pops. Targeted via the most distinctive class combo. */
+        .outdoor-atlas [class*="from-white"][class*="to-[#fff8d8]"] {
+          background-image: linear-gradient(180deg, oklch(0.26 0.10 80 / 0.55), oklch(0.18 0.05 255 / 0.6)) !important;
+          box-shadow: 0 0 28px oklch(0.88 0.18 85 / 0.22), inset 0 1px 0 oklch(1 0 0 / 0.05) !important;
+        }
+        /* Quick Take card (white→fafbff): soft indigo tint */
+        .outdoor-atlas [class*="from-white"][class*="to-[#fafbff]"] {
+          background-image: linear-gradient(135deg, oklch(0.22 0.06 270 / 0.5), oklch(0.17 0.04 255 / 0.55)) !important;
+        }
+        /* KOUT writer card (warm yellow tint) */
+        .outdoor-atlas [class*="from-[#fffbea]"][class*="to-[#fff4d0]"] {
+          background-image: linear-gradient(135deg, oklch(0.24 0.10 80 / 0.45), oklch(0.18 0.06 80 / 0.4)) !important;
+        }
+
+        /* Catch any other lingering pastel surfaces. */
+        .outdoor-atlas [class*="bg-[#dfe9ff]"],
+        .outdoor-atlas [class*="bg-[#eef5ff]"] { background-color: oklch(0.22 0.05 255 / 0.45) !important; }
+        /* Inline-styled pale icon backgrounds in rule cards: keep visible
+           but lift a touch so dark icon glyphs read clearly. */
+        .outdoor-atlas .text-\\[28px\\].leading-none { filter: drop-shadow(0 0 4px oklch(0 0 0 / 0.4)); }
+
         /* Atmospheric backdrop */
         .outdoor-atlas .atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
         .outdoor-atlas .atmos::before {

@@ -47,11 +47,6 @@ export interface Workflow {
   runs: number;
 }
 
-export interface SkillGroup {
-  group: string;
-  items: readonly string[];
-}
-
 const COLORS: ReadonlyArray<'tang' | 'ink' | 'blue'> = ['tang', 'ink', 'blue'];
 
 function statusLabel(p: Project): PortfolioProject['status'] {
@@ -81,7 +76,6 @@ export const SECTIONS: readonly Section[] = [
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Shipped work — productivity tools, AI experiments, side quests.', tag: `${LIVE_COUNT} live` },
   { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: '1 playable' },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
-  { id: 'skills',    label: 'AI Skills',   path: '/skills',    icon: '◈', desc: 'What Bilko is fluent in — models, frameworks, patterns.', tag: 'the kit' },
   { id: 'academy',   label: 'Academy',     path: '/academy',   icon: '▲', desc: 'Structured AI learning paths. Free, opinionated.', tag: '5 levels' },
   { id: 'workflows', label: 'Workflows',   path: '/workflows', icon: '↯', desc: 'Background AI agents and automations running 24/7.', tag: 'running' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
@@ -91,14 +85,6 @@ export const GAMES: readonly PortfolioGame[] = [
   { id: 'game-academy',    name: 'Boat Shooter',    genre: 'Arcade', plays: 'live', blurb: 'Browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
   { id: 'midnight-router', name: 'Midnight Router', genre: 'Puzzle', plays: 'soon', blurb: 'Route signals across a sleeping city before sunrise.',                  color: 'blue' },
   { id: 'echo-chamber',    name: 'Echo Chamber',    genre: 'Audio',  plays: 'soon', blurb: 'Match shapes by what they sound like.',                                color: 'ink'  },
-];
-
-export const SKILLS: readonly SkillGroup[] = [
-  { group: 'Models',      items: ['Gemini 2.0 Flash', 'Claude', 'GPT-4o', 'Llama', 'Gemma 2B (WebGPU)'] },
-  { group: 'Frameworks',  items: ['React 18', 'TypeScript', 'Vite', 'Tailwind v4', 'Fastify'] },
-  { group: 'AI Patterns', items: ['Typed JSON outputs', 'Local-first inference', 'Token credit metering', 'Cross-tool promotion', 'Roast comedy as UX'] },
-  { group: 'Infra',       items: ['Turso / libSQL', 'Stripe (one-off credits)', 'Clerk auth', 'Render auto-deploy', 'WebGPU + WebLLM'] },
-  { group: 'Soft',        items: ['Shipping weekly', 'Building in public', 'Loud thinking', 'Roasting my own prompts'] },
 ];
 
 export const ACADEMY_LEVELS: readonly AcademyLevel[] = [

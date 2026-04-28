@@ -13,8 +13,8 @@ import { TermsPage } from './pages/TermsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { StudioPage } from './pages/StudioPage.js';
-import { SkillsPage } from './pages/SkillsPage.js';
 import { AcademyPage } from './pages/AcademyPage.js';
+import { AcademyLevelPage } from './pages/AcademyLevelPage.js';
 import { WorkflowsPage } from './pages/WorkflowsPage.js';
 import { ContactPage } from './pages/ContactPage.js';
 import { PortfolioProjectDetailPage } from './pages/PortfolioProjectDetailPage.js';
@@ -142,8 +142,8 @@ function AppRoutes() {
 
             {/* ── Portfolio sections ── */}
             <Route path="/studio" element={<StudioPage />} />
-            <Route path="/skills" element={<SkillsPage />} />
             <Route path="/academy" element={<AcademyPage />} />
+            <Route path="/academy/:level" element={<AcademyLevelPage />} />
             <Route path="/workflows" element={<WorkflowsPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />

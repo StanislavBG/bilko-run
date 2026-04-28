@@ -313,6 +313,33 @@
   display: inline-block;
 }
 
+/* ============ Category groups ============ */
+.pf-category { margin-bottom: 56px; }
+.pf-category:last-of-type { margin-bottom: 0; }
+.pf-category-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--pf-ink);
+  margin-bottom: 0;
+}
+.pf-category-header h2 {
+  font-family: var(--pf-font-display);
+  font-weight: 400;
+  font-size: clamp(28px, 3.4vw, 40px);
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.pf-category-header .pf-mono {
+  font-family: var(--pf-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pf-ink-3);
+}
+
 /* ============ Project grid ============ */
 .pf-proj-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; border-top: 1px solid var(--pf-rule); border-left: 1px solid var(--pf-rule); }
 .pf-proj-card {

@@ -67,7 +67,7 @@ const RANGE_ORDER: { tag: string; label: string }[] = [
   { tag: 'last1y',  label: '1 yr' },
   { tag: 'last1m',  label: '1 mo' },
 ];
-const DEFAULT_TAG = 'last10y';
+const DEFAULT_TAG = 'last1m';
 
 const PLOTLY_SRC = 'https://cdn.plot.ly/plotly-2.35.2.min.js';
 let plotlyPromise: Promise<void> | null = null;
@@ -387,7 +387,7 @@ export function OutdoorHoursPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initial = {
     tag: searchParams.get('tag') || DEFAULT_TAG,
-    grain: (searchParams.get('grain') as Grain) || 'monthly',
+    grain: (searchParams.get('grain') as Grain) || 'daily',
     metric: searchParams.get('metric') || 'stay_outside_hours',
     profile: searchParams.get('profile') || 'goldilocks',
     regions: searchParams.get('regions')?.split(',').filter(Boolean) ?? null,
@@ -438,7 +438,7 @@ export function OutdoorHoursPage() {
   useEffect(() => {
     const next = new URLSearchParams();
     if (tag !== DEFAULT_TAG) next.set('tag', tag);
-    if (grain !== 'monthly') next.set('grain', grain);
+    if (grain !== 'daily') next.set('grain', grain);
     if (metricKey !== 'stay_outside_hours') next.set('metric', metricKey);
     if (profileId !== 'goldilocks') next.set('profile', profileId);
     if (yoy) next.set('yoy', '1');

@@ -87,6 +87,36 @@ const STANDALONE_PROJECTS: readonly Project[] = [
     },
     tags: ['Canvas', 'Arcade'],
   },
+  {
+    slug: 'outdoor-hours',
+    name: 'OutdoorHours',
+    tagline: 'KOUT-7: ten years of comfortable hours, scored',
+    category: 'AI Tool · Productivity',
+    status: 'live',
+    year: 2026,
+    host: {
+      kind: 'static-path',
+      path: '/projects/outdoor-hours/',
+      sourceRepo: 'github.com/StanislavBG/outdoor-hours',
+      localPath: '~/Projects/Outdoor-Hours',
+    },
+    tags: ['Data', 'Free'],
+  },
+  {
+    slug: 'local-score',
+    name: 'LocalScore',
+    tagline: 'Private document analysis — runs in your browser',
+    category: 'AI Tool · Productivity',
+    status: 'live',
+    year: 2026,
+    host: {
+      kind: 'static-path',
+      path: '/projects/local-score/',
+      sourceRepo: 'github.com/StanislavBG/local-score',
+      localPath: '~/Projects/Local-Score',
+    },
+    tags: ['Free', 'WebGPU'],
+  },
 ];
 
 /** Every project on bilko.run, regardless of where it's hosted. */

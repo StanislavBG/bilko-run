@@ -331,34 +331,9 @@ export const TOOLS: readonly ToolDefinition[] = [
     ],
     loader: () => import('../pages/StackAuditPage.js').then(m => ({ default: m.StackAuditPage })),
   },
-  {
-    slug: 'local-score',
-    name: 'LocalScore',
-    tagline: 'Private document analysis — runs in your browser',
-    description: 'FREE — Analyze contracts, financials, meeting notes, and sensitive documents with AI that runs entirely in your browser. Your data never leaves your device. Zero cost, zero servers, zero risk.',
-    features: ['100% local', 'Zero API costs', 'Works offline', 'GDPR-friendly'],
-    category: 'business',
-    status: 'live',
-    accent: { text: 'text-green-500', bg: 'bg-green-500', hoverBorder: 'hover:border-green-300' },
-    theme: {
-      heroGradient: 'from-[#0d1f12] via-[#0a150d] to-[#0d1f12]',
-      glowColor: 'rgba(34,197,94,0.14)',
-      accentText: 'text-green-400',
-      accentTextLight: 'text-green-500',
-      buttonBg: 'bg-green-500',
-      buttonHover: 'hover:bg-green-600',
-      buttonShadow: 'shadow-green-900/30',
-    },
-    nav: {
-      dropdown: { badge: 'Free', desc: 'Analyze sensitive documents with AI that runs entirely in your browser. Nothing leaves your device.' },
-      home: { tag: 'Free', desc: 'Private doc analysis via WebGPU', free: true },
-    },
-    crossPromo: [
-      { slug: 'stack-audit', hook: 'Analyzed your docs. Now find waste in your SaaS stack.' },
-      { slug: 'page-roast', hook: 'Documents done. Now roast your landing page.' },
-    ],
-    loader: () => import('../pages/LocalScorePage.js').then(m => ({ default: m.LocalScorePage })),
-  },
+  // LocalScore moved to its own repo (~/Projects/Local-Score) and ships as a
+  // static-path project — see STANDALONE_PROJECTS in projectsRegistry.ts.
+  // This removes the ~6MB web-llm chunk from the host bundle entirely.
   {
     slug: 'stepproof',
     name: 'Stepproof',
@@ -384,34 +359,10 @@ export const TOOLS: readonly ToolDefinition[] = [
     ],
     loader: () => import('../pages/StepproofPage.js').then(m => ({ default: m.StepproofPage })),
   },
-  {
-    slug: 'outdoor-hours',
-    name: 'OutdoorHours',
-    tagline: 'KOUT-7: ten years of comfortable hours, scored',
-    description: 'Where is the weather actually better — Bay Area or Seattle Eastside? We counted every hour of the last ten years and asked one question: was it comfortable to be outside? Daytime, comfortable temp (45-86°F), safe UV, not pouring. Click any dot to drill in.',
-    features: ['10 yrs of hourly ERA5 data', 'Year/month/day rollups', 'Click-to-drill detail', 'KOUT-7 broadcast UI'],
-    category: 'business',
-    status: 'live',
-    accent: { text: 'text-[#e45c3a]', bg: 'bg-[#e45c3a]', hoverBorder: 'hover:border-[#f2b046]' },
-    theme: {
-      heroGradient: 'from-[#1a0d08] via-[#120907] to-[#0d1f1d]',
-      glowColor: 'rgba(228,92,58,0.14)',
-      accentText: 'text-[#f2b046]',
-      accentTextLight: 'text-[#e45c3a]',
-      buttonBg: 'bg-[#e45c3a]',
-      buttonHover: 'hover:bg-[#c44a2a]',
-      buttonShadow: 'shadow-orange-900/30',
-    },
-    nav: {
-      dropdown: { desc: 'KOUT-7 weather report: 10 years of comfortable outdoor hours, Bay Area vs. Seattle Eastside.' },
-      home: { tag: 'Free', desc: '10 yrs of weather, scored for outdoors', free: true },
-    },
-    crossPromo: [
-      { slug: 'local-score', hook: 'Like data that runs in your browser? Try LocalScore for private documents.' },
-      { slug: 'page-roast', hook: 'Built a microsite from your data? Now roast its landing page.' },
-    ],
-    loader: () => import('../pages/OutdoorHoursPage.js').then(m => ({ default: m.OutdoorHoursPage })),
-  },
+  // OutdoorHours moved to its own repo (~/Projects/Outdoor-Hours) and is now
+  // hosted as a static-path project — see STANDALONE_PROJECTS in
+  // src/data/projectsRegistry.ts. Keeping it out of this list means it no
+  // longer ships with the main bundle.
   {
     slug: 'agent-trace',
     name: 'AgentTrace',

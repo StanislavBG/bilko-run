@@ -5,7 +5,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
 import { initDb } from './db.js';
-import { registerDemoRoutes } from './routes/demos.js';
+import { registerToolRoutes } from './routes/tools/index.js';
 import { registerStripeRoutes } from './routes/stripe.js';
 import { registerLicenseRoutes } from './routes/license.js';
 import { registerSocialRoutes } from './routes/social.js';
@@ -65,7 +65,7 @@ app.addHook('onSend', async (_request, reply) => {
 });
 
 // Register API routes
-registerDemoRoutes(app);
+registerToolRoutes(app);
 registerStripeRoutes(app);
 registerLicenseRoutes(app);
 registerSocialRoutes(app);

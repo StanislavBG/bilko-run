@@ -1,9 +1,8 @@
 import React from 'react';
 import { ClerkProvider } from '@clerk/clerk-react';
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout.js';
 import { ToolErrorBoundary } from './components/ErrorBoundary.js';
-import { usePageView } from './hooks/usePageView.js';
 import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
@@ -19,6 +18,7 @@ import { WorkflowsPage } from './pages/WorkflowsPage.js';
 import { ContactPage } from './pages/ContactPage.js';
 import { PortfolioProjectDetailPage } from './pages/PortfolioProjectDetailPage.js';
 import { ROUTABLE_TOOLS } from './config/tools.js';
+import { PROJECTS } from './data/projectsRegistry.js';
 
 // Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
 // only non-tool landing pages are declared here.
@@ -30,7 +30,6 @@ const TOOL_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentT
   ROUTABLE_TOOLS.map(t => [t.slug, React.lazy(t.loader)]),
 );
 
-// Legacy dashboard imports — kept at /app for backward compat
 import { AuthProvider } from './hooks/useAuth.js';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
@@ -45,51 +44,52 @@ class ClerkErrorBoundary extends React.Component<{ children: React.ReactNode; fa
     return this.props.children;
   }
 }
-// Legacy views — lazy loaded (only fetched if user visits /app)
-const HeadlineGraderView = React.lazy(() => import('./views/HeadlineGraderView.js').then(m => ({ default: m.HeadlineGraderView })));
-const PageRoastView = React.lazy(() => import('./views/PageRoastView.js').then(m => ({ default: m.PageRoastView })));
-const AdScorerView = React.lazy(() => import('./views/AdScorerView.js').then(m => ({ default: m.AdScorerView })));
-const ThreadGraderView = React.lazy(() => import('./views/ThreadGraderView.js').then(m => ({ default: m.ThreadGraderView })));
-const EmailForgeView = React.lazy(() => import('./views/EmailForgeView.js').then(m => ({ default: m.EmailForgeView })));
-const AudienceDecoderView = React.lazy(() => import('./views/AudienceDecoderView.js'));
-const MetricsView = React.lazy(() => import('./views/MetricsView.js').then(m => ({ default: m.MetricsView })));
+// Single-source-of-truth path canonicalization. Both /projects/<slug> and
+// /app/<old-slug> redirect to /products/<slug> while preserving the rest of
+// the URL (search params, hash). Old links keep working; the address bar
+// shows the canonical form.
+const APP_TO_PRODUCT: Record<string, string> = {
+  headline: 'headline-grader',
+  'page-roast': 'page-roast',
+  'ad-scorer': 'ad-scorer',
+  thread: 'thread-grader',
+  'email-forge': 'email-forge',
+  audience: 'audience-decoder',
+};
 
-const LEGACY_NAV = [
-  { path: '/headline', label: 'HeadlineGrader' },
-  { path: '/page-roast', label: 'PageRoast' },
-  { path: '/ad-scorer', label: 'AdScorer' },
-  { path: '/thread', label: 'ThreadGrader' },
-  { path: '/email-forge', label: 'EmailForge' },
-  { path: '/audience', label: 'AudienceDecoder' },
-  { path: '/metrics', label: 'Metrics' },
-] as const;
-
-function LegacyNav() {
-  return (
-    <nav style={{
-      background: '#080810', borderBottom: '1px solid #12121f',
-      padding: '0 24px', display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', flexShrink: 0,
-    }}>
-      <span style={{ fontSize: 12, fontWeight: 800, color: '#555', marginRight: 16, whiteSpace: 'nowrap', letterSpacing: 1 }}>CG</span>
-      {LEGACY_NAV.map(({ path, label }) => (
-        <NavLink key={path} to={path} style={({ isActive }) => ({
-          padding: '12px 14px', fontSize: 12, fontWeight: 600,
-          color: isActive ? '#e0e0e0' : '#444', textDecoration: 'none',
-          borderBottom: isActive ? '2px solid #7c4dff' : '2px solid transparent', whiteSpace: 'nowrap',
-        })}>{label}</NavLink>
-      ))}
-    </nav>
-  );
+function RedirectProjectsToProducts() {
+  const loc = useLocation();
+  return <Navigate to={loc.pathname.replace(/^\/projects/, '/products') + loc.search + loc.hash} replace />;
 }
 
-function LegacyDashboard({ children }: { children: React.ReactNode }) {
-  usePageView();
-  return (
-    <div style={{ background: '#0a0a0f', color: '#e0e0e0', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-      <LegacyNav />
-      <main style={{ flex: 1, overflowY: 'auto' }}>{children}</main>
-    </div>
-  );
+// /products/<slug> for a slug that's not a react-route tool — check whether
+// it's a standalone (static-path/external) project and redirect there.
+// Lets old links survive when a tool migrates from react-route to static-path.
+function MaybeStandaloneRedirect() {
+  const loc = useLocation();
+  const slug = loc.pathname.replace(/^\/products\//, '').split('/')[0];
+  const standalone = PROJECTS.find(p => p.slug === slug && p.host.kind !== 'react-route');
+  if (standalone) {
+    if (standalone.host.kind === 'external-url') {
+      window.location.href = standalone.host.url;
+      return null;
+    }
+    // static-path: trigger full reload so Fastify serves the static index.html.
+    window.location.href = standalone.host.path;
+    return null;
+  }
+  return <NotFoundPage />;
+}
+
+function RedirectAppToProducts() {
+  const loc = useLocation();
+  // /app/<old> → /products/<canonical>; /app/metrics → /admin; /app or anything else → /products
+  const segments = loc.pathname.split('/').filter(Boolean); // ["app", "<rest>"]
+  const old = segments[1];
+  if (old === 'metrics') return <Navigate to="/admin" replace />;
+  const canonical = old ? APP_TO_PRODUCT[old] : undefined;
+  const target = canonical ? `/products/${canonical}` : '/products';
+  return <Navigate to={target + loc.search + loc.hash} replace />;
 }
 
 function lazyRoute(El: React.ComponentType) {
@@ -125,13 +125,13 @@ function AppRoutes() {
             <Route path="/products" element={<ProjectsPage />} />
             <Route path="/products/*">
               {toolRoutes()}
+              {/* unknown slug under /products/* — maybe a static-path project? */}
+              <Route path="*" element={<MaybeStandaloneRedirect />} />
             </Route>
 
-            {/* /projects/* — backward compat aliases */}
-            <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/projects/*">
-              {toolRoutes()}
-            </Route>
+            {/* /projects/* — redirect to canonical /products/* */}
+            <Route path="/projects" element={<Navigate to="/products" replace />} />
+            <Route path="/projects/*" element={<RedirectProjectsToProducts />} />
 
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />
@@ -149,15 +149,9 @@ function AppRoutes() {
             <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />
           </Route>
 
-          {/* ── Legacy dashboard at /app ── */}
-          <Route path="/app" element={<Navigate to="/app/headline" replace />} />
-          <Route path="/app/headline" element={<React.Suspense fallback={null}><LegacyDashboard><HeadlineGraderView /></LegacyDashboard></React.Suspense>} />
-          <Route path="/app/page-roast" element={<React.Suspense fallback={null}><LegacyDashboard><PageRoastView /></LegacyDashboard></React.Suspense>} />
-          <Route path="/app/ad-scorer" element={<React.Suspense fallback={null}><LegacyDashboard><AdScorerView /></LegacyDashboard></React.Suspense>} />
-          <Route path="/app/thread" element={<React.Suspense fallback={null}><LegacyDashboard><ThreadGraderView /></LegacyDashboard></React.Suspense>} />
-          <Route path="/app/email-forge" element={<React.Suspense fallback={null}><LegacyDashboard><EmailForgeView /></LegacyDashboard></React.Suspense>} />
-          <Route path="/app/audience" element={<React.Suspense fallback={null}><LegacyDashboard><AudienceDecoderView /></LegacyDashboard></React.Suspense>} />
-          <Route path="/app/metrics" element={<React.Suspense fallback={null}><LegacyDashboard><MetricsView /></LegacyDashboard></React.Suspense>} />
+          {/* /app/* — legacy dashboard URLs redirect to canonical /products/* */}
+          <Route path="/app" element={<RedirectAppToProducts />} />
+          <Route path="/app/*" element={<RedirectAppToProducts />} />
 
           {/* 404 */}
           <Route path="*" element={<Layout />}>

@@ -92,16 +92,44 @@ A single entry in `src/data/projectsRegistry.ts`:
 2. Build it.
    - `react-route`: page + route entry + per-tool server file.
    - `static-path`: standalone repo, `vite build`, copy `dist/` into `public/projects/<slug>/`.
-3. Register it in `src/data/projectsRegistry.ts` (and `src/config/tools.ts` if `react-route`).
+3. Register it in `src/data/standalone-projects.json` (`static-path`/`external-url`) or `src/config/tools.ts` (`react-route`). Sibling sessions should use the [`bilko-host` MCP](../mcp-host-server/README.md) — see below.
 4. Run `pnpm test && pnpm exec tsc --noEmit && pnpm exec vite build` — all must pass.
 5. Commit and push to both remotes (`origin` and `content-grade`). Render auto-deploys.
 6. Verify the project shows up on `/`, `/products`, and in ⌘K.
 
+## Adding from a sibling-repo Claude session (MCP)
+
+A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by hand. Wire up the [`bilko-host` MCP server](../mcp-host-server/README.md) in your sibling's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "bilko-host": {
+      "command": "node",
+      "args": ["/home/bilko/Projects/Bilko/mcp-host-server/dist/server.js"]
+    }
+  }
+}
+```
+
+Then per session:
+
+```
+1. bilko-host__get_host_contract                         # read this file
+2. bilko-host__list_projects                             # check slug isn't taken
+3. (build your app: pnpm build → dist/)
+4. bilko-host__register_static_project { slug, name, … }   # first deploy only
+5. bilko-host__publish_static_project { slug, distPath }   # every deploy
+6. bilko-host__status                                    # verify
+```
+
+The MCP commits + pushes to both host remotes automatically; Render redeploys within ~minute.
+
 ## Removing an app
 
-1. Delete its entry from `projectsRegistry.ts` (and `tools.ts` if `react-route`).
-2. Delete the page (`src/pages/<slug>Page.tsx`) and per-tool server file (`server/routes/tools/<slug>.ts`) and remove the call from `server/routes/tools/index.ts`.
-3. For `static-path`: `rm -rf public/projects/<slug>/`.
+1. Delete its entry from `src/data/standalone-projects.json` (or `src/config/tools.ts` if `react-route`). Sibling sessions: `bilko-host__unregister_project { slug, deleteAssets: true }` does both.
+2. For `react-route`: also delete the page (`src/pages/<slug>Page.tsx`) and per-tool server file (`server/routes/tools/<slug>.ts`) and remove the call from `server/routes/tools/index.ts`.
+3. For `static-path`: `rm -rf public/projects/<slug>/` (or pass `deleteAssets: true` to the MCP).
 4. Add a redirect in `src/App.tsx` if the slug is still being linked from outside.
 
 ## Why this contract exists

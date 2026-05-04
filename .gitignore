@@ -1,6 +1,9 @@
 node_modules/
-dist/
-dist-server/
+# Anchored to repo root — only ignores ./dist (Vite) and ./dist-server (host server tsc).
+# mcp-host-server/dist/ is intentionally tracked so sibling repos can reference
+# the built server.js from .mcp.json without a build step.
+/dist/
+/dist-server/
 data/*.db
 data/*.db-shm
 data/*.db-wal

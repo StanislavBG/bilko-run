@@ -1,0 +1,6 @@
+node_modules
+*.log
+.DS_Store
+# dist/ is committed so sibling repos can reference dist/server.js directly
+# from their .mcp.json without each having to run a build step.
+

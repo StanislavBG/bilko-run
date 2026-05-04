@@ -71,53 +71,11 @@ const TOOL_PROJECTS: readonly Project[] = LISTING_TOOLS.map(t => ({
 }));
 
 /* ── Standalone projects (static-path or external) ────────────────── */
-const STANDALONE_PROJECTS: readonly Project[] = [
-  {
-    slug: 'game-academy',
-    name: 'Boat Shooter',
-    tagline: 'Browser arcade shooter — first entry in the Bilko Game Academy.',
-    category: 'Game',
-    status: 'live',
-    year: 2026,
-    host: {
-      kind: 'static-path',
-      path: '/projects/game-academy/',
-      sourceRepo: 'github.com/StanislavBG/Bilko-Game-Academy',
-      localPath: '~/Projects/Bilko-Game-Academy',
-    },
-    tags: ['Canvas', 'Arcade'],
-  },
-  {
-    slug: 'outdoor-hours',
-    name: 'OutdoorHours',
-    tagline: 'KOUT-7: ten years of comfortable hours, scored',
-    category: 'AI Tool · Productivity',
-    status: 'live',
-    year: 2026,
-    host: {
-      kind: 'static-path',
-      path: '/projects/outdoor-hours/',
-      sourceRepo: 'github.com/StanislavBG/outdoor-hours',
-      localPath: '~/Projects/Outdoor-Hours',
-    },
-    tags: ['Data', 'Free'],
-  },
-  {
-    slug: 'local-score',
-    name: 'LocalScore',
-    tagline: 'Private document analysis — runs in your browser',
-    category: 'AI Tool · Productivity',
-    status: 'live',
-    year: 2026,
-    host: {
-      kind: 'static-path',
-      path: '/projects/local-score/',
-      sourceRepo: 'github.com/StanislavBG/local-score',
-      localPath: '~/Projects/Local-Score',
-    },
-    tags: ['Free', 'WebGPU'],
-  },
-];
+// Sourced from a JSON sidecar so the bilko-host MCP server can edit it
+// safely from sibling-repo Claude sessions without touching TS source.
+// See mcp-host-server/ for the register/publish/unregister tools.
+import standaloneJson from './standalone-projects.json' with { type: 'json' };
+const STANDALONE_PROJECTS: readonly Project[] = standaloneJson as readonly Project[];
 
 /** Every project on bilko.run, regardless of where it's hosted. */
 export const PROJECTS: readonly Project[] = [

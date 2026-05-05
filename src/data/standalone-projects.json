@@ -73,5 +73,20 @@
       "localPath": "~/Projects/Stack-Audit"
     },
     "tags": ["Ops", "Cost"]
+  },
+  {
+    "slug": "launch-grader",
+    "name": "LaunchGrader",
+    "tagline": "Is your product ready to launch?",
+    "category": "AI Tool · Marketing",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/launch-grader/",
+      "sourceRepo": "github.com/StanislavBG/launch-grader",
+      "localPath": "~/Projects/Launch-Grader"
+    },
+    "tags": ["GTM", "Audit"]
   }
 ]

@@ -5,8 +5,8 @@ Per-tool playbooks for extracting each in-repo react-route AI tool to its own st
 | # | Tool | Plan | Effort | Sibling repo | Status | Key risk |
 |--:|---|---|---|---|---|---|
 | 1 | Stepproof | [stepproof.md](stepproof.md) | ~30 min | `StanislavBG/stepproof-page` | ✅ **DONE 2026-05-05** | Marketing page only — server route deleted (frontend never called it) |
-| 2 | StackAudit | [stack-audit.md](stack-audit.md) | ~60 min | `StanislavBG/stack-audit` | ⏳ next | First Clerk-bundled standalone; proves same-origin cookie pattern |
-| 3 | LaunchGrader | [launch-grader.md](launch-grader.md) | ~30–45 min | `StanislavBG/launch-grader` | pending | SSRF — server-side, unaffected by extraction |
+| 2 | StackAudit | [stack-audit.md](stack-audit.md) | ~60 min | `StanislavBG/stack-audit` | ✅ **DONE 2026-05-05** (84 KB gz) | First Clerk-bundled standalone; proves same-origin cookie pattern |
+| 3 | LaunchGrader | [launch-grader.md](launch-grader.md) | ~30–45 min | `StanislavBG/launch-grader` | ⏳ next | SSRF — server-side, unaffected by extraction |
 | 4 | AdScorer | [ad-scorer.md](ad-scorer.md) | ~90 min | `StanislavBG/ad-scorer` | pending | First "big" page; first inline of `<CompareLayout>` + `<Rewrites>` |
 | 5 | HeadlineGrader | [headline-grader.md](headline-grader.md) | ~45 min | `StanislavBG/headline-grader` | pending | Email-unlock free-tier flow; possible `@bilko/host-kit` publish point |
 | 6 | ThreadGrader | [thread-grader.md](thread-grader.md) | ~30 min | `StanislavBG/thread-grader` | pending | Pure template work |
@@ -123,6 +123,53 @@ gh repo create StanislavBG/<slug>[-page] --public --source=. --push --descriptio
 ### 8. Vite base + asset paths
 
 `vite.config.ts` must include `base: '/projects/<slug>/'`. Verify after `pnpm build` that `dist/index.html` has `<script src="/projects/<slug>/assets/...js">` (not `/assets/...`). Stepproof's was correct on first build.
+
+## StackAudit retrospective — additional corrections from #2
+
+Migration #2 added four more learnings on top of the Stepproof eight:
+
+### 9. `src/vite-env.d.ts` is required when the standalone reads `import.meta.env`
+
+`useToolApi` references `import.meta.env.VITE_API_URL` in some shapes; without `vite-env.d.ts` declaring `interface ImportMetaEnv` the standalone's `tsc` fails. Stepproof never read env so dodged this. Add this file to every Clerk-bundled standalone:
+
+```ts
+/// <reference types="vite/client" />
+interface ImportMetaEnv {
+  readonly VITE_API_URL?: string;
+  readonly VITE_CLERK_PUBLISHABLE_KEY?: string;
+}
+interface ImportMeta { readonly env: ImportMetaEnv; }
+```
+
+### 10. Copy kit components from `src/components/tool-page/*.tsx` directly — NOT from a sibling's slim copy
+
+LocalScore is a free tool and ships only `<ToolHero>`/`<CrossPromo>`. It has no `<ScoreCard>`. The instinct to "copy from the working sibling" fails for paid tools that need scoring UI. Read each component's source in the host:
+
+- `src/components/tool-page/ToolHero.tsx`
+- `src/components/tool-page/ScoreCard.tsx`
+- `src/components/tool-page/SectionBreakdown.tsx`
+- `src/components/tool-page/CompareLayout.tsx` (#4 onward)
+- `src/components/tool-page/Rewrites.tsx` (#4 onward)
+- `src/components/tool-page/CrossPromo.tsx`
+- `src/components/tool-page/colors.ts` (grade/bar color helpers — inline these into the standalone's `kit.tsx`)
+
+Bake the tool's `theme` colors directly into the slim copies. Drop generic props (`toolSlug`, `currentTool`) — the standalone only renders one tool.
+
+### 11. The hero gradient + glow color come from `src/config/tools.ts → theme`, NOT from the page's Tailwind classes
+
+The page's body uses `bg-warm-50`, etc. — those are page-level palette tokens. The hero's dark gradient + radial glow live inside `<ToolHero>` and read from `theme.heroGradient` / `theme.glowColor`. When inlining a slim `<ToolHero>` in the standalone, hardcode those exact strings (e.g. `from-[#0d1f17] via-[#0a1510] to-[#0d1f17]` for AdScorer's emerald hero). Source-of-truth is `tools.ts`, not the page.
+
+### 12. Fresh `git init` lands on `master` — rename to `main` before first push
+
+```bash
+cd ~/Projects/<Tool>
+git init -q
+# ... add files, commit ...
+git branch -M main          # rename master → main
+gh repo create StanislavBG/<slug> --public --source=. --push --description "..."
+```
+
+Without the rename, `gh repo create --push` pushes a `master` branch and the GitHub UI shows `master` as default — inconsistent with the host repo's `main`.
 
 ---
 

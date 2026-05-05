@@ -174,31 +174,8 @@ export const TOOLS: readonly ToolDefinition[] = [
     ],
     loader: () => import('../pages/HeadlineGraderPage.js').then(m => ({ default: m.HeadlineGraderPage })),
   },
-  {
-    slug: 'ad-scorer',
-    name: 'AdScorer',
-    tagline: 'Grade ads before you spend the budget',
-    description: 'Platform-specific ad copy grading for Google, Meta, and LinkedIn. Scores hook strength, value prop, emotional architecture, and CTA conversion.',
-    features: ['Platform-specific rules', 'Copy rewrites', 'A/B Compare', '4-pillar scoring'],
-    category: 'content',
-    status: 'live',
-    accent: { text: 'text-emerald-500', bg: 'bg-emerald-500', hoverBorder: 'hover:border-emerald-300' },
-    theme: {
-      heroGradient: 'from-[#0d1f17] via-[#0a1510] to-[#0d1f17]',
-      glowColor: 'rgba(16,185,129,0.14)',
-      accentText: 'text-emerald-400',
-      accentTextLight: 'text-emerald-500',
-      buttonBg: 'bg-emerald-500',
-      buttonHover: 'hover:bg-emerald-600',
-      buttonShadow: 'shadow-emerald-900/30',
-    },
-    nav: { home: { tag: 'Marketing', desc: 'Platform-specific ad grading' } },
-    crossPromo: [
-      { slug: 'page-roast', hook: 'Ad scored. Now roast the landing page it sends people to.' },
-      { slug: 'email-forge', hook: 'Ads drive clicks. Emails close deals. Generate your sequence.' },
-    ],
-    loader: () => import('../pages/AdScorerPage.js').then(m => ({ default: m.AdScorerPage })),
-  },
+  // AdScorer moved to its own repo (~/Projects/Ad-Scorer, github.com/StanislavBG/ad-scorer).
+  // Now served as a static-path sibling at /projects/ad-scorer/ — see src/data/standalone-projects.json.
   {
     slug: 'thread-grader',
     name: 'ThreadGrader',

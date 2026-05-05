@@ -103,5 +103,20 @@
       "localPath": "~/Projects/Launch-Grader"
     },
     "tags": ["GTM", "Audit"]
+  },
+  {
+    "slug": "ad-scorer",
+    "name": "AdScorer",
+    "tagline": "Grade ads before you spend the budget",
+    "category": "AI Tool · Content",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/ad-scorer/",
+      "sourceRepo": "github.com/StanislavBG/ad-scorer",
+      "localPath": "~/Projects/Ad-Scorer"
+    },
+    "tags": ["Ads", "FB/Google/LinkedIn"]
   }
 ]

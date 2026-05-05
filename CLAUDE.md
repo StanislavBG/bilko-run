@@ -41,10 +41,9 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 
 1. **PageRoast** (`/products/page-roast`) — Landing page CRO audit + savage roast
 2. **HeadlineGrader** (`/products/headline-grader`) — 4-framework headline scoring + generate mode
-3. **AdScorer** (`/products/ad-scorer`) — Platform-specific ad grading (FB/Google/LinkedIn) + generate
-4. **ThreadGrader** (`/products/thread-grader`) — X/Twitter thread viral analysis + generate
-5. **EmailForge** (`/products/email-forge`) — 5-email sequence generator (AIDA/PAS/Hormozi/Cialdini/Story)
-6. **AudienceDecoder** (`/products/audience-decoder`) — Audience archetype + engagement analysis
+3. **ThreadGrader** (`/products/thread-grader`) — X/Twitter thread viral analysis + generate
+4. **EmailForge** (`/products/email-forge`) — 5-email sequence generator (AIDA/PAS/Hormozi/Cialdini/Story)
+5. **AudienceDecoder** (`/products/audience-decoder`) — Audience archetype + engagement analysis
 
 **Sibling repos (static-path, canonical URL `/projects/<slug>/`)** — fully independent, built in their own Claude sessions:
 
@@ -54,6 +53,7 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 - **Stepproof** (`/projects/stepproof/`) → `~/Projects/Stepproof/` — YAML scenario regression tests for AI pipelines (marketing page; CLI lives at github.com/StanislavBG/stepproof)
 - **StackAudit** (`/projects/stack-audit/`) → `~/Projects/Stack-Audit/` — SaaS tool stack cost + waste finder. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
 - **LaunchGrader** (`/projects/launch-grader/`) → `~/Projects/Launch-Grader/` — 5-dimension go-to-market readiness audit. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
+- **AdScorer** (`/projects/ad-scorer/`) → `~/Projects/Ad-Scorer/` — Platform-specific ad copy grading (FB/Google/LinkedIn) with Score/Compare/Generate modes. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
 
 **Long-term direction:** all in-repo apps eventually become sibling repos. Bilko stays the framework: registry, auth, credits, kit, brand, blog, admin.
 

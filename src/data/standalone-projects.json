@@ -73,5 +73,20 @@
       "localPath": "~/Projects/Stack-Audit"
     },
     "tags": ["Ops", "Cost"]
+  },
+  {
+    "slug": "git-viewer",
+    "name": "gitoverview",
+    "tagline": "Personal GitHub portfolio dashboard for StanislavBG",
+    "category": "Data · Portfolio",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/git-viewer/",
+      "sourceRepo": "github.com/StanislavBG/git-viewer",
+      "localPath": "~/Projects/git-viewer"
+    },
+    "tags": ["Browser", "Free"]
   }
 ]

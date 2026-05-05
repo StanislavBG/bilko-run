@@ -47,13 +47,13 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 6. **AudienceDecoder** (`/products/audience-decoder`) — Audience archetype + engagement analysis
 7. **LaunchGrader** (`/products/launch-grader`) — 5-dimension go-to-market readiness audit
 8. **StackAudit** (`/products/stack-audit`) — SaaS tool stack cost analysis + waste finder
-9. **Stepproof** (`/products/stepproof`) — YAML scenario regression tests for AI pipelines
 
 **Sibling repos (static-path, canonical URL `/projects/<slug>/`)** — fully independent, built in their own Claude sessions:
 
 - **OutdoorHours** (`/projects/outdoor-hours/`) → `~/Projects/Outdoor-Hours/` — KOUT-7 weather report
 - **LocalScore** (`/projects/local-score/`) → `~/Projects/Local-Score/` — Gemma/WebGPU doc analyzer
 - **Boat Shooter** (`/projects/game-academy/`) → `~/Projects/Bilko-Game-Academy/` — browser arcade
+- **Stepproof** (`/projects/stepproof/`) → `~/Projects/Stepproof/` — YAML scenario regression tests for AI pipelines (marketing page; CLI lives at github.com/StanislavBG/stepproof)
 
 **Long-term direction:** all in-repo apps eventually become sibling repos. Bilko stays the framework: registry, auth, credits, kit, brand, blog, admin.
 
@@ -106,7 +106,6 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 
 ### Backend Patterns (`server/`)
 - `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the inverse-mode generator helper. `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
-- `server/routes/stepproof.ts` — Stepproof scenario runner with YAML parser
 - `server/routes/blog.ts` — Blog CRUD (admin-only writes)
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
 - `server/routes/analytics.ts` — Page views + admin stats dashboard (`/api/analytics/event` is open to same-origin sibling apps for `track()`)

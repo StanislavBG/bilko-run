@@ -334,31 +334,8 @@ export const TOOLS: readonly ToolDefinition[] = [
   // LocalScore moved to its own repo (~/Projects/Local-Score) and ships as a
   // static-path project — see STANDALONE_PROJECTS in projectsRegistry.ts.
   // This removes the ~6MB web-llm chunk from the host bundle entirely.
-  {
-    slug: 'stepproof',
-    name: 'Stepproof',
-    tagline: 'Regression tests for AI pipelines',
-    description: 'Write YAML scenarios, run them N times, check if your LLM can follow instructions. Preset scenarios or bring your own. Like unit tests, but for AI.',
-    features: ['YAML scenarios', 'Preset library', 'LLM judge assertions', 'BYOK support'],
-    category: 'devtools',
-    status: 'live',
-    accent: { text: 'text-cyan-500', bg: 'bg-cyan-500', hoverBorder: 'hover:border-cyan-300' },
-    theme: {
-      heroGradient: 'from-[#0d1c1f] via-[#0a1315] to-[#0d1c1f]',
-      glowColor: 'rgba(6,182,212,0.14)',
-      accentText: 'text-cyan-400',
-      accentTextLight: 'text-cyan-500',
-      buttonBg: 'bg-cyan-500',
-      buttonHover: 'hover:bg-cyan-600',
-      buttonShadow: 'shadow-cyan-900/30',
-    },
-    nav: { home: { tag: 'Dev', desc: 'YAML scenario tests for AI pipelines' } },
-    crossPromo: [
-      { slug: 'page-roast', hook: 'Tests passing? Celebrate by roasting your landing page.' },
-      { slug: 'headline-grader', hook: 'Pipeline works. Now make sure the headline selling it works too.' },
-    ],
-    loader: () => import('../pages/StepproofPage.js').then(m => ({ default: m.StepproofPage })),
-  },
+  // Stepproof moved to its own repo (~/Projects/Stepproof) and is now hosted
+  // as a static-path project — see standalone-projects.json.
   // OutdoorHours moved to its own repo (~/Projects/Outdoor-Hours) and is now
   // hosted as a static-path project — see STANDALONE_PROJECTS in
   // src/data/projectsRegistry.ts. Keeping it out of this list means it no

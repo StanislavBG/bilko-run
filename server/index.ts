@@ -10,7 +10,6 @@ import { registerStripeRoutes } from './routes/stripe.js';
 import { registerLicenseRoutes } from './routes/license.js';
 import { registerSocialRoutes } from './routes/social.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
-import { registerStepproofRoutes } from './routes/stepproof.js';
 import { registerBlogRoutes } from './routes/blog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,7 +68,6 @@ registerToolRoutes(app);
 registerStripeRoutes(app);
 registerLicenseRoutes(app);
 registerSocialRoutes(app);
-registerStepproofRoutes(app);
 registerBlogRoutes(app);
 registerAnalyticsRoutes(app);
 

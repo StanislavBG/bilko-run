@@ -54,7 +54,7 @@
     "host": {
       "kind": "static-path",
       "path": "/projects/stepproof/",
-      "sourceRepo": "github.com/StanislavBG/stepproof",
+      "sourceRepo": "github.com/StanislavBG/stepproof-page",
       "localPath": "~/Projects/Stepproof"
     },
     "tags": ["YAML", "BYOK", "Free"]

@@ -303,34 +303,10 @@ export const TOOLS: readonly ToolDefinition[] = [
     ],
     loader: () => import('../pages/LaunchGraderPage.js').then(m => ({ default: m.LaunchGraderPage })),
   },
-  {
-    slug: 'stack-audit',
-    name: 'StackAudit',
-    tagline: 'Find waste in your SaaS stack',
-    description: 'Paste your tool list. AI finds overlap, cheaper alternatives, self-hosted options, and calculates exactly how much you can save. Enterprise audit for $1.',
-    features: ['Cost analysis', 'Overlap detection', 'Alternative suggestions', 'Savings calculator'],
-    category: 'business',
-    status: 'live',
-    accent: { text: 'text-slate-600', bg: 'bg-slate-500', hoverBorder: 'hover:border-slate-300' },
-    theme: {
-      heroGradient: 'from-[#151a20] via-[#0f1318] to-[#151a20]',
-      glowColor: 'rgba(100,116,139,0.14)',
-      accentText: 'text-slate-400',
-      accentTextLight: 'text-slate-500',
-      buttonBg: 'bg-slate-600',
-      buttonHover: 'hover:bg-slate-700',
-      buttonShadow: 'shadow-slate-900/30',
-    },
-    nav: {
-      dropdown: { desc: 'Find overlap and waste in your SaaS subscriptions. See exactly how much you can save.' },
-      home: { tag: 'Ops', desc: 'SaaS tool stack cost + waste finder' },
-    },
-    crossPromo: [
-      { slug: 'launch-grader', hook: 'Stack optimized. Now audit your launch readiness.' },
-      { slug: 'local-score', hook: 'Need to analyze sensitive contracts? Do it privately in your browser.' },
-    ],
-    loader: () => import('../pages/StackAuditPage.js').then(m => ({ default: m.StackAuditPage })),
-  },
+  // StackAudit moved to its own repo (~/Projects/Stack-Audit) and is now hosted
+  // as a static-path project — see standalone-projects.json. The server route
+  // at /api/demos/stack-audit stays in this repo; the standalone calls it
+  // same-origin.
   // LocalScore moved to its own repo (~/Projects/Local-Score) and ships as a
   // static-path project — see STANDALONE_PROJECTS in projectsRegistry.ts.
   // This removes the ~6MB web-llm chunk from the host bundle entirely.

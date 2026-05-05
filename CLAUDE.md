@@ -46,7 +46,6 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 5. **EmailForge** (`/products/email-forge`) — 5-email sequence generator (AIDA/PAS/Hormozi/Cialdini/Story)
 6. **AudienceDecoder** (`/products/audience-decoder`) — Audience archetype + engagement analysis
 7. **LaunchGrader** (`/products/launch-grader`) — 5-dimension go-to-market readiness audit
-8. **StackAudit** (`/products/stack-audit`) — SaaS tool stack cost analysis + waste finder
 
 **Sibling repos (static-path, canonical URL `/projects/<slug>/`)** — fully independent, built in their own Claude sessions:
 
@@ -54,6 +53,7 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 - **LocalScore** (`/projects/local-score/`) → `~/Projects/Local-Score/` — Gemma/WebGPU doc analyzer
 - **Boat Shooter** (`/projects/game-academy/`) → `~/Projects/Bilko-Game-Academy/` — browser arcade
 - **Stepproof** (`/projects/stepproof/`) → `~/Projects/Stepproof/` — YAML scenario regression tests for AI pipelines (marketing page; CLI lives at github.com/StanislavBG/stepproof)
+- **StackAudit** (`/projects/stack-audit/`) → `~/Projects/Stack-Audit/` — SaaS tool stack cost + waste finder. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
 
 **Long-term direction:** all in-repo apps eventually become sibling repos. Bilko stays the framework: registry, auth, credits, kit, brand, blog, admin.
 

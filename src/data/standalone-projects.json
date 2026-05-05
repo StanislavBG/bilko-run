@@ -58,5 +58,20 @@
       "localPath": "~/Projects/Stepproof"
     },
     "tags": ["YAML", "BYOK", "Free"]
+  },
+  {
+    "slug": "stack-audit",
+    "name": "StackAudit",
+    "tagline": "Find waste in your SaaS stack",
+    "category": "AI Tool · Ops",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/stack-audit/",
+      "sourceRepo": "github.com/StanislavBG/stack-audit",
+      "localPath": "~/Projects/Stack-Audit"
+    },
+    "tags": ["Ops", "Cost"]
   }
 ]

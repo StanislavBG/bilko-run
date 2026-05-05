@@ -275,34 +275,10 @@ export const TOOLS: readonly ToolDefinition[] = [
     loader: () => import('../pages/AudienceDecoderPage.js').then(m => ({ default: m.AudienceDecoderPage })),
     productKey: PRODUCT_KEYS.AUDIENCEDECODER_REPORT,
   },
-  {
-    slug: 'launch-grader',
-    name: 'LaunchGrader',
-    tagline: 'Is your product ready to launch?',
-    description: 'AI audits your go-to-market readiness across 5 dimensions: value prop, pricing, social proof, onboarding, and competitive positioning. Get a score, blockers, and a verdict.',
-    features: ['5-dimension audit', 'Launch blockers', 'Readiness verdict', 'Competitor comparison'],
-    category: 'business',
-    status: 'live',
-    accent: { text: 'text-teal-500', bg: 'bg-teal-500', hoverBorder: 'hover:border-teal-300' },
-    theme: {
-      heroGradient: 'from-[#0d1f1d] via-[#0a1513] to-[#0d1f1d]',
-      glowColor: 'rgba(20,184,166,0.14)',
-      accentText: 'text-teal-400',
-      accentTextLight: 'text-teal-500',
-      buttonBg: 'bg-teal-500',
-      buttonHover: 'hover:bg-teal-600',
-      buttonShadow: 'shadow-teal-900/30',
-    },
-    nav: {
-      dropdown: { desc: 'Is your product ready to launch? AI audits your go-to-market across 5 dimensions.' },
-      home: { tag: 'Marketing', desc: 'Go-to-market readiness audit' },
-    },
-    crossPromo: [
-      { slug: 'page-roast', hook: 'Launch readiness checked. Now roast the landing page that sells it.' },
-      { slug: 'stack-audit', hook: "Ready to launch? Make sure your stack isn't bleeding money first." },
-    ],
-    loader: () => import('../pages/LaunchGraderPage.js').then(m => ({ default: m.LaunchGraderPage })),
-  },
+  // LaunchGrader moved to its own repo (~/Projects/Launch-Grader) and is now hosted
+  // as a static-path project — see standalone-projects.json. The server route
+  // at /api/demos/launch-grader stays in this repo; the standalone calls it
+  // same-origin.
   // StackAudit moved to its own repo (~/Projects/Stack-Audit) and is now hosted
   // as a static-path project — see standalone-projects.json. The server route
   // at /api/demos/stack-audit stays in this repo; the standalone calls it

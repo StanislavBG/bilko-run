@@ -2,14 +2,14 @@
 
 **Goal:** Bilko (this repo) becomes pure host platform — registry, auth, credits, kit, brand chrome, blog, admin. Every product lives in its own sibling repo and ships via the static-path contract.
 
-**Status today (2026-05):**
+**Status (2026-05-06): ✅ COMPLETE — all 9 AI tools extracted.**
 
 | Lives in | Apps |
 |---|---|
-| **Sibling repos (static-path)** ✅ done | OutdoorHours, LocalScore, Boat Shooter |
-| **In-repo (react-route)** — to extract | PageRoast, HeadlineGrader, AdScorer, ThreadGrader, EmailForge, AudienceDecoder, LaunchGrader, StackAudit, Stepproof |
+| **Sibling repos (static-path)** ✅ done | OutdoorHours, LocalScore, Boat Shooter, Stepproof, StackAudit, LaunchGrader, AdScorer, HeadlineGrader, ThreadGrader, EmailForge, AudienceDecoder, PageRoast |
+| **In-repo (react-route)** | _none_ |
 
-That's 9 left. Each extraction follows the same template proven on OutdoorHours + LocalScore.
+The host repo (`~/Projects/Bilko/`) now ships only brand chrome (Layout, HomePage, ProjectsPage, BlogPage, PricingPage, AdminPage, NotFoundPage). `src/pages/` contains zero AI-tool pages, `src/components/tool-page/` and `src/hooks/useToolApi.ts` have been deleted, and `src/index.css` no longer carries the orphan fire animations. See [`extractions/README.md`](extractions/README.md) for the per-tool execution log and the four retrospectives (Stepproof, StackAudit, AdScorer, plus the corrections that applied to all 9).
 
 ## Why extract everything
 

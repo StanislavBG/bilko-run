@@ -157,32 +157,9 @@ export const TOOLS: readonly ToolDefinition[] = [
   // Now served as a static-path sibling at /projects/thread-grader/ — see src/data/standalone-projects.json.
   // EmailForge moved to its own repo (~/Projects/Email-Forge, github.com/StanislavBG/email-forge).
   // Now served as a static-path sibling at /projects/email-forge/ — see src/data/standalone-projects.json.
-  {
-    slug: 'audience-decoder',
-    name: 'AudienceDecoder',
-    tagline: 'Decode who actually follows you',
-    description: 'Paste your social content. AI identifies audience archetypes, content patterns, engagement model, growth opportunities, and builds a content calendar.',
-    features: ['Audience archetypes', 'Engagement scoring', 'Growth opportunities', 'Content calendar'],
-    category: 'content',
-    status: 'live',
-    accent: { text: 'text-purple-500', bg: 'bg-purple-500', hoverBorder: 'hover:border-purple-300' },
-    theme: {
-      heroGradient: 'from-[#1a0f2e] via-[#120a1f] to-[#1a0f2e]',
-      glowColor: 'rgba(168,85,247,0.14)',
-      accentText: 'text-purple-400',
-      accentTextLight: 'text-purple-500',
-      buttonBg: 'bg-purple-500',
-      buttonHover: 'hover:bg-purple-600',
-      buttonShadow: 'shadow-purple-900/30',
-    },
-    nav: { home: { tag: 'Marketing', desc: 'Audience archetype + engagement' } },
-    crossPromo: [
-      { slug: 'thread-grader', hook: "Know your audience. Now write threads they'll actually share." },
-      { slug: 'email-forge', hook: "Know your people. Now write emails they'll actually open." },
-    ],
-    loader: () => import('../pages/AudienceDecoderPage.js').then(m => ({ default: m.AudienceDecoderPage })),
-    productKey: PRODUCT_KEYS.AUDIENCEDECODER_REPORT,
-  },
+  // AudienceDecoder moved to its own repo (~/Projects/Audience-Decoder, github.com/StanislavBG/audience-decoder).
+  // Now served as a static-path sibling at /projects/audience-decoder/ — see src/data/standalone-projects.json.
+  // (One-time-purchase tier remains server-side, transparent to the standalone client.)
   // LaunchGrader moved to its own repo (~/Projects/Launch-Grader) and is now hosted
   // as a static-path project — see standalone-projects.json. The server route
   // at /api/demos/launch-grader stays in this repo; the standalone calls it

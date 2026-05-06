@@ -163,5 +163,20 @@
       "localPath": "~/Projects/Email-Forge"
     },
     "tags": ["Email", "Frameworks"]
+  },
+  {
+    "slug": "audience-decoder",
+    "name": "AudienceDecoder",
+    "tagline": "Decode who actually follows you",
+    "category": "AI Tool · Content",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/audience-decoder/",
+      "sourceRepo": "github.com/StanislavBG/audience-decoder",
+      "localPath": "~/Projects/Audience-Decoder"
+    },
+    "tags": ["Audience", "Archetypes"]
   }
 ]

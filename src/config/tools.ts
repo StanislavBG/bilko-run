@@ -120,35 +120,9 @@ export const TAG_COLORS: Record<ToolTag, string> = {
 /* ── Registry ────────────────────────────────────────────── */
 
 export const TOOLS: readonly ToolDefinition[] = [
-  {
-    slug: 'page-roast',
-    name: 'PageRoast',
-    tagline: 'Brutally honest landing page audits',
-    description: "Paste any URL. Get a scored CRO audit across 4 frameworks — hero, social proof, clarity, and conversion architecture. Plus a savage roast line you'll want to screenshot.",
-    features: ['CRO scoring (0-100)', 'A/B Compare mode', 'Shareable results', 'Actionable fixes'],
-    category: 'business',
-    status: 'live',
-    accent: { text: 'text-fire-500', bg: 'bg-fire-500', hoverBorder: 'hover:border-fire-300' },
-    theme: {
-      heroGradient: 'from-warm-900 via-warm-950 to-warm-900',
-      glowColor: 'rgba(255,107,26,0.12)',
-      accentText: 'text-fire-400',
-      accentTextLight: 'text-fire-500',
-      buttonBg: 'bg-fire-500',
-      buttonHover: 'hover:bg-fire-600',
-      buttonShadow: 'shadow-fire-900/30',
-    },
-    nav: {
-      dropdown: { desc: 'Paste any URL. Get a scored landing page audit with actionable fixes in 30 seconds.' },
-      home: { tag: 'Marketing', desc: 'Landing page CRO audit + savage roast' },
-    },
-    crossPromo: [
-      { slug: 'headline-grader', hook: "Roasted your page? Now grade the headline that's selling it." },
-      { slug: 'ad-scorer', hook: "Fixed your page? Score the ad that's driving traffic to it." },
-    ],
-    loader: () => import('../pages/PageRoastPage.js').then(m => ({ default: m.PageRoastPage })),
-    productKey: PRODUCT_KEYS.PAGEROAST_TOKENS,
-  },
+  // PageRoast moved to its own repo (~/Projects/Page-Roast, github.com/StanislavBG/page-roast).
+  // Now served as a static-path sibling at /projects/page-roast/ — see src/data/standalone-projects.json.
+  // (PAGEROAST_TOKENS one-time-purchase tier remains server-side, transparent to the standalone client.)
   // HeadlineGrader moved to its own repo (~/Projects/Headline-Grader, github.com/StanislavBG/headline-grader).
   // Now served as a static-path sibling at /projects/headline-grader/ — see src/data/standalone-projects.json.
   // AdScorer moved to its own repo (~/Projects/Ad-Scorer, github.com/StanislavBG/ad-scorer).

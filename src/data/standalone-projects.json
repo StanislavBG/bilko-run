@@ -178,5 +178,20 @@
       "localPath": "~/Projects/Audience-Decoder"
     },
     "tags": ["Audience", "Archetypes"]
+  },
+  {
+    "slug": "page-roast",
+    "name": "PageRoast",
+    "tagline": "Brutally honest landing page audits",
+    "category": "AI Tool · Marketing",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/page-roast/",
+      "sourceRepo": "github.com/StanislavBG/page-roast",
+      "localPath": "~/Projects/Page-Roast"
+    },
+    "tags": ["CRO", "Audit"]
   }
 ]

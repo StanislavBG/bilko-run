@@ -37,9 +37,7 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 
 ### Current apps
 
-**In-repo (react-route, canonical URL `/products/<slug>`)** — slated for eventual extraction:
-
-1. **PageRoast** (`/products/page-roast`) — Landing page CRO audit + savage roast
+**In-repo (react-route, canonical URL `/products/<slug>`):** _none_ — all 9 AI tools have been extracted to sibling repos. The host repo now ships only brand chrome (Layout, HomePage, ProjectsPage, BlogPage, PricingPage, AdminPage).
 
 **Sibling repos (static-path, canonical URL `/projects/<slug>/`)** — fully independent, built in their own Claude sessions:
 
@@ -54,6 +52,7 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 - **ThreadGrader** (`/projects/thread-grader/`) → `~/Projects/Thread-Grader/` — X/Twitter thread viral analysis with Score/Compare/Generate modes. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
 - **EmailForge** (`/projects/email-forge/`) → `~/Projects/Email-Forge/` — 5-email sequence generator (AIDA/PAS/Hormozi/Cialdini/Story) with Generate/Compare modes. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
 - **AudienceDecoder** (`/projects/audience-decoder/`) → `~/Projects/Audience-Decoder/` — Audience archetype + engagement analysis with Decode/Compare modes. Page is standalone; server route + one-time-purchase tier stay in this repo (called same-origin via Clerk JWT)
+- **PageRoast** (`/projects/page-roast/`) → `~/Projects/Page-Roast/` — Brutally honest landing page CRO audits with Score/Compare modes + savage roast lines. Page is standalone; server route + 6 endpoints + PAGEROAST_TOKENS one-time-purchase tier stay in this repo (called same-origin via Clerk JWT)
 
 **Long-term direction:** all in-repo apps eventually become sibling repos. Bilko stays the framework: registry, auth, credits, kit, brand, blog, admin.
 

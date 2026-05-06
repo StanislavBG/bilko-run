@@ -153,31 +153,8 @@ export const TOOLS: readonly ToolDefinition[] = [
   // Now served as a static-path sibling at /projects/headline-grader/ — see src/data/standalone-projects.json.
   // AdScorer moved to its own repo (~/Projects/Ad-Scorer, github.com/StanislavBG/ad-scorer).
   // Now served as a static-path sibling at /projects/ad-scorer/ — see src/data/standalone-projects.json.
-  {
-    slug: 'thread-grader',
-    name: 'ThreadGrader',
-    tagline: 'Score your X/Twitter threads',
-    description: 'AI scores hook strength, tension chain, payoff quality, and share triggers. Plus tweet-by-tweet breakdown and hook rewrites.',
-    features: ['Hook analysis', 'Tweet breakdown', 'Hook rewrites', 'A/B Compare'],
-    category: 'content',
-    status: 'live',
-    accent: { text: 'text-sky-500', bg: 'bg-sky-500', hoverBorder: 'hover:border-sky-300' },
-    theme: {
-      heroGradient: 'from-[#0c1929] via-[#080f1a] to-[#0c1929]',
-      glowColor: 'rgba(14,165,233,0.14)',
-      accentText: 'text-sky-400',
-      accentTextLight: 'text-sky-500',
-      buttonBg: 'bg-sky-500',
-      buttonHover: 'hover:bg-sky-600',
-      buttonShadow: 'shadow-sky-900/30',
-    },
-    nav: { home: { tag: 'Marketing', desc: 'X/Twitter thread viral analysis' } },
-    crossPromo: [
-      { slug: 'headline-grader', hook: 'Thread hooks are headlines. Score them in isolation.' },
-      { slug: 'audience-decoder', hook: "Know who's reading your threads. Decode your audience." },
-    ],
-    loader: () => import('../pages/ThreadGraderPage.js').then(m => ({ default: m.ThreadGraderPage })),
-  },
+  // ThreadGrader moved to its own repo (~/Projects/Thread-Grader, github.com/StanislavBG/thread-grader).
+  // Now served as a static-path sibling at /projects/thread-grader/ — see src/data/standalone-projects.json.
   {
     slug: 'email-forge',
     name: 'EmailForge',

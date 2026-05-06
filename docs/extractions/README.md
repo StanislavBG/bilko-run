@@ -171,6 +171,46 @@ gh repo create StanislavBG/<slug> --public --source=. --push --description "..."
 
 Without the rename, `gh repo create --push` pushes a `master` branch and the GitHub UI shows `master` as default — inconsistent with the host repo's `main`.
 
+## AdScorer retrospective — additional corrections from #4
+
+Migration #4 added five more learnings on top of Stepproof + StackAudit. Apply to #5–#9.
+
+### 13. `src/pages/ContentToolsPage.tsx` lazy-imports each tabbed tool — cleanup is mandatory
+
+`ContentToolsPage.tsx` is the host's "Content Tools" tab dashboard. It does `React.lazy(() => import('./<Tool>Page.js'))` for **AdScorer, HeadlineGrader, ThreadGrader, EmailForge, AudienceDecoder** (NOT LaunchGrader, NOT PageRoast). Deleting `<Tool>Page.tsx` without removing the lazy import + tab entry breaks the build.
+
+For #5–#8, every migration must:
+
+```bash
+grep -n "<Tool>Page\|<slug>" src/pages/ContentToolsPage.tsx
+```
+
+Then remove the lazy import line, the `{ id: '<slug>', label: '...' }` tab entry, and the `{activeTab === '<slug>' && <ToolPage />}` render line. `MaybeStandaloneRedirect` handles the redirect from `/products/<slug>` to `/projects/<slug>/`.
+
+**Add to host-side cleanup checklist** (extends retrospective #4): for tabbed tools, also `[ ] Remove <Tool>Page from src/pages/ContentToolsPage.tsx (lazy import + tab + render)`.
+
+### 14. `<CompareLayout>` and `<Rewrites>` inline pattern — proven on AdScorer
+
+The slim kit pattern from StackAudit extends cleanly: copy `src/components/tool-page/CompareLayout.tsx` and `Rewrites.tsx` source verbatim into the standalone's `kit.tsx`, drop generic props (`toolSlug`, `currentTool`), bake theme colors directly. HeadlineGrader and ThreadGrader use both — reuse this pattern.
+
+### 15. `text-display-sm` is required when CompareLayout's winner banner is used
+
+CompareLayout's winner banner uses `text-display-sm`. Add to standalone `index.css`:
+
+```css
+.text-display-sm { font-size: 1.875rem; line-height: 2.25rem; font-weight: 600; }
+```
+
+Or whatever the host's `index.css` defines. Without it, the banner renders as default body text. Applies to AdScorer, HeadlineGrader, ThreadGrader.
+
+### 16. Tab-mode pages don't need `<ToolHero>` tab props
+
+The plan's `<ToolHero>` shape exposed `tab/onTabChange/hasCompare` props, but pages with multi-mode toggles (Score/Compare/Generate) render their own tab UI inside `<ToolHero>` children. Drop those props from the slim copy. Applies to: AdScorer, HeadlineGrader, ThreadGrader, EmailForge.
+
+### 17. Cross-promo target URL: always `https://bilko.run/products/<slug>` (full reload)
+
+Cross-promo links in the standalone should use `https://bilko.run/products/<slug>` with `target="_top"` or `window.location.href = ...` for a full reload. The host's `MaybeStandaloneRedirect` resolves `/products/<slug>` to either the react-route or the static-path bundle, regardless of whether the target tool has been extracted yet. Don't try to know the target's host kind from inside a sibling repo.
+
 ---
 
 ## After all 9 are done

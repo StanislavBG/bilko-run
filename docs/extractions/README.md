@@ -8,7 +8,7 @@ Per-tool playbooks for extracting each in-repo react-route AI tool to its own st
 | 2 | StackAudit | [stack-audit.md](stack-audit.md) | ~60 min | `StanislavBG/stack-audit` | ✅ **DONE 2026-05-05** (84 KB gz) | First Clerk-bundled standalone; proves same-origin cookie pattern |
 | 3 | LaunchGrader | [launch-grader.md](launch-grader.md) | ~30–45 min | `StanislavBG/launch-grader` | ✅ **DONE 2026-05-05** (83 KB gz) | SSRF — server-side, unaffected by extraction |
 | 4 | AdScorer | [ad-scorer.md](ad-scorer.md) | ~90 min | `StanislavBG/ad-scorer` | ✅ **DONE 2026-05-05** (86 KB gz) | First "big" page; first inline of `<CompareLayout>` + `<Rewrites>` |
-| 5 | HeadlineGrader | [headline-grader.md](headline-grader.md) | ~45 min | `StanislavBG/headline-grader` | pending | Email-unlock free-tier flow; possible `@bilko/host-kit` publish point |
+| 5 | HeadlineGrader | [headline-grader.md](headline-grader.md) | ~45 min | `StanislavBG/headline-grader` | ✅ **DONE 2026-05-06** (85 KB gz) | Email-unlock free-tier flow; possible `@bilko/host-kit` publish point |
 | 6 | ThreadGrader | [thread-grader.md](thread-grader.md) | ~30 min | `StanislavBG/thread-grader` | ✅ **DONE 2026-05-06** (88 KB gz) | Pure template work |
 | 7 | EmailForge | [email-forge.md](email-forge.md) | ~30 min | `StanislavBG/email-forge` | pending | Smaller kit footprint; large response payloads |
 | 8 | AudienceDecoder | [audience-decoder.md](audience-decoder.md) | ~45 min | `StanislavBG/audience-decoder` | pending | Unique one-time-purchase tier (server-side, transparent to client) |

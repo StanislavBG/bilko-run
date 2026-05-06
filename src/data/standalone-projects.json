@@ -118,5 +118,20 @@
       "localPath": "~/Projects/Ad-Scorer"
     },
     "tags": ["Ads", "FB/Google/LinkedIn"]
+  },
+  {
+    "slug": "headline-grader",
+    "name": "HeadlineGrader",
+    "tagline": "Score headlines like a pro copywriter",
+    "category": "AI Tool · Content",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/headline-grader/",
+      "sourceRepo": "github.com/StanislavBG/headline-grader",
+      "localPath": "~/Projects/Headline-Grader"
+    },
+    "tags": ["Copy", "Frameworks"]
   }
 ]

@@ -149,31 +149,8 @@ export const TOOLS: readonly ToolDefinition[] = [
     loader: () => import('../pages/PageRoastPage.js').then(m => ({ default: m.PageRoastPage })),
     productKey: PRODUCT_KEYS.PAGEROAST_TOKENS,
   },
-  {
-    slug: 'headline-grader',
-    name: 'HeadlineGrader',
-    tagline: 'Score headlines like a pro copywriter',
-    description: 'AI grades your headlines against 4 proven frameworks — Rule of One, Hormozi Value Equation, Readability, and Proof+Promise+Plan. Get a score, a diagnosis, and AI rewrites.',
-    features: ['Framework-based scoring', 'AI rewrites', 'SERP preview', 'A/B Compare'],
-    category: 'content',
-    status: 'live',
-    accent: { text: 'text-indigo-500', bg: 'bg-indigo-500', hoverBorder: 'hover:border-indigo-300' },
-    theme: {
-      heroGradient: 'from-[#1a1530] via-[#0f0d1a] to-[#1a1530]',
-      glowColor: 'rgba(99,102,241,0.14)',
-      accentText: 'text-indigo-400',
-      accentTextLight: 'text-indigo-500',
-      buttonBg: 'bg-indigo-500',
-      buttonHover: 'hover:bg-indigo-600',
-      buttonShadow: 'shadow-indigo-900/30',
-    },
-    nav: { home: { tag: 'Marketing', desc: '4-framework headline scoring' } },
-    crossPromo: [
-      { slug: 'page-roast', hook: 'Great headline. Now roast the page it lives on.' },
-      { slug: 'thread-grader', hook: 'Headlines are hooks. Test yours in a full thread.' },
-    ],
-    loader: () => import('../pages/HeadlineGraderPage.js').then(m => ({ default: m.HeadlineGraderPage })),
-  },
+  // HeadlineGrader moved to its own repo (~/Projects/Headline-Grader, github.com/StanislavBG/headline-grader).
+  // Now served as a static-path sibling at /projects/headline-grader/ — see src/data/standalone-projects.json.
   // AdScorer moved to its own repo (~/Projects/Ad-Scorer, github.com/StanislavBG/ad-scorer).
   // Now served as a static-path sibling at /projects/ad-scorer/ — see src/data/standalone-projects.json.
   {

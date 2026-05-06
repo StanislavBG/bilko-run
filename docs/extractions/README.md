@@ -10,8 +10,8 @@ Per-tool playbooks for extracting each in-repo react-route AI tool to its own st
 | 4 | AdScorer | [ad-scorer.md](ad-scorer.md) | ~90 min | `StanislavBG/ad-scorer` | ✅ **DONE 2026-05-05** (86 KB gz) | First "big" page; first inline of `<CompareLayout>` + `<Rewrites>` |
 | 5 | HeadlineGrader | [headline-grader.md](headline-grader.md) | ~45 min | `StanislavBG/headline-grader` | ✅ **DONE 2026-05-06** (85 KB gz) | Email-unlock free-tier flow; possible `@bilko/host-kit` publish point |
 | 6 | ThreadGrader | [thread-grader.md](thread-grader.md) | ~30 min | `StanislavBG/thread-grader` | ✅ **DONE 2026-05-06** (88 KB gz) | Pure template work |
-| 7 | EmailForge | [email-forge.md](email-forge.md) | ~30 min | `StanislavBG/email-forge` | pending | Smaller kit footprint; large response payloads |
-| 8 | AudienceDecoder | [audience-decoder.md](audience-decoder.md) | ~45 min | `StanislavBG/audience-decoder` | pending | Unique one-time-purchase tier (server-side, transparent to client) |
+| 7 | EmailForge | [email-forge.md](email-forge.md) | ~30 min | `StanislavBG/email-forge` | ✅ **DONE 2026-05-06** (86 KB gz) | Smaller kit footprint; large response payloads |
+| 8 | AudienceDecoder | [audience-decoder.md](audience-decoder.md) | ~45 min | `StanislavBG/audience-decoder` | ✅ **DONE 2026-05-06** (86 KB gz) | Unique one-time-purchase tier (server-side, transparent to client) |
 | 9 | PageRoast | [page-roast.md](page-roast.md) | ~2 hours | `StanislavBG/page-roast` | pending | Brand flagship; bespoke fetch (no `useToolApi`); 6 endpoints; fire-themed CSS |
 
 All 8 GitHub repo names verified available 2026-05-05.

@@ -3,7 +3,7 @@ import { ToolErrorBoundary } from '../components/ErrorBoundary.js';
 
 const HeadlineGraderPage = React.lazy(() => import('./HeadlineGraderPage.js').then(m => ({ default: m.HeadlineGraderPage })));
 // AdScorer extracted to ~/Projects/Ad-Scorer (static-path sibling at /projects/ad-scorer/).
-const ThreadGraderPage = React.lazy(() => import('./ThreadGraderPage.js').then(m => ({ default: m.ThreadGraderPage })));
+// ThreadGrader extracted to ~/Projects/Thread-Grader (static-path sibling at /projects/thread-grader/).
 const EmailForgePage = React.lazy(() => import('./EmailForgePage.js').then(m => ({ default: m.EmailForgePage })));
 const AudienceDecoderPage = React.lazy(() => import('./AudienceDecoderPage.js').then(m => ({ default: m.AudienceDecoderPage })));
 
@@ -14,8 +14,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: 'headline-grader', label: 'Headlines' },
-  // AdScorer is now a sibling app — link out instead of rendering inline.
-  { id: 'thread-grader', label: 'Threads' },
+  // AdScorer + ThreadGrader are now sibling apps — link out instead of rendering inline.
   { id: 'email-forge', label: 'Email' },
   { id: 'audience-decoder', label: 'Audience' },
 ];
@@ -79,7 +78,6 @@ export function ContentToolsPage() {
           </div>
         }>
           {activeTab === 'headline-grader' && <HeadlineGraderPage />}
-          {activeTab === 'thread-grader' && <ThreadGraderPage />}
           {activeTab === 'email-forge' && <EmailForgePage />}
           {activeTab === 'audience-decoder' && <AudienceDecoderPage />}
         </React.Suspense>

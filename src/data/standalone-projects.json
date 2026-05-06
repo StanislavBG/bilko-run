@@ -118,5 +118,20 @@
       "localPath": "~/Projects/Ad-Scorer"
     },
     "tags": ["Ads", "FB/Google/LinkedIn"]
+  },
+  {
+    "slug": "thread-grader",
+    "name": "ThreadGrader",
+    "tagline": "Score your X/Twitter threads",
+    "category": "AI Tool · Content",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/thread-grader/",
+      "sourceRepo": "github.com/StanislavBG/thread-grader",
+      "localPath": "~/Projects/Thread-Grader"
+    },
+    "tags": ["X/Twitter", "Viral"]
   }
 ]

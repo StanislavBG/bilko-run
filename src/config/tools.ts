@@ -155,31 +155,8 @@ export const TOOLS: readonly ToolDefinition[] = [
   // Now served as a static-path sibling at /projects/ad-scorer/ — see src/data/standalone-projects.json.
   // ThreadGrader moved to its own repo (~/Projects/Thread-Grader, github.com/StanislavBG/thread-grader).
   // Now served as a static-path sibling at /projects/thread-grader/ — see src/data/standalone-projects.json.
-  {
-    slug: 'email-forge',
-    name: 'EmailForge',
-    tagline: 'Generate email sequences that convert',
-    description: 'AI creates 5-email sequences using AIDA, PAS, Hormozi, Cialdini, and Storytelling frameworks. Cold outreach, nurture, launch, or re-engagement.',
-    features: ['5-email sequences', '5 frameworks', 'Open/click estimates', 'A/B Compare'],
-    category: 'content',
-    status: 'live',
-    accent: { text: 'text-amber-500', bg: 'bg-amber-500', hoverBorder: 'hover:border-amber-300' },
-    theme: {
-      heroGradient: 'from-[#1f1a0d] via-[#15100a] to-[#1f1a0d]',
-      glowColor: 'rgba(245,158,11,0.14)',
-      accentText: 'text-amber-400',
-      accentTextLight: 'text-amber-500',
-      buttonBg: 'bg-amber-500',
-      buttonHover: 'hover:bg-amber-600',
-      buttonShadow: 'shadow-amber-900/30',
-    },
-    nav: { home: { tag: 'Marketing', desc: '5-email sequence generator' } },
-    crossPromo: [
-      { slug: 'ad-scorer', hook: 'Emails done. Now score the ad that fills the top of funnel.' },
-      { slug: 'audience-decoder', hook: "Know who you're emailing. Decode your audience first." },
-    ],
-    loader: () => import('../pages/EmailForgePage.js').then(m => ({ default: m.EmailForgePage })),
-  },
+  // EmailForge moved to its own repo (~/Projects/Email-Forge, github.com/StanislavBG/email-forge).
+  // Now served as a static-path sibling at /projects/email-forge/ — see src/data/standalone-projects.json.
   {
     slug: 'audience-decoder',
     name: 'AudienceDecoder',

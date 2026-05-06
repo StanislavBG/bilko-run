@@ -148,5 +148,20 @@
       "localPath": "~/Projects/Thread-Grader"
     },
     "tags": ["X/Twitter", "Viral"]
+  },
+  {
+    "slug": "email-forge",
+    "name": "EmailForge",
+    "tagline": "Generate email sequences that convert",
+    "category": "AI Tool · Content",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/email-forge/",
+      "sourceRepo": "github.com/StanislavBG/email-forge",
+      "localPath": "~/Projects/Email-Forge"
+    },
+    "tags": ["Email", "Frameworks"]
   }
 ]

@@ -2,7 +2,7 @@
   {
     "slug": "game-academy",
     "name": "Boat Shooter",
-    "tagline": "Browser arcade shooter — first entry in the Bilko Game Academy.",
+    "tagline": "Browser arcade shooter \u2014 first entry in the Bilko Game Academy.",
     "category": "Game",
     "status": "live",
     "year": 2026,
@@ -12,13 +12,16 @@
       "sourceRepo": "github.com/StanislavBG/Bilko-Game-Academy",
       "localPath": "~/Projects/Bilko-Game-Academy"
     },
-    "tags": ["Canvas", "Arcade"]
+    "tags": [
+      "Canvas",
+      "Arcade"
+    ]
   },
   {
     "slug": "outdoor-hours",
     "name": "OutdoorHours",
     "tagline": "KOUT-7: ten years of comfortable hours, scored",
-    "category": "AI Tool · Productivity",
+    "category": "AI Tool \u00b7 Productivity",
     "status": "live",
     "year": 2026,
     "host": {
@@ -27,13 +30,16 @@
       "sourceRepo": "github.com/StanislavBG/outdoor-hours",
       "localPath": "~/Projects/Outdoor-Hours"
     },
-    "tags": ["Data", "Free"]
+    "tags": [
+      "Data",
+      "Free"
+    ]
   },
   {
     "slug": "local-score",
     "name": "LocalScore",
-    "tagline": "Private document analysis — runs in your browser",
-    "category": "AI Tool · Productivity",
+    "tagline": "Private document analysis \u2014 runs in your browser",
+    "category": "AI Tool \u00b7 Productivity",
     "status": "live",
     "year": 2026,
     "host": {
@@ -42,13 +48,16 @@
       "sourceRepo": "github.com/StanislavBG/local-score",
       "localPath": "~/Projects/Local-Score"
     },
-    "tags": ["Free", "WebGPU"]
+    "tags": [
+      "Free",
+      "WebGPU"
+    ]
   },
   {
     "slug": "stepproof",
     "name": "Stepproof",
     "tagline": "Regression tests for AI pipelines",
-    "category": "AI Tool · Dev",
+    "category": "AI Tool \u00b7 Dev",
     "status": "live",
     "year": 2026,
     "host": {
@@ -57,13 +66,17 @@
       "sourceRepo": "github.com/StanislavBG/stepproof-page",
       "localPath": "~/Projects/Stepproof"
     },
-    "tags": ["YAML", "BYOK", "Free"]
+    "tags": [
+      "YAML",
+      "BYOK",
+      "Free"
+    ]
   },
   {
     "slug": "stack-audit",
     "name": "StackAudit",
     "tagline": "Find waste in your SaaS stack",
-    "category": "AI Tool · Ops",
+    "category": "AI Tool \u00b7 Ops",
     "status": "live",
     "year": 2026,
     "host": {
@@ -72,13 +85,16 @@
       "sourceRepo": "github.com/StanislavBG/stack-audit",
       "localPath": "~/Projects/Stack-Audit"
     },
-    "tags": ["Ops", "Cost"]
+    "tags": [
+      "Ops",
+      "Cost"
+    ]
   },
   {
     "slug": "git-viewer",
     "name": "gitoverview",
     "tagline": "Personal GitHub portfolio dashboard for StanislavBG",
-    "category": "Data · Portfolio",
+    "category": "Data \u00b7 Portfolio",
     "status": "live",
     "year": 2026,
     "host": {
@@ -87,13 +103,16 @@
       "sourceRepo": "github.com/StanislavBG/git-viewer",
       "localPath": "~/Projects/git-viewer"
     },
-    "tags": ["Browser", "Free"]
+    "tags": [
+      "Browser",
+      "Free"
+    ]
   },
   {
     "slug": "launch-grader",
     "name": "LaunchGrader",
     "tagline": "Is your product ready to launch?",
-    "category": "AI Tool · Marketing",
+    "category": "AI Tool \u00b7 Marketing",
     "status": "live",
     "year": 2026,
     "host": {
@@ -102,13 +121,16 @@
       "sourceRepo": "github.com/StanislavBG/launch-grader",
       "localPath": "~/Projects/Launch-Grader"
     },
-    "tags": ["GTM", "Audit"]
+    "tags": [
+      "GTM",
+      "Audit"
+    ]
   },
   {
     "slug": "ad-scorer",
     "name": "AdScorer",
     "tagline": "Grade ads before you spend the budget",
-    "category": "AI Tool · Content",
+    "category": "AI Tool \u00b7 Content",
     "status": "live",
     "year": 2026,
     "host": {
@@ -117,13 +139,16 @@
       "sourceRepo": "github.com/StanislavBG/ad-scorer",
       "localPath": "~/Projects/Ad-Scorer"
     },
-    "tags": ["Ads", "FB/Google/LinkedIn"]
+    "tags": [
+      "Ads",
+      "FB/Google/LinkedIn"
+    ]
   },
   {
     "slug": "headline-grader",
     "name": "HeadlineGrader",
     "tagline": "Score headlines like a pro copywriter",
-    "category": "AI Tool · Content",
+    "category": "AI Tool \u00b7 Content",
     "status": "live",
     "year": 2026,
     "host": {
@@ -132,13 +157,16 @@
       "sourceRepo": "github.com/StanislavBG/headline-grader",
       "localPath": "~/Projects/Headline-Grader"
     },
-    "tags": ["Copy", "Frameworks"]
+    "tags": [
+      "Copy",
+      "Frameworks"
+    ]
   },
   {
     "slug": "thread-grader",
     "name": "ThreadGrader",
     "tagline": "Score your X/Twitter threads",
-    "category": "AI Tool · Content",
+    "category": "AI Tool \u00b7 Content",
     "status": "live",
     "year": 2026,
     "host": {
@@ -147,13 +175,16 @@
       "sourceRepo": "github.com/StanislavBG/thread-grader",
       "localPath": "~/Projects/Thread-Grader"
     },
-    "tags": ["X/Twitter", "Viral"]
+    "tags": [
+      "X/Twitter",
+      "Viral"
+    ]
   },
   {
     "slug": "email-forge",
     "name": "EmailForge",
     "tagline": "Generate email sequences that convert",
-    "category": "AI Tool · Content",
+    "category": "AI Tool \u00b7 Content",
     "status": "live",
     "year": 2026,
     "host": {
@@ -162,13 +193,16 @@
       "sourceRepo": "github.com/StanislavBG/email-forge",
       "localPath": "~/Projects/Email-Forge"
     },
-    "tags": ["Email", "Frameworks"]
+    "tags": [
+      "Email",
+      "Frameworks"
+    ]
   },
   {
     "slug": "audience-decoder",
     "name": "AudienceDecoder",
     "tagline": "Decode who actually follows you",
-    "category": "AI Tool · Content",
+    "category": "AI Tool \u00b7 Content",
     "status": "live",
     "year": 2026,
     "host": {
@@ -177,13 +211,16 @@
       "sourceRepo": "github.com/StanislavBG/audience-decoder",
       "localPath": "~/Projects/Audience-Decoder"
     },
-    "tags": ["Audience", "Archetypes"]
+    "tags": [
+      "Audience",
+      "Archetypes"
+    ]
   },
   {
     "slug": "page-roast",
     "name": "PageRoast",
     "tagline": "Brutally honest landing page audits",
-    "category": "AI Tool · Marketing",
+    "category": "AI Tool \u00b7 Marketing",
     "status": "live",
     "year": 2026,
     "host": {
@@ -192,6 +229,28 @@
       "sourceRepo": "github.com/StanislavBG/page-roast",
       "localPath": "~/Projects/Page-Roast"
     },
-    "tags": ["CRO", "Audit"]
+    "tags": [
+      "CRO",
+      "Audit"
+    ]
+  },
+  {
+    "slug": "social-signals-trader",
+    "name": "Social Signals Trader",
+    "tagline": "Autonomous trading bots reading 10 subreddits \u2014 live results, in public.",
+    "category": "AI Tool \u00b7 Data",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/social-signals-trader/",
+      "sourceRepo": "github.com/StanislavBG/social-signals-trader",
+      "localPath": "~/Projects/social-signals-trader"
+    },
+    "tags": [
+      "Reddit",
+      "Alpaca",
+      "Free"
+    ]
   }
 ]

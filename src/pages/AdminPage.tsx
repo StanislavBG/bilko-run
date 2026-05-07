@@ -894,16 +894,16 @@ export function AdminPage() {
                 <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">All Projects</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { name: 'PageRoast', status: 'live', path: '/projects/page-roast' },
-                    { name: 'HeadlineGrader', status: 'live', path: '/projects/headline-grader' },
-                    { name: 'AdScorer', status: 'live', path: '/projects/ad-scorer' },
-                    { name: 'ThreadGrader', status: 'live', path: '/projects/thread-grader' },
-                    { name: 'EmailForge', status: 'live', path: '/projects/email-forge' },
-                    { name: 'AudienceDecoder', status: 'live', path: '/projects/audience-decoder' },
-                    { name: 'Stepproof', status: 'live', path: '/projects/stepproof' },
-                    { name: 'LaunchGrader', status: 'live', path: '/projects/launch-grader' },
-                    { name: 'StackAudit', status: 'live', path: '/projects/stack-audit' },
-                    { name: 'LocalScore', status: 'live', path: '/projects/local-score' },
+                    { name: 'PageRoast', status: 'live', path: '/projects/page-roast/' },
+                    { name: 'HeadlineGrader', status: 'live', path: '/projects/headline-grader/' },
+                    { name: 'AdScorer', status: 'live', path: '/projects/ad-scorer/' },
+                    { name: 'ThreadGrader', status: 'live', path: '/projects/thread-grader/' },
+                    { name: 'EmailForge', status: 'live', path: '/projects/email-forge/' },
+                    { name: 'AudienceDecoder', status: 'live', path: '/projects/audience-decoder/' },
+                    { name: 'Stepproof', status: 'live', path: '/projects/stepproof/' },
+                    { name: 'LaunchGrader', status: 'live', path: '/projects/launch-grader/' },
+                    { name: 'StackAudit', status: 'live', path: '/projects/stack-audit/' },
+                    { name: 'LocalScore', status: 'live', path: '/projects/local-score/' },
                     { name: 'AgentTrace', status: 'cli', path: '' },
                   ].map(p => (
                     <div key={p.name} className="border border-warm-100 rounded-lg p-3">

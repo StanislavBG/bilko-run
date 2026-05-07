@@ -87,13 +87,6 @@
   --color-green-500: #22c55e;
   --color-green-600: #16a34a;
 
-  /* Grade colors */
-  --color-grade-a: #16a34a;
-  --color-grade-b: #2563eb;
-  --color-grade-c: #eab308;
-  --color-grade-d: #f97316;
-  --color-grade-f: #ef4444;
-
   /* Fonts */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-display: 'Cal Sans', 'Inter', system-ui, sans-serif;
@@ -230,11 +223,6 @@ body {
 }
 
 /* ── Score animation ───────────────────────────────────────── */
-@keyframes score-count {
-  from { opacity: 0; transform: scale(0.5); }
-  to { opacity: 1; transform: scale(1); }
-}
-
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
@@ -256,7 +244,6 @@ body {
   100% { background-position: 200% 0; }
 }
 
-.animate-score { animation: score-count 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .animate-slide-up { animation: slide-up 0.5s ease-out both; }
 .animate-fade-in { animation: fade-in 0.4s ease-out both; }
 .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }

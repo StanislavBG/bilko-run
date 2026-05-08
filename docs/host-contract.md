@@ -329,6 +329,22 @@ Open alerts are visible at `/admin/cost`. Ceilings can be tuned per-app via the 
 
 Scheduled cron: `91-platform-cost-monitor-daily.md` runs `pnpm cost-monitor` daily at 7am PT.
 
+## Observability dashboard
+
+`/admin/observability` is the single ops view. It aggregates per-sibling:
+
+- 24h traffic, errors, log warnings/errors
+- Synthetic monitor pass rate + load times (p50/p95)
+- Manifest version + host-kit drift
+- Bundle size + git sha
+- Open cost / synthetic / manifest alerts
+
+It is a read-only page over existing tables — no new ingest. To add a column, add a JOIN in `server/routes/admin-observability.ts`. Auto-refresh defaults to 30s (configurable to 1m, 5m, off).
+
+Host-kit drift is computed against `BILKO_LATEST_HOST_KIT` env var (set via Render dashboard). Rows for siblings with no telemetry show `—` instead of `0` to avoid false "everything's broken" signals.
+
+When something feels wrong on bilko.run, this is the first place to look.
+
 ## Why this contract exists
 
 The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:

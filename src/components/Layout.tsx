@@ -96,9 +96,14 @@ export function Layout() {
             <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
           </SignedIn>
           {isAdmin && (
-            <NavLink to="/admin" className="pf-kbd" style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}>
-              Admin
-            </NavLink>
+            <>
+              <NavLink to="/admin" className="pf-kbd" style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}>
+                Admin
+              </NavLink>
+              <NavLink to="/admin/observability" className="pf-kbd" style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}>
+                Observability
+              </NavLink>
+            </>
           )}
           <button
             className="pf-kbd pf-mobile-trigger"

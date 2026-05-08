@@ -252,5 +252,57 @@
       "Alpaca",
       "Free"
     ]
+  },
+  {
+    "slug": "session-manager",
+    "name": "Session Manager",
+    "tagline": "Local cockpit for Claude Code CLI sessions",
+    "category": "Dev Tool · CLI",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "external-url",
+      "url": "https://www.npmjs.com/package/claude-code-session-manager",
+      "sourceRepo": "github.com/StanislavBG/session-manager"
+    },
+    "tags": [
+      "Electron",
+      "CLI",
+      "Free"
+    ]
+  },
+  {
+    "slug": "bilko-flow",
+    "name": "bilko-flow",
+    "tagline": "Deterministic workflows from natural-language goals",
+    "category": "Dev Tool · Library",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "external-url",
+      "url": "https://www.npmjs.com/package/bilko-flow",
+      "sourceRepo": "github.com/StanislavBG/bilko-flow"
+    },
+    "tags": [
+      "TypeScript",
+      "Workflows"
+    ]
+  },
+  {
+    "slug": "bglabs",
+    "name": "BGLabs",
+    "tagline": "Generate dynamic background animations with AI",
+    "category": "AI Tool · Design",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "external-url",
+      "url": "https://bglabs.app",
+      "sourceRepo": "github.com/StanislavBG/bglabs"
+    },
+    "tags": [
+      "Canvas",
+      "Animation"
+    ]
   }
 ]

@@ -250,6 +250,50 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_visitor ON sessions(visitor_id)`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)`,
+  `CREATE TABLE IF NOT EXISTS app_logs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    app           TEXT NOT NULL,
+    version       TEXT,
+    level         TEXT NOT NULL CHECK (level IN ('info','warn','error')),
+    msg           TEXT NOT NULL,
+    visitor_id    TEXT,
+    session_id    TEXT,
+    fields_json   TEXT,
+    created_at    INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_app_logs_app_created ON app_logs (app, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_app_logs_level ON app_logs (level, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS app_errors (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    app           TEXT NOT NULL,
+    version       TEXT,
+    name          TEXT,
+    msg           TEXT NOT NULL,
+    stack         TEXT,
+    url           TEXT,
+    ua            TEXT,
+    visitor_id    TEXT,
+    session_id    TEXT,
+    context_json  TEXT,
+    created_at    INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_app_errors_app_created ON app_errors (app, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS app_manifests (
+    slug             TEXT PRIMARY KEY,
+    schema_version   INTEGER NOT NULL,
+    app_version      TEXT NOT NULL,
+    built_at         TEXT NOT NULL,
+    git_sha          TEXT NOT NULL,
+    git_branch       TEXT NOT NULL,
+    host_kit_version TEXT NOT NULL,
+    golden_path      TEXT NOT NULL,
+    golden_expect    TEXT NOT NULL DEFAULT '',
+    health_path      TEXT,
+    bundle_size_gz   INTEGER NOT NULL,
+    bundle_files     INTEGER NOT NULL,
+    manifest_json    TEXT NOT NULL,
+    updated_at       INTEGER NOT NULL
+  )`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [

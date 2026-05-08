@@ -409,6 +409,52 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     return { newVsReturning, byCountry, byDevice, byBrowser };
   });
 
+  // Cost controls dashboard
+  app.get('/api/admin/cost', async (req, reply) => {
+    if (!await requireAdmin(req, reply)) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const since30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+
+    const [todayTotal, byTool, byDay, openAlerts, ceilings] = await Promise.all([
+      dbGet<{ total: number; estimated_cost: number }>(
+        `SELECT SUM(calls) AS total, ROUND(SUM(calls) * 0.001, 2) AS estimated_cost FROM usage_daily WHERE date = ?`, today,
+      ),
+      dbAll(
+        `SELECT app_slug, SUM(calls) AS calls FROM usage_daily WHERE date = ? GROUP BY app_slug ORDER BY calls DESC LIMIT 10`, today,
+      ),
+      dbAll(
+        `SELECT date, SUM(calls) AS calls, ROUND(SUM(calls) * 0.001, 2) AS estimated_cost FROM usage_daily WHERE date >= ? GROUP BY date ORDER BY date`, since30,
+      ),
+      dbAll(
+        `SELECT * FROM cost_alerts WHERE resolved_at IS NULL ORDER BY created_at DESC LIMIT 50`,
+      ),
+      dbAll(`SELECT * FROM app_spend_ceilings ORDER BY app_slug`),
+    ]);
+
+    return { todayTotal, byTool, byDay, openAlerts, ceilings };
+  });
+
+  app.post('/api/admin/cost/resolve-alert', async (req, reply) => {
+    if (!await requireAdmin(req, reply)) return;
+    const { id } = req.body as { id?: number };
+    if (!id) { reply.status(400); return { error: 'id required' }; }
+    await dbRun(`UPDATE cost_alerts SET resolved_at = ? WHERE id = ?`, Math.floor(Date.now() / 1000), id);
+    return { ok: true };
+  });
+
+  app.post('/api/admin/spend-ceiling', async (req, reply) => {
+    if (!await requireAdmin(req, reply)) return;
+    const { app_slug, max_calls_per_day } = req.body as { app_slug?: string; max_calls_per_day?: number };
+    if (!app_slug || !max_calls_per_day || max_calls_per_day < 1) {
+      reply.status(400); return { error: 'app_slug and positive max_calls_per_day required' };
+    }
+    await dbRun(
+      `INSERT INTO app_spend_ceilings (app_slug, max_calls_per_day, updated_at) VALUES (?, ?, ?) ON CONFLICT(app_slug) DO UPDATE SET max_calls_per_day = excluded.max_calls_per_day, updated_at = excluded.updated_at`,
+      app_slug, max_calls_per_day, Math.floor(Date.now() / 1000),
+    );
+    return { ok: true };
+  });
+
   // Revenue widget data
   app.get('/api/analytics/revenue', async (req, reply) => {
     if (!await requireAdmin(req, reply)) return;

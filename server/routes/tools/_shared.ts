@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { dbGet, dbRun } from '../../db.js';
 import { askGemini } from '../../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../../services/stripe.js';
-import { verifyClerkToken } from '../../clerk.js';
+import { verifyClerkToken, ADMIN_EMAILS } from '../../clerk.js';
 import { parseJsonResponse } from '../../utils.js';
 
 // ── Tier limits ──────────────────────────────────────
@@ -94,6 +94,65 @@ export async function checkRateLimit(ipHash: string, endpoint: string, email?: s
 
 export const parseResult = parseJsonResponse;
 
+// ── Platform-wide cost controls ──────────────────────────
+export const USER_DAILY_DEFAULT = 100;
+export const USER_DAILY_ADMIN   = 1000;
+
+export interface CostCtx {
+  userEmail: string | null;
+  ipHash: string;
+  isAdmin: boolean;
+  appSlug: string;
+}
+
+export async function enforceCallLimits(
+  ctx: CostCtx,
+): Promise<{ ok: true } | { ok: false; status: number; reason: string }> {
+  const today = new Date().toISOString().slice(0, 10);
+  const userKey = ctx.userEmail ?? `anon:${ctx.ipHash}`;
+  const userCap = ctx.isAdmin ? USER_DAILY_ADMIN : USER_DAILY_DEFAULT;
+
+  const userRow = await dbGet<{ calls: number }>(
+    `INSERT INTO usage_daily (user_email, app_slug, date, calls) VALUES (?, ?, ?, 1)
+     ON CONFLICT(user_email, app_slug, date) DO UPDATE SET calls = calls + 1 RETURNING calls`,
+    userKey, ctx.appSlug, today,
+  );
+  const userCalls = userRow?.calls ?? 1;
+
+  if (userCalls > userCap) {
+    await dbRun(
+      `INSERT INTO cost_alerts (alert_kind, app_slug, user_email, details_json, created_at)
+       VALUES ('user_cap', ?, ?, ?, ?)`,
+      ctx.appSlug, userKey, JSON.stringify({ calls: userCalls, cap: userCap, date: today }), Math.floor(Date.now() / 1000),
+    );
+    return { ok: false, status: 429, reason: `Daily limit reached (${userCap} calls/day). Resets at midnight UTC.` };
+  }
+
+  const ceiling = await dbGet<{ max_calls_per_day: number }>(
+    `SELECT max_calls_per_day FROM app_spend_ceilings WHERE app_slug = ?`, ctx.appSlug,
+  );
+  if (ceiling) {
+    const total = await dbGet<{ total: number }>(
+      `SELECT SUM(calls) AS total FROM usage_daily WHERE app_slug = ? AND date = ?`,
+      ctx.appSlug, today,
+    );
+    if ((total?.total ?? 0) > ceiling.max_calls_per_day) {
+      await dbRun(
+        `INSERT INTO cost_alerts (alert_kind, app_slug, details_json, created_at)
+         VALUES ('app_ceiling', ?, ?, ?)`,
+        ctx.appSlug, JSON.stringify({ total: total?.total, ceiling: ceiling.max_calls_per_day, date: today }), Math.floor(Date.now() / 1000),
+      );
+      return { ok: false, status: 503, reason: `Tool temporarily unavailable — daily call ceiling reached. Try again tomorrow.` };
+    }
+  }
+
+  return { ok: true };
+}
+
+export function isAdminEmail(email: string): boolean {
+  return ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
 // Shared "generate" inverse-mode helper used by Headline/Ad/Thread generators.
 export async function handleGenerateEndpoint(
   req: FastifyRequest,
@@ -136,6 +195,12 @@ export async function handleGenerateEndpoint(
       isPro: rate.isPro,
       message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg(`${opts.inputField} generation`),
     };
+  }
+
+  const costLimit = await enforceCallLimits({ userEmail: email, ipHash, isAdmin: isAdminEmail(email), appSlug: opts.endpoint });
+  if (!costLimit.ok) {
+    reply.status(costLimit.status);
+    return { error: costLimit.reason };
   }
 
   try {

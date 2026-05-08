@@ -10,6 +10,7 @@ import { PricingPage } from './pages/PricingPage.js';
 import { PrivacyPage } from './pages/PrivacyPage.js';
 import { TermsPage } from './pages/TermsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
+import { AdminCostPage } from './pages/AdminCostPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { StudioPage } from './pages/StudioPage.js';
 import { AcademyPage } from './pages/AcademyPage.js';
@@ -142,6 +143,7 @@ function AppRoutes() {
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin/cost" element={<AdminCostPage />} />
 
             {/* ── Portfolio sections ── */}
             <Route path="/studio" element={<StudioPage />} />

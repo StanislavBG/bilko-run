@@ -4,7 +4,9 @@ import { hasPurchased } from '../../services/stripe.js';
 import { PRODUCT_KEYS } from '../../../shared/product-catalog.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg, parseResult,
+  enforceCallLimits, isAdminEmail,
 } from './_shared.js';
+import { verifyClerkToken } from '../../clerk.js';
 
 export function registerAudienceDecoderRoutes(app: FastifyInstance): void {
   app.post('/api/demos/audience-decoder', async (req, reply) => {
@@ -33,6 +35,9 @@ export function registerAudienceDecoderRoutes(app: FastifyInstance): void {
         message: _adRate.isPro ? paidGateMsg(_adRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const _adVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const _adCostLimit = await enforceCallLimits({ userEmail: _adVerifiedEmail, ipHash: _adIpHash, isAdmin: _adVerifiedEmail ? isAdminEmail(_adVerifiedEmail) : false, appSlug: 'audience-decoder' });
+    if (!_adCostLimit.ok) { reply.status(_adCostLimit.status); return { error: _adCostLimit.reason }; }
 
     const systemPrompt = `You are an audience intelligence analyst. Analyze the creator's content portfolio and return a JSON object.
 
@@ -136,6 +141,9 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         message: adcRate.isPro ? paidGateMsg(adcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const adcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const adcCostLimit = await enforceCallLimits({ userEmail: adcVerifiedEmail, ipHash: adcIpHash, isAdmin: adcVerifiedEmail ? isAdminEmail(adcVerifiedEmail) : false, appSlug: 'audience-decoder' });
+    if (!adcCostLimit.ok) { reply.status(adcCostLimit.status); return { error: adcCostLimit.reason }; }
 
     const analyzeSystemPrompt = `You are an audience intelligence analyst. Analyze the creator's content portfolio and return a JSON object.
 

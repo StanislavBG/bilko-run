@@ -6,6 +6,7 @@ import {
   getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount,
 } from '../../services/tokens.js';
 import { requireAuth } from '../../clerk.js';
+import { hashIp, enforceCallLimits, isAdminEmail } from './_shared.js';
 
 export function registerStackAuditRoutes(app: FastifyInstance): void {
   // ── Stack Audit ────────────────────────────────────
@@ -17,6 +18,9 @@ export function registerStackAuditRoutes(app: FastifyInstance): void {
 
     const email = await requireAuth(req, reply);
     if (!email) return;
+
+    const costLimit = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'stack-audit' });
+    if (!costLimit.ok) { reply.status(costLimit.status); return { error: costLimit.reason }; }
 
     if (!(await hasTokenAccount(email))) { await grantFreeTokens(email); }
     const sub = await getActiveSubscriptionLive(email);

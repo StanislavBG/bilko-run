@@ -2,8 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  parseResult, handleGenerateEndpoint,
+  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail,
 } from './_shared.js';
+import { verifyClerkToken } from '../../clerk.js';
 
 export function registerAdScorerRoutes(app: FastifyInstance): void {
   // ── Ad Copy Generator (inverse mode) ──────────────────────────
@@ -75,6 +76,9 @@ Respond ONLY with valid JSON:
         message: _asRate.isPro ? paidGateMsg(_asRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const _asVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const _asLimit = await enforceCallLimits({ userEmail: _asVerifiedEmail, ipHash: _asIpHash, isAdmin: _asVerifiedEmail ? isAdminEmail(_asVerifiedEmail) : false, appSlug: 'ad-scorer' });
+    if (!_asLimit.ok) { reply.status(_asLimit.status); return { error: _asLimit.reason }; }
 
     const systemPrompt = `You are a world-class performance ad copywriting analyst. You evaluate ad copy for paid platforms (Facebook, Google, LinkedIn) using proven direct response frameworks.
 
@@ -181,6 +185,9 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         message: ascRate.isPro ? paidGateMsg(ascRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const ascVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const ascLimit = await enforceCallLimits({ userEmail: ascVerifiedEmail, ipHash: ascIpHash, isAdmin: ascVerifiedEmail ? isAdminEmail(ascVerifiedEmail) : false, appSlug: 'ad-scorer' });
+    if (!ascLimit.ok) { reply.status(ascLimit.status); return { error: ascLimit.reason }; }
 
     const scoringSystemPrompt = `You are a world-class performance ad copywriting analyst. You evaluate ad copy for paid platforms (Facebook, Google, LinkedIn) using proven direct response frameworks.
 

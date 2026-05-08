@@ -315,6 +315,20 @@ VALUES ('my-app', 300000, strftime('%s','now'));
 
 The `golden` and `audit` gates require a `sourceRepoPath` argument pointing to the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`). Without it, both gates fail with a clear error. Pass it on every publish call.
 
+## Cost controls
+
+Three layers protect the platform from runaway Gemini spend:
+
+1. **Per-user daily Gemini call cap** (100 calls/day default, 1000 for admin). Returns 429 + friendly message when breached.
+2. **Per-app daily ceiling** (stored in `app_spend_ceilings` table, default 2000). Returns 503 + inserts a `cost_alerts` row when the app's total daily calls exceed the ceiling.
+3. **Daily cost-of-revenue monitor** (`pnpm cost-monitor`): alerts if Gemini COGS exceeds 25% of Stripe revenue, or if absolute spend exceeds $50/day.
+
+All paid `react-route` tools call `enforceCallLimits(ctx)` from `server/routes/tools/_shared.ts` before every Gemini invocation. Free tools (Outdoor-Hours, LocalScore) use the existing IP-only rate limiter and are exempt.
+
+Open alerts are visible at `/admin/cost`. Ceilings can be tuned per-app via the admin UI or directly in the `app_spend_ceilings` table.
+
+Scheduled cron: `91-platform-cost-monitor-daily.md` runs `pnpm cost-monitor` daily at 7am PT.
+
 ## Why this contract exists
 
 The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:

@@ -2,8 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  parseResult, handleGenerateEndpoint,
+  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail,
 } from './_shared.js';
+import { verifyClerkToken } from '../../clerk.js';
 
 export function registerThreadGraderRoutes(app: FastifyInstance): void {
   // ── Thread Generator (inverse mode) ───────────────────────────
@@ -70,6 +71,9 @@ Respond ONLY with valid JSON:
         message: _tgRate.isPro ? paidGateMsg(_tgRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const _tgVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const _tgLimit = await enforceCallLimits({ userEmail: _tgVerifiedEmail, ipHash: _tgIpHash, isAdmin: _tgVerifiedEmail ? isAdminEmail(_tgVerifiedEmail) : false, appSlug: 'thread-grader' });
+    if (!_tgLimit.ok) { reply.status(_tgLimit.status); return { error: _tgLimit.reason }; }
 
     const systemPrompt = `You are a viral content analyst specializing in X/Twitter threads. Score this thread on 4 pillars:
 
@@ -176,6 +180,9 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         message: tgcRate.isPro ? paidGateMsg(tgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const tgcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const tgcLimit = await enforceCallLimits({ userEmail: tgcVerifiedEmail, ipHash: tgcIpHash, isAdmin: tgcVerifiedEmail ? isAdminEmail(tgcVerifiedEmail) : false, appSlug: 'thread-grader' });
+    if (!tgcLimit.ok) { reply.status(tgcLimit.status); return { error: tgcLimit.reason }; }
 
     const scoringSystemPrompt = `You are a viral content analyst specializing in X/Twitter threads. Score this thread on 4 pillars:
 

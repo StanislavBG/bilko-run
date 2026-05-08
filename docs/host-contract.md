@@ -397,6 +397,81 @@ ORDER BY n DESC
 LIMIT 50;
 ```
 
+## Game services
+
+For games hosted on bilko.run (current: Boat Shooter; upcoming: Sudoku), the host provides three platform services accessed via the `@bilkobibitkov/host-kit` React hooks `useLeaderboard`, `useSaveState`, and `useUnlocks`.
+
+### Endpoints
+
+All endpoints live under `/api/games/:slug/` where `slug` matches a registered entry in `shared/game-config.ts`.
+
+#### Leaderboard
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST /api/games/:slug/scores` | Required | Submit `{ score, mode?, payload?, sig?, ts? }`. Rate-limited 60/hour/user. Validates `score ≤ maxPlausibleScore`. |
+| `GET /api/games/:slug/scores` | Open | Query `range=today\|week\|all`, `mode`, `limit` (max 500). Returns `{ scores: ScoreRow[] }`. `display_name` is the email prefix. |
+
+#### Save state (one row per user per game)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET /api/games/:slug/save` | Required | Returns `{ blob, version, updated_at }`. |
+| `PUT /api/games/:slug/save` | Required | Body `{ blob, expectedVersion? }`. CAS: if `expectedVersion` ≠ current, returns 409 with `currentVersion`. Blob ≤ 32 KB. |
+| `DELETE /api/games/:slug/save` | Required | Clears the save for the authenticated user. |
+
+#### Achievements
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST /api/games/:slug/unlock` | Required | Body `{ key }`. Idempotent. Returns `{ ok, alreadyUnlocked, unlocked_at }`. |
+| `GET /api/games/:slug/unlocks` | Required | Returns `{ unlocks: Array<{key, unlocked_at}> }` for authenticated user. |
+| `GET /api/games/:slug/achievements` | Open | Returns full `{ achievements }` catalog (declared in `GAME_CONFIGS`). |
+
+### Registry shape (`shared/game-config.ts`)
+
+```ts
+export interface GameConfig {
+  slug: string;
+  scoreOrder: 'asc' | 'desc';   // 'desc' = higher better; 'asc' = lower time
+  maxPlausibleScore: number;     // score above this is rejected as cheat
+  achievements: Array<{
+    key: string;                 // stable id — changing breaks existing unlocks
+    name: string;
+    description: string;
+    icon: string;
+    secret?: boolean;            // hides name/desc until unlocked
+  }>;
+}
+```
+
+Adding a new achievement key is a code change to `shared/game-config.ts`. Keys are stable — never rename a key after it has been unlocked by real users.
+
+### Hook examples (`@bilkobibitkov/host-kit`)
+
+```tsx
+import { useLeaderboard, useSaveState, useUnlocks } from '@bilkobibitkov/host-kit';
+
+// Top-10 all-time scores, with submit helper
+const { scores, submit, loading } = useLeaderboard('boat-shooter', { range: 'all', limit: 10 });
+
+// Cloud save (CAS-protected)
+const { blob, version, save, clear } = useSaveState<MyGameState>('boat-shooter');
+
+// Achievement unlocks + catalog
+const { unlocks, achievements, unlock } = useUnlocks('boat-shooter');
+
+// At game-over:
+await submit(finalScore, 'normal');
+if (isFirstKill) await unlock('first_kill');
+```
+
+### Anti-cheat
+
+- Score submission is rate-limited to 60 per hour per (user × game) via an in-memory sliding window.
+- Scores above `maxPlausibleScore` are rejected with 400.
+- Optional HMAC: set `BILKO_GAME_HMAC_KEY` env var. Client signs `${slug}:${score}:${mode}:${ts}` with shared key; server validates `sig` field on POST.
+
 ## Why this contract exists
 
 The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:

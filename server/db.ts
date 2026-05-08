@@ -366,6 +366,33 @@ const MIGRATIONS = [
     notes            TEXT,
     created_at       INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS game_scores (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    game         TEXT NOT NULL,
+    user_email   TEXT NOT NULL,
+    score        REAL NOT NULL,
+    mode         TEXT NOT NULL DEFAULT '',
+    payload_json TEXT,
+    created_at   INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_scores_game_score ON game_scores (game, mode, score DESC, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_scores_user ON game_scores (user_email, game)`,
+  `CREATE TABLE IF NOT EXISTS game_saves (
+    game        TEXT NOT NULL,
+    user_email  TEXT NOT NULL,
+    blob_json   TEXT NOT NULL,
+    version     INTEGER NOT NULL DEFAULT 1,
+    updated_at  INTEGER NOT NULL,
+    PRIMARY KEY (game, user_email)
+  )`,
+  `CREATE TABLE IF NOT EXISTS game_achievements (
+    game         TEXT NOT NULL,
+    user_email   TEXT NOT NULL,
+    key          TEXT NOT NULL,
+    unlocked_at  INTEGER NOT NULL,
+    PRIMARY KEY (game, user_email, key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_achievements_user ON game_achievements (user_email)`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [

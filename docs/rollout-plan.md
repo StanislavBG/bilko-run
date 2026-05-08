@@ -19,7 +19,7 @@ Authoritative tracker for two parallel rollouts: (1) publishing developer-facing
 | A5 | `@bilkobibitkov/agent-comply` | `~/Projects/Preflight/packages/agent-comply/` | not in scope | `0.2.13` | first publish under scope | ⬜ |
 | A6 | `@bilkobibitkov/agent-gate` | `~/Projects/Preflight/packages/agent-gate/` | not in scope | `0.2.10` | first publish under scope | ⬜ |
 | A7 | `agent-shift` | `~/Projects/Preflight/packages/agent-shift/` | not in registry | `0.2.3` | first publish (unscoped, matches name) | ⬜ |
-| A8 | `@bilkobibitkov/preflight-license` | `~/Projects/Preflight/packages/license/` | not in scope | `1.0.3` | first publish under scope | ⬜ |
+| A8 | `@bilkobibitkov/preflight-license` | `~/Projects/Preflight/packages/license/` | unpublished 2026-03-24, slot 1.0.3 burned | `1.0.3` | blocked — needs version bump | 🟡 |
 | A9 | `@bilkobibitkov/host-kit` | new — extract from siblings | not yet | n/a | create, publish, migrate 9 siblings to depend on it | ⬜ |
 
 **Net delta after this rollout:** 3 → 11 published packages.
@@ -258,3 +258,4 @@ _(Each scheduled run appends one line here.)_
 
 - _empty — routine not yet scheduled._
 - 2026-05-07: A2 + A3 — published claude-code-session-manager@0.8.1 (npm was at 0.8.0; local bumped to 0.8.1); bilko-flow skipped at 0.3.1 (already in sync). Note: session-manager has no `.git` directory, so git tag/push step was skipped.
+- 2026-05-07: A8 — HALT. `@bilkobibitkov/preflight-license@1.0.3` publish rejected with `E400 Cannot publish over previously published version "1.0.3"`. `npm view` confirms the package was unpublished on 2026-03-24; npm permanently retires that version slot, so 1.0.3 cannot be republished. PRD forbids bumping the version or retrying on a different name/scope, so package state on npm is unchanged. Build + dry-run pack succeeded (18 files, 11.2 kB). To unblock: bump `packages/license/package.json` version to `1.0.4` (or higher) and re-run.

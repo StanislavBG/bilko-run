@@ -12,6 +12,7 @@ import { TermsPage } from './pages/TermsPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { AdminCostPage } from './pages/AdminCostPage.js';
 import { ObservabilityPage } from './pages/admin/ObservabilityPage.js';
+import { SecretsPage } from './pages/admin/SecretsPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { StudioPage } from './pages/StudioPage.js';
 import { AcademyPage } from './pages/AcademyPage.js';
@@ -146,6 +147,7 @@ function AppRoutes() {
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/cost" element={<AdminCostPage />} />
             <Route path="/admin/observability" element={<ObservabilityPage />} />
+            <Route path="/admin/secrets" element={<SecretsPage />} />
 
             {/* ── Portfolio sections ── */}
             <Route path="/studio" element={<StudioPage />} />

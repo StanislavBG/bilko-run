@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "slug": "INVALID SLUG WITH SPACES",
+  "version": "not-semver",
+  "builtAt": "not-a-date"
+}

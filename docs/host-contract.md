@@ -256,6 +256,65 @@ Schedule via the `schedule` skill at `0 */6 * * *` using the PRD at
 Tune sensitivity via `STREAK_TO_ALERT` in `scripts/synthetic-monitor.ts`
 (default: 3 consecutive failures).
 
+## Publish gate
+
+Every static-path publish runs five gates in order. All must pass (or be explicitly bypassed by an admin) before the bundle is moved into `public/projects/<slug>/`.
+
+| Gate | What it checks | Bypass name |
+|---|---|---|
+| `manifest` | `manifest.json` exists, parses, and validates against the Zod schema in `shared/manifest-schema.ts`; slug matches registered slug | `manifest` |
+| `budget` | Total gzipped bundle size ≤ `app_budgets.max_size_gz_bytes` (default 200 KB per app) | `budget` |
+| `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes when run via `pnpm exec playwright test` | `golden` |
+| `a11y` | axe-core scan of the golden path finds zero `serious` or `critical` violations | `a11y` |
+| `audit` | `pnpm audit --prod --audit-level=high` exits 0 (no high/critical CVEs in the prod dep tree) | `audit` |
+
+The `manifest` gate short-circuits the entire pipeline — if it fails, later gates are skipped (their results would be meaningless without a valid manifest).
+
+### Gate failure format
+
+A blocked publish returns a structured JSON error body:
+
+```json
+{
+  "error": "publish blocked by gate(s): budget, a11y",
+  "gates": [
+    { "name": "manifest", "status": "pass",   "details": "v1.0.0 / sha abc1234" },
+    { "name": "budget",   "status": "fail",   "details": "bundle 512.0 KB gz exceeds budget 200 KB" },
+    { "name": "golden",   "status": "pass",   "details": "golden.spec.ts green" },
+    { "name": "a11y",     "status": "fail",   "details": "2 serious/critical: color-contrast, label" },
+    { "name": "audit",    "status": "pass",   "details": "no high/critical CVEs" }
+  ]
+}
+```
+
+### Bypassing a gate
+
+Pass `bypass` (comma-separated gate names) and `bypassReason` to `publish_static_project`:
+
+```
+bilko-host__publish_static_project {
+  slug: "stack-audit",
+  distPath: "/home/bilko/Projects/Stack-Audit/dist",
+  bypass: "a11y",
+  bypassReason: "Known contrast issue tracked in issue #42, fix ships next build"
+}
+```
+
+Every bypass use is logged to the `publish_overrides` table (slug, gate, reason, admin_email, timestamp). There is no bulk bypass — override one gate at a time.
+
+### App budget table
+
+Default budget per app: **200 KB gzipped**. Adjust via direct SQL (admin UI out of scope):
+
+```sql
+INSERT OR REPLACE INTO app_budgets (slug, max_size_gz_bytes, updated_at)
+VALUES ('my-app', 300000, strftime('%s','now'));
+```
+
+### sourceRepoPath requirement
+
+The `golden` and `audit` gates require a `sourceRepoPath` argument pointing to the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`). Without it, both gates fail with a clear error. Pass it on every publish call.
+
 ## Why this contract exists
 
 The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:

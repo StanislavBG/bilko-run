@@ -152,10 +152,11 @@ export function AdminPage() {
   const [excludeSelf, setExcludeSelf] = useState(true);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'users' | 'roasts' | 'activity' | 'tools' | 'sources' | 'funnels' | 'audience'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'roasts' | 'activity' | 'tools' | 'sources' | 'funnels' | 'audience' | 'manifests'>('overview');
   const [sourcesData, setSourcesData] = useState<any | null>(null);
   const [funnelsData, setFunnelsData] = useState<any | null>(null);
   const [audienceData, setAudienceData] = useState<any | null>(null);
+  const [manifestsData, setManifestsData] = useState<any | null>(null);
 
   useEffect(() => {
     document.title = 'Admin — bilko.run';
@@ -172,7 +173,7 @@ export function AdminPage() {
       const s = await fetch(`${API}/analytics/stats?days=${days}&exclude_self=${excl}`, { headers }).then(res => res.json());
       setStats(s);
       // Reset lazy tab caches when filters change
-      setSourcesData(null); setFunnelsData(null); setAudienceData(null);
+      setSourcesData(null); setFunnelsData(null); setAudienceData(null); setManifestsData(null);
     })().catch(() => {}).finally(() => setLoading(false));
   }, [isAdmin, days, excludeSelf]);
 
@@ -207,6 +208,16 @@ export function AdminPage() {
       setAudienceData(data);
     })().catch(() => {});
   }, [isAdmin, tab, audienceData, sinceParam, excludeSelf]);
+
+  useEffect(() => {
+    if (!isAdmin || tab !== 'manifests' || manifestsData) return;
+    (async () => {
+      const token = await getToken();
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const data = await fetch(`${API}/admin/manifests`, { headers }).then(r => r.json());
+      setManifestsData(data);
+    })().catch(() => {});
+  }, [isAdmin, tab, manifestsData]);
 
   if (isLoaded && !isAdmin) return <Navigate to="/" replace />;
   if (!isLoaded) return <div className="p-12 text-center text-warm-400">Loading...</div>;
@@ -252,7 +263,7 @@ export function AdminPage() {
 
           {/* Tab Nav */}
           <div className="flex gap-1 bg-warm-100 rounded-xl p-1 mb-6 w-fit">
-            {(['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools'] as const).map(t => (
+            {(['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'manifests'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -918,6 +929,64 @@ export function AdminPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+          {/* ── Manifests Tab ── */}
+          {tab === 'manifests' && (
+            <div className="space-y-6">
+              {!manifestsData && <div className="text-warm-400 text-center py-12">Loading manifests...</div>}
+              {manifestsData && (
+                <div className="bg-white rounded-xl border border-warm-200/60 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400">Published Sibling Manifests</h2>
+                    {manifestsData.latestKitVersion && (
+                      <span className="text-xs text-warm-400">latest host-kit: <code className="font-mono text-warm-700">{manifestsData.latestKitVersion}</code></span>
+                    )}
+                  </div>
+                  {manifestsData.manifests?.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-warm-100">
+                            <th className="text-left py-1.5 px-2 text-xs font-bold text-warm-400">Slug</th>
+                            <th className="text-left py-1.5 px-2 text-xs font-bold text-warm-400">Version</th>
+                            <th className="text-left py-1.5 px-2 text-xs font-bold text-warm-400">Host-Kit</th>
+                            <th className="text-left py-1.5 px-2 text-xs font-bold text-warm-400">Drift</th>
+                            <th className="text-left py-1.5 px-2 text-xs font-bold text-warm-400">Git SHA</th>
+                            <th className="text-left py-1.5 px-2 text-xs font-bold text-warm-400">Built</th>
+                            <th className="text-right py-1.5 px-2 text-xs font-bold text-warm-400">Size (gz)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {manifestsData.manifests.map((m: any) => (
+                            <tr key={m.slug} className="border-b border-warm-50">
+                              <td className="py-2 px-2 font-mono text-xs text-warm-800 font-semibold">{m.slug}</td>
+                              <td className="py-2 px-2 font-mono text-xs text-warm-600">{m.version}</td>
+                              <td className="py-2 px-2 font-mono text-xs text-warm-600">{m.hostKitVersion}</td>
+                              <td className="py-2 px-2">
+                                {m.hostKitDrift === 'current' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">current</span>
+                                )}
+                                {m.hostKitDrift === 'minor_behind' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-700">-1 minor</span>
+                                )}
+                                {m.hostKitDrift === 'major_behind' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">outdated</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 font-mono text-xs text-warm-500">{m.gitSha?.slice(0, 7)}</td>
+                              <td className="py-2 px-2 text-xs text-warm-500">{timeAgo(m.builtAt)}</td>
+                              <td className="py-2 px-2 text-right text-xs text-warm-600 font-mono">{m.bundleSizeKb} KB</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-warm-400">No manifests yet. Build and publish a sibling app with <code className="font-mono text-xs">emit-manifest.mjs</code> to populate this table.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>

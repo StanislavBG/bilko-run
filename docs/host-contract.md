@@ -166,6 +166,71 @@ Apps that don't call `initTelemetry` get no structured logs or error capture.
 Out of scope for this contract version: source-map symbolication, log retention
 TTL, Node/CLI SDKs, real-time streaming, cross-app trace IDs.
 
+## Manifest contract
+
+Every `static-path` sibling MUST emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool validates this file and refuses to publish if it's absent or invalid. The host stores the latest manifest per app in the `app_manifests` Turso table, visible at `/admin` → Manifests tab.
+
+### Schema
+
+Defined in `shared/manifest-schema.ts` (Zod). All fields required unless marked optional.
+
+| Field | Type | Notes |
+|---|---|---|
+| `schemaVersion` | `1` (literal) | Must be exactly `1` |
+| `slug` | `string` | Must match the registered slug. Regex: `/^[a-z0-9-]{2,40}$/` |
+| `version` | `string` | Semver, e.g. `"1.2.3"`. Read from `package.json` |
+| `builtAt` | ISO 8601 UTC string | `new Date().toISOString()` at build time |
+| `gitSha` | `string` | 7–40 hex chars. `git rev-parse --short HEAD` |
+| `gitBranch` | `string` | `git rev-parse --abbrev-ref HEAD` |
+| `hostKit.version` | `string` | Version of `@bilkobibitkov/host-kit` in use. `"0.0.0"` if not used |
+| `golden.path` | `string` | URL path the synthetic monitor GETs. Must start with `/` |
+| `golden.expect` | `string` | Optional CSS selector or text the monitor checks for |
+| `health.path` | `string` (optional) | If present, host health poller GETs this path every N minutes |
+| `bundle.sizeBytesGz` | `integer` | Total gzip size of all dist files in bytes |
+| `bundle.fileCount` | `integer` | Total number of files in the bundle |
+
+**Limit**: The raw JSON must be under 16 KB. Larger files are rejected with an actionable error.
+
+### Worked example (Stack-Audit)
+
+```json
+{
+  "schemaVersion": 1,
+  "slug": "stack-audit",
+  "version": "1.0.0",
+  "builtAt": "2026-05-08T14:30:00.000Z",
+  "gitSha": "abc1234",
+  "gitBranch": "main",
+  "hostKit": { "version": "0.3.0" },
+  "golden": {
+    "path": "/projects/stack-audit/",
+    "expect": "StackAudit"
+  },
+  "health": {},
+  "bundle": {
+    "sizeBytesGz": 245760,
+    "fileCount": 38
+  }
+}
+```
+
+### How to emit it (build script)
+
+Add `scripts/emit-manifest.mjs` to your repo (see Stack-Audit or Outdoor-Hours for a working example), then wire it into your build script:
+
+```json
+"build": "tsc -b && vite build && node scripts/emit-manifest.mjs"
+```
+
+The script reads `package.json`, walks the `dist/` tree, computes gzip sizes, and writes `dist/manifest.json`. It requires no additional dependencies — only Node.js built-ins.
+
+### Drift indicator
+
+`/admin` → Manifests tab shows a per-app drift badge computed from `hostKit.version`:
+- **green** — matches the highest version seen across all manifests (`current`)
+- **yellow** — exactly 1 minor version behind (`minor_behind`)
+- **red** — ≥2 minors behind or different major (`major_behind`)
+
 ## Why this contract exists
 
 The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:

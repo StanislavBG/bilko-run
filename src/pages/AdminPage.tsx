@@ -152,11 +152,12 @@ export function AdminPage() {
   const [excludeSelf, setExcludeSelf] = useState(true);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'users' | 'roasts' | 'activity' | 'tools' | 'sources' | 'funnels' | 'audience' | 'manifests'>('overview');
+  const [tab, setTab] = useState<'overview' | 'users' | 'roasts' | 'activity' | 'tools' | 'sources' | 'funnels' | 'audience' | 'manifests' | 'synthetic'>('overview');
   const [sourcesData, setSourcesData] = useState<any | null>(null);
   const [funnelsData, setFunnelsData] = useState<any | null>(null);
   const [audienceData, setAudienceData] = useState<any | null>(null);
   const [manifestsData, setManifestsData] = useState<any | null>(null);
+  const [syntheticData, setSyntheticData] = useState<any | null>(null);
 
   useEffect(() => {
     document.title = 'Admin — bilko.run';
@@ -173,7 +174,7 @@ export function AdminPage() {
       const s = await fetch(`${API}/analytics/stats?days=${days}&exclude_self=${excl}`, { headers }).then(res => res.json());
       setStats(s);
       // Reset lazy tab caches when filters change
-      setSourcesData(null); setFunnelsData(null); setAudienceData(null); setManifestsData(null);
+      setSourcesData(null); setFunnelsData(null); setAudienceData(null); setManifestsData(null); setSyntheticData(null);
     })().catch(() => {}).finally(() => setLoading(false));
   }, [isAdmin, days, excludeSelf]);
 
@@ -219,6 +220,16 @@ export function AdminPage() {
     })().catch(() => {});
   }, [isAdmin, tab, manifestsData]);
 
+  useEffect(() => {
+    if (!isAdmin || tab !== 'synthetic' || syntheticData) return;
+    (async () => {
+      const token = await getToken();
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const data = await fetch(`${API}/admin/synthetic/grid?days=30`, { headers }).then(r => r.json());
+      setSyntheticData(data);
+    })().catch(() => {});
+  }, [isAdmin, tab, syntheticData]);
+
   if (isLoaded && !isAdmin) return <Navigate to="/" replace />;
   if (!isLoaded) return <div className="p-12 text-center text-warm-400">Loading...</div>;
 
@@ -263,7 +274,7 @@ export function AdminPage() {
 
           {/* Tab Nav */}
           <div className="flex gap-1 bg-warm-100 rounded-xl p-1 mb-6 w-fit">
-            {(['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'manifests'] as const).map(t => (
+            {(['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'manifests', 'synthetic'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -931,6 +942,80 @@ export function AdminPage() {
               </div>
             </div>
           )}
+          {/* ── Synthetic Tab ── */}
+          {tab === 'synthetic' && (
+            <div className="space-y-6">
+              {!syntheticData && <div className="text-warm-400 text-center py-12">Loading synthetic runs...</div>}
+              {syntheticData && (
+                <>
+                  {/* Open alerts */}
+                  {syntheticData.grid?.some((g: any) => g.alert) && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                      <h2 className="text-xs font-bold uppercase tracking-wider text-red-500 mb-3">Open Alerts</h2>
+                      <div className="space-y-2">
+                        {syntheticData.grid.filter((g: any) => g.alert).map((g: any) => (
+                          <div key={g.slug} className="flex items-center justify-between text-sm">
+                            <span className="font-mono font-semibold text-red-700">{g.slug}</span>
+                            <span className="text-red-500 text-xs">
+                              {g.streak}× consecutive fail · since {new Date(g.alert.firstFailedAt * 1000).toLocaleDateString()}
+                            </span>
+                            {g.latestError && (
+                              <span className="text-xs text-red-400 truncate max-w-xs ml-3">{g.latestError}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Per-sibling grids */}
+                  {syntheticData.grid?.length === 0 && (
+                    <p className="text-sm text-warm-400 text-center py-8">No sibling manifests registered. Publish a sibling app first.</p>
+                  )}
+                  {syntheticData.grid?.map((g: any) => (
+                    <div key={g.slug} className="bg-white rounded-xl border border-warm-200/60 p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-2.5 h-2.5 rounded-full ${g.latestOk === true ? 'bg-green-500' : g.latestOk === false ? 'bg-red-500' : 'bg-warm-300'}`} />
+                          <span className="font-mono font-bold text-warm-800 text-sm">{g.slug}</span>
+                          {g.streak > 0 && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                              {g.streak}× fail streak
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-4 text-xs text-warm-400">
+                          {g.p50 != null && <span>p50 {g.p50}ms</span>}
+                          {g.p95 != null && <span>p95 {g.p95}ms</span>}
+                          {g.latestRanAt && (
+                            <span>last run {new Date(g.latestRanAt * 1000).toLocaleString()}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 30-day grid */}
+                      <div className="flex gap-0.5 flex-wrap">
+                        {g.dayGrid.map((cell: any) => (
+                          <div
+                            key={cell.date}
+                            title={`${cell.date}${cell.ok === null ? ' — no data' : cell.ok ? ' — pass' : ` — fail${cell.error ? ': ' + cell.error : ''}`}${cell.loadMs ? ` (${cell.loadMs}ms)` : ''}`}
+                            className={`w-3.5 h-3.5 rounded-sm cursor-default ${
+                              cell.ok === null ? 'bg-warm-100' : cell.ok ? 'bg-green-400' : 'bg-red-400'
+                            }`}
+                          />
+                        ))}
+                      </div>
+
+                      {g.latestError && (
+                        <p className="mt-2 text-xs text-red-500 font-mono truncate">{g.latestError}</p>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
           {/* ── Manifests Tab ── */}
           {tab === 'manifests' && (
             <div className="space-y-6">

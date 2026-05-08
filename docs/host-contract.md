@@ -231,6 +231,31 @@ The script reads `package.json`, walks the `dist/` tree, computes gzip sizes, an
 - **yellow** — exactly 1 minor version behind (`minor_behind`)
 - **red** — ≥2 minors behind or different major (`major_behind`)
 
+## Synthetic monitoring
+
+Every 6h a headless Chromium opens each sibling's `manifest.golden.path` and
+asserts `manifest.golden.expect` text is present in the page body. Results
+land in the `synthetic_runs` table. Three consecutive failures open an alert
+(logged via `/api/telemetry/log` as a `synthetic.fail.streak` error event, and
+printed to stderr — email integration is a follow-up once an SMTP provider is
+chosen). Resolution = next passing run.
+
+The `/admin` → Synthetic tab shows a per-sibling 30-day grid (green = pass,
+red = fail, grey = no run), latency p50/p95, current failure streak, and any
+open alerts.
+
+Run manually:
+
+```bash
+cd /home/bilko/Projects/Bilko && pnpm synthetic
+```
+
+Schedule via the `schedule` skill at `0 */6 * * *` using the PRD at
+`~/.claude/session-manager/scheduled-plans/prds/90-platform-synthetic-cron.md`.
+
+Tune sensitivity via `STREAK_TO_ALERT` in `scripts/synthetic-monitor.ts`
+(default: 3 consecutive failures).
+
 ## Why this contract exists
 
 The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:

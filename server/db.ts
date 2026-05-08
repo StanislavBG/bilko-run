@@ -294,6 +294,23 @@ const MIGRATIONS = [
     manifest_json    TEXT NOT NULL,
     updated_at       INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS synthetic_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug          TEXT NOT NULL,
+    ok            INTEGER NOT NULL,
+    http_status   INTEGER,
+    load_ms       INTEGER,
+    expect_found  INTEGER,
+    error_msg     TEXT,
+    ran_at        INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_synthetic_runs_slug_ran ON synthetic_runs (slug, ran_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS synthetic_alerts (
+    slug             TEXT PRIMARY KEY,
+    first_failed_at  INTEGER NOT NULL,
+    notified_at      INTEGER,
+    resolved_at      INTEGER
+  )`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [

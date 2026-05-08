@@ -62,7 +62,8 @@
     "ajv": "^8.18.0",
     "fastify": "^5.8.2",
     "js-yaml": "^4.1.1",
-    "stripe": "^14.21.0"
+    "stripe": "^14.21.0",
+    "zod": "^3.25.76"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

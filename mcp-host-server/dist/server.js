@@ -29,9 +29,11 @@ import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile, rm, mkdir, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createClient } from '@libsql/client';
+import { ManifestSchema } from './manifest-schema.js';
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
 // Layout: <HOST_ROOT>/mcp-host-server/dist/server.js  →  ../../
@@ -40,6 +42,52 @@ const HOST_ROOT = resolve(__dirname, '..', '..');
 const REGISTRY_JSON = resolve(HOST_ROOT, 'src/data/standalone-projects.json');
 const HOST_CONTRACT = resolve(HOST_ROOT, 'docs/host-contract.md');
 const PUBLIC_PROJECTS = resolve(HOST_ROOT, 'public/projects');
+// ── Host DB (minimal — only used for manifest UPSERTs) ───────────────────
+let _db = null;
+function getHostDb() {
+    if (!_db) {
+        const url = process.env.TURSO_DATABASE_URL;
+        if (url) {
+            _db = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+        }
+        else {
+            const dataDir = resolve(HOST_ROOT, 'data');
+            mkdirSync(dataDir, { recursive: true });
+            _db = createClient({ url: `file:${resolve(dataDir, 'contentgrade.db')}` });
+        }
+    }
+    return _db;
+}
+async function upsertManifest(manifest) {
+    await getHostDb().execute({
+        sql: `INSERT INTO app_manifests (
+      slug, schema_version, app_version, built_at, git_sha, git_branch,
+      host_kit_version, golden_path, golden_expect, health_path,
+      bundle_size_gz, bundle_files, manifest_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(slug) DO UPDATE SET
+      schema_version=excluded.schema_version,
+      app_version=excluded.app_version,
+      built_at=excluded.built_at,
+      git_sha=excluded.git_sha,
+      git_branch=excluded.git_branch,
+      host_kit_version=excluded.host_kit_version,
+      golden_path=excluded.golden_path,
+      golden_expect=excluded.golden_expect,
+      health_path=excluded.health_path,
+      bundle_size_gz=excluded.bundle_size_gz,
+      bundle_files=excluded.bundle_files,
+      manifest_json=excluded.manifest_json,
+      updated_at=excluded.updated_at`,
+        args: [
+            manifest.slug, manifest.schemaVersion, manifest.version, manifest.builtAt,
+            manifest.gitSha, manifest.gitBranch, manifest.hostKit.version,
+            manifest.golden.path, manifest.golden.expect, manifest.health.path ?? null,
+            manifest.bundle.sizeBytesGz, manifest.bundle.fileCount,
+            JSON.stringify(manifest), Math.floor(Date.now() / 1000),
+        ],
+    });
+}
 // ── Helpers ──────────────────────────────────────────────────────────────
 async function readRegistry() {
     const raw = await readFile(REGISTRY_JSON, 'utf8');
@@ -256,11 +304,38 @@ server.registerTool('publish_static_project', {
             if (p.host.kind !== 'static-path')
                 return err(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
         }
+        // Validate manifest.json before touching any host files.
+        const manifestPath = resolve(distAbs, 'manifest.json');
+        let manifest;
+        try {
+            const raw = await readFile(manifestPath, 'utf8');
+            if (raw.length > 16_000) {
+                return err(`manifest.json too large (${raw.length} bytes; max 16384). Likely accidental data — review what your build script is writing.`);
+            }
+            manifest = ManifestSchema.parse(JSON.parse(raw));
+        }
+        catch (e) {
+            if (e.code === 'ENOENT') {
+                return err(`manifest.json missing in ${distAbs}. Every sibling must emit one at build time. ` +
+                    `See docs/host-contract.md "Manifest contract" for the schema and a working example.`);
+            }
+            return err(`manifest.json invalid: ${e.message ?? e}`);
+        }
+        if (manifest.slug !== slug) {
+            return err(`manifest slug "${manifest.slug}" does not match registered slug "${slug}".`);
+        }
         // Replace public/projects/<slug>/ atomically-ish (rm + cp -r).
         const target = resolve(PUBLIC_PROJECTS, slug);
         await rm(target, { recursive: true, force: true });
         await mkdir(dirname(target), { recursive: true });
         await exec('cp', ['-r', distAbs, target]);
+        // Write manifest row to host DB (best-effort — don't fail the publish if DB is down).
+        try {
+            await upsertManifest(manifest);
+        }
+        catch (dbErr) {
+            console.error('[manifest-upsert] DB write failed (non-fatal):', dbErr.message);
+        }
         const lines = [`published: ${distAbs} → ${target}`];
         if (autoCommit) {
             const r = await commitAndPush(`publish: ${slug} build`, [`public/projects/${slug}`]);

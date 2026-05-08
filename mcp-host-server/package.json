@@ -13,6 +13,7 @@
     "dev": "tsx src/server.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.2",
     "@modelcontextprotocol/sdk": "^1.20.0",
     "zod": "^3.24.0"
   },

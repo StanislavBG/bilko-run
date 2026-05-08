@@ -35,6 +35,9 @@ importers:
       stripe:
         specifier: ^14.21.0
         version: 14.25.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@playwright/test':
         specifier: ^1.59.1
@@ -90,6 +93,9 @@ importers:
 
   mcp-host-server:
     dependencies:
+      '@libsql/client':
+        specifier: ^0.17.2
+        version: 0.17.2
       '@modelcontextprotocol/sdk':
         specifier: ^1.20.0
         version: 1.29.0(zod@3.25.76)

@@ -4,7 +4,9 @@ import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
   parseResult, handleGenerateEndpoint, FREE_TIER_LIMIT, HEADLINE_GRADER_ENDPOINT, resetUsage,
+  enforceCallLimits, isAdminEmail,
 } from './_shared.js';
+import { verifyClerkToken } from '../../clerk.js';
 
 export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
   // ── Headline Grader ──────────────────────────────────────
@@ -57,6 +59,9 @@ export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
         message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const _hgVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const _hgLimit = await enforceCallLimits({ userEmail: _hgVerifiedEmail, ipHash, isAdmin: _hgVerifiedEmail ? isAdminEmail(_hgVerifiedEmail) : false, appSlug: 'headline-grader' });
+    if (!_hgLimit.ok) { reply.status(_hgLimit.status); return { error: _hgLimit.reason }; }
 
     const wordCountByContext: Record<string, string> = {
       email: '4–9 words ideal (penalize beyond 12)',
@@ -192,6 +197,9 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
           ? paidGateMsg(hgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const _hgcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const _hgcLimit = await enforceCallLimits({ userEmail: _hgcVerifiedEmail, ipHash: hgcIpHash, isAdmin: _hgcVerifiedEmail ? isAdminEmail(_hgcVerifiedEmail) : false, appSlug: 'headline-grader' });
+    if (!_hgcLimit.ok) { reply.status(_hgcLimit.status); return { error: _hgcLimit.reason }; }
 
     const scoringSystemPrompt = `You are a world-class direct response copywriting analyst. You evaluate headlines using four proven conversion frameworks.
 

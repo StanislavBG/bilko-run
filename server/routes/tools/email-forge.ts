@@ -2,7 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
+  enforceCallLimits, isAdminEmail,
 } from './_shared.js';
+import { verifyClerkToken } from '../../clerk.js';
 
 export function registerEmailForgeRoutes(app: FastifyInstance): void {
   // ── Email Forge ──────────────────────────────────────
@@ -50,6 +52,9 @@ export function registerEmailForgeRoutes(app: FastifyInstance): void {
         message: _efRate.isPro ? paidGateMsg(_efRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const _efVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const _efLimit = await enforceCallLimits({ userEmail: _efVerifiedEmail, ipHash: _efIpHash, isAdmin: _efVerifiedEmail ? isAdminEmail(_efVerifiedEmail) : false, appSlug: 'email-forge' });
+    if (!_efLimit.ok) { reply.status(_efLimit.status); return { error: _efLimit.reason }; }
 
     const GOAL_LABELS: Record<string, string> = {
       cold_outreach: 'Cold Outreach',
@@ -179,6 +184,9 @@ Make each email feel distinct — different frameworks, different emotional leve
         message: efcRate.isPro ? paidGateMsg(efcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
+    const efcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
+    const efcLimit = await enforceCallLimits({ userEmail: efcVerifiedEmail, ipHash: efcIpHash, isAdmin: efcVerifiedEmail ? isAdminEmail(efcVerifiedEmail) : false, appSlug: 'email-forge' });
+    if (!efcLimit.ok) { reply.status(efcLimit.status); return { error: efcLimit.reason }; }
 
     const systemPrompt = `You are an elite email copywriter who has studied AIDA, PAS, Hormozi, Cialdini, and narrative frameworks deeply. You write high-converting email sequences for real businesses.
 

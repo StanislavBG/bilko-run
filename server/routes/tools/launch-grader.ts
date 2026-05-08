@@ -7,6 +7,7 @@ import {
 } from '../../services/tokens.js';
 import { requireAuth } from '../../clerk.js';
 import { validatePublicUrl, fetchPageBounded } from '../../services/page-fetch.js';
+import { hashIp, enforceCallLimits, isAdminEmail } from './_shared.js';
 
 export function registerLaunchGraderRoutes(app: FastifyInstance): void {
   // ── Launch Grader ──────────────────────────────────
@@ -21,6 +22,9 @@ export function registerLaunchGraderRoutes(app: FastifyInstance): void {
 
     const email = await requireAuth(req, reply);
     if (!email) return;
+
+    const costLimit = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'launch-grader' });
+    if (!costLimit.ok) { reply.status(costLimit.status); return { error: costLimit.reason }; }
 
     let parsedUrl: URL;
     try { parsedUrl = validatePublicUrl(rawUrl); } catch (err: any) { reply.status(400); return { error: err.message || 'Invalid URL.' }; }

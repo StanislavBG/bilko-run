@@ -52,7 +52,8 @@
     "metrics:history": "node scripts/metrics.js --history",
     "metrics:csv": "node scripts/metrics.js --csv",
     "github-traffic": "node scripts/github-traffic.js",
-    "synthetic": "tsx scripts/synthetic-monitor.ts"
+    "synthetic": "tsx scripts/synthetic-monitor.ts",
+    "cost-monitor": "tsx scripts/cost-monitor.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.2.3",

@@ -7,7 +7,7 @@ import {
 } from '../../services/tokens.js';
 import { requireAuth } from '../../clerk.js';
 import { validatePublicUrl, fetchPageBounded } from '../../services/page-fetch.js';
-import { parseResult } from './_shared.js';
+import { parseResult, hashIp, enforceCallLimits, isAdminEmail } from './_shared.js';
 
 export function registerPageRoastRoutes(app: FastifyInstance): void {
   // ── Public stats (for social proof) ─────────────────────────────
@@ -51,6 +51,9 @@ export function registerPageRoastRoutes(app: FastifyInstance): void {
 
     const email = await requireAuth(req, reply);
     if (!email) return;
+
+    const costLimit = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'page-roast' });
+    if (!costLimit.ok) { reply.status(costLimit.status); return { error: costLimit.reason }; }
 
     let parsedUrl: URL;
     try {
@@ -182,6 +185,9 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
 
     const email = await requireAuth(req, reply);
     if (!email) return;
+
+    const costLimitCmp = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'page-roast' });
+    if (!costLimitCmp.ok) { reply.status(costLimitCmp.status); return { error: costLimitCmp.reason }; }
 
     // Auto-grant free tokens for new users
     if (!(await hasTokenAccount(email))) {

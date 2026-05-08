@@ -325,6 +325,29 @@ const MIGRATIONS = [
     created_at   INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_publish_overrides_slug ON publish_overrides (slug, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS usage_daily (
+    user_email   TEXT NOT NULL,
+    app_slug     TEXT NOT NULL,
+    date         TEXT NOT NULL,
+    calls        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_email, app_slug, date)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_usage_daily_app_date ON usage_daily (app_slug, date)`,
+  `CREATE TABLE IF NOT EXISTS app_spend_ceilings (
+    app_slug          TEXT PRIMARY KEY,
+    max_calls_per_day INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS cost_alerts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_kind   TEXT NOT NULL,
+    app_slug     TEXT,
+    user_email   TEXT,
+    details_json TEXT NOT NULL,
+    created_at   INTEGER NOT NULL,
+    resolved_at  INTEGER
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_cost_alerts_open ON cost_alerts (resolved_at, created_at DESC)`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [
@@ -419,6 +442,21 @@ export async function initDb(): Promise<void> {
       await client.execute({
         sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
         args: [slug, 200_000, Math.floor(Date.now() / 1000)],
+      });
+    } catch { /* ignore */ }
+  }
+
+  // Seed app_spend_ceilings for all paid tools (idempotent)
+  const PAID_TOOL_SLUGS = [
+    'stack-audit', 'launch-grader', 'page-roast',
+    'ad-scorer', 'headline-grader', 'thread-grader',
+    'email-forge', 'audience-decoder',
+  ];
+  for (const slug of PAID_TOOL_SLUGS) {
+    try {
+      await client.execute({
+        sql: 'INSERT OR IGNORE INTO app_spend_ceilings (app_slug, max_calls_per_day, updated_at) VALUES (?, ?, ?)',
+        args: [slug, 2000, Math.floor(Date.now() / 1000)],
       });
     } catch { /* ignore */ }
   }

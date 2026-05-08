@@ -1,4 +1,5 @@
 import { PROJECTS, type Project, projectHref, isReactRoute } from './projectsRegistry.js';
+import { PACKAGES } from './packages.js';
 
 export interface Section {
   id: string;
@@ -74,6 +75,7 @@ const LIVE_COUNT = PORTFOLIO_PROJECTS.filter(p => p.status === 'Live').length;
 export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Shipped work — productivity tools, AI experiments, side quests.', tag: `${LIVE_COUNT} live` },
+  { id: 'packages',  label: 'Packages',    path: '/packages',  icon: '⊟', desc: 'Open-source CLI tools and libraries — npm install and use locally.', tag: `${PACKAGES.length} live` },
   { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: '1 playable' },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
   { id: 'academy',   label: 'Academy',     path: '/academy',   icon: '▲', desc: 'Structured AI learning paths. Free, opinionated.', tag: '5 levels' },

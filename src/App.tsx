@@ -23,6 +23,7 @@ import { PROJECTS } from './data/projectsRegistry.js';
 // Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
 // only non-tool landing pages are declared here.
 const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
+const PackagesPage = React.lazy(() => import('./pages/PackagesPage.js').then(m => ({ default: m.PackagesPage })));
 
 // Build one React.lazy component per registered tool so code-splitting still works.
 const TOOL_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentType>> = Object.fromEntries(
@@ -134,6 +135,7 @@ function AppRoutes() {
             <Route path="/projects" element={<Navigate to="/products" replace />} />
             <Route path="/projects/*" element={<RedirectProjectsToProducts />} />
 
+            <Route path="/packages" element={<React.Suspense fallback={null}><PackagesPage /></React.Suspense>} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />
             <Route path="/pricing" element={<PricingPage />} />

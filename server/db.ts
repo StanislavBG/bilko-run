@@ -348,6 +348,24 @@ const MIGRATIONS = [
     resolved_at  INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_cost_alerts_open ON cost_alerts (resolved_at, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS csp_violations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    blocked_uri   TEXT,
+    violated_dir  TEXT,
+    document_uri  TEXT,
+    source_file   TEXT,
+    line_number   INTEGER,
+    user_agent    TEXT,
+    created_at    INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_csp_violations_created ON csp_violations (created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS secret_metadata (
+    name             TEXT PRIMARY KEY,
+    last_rotated_at  INTEGER,
+    rotated_by       TEXT,
+    notes            TEXT,
+    created_at       INTEGER NOT NULL
+  )`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [
@@ -1429,6 +1447,25 @@ That's the long bet. The MCP is the API. Read \`docs/host-contract.md\`, build a
     'build-log',
     new Date().toISOString(),
   );
+
+  // Seed secret_metadata (idempotent — INSERT OR IGNORE, NULL last_rotated_at = never rotated)
+  const SECRET_NAMES = [
+    'STRIPE_API_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'GEMINI_API_KEY',
+    'CLERK_SECRET_KEY',
+    'CLERK_WEBHOOK_SECRET',
+    'TURSO_AUTH_TOKEN',
+  ];
+  const now = Math.floor(Date.now() / 1000);
+  for (const name of SECRET_NAMES) {
+    try {
+      await client.execute({
+        sql: 'INSERT OR IGNORE INTO secret_metadata (name, last_rotated_at, notes, created_at) VALUES (?, NULL, ?, ?)',
+        args: [name, 'seeded on PRD 29', now],
+      });
+    } catch { /* ignore */ }
+  }
 
   console.log('[DB] Initialized' + (process.env.TURSO_DATABASE_URL ? ' (Turso)' : ' (local SQLite)'));
 }

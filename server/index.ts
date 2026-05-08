@@ -4,7 +4,7 @@ import staticPlugin from '@fastify/static';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
-import { initDb } from './db.js';
+import { initDb, dbAll } from './db.js';
 import { registerToolRoutes } from './routes/tools/index.js';
 import { registerStripeRoutes } from './routes/stripe.js';
 import { registerLicenseRoutes } from './routes/license.js';
@@ -15,6 +15,8 @@ import { registerTelemetryRoutes } from './routes/telemetry.js';
 import { registerManifestsRoutes } from './routes/manifests.js';
 import { registerSyntheticRoutes } from './routes/synthetic.js';
 import { registerObservabilityRoutes } from './routes/admin-observability.js';
+import { registerSecretsRoutes } from './routes/admin-secrets.js';
+import { registerSecurityHeaders } from './security-headers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -56,16 +58,8 @@ await app.register(cors, {
   credentials: true,
 });
 
-// Security headers
-app.addHook('onSend', async (_request, reply) => {
-  reply.header('X-Content-Type-Options', 'nosniff');
-  reply.header('X-Frame-Options', 'DENY');
-  reply.header('X-XSS-Protection', '0');
-  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-  if (isProd) {
-    reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  }
-});
+// Security headers (CSP + HSTS + COOP + Permissions-Policy)
+registerSecurityHeaders(app);
 
 // Register API routes
 registerToolRoutes(app);
@@ -78,6 +72,24 @@ registerTelemetryRoutes(app);
 registerManifestsRoutes(app);
 registerSyntheticRoutes(app);
 registerObservabilityRoutes(app);
+registerSecretsRoutes(app);
+
+// Boot-time secret age check
+try {
+  const secretRows = await dbAll<{ name: string; last_rotated_at: number | null }>(
+    `SELECT name, last_rotated_at FROM secret_metadata`,
+  );
+  const nowSec = Math.floor(Date.now() / 1000);
+  for (const r of secretRows) {
+    if (!r.last_rotated_at) {
+      app.log.warn(`secret ${r.name}: never rotated (or unknown). Run runbook.`);
+      continue;
+    }
+    const days = (nowSec - r.last_rotated_at) / 86400;
+    if (days > 180) app.log.error(`secret ${r.name}: ${Math.floor(days)} days old. ROTATE NOW.`);
+    else if (days > 90) app.log.warn(`secret ${r.name}: ${Math.floor(days)} days old. Schedule rotation.`);
+  }
+} catch { /* non-fatal — table may not exist on very first boot before migration */ }
 
 // Health check
 app.get('/api/health', async () => ({

@@ -345,6 +345,58 @@ Host-kit drift is computed against `BILKO_LATEST_HOST_KIT` env var (set via Rend
 
 When something feels wrong on bilko.run, this is the first place to look.
 
+## Security headers
+
+bilko.run sends a strict CSP plus the OWASP-recommended security header set on every response. All headers are applied at the Fastify hook level (`server/security-headers.ts`) so they cover both host SPA routes and `/projects/*` static-path siblings.
+
+### Headers sent on every response
+
+| Header | Value |
+|---|---|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | camera, mic, USB, geolocation capped to `self` or `()` |
+| `Cross-Origin-Opener-Policy` | `same-origin` |
+| `Content-Security-Policy[-Report-Only]` | Per-request nonce; see spec below |
+
+### CSP spec
+
+```
+default-src 'self';
+script-src  'self' 'nonce-{NONCE}' https://js.clerk.com https://js.stripe.com 'strict-dynamic';
+style-src   'self' 'nonce-{NONCE}';
+img-src     'self' data: https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com;
+font-src    'self' data:;
+connect-src 'self' https://*.clerk.com https://api.stripe.com;
+frame-src   https://*.clerk.com https://js.stripe.com https://hooks.stripe.com;
+object-src  'none';
+base-uri    'self';
+form-action 'self' https://*.stripe.com;
+frame-ancestors 'none';
+report-uri  /api/security/csp-report;
+upgrade-insecure-requests;
+```
+
+A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook auto-injects `nonce="…"` onto every `<script>` and `<style>` tag in HTML string payloads, plus a `<meta name="csp-nonce">` for host-kit runtime CSS. Static-file streams served by `@fastify/static` are not rewritten (streams pass through unchanged).
+
+### Mode toggle
+
+`BILKO_CSP_ENFORCE=1` → `Content-Security-Policy` (enforced).
+Default (unset) → `Content-Security-Policy-Report-Only` (report-only burn-in).
+
+### Violation reporting
+
+Browsers POST violations to `/api/security/csp-report`. Reports are persisted in the `csp_violations` table (columns: `blocked_uri`, `violated_dir`, `document_uri`, `source_file`, `line_number`, `user_agent`, `created_at`). The endpoint is rate-limited to 60 req/min/IP. Inspect violations with the admin SQL view or directly:
+
+```sql
+SELECT blocked_uri, violated_dir, document_uri, COUNT(*) as n
+FROM csp_violations
+GROUP BY 1, 2, 3
+ORDER BY n DESC
+LIMIT 50;
+```
+
 ## Why this contract exists
 
 The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:

@@ -19,7 +19,7 @@ Authoritative tracker for two parallel rollouts: (1) publishing developer-facing
 | A5 | `@bilkobibitkov/agent-comply` | `~/Projects/Preflight/packages/agent-comply/` | not in scope | `0.2.13` | first publish under scope | ⬜ |
 | A6 | `@bilkobibitkov/agent-gate` | `~/Projects/Preflight/packages/agent-gate/` | not in scope | `0.2.10` | first publish under scope | ⬜ |
 | A7 | `agent-shift` | `~/Projects/Preflight/packages/agent-shift/` | not in registry | `0.2.3` | first publish (unscoped, matches name) | ⬜ |
-| A8 | `@bilkobibitkov/preflight-license` | `~/Projects/Preflight/packages/license/` | unpublished 2026-03-24, slot 1.0.3 burned | `1.0.3` | blocked — needs version bump | 🟡 |
+| A8 | `@bilkobibitkov/preflight-license` | `~/Projects/Preflight/packages/license/` | `1.0.4` live | `1.0.4` | published 1.0.4 (1.0.3 slot retired) | ✅ |
 | A9 | `@bilkobibitkov/host-kit` | new — extract from siblings | `0.1.0` live | `0.1.0` | create, publish, migrate 9 siblings to depend on it | 🟡 |
 
 **Net delta after this rollout:** 3 → 11 published packages.
@@ -265,3 +265,4 @@ _(Each scheduled run appends one line here.)_
 - 2026-05-07: A9 Phase 1 — published @bilkobibitkov/host-kit@0.1.0; sibling migrations queued (PRDs 19, 20). Row marked 🟡 since Phases 2 + 3 (Stack-Audit pilot + 8 remaining sibling migrations) are still pending.
 - 2026-05-07: A9 Phase 2 — migrated Stack-Audit to @bilkobibitkov/host-kit. Bundle gz: 84.1 KB (+0.1% vs 84.0 KB baseline). Stack-Audit repo at e45803d; host repo at ae02b1f (pushed to origin/main + content-grade/master). Live URL returns HTTP/2 200 but Render had not pulled the new asset hash (`index-GFc59phl.js`) within ~10 min of push — still serving prior `index-B57DcoDy.js`. Verify deploy on next Render cycle. 8 siblings remaining (PRD 20).
 - 2026-05-07: Part C — /packages page live with 4 packages (host-kit, stepproof, bilko-flow, session-manager). Pre-flight note: only 3 A-rows ✅ + host-kit (🟡 but on npm); proceeded at user's explicit request. Page omits A4–A8 (unpublished). Pushed to ce02f86.
+- 2026-05-08: A8 — published @bilkobibitkov/preflight-license@1.0.4 (1.0.3 slot retired by npm; PRD 16 version-bump restriction reversed). A4–A7 (PRD 17) now runnable.

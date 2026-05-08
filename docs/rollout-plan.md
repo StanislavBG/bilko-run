@@ -104,9 +104,9 @@ These projects exist locally but are not in `src/data/standalone-projects.json`.
 
 | # | Project | Local path | Host kind | Slug / path | Action | Status |
 |--:|---|---|---|---|---|---|
-| B1 | Session Manager | `~/Projects/session-manager/` | `external-url` | npm + GitHub link | JSON entry only | ⬜ |
-| B2 | bilko-flow | `~/Projects/bilko-flow/` | `external-url` | npm link | JSON entry only | ⬜ |
-| B3 | BGLabs | `~/Projects/BGLabs/` | `external-url` | https://bglabs.app | JSON entry only | ⬜ |
+| B1 | Session Manager | `~/Projects/session-manager/` | `external-url` | npm + GitHub link | JSON entry only | ✅ |
+| B2 | bilko-flow | `~/Projects/bilko-flow/` | `external-url` | npm link | JSON entry only | ✅ |
+| B3 | BGLabs | `~/Projects/BGLabs/` | `external-url` | https://bglabs.app | JSON entry only | ✅ |
 | B4 | Provocations | `~/Projects/Provocations/` | `external-url` | (resolve URL — bglabs subroute? own domain?) | JSON entry, after URL is decided | ⬜ |
 | B5 | review-pilot | `~/Projects/review-pilot/` | `external-url` | (own SaaS domain — confirm) | JSON entry only | ⬜ |
 | B6 | Preflight | `~/Projects/Preflight/site/` | `external-url` | (preflight site URL — confirm) | JSON entry only | ⬜ |
@@ -178,6 +178,8 @@ After each: rebuild host (`pnpm exec vite build`), commit `Registry: add <Projec
 ---
 
 ## Part C — Representative page on bilko.run
+
+**Status: ✅**
 
 Add **`/packages`** — a public page that lists every npm package Bilko ships, with install commands and descriptions. Feels like the "OS app store" framing the user asked about earlier, scoped to dev tools.
 
@@ -262,3 +264,4 @@ _(Each scheduled run appends one line here.)_
 - 2026-05-07: A4–A7 — HALT. PRD 16 (A8 `@bilkobibitkov/preflight-license`) not yet completed; `npm view` returns 404 (still unpublished since 2026-03-24). All four packages declare `"@bilkobibitkov/preflight-license": "^1.0.0"` in `dependencies`, so publishing them now would ship uninstallable artifacts. No publishes attempted; rows A4–A7 remain ⬜. Unblock by completing A8 first.
 - 2026-05-07: A9 Phase 1 — published @bilkobibitkov/host-kit@0.1.0; sibling migrations queued (PRDs 19, 20). Row marked 🟡 since Phases 2 + 3 (Stack-Audit pilot + 8 remaining sibling migrations) are still pending.
 - 2026-05-07: A9 Phase 2 — migrated Stack-Audit to @bilkobibitkov/host-kit. Bundle gz: 84.1 KB (+0.1% vs 84.0 KB baseline). Stack-Audit repo at e45803d; host repo at ae02b1f (pushed to origin/main + content-grade/master). Live URL returns HTTP/2 200 but Render had not pulled the new asset hash (`index-GFc59phl.js`) within ~10 min of push — still serving prior `index-B57DcoDy.js`. Verify deploy on next Render cycle. 8 siblings remaining (PRD 20).
+- 2026-05-07: Part C — /packages page live with 4 packages (host-kit, stepproof, bilko-flow, session-manager). Pre-flight note: only 3 A-rows ✅ + host-kit (🟡 but on npm); proceeded at user's explicit request. Page omits A4–A8 (unpublished). Pushed to ce02f86.

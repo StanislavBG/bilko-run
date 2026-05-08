@@ -29,11 +29,11 @@ import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile, rm, mkdir, stat } from 'node:fs/promises';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createClient } from '@libsql/client';
-import { ManifestSchema } from './manifest-schema.js';
+import { getHostDb, mcpRun, ensureGateTables } from './db.js';
+import { runGates, gateSummary } from './gates/index.js';
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
 // Layout: <HOST_ROOT>/mcp-host-server/dist/server.js  →  ../../
@@ -42,22 +42,7 @@ const HOST_ROOT = resolve(__dirname, '..', '..');
 const REGISTRY_JSON = resolve(HOST_ROOT, 'src/data/standalone-projects.json');
 const HOST_CONTRACT = resolve(HOST_ROOT, 'docs/host-contract.md');
 const PUBLIC_PROJECTS = resolve(HOST_ROOT, 'public/projects');
-// ── Host DB (minimal — only used for manifest UPSERTs) ───────────────────
-let _db = null;
-function getHostDb() {
-    if (!_db) {
-        const url = process.env.TURSO_DATABASE_URL;
-        if (url) {
-            _db = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
-        }
-        else {
-            const dataDir = resolve(HOST_ROOT, 'data');
-            mkdirSync(dataDir, { recursive: true });
-            _db = createClient({ url: `file:${resolve(dataDir, 'contentgrade.db')}` });
-        }
-    }
-    return _db;
-}
+// ── Manifest UPSERT ───────────────────────────────────────────────────────
 async function upsertManifest(manifest) {
     await getHostDb().execute({
         sql: `INSERT INTO app_manifests (
@@ -276,14 +261,17 @@ server.registerTool('unregister_project', {
 // 5) publish_static_project ─────────────────────────────────────────────
 server.registerTool('publish_static_project', {
     title: 'Publish a static-path app build',
-    description: 'Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Replaces any previous bytes for that slug. Optionally commits + pushes the host so Render auto-deploys. Run this AFTER your `vite build` succeeds in the sibling. The slug must already be registered (call register_static_project first if needed).',
+    description: 'Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs five publish gates (manifest, budget, golden, a11y, audit) before copying. Any non-bypassed gate failure blocks the publish. Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged.',
     inputSchema: {
         slug: z.string().min(1),
         distPath: z.string().describe('Absolute path to the built dist/ directory in the sibling repo. Example: "/home/bilko/Projects/Outdoor-Hours/dist".'),
+        sourceRepoPath: z.string().optional().describe('Absolute path to the sibling repo root (e.g. "/home/bilko/Projects/Stack-Audit"). Required for golden and audit gates.'),
+        bypass: z.string().optional().describe('Comma-separated gate names to skip, e.g. "a11y" or "golden,audit". Each bypass is logged.'),
+        bypassReason: z.string().optional().describe('Required justification when bypass is set. Logged to publish_overrides.'),
         autoCommit: z.boolean().default(true),
         requireRegistered: z.boolean().default(true).describe('Refuse to publish a slug that isn\'t in the registry.'),
     },
-}, async ({ slug, distPath, autoCommit, requireRegistered }) => {
+}, async ({ slug, distPath, sourceRepoPath, bypass, bypassReason, autoCommit, requireRegistered }) => {
     try {
         // Sanity: dist exists and looks like a build.
         const distAbs = resolve(distPath);
@@ -304,39 +292,61 @@ server.registerTool('publish_static_project', {
             if (p.host.kind !== 'static-path')
                 return err(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
         }
-        // Validate manifest.json before touching any host files.
-        const manifestPath = resolve(distAbs, 'manifest.json');
-        let manifest;
-        try {
-            const raw = await readFile(manifestPath, 'utf8');
-            if (raw.length > 16_000) {
-                return err(`manifest.json too large (${raw.length} bytes; max 16384). Likely accidental data — review what your build script is writing.`);
+        // Run publish gates.
+        const bypassSet = new Set((bypass ?? '').split(',').filter(Boolean));
+        const ctx = {
+            slug,
+            bundleDir: distAbs,
+            sourceRepo: sourceRepoPath,
+            bypass: bypassSet,
+            adminEmail: undefined,
+        };
+        const results = await runGates(ctx);
+        const summary = gateSummary(results);
+        // Telemetry: log every gate outcome to stderr (MCP server can't use stdout).
+        for (const r of results) {
+            console.error(`[gate] ${slug}/${r.name}: ${r.status} — ${r.details}`);
+        }
+        // Audit-log every bypassed gate.
+        const skipped = results.filter(r => r.status === 'skipped');
+        for (const s of skipped) {
+            try {
+                await mcpRun(`INSERT INTO publish_overrides (slug, gate, reason, admin_email, created_at) VALUES (?, ?, ?, ?, ?)`, [slug, s.name, bypassReason ?? '', ctx.adminEmail ?? 'unknown', Math.floor(Date.now() / 1000)]);
             }
-            manifest = ManifestSchema.parse(JSON.parse(raw));
-        }
-        catch (e) {
-            if (e.code === 'ENOENT') {
-                return err(`manifest.json missing in ${distAbs}. Every sibling must emit one at build time. ` +
-                    `See docs/host-contract.md "Manifest contract" for the schema and a working example.`);
+            catch (dbErr) {
+                console.error('[publish-override] DB write failed (non-fatal):', dbErr.message);
             }
-            return err(`manifest.json invalid: ${e.message ?? e}`);
         }
-        if (manifest.slug !== slug) {
-            return err(`manifest slug "${manifest.slug}" does not match registered slug "${slug}".`);
+        if (!summary.ok) {
+            return {
+                content: [{
+                        type: 'text',
+                        text: JSON.stringify({
+                            error: `publish blocked by gate(s): ${summary.failed.join(', ')}`,
+                            gates: results,
+                        }, null, 2),
+                    }],
+                isError: true,
+            };
         }
-        // Replace public/projects/<slug>/ atomically-ish (rm + cp -r).
+        // Gates passed — replace public/projects/<slug>/ atomically-ish (rm + cp -r).
         const target = resolve(PUBLIC_PROJECTS, slug);
         await rm(target, { recursive: true, force: true });
         await mkdir(dirname(target), { recursive: true });
         await exec('cp', ['-r', distAbs, target]);
         // Write manifest row to host DB (best-effort — don't fail the publish if DB is down).
-        try {
-            await upsertManifest(manifest);
+        if (ctx.manifest) {
+            try {
+                await upsertManifest(ctx.manifest);
+            }
+            catch (dbErr) {
+                console.error('[manifest-upsert] DB write failed (non-fatal):', dbErr.message);
+            }
         }
-        catch (dbErr) {
-            console.error('[manifest-upsert] DB write failed (non-fatal):', dbErr.message);
-        }
-        const lines = [`published: ${distAbs} → ${target}`];
+        const lines = [
+            `gates: ${results.map(r => `${r.name}=${r.status}`).join(', ')}`,
+            `published: ${distAbs} → ${target}`,
+        ];
         if (autoCommit) {
             const r = await commitAndPush(`publish: ${slug} build`, [`public/projects/${slug}`]);
             lines.push(r.details);
@@ -376,6 +386,13 @@ server.registerTool('status', {
 });
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
+    // Ensure gate tables exist (idempotent — CREATE TABLE IF NOT EXISTS).
+    try {
+        await ensureGateTables();
+    }
+    catch (e) {
+        console.error('[boot] ensureGateTables failed (non-fatal):', e.message);
+    }
     const transport = new StdioServerTransport();
     await server.connect(transport);
     // Don't write to stdout — that's the MCP transport. stderr only.

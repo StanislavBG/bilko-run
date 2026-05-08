@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "slug": "test-gate-app",
+  "version": "1.0.0",
+  "builtAt": "2026-05-08T12:00:00.000Z",
+  "gitSha": "abc1234",
+  "gitBranch": "main",
+  "hostKit": { "version": "0.3.0" },
+  "golden": { "path": "/projects/test-gate-app/", "expect": "Hello" },
+  "health": {},
+  "bundle": { "sizeBytesGz": 50000, "fileCount": 5 }
+}

@@ -311,6 +311,20 @@ const MIGRATIONS = [
     notified_at      INTEGER,
     resolved_at      INTEGER
   )`,
+  `CREATE TABLE IF NOT EXISTS app_budgets (
+    slug              TEXT PRIMARY KEY,
+    max_size_gz_bytes INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS publish_overrides (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug         TEXT NOT NULL,
+    gate         TEXT NOT NULL,
+    reason       TEXT,
+    admin_email  TEXT,
+    created_at   INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_publish_overrides_slug ON publish_overrides (slug, created_at DESC)`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [
@@ -390,6 +404,21 @@ export async function initDb(): Promise<void> {
       await client.execute({
         sql: 'INSERT OR IGNORE INTO referrer_rules (host_pattern, bucket, source_name) VALUES (?, ?, ?)',
         args: [pattern, bucket, source],
+      });
+    } catch { /* ignore */ }
+  }
+
+  // Seed app_budgets with default 200 KB gz budget for every static-path sibling (idempotent)
+  const STATIC_SLUGS = [
+    'game-academy', 'outdoor-hours', 'local-score', 'stepproof', 'stack-audit',
+    'git-viewer', 'launch-grader', 'ad-scorer', 'headline-grader', 'thread-grader',
+    'email-forge', 'audience-decoder', 'page-roast', 'social-signals-trader',
+  ];
+  for (const slug of STATIC_SLUGS) {
+    try {
+      await client.execute({
+        sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
+        args: [slug, 200_000, Math.floor(Date.now() / 1000)],
       });
     } catch { /* ignore */ }
   }

@@ -74,6 +74,7 @@ A single entry in `src/data/projectsRegistry.ts`:
 - A sync step (manual or scripted) that copies `dist/` into `public/projects/<slug>/` of this repo.
 - The build's `index.html` must use relative or `/projects/<slug>/`-prefixed asset paths (Vite: set `base: '/projects/<slug>/'`).
 - No assumption about parent-page layout — your bundle owns the entire page.
+- **A `manifest.json` at the bundle root** (`dist/manifest.json`) — see "Manifest contract" below. `publish_static_project` refuses bundles without one.
 
 ### `external-url` apps
 
@@ -131,6 +132,39 @@ The MCP commits + pushes to both host remotes automatically; Render redeploys wi
 2. For `react-route`: also delete the page (`src/pages/<slug>Page.tsx`) and per-tool server file (`server/routes/tools/<slug>.ts`) and remove the call from `server/routes/tools/index.ts`.
 3. For `static-path`: `rm -rf public/projects/<slug>/` (or pass `deleteAssets: true` to the MCP).
 4. Add a redirect in `src/App.tsx` if the slug is still being linked from outside.
+
+## Telemetry contract
+
+Every sibling app SHOULD call `initTelemetry({ app, version })` from
+`@bilkobibitkov/host-kit` at boot. This wires three signals automatically:
+
+- `track(name, props)` → `analytics_events` (same table as `/api/analytics/event`)
+- `log.info|warn|error(msg, fields)` → `app_logs` (info sampled at 10% by default)
+- Uncaught `window.error` + `unhandledrejection` → `app_errors` (100% sampled, de-duped at 3/min per fingerprint)
+
+The SDK is non-blocking and batched (5s buffer, flush on page-hide). It uses
+`sendBeacon` so late-lifecycle errors are not dropped. PII keys matching
+`/(email|password|token|key|ssn|card|cvv|apikey)/i` are redacted client-side
+before any send.
+
+```ts
+import { initTelemetry } from '@bilkobibitkov/host-kit';
+initTelemetry({ app: 'my-app', version: '1.0.0' });
+```
+
+Server endpoints (all rate-limited per IP, append-only tables):
+
+| Endpoint | Table | Rate limit |
+|---|---|---|
+| `POST /api/telemetry/event` | `funnel_events` | 1200/min |
+| `POST /api/telemetry/log` | `app_logs` | 600/min |
+| `POST /api/telemetry/error` | `app_errors` | 300/min |
+
+`track()` works without `initTelemetry` (falls back to pre-0.3.0 direct-send).
+Apps that don't call `initTelemetry` get no structured logs or error capture.
+
+Out of scope for this contract version: source-map symbolication, log retention
+TTL, Node/CLI SDKs, real-time streaming, cross-app trace IDs.
 
 ## Why this contract exists
 

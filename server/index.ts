@@ -14,6 +14,7 @@ import { registerBlogRoutes } from './routes/blog.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import { registerManifestsRoutes } from './routes/manifests.js';
 import { registerSyntheticRoutes } from './routes/synthetic.js';
+import { registerObservabilityRoutes } from './routes/admin-observability.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -76,6 +77,7 @@ registerAnalyticsRoutes(app);
 registerTelemetryRoutes(app);
 registerManifestsRoutes(app);
 registerSyntheticRoutes(app);
+registerObservabilityRoutes(app);
 
 // Health check
 app.get('/api/health', async () => ({

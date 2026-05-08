@@ -16,6 +16,7 @@ import { registerManifestsRoutes } from './routes/manifests.js';
 import { registerSyntheticRoutes } from './routes/synthetic.js';
 import { registerObservabilityRoutes } from './routes/admin-observability.js';
 import { registerSecretsRoutes } from './routes/admin-secrets.js';
+import { registerGameRoutes } from './routes/games.js';
 import { registerSecurityHeaders } from './security-headers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -73,6 +74,7 @@ registerManifestsRoutes(app);
 registerSyntheticRoutes(app);
 registerObservabilityRoutes(app);
 registerSecretsRoutes(app);
+registerGameRoutes(app);
 
 // Boot-time secret age check
 try {

@@ -289,6 +289,25 @@
     ]
   },
   {
+    "slug": "sudoku",
+    "name": "Sudoku",
+    "tagline": "A clean, calm, free Sudoku — Bilko's second game.",
+    "category": "Game · Puzzle",
+    "status": "draft",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/sudoku/",
+      "sourceRepo": "github.com/StanislavBG/Bilko-Sudoku",
+      "localPath": "~/Projects/Bilko-Sudoku"
+    },
+    "tags": [
+      "Game",
+      "Puzzle",
+      "Free"
+    ]
+  },
+  {
     "slug": "bglabs",
     "name": "BGLabs",
     "tagline": "Generate dynamic background animations with AI",
@@ -303,6 +322,26 @@
     "tags": [
       "Canvas",
       "Animation"
+    ]
+  },
+  {
+    "slug": "mindswiffer",
+    "name": "MindSwiffer",
+    "tagline": "Minesweeper, swept clean. No 50/50s, ever.",
+    "category": "Game · Puzzle",
+    "status": "draft",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/mindswiffer/",
+      "sourceRepo": "github.com/StanislavBG/Bilko-MindSwiffer",
+      "localPath": "~/Projects/Bilko-MindSwiffer"
+    },
+    "tags": [
+      "Game",
+      "Puzzle",
+      "Free",
+      "No-guess"
     ]
   }
 ]

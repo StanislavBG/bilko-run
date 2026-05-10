@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/projects/fizzpop/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)" />
+    <title>FizzPop · Bilko</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('bilko_fizzpop_theme_v1');
+          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+          if (localStorage.getItem('bilko_fizzpop_cb_v1') === '1') document.documentElement.dataset.cb = '1';
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/projects/fizzpop/assets/index-Ca85YNO7.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/fizzpop/assets/index-CV98x_me.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

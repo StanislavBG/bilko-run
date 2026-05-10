@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@bilkobibitkov/ai-tool-kit':
+        specifier: link:../AI-Tool-Kit
+        version: link:../AI-Tool-Kit
       '@clerk/backend':
         specifier: ^3.2.3
         version: 3.2.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

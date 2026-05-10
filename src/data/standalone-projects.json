@@ -393,5 +393,21 @@
       "localPath": "~/Projects/Bilko-Etch"
     },
     "tags": ["Game", "Puzzle", "Free", "No-guess"]
+  },
+  {
+    "slug": "cellar",
+    "name": "Cellar",
+    "tagline": "FreeCell, clean-room. Every deal solver-verified. Daily challenge included.",
+    "category": "Game · Card",
+    "status": "live",
+    "launchedAt": "2026-05-09",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/cellar/",
+      "sourceRepo": "github.com/StanislavBG/Bilko-Cellar",
+      "localPath": "~/Projects/Bilko-Cellar"
+    },
+    "tags": ["Game", "Card", "FreeCell", "Daily", "Free"]
   }
 ]

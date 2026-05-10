@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "slug": "social-signals-trader",
+  "version": "0.1.0",
+  "builtAt": "2026-05-10T04:30:00.000Z",
+  "gitSha": "a627d83",
+  "gitBranch": "main",
+  "hostKit": { "version": "0.0.0" },
+  "golden": {
+    "path": "/projects/social-signals-trader/",
+    "expect": "publictrades"
+  },
+  "health": {},
+  "bundle": {
+    "sizeBytesGz": 67456,
+    "fileCount": 14
+  }
+}

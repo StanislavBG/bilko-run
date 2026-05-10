@@ -1,7 +1,7 @@
-/* global React, ReactDOM, SITE, PERF, EQUITY, HEATMAP, TRADES, WATCHLIST, SUBREDDITS, TRENDING, THEMES, STRATEGIES,
+/* global React, ReactDOM, SITE, PERF, EQUITY, HEATMAP, TRADES, WATCHLIST, SUBREDDITS, TRENDING, THEMES, STRATEGIES, WEEKLY_REPORTS,
    StatusBar, Header, Hero, StatStrip, EquityChart, Heatmap, TradesTable,
    SubredditPanel, TrendingTickers, Themes, Watchlist, Methodology, FooterCTA,
-   TradesPage, RedditPage, WatchlistPage, MethodologyPage, StrategiesPage,
+   TradesPage, RedditPage, WatchlistPage, MethodologyPage, ReportsPage, StrategiesPage,
    TweaksPanel, useTweaks, TweakSection, TweakRadio, TweakToggle, TweakSelect */
 
 const { useState } = React;
@@ -24,7 +24,7 @@ const ACCENT_MAP = {
 
 function getInitialPage() {
   const h = (location.hash || "").replace("#", "");
-  return ["dashboard","strategies","macro","trades","reddit","watchlist","methodology"].includes(h) ? h : "dashboard";
+  return ["dashboard","strategies","macro","trades","reddit","watchlist","reports","methodology"].includes(h) ? h : "dashboard";
 }
 
 function App() {
@@ -85,6 +85,7 @@ function App() {
       {page === "trades" && <TradesPage />}
       {page === "reddit" && <RedditPage />}
       {page === "watchlist" && <WatchlistPage />}
+      {page === "reports" && <ReportsPage />}
       {page === "methodology" && <MethodologyPage />}
 
       {page !== "dashboard" && (

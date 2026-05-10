@@ -530,6 +530,17 @@ function WatchlistPage() {
           </table>
         </div>
       </div>
+
+      {/* EVENT CARDS — one card per (ticker, event_date), sorted by event_date asc */}
+      <div style={{ marginTop: 12 }}>
+        <div style={{ marginBottom: 8 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Upcoming event cards</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>
+            Per-event breakdown: subreddit sentiment, positions, and P&L by catalyst date
+          </p>
+        </div>
+        <EventCardList />
+      </div>
     </main>
   );
 }
@@ -635,4 +646,81 @@ function PageHeader({ title, subtitle }) {
   );
 }
 
-Object.assign(window, { TradesPage, RedditPage, WatchlistPage, MethodologyPage, PageHeader, HBarChart, VBarChart });
+// ============== Reports page ==============
+function ReportsPage() {
+  const reports = window.WEEKLY_REPORTS || [];
+  const [selected, setSelected] = useState(reports.length > 0 ? reports[0].week : null);
+
+  if (reports.length === 0) {
+    return (
+      <main className="shell">
+        <PageHeader title="Weekly Reports" subtitle="Saturday 9 AM · Claude reviews its own trades" />
+        <div className="card" style={{ padding: 24, color: "var(--muted)", fontFamily: "var(--mono)", fontSize: 13 }}>
+          No reports yet. The weekly report cron runs every Saturday at 9 AM PT.
+        </div>
+      </main>
+    );
+  }
+
+  const current = reports.find((r) => r.week === selected) || reports[0];
+
+  const gradeColor = (g) => {
+    if (!g || g === "?") return "var(--muted)";
+    if (g.startsWith("A")) return "var(--pos)";
+    if (g.startsWith("B")) return "oklch(0.78 0.14 235)";
+    if (g.startsWith("C")) return "var(--warn, oklch(0.82 0.16 75))";
+    return "var(--neg)";
+  };
+
+  const renderMarkdown = (md) => {
+    if (typeof window.marked !== "undefined") {
+      return { __html: window.marked.parse(md) };
+    }
+    return { __html: `<pre style="white-space:pre-wrap;font-size:13px">${md.replace(/</g,"&lt;")}</pre>` };
+  };
+
+  return (
+    <main className="shell">
+      <PageHeader title="Weekly Reports" subtitle="Saturday 9 AM · Claude reviews its own trades" />
+      <div className="grid grid-12" style={{ marginTop: 12 }}>
+        <div className="col-3 col-md-12">
+          <div className="card" style={{ padding: "8px 0" }}>
+            {reports.map((r) => (
+              <div
+                key={r.week}
+                onClick={() => setSelected(r.week)}
+                style={{
+                  padding: "10px 16px",
+                  cursor: "pointer",
+                  background: selected === r.week ? "var(--surface-2)" : "transparent",
+                  borderLeft: selected === r.week ? "2px solid var(--accent)" : "2px solid transparent",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 600 }}>{r.week}</span>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 700, color: gradeColor(r.grade) }}>{r.grade}</span>
+                </div>
+                {r.summary && (
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                    {r.summary}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col-9 col-md-12">
+          {current && (
+            <div
+              className="card reports-content"
+              style={{ padding: 24, lineHeight: 1.65, fontSize: 14 }}
+              dangerouslySetInnerHTML={renderMarkdown(current.content)}
+            />
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+Object.assign(window, { TradesPage, RedditPage, WatchlistPage, MethodologyPage, ReportsPage, PageHeader, HBarChart, VBarChart });

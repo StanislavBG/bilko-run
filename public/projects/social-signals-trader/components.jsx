@@ -29,25 +29,31 @@ function StatusBar() {
   }, []);
   const pad = (n) => String(n).padStart(2, "0");
   const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-  const ticks = [
-    ["SPY", 528.42, +0.42],
-    ["QQQ", 461.18, +0.71],
-    ["NVDA", 894.02, +1.84],
-    ["TSLA", 248.10, -0.92],
-    ["BTC", 67214, +1.20],
-    ["VIX", 14.22, -3.41],
-  ];
+  const ticks = window.STATUS_QUOTES || [];
+  const marketState = ticks.find((t) => t.marketState)?.marketState || "closed";
+  const isOpen = marketState === "open";
   return (
     <div className="statusbar">
-      <span className="live">LIVE · MARKET OPEN</span>
+      <span className="live">{isOpen ? "LIVE · MARKET OPEN" : "MARKET CLOSED"}</span>
       <div className="ticker-strip">
-        {ticks.map(([t, p, c]) => (
-          <span key={t}>
-            <b style={{ color: "var(--text)" }}>{t}</b>
-            <span className="tnum">{p.toLocaleString("en-US", { minimumFractionDigits: p < 1000 ? 2 : 0 })}</span>
-            <span className={c >= 0 ? "up" : "down"}>{c >= 0 ? "+" : ""}{c.toFixed(2)}%</span>
-          </span>
-        ))}
+        {ticks.length === 0 && <span className="muted">no quotes</span>}
+        {ticks.map((q) => {
+          const p = q.price;
+          const c = q.changePct;
+          return (
+            <span key={q.ticker}>
+              <b style={{ color: "var(--text)" }}>{q.ticker}</b>
+              <span className="tnum">
+                {p == null ? "—" : p.toLocaleString("en-US", { minimumFractionDigits: p < 1000 ? 2 : 0 })}
+              </span>
+              {c == null ? (
+                <span className="muted">—</span>
+              ) : (
+                <span className={c >= 0 ? "up" : "down"}>{c >= 0 ? "+" : ""}{c.toFixed(2)}%</span>
+              )}
+            </span>
+          );
+        })}
       </div>
       <span className="muted">{ts}</span>
     </div>
@@ -63,6 +69,7 @@ function Header({ handle, bmcUrl, page, setPage }) {
     ["trades", "Trades"],
     ["reddit", "Reddit Intel"],
     ["watchlist", "Watchlist"],
+    ["reports", "Reports"],
     ["methodology", "Methodology"],
   ];
   return (

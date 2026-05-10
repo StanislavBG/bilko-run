@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { dbAll, dbGet, dbRun, dbTransaction, txGet, txRun } from '../db.js';
-import { GAME_CONFIGS, type GameConfig } from '../../shared/game-config.js';
+import { GAME_CONFIGS, CROSS_GAME_TRIGGERS, type GameConfig } from '../../shared/game-config.js';
 
 // ── In-memory rate limiter: 60 score submissions / hour / (user + game) ──────
 
@@ -178,10 +178,17 @@ export async function deleteGameSave(game: string, userEmail: string): Promise<v
 
 // ── Achievements ───────────────────────────────────────────────────────────
 
+export interface CrossUnlockInfo {
+  game: string;
+  key: string;
+  name: string;
+}
+
 export interface UnlockResult {
   ok: boolean;
   alreadyUnlocked?: boolean;
   unlocked_at?: number;
+  crossUnlock?: CrossUnlockInfo;
   error?: string;
   status?: number;
 }
@@ -210,7 +217,33 @@ export async function unlockAchievement(
     `INSERT INTO game_achievements (game, user_email, key, unlocked_at) VALUES (?, ?, ?, ?)`,
     game, userEmail, key, ts,
   );
-  return { ok: true, unlocked_at: ts };
+
+  let crossUnlock: CrossUnlockInfo | undefined;
+  const trig = CROSS_GAME_TRIGGERS[`${game}:${key}`];
+  if (trig) {
+    const other = await dbGet(
+      `SELECT 1 FROM game_achievements WHERE game = ? AND user_email = ? AND key = ?`,
+      trig.otherSlug, userEmail, trig.otherKey,
+    );
+    if (other) {
+      const alreadyCross = await dbGet(
+        `SELECT 1 FROM game_achievements WHERE game = ? AND user_email = ? AND key = ?`,
+        trig.awardSlug, userEmail, trig.awardKey,
+      );
+      if (!alreadyCross) {
+        const awardAch = GAME_CONFIGS[trig.awardSlug]?.achievements.find(a => a.key === trig.awardKey);
+        if (awardAch) {
+          await dbRun(
+            `INSERT INTO game_achievements (game, user_email, key, unlocked_at) VALUES (?, ?, ?, ?)`,
+            trig.awardSlug, userEmail, trig.awardKey, Math.floor(Date.now() / 1000),
+          );
+          crossUnlock = { game: trig.awardSlug, key: trig.awardKey, name: awardAch.name };
+        }
+      }
+    }
+  }
+
+  return { ok: true, unlocked_at: ts, ...(crossUnlock ? { crossUnlock } : {}) };
 }
 
 export async function getUnlocks(

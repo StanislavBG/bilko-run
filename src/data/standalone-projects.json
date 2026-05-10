@@ -384,7 +384,8 @@
     "name": "Etch",
     "tagline": "A clean-room nonogram. Solvable by thinking, never by guessing.",
     "category": "Game · Puzzle",
-    "status": "draft",
+    "status": "live",
+    "launchedAt": "2026-05-10",
     "year": 2026,
     "host": {
       "kind": "static-path",

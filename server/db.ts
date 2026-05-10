@@ -393,6 +393,15 @@ const MIGRATIONS = [
     PRIMARY KEY (game, user_email, key)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_achievements_user ON game_achievements (user_email)`,
+  `CREATE TABLE IF NOT EXISTS academy_quota_daily (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    email_hash TEXT NOT NULL,
+    call_at    INTEGER NOT NULL,
+    outcome    TEXT NOT NULL CHECK (outcome IN ('ok','error','denied','rate_limited')),
+    token_in   INTEGER NOT NULL DEFAULT 0,
+    token_out  INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS academy_quota_email_at ON academy_quota_daily(email_hash, call_at)`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [
@@ -497,6 +506,13 @@ export async function initDb(): Promise<void> {
     'ad-scorer', 'headline-grader', 'thread-grader',
     'email-forge', 'audience-decoder',
   ];
+  // Academy gets a tighter ceiling: 5 calls/user × expected daily active users
+  try {
+    await client.execute({
+      sql: 'INSERT OR IGNORE INTO app_spend_ceilings (app_slug, max_calls_per_day, updated_at) VALUES (?, ?, ?)',
+      args: ['academy', 200, Math.floor(Date.now() / 1000)],
+    });
+  } catch { /* ignore */ }
   for (const slug of PAID_TOOL_SLUGS) {
     try {
       await client.execute({

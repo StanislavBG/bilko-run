@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "fizzpop",
   "version": "0.1.0",
-  "builtAt": "2026-05-10T09:40:40.898Z",
-  "gitSha": "fbee9a2",
+  "builtAt": "2026-05-10T09:54:26.662Z",
+  "gitSha": "44190bf",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.7.2"

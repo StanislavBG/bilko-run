@@ -52,6 +52,10 @@ Based on the LinkedIn strategy (Irina Malkova 10/10 quality reference):
 - Pull quotes for shareable insights
 - Embedded tool demos where relevant (link to live tool)
 
+## Post Backlog
+
+- **MindSwiffer — building Minesweeper without 50/50s** (build-log): shipped 2026-05-09 at /projects/mindswiffer/. Cover: no-guess constraint solver, wave-function collapse analogy, why 50/50s are a design failure not a feature, 65-test Playwright suite, 5-theme WCAG AA a11y, cascade animations + reduced-motion.
+
 ## Content Sources
 1. **Reddit knowledge base** — 5,500+ indexed discussions from 86 subreddits (ChromaDB at Local-Browser-Automation/downloads/chroma-db/)
 2. **Content calendar** — 44 drafted posts in content-calendar.db

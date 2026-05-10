@@ -99,7 +99,7 @@
     "name": "Academy",
     "tagline": "Free, ad-free AI fundamentals for humans — every claim cited.",
     "category": "Learn",
-    "status": "draft",
+    "status": "live",
     "year": 2026,
     "host": {
       "kind": "static-path",

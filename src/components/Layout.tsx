@@ -57,16 +57,22 @@ export function Layout() {
           <span>Bilko Bibitkov</span>
         </Link>
         <nav>
-          {SECTIONS.map(s => (
-            <NavLink
-              key={s.id}
-              to={s.path}
-              className={() => (activePath === s.path ? 'active' : '')}
-              end={s.path === '/'}
-            >
-              {s.label}
-            </NavLink>
-          ))}
+          {SECTIONS.map(s =>
+            s.href ? (
+              <a key={s.id} href={s.href} className={activePath === s.path ? 'active' : ''}>
+                {s.label}
+              </a>
+            ) : (
+              <NavLink
+                key={s.id}
+                to={s.path}
+                className={() => (activePath === s.path ? 'active' : '')}
+                end={s.path === '/'}
+              >
+                {s.label}
+              </NavLink>
+            ),
+          )}
         </nav>
         <div className="pf-right">
           <span style={{
@@ -119,13 +125,21 @@ export function Layout() {
         <div className="pf-mobile-menu" onClick={() => setMobileOpen(false)}>
           <div className="pf-mobile-sheet" onClick={e => e.stopPropagation()}>
             <div className="pf-eyebrow" style={{ marginBottom: 12 }}>Sections</div>
-            {SECTIONS.map(s => (
-              <Link key={s.id} to={s.path} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
-                <span className="pf-mobile-icon">{s.icon}</span>
-                <span>{s.label}</span>
-                <span className="pf-mobile-tag">{s.tag}</span>
-              </Link>
-            ))}
+            {SECTIONS.map(s =>
+              s.href ? (
+                <a key={s.id} href={s.href} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
+                  <span className="pf-mobile-icon">{s.icon}</span>
+                  <span>{s.label}</span>
+                  <span className="pf-mobile-tag">{s.tag}</span>
+                </a>
+              ) : (
+                <Link key={s.id} to={s.path} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
+                  <span className="pf-mobile-icon">{s.icon}</span>
+                  <span>{s.label}</span>
+                  <span className="pf-mobile-tag">{s.tag}</span>
+                </Link>
+              ),
+            )}
             <div className="pf-eyebrow" style={{ marginTop: 24, marginBottom: 12 }}>Elsewhere</div>
             <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" className="pf-mobile-link">GitHub ↗</a>
             <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="pf-mobile-link">Twitter ↗</a>

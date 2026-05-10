@@ -500,6 +500,15 @@ export async function initDb(): Promise<void> {
     } catch { /* ignore */ }
   }
 
+  // Academy ships the cl100k_base BPE table for the in-browser tokenizer demo (~500 KB gz alone).
+  // Bumped from default 200 KB to 700 KB; trim target tracked in Bilko-Academy/KNOWN-ISSUES.md.
+  try {
+    await client.execute({
+      sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
+      args: ['academy', 700_000, Math.floor(Date.now() / 1000)],
+    });
+  } catch { /* ignore */ }
+
   // Seed app_spend_ceilings for all paid tools (idempotent)
   const PAID_TOOL_SLUGS = [
     'stack-audit', 'launch-grader', 'page-roast',

@@ -23,6 +23,7 @@ Bilko's workspace lives in `~/Projects/` with this structure:
   Preflight/                ← Monorepo: stepproof, agent-comply, agent-gate,
                                agent-shift, agent-trace, license, site
   Archive/                  ← Bilko-Archive, AIQA, Content-Grade, experiments
+  Bilko-Academy/            ← sibling — non-technical AI fundamentals (see [docs/academy-research.md](docs/academy-research.md))
 ```
 
 ## Main URLs

@@ -121,6 +121,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 - Never propose solutions — implement them directly
 - Each tool is independent — don't merge them or add cross-dependencies in the backend or frontend
 - **New apps default to `static-path` (own repo).** Use `react-route` only when an app genuinely needs to live in this bundle (rare); the trend is the other direction
+- **New npm packages follow [`docs/publishing-contract.md`](docs/publishing-contract.md).** LICENSE on disk (not just metadata), MIT, `--provenance` on publish, Changesets-managed CHANGELOG. Templates in `docs/templates/`.
 - All paid tools share the same credit model (free tools — LocalScore, OutdoorHours — don't deduct credits)
 - All SQL uses parameterized statements via db helpers — never string interpolation
 - Auth: `requireAuth` for token-spending endpoints, rate limiting for free-tier endpoints

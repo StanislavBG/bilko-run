@@ -53,7 +53,8 @@
     "metrics:csv": "node scripts/metrics.js --csv",
     "github-traffic": "node scripts/github-traffic.js",
     "synthetic": "tsx scripts/synthetic-monitor.ts",
-    "cost-monitor": "tsx scripts/cost-monitor.ts"
+    "cost-monitor": "tsx scripts/cost-monitor.ts",
+    "sanity-qa": "tsx scripts/sanity-qa.ts"
   },
   "dependencies": {
     "@bilkobibitkov/ai-tool-kit": "link:../AI-Tool-Kit",
@@ -83,7 +84,9 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
     "@vitest/coverage-v8": "^3.2.4",
+    "axe-core": "^4.11.4",
     "concurrently": "^8.2.2",
+    "lighthouse": "^13.3.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.23.0",

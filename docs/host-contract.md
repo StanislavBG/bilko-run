@@ -315,6 +315,62 @@ VALUES ('my-app', 300000, strftime('%s','now'));
 
 The `golden` and `audit` gates require a `sourceRepoPath` argument pointing to the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`). Without it, both gates fail with a clear error. Pass it on every publish call.
 
+## Sanity QA gate
+
+`scripts/sanity-qa.ts` is an end-to-end QA gate that must pass before any publish PRD proceeds. Every publish PRD should start with:
+
+```bash
+cd ~/Projects/Bilko
+tsx scripts/sanity-qa.ts --targets=<slug> --fail-fast
+test $? -eq 0 || { echo "Sanity QA failed; HALT"; exit 1; }
+```
+
+### What it checks
+
+Five subagents run in parallel against every live static-path target:
+
+| Subagent | Checks |
+|---|---|
+| **Smoke** | Playwright golden-path; game-specific flows for sudoku/mindswiffer/game-academy; no console errors |
+| **Security** | CSP headers, HSTS, frame-ancestors, no leaked secrets (sk-/AIza/JWT patterns), SSRF probe on `/api/page-fetch` |
+| **Perf** | Lighthouse mobile audit — Performance ≥ 85, Accessibility ≥ 95, Best Practices ≥ 90, SEO ≥ 90; LCP ≤ 2.5s, CLS ≤ 0.1, TTI ≤ 3.5s |
+| **Size** | `manifest.bundle.sizeBytesGz` vs per-app budget (games: 250 KB, academy: 400 KB, others: 200 KB); fileCount ≤ 30; stale-manifest drift detection |
+| **A11y** | axe-core scan (WCAG 2.1 AA) in mobile + desktop viewports; zero serious/critical violations; reduced-motion honored |
+
+### CLI
+
+```bash
+# Full run (all live targets)
+pnpm sanity-qa
+
+# Single target
+tsx scripts/sanity-qa.ts --targets=sudoku
+
+# Multiple targets, fail-fast, custom report path
+tsx scripts/sanity-qa.ts --targets=sudoku,mindswiffer --fail-fast --write-report=/tmp/qa.md
+```
+
+Exit codes: `0` = PASS, `1` = FAIL, `2` = internal error.
+
+### Decision logic
+
+| Condition | Decision |
+|---|---|
+| Smoke fails for any target | FAIL |
+| Security critical/high finding | FAIL |
+| Any a11y serious/critical violation | FAIL |
+| Perf score < 80 for any target | FAIL |
+| Any warn-level issue (no FAIL) | WARN |
+| All clean | PASS |
+
+### Reports
+
+Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md`. The nightly cron (`93-sanity-qa-cron.md`, 03:00 PDT) commits the report and opens a GitHub issue tagged `qa-failure` on FAIL.
+
+### Prompt files (AI-subagent mode)
+
+`scripts/sanity-qa-prompts/*.txt` — self-contained prompts for each subagent. These are the spec for `claude -p` invocations if you want AI-driven rather than deterministic runner execution.
+
 ## Cost controls
 
 Three layers protect the platform from runaway Gemini spend:

@@ -102,9 +102,9 @@ export const SECTIONS: readonly Section[] = [
 ];
 
 export const GAMES: readonly PortfolioGame[] = [
-  { id: 'game-academy',    name: 'Boat Shooter',    genre: 'Arcade', plays: 'live', blurb: 'Browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
-  { id: 'midnight-router', name: 'Midnight Router', genre: 'Puzzle', plays: 'soon', blurb: 'Route signals across a sleeping city before sunrise.',                  color: 'blue' },
-  { id: 'echo-chamber',    name: 'Echo Chamber',    genre: 'Audio',  plays: 'soon', blurb: 'Match shapes by what they sound like.',                                color: 'ink'  },
+  { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade', plays: 'live', blurb: 'Browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
+  { id: 'sudoku',       name: 'Sudoku',       genre: 'Puzzle', plays: 'live', blurb: 'Daily-streak Sudoku with hints, themes, and a11y-first input.',         color: 'blue', href: '/projects/sudoku/' },
+  { id: 'mindswiffer',  name: 'Sweeper',      genre: 'Puzzle', plays: 'live', blurb: 'Minesweeper, no-guess mode, daily streaks, sound + haptics.',           color: 'ink',  href: '/projects/mindswiffer/' },
 ];
 
 export const ACADEMY_LEVELS: readonly AcademyLevel[] = [

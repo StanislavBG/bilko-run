@@ -15,19 +15,19 @@ jobs:
       id-token: write   # required for npm provenance attestation
 
     steps:
-      # Pin actions by SHA, not by tag, for supply-chain safety.
-      # Replace these SHAs with current pinned versions when copying this template.
+      # SHAs pinned to specific versions for supply-chain safety.
+      # Verify and update when bumping action versions.
       - name: Checkout
-        uses: actions/checkout@<TODO-pin-sha>
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Setup Node
-        uses: actions/setup-node@<TODO-pin-sha>
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@<TODO-pin-sha>
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda  # v4.1.0
         with:
           version: 9
 
@@ -45,12 +45,16 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
 
-# Monorepo variant — replace the publish step with:
+# ── Monorepo variant ──────────────────────────────────────────────────────────
+# Replace the Publish step above with this for Changesets-managed monorepos:
 #
 #   - name: Publish (workspace)
-#     run: pnpm -r publish --access public --provenance --filter='[HEAD~1]'
+#     uses: changesets/action@v1
+#     with:
+#       publish: pnpm release
 #     env:
+#       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 #       NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
 #
-# For Changesets-managed monorepos, use the changesets/action workflow instead:
-#   https://github.com/changesets/action
+# Or for manual filter-based publishing (non-Changesets):
+#   run: pnpm -r publish --access public --provenance --filter='[HEAD~1]'

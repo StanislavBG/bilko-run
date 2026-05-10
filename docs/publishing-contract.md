@@ -4,6 +4,16 @@ Companion to [`host-contract.md`](./host-contract.md). That document covers the 
 
 The two contracts are independent: a sibling app may also publish parts of itself to npm; a published npm package need not be a sibling app.
 
+## What the host provides for npm packages
+
+Nothing — npm packages are standalone. They don't inherit bilko.run auth, credits, Clerk, or Stripe. The only shared infrastructure is:
+
+- **NPM_AUTOMATION_TOKEN** — one GH org secret; every publishable repo is added to its visibility list.
+- **release.yml template** — copy once; CI handles the rest.
+- **Versioning discipline** — described below; consistent across all packages.
+
+If an npm package *also* happens to be a sibling app (e.g. PageRoast CLI + `/projects/page-roast/` page), it follows *both* contracts independently.
+
 ## What is this
 
 A short rulebook every Bilko npm package follows. Apply it to:
@@ -178,6 +188,60 @@ One-time, by the maintainer:
 5. Verify: tag a no-op version, push tag, watch the workflow publish.
 
 The token is **automation-class** — bypasses 2FA for CI but is tied to the maintainer's 2FA enrollment. If the token leaks: revoke at npm immediately, rotate, update the GH secret.
+
+## Monorepo subpackage extras
+
+For packages under `Preflight/packages/*`:
+
+- The **root** `package.json` is `private: true` — it never publishes.
+- Each subpackage's `repository.directory` field must point to `packages/<name>` so npm provenance resolves the correct path in the GitHub tree.
+- Inter-package deps that cross the monorepo boundary (e.g. `agent-gate` depends on `@bilkobibitkov/preflight-license`) must reference the **published version**, not `workspace:*`, in the shipped tarball. Changesets handles this during `changeset version`.
+- `pnpm -r build` builds all subpackages; `pnpm -r test` tests all. CI runs both before publish.
+
+## Publish checklist
+
+Run this before every `git tag v<ver> && git push --tags`:
+
+```
+[ ] pnpm build                         — exits 0, dist/ updated
+[ ] pnpm test                          — all green
+[ ] pnpm typecheck                     — no type errors
+[ ] pnpm pack --dry-run                — LICENSE in file list, size under cap
+[ ] CHANGELOG.md has entry for <ver>   — no version gaps
+[ ] package.json version matches tag   — no off-by-one
+[ ] .github/workflows/release.yml      — workflow file present and pinned
+```
+
+For Changesets-managed repos, `pnpm changeset version` handles the version bump and CHANGELOG update. The checklist applies after that command.
+
+## `files` field integrity
+
+Every path listed in `"files"` must exist on disk at publish time. A missing file ships silently (npm won't error; consumers just don't get it). The most common footgun is listing `"LICENSE"` without the file on disk.
+
+Before tagging, always run `pnpm pack --dry-run` and grep the output for every path you declared in `files`.
+
+## Naming conventions
+
+| Concern | Convention |
+|---|---|
+| Scoped package name | `@bilkobibitkov/<name>` |
+| Binary name | `<name>` (matches the `bin` key and the npm package short name) |
+| Tag format (single-package repo) | `v<semver>` (e.g. `v1.2.3`) |
+| Tag format (monorepo subpackage) | `<pkg>-v<semver>` (e.g. `agent-trace-v0.4.4`) |
+| Dist directory | `dist/` — never commit this; build in CI |
+| Styles directory | `styles/` — commit as-is; raw CSS tokens ship as source |
+
+## Size budgets
+
+`pnpm pack --dry-run` output must stay under:
+
+| Kind | Packed size cap |
+|---|---|
+| Library (e.g. host-kit) | 200 KB |
+| CLI (e.g. agent-trace) | 50 KB |
+| Small lib (e.g. sudoku-engine) | 30 KB |
+
+If you exceed the cap: audit `files`, strip test fixtures from the tarball, and confirm `dist/` doesn't include source maps in production.
 
 ## Cross-references
 

@@ -33,10 +33,6 @@ try {
   process.exit(1);
 }
 
-if (isProd && !process.env.ANTHROPIC_API_KEY_ACADEMY) {
-  console.error('[Boot] ANTHROPIC_API_KEY_ACADEMY not set — refusing to start in production.');
-  process.exit(1);
-}
 
 const app = Fastify({
   logger: { level: 'warn' },

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "slug": "cellar",
+  "version": "0.1.0",
+  "builtAt": "2026-05-10T09:00:47.954Z",
+  "gitSha": "unknown",
+  "gitBranch": "unknown",
+  "hostKit": {
+    "version": "0.7.2"
+  },
+  "golden": {
+    "path": "/projects/cellar/",
+    "expect": "bilko-cellar"
+  },
+  "health": {},
+  "bundle": {
+    "sizeBytesGz": 218128,
+    "fileCount": 5
+  }
+}

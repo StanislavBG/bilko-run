@@ -464,15 +464,26 @@
 .pf-level-row .pf-cta { font-family: var(--pf-font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pf-accent); }
 
 /* ============ Workflows ============ */
+.pf-wf-section-title {
+  font-family: var(--pf-font-mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--pf-ink-3); margin: 40px 0 16px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--pf-ink);
+}
+.pf-wf-channels { margin-bottom: 20px; }
+.pf-wf-channel-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0; border-top: 1px solid var(--pf-rule); }
+.pf-wf-channel-list li { border-bottom: 1px solid var(--pf-rule); }
+.pf-wf-channel-list a {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  padding: 16px 16px; text-decoration: none; transition: padding 0.2s, background 0.2s;
+}
+.pf-wf-channel-list a:hover { padding-left: 24px; background: var(--pf-paper); }
+.pf-wf-channel-label { font-family: var(--pf-font-display); font-size: 18px; color: var(--pf-ink); }
+.pf-wf-channel-handle { font-family: var(--pf-font-mono); font-size: 12px; color: var(--pf-ink-2); }
 .pf-wf-table { width: 100%; border-collapse: collapse; }
 .pf-wf-table th { text-align: left; font-family: var(--pf-font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pf-ink-3); padding: 12px 16px; border-bottom: 1px solid var(--pf-ink); }
-.pf-wf-table td { padding: 18px 16px; border-bottom: 1px solid var(--pf-rule); font-size: 14px; }
+.pf-wf-table td { padding: 18px 16px; border-bottom: 1px solid var(--pf-rule); font-size: 14px; vertical-align: top; }
 .pf-wf-table tr:hover td { background: var(--pf-paper); }
 .pf-wf-table .pf-name { font-family: var(--pf-font-display); font-size: 22px; }
-.pf-wf-status { display: inline-flex; align-items: center; gap: 6px; font-family: var(--pf-font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
-.pf-wf-status .pf-d { width: 8px; height: 8px; border-radius: 50%; }
-.pf-wf-status.running .pf-d { background: var(--pf-green); animation: pf-pulse 2s infinite; }
-.pf-wf-status.idle .pf-d { background: var(--pf-ink-3); }
 
 /* ============ Contact ============ */
 .pf-contact {

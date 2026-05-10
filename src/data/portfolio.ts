@@ -43,9 +43,16 @@ export interface AcademyLevel {
 export interface Workflow {
   id: string;
   name: string;
-  status: 'running' | 'idle';
-  lastRun: string;
-  runs: number;
+  cadence: string;
+  desc: string;
+}
+
+export interface Channel {
+  id: string;
+  label: string;
+  handle: string;
+  href: string;
+  kind: 'x' | 'facebook' | 'blog';
 }
 
 const COLORS: ReadonlyArray<'tang' | 'ink' | 'blue'> = ['tang', 'ink', 'blue'];
@@ -99,12 +106,30 @@ export const ACADEMY_LEVELS: readonly AcademyLevel[] = [
   { n: 5, name: 'Architect',   desc: 'Rules-first systems that scale to many flows.' },
 ];
 
+// Real pipelines orchestrated by Burrow (local-first agent at ~/Projects/burrow).
+// Cron tick every 5min picks the highest-priority overdue pipeline; cadences below
+// are target intervals enforced by the scheduler, not fixed clocks.
 export const WORKFLOWS: readonly Workflow[] = [
-  { id: 'wf-news',   name: 'Daily news digest',     status: 'running', lastRun: '2h ago',  runs: 142 },
-  { id: 'wf-blog',   name: 'Blog draft pipeline',   status: 'running', lastRun: '12h ago', runs: 38 },
-  { id: 'wf-social', name: 'Social cross-post',     status: 'running', lastRun: '1h ago',  runs: 261 },
-  { id: 'wf-audit',  name: 'Rules audit (nightly)', status: 'idle',    lastRun: '8h ago',  runs: 89 },
-  { id: 'wf-image',  name: 'Brand image batch',     status: 'running', lastRun: '20m ago', runs: 51 },
+  { id: 'wf-orch',        name: 'Orchestrator tick',     cadence: 'every 5 min',  desc: 'Cron-driven scheduler. Picks the highest-priority overdue pipeline, claims the browser lock, runs it.' },
+  { id: 'wf-keepalive',   name: 'Browser keepalive',     cadence: 'every 12 min', desc: 'Keeps the headed Chromium session warm so social pipelines never cold-start a login.' },
+  { id: 'wf-reddit',      name: 'Reddit session',        cadence: 'every ~3h',    desc: 'Human-paced scroll across 78 subreddits. Captures, classifies, drafts replies via Claude.' },
+  { id: 'wf-x',           name: 'X session',             cadence: 'every ~3h',    desc: 'Scroll, draft post, high-opportunity replies. Daily caps: 1 reply, 1 post.' },
+  { id: 'wf-linkedin',    name: 'LinkedIn session',      cadence: 'every ~12h',   desc: 'Gather-only mode while the algorithm penalty cools off. Captures feed into the brain.' },
+  { id: 'wf-fb-football', name: 'FB Football news',      cadence: 'every ~6h',    desc: 'Posts as European Football Daily. Web-search sourcing + image-gen via Gemini.' },
+  { id: 'wf-fb-bilko',    name: 'FB Bilko post',         cadence: 'every ~24h',   desc: 'Posts as Bilko Bibitkov page. AI-education micro-essays with generated imagery.' },
+  { id: 'wf-index',       name: 'Knowledge indexer',     cadence: 'every ~4h',    desc: 'Inbox → chunk → embed (nomic-embed-text-v1.5) → ChromaDB. Distills insights with Claude.' },
+  { id: 'wf-sentiment',   name: 'Sentiment scoring',     cadence: 'every ~4h',    desc: 'Scores post sentiment across captured platforms into analytics.db.' },
+  { id: 'wf-themes',      name: 'Themes extraction',     cadence: 'every ~4h',    desc: 'LLM-clusters daily themes from indexed chunks. Surfaces what the brain is talking about.' },
+  { id: 'wf-stats',       name: 'Stats snapshot',        cadence: 'every ~6h',    desc: 'Daily metrics rolled into stats.db — posts, replies, follows, captures, brain growth.' },
+  { id: 'wf-retention',   name: 'Capture retention',     cadence: 'weekly · Sun 5am', desc: 'Sweeps archived captures older than 30 days. Keeps the brain fresh.' },
+];
+
+export const CHANNELS: readonly Channel[] = [
+  { id: 'x-bilko',     kind: 'x',        label: 'X · CEO / builder',         handle: '@BilkoBibitkov',         href: 'https://x.com/BilkoBibitkov' },
+  { id: 'x-bglabs',    kind: 'x',        label: 'X · BG Labs',               handle: '@Bilko_BGLabs',          href: 'https://x.com/Bilko_BGLabs' },
+  { id: 'fb-bilko',    kind: 'facebook', label: 'Facebook · Bilko Bibitkov', handle: 'Vibe Coding CEO',        href: 'https://www.facebook.com/profile.php?id=61586788196871' },
+  { id: 'fb-football', kind: 'facebook', label: 'Facebook · Football',       handle: 'European Football Daily', href: 'https://www.facebook.com/profile.php?id=61587170666602' },
+  { id: 'blog',        kind: 'blog',     label: 'Blog',                      handle: 'bilko.run/blog',         href: '/blog' },
 ];
 
 export const NOW_ITEMS: readonly string[] = [

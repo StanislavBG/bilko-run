@@ -11,25 +11,26 @@ type Filter = typeof FILTERS[number];
  * Display order for category groups. Anything not in this list falls to the
  * end and renders in the order it first appears in the registry.
  *
- * Rule: distinct / non-remote-LLM categories first; Gemini-backed AI tools
- * at the bottom. Within each category, registry array order applies.
+ * Rule: distinct / non-remote-LLM categories first; Boat Shooter is on-hold
+ * but stays above the AI block; live-LLM Gemini tools cluster at the bottom.
+ * Within each category, registry array order applies.
  */
 const CATEGORY_ORDER: readonly string[] = [
-  // distinct, no remote LLM
-  'Game · Puzzle',
-  'Game',
-  'AI Tool · Productivity',   // local-score (browser WebGPU), outdoor-hours (no LLM)
-  'Dev Tool · CLI',
-  'Dev Tool · Library',
-  'Data · Portfolio',
-  'AI Tool · Dev',            // stepproof (BYOK CLI marketing page)
-  'Learn',
-  // live remote LLM (Gemini)
-  'AI Tool · Marketing',
-  'AI Tool · Content',
-  'AI Tool · Ops',
-  'AI Tool · Data',
-  'AI Tool · Design',
+  // distinct, top of page
+  'Data · Portfolio',         // git-viewer
+  'AI Tool · Productivity',   // outdoor-hours (then local-score within group)
+  'Game · Puzzle',            // sudoku, mindswiffer
+  'Dev Tool · CLI',           // session-manager
+  'Learn',                    // academy (also has its own /academy tab)
+  'Dev Tool · Library',       // bilko-flow
+  'Game',                     // Boat Shooter (on-hold) — last of distinct block
+  // live remote LLM (Gemini-backed)
+  'AI Tool · Data',           // social-signals-trader
+  'AI Tool · Marketing',      // page-roast, launch-grader
+  'AI Tool · Content',        // headline, thread, ad, email, audience
+  'AI Tool · Dev',            // stepproof
+  'AI Tool · Ops',            // stack-audit
+  'AI Tool · Design',         // bglabs
 ];
 
 interface Group {

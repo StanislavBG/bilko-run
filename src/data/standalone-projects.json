@@ -1,5 +1,41 @@
 [
   {
+    "slug": "git-viewer",
+    "name": "gitoverview",
+    "tagline": "Personal GitHub portfolio dashboard for StanislavBG",
+    "category": "Data · Portfolio",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/git-viewer/",
+      "sourceRepo": "github.com/StanislavBG/git-viewer",
+      "localPath": "~/Projects/git-viewer"
+    },
+    "tags": [
+      "Browser",
+      "Free"
+    ]
+  },
+  {
+    "slug": "outdoor-hours",
+    "name": "OutdoorHours",
+    "tagline": "KOUT-7: ten years of comfortable hours, scored",
+    "category": "AI Tool · Productivity",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/outdoor-hours/",
+      "sourceRepo": "github.com/StanislavBG/outdoor-hours",
+      "localPath": "~/Projects/Outdoor-Hours"
+    },
+    "tags": [
+      "Data",
+      "Free"
+    ]
+  },
+  {
     "slug": "sudoku",
     "name": "Sudoku",
     "tagline": "A clean, calm, free Sudoku — Bilko's second game.",
@@ -41,21 +77,39 @@
     ]
   },
   {
-    "slug": "game-academy",
-    "name": "Boat Shooter",
-    "tagline": "Browser arcade shooter — first entry in the Bilko Game Academy.",
-    "category": "Game",
+    "slug": "session-manager",
+    "name": "Session Manager",
+    "tagline": "Local cockpit for Claude Code CLI sessions",
+    "category": "Dev Tool · CLI",
     "status": "live",
     "year": 2026,
     "host": {
-      "kind": "static-path",
-      "path": "/projects/game-academy/",
-      "sourceRepo": "github.com/StanislavBG/Bilko-Game-Academy",
-      "localPath": "~/Projects/Bilko-Game-Academy"
+      "kind": "external-url",
+      "url": "https://www.npmjs.com/package/claude-code-session-manager",
+      "sourceRepo": "github.com/StanislavBG/session-manager"
     },
     "tags": [
-      "Canvas",
-      "Arcade"
+      "Electron",
+      "CLI",
+      "Free"
+    ]
+  },
+  {
+    "slug": "academy",
+    "name": "Academy",
+    "tagline": "Free, ad-free AI fundamentals for humans — every claim cited.",
+    "category": "Learn",
+    "status": "draft",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/academy/",
+      "sourceRepo": "github.com/StanislavBG/Bilko-Academy",
+      "localPath": "~/Projects/Bilko-Academy"
+    },
+    "tags": [
+      "Learn",
+      "Free"
     ]
   },
   {
@@ -77,42 +131,6 @@
     ]
   },
   {
-    "slug": "outdoor-hours",
-    "name": "OutdoorHours",
-    "tagline": "KOUT-7: ten years of comfortable hours, scored",
-    "category": "AI Tool · Productivity",
-    "status": "live",
-    "year": 2026,
-    "host": {
-      "kind": "static-path",
-      "path": "/projects/outdoor-hours/",
-      "sourceRepo": "github.com/StanislavBG/outdoor-hours",
-      "localPath": "~/Projects/Outdoor-Hours"
-    },
-    "tags": [
-      "Data",
-      "Free"
-    ]
-  },
-  {
-    "slug": "session-manager",
-    "name": "Session Manager",
-    "tagline": "Local cockpit for Claude Code CLI sessions",
-    "category": "Dev Tool · CLI",
-    "status": "live",
-    "year": 2026,
-    "host": {
-      "kind": "external-url",
-      "url": "https://www.npmjs.com/package/claude-code-session-manager",
-      "sourceRepo": "github.com/StanislavBG/session-manager"
-    },
-    "tags": [
-      "Electron",
-      "CLI",
-      "Free"
-    ]
-  },
-  {
     "slug": "bilko-flow",
     "name": "bilko-flow",
     "tagline": "Deterministic workflows from natural-language goals",
@@ -130,57 +148,40 @@
     ]
   },
   {
-    "slug": "git-viewer",
-    "name": "gitoverview",
-    "tagline": "Personal GitHub portfolio dashboard for StanislavBG",
-    "category": "Data · Portfolio",
+    "slug": "game-academy",
+    "name": "Boat Shooter",
+    "tagline": "(on hold) — Browser arcade shooter — first entry in the Bilko Game Academy.",
+    "category": "Game",
     "status": "live",
     "year": 2026,
     "host": {
       "kind": "static-path",
-      "path": "/projects/git-viewer/",
-      "sourceRepo": "github.com/StanislavBG/git-viewer",
-      "localPath": "~/Projects/git-viewer"
+      "path": "/projects/game-academy/",
+      "sourceRepo": "github.com/StanislavBG/Bilko-Game-Academy",
+      "localPath": "~/Projects/Bilko-Game-Academy"
     },
     "tags": [
-      "Browser",
-      "Free"
+      "On hold",
+      "Canvas",
+      "Arcade"
     ]
   },
   {
-    "slug": "stepproof",
-    "name": "Stepproof",
-    "tagline": "Regression tests for AI pipelines",
-    "category": "AI Tool · Dev",
+    "slug": "social-signals-trader",
+    "name": "Social Signals Trader",
+    "tagline": "Autonomous trading bots reading 10 subreddits — live results, in public.",
+    "category": "AI Tool · Data",
     "status": "live",
     "year": 2026,
     "host": {
       "kind": "static-path",
-      "path": "/projects/stepproof/",
-      "sourceRepo": "github.com/StanislavBG/stepproof-page",
-      "localPath": "~/Projects/Stepproof"
+      "path": "/projects/social-signals-trader/",
+      "sourceRepo": "github.com/StanislavBG/social-signals-trader",
+      "localPath": "~/Projects/social-signals-trader"
     },
     "tags": [
-      "YAML",
-      "BYOK",
-      "Free"
-    ]
-  },
-  {
-    "slug": "academy",
-    "name": "Academy",
-    "tagline": "Free, ad-free AI fundamentals for humans — every claim cited.",
-    "category": "Learn",
-    "status": "draft",
-    "year": 2026,
-    "host": {
-      "kind": "static-path",
-      "path": "/projects/academy/",
-      "sourceRepo": "github.com/StanislavBG/Bilko-Academy",
-      "localPath": "~/Projects/Bilko-Academy"
-    },
-    "tags": [
-      "Learn",
+      "Reddit",
+      "Alpaca",
       "Free"
     ]
   },
@@ -236,6 +237,25 @@
     "tags": [
       "X/Twitter",
       "Viral"
+    ]
+  },
+  {
+    "slug": "stepproof",
+    "name": "Stepproof",
+    "tagline": "Regression tests for AI pipelines",
+    "category": "AI Tool · Dev",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/stepproof/",
+      "sourceRepo": "github.com/StanislavBG/stepproof-page",
+      "localPath": "~/Projects/Stepproof"
+    },
+    "tags": [
+      "YAML",
+      "BYOK",
+      "Free"
     ]
   },
   {
@@ -326,25 +346,6 @@
     "tags": [
       "Ops",
       "Cost"
-    ]
-  },
-  {
-    "slug": "social-signals-trader",
-    "name": "Social Signals Trader",
-    "tagline": "Autonomous trading bots reading 10 subreddits — live results, in public.",
-    "category": "AI Tool · Data",
-    "status": "live",
-    "year": 2026,
-    "host": {
-      "kind": "static-path",
-      "path": "/projects/social-signals-trader/",
-      "sourceRepo": "github.com/StanislavBG/social-signals-trader",
-      "localPath": "~/Projects/social-signals-trader"
-    },
-    "tags": [
-      "Reddit",
-      "Alpaca",
-      "Free"
     ]
   },
   {

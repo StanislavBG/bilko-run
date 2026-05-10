@@ -364,5 +364,34 @@
       "Canvas",
       "Animation"
     ]
+  },
+  {
+    "slug": "fizzpop",
+    "name": "FizzPop",
+    "tagline": "Aim, pop, repeat. The daily bubble shooter — every puzzle solver-validated.",
+    "category": "Game · Arcade",
+    "status": "draft",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/fizzpop/",
+      "sourceRepo": "github.com/StanislavBG/Bilko-Fizzpop"
+    },
+    "tags": ["Game", "Arcade", "Bubble Shooter", "Daily", "Free"]
+  },
+  {
+    "slug": "etch",
+    "name": "Etch",
+    "tagline": "A clean-room nonogram. Solvable by thinking, never by guessing.",
+    "category": "Game · Puzzle",
+    "status": "draft",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/etch/",
+      "sourceRepo": "github.com/StanislavBG/Bilko-Etch",
+      "localPath": "~/Projects/Bilko-Etch"
+    },
+    "tags": ["Game", "Puzzle", "Free", "No-guess"]
   }
 ]

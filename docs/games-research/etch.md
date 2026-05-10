@@ -1,5 +1,7 @@
 # Etch market research + Bilko-Etch design brief
 
+**Implementation status (as of 2026-05-10):** This brief is the source-of-truth for the Etch PRD chain (110–116) currently scheduled in `~/.claude/session-manager/scheduled-plans/prds/`. Sibling repo target: `~/Projects/Bilko-Etch/`. Canonical URL: `bilko.run/projects/etch/`. Five new visual tokens land in `@bilkobibitkov/host-kit` `styles/game-tokens.css`: `--clue-size`, `--cross-mark`, `--clue-done`, `--major-line`, `--reveal-glow`. The "no-guess" guarantee from MindSwiffer transfers to Etch — every puzzle is solvable by line-by-line deduction at its declared difficulty.
+
 Reference doc that grounds the Etch PRD set (47–52, TBA). Read this before picking up any of those PRDs — it's the "why" behind every UI choice. Every subsequent PRD references this file, not the internet.
 
 Etch is the Bilko-house re-implementation of the **nonogram** (a.k.a. Picross, Griddler, Hanjie, Paint-by-Numbers): a logic puzzle where the player fills cells in a grid using row and column digit-clues until a hidden pixel picture emerges. It is the third entry in the Bilko Game Studio after [Sudoku](../sudoku-research.md) and [MindSwiffer](../mindswiffer-research.md), and the first one whose end-state is a *picture*, not a number grid.

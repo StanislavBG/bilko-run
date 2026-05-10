@@ -89,3 +89,6 @@ Each blog post becomes a podcast episode:
 - Social shares (X + LinkedIn)
 - Tool signups from blog (utm tracking)
 - Email captures from blog
+
+## Next Post Ideas
+- Etch — building Mario's Picross from scratch in N PRDs and one weekend, with a verified no-guess generator + Wordle-style picture share-tile.

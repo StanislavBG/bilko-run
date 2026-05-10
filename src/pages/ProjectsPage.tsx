@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/portfolio/PageHeader.js';
 import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { PORTFOLIO_PROJECTS, type PortfolioProject } from '../data/portfolio.js';
@@ -110,6 +110,16 @@ export function ProjectsPage() {
                 <div className="pf-foot">
                   <span className={`pf-status ${p.status.toLowerCase()}`}>{p.status}</span>
                   {p.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}
+                  {p.kind.includes('Game') && (
+                    <Link
+                      to="/games"
+                      className="pf-chip"
+                      onClick={e => e.stopPropagation()}
+                      style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}
+                    >
+                      Play in arcade →
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}

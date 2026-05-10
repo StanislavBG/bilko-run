@@ -10,12 +10,26 @@ type Filter = typeof FILTERS[number];
 /**
  * Display order for category groups. Anything not in this list falls to the
  * end and renders in the order it first appears in the registry.
+ *
+ * Rule: distinct / non-remote-LLM categories first; Gemini-backed AI tools
+ * at the bottom. Within each category, registry array order applies.
  */
 const CATEGORY_ORDER: readonly string[] = [
-  'AI Tool · Content',
-  'AI Tool · Productivity',
-  'AI Tool · Dev',
+  // distinct, no remote LLM
+  'Game · Puzzle',
   'Game',
+  'AI Tool · Productivity',   // local-score (browser WebGPU), outdoor-hours (no LLM)
+  'Dev Tool · CLI',
+  'Dev Tool · Library',
+  'Data · Portfolio',
+  'AI Tool · Dev',            // stepproof (BYOK CLI marketing page)
+  'Learn',
+  // live remote LLM (Gemini)
+  'AI Tool · Marketing',
+  'AI Tool · Content',
+  'AI Tool · Ops',
+  'AI Tool · Data',
+  'AI Tool · Design',
 ];
 
 interface Group {

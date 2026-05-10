@@ -4,6 +4,10 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Load cron-specific env (GITHUB_TOKEN, etc.) if present
+# shellcheck source=/dev/null
+[[ -f "$HOME/.env.cron" ]] && source "$HOME/.env.cron"
 REPORT_DIR="$REPO_ROOT/test-results"
 TIMESTAMP="$(TZ=America/Los_Angeles date '+%Y-%m-%d-%H-%M')"
 REPORT_FILE="$REPORT_DIR/sanity-qa-${TIMESTAMP}.md"
@@ -53,10 +57,12 @@ if [[ "$DECISION" == "FAIL" || "$DECISION" == "ERROR" ]]; then
   fi
 fi
 
-# Commit the report so it's visible in the repo
+# Commit and push the report to both remotes
 if [[ -f "$REPORT_FILE" ]]; then
   git add "$REPORT_FILE" || true
   git commit -m "chore(qa): sanity-qa ${DECISION} ${TIMESTAMP}" || true
+  git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"
+  git push content-grade main || echo "[sanity-qa-cron] push content-grade failed (non-fatal)"
 fi
 
 exit $EXIT_CODE

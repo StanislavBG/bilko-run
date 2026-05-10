@@ -365,7 +365,19 @@ Exit codes: `0` = PASS, `1` = FAIL, `2` = internal error.
 
 ### Reports
 
-Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md`. The nightly cron (`93-sanity-qa-cron.md`, 03:00 PDT) commits the report and opens a GitHub issue tagged `qa-failure` on FAIL.
+Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md`. The nightly cron (03:00 PDT) commits the report and opens a GitHub issue tagged `qa-failure` on FAIL.
+
+### Cron schedule
+
+```
+0 10 * * * cd /home/bilko/Projects/Bilko && bash scripts/sanity-qa-cron.sh >> /tmp/sanity-qa-cron.log 2>&1
+```
+
+`10:00 UTC = 03:00 PDT` (DST anchor; during PST it fires at 02:00 PST — acceptable).
+
+- On FAIL or ERROR: opens a GitHub issue on `StanislavBG/bilko-run` tagged `qa-failure` with the first 60 lines of the report (requires `gh` CLI; token sourced from `~/.env.cron`).
+- Report committed to `test-results/` and pushed to both `origin` and `content-grade` remotes.
+- PRD: `~/.claude/session-manager/scheduled-plans/prds/93-sanity-qa-cron.md`.
 
 ### Prompt files (AI-subagent mode)
 

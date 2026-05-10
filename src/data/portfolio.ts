@@ -4,7 +4,14 @@ import { PACKAGES } from './packages.js';
 export interface Section {
   id: string;
   label: string;
+  /** React-Router path used for active-state matching. */
   path: string;
+  /**
+   * When set, clicking this nav item navigates to this URL via a full-page
+   * navigation (<a href>) rather than a React-Router push. Use for
+   * static-path siblings that live outside the host SPA.
+   */
+  href?: string;
   icon: string;
   desc: string;
   tag: string;
@@ -45,6 +52,8 @@ export interface Workflow {
   name: string;
   cadence: string;
   desc: string;
+  /** Public destination this workflow posts into, if any. */
+  output?: { label: string; href: string };
 }
 
 export interface Channel {
@@ -87,7 +96,7 @@ export const SECTIONS: readonly Section[] = [
   { id: 'games',     label: 'Games',       path: '/games',     icon: '◈', desc: 'A small arcade of free, ad-free browser games.', tag: `${GAME_COUNT} live` },
   { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: '1 playable' },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
-  { id: 'academy',   label: 'Academy',     path: '/academy',   icon: '▲', desc: 'Structured AI learning paths. Free, opinionated.', tag: '5 levels' },
+  { id: 'academy',   label: 'Academy',     path: '/academy',   href: '/projects/academy/', icon: '▲', desc: 'Three-module AI fundamentals. Free, ad-free, every claim cited.', tag: '3 modules' },
   { id: 'workflows', label: 'Workflows',   path: '/workflows', icon: '↯', desc: 'Background AI agents and automations running 24/7.', tag: 'running' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
 ];
@@ -113,16 +122,24 @@ export const WORKFLOWS: readonly Workflow[] = [
   { id: 'wf-orch',        name: 'Orchestrator tick',     cadence: 'every 5 min',  desc: 'Cron-driven scheduler. Picks the highest-priority overdue pipeline, claims the browser lock, runs it.' },
   { id: 'wf-keepalive',   name: 'Browser keepalive',     cadence: 'every 12 min', desc: 'Keeps the headed Chromium session warm so social pipelines never cold-start a login.' },
   { id: 'wf-reddit',      name: 'Reddit session',        cadence: 'every ~3h',    desc: 'Human-paced scroll across 78 subreddits. Captures, classifies, drafts replies via Claude.' },
-  { id: 'wf-x',           name: 'X session',             cadence: 'every ~3h',    desc: 'Scroll, draft post, high-opportunity replies. Daily caps: 1 reply, 1 post.' },
+  { id: 'wf-x',           name: 'X session',             cadence: 'every ~3h',    desc: 'Scroll, draft post, high-opportunity replies. Daily caps: 1 reply, 1 post.', output: { label: 'Follow @BilkoBibitkov', href: 'https://x.com/BilkoBibitkov' } },
   { id: 'wf-linkedin',    name: 'LinkedIn session',      cadence: 'every ~12h',   desc: 'Gather-only mode while the algorithm penalty cools off. Captures feed into the brain.' },
-  { id: 'wf-fb-football', name: 'FB Football news',      cadence: 'every ~6h',    desc: 'Posts as European Football Daily. Web-search sourcing + image-gen via Gemini.' },
-  { id: 'wf-fb-bilko',    name: 'FB Bilko post',         cadence: 'every ~24h',   desc: 'Posts as Bilko Bibitkov page. AI-education micro-essays with generated imagery.' },
+  { id: 'wf-fb-football', name: 'FB Football news',      cadence: 'every ~6h',    desc: 'Posts as European Football Daily. Web-search sourcing + image-gen via Gemini.', output: { label: 'Follow European Football Daily', href: 'https://www.facebook.com/profile.php?id=61587170666602' } },
+  { id: 'wf-fb-bilko',    name: 'FB Bilko post',         cadence: 'every ~24h',   desc: 'Posts as Bilko Bibitkov page. AI-education micro-essays with generated imagery.', output: { label: 'Follow Bilko Bibitkov', href: 'https://www.facebook.com/profile.php?id=61586788196871' } },
   { id: 'wf-index',       name: 'Knowledge indexer',     cadence: 'every ~4h',    desc: 'Inbox → chunk → embed (nomic-embed-text-v1.5) → ChromaDB. Distills insights with Claude.' },
   { id: 'wf-sentiment',   name: 'Sentiment scoring',     cadence: 'every ~4h',    desc: 'Scores post sentiment across captured platforms into analytics.db.' },
   { id: 'wf-themes',      name: 'Themes extraction',     cadence: 'every ~4h',    desc: 'LLM-clusters daily themes from indexed chunks. Surfaces what the brain is talking about.' },
   { id: 'wf-stats',       name: 'Stats snapshot',        cadence: 'every ~6h',    desc: 'Daily metrics rolled into stats.db — posts, replies, follows, captures, brain growth.' },
   { id: 'wf-retention',   name: 'Capture retention',     cadence: 'weekly · Sun 5am', desc: 'Sweeps archived captures older than 30 days. Keeps the brain fresh.' },
 ];
+
+export const WORKFLOWS_SUMMARY = {
+  pipelinesCount: 12,
+  channelsCount: 5,
+  postingCadenceLine: '4 posts/day cap across X + Facebook · replies on human-paced scrolls',
+  blurb:
+    "Burrow is a local-first agent running on Bilko's machine. It drives a single headed Chromium session through Reddit, X, LinkedIn, and Facebook at human speed, drafts replies and posts via Claude, and keeps a 5,500+ chunk knowledge brain (ChromaDB + nomic embeddings). All output goes to the public channels below — that's where you'll see it.",
+} as const;
 
 export const CHANNELS: readonly Channel[] = [
   { id: 'x-bilko',     kind: 'x',        label: 'X · CEO / builder',         handle: '@BilkoBibitkov',         href: 'https://x.com/BilkoBibitkov' },

@@ -42,6 +42,8 @@ function aggregateReferrers(list: Array<{ referrer: string; views: number }>): A
 interface Stats {
   period: { days: number; since: string };
   views: number;
+  botViews: number;
+  botUserAgents: Array<{ ua: string; views: number }>;
   todayViews: number;
   totalRoasts: number;
   totalUsers: number;
@@ -310,6 +312,30 @@ export function AdminPage() {
               <div className="bg-white rounded-xl border border-warm-200/60 p-5 mb-6">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Daily Active Users</h2>
                 <BarChart data={(stats.dailyActiveUsers ?? []).map(d => ({ key: d.date.slice(5), value: d.users }))} label="users" color="bg-purple-400" />
+              </div>
+
+              {/* Bot traffic — captured but excluded from real-visitor numbers */}
+              <div className="bg-white rounded-xl border border-warm-200/60 p-5 mb-6">
+                <div className="flex items-baseline justify-between mb-4">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400">Bot &amp; Crawler Traffic</h2>
+                  <span className="text-xs text-warm-400">excluded from numbers above · captured for the record</span>
+                </div>
+                <div className="flex items-baseline gap-4 mb-4">
+                  <span className="text-3xl font-black text-warm-900">{stats.botViews ?? 0}</span>
+                  <span className="text-sm text-warm-500">bot hits in last {stats.period.days}d</span>
+                </div>
+                {stats.botUserAgents && stats.botUserAgents.length > 0 ? (
+                  <div className="space-y-1">
+                    {stats.botUserAgents.map(b => (
+                      <div key={b.ua} className="flex items-center justify-between text-xs">
+                        <span className="text-warm-600 font-mono truncate" title={b.ua}>{b.ua.slice(0, 80)}</span>
+                        <span className="text-warm-900 font-bold ml-3">{b.views}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-warm-400">No bot traffic logged yet.</p>
+                )}
               </div>
 
               {/* Pages + Referrers */}

@@ -90,8 +90,10 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const visitorId = (body?.visitor_id ?? '').slice(0, 64) || null;
       const sessionId = (body?.session_id ?? '').slice(0, 64) || null;
 
+      // Capture bot traffic too — admin needs to be able to see what's hitting
+      // the site (random internet traffic, scrapers, link-unfurlers). Reports
+      // filter is_bot = 0 by default so the visible numbers don't shift.
       const bot = isBot(ua) ? 1 : 0;
-      if (bot) return { ok: true };
 
       const refHost = parseRefHost(referrer);
       const { bucket: sourceBucket } = await classifyReferrer(refHost);
@@ -196,7 +198,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
     const [
-      totalViews, byDay, byPage, byReferrer, todayViews,
+      totalViews, byDay, byPage, byReferrer, todayViews, botViews, botUserAgents,
       totalRoasts, totalUsers, topUsers, tokenPurchases,
       signupsByDay, roastsByDay, recentUserRoasts, activityFeed,
       revenueSingle, revenueBundle, toolUsage, toolVisits,
@@ -212,6 +214,10 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       dbAll(`SELECT path, COUNT(*) as views FROM page_views WHERE date >= ?${excludeAdmins} GROUP BY path ORDER BY views DESC LIMIT 20`, since, ...adminArgs),
       dbAll(`SELECT referrer, COUNT(*) as views FROM page_views WHERE date >= ? AND referrer IS NOT NULL AND referrer != ''${excludeAdmins} GROUP BY referrer ORDER BY views DESC LIMIT 20`, since, ...adminArgs),
       dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date = ?${excludeAdmins}`, today, ...adminArgs),
+      // Bot traffic since `since` — captured but excluded from real-traffic numbers.
+      dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ? AND is_bot = 1`, since),
+      // Top bot user-agents so admin can see who's hitting the site.
+      dbAll(`SELECT COALESCE(ua, '(empty)') as ua, COUNT(*) as views FROM page_views WHERE date >= ? AND is_bot = 1 GROUP BY ua ORDER BY views DESC LIMIT 10`, since),
       dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history'),
       dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances'),
       dbAll(`
@@ -277,6 +283,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     return {
       period: { days, since },
       views: totalViews?.n ?? 0,
+      botViews: botViews?.n ?? 0,
+      botUserAgents,
       todayViews: todayViews?.n ?? 0,
       totalRoasts: totalRoasts?.n ?? 0,
       totalUsers: totalUsers?.n ?? 0,
@@ -315,6 +323,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
   function buildAdminExclusion(req: any): { excludeAdmins: string; adminArgs: unknown[]; since: string; sinceMs: number } {
     const sinceParam = (req.query as any)?.since;
     const excludeSelf = ((req.query as any)?.exclude_self ?? '1') !== '0';
+    const includeBots = ((req.query as any)?.include_bots ?? '0') === '1';
     const days = 30;
     const since = typeof sinceParam === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
       ? sinceParam
@@ -322,9 +331,11 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     const sinceMs = new Date(since + 'T00:00:00Z').getTime();
 
     const placeholders = ADMIN_EMAILS.map(() => '?').join(', ');
-    const excludeAdmins = !excludeSelf || ADMIN_EMAILS.length === 0
+    const adminFilter = !excludeSelf || ADMIN_EMAILS.length === 0
       ? ''
       : ` AND (email IS NULL OR email NOT IN (${placeholders}))`;
+    const botFilter = includeBots ? '' : ' AND is_bot = 0';
+    const excludeAdmins = adminFilter + botFilter;
     const adminArgs: unknown[] = excludeSelf ? ADMIN_EMAILS.map(e => e.toLowerCase()) : [];
     return { excludeAdmins, adminArgs, since, sinceMs };
   }

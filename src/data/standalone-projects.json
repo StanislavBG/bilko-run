@@ -330,7 +330,8 @@
     "name": "MindSwiffer",
     "tagline": "Minesweeper, swept clean. No 50/50s, ever.",
     "category": "Game · Puzzle",
-    "status": "draft",
+    "status": "live",
+    "launchedAt": "2026-05-09",
     "year": 2026,
     "host": {
       "kind": "static-path",

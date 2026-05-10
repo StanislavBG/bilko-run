@@ -92,3 +92,4 @@ Each blog post becomes a podcast episode:
 
 ## Next Post Ideas
 - Etch — building Mario's Picross from scratch in N PRDs and one weekend, with a verified no-guess generator + Wordle-style picture share-tile.
+- FizzPop — building a Daily Solvable bubble shooter, in 12 PRDs and one weekend

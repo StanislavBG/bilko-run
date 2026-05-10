@@ -13,6 +13,18 @@ export interface GameConfig {
   achievements: AchievementDef[];
 }
 
+export interface CrossGameTrigger {
+  otherSlug: string;
+  otherKey: string;
+  awardSlug: string;
+  awardKey: string;
+}
+
+export const CROSS_GAME_TRIGGERS: Record<string, CrossGameTrigger> = {
+  'sudoku:first_win':        { otherSlug: 'mindswiffer', otherKey: 'first_sweep', awardSlug: 'bilko', awardKey: 'puzzler' },
+  'mindswiffer:first_sweep': { otherSlug: 'sudoku',      otherKey: 'first_win',   awardSlug: 'bilko', awardKey: 'puzzler' },
+};
+
 export const GAME_CONFIGS: Record<string, GameConfig> = {
   'boat-shooter': {
     slug: 'boat-shooter',
@@ -22,5 +34,34 @@ export const GAME_CONFIGS: Record<string, GameConfig> = {
       { key: 'first_kill', name: 'First Blood', description: 'Land your first hit.', icon: '🎯' },
     ],
   },
-  // sudoku entries land via PRD 38-sudoku-stats-and-achievements
+  'sudoku': {
+    slug: 'sudoku',
+    scoreOrder: 'desc',
+    maxPlausibleScore: 0,
+    achievements: [
+      { key: 'first_win', name: 'First win', description: 'Solve your first Sudoku.', icon: '🔢' },
+    ],
+  },
+  'mindswiffer': {
+    slug: 'mindswiffer',
+    scoreOrder: 'asc',
+    maxPlausibleScore: 3_600_000,
+    achievements: [
+      { key: 'first_sweep',          name: 'First sweep',       description: 'Win your first MindSwiffer.',                    icon: '💣' },
+      { key: 'beginner_sub_60',      name: 'Sub-60 Beginner',   description: 'Win Beginner in under 60 seconds.',               icon: '⚡' },
+      { key: 'intermediate_sub_180', name: 'Sub-3 Intermediate', description: 'Win Intermediate in under 3 minutes.',           icon: '⚡⚡' },
+      { key: 'expert_win',           name: 'Expert sweeper',    description: 'Win on Expert difficulty.',                       icon: '🏆' },
+      { key: 'streak_7',             name: 'Week-long sweep',   description: '7-day daily streak.',                            icon: '🔥' },
+      { key: 'no_flag_win',          name: 'Flagless',          description: 'Win without placing a single flag.',              icon: '🧠' },
+      { key: 'no_hint_intermediate', name: 'Pure deduction',    description: 'Win Intermediate without using a hint.',         icon: '🪶' },
+    ],
+  },
+  'bilko': {
+    slug: 'bilko',
+    scoreOrder: 'desc',
+    maxPlausibleScore: 0,
+    achievements: [
+      { key: 'puzzler', name: 'Puzzler', description: 'Solve your first Sudoku and your first MindSwiffer.', icon: '🧩' },
+    ],
+  },
 };

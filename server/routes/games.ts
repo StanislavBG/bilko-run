@@ -89,7 +89,12 @@ export function registerGameRoutes(app: FastifyInstance): void {
       reply.code(result.status ?? 400);
       return { error: result.error };
     }
-    return { ok: true, alreadyUnlocked: result.alreadyUnlocked ?? false, unlocked_at: result.unlocked_at };
+    return {
+      ok: true,
+      alreadyUnlocked: result.alreadyUnlocked ?? false,
+      unlocked_at: result.unlocked_at,
+      ...(result.crossUnlock ? { crossUnlock: result.crossUnlock } : {}),
+    };
   });
 
   app.get('/api/games/:slug/unlocks', async (req, reply) => {

@@ -17,6 +17,7 @@ import { registerSyntheticRoutes } from './routes/synthetic.js';
 import { registerObservabilityRoutes } from './routes/admin-observability.js';
 import { registerSecretsRoutes } from './routes/admin-secrets.js';
 import { registerGameRoutes } from './routes/games.js';
+import { registerAcademyRoutes } from './routes/academy.js';
 import { registerSecurityHeaders } from './security-headers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,11 @@ try {
   await initDb();
 } catch (err) {
   console.error('[DB] Init failed, exiting:', err);
+  process.exit(1);
+}
+
+if (isProd && !process.env.ANTHROPIC_API_KEY_ACADEMY) {
+  console.error('[Boot] ANTHROPIC_API_KEY_ACADEMY not set — refusing to start in production.');
   process.exit(1);
 }
 
@@ -75,6 +81,7 @@ registerSyntheticRoutes(app);
 registerObservabilityRoutes(app);
 registerSecretsRoutes(app);
 registerGameRoutes(app);
+registerAcademyRoutes(app);
 
 // Boot-time secret age check
 try {

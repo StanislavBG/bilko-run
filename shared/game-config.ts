@@ -56,12 +56,24 @@ export const GAME_CONFIGS: Record<string, GameConfig> = {
       { key: 'no_hint_intermediate', name: 'Pure deduction',    description: 'Win Intermediate without using a hint.',         icon: '🪶' },
     ],
   },
+  'etch': {
+    slug: 'etch',
+    scoreOrder: 'desc',
+    maxPlausibleScore: 0,
+    achievements: [
+      { key: 'first_solve', name: 'First sketch', description: 'Solve your first Etch nonogram.', icon: '🖼️' },
+    ],
+  },
   'bilko': {
     slug: 'bilko',
     scoreOrder: 'desc',
     maxPlausibleScore: 0,
     achievements: [
       { key: 'puzzler', name: 'Puzzler', description: 'Solve your first Sudoku and your first MindSwiffer.', icon: '🧩' },
+      // TODO: Triple Threat — solve Sudoku + MindSwiffer + Etch (PRD 116).
+      // The existing CROSS_GAME_TRIGGERS only supports 2-game triggers. A 3-game
+      // "triple_threat" achievement needs a different trigger shape — track as a follow-up.
+      { key: 'triple_threat', name: 'Triple Threat', description: 'Solve your first Sudoku, MindSwiffer, AND Etch.', icon: '🎯', secret: true },
     ],
   },
 };

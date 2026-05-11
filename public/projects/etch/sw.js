@@ -3,22 +3,54 @@
  * Strategy: cache-first for already-loaded same-origin assets under the scope.
  * Network-first for the daily JSON so users get today's puzzle when online.
  *
+ * v0.7.0: install-time prefetch of tomorrow's daily JSON when connection is
+ * fast (effectiveType === '4g', no saveData). Saves a round-trip on the next
+ * puzzle the player loads.
+ *
  * IMPORTANT: bumping CACHE_NAME invalidates the prior cache on activate.
  */
-const CACHE_NAME = 'etch-v0.4.0';
+const CACHE_NAME = 'etch-v0.7.0';
 const SCOPE = self.registration.scope; // ends with /projects/etch/
+
+function networkOk() {
+  try {
+    const conn = self.navigator && self.navigator.connection;
+    if (!conn) return true;
+    if (conn.saveData === true) return false;
+    if (typeof conn.effectiveType === 'string' && conn.effectiveType !== '4g') return false;
+    return true;
+  } catch (_e) {
+    return true;
+  }
+}
+
+function tomorrowIso() {
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  return tomorrow.toISOString().slice(0, 10);
+}
 
 self.addEventListener('install', (event) => {
   // Skip waiting so the new SW activates immediately on update.
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll([
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Core shell — always prefetch.
+      await cache.addAll([
         SCOPE,
         SCOPE + 'index.html',
         SCOPE + 'manifest.webmanifest',
-      ]).catch(() => undefined),
-    ),
+      ]).catch(() => undefined);
+      // Tomorrow's daily — only on fast networks. Best-effort; failures are
+      // silent so the worker still installs cleanly when offline.
+      if (networkOk()) {
+        const url = SCOPE + 'daily/' + tomorrowIso() + '.json';
+        try {
+          const res = await fetch(url, { cache: 'no-cache' });
+          if (res.ok) await cache.put(url, res.clone());
+        } catch (_e) { /* offline or 404; ignore */ }
+      }
+    }),
   );
 });
 

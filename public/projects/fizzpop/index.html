@@ -10,6 +10,20 @@
     <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Aim, pop, repeat. The daily bubble shooter from Bilko." />
     <title>FizzPop · Bilko</title>
+    <!-- Critical CSS for above-the-fold (topbar + board frame + HUD).
+         Inlined to keep LCP fast on cold loads; the rest of the stylesheet
+         hydrates from the main bundle. ~600 bytes raw. -->
+    <style>
+      html,body{margin:0;padding:0;background:#f4f4f5;color:#1c1c1e;font-family:system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+      html[data-theme="dark"]{background:#1c1c1e;color:#f4f4f5}
+      #root{min-height:100vh;display:flex;flex-direction:column}
+      .fp-play-shell{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden}
+      .fp-play-topbar{display:flex;align-items:center;gap:8px;padding:8px 12px;min-height:44px;flex:0 0 auto}
+      .fp-play-main{flex:1 1 auto;display:flex;align-items:stretch;justify-content:center;min-height:0}
+      .fp-canvas{display:block;max-width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+      .fp-help-btn,.fp-topbar-back{appearance:none;border:0;background:rgba(127,127,127,.12);color:inherit;width:32px;height:32px;border-radius:16px;cursor:pointer;font:inherit;font-weight:600}
+      .fp-hud{display:flex;align-items:center;gap:8px;flex:1;font-size:14px;min-width:0}
+    </style>
     <script>
       (function () {
         try {
@@ -19,8 +33,12 @@
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/projects/fizzpop/assets/index-DTxQLLhK.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/fizzpop/assets/index-C62dYesE.css">
+    <script type="module" crossorigin src="/projects/fizzpop/assets/index-BLgwSWML.js"></script>
+    <link rel="modulepreload" crossorigin href="/projects/fizzpop/assets/vendor-CoSDG3-6.js">
+    <link rel="modulepreload" crossorigin href="/projects/fizzpop/assets/vendor-react--BaANhCK.js">
+    <link rel="modulepreload" crossorigin href="/projects/fizzpop/assets/solver-DyUAMngq.js">
+    <link rel="stylesheet" crossorigin href="/projects/fizzpop/assets/vendor-react-DVjxAG5I.css">
+    <link rel="stylesheet" crossorigin href="/projects/fizzpop/assets/index-C-syE9dH.css">
   </head>
   <body>
     <div id="root"></div>

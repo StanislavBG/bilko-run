@@ -28,8 +28,23 @@
       } catch (e) {}
     })();
     </script>
-    <script type="module" crossorigin src="/projects/etch/assets/index-CGnPoMG6.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-CZh7eX1I.css">
+    <!-- Critical CSS for above-the-fold (top bar + board scroller skeleton).
+         The rest of the stylesheet loads async via Vite-injected <link>.
+         Keep this under 2 KB minified — anything heavier defeats the purpose. -->
+    <style>
+    html,body{margin:0;padding:0;background:#fafaf7;color:#1c1c1e;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+    html[data-theme="dark"]{background:#1c1c1e;color:#fafaf7}
+    html[data-theme="sepia"]{background:#f4ecd8;color:#3e2f1c}
+    #root{min-height:100dvh;display:flex;flex-direction:column}
+    .etch-shell{display:flex;flex-direction:column;min-height:100dvh}
+    .etch-topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,0.07);height:44px;box-sizing:border-box;flex:0 0 auto}
+    .etch-main{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+    .etch-footer{text-align:center;padding:6px 0;font-size:12px;opacity:0.6;height:24px;box-sizing:border-box;flex:0 0 auto}
+    .etch-board-scroller{flex:1 1 auto;min-height:0}
+    </style>
+    <script type="module" crossorigin src="/projects/etch/assets/index-Bm7juwRw.js"></script>
+    <link rel="modulepreload" crossorigin href="/projects/etch/assets/vendor-DazgiQfN.js">
+    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-B46XHh6C.css">
   </head>
   <body>
     <div id="root"></div>

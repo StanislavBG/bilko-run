@@ -102,7 +102,7 @@ export const SECTIONS: readonly Section[] = [
 ];
 
 export const GAMES: readonly PortfolioGame[] = [
-  { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade', plays: 'live', blurb: 'Browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
+  { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade', plays: 'wip',  blurb: 'Work in progress — browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
   { id: 'sudoku',       name: 'Sudoku',       genre: 'Puzzle', plays: 'live', blurb: 'Daily-streak Sudoku with hints, themes, and a11y-first input.',         color: 'blue', href: '/projects/sudoku/' },
   { id: 'mindswiffer',  name: 'Sweeper',      genre: 'Puzzle', plays: 'live', blurb: 'Minesweeper, no-guess mode, daily streaks, sound + haptics.',           color: 'ink',  href: '/projects/mindswiffer/' },
   { id: 'fizzpop',      name: 'FizzPop',      genre: 'Arcade', plays: 'live', blurb: 'Pop-the-bubbles arcade reflex game. Short loops, satisfying juice.',    color: 'tang', href: '/projects/fizzpop/' },
@@ -155,7 +155,7 @@ export const CHANNELS: readonly Channel[] = [
 export const NOW_ITEMS: readonly string[] = [
   `Shipping the ${PROJECT_COUNT}-project Bilko platform`,
   'Cooking AgentTrace (local agent observability)',
-  'Game Academy: Boat Shooter live, more on the way',
+  'Game Academy: Boat Shooter (work in progress)',
   'Building in public — see Blog',
 ];
 
@@ -164,7 +164,7 @@ export const TICKER_ITEMS: readonly string[] = [
   'PageRoast — live',
   'OutdoorHours — KOUT-7 weather report',
   'LocalScore — runs in your browser, never sees data',
-  'Game Academy: Boat Shooter playable',
+  'Game Academy: Boat Shooter — work in progress',
   'Open to collaborations',
   'Listening to: Aphex Twin',
 ];

@@ -8,9 +8,14 @@
  *   • Runtime: stale-while-revalidate for same-origin assets under our
  *     scope. Network-first for the document so users get updated builds.
  *   • Never intercept analytics, telemetry, or cross-origin requests.
+ *   • Listen for a `prefetch-assets` message from the client and warm
+ *     the lazy chunk URLs it sends, but ONLY when the client says the
+ *     connection is fast (effectiveType === '4g'). This keeps the
+ *     secondary chunks (StatsSheet, HelpCenter, ReplayViewer) hot for
+ *     the first interaction after FCP without burning data on 2G/3G.
  */
 
-const SW_VERSION = 'sudoku-v1';
+const SW_VERSION = 'sudoku-v2';
 const CACHE_NAME = `bilko-sudoku-${SW_VERSION}`;
 const SCOPE = '/projects/sudoku/';
 
@@ -82,5 +87,32 @@ self.addEventListener('fetch', (event) => {
         .catch(() => cached);
       return cached || fetchPromise;
     }),
+  );
+});
+
+/**
+ * Idle-time asset prefetch. The client posts a list of lazy-chunk URLs
+ * (StatsSheet, HelpCenter, ReplayViewer, WinModal) once after FCP. We
+ * only honour the request if the client tells us the connection is fast.
+ * Each URL is fetched at low priority and dropped into the same cache as
+ * runtime requests, so subsequent first-tap navigation hits the cache.
+ */
+self.addEventListener('message', (event) => {
+  const msg = event.data;
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type !== 'prefetch-assets') return;
+  if (msg.effectiveType && msg.effectiveType !== '4g') return;
+  const urls = Array.isArray(msg.urls) ? msg.urls : [];
+  if (urls.length === 0) return;
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        urls.map((u) =>
+          fetch(u, { credentials: 'same-origin', priority: 'low' })
+            .then((r) => r.ok && cache.put(u, r.clone()))
+            .catch(() => undefined),
+        ),
+      ),
+    ),
   );
 });

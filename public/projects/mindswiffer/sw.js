@@ -9,7 +9,7 @@
  *    (host contract — we never touch the host app's routes).
  */
 
-const VERSION = 'mindswiffer-v0.4.0';
+const VERSION = 'mindswiffer-v0.7.0';
 const PREFIX = '/projects/mindswiffer/';
 const SHELL = [
   PREFIX,

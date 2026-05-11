@@ -21,8 +21,50 @@
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/projects/cellar/assets/index-CloCrfTE.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/cellar/assets/index-BuKc35AD.css">
+    <style>
+      /* Critical-path CSS — paints the layout shell before the main bundle
+         loads. Prevents a flash of unstyled content. Keep TINY (<1 KB gz).
+         Anything fancy (animations, theme overrides, custom fonts) stays in
+         the deferred stylesheet. */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body, #root { height: 100%; margin: 0; }
+      body {
+        background: #ffffff;
+        color: #1c1c1e;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        overscroll-behavior: none;
+      }
+      html[data-theme="dark"] body { background: #0c0c0d; color: #f2f2f7; }
+      html[data-theme="hc"] body { background: #ffffff; color: #000000; }
+      /* Layout skeleton — exactly what host-kit's GameShell renders. */
+      #root > div.min-h-screen {
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+      }
+      #root > div.min-h-screen > header {
+        padding: 6px 12px;
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+        flex-shrink: 0;
+      }
+      #root > div.min-h-screen > main {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      /* Top HUD shell — fixed-height strip even before the JS hydrates. */
+      .ce-hud {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        min-height: 40px;
+      }
+    </style>
+    <script type="module" crossorigin src="/projects/cellar/assets/index-CCjwON37.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/cellar/assets/index-VlJ6PfPZ.css">
   </head>
   <body>
     <div id="root"></div>

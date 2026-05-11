@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "slug": "fizzpop",
-  "version": "0.1.0",
-  "builtAt": "2026-05-10T09:54:26.662Z",
-  "gitSha": "44190bf",
+  "version": "0.2.0",
+  "builtAt": "2026-05-11T07:00:10.333Z",
+  "gitSha": "0691ae5",
   "gitBranch": "main",
   "hostKit": {
-    "version": "0.7.2"
+    "version": "0.0.0"
   },
   "golden": {
     "path": "/projects/fizzpop/",
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 218825,
+    "sizeBytesGz": 229964,
     "fileCount": 5
   }
 }

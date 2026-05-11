@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "slug": "mindswiffer",
-  "version": "0.1.0",
-  "builtAt": "2026-05-10T00:46:18.920Z",
-  "gitSha": "7bb5687",
+  "version": "0.2.0",
+  "builtAt": "2026-05-11T06:44:52.530Z",
+  "gitSha": "89d03f5",
   "gitBranch": "main",
   "hostKit": {
-    "version": "file:../Bilko-Host-Kit"
+    "version": "0.0.0"
   },
   "golden": {
     "path": "/projects/mindswiffer/",
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 252194,
+    "sizeBytesGz": 257193,
     "fileCount": 5
   }
 }

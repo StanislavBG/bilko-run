@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
   "slug": "sudoku",
-  "version": "0.1.0",
-  "builtAt": "2026-05-09T06:42:03.691Z",
-  "gitSha": "0efffcb",
+  "version": "0.3.0",
+  "builtAt": "2026-05-11T06:39:50.637Z",
+  "gitSha": "754a709",
   "gitBranch": "main",
   "hostKit": {
-    "version": "0.3.1"
+    "version": "0.0.0"
   },
   "golden": {
     "path": "/projects/sudoku/",
-    "expect": "Sudoku"
+    "expect": "bilko-sudoku"
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 218030,
+    "sizeBytesGz": 229957,
     "fileCount": 5
   }
 }

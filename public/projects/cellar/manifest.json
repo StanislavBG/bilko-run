@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "slug": "cellar",
-  "version": "0.4.0",
-  "builtAt": "2026-05-11T14:30:16.254Z",
-  "gitSha": "f58f702",
+  "version": "0.5.0",
+  "builtAt": "2026-05-11T15:13:27.340Z",
+  "gitSha": "49bf6ef",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 117868,
+    "sizeBytesGz": 121647,
     "fileCount": 25
   }
 }

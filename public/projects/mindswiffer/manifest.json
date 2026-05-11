@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "slug": "mindswiffer",
-  "version": "0.4.0",
-  "builtAt": "2026-05-11T14:27:54.153Z",
-  "gitSha": "c5551e8",
+  "version": "0.5.0",
+  "builtAt": "2026-05-11T15:12:10.486Z",
+  "gitSha": "83deb2f",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 120683,
+    "sizeBytesGz": 125652,
     "fileCount": 21
   }
 }

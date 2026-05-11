@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "slug": "etch",
-  "version": "0.1.0",
-  "builtAt": "2026-05-11T01:10:14.055Z",
-  "gitSha": "e84fbc5",
+  "version": "0.2.0",
+  "builtAt": "2026-05-11T06:35:06.128Z",
+  "gitSha": "8ad7fcb",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 226201,
+    "sizeBytesGz": 233446,
     "fileCount": 36
   }
 }

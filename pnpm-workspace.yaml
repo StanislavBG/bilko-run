@@ -7,3 +7,9 @@ packages:
 onlyBuiltDependencies:
   - '@clerk/shared'
   - esbuild
+
+# PageRoast-CLI's published 0.1.0 still has @bilkobibitkov/ai-tool-kit as a
+# link:../AI-Tool-Kit dep. Override forces the npm version everywhere so
+# Render (no sibling repos on disk) can install cleanly.
+overrides:
+  '@bilkobibitkov/ai-tool-kit': ^0.1.0

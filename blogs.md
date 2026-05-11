@@ -54,6 +54,8 @@ Based on the LinkedIn strategy (Irina Malkova 10/10 quality reference):
 
 ## Post Backlog
 
+- **Cellar — building a full FreeCell engine from scratch** (build-log): shipped 2026-05-10 at /projects/cellar/. Cover: domain-restricted deal-number seeding (no /dev/urandom), solvability oracle via recursive BFS with 5k-node cap, CSS specificity war between `:root` and `[data-theme]` attribute selectors, 45-test Playwright suite across 8 spec files, 5-theme WCAG AA a11y, autosave/hydration, daily streak system with freeze tokens.
+
 - **MindSwiffer — building Minesweeper without 50/50s** (build-log): shipped 2026-05-09 at /projects/mindswiffer/. Cover: no-guess constraint solver, wave-function collapse analogy, why 50/50s are a design failure not a feature, 65-test Playwright suite, 5-theme WCAG AA a11y, cascade animations + reduced-motion.
 
 ## Content Sources

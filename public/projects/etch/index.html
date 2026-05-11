@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1c1c1e" />
     <title>Etch — Bilko</title>
     <!-- Anti-FOUC: read persisted theme settings before any CSS renders -->
     <script>
@@ -14,11 +17,19 @@
         if (localStorage.getItem('bilko_etch_cb_v1') === '1') document.documentElement.dataset.cb = '1';
         if (localStorage.getItem('bilko_etch_hc_v1') === '1') document.documentElement.dataset.hc = '1';
         if (localStorage.getItem('bilko_etch_reduced_v1') === '1') document.documentElement.dataset.reduced = '1';
+        var accent = localStorage.getItem('bilko_etch_accent_v1');
+        if (accent && /^#?[0-9a-fA-F]{6}$/.test(accent)) {
+          document.documentElement.style.setProperty('--etch-accent', accent.charAt(0) === '#' ? accent : '#' + accent);
+        }
+        var border = localStorage.getItem('bilko_etch_border_v1');
+        if (border === 'rounded' || border === 'dotted') document.documentElement.dataset.cellBorder = border;
+        var face = localStorage.getItem('bilko_etch_cluefont_v1');
+        if (face === 'blocky' || face === 'etched') document.documentElement.dataset.clueFace = face;
       } catch (e) {}
     })();
     </script>
-    <script type="module" crossorigin src="/projects/etch/assets/index-DNN6bPxy.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-CPCPHd4a.css">
+    <script type="module" crossorigin src="/projects/etch/assets/index-v8jte9KQ.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-ReF_JueX.css">
   </head>
   <body>
     <div id="root"></div>

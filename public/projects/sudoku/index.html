@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/projects/sudoku/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="apple-touch-icon" href="/projects/sudoku/icon-192.png" />
+    <link rel="manifest" href="/projects/sudoku/manifest.webmanifest" />
+    <meta name="theme-color" content="#007aff" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Sudoku · A clean, calm, free Sudoku — by Bilko." />
     <title>Sudoku · Bilko</title>
     <script>
@@ -14,9 +17,18 @@
           if (localStorage.getItem('bilko_sudoku_cb_v1') === '1') document.documentElement.dataset.cb = '1';
         } catch (e) {}
       })();
+      // Defer SW registration to idle so it never blocks first paint.
+      // Skip on localhost dev — vite HMR + SW caching fight each other.
+      if ('serviceWorker' in navigator && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+        window.addEventListener('load', function () {
+          (window.requestIdleCallback || window.setTimeout)(function () {
+            navigator.serviceWorker.register('/projects/sudoku/sw.js', { scope: '/projects/sudoku/' }).catch(function () {});
+          }, { timeout: 2000 });
+        });
+      }
     </script>
-    <script type="module" crossorigin src="/projects/sudoku/assets/index-HxNHUHz0.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/sudoku/assets/index-CaS_2Ofp.css">
+    <script type="module" crossorigin src="/projects/sudoku/assets/index-D9v9voVT.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/sudoku/assets/index-CCa_Jqbu.css">
   </head>
   <body>
     <div id="root"></div>

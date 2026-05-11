@@ -1,0 +1,30 @@
+{
+  "name": "Bilko Sudoku",
+  "short_name": "Sudoku",
+  "description": "A clean, calm, free Sudoku — by Bilko.",
+  "start_url": "/projects/sudoku/",
+  "scope": "/projects/sudoku/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#007aff",
+  "icons": [
+    {
+      "src": "/projects/sudoku/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/projects/sudoku/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/projects/sudoku/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

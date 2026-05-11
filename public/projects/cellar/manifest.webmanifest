@@ -1,0 +1,31 @@
+{
+  "name": "Cellar — by Bilko",
+  "short_name": "Cellar",
+  "description": "A clean, calm, free FreeCell. Every deal is winnable — and we prove it.",
+  "scope": "/projects/cellar/",
+  "start_url": "/projects/cellar/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1c1c1e",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/projects/cellar/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/projects/cellar/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/projects/cellar/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

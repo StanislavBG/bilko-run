@@ -150,9 +150,9 @@
   {
     "slug": "game-academy",
     "name": "Boat Shooter",
-    "tagline": "(on hold) — Browser arcade shooter — first entry in the Bilko Game Academy.",
+    "tagline": "(work in progress) — Browser arcade shooter — first entry in the Bilko Game Academy.",
     "category": "Game",
-    "status": "live",
+    "status": "cooking",
     "year": 2026,
     "host": {
       "kind": "static-path",
@@ -161,7 +161,7 @@
       "localPath": "~/Projects/Bilko-Game-Academy"
     },
     "tags": [
-      "On hold",
+      "Work in progress",
       "Canvas",
       "Arcade"
     ]

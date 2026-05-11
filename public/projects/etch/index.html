@@ -3,22 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Etch — Bilko</title>
     <!-- Anti-FOUC: read persisted theme settings before any CSS renders -->
     <script>
     (function () {
       try {
         var t = localStorage.getItem('bilko_etch_theme_v1');
-        if (t === '"light"') document.documentElement.dataset.theme = 'light';
-        else if (t === '"dark"') document.documentElement.dataset.theme = 'dark';
-        if (localStorage.getItem('bilko_etch_cb_v1') === 'true') document.documentElement.dataset.cb = '1';
-        if (localStorage.getItem('bilko_etch_hc_v1') === 'true') document.documentElement.dataset.hc = '1';
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        if (localStorage.getItem('bilko_etch_cb_v1') === '1') document.documentElement.dataset.cb = '1';
+        if (localStorage.getItem('bilko_etch_hc_v1') === '1') document.documentElement.dataset.hc = '1';
       } catch (e) {}
     })();
     </script>
-    <script type="module" crossorigin src="/projects/etch/assets/index-DaBRWg4F.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-CeCuEJPK.css">
+    <script type="module" crossorigin src="/projects/etch/assets/index-BGVeP0fP.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-B0opN3Vv.css">
   </head>
   <body>
     <div id="root"></div>

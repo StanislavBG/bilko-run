@@ -10,14 +10,15 @@
     (function () {
       try {
         var t = localStorage.getItem('bilko_etch_theme_v1');
-        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        if (t === 'light' || t === 'dark' || t === 'sepia') document.documentElement.dataset.theme = t;
         if (localStorage.getItem('bilko_etch_cb_v1') === '1') document.documentElement.dataset.cb = '1';
         if (localStorage.getItem('bilko_etch_hc_v1') === '1') document.documentElement.dataset.hc = '1';
+        if (localStorage.getItem('bilko_etch_reduced_v1') === '1') document.documentElement.dataset.reduced = '1';
       } catch (e) {}
     })();
     </script>
-    <script type="module" crossorigin src="/projects/etch/assets/index-gW-RogrF.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-C88B6dVk.css">
+    <script type="module" crossorigin src="/projects/etch/assets/index-DNN6bPxy.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-CPCPHd4a.css">
   </head>
   <body>
     <div id="root"></div>

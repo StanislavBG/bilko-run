@@ -34,3 +34,4 @@ Wave-2 was a cross-review pass over all 12 FizzPop PRDs (100–106, parallelGrou
 - Mode names consistent: `'daily' | 'beginner' | 'intermediate' | 'expert'`.
 - Zustand hook names consistent: `useRunState()`, `useRunActions()`, `useStreakState()`, `useStreakActions()`.
 - Debug hook co-location resolved: `__fizzpopStartBeginner`, `__fizzpopStartDaily`, `__fizzpopFakeWin` → `src/state/store.ts`; `__fizzpopTestState` → `Board.tsx`.
+- 2026-05-10: build-validate gate green. typecheck/tests/build/axe/dailies/smoke all pass. Bundle: 218 KB gz.

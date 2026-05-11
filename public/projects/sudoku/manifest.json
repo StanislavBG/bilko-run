@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "slug": "sudoku",
-  "version": "0.5.0",
-  "builtAt": "2026-05-11T14:30:27.238Z",
-  "gitSha": "bea7fc8",
+  "version": "0.6.0",
+  "builtAt": "2026-05-11T15:05:29.459Z",
+  "gitSha": "949f02e",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 100672,
-    "fileCount": 22
+    "sizeBytesGz": 106316,
+    "fileCount": 24
   }
 }

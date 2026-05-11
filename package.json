@@ -70,11 +70,6 @@
     "stripe": "^14.21.0",
     "zod": "^3.25.76"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.2.2",

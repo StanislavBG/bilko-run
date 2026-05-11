@@ -1,3 +1,9 @@
 packages:
   - '.'
   - mcp-host-server
+
+# pnpm v10+ requires this here (not package.json) for workspace roots.
+# Without it, ERR_PNPM_IGNORED_BUILDS fails the install on Render.
+onlyBuiltDependencies:
+  - '@clerk/shared'
+  - esbuild

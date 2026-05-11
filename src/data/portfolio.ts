@@ -94,7 +94,7 @@ export const SECTIONS: readonly Section[] = [
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Shipped work — productivity tools, AI experiments, side quests.', tag: `${LIVE_COUNT} live` },
   { id: 'packages',  label: 'Packages',    path: '/packages',  icon: '⊟', desc: 'Open-source CLI tools and libraries — npm install and use locally.', tag: `${PACKAGES.length} live` },
   { id: 'games',     label: 'Games',       path: '/games',     icon: '◈', desc: 'A small arcade of free, ad-free browser games.', tag: `${GAME_COUNT} live` },
-  { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: '1 playable' },
+  { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: '6 playable' },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
   { id: 'academy',   label: 'Academy',     path: '/academy',   href: '/projects/academy/', icon: '▲', desc: 'Three-module AI fundamentals. Free, ad-free, every claim cited.', tag: '3 modules' },
   { id: 'workflows', label: 'Workflows',   path: '/workflows', icon: '↯', desc: 'Background AI agents and automations running 24/7.', tag: 'running' },
@@ -105,6 +105,9 @@ export const GAMES: readonly PortfolioGame[] = [
   { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade', plays: 'live', blurb: 'Browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
   { id: 'sudoku',       name: 'Sudoku',       genre: 'Puzzle', plays: 'live', blurb: 'Daily-streak Sudoku with hints, themes, and a11y-first input.',         color: 'blue', href: '/projects/sudoku/' },
   { id: 'mindswiffer',  name: 'Sweeper',      genre: 'Puzzle', plays: 'live', blurb: 'Minesweeper, no-guess mode, daily streaks, sound + haptics.',           color: 'ink',  href: '/projects/mindswiffer/' },
+  { id: 'fizzpop',      name: 'FizzPop',      genre: 'Arcade', plays: 'live', blurb: 'Pop-the-bubbles arcade reflex game. Short loops, satisfying juice.',    color: 'tang', href: '/projects/fizzpop/' },
+  { id: 'etch',         name: 'Etch',         genre: 'Puzzle', plays: 'live', blurb: "Mario's Picross-style nonogram with a verified no-guess generator.",    color: 'blue', href: '/projects/etch/' },
+  { id: 'cellar',       name: 'Cellar',       genre: 'Card',   plays: 'live', blurb: 'FreeCell solitaire with solver-verified daily deals.',                  color: 'ink',  href: '/projects/cellar/' },
 ];
 
 export const ACADEMY_LEVELS: readonly AcademyLevel[] = [

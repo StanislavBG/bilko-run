@@ -17,7 +17,6 @@ import { NotFoundPage } from './pages/NotFoundPage.js';
 import { StudioPage } from './pages/StudioPage.js';
 import { AcademyPage } from './pages/AcademyPage.js';
 import { AcademyLevelPage } from './pages/AcademyLevelPage.js';
-import { GamesPage } from './pages/GamesPage.js';
 import { WorkflowsPage } from './pages/WorkflowsPage.js';
 import { ContactPage } from './pages/ContactPage.js';
 import { PortfolioProjectDetailPage } from './pages/PortfolioProjectDetailPage.js';
@@ -139,7 +138,8 @@ function AppRoutes() {
             <Route path="/projects" element={<Navigate to="/products" replace />} />
             <Route path="/projects/*" element={<RedirectProjectsToProducts />} />
 
-            <Route path="/games" element={<GamesPage />} />
+            {/* /games -> /studio canonical (Studio Page is the long-term home) */}
+            <Route path="/games" element={<Navigate to="/studio" replace />} />
             <Route path="/packages" element={<React.Suspense fallback={null}><PackagesPage /></React.Suspense>} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />

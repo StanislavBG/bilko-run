@@ -127,7 +127,7 @@ export function ProjectsPage() {
                   {p.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}
                   {p.kind.includes('Game') && (
                     <Link
-                      to="/games"
+                      to="/studio"
                       className="pf-chip"
                       onClick={e => e.stopPropagation()}
                       style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}

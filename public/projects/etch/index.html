@@ -6,9 +6,14 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1c1c1e" />
+    <meta name="theme-color" content="#b85a30" />
     <title>Etch — Bilko</title>
-    <!-- Anti-FOUC: read persisted theme settings before any CSS renders -->
+    <!-- Sleepy Cat fonts (v0.8.0): Lora serif + Caveat cursive + Nunito body. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Nunito:wght@500;600;700;800&family=Caveat:wght@500;700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Nunito:wght@500;600;700;800&family=Caveat:wght@500;700&display=swap" />
+    <!-- Anti-FOUC: read persisted theme + palette before any CSS renders -->
     <script>
     (function () {
       try {
@@ -25,6 +30,14 @@
         if (border === 'rounded' || border === 'dotted') document.documentElement.dataset.cellBorder = border;
         var face = localStorage.getItem('bilko_etch_cluefont_v1');
         if (face === 'blocky' || face === 'etched') document.documentElement.dataset.clueFace = face;
+        // v0.8.0 Sleepy Cat palette — Cream is the default.
+        var pal = localStorage.getItem('bilko_etch_palette_v1');
+        if (pal !== 'cream' && pal !== 'sage' && pal !== 'lavender' && pal !== 'newspaper') pal = 'cream';
+        document.documentElement.dataset.palette = pal;
+        var cs = localStorage.getItem('bilko_etch_cellsize_v1');
+        var sizeN = cs ? Number(cs) : (window.innerWidth < 480 ? 44 : 56);
+        if (sizeN >= 36 && sizeN <= 96) document.documentElement.style.setProperty('--etch-cell-size', sizeN + 'px');
+        if (localStorage.getItem('bilko_etch_autofade_v1') === '0') document.documentElement.dataset.autofade = 'off';
       } catch (e) {}
     })();
     </script>
@@ -32,19 +45,22 @@
          The rest of the stylesheet loads async via Vite-injected <link>.
          Keep this under 2 KB minified — anything heavier defeats the purpose. -->
     <style>
-    html,body{margin:0;padding:0;background:#fafaf7;color:#1c1c1e;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-    html[data-theme="dark"]{background:#1c1c1e;color:#fafaf7}
-    html[data-theme="sepia"]{background:#f4ecd8;color:#3e2f1c}
+    html,body{margin:0;padding:0;background:#fffaf0;color:#2a201a;font-family:'Nunito',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+    html[data-palette="sage"]{background:#fbfaf2;color:#1f2a1c}
+    html[data-palette="lavender"]{background:#fbf6fb;color:#2a1f2c}
+    html[data-palette="newspaper"]{background:#fbf7ec;color:#0c0a08}
+    html[data-theme="dark"]:not([data-palette]){background:#1c1c1e;color:#fafaf7}
+    html[data-theme="sepia"]:not([data-palette]){background:#f4ecd8;color:#3e2f1c}
     #root{min-height:100dvh;display:flex;flex-direction:column}
     .etch-shell{display:flex;flex-direction:column;min-height:100dvh}
-    .etch-topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid rgba(0,0,0,0.07);height:44px;box-sizing:border-box;flex:0 0 auto}
+    .etch-topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;box-sizing:border-box;flex:0 0 auto;min-height:64px}
     .etch-main{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
     .etch-footer{text-align:center;padding:6px 0;font-size:12px;opacity:0.6;height:24px;box-sizing:border-box;flex:0 0 auto}
     .etch-board-scroller{flex:1 1 auto;min-height:0}
     </style>
-    <script type="module" crossorigin src="/projects/etch/assets/index-Bm7juwRw.js"></script>
+    <script type="module" crossorigin src="/projects/etch/assets/index-BDnjWR43.js"></script>
     <link rel="modulepreload" crossorigin href="/projects/etch/assets/vendor-DazgiQfN.js">
-    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-B46XHh6C.css">
+    <link rel="stylesheet" crossorigin href="/projects/etch/assets/index-BCS_mZ0P.css">
   </head>
   <body>
     <div id="root"></div>

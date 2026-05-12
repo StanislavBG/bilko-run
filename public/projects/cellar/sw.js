@@ -5,7 +5,7 @@
 //   - fetch: network-first for HTML, cache-first for hashed JS/CSS assets.
 //   - never intercept cross-origin or POST/PUT.
 
-const VERSION = 'cellar-v0.7.0';
+const VERSION = 'cellar-v0.8.0';
 const SHELL = [
   '/projects/cellar/',
   '/projects/cellar/index.html',

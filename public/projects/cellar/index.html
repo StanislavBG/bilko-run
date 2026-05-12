@@ -5,10 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/projects/cellar/favicon.svg" />
     <link rel="manifest" href="/projects/cellar/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/projects/cellar/icon-192.png" />
-    <meta name="theme-color" content="#1c1c1e" />
+    <meta name="theme-color" content="#1a120c" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="A clean, calm, free FreeCell. Every deal is winnable — and we prove it." />
     <title>Cellar — by Bilko</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
     <script>
       (function () {
         try {
@@ -18,34 +21,48 @@
           } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
             document.documentElement.dataset.theme = 'dark';
           }
+          // v0.8: hydrate cellar look (theme/size/style/texture) before paint.
+          var lookRaw = localStorage.getItem('bilko_cellar_look_v1');
+          var look = lookRaw ? JSON.parse(lookRaw) : {};
+          var allowedThemes = { cellar: 1, parlor: 1, midnight: 1, paper: 1 };
+          var allowedSizes = { compact: 1, medium: 1, generous: 1 };
+          var allowedStyles = { classic: 1, modern: 1, mono: 1 };
+          var allowedTex = { flat: 1, vignette: 1, grain: 1 };
+          document.documentElement.dataset.cellarTheme = allowedThemes[look.theme] ? look.theme : 'cellar';
+          document.documentElement.dataset.cardSize = allowedSizes[look.cardSize] ? look.cardSize : 'medium';
+          document.documentElement.dataset.cardStyle = allowedStyles[look.cardStyle] ? look.cardStyle : 'classic';
+          document.documentElement.dataset.tableTexture = allowedTex[look.tableTexture] ? look.tableTexture : 'vignette';
         } catch (e) {}
       })();
     </script>
     <style>
       /* Critical-path CSS — paints the layout shell before the main bundle
          loads. Prevents a flash of unstyled content. Keep TINY (<1 KB gz).
-         Anything fancy (animations, theme overrides, custom fonts) stays in
-         the deferred stylesheet. */
+         v0.8: paints the cellar wood backdrop immediately so there's no
+         flash of white before the deferred stylesheet arrives. */
       *, *::before, *::after { box-sizing: border-box; }
       html, body, #root { height: 100%; margin: 0; }
       body {
-        background: #ffffff;
-        color: #1c1c1e;
+        background: #1a120c;
+        color: #f5ebd6;
         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
         -webkit-font-smoothing: antialiased;
         overscroll-behavior: none;
       }
+      html[data-cellar-theme="parlor"] body { background: #0e1f1a; color: #ecf0eb; }
+      html[data-cellar-theme="midnight"] body { background: #0c1220; color: #e4ebf4; }
+      html[data-cellar-theme="paper"] body { background: #efe9dd; color: #2a1f15; }
+      html[data-theme="light"] body { background: #ffffff; color: #1c1c1e; }
       html[data-theme="dark"] body { background: #0c0c0d; color: #f2f2f7; }
       html[data-theme="hc"] body { background: #ffffff; color: #000000; }
-      /* Layout skeleton — exactly what host-kit's GameShell renders. */
       #root > div.min-h-screen {
         min-height: 100dvh;
         display: flex;
         flex-direction: column;
       }
       #root > div.min-h-screen > header {
-        padding: 6px 12px;
-        border-bottom: 1px solid rgba(0,0,0,0.08);
+        padding: 18px 28px 14px;
+        border-bottom: 1px solid rgba(245,235,214,0.10);
         flex-shrink: 0;
       }
       #root > div.min-h-screen > main {
@@ -54,7 +71,6 @@
         display: flex;
         flex-direction: column;
       }
-      /* Top HUD shell — fixed-height strip even before the JS hydrates. */
       .ce-hud {
         display: flex;
         align-items: center;
@@ -63,8 +79,8 @@
         min-height: 40px;
       }
     </style>
-    <script type="module" crossorigin src="/projects/cellar/assets/index-CCjwON37.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/cellar/assets/index-VlJ6PfPZ.css">
+    <script type="module" crossorigin src="/projects/cellar/assets/index-Cur5YTdU.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/cellar/assets/index-tWLVapCP.css">
   </head>
   <body>
     <div id="root"></div>

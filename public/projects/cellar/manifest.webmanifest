@@ -5,8 +5,8 @@
   "scope": "/projects/cellar/",
   "start_url": "/projects/cellar/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1c1c1e",
+  "background_color": "#1a120c",
+  "theme_color": "#1a120c",
   "orientation": "any",
   "icons": [
     {

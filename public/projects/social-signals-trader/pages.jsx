@@ -578,6 +578,17 @@ function WatchlistPage() {
         <ThesisCardList theses={window.THESES} limit={20} />
       </div>
 
+      {/* SIGNAL AGREEMENT — 4-source per-thesis cross-check (G1) */}
+      <div style={{ marginTop: 12 }}>
+        <div style={{ marginBottom: 8 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Signal agreement</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>
+            For each thesis: what 4 independent sources said — momentum, agent, ticker_intent, options flow
+          </p>
+        </div>
+        {window.SignalAgreementPanel ? <window.SignalAgreementPanel limit={12} /> : null}
+      </div>
+
       {/* EVENT CARDS — one card per (ticker, event_date), sorted by event_date asc */}
       <div style={{ marginTop: 12 }}>
         <div style={{ marginBottom: 8 }}>

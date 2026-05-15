@@ -150,7 +150,6 @@ function MacroPage() {
           <div className="card">
             <div className="card-head">
               <h3>AI summary · what the 10 subs are saying about {sel.name}</h3>
-              <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>regenerated 4m ago</span>
             </div>
             <div className="card-body">
               {/* sentiment + bull/bear gauge */}
@@ -165,14 +164,22 @@ function MacroPage() {
                 </div>
                 <div style={{ padding: "10px 14px", borderRight: "1px solid var(--line)" }}>
                   <div className="label" style={{ fontFamily: "var(--mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Bull / Bear posts</div>
-                  <div className="mono" style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>
-                    <span className="up">{bullCount.toLocaleString()}</span>
-                    <span className="dim"> / </span>
-                    <span className="down">{bearCount.toLocaleString()}</span>
-                  </div>
-                  <div style={{ width: "100%", height: 4, background: "var(--neg-bg)", borderRadius: 2, marginTop: 6, overflow: "hidden" }}>
-                    <div style={{ width: `${bullPct * 100}%`, height: "100%", background: "var(--pos)" }} />
-                  </div>
+                  {totalPosts > 0 ? (
+                    <>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>
+                        <span className="up">{bullCount.toLocaleString()}</span>
+                        <span className="dim"> / </span>
+                        <span className="down">{bearCount.toLocaleString()}</span>
+                      </div>
+                      <div style={{ width: "100%", height: 4, background: "var(--neg-bg)", borderRadius: 2, marginTop: 6, overflow: "hidden" }}>
+                        <div style={{ width: `${bullPct * 100}%`, height: "100%", background: "var(--pos)" }} />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="dim mono" style={{ fontSize: 11.5, marginTop: 4 }}>
+                      Aggregate sentiment not yet computed.
+                    </div>
+                  )}
                 </div>
                 <div style={{ padding: "10px 14px" }}>
                   <div className="label" style={{ fontFamily: "var(--mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Mentions/24h</div>

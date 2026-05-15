@@ -216,6 +216,9 @@ function StrategiesPage() {
         </div>
       </div>
 
+      {/* WSB_FADE vs WSB_EARN — pinned head-to-head (G3) */}
+      {window.WSBHeadToHead && <window.WSBHeadToHead />}
+
       {/* HEAD-TO-HEAD COMPARISON (D4) */}
       {window.StrategyComparisonPanel && <window.StrategyComparisonPanel />}
 

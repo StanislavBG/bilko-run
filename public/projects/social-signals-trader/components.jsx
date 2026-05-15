@@ -267,6 +267,7 @@ function Heatmap({ data }) {
 // ============== Trades table ==============
 function TradesTable({ trades, bmcUrl }) {
   const [filter, setFilter] = useState("ALL");
+  const [openTrade, setOpenTrade] = useState(null);
   const filtered = trades.filter((t) => {
     if (filter === "OPEN") return t.status === "OPEN";
     if (filter === "CLOSED") return t.status === "CLOSED";
@@ -304,7 +305,12 @@ function TradesTable({ trades, bmcUrl }) {
           </thead>
           <tbody>
             {filtered.map((t) => (
-              <tr key={t.id}>
+              <tr
+                key={t.id}
+                onClick={() => setOpenTrade(t)}
+                style={{ cursor: "pointer" }}
+                title="Click for provenance"
+              >
                 <td className="dim">{t.id}</td>
                 <td>
                   <div className="ticker">{t.ticker}</div>
@@ -320,7 +326,7 @@ function TradesTable({ trades, bmcUrl }) {
                   {fmt$(t.pnl)}
                   <div className="sub-cell" style={{ color: t.pnl >= 0 ? "var(--pos)" : "var(--neg)", opacity: 0.7 }}>{t.pnlPct >= 0 ? "+" : ""}{t.pnlPct.toFixed(1)}%</div>
                   {t.pnl > 1000 && t.status === "CLOSED" && (
-                    <a className="tip-inline" href={bmcUrl} target="_blank" rel="noreferrer" title="Tip the trader">☕ tip</a>
+                    <a className="tip-inline" href={bmcUrl} target="_blank" rel="noreferrer" title="Tip the trader" onClick={(e) => e.stopPropagation()}>☕ tip</a>
                   )}
                 </td>
                 <td className="dim">{t.source}</td>
@@ -330,6 +336,9 @@ function TradesTable({ trades, bmcUrl }) {
           </tbody>
         </table>
       </div>
+      {openTrade && window.TradeProvenanceModal && (
+        <window.TradeProvenanceModal trade={openTrade} onClose={() => setOpenTrade(null)} />
+      )}
     </div>
   );
 }

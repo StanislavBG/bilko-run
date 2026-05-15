@@ -66,6 +66,7 @@ function TradesPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [sort, setSort] = useState({ key: "id", dir: "desc" });
+  const [openTrade, setOpenTrade] = useState(null);
 
   const filtered = useMemo(() => {
     let r = trades.filter((t) => {
@@ -248,7 +249,7 @@ function TradesPage() {
             </thead>
             <tbody>
               {filtered.map((t) => (
-                <tr key={t.id}>
+                <tr key={t.id} onClick={() => setOpenTrade(t)} style={{ cursor: "pointer" }} title="Click for provenance">
                   <td className="dim">{t.id}</td>
                   <td><div className="ticker">{t.ticker}</div><div className="sub-cell">{t.opened}{t.closed ? ` → ${t.closed}` : " · open"}</div></td>
                   <td><span className={`pill ${t.side === "LONG" ? "long" : "short"}`}>{t.side}</span></td>
@@ -266,6 +267,9 @@ function TradesPage() {
           </table>
         </div>
       </div>
+      {openTrade && window.TradeProvenanceModal && (
+        <window.TradeProvenanceModal trade={openTrade} onClose={() => setOpenTrade(null)} />
+      )}
     </main>
   );
 }
@@ -291,11 +295,16 @@ function RedditPage() {
         <div className="card-head"><h3>Active themes · last 24h</h3></div>
         <div className="card-body tight">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", borderTop: "1px solid var(--line)" }}>
-            {themes.map((t, i) => (
-              <div key={t.title} style={{ padding: 14, borderRight: i % 3 === 2 ? "none" : "1px solid var(--line)", borderBottom: i < 3 ? "1px solid var(--line)" : "none" }}>
+            {(themes || []).map((t, i) => (
+              <div key={t.title || i} style={{ padding: 14, borderRight: i % 3 === 2 ? "none" : "1px solid var(--line)", borderBottom: i < 3 ? "1px solid var(--line)" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{t.title}</span>
-                  <span className="mono" style={{ fontSize: 11 }}>{t.heat}<span className={t.change >= 0 ? "up" : "down"} style={{ marginLeft: 6 }}>{t.change >= 0 ? "+" : ""}{t.change}</span></span>
+                  <span className="mono" style={{ fontSize: 11 }}>
+                    {t.heat ?? "—"}
+                    {t.change != null && (
+                      <span className={t.change >= 0 ? "up" : "down"} style={{ marginLeft: 6 }}>{t.change >= 0 ? "+" : ""}{t.change}</span>
+                    )}
+                  </span>
                 </div>
                 <p style={{ margin: 0, color: "var(--text-2)", fontSize: 12, lineHeight: 1.5 }}>{t.blurb}</p>
               </div>
@@ -311,18 +320,23 @@ function RedditPage() {
           <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>volume only · sentiment in panel below</span>
         </div>
         <div className="card-body tight">
-          {flow.map((t) => {
-            const max = Math.max(...t.series);
+          {(flow || []).length === 0 && (
+            <div className="dim" style={{ padding: "12px 14px", fontFamily: "var(--mono)", fontSize: 11 }}>No ticker-flow data yet — burrow's ticker_mention_flow has no captures for the active watchlist.</div>
+          )}
+          {(flow || []).map((t) => {
+            const series = Array.isArray(t.series) ? t.series : [];
+            const max = Math.max(...series, 1);
+            const action = t.action || "—";
             return (
               <div key={t.ticker} style={{ display: "grid", gridTemplateColumns: "70px 1fr 100px 140px", alignItems: "center", gap: 14, padding: "10px 14px", borderBottom: "1px solid var(--line)", fontFamily: "var(--mono)", fontSize: 11.5 }}>
                 <span style={{ fontWeight: 600 }}>{t.ticker}</span>
                 <div style={{ display: "flex", gap: 1, height: 28, alignItems: "flex-end" }}>
-                  {t.series.map((v, i) => (
-                    <div key={i} style={{ flex: 1, height: `${(v / max) * 100}%`, background: "var(--info)", opacity: 0.4 + (v/max) * 0.6, borderRadius: "1px 1px 0 0" }} />
+                  {series.map((v, i) => (
+                    <div key={i} style={{ flex: 1, height: `${((v || 0) / max) * 100}%`, background: "var(--info)", opacity: 0.4 + ((v || 0)/max) * 0.6, borderRadius: "1px 1px 0 0" }} />
                   ))}
                 </div>
-                <span style={{ color: "var(--muted)", fontSize: 10.5, textAlign: "right" }}>{t.series[t.series.length - 1]} <span style={{ opacity: 0.6 }}>today</span></span>
-                <span className={`pill ${t.action.startsWith("HOLDING") ? "holding" : t.action.startsWith("WATCHING") ? "watching" : t.action.startsWith("STOPPED") ? "stopped" : "passed"}`}>{t.action}</span>
+                <span style={{ color: "var(--muted)", fontSize: 10.5, textAlign: "right" }}>{series[series.length - 1] ?? 0} <span style={{ opacity: 0.6 }}>today</span></span>
+                <span className={`pill ${typeof action === "string" && action.startsWith("HOLDING") ? "holding" : typeof action === "string" && action.startsWith("WATCHING") ? "watching" : typeof action === "string" && action.startsWith("STOPPED") ? "stopped" : "passed"}`}>{action}</span>
               </div>
             );
           })}
@@ -340,9 +354,13 @@ function RedditPage() {
                   style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", cursor: "pointer", background: openSub === s.name ? "var(--surface-2)" : "transparent", borderLeft: openSub === s.name ? "2px solid var(--accent)" : "2px solid transparent" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--mono)", fontSize: 12 }}>
                     <span style={{ fontWeight: 600 }}>r/{s.name}</span>
-                    <span className={s.sentiment >= 0 ? "up" : "down"} style={{ fontSize: 11 }}>{s.sentiment >= 0 ? "+" : ""}{s.sentiment.toFixed(2)}</span>
+                    {s.sentiment == null ? (
+                      <span className="dim" style={{ fontSize: 11 }}>—</span>
+                    ) : (
+                      <span className={s.sentiment >= 0 ? "up" : "down"} style={{ fontSize: 11 }}>{s.sentiment >= 0 ? "+" : ""}{Number(s.sentiment).toFixed(2)}</span>
+                    )}
                   </div>
-                  <div className="mono" style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{fmtSubs(s.subs)} subs · {s.posts24h} posts/24h · {s.newPostsPerHour}/hr</div>
+                  <div className="mono" style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{fmtSubs(s.subs || 0)} subs · {s.posts24h ?? 0} posts/24h · {s.newPostsPerHour ?? 0}/hr</div>
                 </div>
               ))}
             </div>
@@ -358,10 +376,10 @@ function RedditPage() {
             <div className="card-body">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0, marginBottom: 14, border: "1px solid var(--line)", borderRadius: 4 }}>
                 {[
-                  ["Posts/24h", sub.posts24h],
-                  ["Sentiment", (sub.sentiment >= 0 ? "+" : "") + sub.sentiment.toFixed(2)],
-                  ["Bull / Bear", `${sub.bullCount} / ${sub.bearCount}`],
-                  ["Avg score", sub.avgScore],
+                  ["Posts/24h", sub.posts24h ?? 0],
+                  ["Sentiment", sub.sentiment == null ? "—" : ((sub.sentiment >= 0 ? "+" : "") + Number(sub.sentiment).toFixed(2))],
+                  ["Bull / Bear", `${sub.bullCount ?? 0} / ${sub.bearCount ?? 0}`],
+                  ["Avg score", sub.avgScore ?? sub.avgUpvotes ?? "—"],
                 ].map((s, i) => (
                   <div key={s[0]} style={{ padding: "10px 12px", borderRight: i < 3 ? "1px solid var(--line)" : "none" }}>
                     <div className="label" style={{ fontFamily: "var(--mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>{s[0]}</div>
@@ -372,24 +390,30 @@ function RedditPage() {
 
               <div style={{ marginBottom: 14 }}>
                 <div className="label" style={{ fontFamily: "var(--mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>30-day mention volume</div>
-                <div style={{ display: "flex", gap: 1, height: 50, alignItems: "flex-end" }}>
-                  {sub.series30d.map((v, i) => {
-                    const max = Math.max(...sub.series30d);
-                    return <div key={i} style={{ flex: 1, height: `${(v / max) * 100}%`, background: "var(--info)", opacity: 0.5 + (v/max) * 0.5, borderRadius: "1px 1px 0 0" }} />;
-                  })}
-                </div>
+                {Array.isArray(sub.series30d) && sub.series30d.length > 0 ? (
+                  <div style={{ display: "flex", gap: 1, height: 50, alignItems: "flex-end" }}>
+                    {(() => {
+                      const max = Math.max(...sub.series30d, 1);
+                      return sub.series30d.map((v, i) => (
+                        <div key={i} style={{ flex: 1, height: `${((v || 0) / max) * 100}%`, background: "var(--info)", opacity: 0.5 + ((v || 0)/max) * 0.5, borderRadius: "1px 1px 0 0" }} />
+                      ));
+                    })()}
+                  </div>
+                ) : (
+                  <div className="dim" style={{ fontFamily: "var(--mono)", fontSize: 11 }}>no series yet</div>
+                )}
               </div>
 
               <div style={{ marginBottom: 14 }}>
                 <div className="label" style={{ fontFamily: "var(--mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 8 }}>Top tickers in r/{sub.name}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {sub.top.map((t) => <span key={t} style={{ background: "var(--surface-2)", border: "1px solid var(--line)", padding: "4px 8px", borderRadius: 3, fontFamily: "var(--mono)", fontSize: 11 }}>{t}</span>)}
+                  {(Array.isArray(sub.topTickers) && sub.topTickers.length ? sub.topTickers : (sub.top || [])).map((t) => <span key={t} style={{ background: "var(--surface-2)", border: "1px solid var(--line)", padding: "4px 8px", borderRadius: 3, fontFamily: "var(--mono)", fontSize: 11 }}>{t}</span>)}
                 </div>
               </div>
 
               <div>
                 <div className="label" style={{ fontFamily: "var(--mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 8 }}>Top voices</div>
-                <div className="mono" style={{ fontSize: 11.5, color: "var(--text-2)" }}>{sub.topAuthors.join(" · ")}</div>
+                <div className="mono" style={{ fontSize: 11.5, color: "var(--text-2)" }}>{(Array.isArray(sub.topAuthors) && sub.topAuthors.length) ? sub.topAuthors.join(" · ") : <span className="dim">—</span>}</div>
               </div>
             </div>
           </div>
@@ -397,15 +421,18 @@ function RedditPage() {
           <div className="card">
             <div className="card-head"><h3>Top posts in r/{sub.name}</h3></div>
             <div className="card-body tight">
-              {sub.topPosts.map((p, i) => (
-                <div key={i} style={{ padding: "10px 14px", borderBottom: i < sub.topPosts.length - 1 ? "1px solid var(--line)" : "none" }}>
+              {(sub.topPosts || []).length === 0 && (
+                <div className="dim" style={{ padding: "12px 14px", fontFamily: "var(--mono)", fontSize: 11 }}>No top posts captured yet.</div>
+              )}
+              {(sub.topPosts || []).map((p, i) => (
+                <div key={i} style={{ padding: "10px 14px", borderBottom: i < (sub.topPosts.length - 1) ? "1px solid var(--line)" : "none" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                     <span style={{ fontSize: 13, fontWeight: 500 }}>{p.title}</span>
-                    <span className="mono dim" style={{ fontSize: 10, whiteSpace: "nowrap" }}>{p.age}</span>
+                    {p.age ? <span className="mono dim" style={{ fontSize: 10, whiteSpace: "nowrap" }}>{p.age}</span> : null}
                   </div>
                   <div className="mono" style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>
-                    <span style={{ background: "var(--surface-2)", border: "1px solid var(--line)", padding: "1px 5px", borderRadius: 3, marginRight: 6 }}>{p.flair}</span>
-                    ↑ {p.score.toLocaleString()} · {p.comments.toLocaleString()} comments
+                    {p.flair ? <span style={{ background: "var(--surface-2)", border: "1px solid var(--line)", padding: "1px 5px", borderRadius: 3, marginRight: 6 }}>{p.flair}</span> : null}
+                    ↑ {Number(p.score || 0).toLocaleString()} · {Number(p.comments || 0).toLocaleString()} comments
                   </div>
                 </div>
               ))}
@@ -418,20 +445,29 @@ function RedditPage() {
       <div className="card">
         <div className="card-head"><h3>Hot posts feed · all 10 subs</h3></div>
         <div className="card-body tight">
-          {posts.map((p, i) => (
-            <div key={i} style={{ padding: "12px 14px", borderBottom: i < posts.length - 1 ? "1px solid var(--line)" : "none", display: "grid", gridTemplateColumns: "1fr auto", gap: 14, alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{p.title}</div>
-                <div className="mono" style={{ fontSize: 10.5, color: "var(--muted)" }}>
-                  <span style={{ color: "var(--text-2)" }}>r/{p.sub}</span>
-                  <span style={{ background: "var(--surface-2)", border: "1px solid var(--line)", padding: "1px 5px", borderRadius: 3, margin: "0 8px" }}>{p.flair}</span>
-                  ↑ {p.score.toLocaleString()} · {p.comments.toLocaleString()} comments · {p.age}
-                  <span className={p.sentiment >= 0 ? "up" : "down"} style={{ marginLeft: 8 }}>sent {p.sentiment >= 0 ? "+" : ""}{p.sentiment.toFixed(2)}</span>
+          {(posts || []).length === 0 && (
+            <div className="dim" style={{ padding: "12px 14px", fontFamily: "var(--mono)", fontSize: 11 }}>No hot posts captured yet.</div>
+          )}
+          {(posts || []).map((p, i) => {
+            const action = p.action || "—";
+            return (
+              <div key={i} style={{ padding: "12px 14px", borderBottom: i < posts.length - 1 ? "1px solid var(--line)" : "none", display: "grid", gridTemplateColumns: "1fr auto", gap: 14, alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{p.title}</div>
+                  <div className="mono" style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                    <span style={{ color: "var(--text-2)" }}>r/{p.sub}</span>
+                    {p.flair ? <span style={{ background: "var(--surface-2)", border: "1px solid var(--line)", padding: "1px 5px", borderRadius: 3, margin: "0 8px" }}>{p.flair}</span> : <span style={{ marginRight: 4 }}> </span>}
+                    ↑ {Number(p.score || 0).toLocaleString()} · {Number(p.comments || 0).toLocaleString()} comments
+                    {p.age ? ` · ${p.age}` : null}
+                    {p.sentiment != null && (
+                      <span className={p.sentiment >= 0 ? "up" : "down"} style={{ marginLeft: 8 }}>sent {p.sentiment >= 0 ? "+" : ""}{Number(p.sentiment).toFixed(2)}</span>
+                    )}
+                  </div>
                 </div>
+                <span className={`pill ${typeof action === "string" && action.startsWith("ACTED") ? "holding" : typeof action === "string" && action.startsWith("STOPPED") ? "stopped" : "passed"}`}>{action}</span>
               </div>
-              <span className={`pill ${p.action.startsWith("ACTED") ? "holding" : p.action.startsWith("STOPPED") ? "stopped" : "passed"}`}>{p.action}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </main>
@@ -531,6 +567,17 @@ function WatchlistPage() {
         </div>
       </div>
 
+      {/* THESIS CARDS — one card per thesis, with lifecycle bar (D1) */}
+      <div style={{ marginTop: 12 }}>
+        <div style={{ marginBottom: 8 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Theses · lifecycle</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>
+            DETECTED → CORROBORATED → ENTERED → EXITED · countdown to event · contributing strategies
+          </p>
+        </div>
+        <ThesisCardList theses={window.THESES} limit={20} />
+      </div>
+
       {/* EVENT CARDS — one card per (ticker, event_date), sorted by event_date asc */}
       <div style={{ marginTop: 12 }}>
         <div style={{ marginBottom: 8 }}>
@@ -540,6 +587,17 @@ function WatchlistPage() {
           </p>
         </div>
         <EventCardList />
+      </div>
+
+      {/* CATALYST WINDOW — upcoming earnings / FDA / ex-div from the calendars */}
+      <div style={{ marginTop: 12 }}>
+        <div style={{ marginBottom: 8 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Catalyst window</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>
+            Confirmed and unconfirmed catalysts from earnings + event calendars · grouped by date
+          </p>
+        </div>
+        <CatalystWindowPanel />
       </div>
     </main>
   );
@@ -594,6 +652,17 @@ function MethodologyPage() {
         </div>
       </div>
 
+      {/* DECISION NARRATIVE STREAM — D5 */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-head">
+          <h3>Decision narrative · the agent did X because Y</h3>
+          <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>last 25 ticks · prose-mode read from agent_reports.jsonl</span>
+        </div>
+        <div className="card-body tight">
+          {window.DecisionNarrativeStream ? <window.DecisionNarrativeStream /> : null}
+        </div>
+      </div>
+
       {/* RULE BREAKS */}
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-head">
@@ -606,8 +675,11 @@ function MethodologyPage() {
               <tr><th>Trade</th><th>Ticker</th><th>Rule broken</th><th className="num">Outcome</th><th>Lesson</th></tr>
             </thead>
             <tbody>
-              {breaks.map((b) => (
-                <tr key={b.trade}>
+              {(breaks || []).length === 0 && (
+                <tr><td colSpan={5} className="dim" style={{ padding: 14, textAlign: "center" }}>No rule firings logged yet.</td></tr>
+              )}
+              {(breaks || []).map((b, i) => (
+                <tr key={`${b.ts || i}-${b.ticker || ""}-${b.rule || ""}-${i}`}>
                   <td className="dim">{b.trade}</td>
                   <td className="ticker">{b.ticker}</td>
                   <td className="dim">{b.rule}</td>
@@ -618,6 +690,27 @@ function MethodologyPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* SIGNAL DEDUP — sibling of rule breaks: "blocked at gate" but for the dedup window */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 8 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Signal dedup · time-windowed gate</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>
+            Recent (strategy, ticker, direction) fires suppressed within the 60-minute window, plus the live windows still in effect
+          </p>
+        </div>
+        <SignalDedupPanel />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 8 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>News signal health · headline scanner pulse</h2>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 12 }}>
+            24h scan totals plus recently flagged headlines (block_entry / exit_now) per ticker — distinguishes "no flags" from "scanner stalled"
+          </p>
+        </div>
+        <NewsSignalHealthPanel />
       </div>
 
       {/* FAQ */}

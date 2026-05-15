@@ -176,6 +176,9 @@ function StrategiesPage() {
         </div>
       </div>
 
+      {/* HEAD-TO-HEAD COMPARISON (D4) */}
+      {window.StrategyComparisonPanel && <window.StrategyComparisonPanel />}
+
       {/* SELECTED STRATEGY DETAIL */}
       <div className="card">
         <div className="card-head">

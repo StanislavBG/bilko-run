@@ -441,6 +441,9 @@ function RedditPage() {
         </div>
       </div>
 
+      {/* SUBREDDIT ALPHA ATTRIBUTION (G4) */}
+      {window.SubredditAlphaAttribution && <window.SubredditAlphaAttribution />}
+
       {/* HOT POSTS GLOBAL */}
       <div className="card">
         <div className="card-head"><h3>Hot posts feed · all 10 subs</h3></div>

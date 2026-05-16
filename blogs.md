@@ -54,6 +54,8 @@ Based on the LinkedIn strategy (Irina Malkova 10/10 quality reference):
 
 ## Post Backlog
 
+- **Five redesigns, three bugs the "all green" reports missed** (lessons): SHIPPED 2026-05-15 as `all-green-three-bugs-the-regression-pass-caught`. Week-in-review for May 11–15: six polish rounds in one Monday, five Claude Design handoffs, the paranoid second-pass discipline, three would-have-shipped-broken bugs (Cellar SW VERSION drift, Sudoku invisible-undo bus-dispatch test, MindSwiffer skipped vitest), three host-level structural fixes queued for next week.
+
 - **Cellar — building a full FreeCell engine from scratch** (build-log): shipped 2026-05-10 at /projects/cellar/. Cover: domain-restricted deal-number seeding (no /dev/urandom), solvability oracle via recursive BFS with 5k-node cap, CSS specificity war between `:root` and `[data-theme]` attribute selectors, 45-test Playwright suite across 8 spec files, 5-theme WCAG AA a11y, autosave/hydration, daily streak system with freeze tokens.
 
 - **MindSwiffer — building Minesweeper without 50/50s** (build-log): shipped 2026-05-09 at /projects/mindswiffer/. Cover: no-guess constraint solver, wave-function collapse analogy, why 50/50s are a design failure not a feature, 65-test Playwright suite, 5-theme WCAG AA a11y, cascade animations + reduced-motion.

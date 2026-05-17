@@ -209,7 +209,26 @@ function CorroborationView({ corroboration }) {
   );
 }
 
+// Block reason codes that reflect market state rather than a strategy
+// decision. Historically the agent wrote one rule_break per cron tick
+// for each open thesis whenever markets were closed, which swamped the
+// rationale feed. New code no longer emits these (theses_cli J1 fix),
+// but the modal still filters legacy rows from `audit.jsonl`.
+const ENV_RULE_BREAKS = new Set([
+  "market_closed",
+  "weekend",
+  "pre_open",
+  "post_close",
+]);
+
+function _isEnvironmentalRow(r) {
+  const breaks = Array.isArray(r && r.ruleBreaks) ? r.ruleBreaks : [];
+  if (breaks.length === 0) return false;
+  return breaks.every((b) => ENV_RULE_BREAKS.has(b));
+}
+
 function RationaleList({ rationale }) {
+  const [showEnv, setShowEnv] = React.useState(false);
   if (!Array.isArray(rationale) || rationale.length === 0) {
     return (
       <div className="dim" style={{ fontFamily: "var(--mono)", fontSize: 11 }}>
@@ -217,9 +236,35 @@ function RationaleList({ rationale }) {
       </div>
     );
   }
+  const envCount = rationale.filter(_isEnvironmentalRow).length;
+  const visible = showEnv ? rationale : rationale.filter((r) => !_isEnvironmentalRow(r));
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      {rationale.map((r, i) => {
+      {envCount > 0 && (
+        <label
+          style={{
+            fontFamily: "var(--mono)",
+            fontSize: 10.5,
+            color: "var(--muted)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showEnv}
+            onChange={(e) => setShowEnv(e.target.checked)}
+          />
+          show environmental skips ({envCount} hidden)
+        </label>
+      )}
+      {visible.length === 0 ? (
+        <div className="dim" style={{ fontFamily: "var(--mono)", fontSize: 11 }}>
+          no strategy-level rationale (only environmental skips on file)
+        </div>
+      ) : visible.map((r, i) => {
         const kindColor =
           r.kind === "ENTERED" ? "var(--pos)"
           : r.kind === "EXITED" ? "var(--warn)"

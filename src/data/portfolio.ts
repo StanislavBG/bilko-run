@@ -152,10 +152,10 @@ export const CHANNELS: readonly Channel[] = [
 ];
 
 export const NOW_ITEMS: readonly string[] = [
-  `Shipping the ${PROJECT_COUNT}-project Bilko platform`,
-  'Cooking AgentTrace (local agent observability)',
-  'Game Academy: Boat Shooter (work in progress)',
-  'Building in public — see Blog',
+  'Burrow (Reddit-watching pipeline) just went gather-only',
+  'Trading research engine: 1,023 passing tests this week',
+  'Session-manager harness shipped v0.12.1',
+  'New build log up on the blog',
 ];
 
 export const TICKER_ITEMS: readonly string[] = [

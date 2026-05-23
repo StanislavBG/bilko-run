@@ -8,7 +8,7 @@ export function HomePage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Bilko Bibitkov — AI builder, regular human';
+    document.title = 'Bilko Bibitkov — small AI tools';
   }, []);
 
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -18,8 +18,8 @@ export function HomePage() {
       <section className="pf-hero">
         <div>
           <h1>
-            <span style={{ display: 'block' }}>I build <span className="pf-accent">AI things</span></span>
-            <span style={{ display: 'block' }}>for <span className="pf-strike">enterprises</span> humans.</span>
+            <span style={{ display: 'block' }}>Small <span className="pf-accent">AI tools</span>,</span>
+            <span style={{ display: 'block' }}>one at a time.</span>
           </h1>
           <div className="pf-who">
             <span>Sofia · Studio of one</span>
@@ -27,11 +27,12 @@ export function HomePage() {
             <span>est. 2024</span>
           </div>
           <p className="pf-blurb">
-            Hey, I'm Bilko. I believe in people — stubbornly, loudly, sometimes
-            embarrassingly. My dream is simple: make AI feel like a buddy that
-            has your back, not a black box that talks down to you. I'll try a
-            hundred ideas, fail at ninety, laugh at most of them, and ship the
-            ten that actually help someone's day.
+            About a dozen small AI tools, each doing one thing. A roaster
+            for landing pages. A scorer for ads. A weather report that
+            tells you whether to go outside today. A Reddit-watching
+            pipeline, a few browser games, and a trading research engine
+            ticking along in the background. Most are free or a few bucks.
+            Build logs on the blog.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
             <button className="pf-btn" onClick={() => navigate('/projects')}>See the work →</button>
@@ -90,8 +91,8 @@ export function HomePage() {
             <div className="pf-portrait-meta">
               <div className="pf-mono" style={{ color: 'var(--pf-ink-3)' }}>Bilko Bibitkov</div>
               <div className="pf-serif" style={{ fontSize: 22, lineHeight: 1.1, marginTop: 4 }}>
-                <em style={{ color: 'var(--pf-accent)' }}>Stubborn optimist.</em><br />
-                Builder of small useful things.
+                <em style={{ color: 'var(--pf-accent)' }}>About a dozen tools.</em><br />
+                Build logs on the blog.
               </div>
             </div>
           </div>

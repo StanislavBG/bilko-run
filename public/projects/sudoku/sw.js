@@ -15,7 +15,7 @@
  *     the first interaction after FCP without burning data on 2G/3G.
  */
 
-const SW_VERSION = 'sudoku-v2';
+const SW_VERSION = 'sudoku-v0.9.1';
 const CACHE_NAME = `bilko-sudoku-${SW_VERSION}`;
 const SCOPE = '/projects/sudoku/';
 

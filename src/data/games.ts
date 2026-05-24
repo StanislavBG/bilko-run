@@ -9,7 +9,7 @@ export interface GameCard {
   /** Server-side game slug used for leaderboard/unlocks API calls. */
   apiSlug: string;
   hostKind: 'react-route' | 'static-path' | 'external-url';
-  status: 'live' | 'cooking' | 'archived';
+  status: 'live' | 'cooking' | 'postponed' | 'archived';
 }
 
 const ICONS: Record<string, string> = {

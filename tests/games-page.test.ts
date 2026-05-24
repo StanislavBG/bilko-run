@@ -24,8 +24,14 @@ describe('Games registry', () => {
     expect(liveGames.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('includes Boat Shooter (game-academy)', () => {
-    expect(liveGames.some(g => g.slug === 'game-academy')).toBe(true);
+  it('Boat Shooter is registered but not live (postponed)', () => {
+    // Boat Shooter pages exist but the game is unfinished; the card on the
+    // Projects page marks it Postponed and click navigation is suppressed so
+    // visitors don't land in a half-built arcade.
+    const boat = standalone.find(p => isGame(p) && p.slug === 'game-academy');
+    expect(boat).toBeDefined();
+    expect(boat?.status).toBe('postponed');
+    expect(liveGames.some(g => g.slug === 'game-academy')).toBe(false);
   });
 
   it('includes Sudoku', () => {

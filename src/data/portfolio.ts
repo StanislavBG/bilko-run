@@ -22,7 +22,7 @@ export interface PortfolioProject {
   name: string;
   kind: string;
   year: number;
-  status: 'Live' | 'Shipped' | 'Cooking';
+  status: 'Live' | 'Shipped' | 'Cooking' | 'Postponed';
   blurb: string;
   tags: readonly string[];
   color: 'tang' | 'ink' | 'blue';
@@ -67,8 +67,9 @@ export interface Channel {
 const COLORS: ReadonlyArray<'tang' | 'ink' | 'blue'> = ['tang', 'ink', 'blue'];
 
 function statusLabel(p: Project): PortfolioProject['status'] {
-  if (p.status === 'live')    return 'Live';
-  if (p.status === 'cooking') return 'Cooking';
+  if (p.status === 'live')      return 'Live';
+  if (p.status === 'cooking')   return 'Cooking';
+  if (p.status === 'postponed') return 'Postponed';
   return 'Shipped';
 }
 
@@ -101,7 +102,7 @@ export const SECTIONS: readonly Section[] = [
 ];
 
 export const GAMES: readonly PortfolioGame[] = [
-  { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade', plays: 'wip',  blurb: 'Work in progress — browser-first arcade shooter. First entry in the Game Academy series.', color: 'tang', href: '/projects/game-academy/' },
+  { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade', plays: 'postponed', blurb: 'Postponed — browser-first arcade shooter. First entry in the Game Academy series; we paused it to focus on other apps.', color: 'tang' },
   { id: 'sudoku',       name: 'Sudoku',       genre: 'Puzzle', plays: 'live', blurb: 'Daily-streak Sudoku with hints, themes, and a11y-first input.',         color: 'blue', href: '/projects/sudoku/' },
   { id: 'mindswiffer',  name: 'Sweeper',      genre: 'Puzzle', plays: 'live', blurb: 'Minesweeper, no-guess mode, daily streaks, sound + haptics.',           color: 'ink',  href: '/projects/mindswiffer/' },
   { id: 'fizzpop',      name: 'FizzPop',      genre: 'Arcade', plays: 'live', blurb: 'Pop-the-bubbles arcade reflex game. Short loops, satisfying juice.',    color: 'tang', href: '/projects/fizzpop/' },

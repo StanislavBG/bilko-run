@@ -9,6 +9,9 @@ import type { PortfolioProject } from '../../data/portfolio.js';
  *   browser leaves the SPA and serves the static project (or external host).
  */
 export function navigateProject(navigate: NavigateFunction, p: PortfolioProject): void {
+  // Postponed projects render as informational cards only — the underlying
+  // app is unfinished, so we don't send visitors to play it.
+  if (p.status === 'Postponed') return;
   if (p.isInternal) {
     navigate(p.href);
   } else {

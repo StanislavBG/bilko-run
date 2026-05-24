@@ -34,14 +34,18 @@ export function CommandPalette({ open, onClose }: Props) {
   const items = useMemo<Item[]>(() => {
     const all: Item[] = [
       ...SECTIONS.map(s => ({ kind: 'Section', ic: s.icon, name: s.label, desc: s.desc, path: s.path, internal: true })),
-      ...PORTFOLIO_PROJECTS.map(p => ({
-        kind: p.status === 'Cooking' ? 'Cooking' : 'Project',
-        ic: '◐',
-        name: p.name,
-        desc: p.kind,
-        path: p.href,
-        internal: p.isInternal,
-      })),
+      ...PORTFOLIO_PROJECTS
+        // Postponed projects shouldn't be reachable via ⌘K (clicking them would
+        // open an unfinished game). Surface them on the Projects page only.
+        .filter(p => p.status !== 'Postponed')
+        .map(p => ({
+          kind: p.status === 'Cooking' ? 'Cooking' : 'Project',
+          ic: '◐',
+          name: p.name,
+          desc: p.kind,
+          path: p.href,
+          internal: p.isInternal,
+        })),
     ];
     if (!query) return all.slice(0, 12);
     const q = query.toLowerCase();

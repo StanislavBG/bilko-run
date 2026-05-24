@@ -25,7 +25,7 @@
 
 import { LISTING_TOOLS, type ToolDefinition } from '../config/tools.js';
 
-export type ProjectStatus = 'live' | 'cooking' | 'archived';
+export type ProjectStatus = 'live' | 'cooking' | 'postponed' | 'archived';
 
 export type ProjectHost =
   | { kind: 'react-route'; path: string }

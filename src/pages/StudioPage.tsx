@@ -24,7 +24,7 @@ export function StudioPage() {
             <div className="pf-game-body">
               <div className="pf-meta">
                 <span>{g.genre}</span>
-                <span>{g.plays} plays</span>
+                <span>{g.plays === 'postponed' ? 'postponed' : `${g.plays} plays`}</span>
               </div>
               <h3>{g.name}</h3>
               <p>{g.blurb}</p>
@@ -34,7 +34,7 @@ export function StudioPage() {
                 </a>
               ) : (
                 <button className="pf-btn" disabled style={{ width: '100%', justifyContent: 'center', opacity: 0.5, cursor: 'not-allowed' }}>
-                  Soon
+                  {g.plays === 'postponed' ? 'Postponed' : 'Soon'}
                 </button>
               )}
             </div>

@@ -4,7 +4,7 @@ import { PageHeader } from '../components/portfolio/PageHeader.js';
 import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { PORTFOLIO_PROJECTS, type PortfolioProject } from '../data/portfolio.js';
 
-const FILTERS = ['All', 'Live', 'Shipped', 'Cooking'] as const;
+const FILTERS = ['All', 'Live', 'Shipped', 'Cooking', 'Postponed'] as const;
 type Filter = typeof FILTERS[number];
 
 /**
@@ -112,27 +112,31 @@ export function ProjectsPage() {
             <span className="pf-mono">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</span>
           </header>
           <div className="pf-proj-grid">
-            {projects.map((p, i) => (
-              <div key={p.id} className="pf-proj-card" onClick={() => navigateProject(navigate, p)}>
+            {projects.map((p) => (
+              <div
+                key={p.id}
+                className={`pf-proj-card${p.status === 'Postponed' ? ' postponed' : ''}`}
+                onClick={() => navigateProject(navigate, p)}
+                style={p.status === 'Postponed' ? { cursor: 'default' } : undefined}
+              >
                 <div className={`pf-swatch ${p.color}`}></div>
-                <div className="pf-head">
-                  <span className="pf-ord">No. {String(i + 1).padStart(2, '0')}</span>
-                  <span className="pf-ord">{p.year}</span>
+                <div className="pf-kind">
+                  <span>{p.kind}</span>
+                  <span className="pf-year">{p.year}</span>
                 </div>
-                <div className="pf-kind">{p.kind}</div>
                 <h3>{p.name}</h3>
                 <p className="pf-blurb">{p.blurb}</p>
                 <div className="pf-foot">
                   <span className={`pf-status ${p.status.toLowerCase()}`}>{p.status}</span>
-                  {p.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}
-                  {p.kind.includes('Game') && (
+                  {p.tags.slice(0, 2).map(t => <span key={t} className="pf-chip">{t}</span>)}
+                  {p.kind.includes('Game') && p.status !== 'Postponed' && (
                     <Link
                       to="/studio"
                       className="pf-chip"
                       onClick={e => e.stopPropagation()}
                       style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}
                     >
-                      Play in arcade →
+                      Play →
                     </Link>
                   )}
                 </div>

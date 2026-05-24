@@ -7,9 +7,13 @@
  * fast (effectiveType === '4g', no saveData). Saves a round-trip on the next
  * puzzle the player loads.
  *
+ * v0.8.2: bump CACHE_NAME to force-evict the v0.7.0 cache that pinned the
+ * pre-Sleepy-Cat shell for existing installs (it never got bumped at v0.8.0
+ * release, so users were still being served the legacy dark chrome).
+ *
  * IMPORTANT: bumping CACHE_NAME invalidates the prior cache on activate.
  */
-const CACHE_NAME = 'etch-v0.7.0';
+const CACHE_NAME = 'etch-v0.8.2';
 const SCOPE = self.registration.scope; // ends with /projects/etch/
 
 function networkOk() {

@@ -6,8 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Academy — Bilko</title>
     <meta name="description" content="Learn how AI actually works. No fluff. Every claim cited." />
-    <script type="module" crossorigin src="/projects/academy/assets/index-QmZ7u8yN.js"></script>
-    <link rel="stylesheet" crossorigin href="/projects/academy/assets/index-D_61P3Rm.css">
+    <!-- Apply stored theme before React mounts to avoid flash of unstyled content -->
+    <script>(function(){var t=localStorage.getItem('bilko_academy_theme_v1');if(t)document.documentElement.dataset.theme=t;})()</script>
+    <!-- Editorial fonts: Source Serif 4, Inter Tight, JetBrains Mono -->
+    <!-- Loaded in <head> to prevent FOUC before React hydrates -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="/projects/academy/assets/index-C8O9xQ83.js"></script>
+    <link rel="stylesheet" crossorigin href="/projects/academy/assets/index-DJ3znqT8.css">
   </head>
   <body>
     <div id="root"></div>

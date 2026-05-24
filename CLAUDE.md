@@ -45,15 +45,18 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 - **OutdoorHours** (`/projects/outdoor-hours/`) → `~/Projects/Outdoor-Hours/` — KOUT-7 weather report
 - **LocalScore** (`/projects/local-score/`) → `~/Projects/Local-Score/` — Gemma/WebGPU doc analyzer
 - **Boat Shooter** (`/projects/game-academy/`) → `~/Projects/Bilko-Game-Academy/` — browser arcade
+- **Bilko-Academy** (`/projects/academy/`) → `~/Projects/Bilko-Academy/` — Interactive AI fundamentals course (23 MDX lessons across 4 modules: intro / what is an AI / prompting / safety & verification). Pure static-path; consumes `host-kit` (workspace package at `~/Projects/Bilko-Host-Kit/`) for shared chrome, telemetry, and the publish CLI. No Bilko-host server route.
 - **Stepproof** (`/projects/stepproof/`) → `~/Projects/Stepproof/` — YAML scenario regression tests for AI pipelines (marketing page; CLI lives at github.com/StanislavBG/stepproof)
-- **StackAudit** (`/projects/stack-audit/`) → `~/Projects/Stack-Audit/` — SaaS tool stack cost + waste finder. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
-- **LaunchGrader** (`/projects/launch-grader/`) → `~/Projects/Launch-Grader/` — 5-dimension go-to-market readiness audit. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
-- **AdScorer** (`/projects/ad-scorer/`) → `~/Projects/Ad-Scorer/` — Platform-specific ad copy grading (FB/Google/LinkedIn) with Score/Compare/Generate modes. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
-- **HeadlineGrader** (`/projects/headline-grader/`) → `~/Projects/Headline-Grader/` — 4-framework headline scoring (Rule of One, Hormozi, Readability, Proof+Promise+Plan) with Score/Compare/Generate modes. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
-- **ThreadGrader** (`/projects/thread-grader/`) → `~/Projects/Thread-Grader/` — X/Twitter thread viral analysis with Score/Compare/Generate modes. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
-- **EmailForge** (`/projects/email-forge/`) → `~/Projects/Email-Forge/` — 5-email sequence generator (AIDA/PAS/Hormozi/Cialdini/Story) with Generate/Compare modes. Page is standalone; server route stays in this repo (called same-origin via Clerk JWT)
-- **AudienceDecoder** (`/projects/audience-decoder/`) → `~/Projects/Audience-Decoder/` — Audience archetype + engagement analysis with Decode/Compare modes. Page is standalone; server route + one-time-purchase tier stay in this repo (called same-origin via Clerk JWT)
-- **PageRoast** (`/projects/page-roast/`) → `~/Projects/Page-Roast/` — Brutally honest landing page CRO audits with Score/Compare modes + savage roast lines. Page is standalone; server route + 6 endpoints + PAGEROAST_TOKENS one-time-purchase tier stay in this repo (called same-origin via Clerk JWT)
+- **StackAudit** (`/projects/stack-audit/`) → `~/Projects/Stack-Audit/` — SaaS tool stack cost + waste finder
+- **LaunchGrader** (`/projects/launch-grader/`) → `~/Projects/Launch-Grader/` — 5-dimension go-to-market readiness audit
+- **AdScorer** (`/projects/ad-scorer/`) → `~/Projects/Ad-Scorer/` — Platform-specific ad copy grading (FB/Google/LinkedIn) with Score/Compare/Generate modes
+- **HeadlineGrader** (`/projects/headline-grader/`) → `~/Projects/Headline-Grader/` — 4-framework headline scoring (Rule of One, Hormozi, Readability, Proof+Promise+Plan) with Score/Compare/Generate modes
+- **ThreadGrader** (`/projects/thread-grader/`) → `~/Projects/Thread-Grader/` — X/Twitter thread viral analysis with Score/Compare/Generate modes
+- **EmailForge** (`/projects/email-forge/`) → `~/Projects/Email-Forge/` — 5-email sequence generator (AIDA/PAS/Hormozi/Cialdini/Story) with Generate/Compare modes
+- **AudienceDecoder** (`/projects/audience-decoder/`) → `~/Projects/Audience-Decoder/` — Audience archetype + engagement analysis with Decode/Compare modes
+- **PageRoast** (`/projects/page-roast/`) → `~/Projects/Page-Roast/` — Brutally honest landing page CRO audits with Score/Compare modes + savage roast lines
+
+**Architectural note — gateway pattern for the 8 AI-tool siblings:** StackAudit, LaunchGrader, AdScorer, HeadlineGrader, ThreadGrader, EmailForge, AudienceDecoder, and PageRoast each ship their React page from the sibling repo, but their Gemini-backed scoring endpoint stays in Bilko host under `server/routes/tools/<slug>.ts`. The sibling calls its endpoint same-origin via Clerk JWT — no CORS, no cross-origin auth. Two tools carry extra host-side weight: PageRoast owns 6 endpoints plus the PAGEROAST_TOKENS one-time-purchase tier, and AudienceDecoder owns its own one-time-purchase tier. This split is deliberate, not a migration leftover; Academy and the free tools (OutdoorHours, LocalScore) are not in this pattern and have no host-side server route.
 
 **Long-term direction:** all in-repo apps eventually become sibling repos. Bilko stays the framework: registry, auth, credits, kit, brand, blog, admin.
 

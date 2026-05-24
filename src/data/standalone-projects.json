@@ -428,5 +428,25 @@
       "Daily",
       "Free"
     ]
+  },
+  {
+    "slug": "signal-builder",
+    "name": "signal-builder",
+    "tagline": "Signals layer: turns raw Reddit info into structured trader-facing panels via MCP.",
+    "category": "Dev Tool · CLI",
+    "status": "cooking",
+    "year": 2026,
+    "host": {
+      "kind": "external-url",
+      "url": "https://github.com/StanislavBG/signal-builder",
+      "sourceRepo": "github.com/StanislavBG/signal-builder",
+      "localPath": "~/Projects/signal-builder"
+    },
+    "tags": [
+      "Python",
+      "MCP",
+      "Signals",
+      "Free"
+    ]
   }
 ]

@@ -1859,92 +1859,106 @@ For as long as the static-path contract holds, yes. The host's job is to provide
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Week-in-review: May 22 – June 3, 2026 — The host told the truth, then ran itself
+  // Build log: May 22 – June 3, 2026 — A dependency cycle became two products
   // ─────────────────────────────────────────────────────────────────────
   await dbRun(
     `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
-    'the-week-the-host-told-the-truth',
-    `The week the host told the truth, then ran itself for ten days`,
-    'In twelve days the Bilko host repo made 380-odd commits. Exactly four were decisions; the other 376 were a robot publishing the same dashboard every thirty minutes. The four decisions were all about telling the truth — a half-built game marked Postponed, a homepage that stopped pretending to be a human, a tool shipped as "cooking" not "live." Then the host went quiet and let the cron prove the contract.',
-    `In twelve days the Bilko host repo made just over 380 commits. Exactly four of them were decisions. The other 376 were a robot publishing the same dashboard snapshot every thirty minutes, around the clock, for ten days straight.
+    'when-a-dependency-cycle-becomes-two-products',
+    `When a dependency cycle becomes two new products`,
+    'Two weeks ago I split my trading stack into clean layers. Last week I had to put part of it back — because a "service" that imports its own client isn\'t a service, it\'s a cycle. Breaking that cycle didn\'t just fix the graph. It revealed where the real product boundaries were, and two of them became their own repos: a paid SEC-filings intelligence MCP (edgar-rag) and a storefront to host it (MCP-Host). A full-portfolio build log, not just the host repo.',
+    `Two weeks ago I split my trading stack into clean layers. Last week I had to put part of it back. The reason I had to put it back is the most useful architecture lesson I've had this year: **a service that imports its own client is not a service — it's a cycle.** Breaking that cycle didn't just tidy a dependency graph. It told me exactly where the real product boundaries were, and two of those boundaries walked off and became their own repos.
 
-That ratio — four decisions to 376 heartbeats — is the whole story of this stretch, and it is the best evidence yet that the [static-path contract](/blog/the-week-the-platform-got-dumber) is doing its job. The host is not supposed to be busy. When it does move, it should move with judgment. This period it moved four times, and all four edits were the same kind of edit: removing a thing that wasn't true.
+Last post I looked at one repo — the [bilko.run host](/blog/the-week-the-platform-got-dumber) — saw it do almost nothing but auto-publish dashboards, and called it a quiet stretch. That was true of one repo and badly wrong about the portfolio. Across roughly twelve days and a dozen repos, the real work was a four-act architecture story: extract everything, discover the cycle, reverse the over-extraction, and then ship the two pieces that turned out to be genuinely standalone — as products. Here is the whole arc.
 
-Here is what the four decisions were, why each one was subtractive, and what 376 unattended commits actually prove.
+## Act 1 — the great extraction (May 23–24)
 
-## Decision one: Boat Shooter is Postponed, and the site finally says so
+The bet from the previous week was simple: [Burrow](https://github.com/StanislavBG/burrow) (the Reddit capture pipeline) should only *gather*; whoever consumes the data should *interpret* it. So I built that, fast. In about two days a brand-new repo, **signal-builder**, went from an empty m0 skeleton to M9 — nine milestones — absorbing the entire interpretation layer out of the trader, [social-signals-trader](/projects/social-signals-trader):
 
-[Boat Shooter](/projects) — the \`game-academy\` sibling — has been an unfinished arcade game wearing a "cooking" badge for weeks, which on a portfolio reads as "coming soon," which reads as "real, just not yet." It is not coming soon. So on May 23 it got a new status the registry didn't have before: \`postponed\`.
+- **M1** — local aggregates + post_cache + the first panel/signal MCP tools
+- **M2** — the sentiment stack
+- **M3** — news signals + short-interest
+- **M4** — \`fund_extractor\` (10-K/10-Q thesis extraction)
+- **M5** — \`catalyst_calendar\`
+- **M6** — \`proactive_scan\` + \`score_tickers\` + corroboration
+- **M8** — panel-replay backtest mode + panel history/freshness tools
 
-This was more than a label swap. Adding \`Postponed\` to the \`ProjectStatus\` type rippled through the whole surface, and every ripple was in service of not letting a visitor reach a half-built page by accident:
+At the same time Burrow went gather-only *for real*, not just on paper: PRD 79 dropped \`post_sentiment\` and archived the scoring pipeline; PRD 80 introduced a shared \`Reader\` singleton so the dashboard stops reaching straight into the indexer; PRDs 76/82 exposed EDGAR filings over MCP. And the trader became a wall of shims — every old import now delegating into the \`signal_builder\` package.
 
-- The Projects-page card renders at 0.65 opacity with no hover lift — it looks shelved, because it is.
-- Clicking it is a no-op; \`navigateProject\` returns early.
-- The "Play →" game chip is hidden, and the Studio page swaps its "Soon" button for "Postponed" and drops the "X plays" counter.
-- The ⌘K command palette **filters postponed items out entirely**, so the fast path can't reach the page either.
-- A stale test that still asserted Boat Shooter lived in \`liveGames\` got fixed in the same commit — the test was lying too.
+On paper, beautiful. Producer gathers, gateway interprets, trader trades. Three clean layers.
 
-The honest version of a portfolio includes the things you shelved, labeled as shelved. "Cooking" was a small fib. "Postponed" is the truth, and the truth got its own CSS.
+## Act 2 — the cycle (discovered May 28)
 
-## Decision two: the homepage stopped pretending to be a person
+Then I ran a full architecture audit, and the diagram had an arrow pointing the wrong way.
 
-The old landing copy introduced Bilko as a "stubborn optimist" human builder in Sofia who "believes in people — stubbornly, loudly, sometimes embarrassingly." It was warm. It was also false on two counts: Bilko is an AI agent, not a human, and the Sofia line was stale placeholder that had outlived whatever it was a placeholder for.
+signal-builder's M6 modules — \`proactive_scan\`, \`score_tickers\`, corroboration — imported \`social_signals_trader.strategies\`, \`.events\`, \`.theses\`, \`.universe\`. The "upstream producer" was importing the downstream consumer. That isn't a layering; it's a **cycle**. And a cycle is fatal to the one thing I actually wanted signal-builder to become: a clean, hosted, upstream service that many clients can call without dragging a trader's strategy code along with it.
 
-The May 22 rewrite deleted the persona and replaced it with an inventory:
+The tell was deployment. I couldn't run signal-builder anywhere the trader wasn't also installed. A "service" you can't start without its own client is a library wearing a service costume.
 
-> About a dozen small AI tools, each doing one thing. A roaster for landing pages. A scorer for ads. A weather report that tells you whether to go outside today. A Reddit-watching pipeline, a few browser games, and a trading research engine ticking along in the background. Most are free or a few bucks. Build logs on the blog.
+## Act 3 — the reversal (May 28–29)
 
-The headline went from "I build AI things for ~~enterprises~~ humans" to "Small AI tools, one at a time." The rotating status line dropped the aspirational items ("Building in public — see Blog") for factual ones pulled from the actual week: "Burrow just went gather-only," "Trading research engine: 1,023 passing tests this week," "Session-manager harness shipped v0.12.1." Even the \`<title>\` changed — from "AI builder, regular human" to "small AI tools."
+Four commits, all the same shape: **move it back.**
 
-The pattern holds: the edit removed a claim. A homepage that lists what exists ages gracefully; a homepage that performs a personality has to keep performing it, and ours had stopped meaning it.
+\`proactive_scan\`, \`score_tickers\`, corroboration, and \`catalyst_calendar\` all went home to the trader. The rule I should have started with, stated plainly in the commit messages: a module that imports the trader's strategies/events/theses *is* trader orchestration, and it lives in the trader. A module that produces per-ticker data from raw inputs — sentiment, news, fund theses, aggregates — is genuinely upstream, and it stays in signal-builder. **The direction of the dependency arrow is the architecture.** Everything else is detail.
 
-## Decision three: signal-builder shipped as "cooking," on purpose
+After the reversal, no real \`social_signals_trader\` import remained in \`src/signal_builder\`. 337 tests green. The trader got its orchestration back; the producer got its independence.
 
-The one genuinely additive change was a new tile — and it was added with maximum honesty about its state. [signal-builder](https://github.com/StanislavBG/signal-builder) is a new sibling: an MCP server that turns raw Reddit capture into structured, trader-facing panels — the interpretation layer that sits between [Burrow](/blog/the-week-the-platform-got-dumber) (which now only gathers) and the trading engine (which now consumes). It is the natural next piece of the gather-only decoupling we wrote about last week.
+## Act 4 — the boundary turned out to be a business (May 29 → June 3)
 
-It went into the registry as an \`external-url\` entry with status \`cooking\` — because only milestone M0 has shipped in the sibling repo, and the tile should not imply more than exists. It even got a smoke test (\`smoke-signal-builder-tile.sh\`, PRD 48) whose job is to verify the JSON parses, the entry has the right shape, exactly one \`signal-builder\` exists in HEAD and the worktree, and the same code path the \`bilko-host\` MCP uses can read it. A tile for a tool that barely exists, gated by a test that makes sure the tile is at least correctly wired. "Cooking" is a promise to update the badge when it's true.
+Here's the part I didn't see coming. Once signal-builder was a genuinely standalone producer, the question "where does it live?" had a new answer — not "a package the trader imports" but a hosted service. The decided direction, written into the trader's own architecture doc:
 
-## Decision four (and a half): Academy got an editorial redesign
+> signal-builder is a separate, publicly-hosted, paid, multi-tenant MCP service producing per-ticker time-series; this trader is its first of many clients.
 
-The fourth real change was a content drop, not a registry decision, but it's worth a line: [Bilko Academy](/projects/academy/) republished twice — first an editorial redesign bundle (new Tokens lesson with an opener SVG, stat row, hover citations, an AskClaude embed, restyled interactives, sidebar+topbar+rightrail chrome) and then a same-day follow-up to fix a "1991-looking page" where the GameShell hero was overpowering the new editorial layout. Static-path siblings ship their own bundles; the host just serves them. The host's only involvement was committing the artifact.
+A client-only dependency, contract-pinned, that degrades gracefully when the service is down. And once you've decided *one* piece is a hosted paid MCP, you start seeing the others. Two brand-new repos fell out of the same realization:
 
-## Then nothing happened, 376 times
+### edgar-rag — SEC filings as a rentable intelligence layer
 
-From May 25 through June 3, the host repo's commit log is a single repeating line: \`social-signals-trader: publish dashboard snapshot\`, roughly 48 times a day — once every thirty minutes — plus the hourly [Outdoor Hours](/projects/outdoor-hours/) JSON refreshes. Three hundred and seventy-six dashboard snapshots in ten days. Zero of them required a human or an agent to decide anything.
+EDGAR ingestion had been squatting inside Burrow. This week it got [its own repo](https://github.com/StanislavBG/edgar-rag). The north star isn't the filings — those are public and commoditized — it's the local pipeline that turns filings into searchable vectors *plus* pre-computed intelligence an agent would otherwise spend ~$500/mo building. Local produces, Replit serves, agents rent it through an x402-metered MCP. As of this week: 11 companies, 409 filings, ~11.5k chunks spanning 2021→2026; metrics computed from **exact SEC XBRL** (no LLM anywhere in the number path); intelligence generated by a local \`claude -p\` CLI so there's no API key in the loop. Burrow's \`news_collect\` pipeline got disabled the same week — that job moved here, where it belongs.
 
-This is the part that looks like nothing and is actually the product. The whole bet of decomposing Bilko from a SaaS into a host platform was that the host could sit still while the work happens in siblings and the cron, and that auto-deploy from Content-Grade/master would keep the lights on without supervision. Ten days of unattended green commits, every tool reachable, every snapshot fresh on the half-hour, is that bet paying out. The flat line in the commit graph is the heartbeat monitor, not the flatline.
+### MCP-Host — the iStore for MCPs
 
-## What we'd do differently
+If signal-builder and edgar-rag are both going to be hosted paid services, they need somewhere that handles the boring shared parts. So: **MCP-Host**, a single Replit-hosted control plane + runtime + storefront for a whole fleet of MCP servers. One gateway mounts every provider at \`/mcp/<provider>\`, sharing OAuth 2.1 auth, one x402 wallet for billing, a Postgres data layer with per-provider RLS schemas, metering, audit, and one-command registry syndication. Providers conform to a Provider Protocol (\`provider.json\` + an SDK base class) and get all of that for free. It went from "initial platform" on May 29 to **self-serve register / publish / declarative-proxy at v0.4.0** by June 3 — with three pilot providers (edgar-rag, signal-builder, and the social-trader) wired in as worked examples, plus a hardened production Postgres backend and a live-health storefront. 81 tests.
 
-We waited too long to mark Boat Shooter. It has been unplayable-but-listed for weeks, and a "cooking" badge on a thing that is actually shelved is a small, daily lie to every visitor who hovers it. The fix took one commit and one new status enum; we should have shipped it the first day the game stopped being worked on, not the day we happened to be editing the registry for something else. Lesson: status drift is a bug, and "this badge no longer matches reality" deserves a fix-now PRD the same way a broken build does.
+So the trading-stack refactor didn't just clean up a graph. It produced a paid filings service (edgar-rag), a paid signals service (signal-builder), and the storefront to sell both (MCP-Host). The cycle I had to break was the exact thing standing between "internal helper" and "product."
 
-And the persona copy is a warning about a whole category. It read well, which is exactly why it survived months past being true. Copy that performs a personality has to be re-earned every time the facts change; copy that lists what exists updates itself when the inventory does. We're going to keep the homepage in inventory voice and let the [blog](/blog) carry the personality, where it can be dated and therefore allowed to age.
+## Meanwhile, the harness kept sprinting
 
-## Calling it a week (and a half)
+None of this happens at this pace without the tool I run it all from. **session-manager** — the Claude Code session harness — shipped v0.13 → v0.17 in the same window: the Almanac UX redesign (paper-warm chrome, left-nav promotion), terminal controls where pop-ups become full pages, a 46-prompt SWE library with a tweak-and-send modal wired straight to the PTY, a session-topology matrix view, and an in-app file Editor scene with sandboxed HTML/MD preview that gives it a Google-Docs feel. Plus the unglamorous load-bearing fixes: the scheduler now auto-promotes a failed PRD when its \`fix-*\` companion succeeds, plugins got SIGKILL escalation + a deadman reaper, and four separate "is this path inside \$HOME?" implementations got consolidated into one.
 
-That's the period. Four decisions, all of them deletions of something untrue: a game that wasn't playable, a builder that wasn't human, a status that overpromised, a layout that lied about the year. One genuinely new tile, shipped honestly as half-done. And then ten days of a machine publishing the same dashboard every thirty minutes while nobody watched, which is the only kind of week a host platform should aspire to.
+## And the deliberately slow one
 
-If you want to see the surfaces that changed:
+[torlashka-sreshta](https://github.com/StanislavBG/torlashka-sreshta) — the Bulgarian guest-house repo with the proposal-gate rule — approved its first two proposals, finalized a third with Postgres details, shipped idempotency keys for \`POST /api/v1/bookings\`, and ran a five-couples booking simulation. Four commits in a window where the trading stack saw well over a hundred. That contrast *is* the point: same harness, same contract, two completely different speed limits, each correct for its blast radius.
 
-- [The Projects gallery](/projects) — now with an honest "Postponed" card
-- [Outdoor Hours](/projects/outdoor-hours/) — the hourly heartbeat that never missed
-- [Bilko Academy](/projects/academy/) — the editorial redesign, GameShell now compressed
-- [Page Roast](/projects/page-roast/) — still the savagest CRO audit on the site
+## What I'd do differently
+
+**Draw the arrow first.** The entire Act 2 → Act 3 round-trip — extract M6 into signal-builder, discover it imports the trader, move it back — was avoidable. The signal that \`proactive_scan\` and \`score_tickers\` belonged in the trader was sitting in plain sight on day one: they import strategies, events, and theses, which are *trader* concepts. One question — "which way do this module's imports point?" — asked before the move, and M6 never crosses the boundary. The cost wasn't catastrophic (four reversal commits, ~5 days later, test-protected the whole way) but it was pure, predictable waste.
+
+The thing I'd keep: extracting aggressively and then correcting is still faster than designing the perfect boundary up front — *as long as the test suites pin the contract on both sides*. signal-builder's 337 tests and the trader's thousand-plus meant the reversal was mechanical, not scary. Move fast, but let the dependency graph — not the feature list — tell you where the seams are.
+
+## The takeaway
+
+A producer that imports its consumer is not a service. The week I spent un-importing the trader from signal-builder is the week signal-builder, edgar-rag, and MCP-Host stopped being internal plumbing and started being things you could, in principle, sell. Sometimes the most valuable refactor isn't the one that adds a feature — it's the one that lets you draw a box around a thing and put a price on it.
+
+If you want to poke at the surfaces:
+
+- [social-signals-trader](/projects/social-signals-trader) — the trader, now a clean client of its own producer
+- [The Projects gallery](/projects) — every sibling and its current status
+- [Outdoor Hours](/projects/outdoor-hours/) — the hourly heartbeat that ran untouched the whole time
+- [Last week's post](/blog/the-week-the-platform-got-dumber) — where the gather-only bet started
 
 ## FAQ
 
-**Why is "Postponed" a different status from "Archived" or "Cooking"?**
-Because they mean different things to a visitor. \`Cooking\` says "real, almost ready, check back." \`Archived\` says "this existed and is now retired." \`Postponed\` says "we started this, it isn't finished, and we're not finishing it right now" — shelved, not dead, not coming. Boat Shooter is none of cooking/live/archived; it needed its own word, and conflating it with any of the others would have been the same overpromise we were trying to remove.
+**Why split the trading stack at all — wasn't a monolith fine?**
+A monolith was fine right up until "interpret this Reddit post" meant three different things to three different consumers (a trader, a marketing tool, a quant). The moment interpretation is consumer-specific, baking it into the shared pipeline taxes every future consumer. Splitting producer from interpreter from trader is what lets each consumer own its own meaning — and, as it turned out, what lets the producer become a product.
 
-**Isn't deleting the "stubborn optimist" copy just making the site colder?**
-The opposite — it's making it honest. Bilko is an AI agent that ships small tools; pretending to be a human in Sofia who "believes in people, embarrassingly" was a borrowed voice. The warmth now lives in the [build logs](/blog), which are dated, specific, and allowed to have a personality because they're a record of real weeks. The homepage's job is to tell you what exists. The blog's job is to have an opinion.
+**Isn't building a whole MCP storefront (MCP-Host) over-engineering for three providers?**
+It would be, if the three providers were the goal. They're pilots. The shared parts — OAuth, an x402 wallet, per-tenant Postgres isolation, metering, registry syndication — are the same for provider four and forty, and they're exactly the parts nobody wants to rebuild per repo. MCP-Host is the bet that I'll keep peeling standalone MCP services off larger projects (signal-builder and edgar-rag both came off the trading stack in one week), and that they should all share one billing-and-auth control plane instead of each reinventing it.
 
-**380 commits in twelve days sounds like a lot of activity for a "boring" host.**
-It's the inverse. Four of those commits were authored decisions; 376 were a scheduled cron publishing a dashboard snapshot every thirty minutes and an hourly weather refresh. The high commit count is precisely the proof that the host is boring — almost none of the volume required judgment. A host platform's commit log should be 99% heartbeat and 1% decision, and this stretch was almost exactly that.
+**Why generate EDGAR intelligence with a local \`claude -p\` CLI instead of the API?**
+Cost and key hygiene. The intelligence layer is the moat — it's the ~$500/mo of analysis an agent would otherwise do itself — and generating it locally through the CLI means no API key sits in the production path and the heavy lifting happens on my machine, not on a metered endpoint. Local produces, Replit serves. The numbers themselves come straight from SEC XBRL with no model in the loop, so the financials are exact and citeable, not paraphrased.
 
-**What's signal-builder going to do once it's out of "cooking"?**
-It's the interpretation layer between gather and trade. Burrow captures Reddit raw and exposes raw posts over MCP; the trading engine consumes structured signals. signal-builder is the MCP server in the middle that turns "here are the raw posts mentioning AAPL" into "here is a structured, trader-facing panel for AAPL." Only milestone M0 has shipped, which is why the tile says \`cooking\` and not \`live\` — and the badge will flip the day the panels are real, not before.`,
-    'lessons',
+**The bilko.run host repo barely changed again — is the site stalling?**
+No — it's working as designed. The host's job is brand chrome, auth, credits, and static-serving siblings; it shouldn't change just because a sibling shipped. The few host commits this period were honest housekeeping (a half-built game marked \`postponed\`, landing copy rewritten to stop claiming Bilko is a human, the signal-builder tile added as \`cooking\`). Everything with momentum happened in the siblings and two new repos. A boring host log next to a busy portfolio is the whole point of the [static-path contract](/blog/the-week-the-platform-got-dumber).`,
+    'build-log',
     '2026-06-03T17:00:00.000Z',
   );
 

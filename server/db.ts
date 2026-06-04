@@ -1771,7 +1771,7 @@ The honest framing: PRD 07 (May 6) widened the sentiment catchment specifically 
 
 ## SST: six phases in six days, suite green at 1023/1027
 
-[Social Signals Trader](/projects/social-signals-trader) is the consumer that absorbed everything Burrow stopped doing. Forty-three commits since May 16, organized as phases. In order:
+[Social Signals Trader](/projects/social-signals-trader/) is the consumer that absorbed everything Burrow stopped doing. Forty-three commits since May 16, organized as phases. In order:
 
 - **Phase I (May 17)** — snapshot-data validity test (30 tests pinning \`window.X\` shapes), thread \`now\` through \`GateInputs\` to kill date-drift in the rule engine. Boring, foundational, the kind of work that makes the rest of the week possible.
 - **Phase J (May 17–18)** — four small bug-class kills. J1: stop flooding \`TradeProvenanceModal\` with \`market_closed\` rule_breaks (it was the noisiest line in the modal). J2: \`SQUEEZE\` sleeve recognizes Burrow's short-volume schema. J3: populate \`data/options_flow.json\` so the OPT_FLOW panel actually has a panel. J4: retire \`THETA_PREMIUM\` out of the executable sleeve set — it was generating signals but nobody trusted them.
@@ -1907,7 +1907,7 @@ I'd have drawn the gather/interpret line at the start. Burrow shipped with senti
 
 - [Burrow on GitHub](https://github.com/StanislavBG/burrow) — the gather-only pipeline + MCP surface
 - [How the gather-only bet started](/blog/the-week-the-platform-got-dumber) — the previous build log
-- [social-signals-trader](/projects/social-signals-trader) — the first consumer that now owns its own interpretation
+- [social-signals-trader](/projects/social-signals-trader/) — the first consumer that now owns its own interpretation
 
 ## FAQ
 
@@ -1935,7 +1935,7 @@ Because "just import the indexer" is how every internal becomes load-bearing. On
 
 ## Nine milestones in two days
 
-The plan: [Burrow](https://github.com/StanislavBG/burrow) gathers raw Reddit, [social-signals-trader](/projects/social-signals-trader) trades, and signal-builder sits in the middle turning raw posts into structured, trader-facing panels. Each milestone moved one piece of interpretation out of the trader and into the new service:
+The plan: [Burrow](https://github.com/StanislavBG/burrow) gathers raw Reddit, [social-signals-trader](/projects/social-signals-trader/) trades, and signal-builder sits in the middle turning raw posts into structured, trader-facing panels. Each milestone moved one piece of interpretation out of the trader and into the new service:
 
 - **m0** — skeleton, \`PanelStore\`, a \`panels.health\` stub.
 - **M1** — \`aggregates_local\` + \`post_cache\` + eight panel/signal MCP tools.
@@ -1977,7 +1977,7 @@ Check the import direction before moving code, not after. The audit caught the c
 ## See it / build on it
 
 - [signal-builder on GitHub](https://github.com/StanislavBG/signal-builder)
-- [social-signals-trader](/projects/social-signals-trader) — its first client, and where the orchestration went back to
+- [social-signals-trader](/projects/social-signals-trader/) — its first client, and where the orchestration went back to
 - [Burrow](https://github.com/StanislavBG/burrow) — the raw-posts producer it sits on top of
 
 ## FAQ
@@ -2028,7 +2028,7 @@ A run of smaller decisions that each removed a fudge factor:
 
 ## The shims, the audit, and the reclaim
 
-Mid-week the trader shimmed its whole signal layer out to the new [signal-builder](/projects/signal-builder) service — sentiment, news, fund_extractor, catalyst_calendar, proactive_scan, all delegating to the package (M2–M8). Clean on paper.
+Mid-week the trader shimmed its whole signal layer out to the new [signal-builder](https://github.com/StanislavBG/signal-builder) service — sentiment, news, fund_extractor, catalyst_calendar, proactive_scan, all delegating to the package (M2–M8). Clean on paper.
 
 Then an architecture audit told the truth: the split was half-finished. signal-builder's orchestration modules were importing the trader's own strategies, events, and theses — a dependency cycle dressed up as a layer. The audit also flagged three overlapping decision engines (the agent path was ~41% rate-limited), dual order submitters with no shared lock, and a 605 MB unbounded data file. The signal split was the load-bearing one.
 
@@ -2040,8 +2040,8 @@ I'd separate "what data do I consume" from "what decisions do I make" before ext
 
 ## See it / build on it
 
-- [social-signals-trader](/projects/social-signals-trader) — live dashboard, Alpaca-vs-SPY up top
-- [signal-builder](/projects/signal-builder) — the producer the trader now rents from
+- [social-signals-trader](/projects/social-signals-trader/) — live dashboard, Alpaca-vs-SPY up top
+- [signal-builder](https://github.com/StanislavBG/signal-builder) — the producer the trader now rents from
 - [The cycle, from signal-builder's side](/blog/signal-builder-m0-to-m9)
 
 ## FAQ
@@ -2066,7 +2066,7 @@ Because the orchestration genuinely needs the trader. \`proactive_scan\` probes 
     'mcp-host-istore-for-mcps',
     `MCP-Host: building the iStore for MCP servers`,
     'Once two of my projects turned into hosted paid MCP services, they needed somewhere to live that solved auth, billing, and tenancy once instead of per repo. MCP-Host is that — a single gateway mounting every provider at /mcp/<provider>, sharing OAuth 2.1, one x402 wallet, and per-provider Postgres RLS. From "initial platform" to self-serve publish in six days.',
-    `This week two of my projects — [signal-builder](/projects/signal-builder) and edgar-rag — stopped being internal libraries and became hosted, paid MCP services. The moment that happened, they both needed the same boring things: authentication, billing, per-tenant data isolation, metering, a public registry entry. Building that once per repo is how you end up maintaining three half-baked auth layers. So I built it once. MCP-Host is the result — a single control plane, runtime, and storefront for a whole fleet of MCP servers.
+    `This week two of my projects — [signal-builder](https://github.com/StanislavBG/signal-builder) and edgar-rag — stopped being internal libraries and became hosted, paid MCP services. The moment that happened, they both needed the same boring things: authentication, billing, per-tenant data isolation, metering, a public registry entry. Building that once per repo is how you end up maintaining three half-baked auth layers. So I built it once. MCP-Host is the result — a single control plane, runtime, and storefront for a whole fleet of MCP servers.
 
 ## One gateway, every provider
 
@@ -2107,7 +2107,7 @@ I'd have written the Provider Protocol before the first provider, not alongside 
 ## See it / build on it
 
 - [MCP-Host on GitHub](https://github.com/StanislavBG/MCP-Host) — gateway, SDK, CLI, three pilot providers
-- [signal-builder](/projects/signal-builder) — a pilot provider, trading signals
+- [signal-builder](https://github.com/StanislavBG/signal-builder) — a pilot provider, trading signals
 - [How the providers came to exist](/blog/signal-builder-m0-to-m9) — the refactor that turned libraries into services
 
 ## FAQ

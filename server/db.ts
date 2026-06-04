@@ -1859,107 +1859,269 @@ For as long as the static-path contract holds, yes. The host's job is to provide
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Build log: May 22 – June 3, 2026 — A dependency cycle became two products
+  // Build log: Burrow goes gather-only (May 22 – June 3, 2026)
   // ─────────────────────────────────────────────────────────────────────
   await dbRun(
     `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
-    'when-a-dependency-cycle-becomes-two-products',
-    `When a dependency cycle becomes two new products`,
-    'Two weeks ago I split my trading stack into clean layers. Last week I had to put part of it back — because a "service" that imports its own client isn\'t a service, it\'s a cycle. Breaking that cycle didn\'t just fix the graph. It revealed where the real product boundaries were, and two of them became their own repos: a paid SEC-filings intelligence MCP (edgar-rag) and a storefront to host it (MCP-Host). A full-portfolio build log, not just the host repo.',
-    `Two weeks ago I split my trading stack into clean layers. Last week I had to put part of it back. The reason I had to put it back is the most useful architecture lesson I've had this year: **a service that imports its own client is not a service — it's a cycle.** Breaking that cycle didn't just tidy a dependency graph. It told me exactly where the real product boundaries were, and two of those boundaries walked off and became their own repos.
+    'burrow-goes-gather-only',
+    `Burrow goes gather-only: a pipeline that won't interpret`,
+    'Burrow used to capture Reddit posts and score their sentiment. This week it stopped scoring — on purpose. PRD 79 dropped post_sentiment, PRD 80 put a single Reader between the dashboard and the indexer, EDGAR moved out to its own repo, and a pile of unglamorous fixes kept the crawler alive. The case for a data pipeline that refuses to have an opinion.',
+    `Burrow is the part of my stack that watches Reddit. For months it did two jobs: capture posts at human pace and persist them raw, *and* score each one — sentiment, ticker mentions, pulse coverage — exposing all of that derived state over MCP. This week I cut the second job out entirely. Burrow now gathers and serves raw data, and nothing else.
 
-Last post I looked at one repo — the [bilko.run host](/blog/the-week-the-platform-got-dumber) — saw it do almost nothing but auto-publish dashboards, and called it a quiet stretch. That was true of one repo and badly wrong about the portfolio. Across roughly twelve days and a dozen repos, the real work was a four-act architecture story: extract everything, discover the cycle, reverse the over-extraction, and then ship the two pieces that turned out to be genuinely standalone — as products. Here is the whole arc.
+That sounds like a downgrade. It is the opposite. Here is why a data pipeline should refuse to interpret, and the PRDs that made Burrow refuse.
 
-## Act 1 — the great extraction (May 23–24)
+## Why a pipeline shouldn't have an opinion
 
-The bet from the previous week was simple: [Burrow](https://github.com/StanislavBG/burrow) (the Reddit capture pipeline) should only *gather*; whoever consumes the data should *interpret* it. So I built that, fast. In about two days a brand-new repo, **signal-builder**, went from an empty m0 skeleton to M9 — nine milestones — absorbing the entire interpretation layer out of the trader, [social-signals-trader](/projects/social-signals-trader):
+"Sentiment" is not a property of a Reddit post. It is a question someone asks of a post, and the right answer depends on who is asking. A trader wants "is this bullish or bearish pressure on the stock?" A marketing tool wants "is this user happy with the product?" A quant wants "what is the conviction-weighted edge on this thesis?" Same post, three different answers. When Burrow scored sentiment, it was silently picking one of those answers for everybody — and getting it wrong for almost everybody.
 
-- **M1** — local aggregates + post_cache + the first panel/signal MCP tools
-- **M2** — the sentiment stack
-- **M3** — news signals + short-interest
-- **M4** — \`fund_extractor\` (10-K/10-Q thesis extraction)
-- **M5** — \`catalyst_calendar\`
-- **M6** — \`proactive_scan\` + \`score_tickers\` + corroboration
-- **M8** — panel-replay backtest mode + panel history/freshness tools
+The fix is to push interpretation to the consumer and keep the pipeline honest: capture, dedupe, persist, expose. If a consumer wants sentiment, it reads the raw posts and scores them with its own definition. Burrow's job is to make sure the raw posts are there, fresh, and addressable.
 
-At the same time Burrow went gather-only *for real*, not just on paper: PRD 79 dropped \`post_sentiment\` and archived the scoring pipeline; PRD 80 introduced a shared \`Reader\` singleton so the dashboard stops reaching straight into the indexer; PRDs 76/82 exposed EDGAR filings over MCP. And the trader became a wall of shims — every old import now delegating into the \`signal_builder\` package.
+## PRD 79: drop sentiment, add research-on-demand
 
-On paper, beautiful. Producer gathers, gateway interprets, trader trades. Three clean layers.
+PRD 79 was the cut. \`post_sentiment\` is gone and the scoring pipeline is archived — not deleted, archived, so a historical re-score can still run as a one-off, but no new derived rows get written. In its place Burrow grew something far more useful: a research-on-demand pipeline. \`analytics.db\` migrated to schema version 10 with a \`research_requests\` queue table; a HIVE-agent research worker drains that queue and writes into a lazily-created \`knowledge_adhoc\` Chroma collection; and four new MCP tools — \`request_research\`, \`research_status\`, \`research_results\`, \`search_adhoc\` — let a consumer say "go find out about X" and poll for the answer. Burrow stopped having opinions about posts and started taking orders for research instead.
 
-## Act 2 — the cycle (discovered May 28)
+## PRD 80: one Reader, one contract
 
-Then I ran a full architecture audit, and the diagram had an arrow pointing the wrong way.
+The dashboard used to import the indexer directly and read its internals. That is the kind of coupling that makes every refactor a landmine. PRD 80 introduced a single shared \`Reader\` singleton — one object that owns every read path — and routed the dashboard's research route through it instead of the indexer. Then it enforced a loopback-only bind, added an import-check, and wrote the Contract surface docs so the boundary is something you can point at, not folklore. Three parts, one outcome: there is now exactly one way to read from Burrow, and it is documented.
 
-signal-builder's M6 modules — \`proactive_scan\`, \`score_tickers\`, corroboration — imported \`social_signals_trader.strategies\`, \`.events\`, \`.theses\`, \`.universe\`. The "upstream producer" was importing the downstream consumer. That isn't a layering; it's a **cycle**. And a cycle is fatal to the one thing I actually wanted signal-builder to become: a clean, hosted, upstream service that many clients can call without dragging a trader's strategy code along with it.
+## The hardening nobody sees
 
-The tell was deployment. I couldn't run signal-builder anywhere the trader wasn't also installed. A "service" you can't start without its own client is a library wearing a service costume.
+A crawler that runs unattended fails in boring, fatal ways, and a chunk of the week went to those:
 
-## Act 3 — the reversal (May 28–29)
+- **Stop OOM-killing the orchestrator.** The indexer was holding too much in memory under pressure and taking the whole orchestrator down with it. Fixed the memory profile so a backfill can't nuke the process.
+- **Auto-recover a crashed renderer.** The browser layer now detects a dead renderer, restarts it, and surfaces an honest health signal instead of silently wedging.
+- **Real HTTP 410 for tombstones.** Deleted resources used to return \`200\` with an error envelope — which every client read as success. They now return a real \`410 Gone\`, so a consumer can tell "deleted" from "broken."
+- **Ticker-aware subreddit discovery (PRD 81).** Targeted gather: Burrow can now discover and prioritize the subreddits where a given ticker actually gets discussed, instead of crawling blind.
 
-Four commits, all the same shape: **move it back.**
+None of these ship a feature anyone will tweet about. All of them are the difference between a pipeline you trust unattended and one you babysit.
 
-\`proactive_scan\`, \`score_tickers\`, corroboration, and \`catalyst_calendar\` all went home to the trader. The rule I should have started with, stated plainly in the commit messages: a module that imports the trader's strategies/events/theses *is* trader orchestration, and it lives in the trader. A module that produces per-ticker data from raw inputs — sentiment, news, fund theses, aggregates — is genuinely upstream, and it stays in signal-builder. **The direction of the dependency arrow is the architecture.** Everything else is detail.
+## EDGAR moved out
 
-After the reversal, no real \`social_signals_trader\` import remained in \`src/signal_builder\`. 337 tests green. The trader got its orchestration back; the producer got its independence.
-
-## Act 4 — the boundary turned out to be a business (May 29 → June 3)
-
-Here's the part I didn't see coming. Once signal-builder was a genuinely standalone producer, the question "where does it live?" had a new answer — not "a package the trader imports" but a hosted service. The decided direction, written into the trader's own architecture doc:
-
-> signal-builder is a separate, publicly-hosted, paid, multi-tenant MCP service producing per-ticker time-series; this trader is its first of many clients.
-
-A client-only dependency, contract-pinned, that degrades gracefully when the service is down. And once you've decided *one* piece is a hosted paid MCP, you start seeing the others. Two brand-new repos fell out of the same realization:
-
-### edgar-rag — SEC filings as a rentable intelligence layer
-
-EDGAR ingestion had been squatting inside Burrow. This week it got [its own repo](https://github.com/StanislavBG/edgar-rag). The north star isn't the filings — those are public and commoditized — it's the local pipeline that turns filings into searchable vectors *plus* pre-computed intelligence an agent would otherwise spend ~$500/mo building. Local produces, Replit serves, agents rent it through an x402-metered MCP. As of this week: 11 companies, 409 filings, ~11.5k chunks spanning 2021→2026; metrics computed from **exact SEC XBRL** (no LLM anywhere in the number path); intelligence generated by a local \`claude -p\` CLI so there's no API key in the loop. Burrow's \`news_collect\` pipeline got disabled the same week — that job moved here, where it belongs.
-
-### MCP-Host — the iStore for MCPs
-
-If signal-builder and edgar-rag are both going to be hosted paid services, they need somewhere that handles the boring shared parts. So: **MCP-Host**, a single Replit-hosted control plane + runtime + storefront for a whole fleet of MCP servers. One gateway mounts every provider at \`/mcp/<provider>\`, sharing OAuth 2.1 auth, one x402 wallet for billing, a Postgres data layer with per-provider RLS schemas, metering, audit, and one-command registry syndication. Providers conform to a Provider Protocol (\`provider.json\` + an SDK base class) and get all of that for free. It went from "initial platform" on May 29 to **self-serve register / publish / declarative-proxy at v0.4.0** by June 3 — with three pilot providers (edgar-rag, signal-builder, and the social-trader) wired in as worked examples, plus a hardened production Postgres backend and a live-health storefront. 81 tests.
-
-So the trading-stack refactor didn't just clean up a graph. It produced a paid filings service (edgar-rag), a paid signals service (signal-builder), and the storefront to sell both (MCP-Host). The cycle I had to break was the exact thing standing between "internal helper" and "product."
-
-## Meanwhile, the harness kept sprinting
-
-None of this happens at this pace without the tool I run it all from. **session-manager** — the Claude Code session harness — shipped v0.13 → v0.17 in the same window: the Almanac UX redesign (paper-warm chrome, left-nav promotion), terminal controls where pop-ups become full pages, a 46-prompt SWE library with a tweak-and-send modal wired straight to the PTY, a session-topology matrix view, and an in-app file Editor scene with sandboxed HTML/MD preview that gives it a Google-Docs feel. Plus the unglamorous load-bearing fixes: the scheduler now auto-promotes a failed PRD when its \`fix-*\` companion succeeds, plugins got SIGKILL escalation + a deadman reaper, and four separate "is this path inside \$HOME?" implementations got consolidated into one.
-
-## And the deliberately slow one
-
-[torlashka-sreshta](https://github.com/StanislavBG/torlashka-sreshta) — the Bulgarian guest-house repo with the proposal-gate rule — approved its first two proposals, finalized a third with Postgres details, shipped idempotency keys for \`POST /api/v1/bookings\`, and ran a five-couples booking simulation. Four commits in a window where the trading stack saw well over a hundred. That contrast *is* the point: same harness, same contract, two completely different speed limits, each correct for its blast radius.
+Burrow had also been ingesting SEC EDGAR filings. That never belonged here — it is a different data source with a different cadence and a different consumer — so it moved to its own repo (edgar-rag), and Burrow's \`news_collect\` pipeline got disabled in the registry. A pipeline that refuses to interpret should also refuse to sprawl. One source, done well, beats three sources done partway.
 
 ## What I'd do differently
 
-**Draw the arrow first.** The entire Act 2 → Act 3 round-trip — extract M6 into signal-builder, discover it imports the trader, move it back — was avoidable. The signal that \`proactive_scan\` and \`score_tickers\` belonged in the trader was sitting in plain sight on day one: they import strategies, events, and theses, which are *trader* concepts. One question — "which way do this module's imports point?" — asked before the move, and M6 never crosses the boundary. The cost wasn't catastrophic (four reversal commits, ~5 days later, test-protected the whole way) but it was pure, predictable waste.
+I'd have drawn the gather/interpret line at the start. Burrow shipped with sentiment baked in because, early on, there was exactly one consumer and baking it in was faster. The moment a second consumer showed up with a different definition of "sentiment," the bundle became a liability — and I still waited weeks to cut it. The lesson: the first time you catch yourself picking a default *meaning* for downstream consumers, that meaning belongs downstream. A pipeline's superpower is that it has no opinion; spend it.
 
-The thing I'd keep: extracting aggressively and then correcting is still faster than designing the perfect boundary up front — *as long as the test suites pin the contract on both sides*. signal-builder's 337 tests and the trader's thousand-plus meant the reversal was mechanical, not scary. Move fast, but let the dependency graph — not the feature list — tell you where the seams are.
+## See it / build on it
 
-## The takeaway
-
-A producer that imports its consumer is not a service. The week I spent un-importing the trader from signal-builder is the week signal-builder, edgar-rag, and MCP-Host stopped being internal plumbing and started being things you could, in principle, sell. Sometimes the most valuable refactor isn't the one that adds a feature — it's the one that lets you draw a box around a thing and put a price on it.
-
-If you want to poke at the surfaces:
-
-- [social-signals-trader](/projects/social-signals-trader) — the trader, now a clean client of its own producer
-- [The Projects gallery](/projects) — every sibling and its current status
-- [Outdoor Hours](/projects/outdoor-hours/) — the hourly heartbeat that ran untouched the whole time
-- [Last week's post](/blog/the-week-the-platform-got-dumber) — where the gather-only bet started
+- [Burrow on GitHub](https://github.com/StanislavBG/burrow) — the gather-only pipeline + MCP surface
+- [How the gather-only bet started](/blog/the-week-the-platform-got-dumber) — the previous build log
+- [social-signals-trader](/projects/social-signals-trader) — the first consumer that now owns its own interpretation
 
 ## FAQ
 
-**Why split the trading stack at all — wasn't a monolith fine?**
-A monolith was fine right up until "interpret this Reddit post" meant three different things to three different consumers (a trader, a marketing tool, a quant). The moment interpretation is consumer-specific, baking it into the shared pipeline taxes every future consumer. Splitting producer from interpreter from trader is what lets each consumer own its own meaning — and, as it turned out, what lets the producer become a product.
+**Doesn't removing sentiment make Burrow less useful?**
+It makes it *more* reusable. A pipeline that scores sentiment is useful to exactly the one consumer whose definition of sentiment it happened to encode. A pipeline that serves clean raw posts plus on-demand research is useful to every consumer, because each brings its own definition. Less opinion, more reach.
 
-**Isn't building a whole MCP storefront (MCP-Host) over-engineering for three providers?**
-It would be, if the three providers were the goal. They're pilots. The shared parts — OAuth, an x402 wallet, per-tenant Postgres isolation, metering, registry syndication — are the same for provider four and forty, and they're exactly the parts nobody wants to rebuild per repo. MCP-Host is the bet that I'll keep peeling standalone MCP services off larger projects (signal-builder and edgar-rag both came off the trading stack in one week), and that they should all share one billing-and-auth control plane instead of each reinventing it.
+**What's the research-on-demand pipeline for?**
+It turns Burrow from a passive capture loop into something you can task. A consumer enqueues a research request, a HIVE-agent worker investigates and writes results into an ad-hoc knowledge collection, and the consumer polls for the answer over MCP. It is the gather-only philosophy taken one step further: Burrow doesn't interpret your data, but it will go *get* data you ask for.
 
-**Why generate EDGAR intelligence with a local \`claude -p\` CLI instead of the API?**
-Cost and key hygiene. The intelligence layer is the moat — it's the ~$500/mo of analysis an agent would otherwise do itself — and generating it locally through the CLI means no API key sits in the production path and the heavy lifting happens on my machine, not on a metered endpoint. Local produces, Replit serves. The numbers themselves come straight from SEC XBRL with no model in the loop, so the financials are exact and citeable, not paraphrased.
+**Why a single Reader instead of just importing the indexer?**
+Because "just import the indexer" is how every internal becomes load-bearing. One Reader singleton means one read contract, one place to enforce loopback binding and import rules, and one thing to document. The dashboard no longer knows the indexer exists — it knows the Reader exists. That is the whole point of a boundary.`,
+    'build-log',
+    '2026-06-03T16:00:00.000Z',
+  );
 
-**The bilko.run host repo barely changed again — is the site stalling?**
-No — it's working as designed. The host's job is brand chrome, auth, credits, and static-serving siblings; it shouldn't change just because a sibling shipped. The few host commits this period were honest housekeeping (a half-built game marked \`postponed\`, landing copy rewritten to stop claiming Bilko is a human, the signal-builder tile added as \`cooking\`). Everything with momentum happened in the siblings and two new repos. A boring host log next to a busy portfolio is the whole point of the [static-path contract](/blog/the-week-the-platform-got-dumber).`,
+  // ─────────────────────────────────────────────────────────────────────
+  // Build log: signal-builder — m0 to M9 and the cycle (May 22 – June 3, 2026)
+  // ─────────────────────────────────────────────────────────────────────
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'signal-builder-m0-to-m9',
+    `signal-builder: m0 to M9, and the cycle that redefined it`,
+    'In two days a brand-new repo absorbed an entire trading engine\'s interpretation layer — nine milestones, m0 through M9. Then an architecture audit caught it importing its own client. Breaking that dependency cycle turned signal-builder from a helper library into a hosted, paid, multi-tenant MCP service. A build log about the difference.',
+    `signal-builder did not exist two weeks ago. This week it went from an empty m0 skeleton to M9 — nine milestones — and absorbed the entire interpretation layer of my trading stack. Then I almost shipped it broken, caught it in an architecture audit, and the fix changed what signal-builder *is*. This is that story.
+
+## Nine milestones in two days
+
+The plan: [Burrow](https://github.com/StanislavBG/burrow) gathers raw Reddit, [social-signals-trader](/projects/social-signals-trader) trades, and signal-builder sits in the middle turning raw posts into structured, trader-facing panels. Each milestone moved one piece of interpretation out of the trader and into the new service:
+
+- **m0** — skeleton, \`PanelStore\`, a \`panels.health\` stub.
+- **M1** — \`aggregates_local\` + \`post_cache\` + eight panel/signal MCP tools.
+- **M2** — the sentiment stack, behind \`panels.sentiment\`.
+- **M3** — news stack + \`panels.news_signals\` + short-interest.
+- **M4** — \`fund_extractor\` (10-K/10-Q thesis extraction) + \`panels.fund_theses\`.
+- **M5** — \`catalyst_calendar\` + \`panels.catalyst_calendar/find\`.
+- **M6** — \`proactive_scan\` + \`score_tickers\` + corroboration.
+- **M8** — \`meta.panel_history\` + \`meta.panel_freshness\`.
+
+The trader, in parallel, replaced each of those with a thin shim delegating to the \`signal_builder\` package. On paper it was a clean three-layer split, done in a weekend.
+
+## The cycle: a service that imported its client
+
+Then I ran a full architecture audit, and it flagged the split as half-finished: an undeclared dependency reached via both an editable import *and* a spawned MCP, with no enforced contract. Translation: signal-builder's M6 modules — \`proactive_scan\`, \`score_tickers\`, corroboration — were importing \`social_signals_trader.strategies\`, \`.events\`, \`.theses\`, \`.universe\`.
+
+The upstream producer was importing the downstream consumer. That is a dependency **cycle**, and it is fatal to the thing I wanted signal-builder to be. The tell was deployment: I could not run signal-builder anywhere the trader wasn't also installed. A service you can't start without its own client is a library in a costume.
+
+## The fix, and the rule it taught
+
+The fix was four commits, all "move it back." \`proactive_scan\`, \`score_tickers\`, corroboration, and \`catalyst_calendar\` went home to the trader. The rule that fell out, and that I should have started with:
+
+> A module that imports the trader's strategies, events, or theses *is* trader orchestration — it lives in the trader. A module that produces per-ticker data from raw inputs — sentiment, news, fund theses, aggregates — is genuinely upstream, and it stays in signal-builder.
+
+After the cut, no real \`social_signals_trader\` import remained in \`src/signal_builder\`. 337 tests pass. The producer no longer knows the consumer exists. \`score_tickers\` was simply deleted — it was never an MCP tool and nothing in signal-builder imported it; \`proactive_scan\`'s only real use was resolving a coverage-ledger path, which got inlined behind an env var. The panel still reads the ledger; the scan that writes it is the trader's job.
+
+## From library to product
+
+Here is what the cycle was hiding. Once signal-builder couldn't import the trader, the question "where does it live?" had a new answer — not a package, a service. The decision, written into the architecture doc:
+
+> signal-builder is a separate, publicly-hosted, paid, multi-tenant MCP service producing per-ticker time-series; this trader is its first of many clients.
+
+A client-only dependency, contract-pinned, that degrades gracefully when the service is down. Two pieces of plumbing made the boundary real this week: a \`ticker_tracker\` queue + drainer (PRD 54, closing an old exception) so consumers can request coverage for a ticker, and a Burrow ↔ signal-builder integration smoke battery (PRD 58) that exercises the Burrow MCP directly and flags the HTTP middleware gap. It even grew a \`panels.edgar_signal\` tool (PRD 82) deriving insider + 8-K tone from EDGAR. signal-builder stopped being "the trader's helper" and started being a product the trader rents.
+
+## What I'd do differently
+
+Check the import direction before moving code, not after. The audit caught the cycle, but the signal was visible on day one: \`proactive_scan\` imports strategies and theses, which are trader concepts. One question — "which way do this module's imports point?" — asked before M6, and the whole extract-then-reverse round trip never happens. The thing that saved me was test coverage: 337 tests on signal-builder and a thousand-plus on the trader meant the reversal was mechanical, not terrifying. Extract aggressively if your tests pin the contract — but read the arrows first.
+
+## See it / build on it
+
+- [signal-builder on GitHub](https://github.com/StanislavBG/signal-builder)
+- [social-signals-trader](/projects/social-signals-trader) — its first client, and where the orchestration went back to
+- [Burrow](https://github.com/StanislavBG/burrow) — the raw-posts producer it sits on top of
+
+## FAQ
+
+**Why build signal-builder at all instead of leaving the logic in the trader?**
+Because interpretation is consumer-specific and the trader won't be the only consumer. Pulling sentiment, news, and fund-thesis extraction into a producer that exposes per-ticker panels over MCP means the next consumer — another strategy, a research tool, a dashboard — reads the same panels instead of reimplementing them. The split is what lets the producer become a paid service with many clients.
+
+**Was extracting nine milestones in two days reckless?**
+Half of it was right and half overshot. The data-producing milestones (M1–M5) belonged in signal-builder and stayed. The orchestration milestone (M6) imported the trader and had to come back. The recklessness wasn't the speed — it was not checking the dependency direction per milestone. With the test suites pinning both sides, fixing the overshoot cost four commits.
+
+**What does "multi-tenant paid MCP service" actually mean here?**
+signal-builder will be hosted once, produce per-ticker time-series, and serve many clients over MCP — billed per use, isolated per tenant. The trader depends on it as a remote service (client-only, contract-pinned) and keeps trading even when the service is unreachable, just with staler signals. That contract is only possible because the producer no longer imports any one client.`,
+    'build-log',
+    '2026-06-03T16:30:00.000Z',
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Build log: social-signals-trader — extract and reclaim (May 22 – June 3, 2026)
+  // ─────────────────────────────────────────────────────────────────────
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'trader-extract-and-reclaim',
+    `I extracted my trader's brain, then took half of it back`,
+    'social-signals-trader shimmed its entire signal layer out to a new service, shipped a 3-tier CATALYST_WATERFALL strategy and a strategy-catalog-as-data system, enabled shorts and flat $5k tickets — then reclaimed its orchestration when the split turned into a dependency cycle. A build log about where a trading engine\'s brain actually belongs.',
+    `social-signals-trader is the engine that turns signals into trades. This week it did two contradictory-sounding things: it gave away its entire interpretation layer to a new service, and then it took the orchestration half of that layer right back. Both were correct. Here's the build log, including the strategy work that happened in between.
+
+## CATALYST_WATERFALL: a three-tier cascade, as data
+
+The headline feature is a single strategy that fires on every catalyst-calendar thesis and walks three signal tiers — first to produce a direction wins:
+
+1. **social** — \`panels.sentiment\`, gated on bull-share — at 1.0× capital
+2. **options_tech** — call/put ratio with an above-50-day-SMA fallback — at 0.5× capital
+3. **naive** — constant LONG — at 0.25× capital
+
+The clever part is that it's all data, not code. The variant DSL gained a \`cascade:\` key; each tier either declares a full signal spec or a constant \`direction_rule\` shortcut. Every emitted proposal carries its \`tier\` and \`capital_multiplier\`, so the audit log preserves *why* a trade fired, and the dashboard's Trades table renders a coloured tier badge — green for social, amber for options_tech, grey for naive — by joining audit rows onto orders by \`client_order_id\`. You can read a fill and know which tier of conviction produced it.
+
+## Strategy catalog as data (no code to add a sleeve)
+
+CATALYST_WATERFALL rides on a bigger change: the strategy registry is now built from \`data/strategies/*.yaml\` (PRD 70), a strategy variant can be declared entirely in YAML with no code change (PRD 71), and a variant-evaluation harness (PRD 72) lets me A/B a new sleeve before promoting it. Adding a strategy went from "write a class, wire it in, test it" to "drop a YAML file." That is the difference between a trading engine I extend and a trading engine that fights me.
+
+## Shorts, flat tickets, and Alpaca-vs-SPY
+
+A run of smaller decisions that each removed a fudge factor:
+
+- **Shorts enabled end-to-end** (PRD 60) — the engine can now express bearish theses, not just sit them out.
+- **Flat $5,000 ticket notional** promoted from an env-only override to the default, and the CATALYST_WATERFALL tiers flattened to 1.0× — every trade is the same size regardless of tier. Position sizing was adding noise to strategy evaluation; making it flat made the comparisons honest.
+- **Alpaca-vs-SPY as the primary KPI** (PRD 73) — the dashboard's headline number is now performance against the index, because beating SPY is the only benchmark that matters. Also shipped: an Optimization tab (PRD 47) for sleeve param sweeps and a Signals tab (PRD 46) with sentiment/mentions time-series, plus \`trade_points\`, a daily OHLCV collector over the event-relative window so backtests have clean price data.
+
+## The shims, the audit, and the reclaim
+
+Mid-week the trader shimmed its whole signal layer out to the new [signal-builder](/projects/signal-builder) service — sentiment, news, fund_extractor, catalyst_calendar, proactive_scan, all delegating to the package (M2–M8). Clean on paper.
+
+Then an architecture audit told the truth: the split was half-finished. signal-builder's orchestration modules were importing the trader's own strategies, events, and theses — a dependency cycle dressed up as a layer. The audit also flagged three overlapping decision engines (the agent path was ~41% rate-limited), dual order submitters with no shared lock, and a 605 MB unbounded data file. The signal split was the load-bearing one.
+
+So I reclaimed it. \`score_tickers\`, \`proactive_scan\`, corroboration, and \`catalyst_calendar\` moved back into the trader, because anything that imports strategies/events/theses *is* trader orchestration. What stayed in signal-builder is what's genuinely upstream — the per-ticker data production. The trader now talks to signal-builder through a single \`sb_client\` gateway with a pluggable transport: a client-only dependency on a remote service, not an editable import of a sibling package.
+
+## What I'd do differently
+
+I'd separate "what data do I consume" from "what decisions do I make" before extracting anything. The mistake wasn't building signal-builder — it was moving the decision-making (\`proactive_scan\`, \`score_tickers\`) into it alongside the data production. Decisions need the trader's strategy context; data production doesn't. Drawing that line first would have made the split a one-way move instead of a round trip. The reclaim was cheap only because the test suite held the contract on both ends.
+
+## See it / build on it
+
+- [social-signals-trader](/projects/social-signals-trader) — live dashboard, Alpaca-vs-SPY up top
+- [signal-builder](/projects/signal-builder) — the producer the trader now rents from
+- [The cycle, from signal-builder's side](/blog/signal-builder-m0-to-m9)
+
+## FAQ
+
+**Why flatten every trade to $5,000?**
+Because variable position sizing was contaminating strategy evaluation. If a sleeve looks good, I need to know it's the *signal* that's good, not that it happened to size up the winners. Flat tickets make the comparison between strategies and tiers honest; sizing is a separate optimization I can add back once the strategies are proven.
+
+**Isn't strategy-as-YAML just config sprawl?**
+It would be if the YAML were doing logic. It isn't — it declares which signals a sleeve uses and how they cascade, against a fixed set of evaluators. The logic lives in code; the *composition* lives in data. That split is exactly what lets me add a sleeve or A/B a variant without a deploy, and it's why CATALYST_WATERFALL's three-tier cascade is a single YAML file.
+
+**Why take the orchestration back instead of fixing signal-builder to not need the trader?**
+Because the orchestration genuinely needs the trader. \`proactive_scan\` probes the trader's strategy deciders and promotes results into the trader's thesis lifecycle — that's trader logic by definition. The right boundary isn't "make the producer smart enough to do it"; it's "the producer produces data, the trader decides." Moving it back put the code where its dependencies already pointed.`,
     'build-log',
     '2026-06-03T17:00:00.000Z',
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Build log: MCP-Host — the iStore for MCPs (May 29 – June 3, 2026)
+  // ─────────────────────────────────────────────────────────────────────
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'mcp-host-istore-for-mcps',
+    `MCP-Host: building the iStore for MCP servers`,
+    'Once two of my projects turned into hosted paid MCP services, they needed somewhere to live that solved auth, billing, and tenancy once instead of per repo. MCP-Host is that — a single gateway mounting every provider at /mcp/<provider>, sharing OAuth 2.1, one x402 wallet, and per-provider Postgres RLS. From "initial platform" to self-serve publish in six days.',
+    `This week two of my projects — [signal-builder](/projects/signal-builder) and edgar-rag — stopped being internal libraries and became hosted, paid MCP services. The moment that happened, they both needed the same boring things: authentication, billing, per-tenant data isolation, metering, a public registry entry. Building that once per repo is how you end up maintaining three half-baked auth layers. So I built it once. MCP-Host is the result — a single control plane, runtime, and storefront for a whole fleet of MCP servers.
+
+## One gateway, every provider
+
+MCP-Host is one Replit-hosted FastAPI app that mounts every provider at \`/mcp/<provider>\`. A request flows through a single pipeline — auth → entitlement → billing → dispatch → metering — before it ever reaches provider code. That means a provider author writes tools, not infrastructure: the gateway handles the OAuth handshake, checks the caller's entitlement, debits the wallet, routes to the tool, and records usage. Add a provider, and it inherits the entire pipeline for free.
+
+The three pilots wired in this week are real, not toy: edgar-rag (SEC filings), signal-builder (trading signals), and the social-trader — three providers from completely disconnected disciplines, sharing one gateway.
+
+## The Provider Protocol
+
+What keeps this from becoming a pile of special cases is a contract. A provider conforms to the Provider Protocol: a \`provider.json\` manifest plus an SDK \`Provider\` base class with \`@tool\` decorators, a \`ToolContext\`, typed \`ErrorCode\`s, content helpers, and a manifest validator. There's a CLI — \`mcp-host scaffold / validate / tdqs / syndicate\` — that generates a new provider skeleton, validates the manifest, runs it through a quality gate (TDQS), and plans registry syndication. The protocol is the thing that lets "onboard a new MCP" be a documented checklist instead of a negotiation.
+
+## Auth, billing, and tenancy — solved once
+
+The shared services are the whole value proposition:
+
+- **Auth** — OAuth 2.1-style token + API-key validation, plus an entitlement engine that decides who can call what.
+- **Billing** — one shared x402 wallet, a per-tool price map, fail-closed by default, with an admin bypass for testing. Every provider bills through the same wallet.
+- **Data** — a per-provider Postgres layer with Row-Level Security schemas, so two providers (or two tenants of one provider) can never read each other's rows. In dev it's a \`SqliteStore\` with a \`TenantDB\`; in prod a \`PgStore\` with RLS; a factory picks the backend off \`DATABASE_URL\`.
+- **Artifacts** — an HMAC chunked-upload store with a read-only view, for providers that serve files.
+
+Phase 2 this week added per-MCP owner-admin isolation and a publisher MCP with owner-gated upload — so a provider's owner administers their own MCP without touching anyone else's. 81 tests across all of it.
+
+## Six days: v0.2 to self-serve v0.4
+
+The pace tells the story. It went from "initial platform" on May 29 to self-serve in six days:
+
+- **v0.2.0** (Jun 2) — first real provider (platform-health), DB-degraded resilience, version + live git short-SHA in \`/health\`.
+- **v0.2.1–v0.2.2** (Jun 2) — a storefront with a status dot, a version/build/backend/provider-count header, and live \`/health\` results embedded on the homepage.
+- **v0.3.0** (Jun 3) — live owner ingest for the social-trader.
+- **v0.4.0** (Jun 3) — the big one: self-serve register, publish, and a declarative proxy, so a provider can be added without hand-editing the host.
+
+Along the way it grew a production Postgres backend (PgStore + per-provider RLS, auto-selected by \`DATABASE_URL\`) and Replit first-boot hardening — a Reserved-VM target, a preflight config guard, and a \`PgStore\` that retries connect with backoff so a cold database can't abort boot. The unglamorous deploy-reality work is exactly what makes a control plane trustworthy.
+
+## What I'd do differently
+
+I'd have written the Provider Protocol before the first provider, not alongside the second. MCP-Host only exists because I noticed signal-builder and edgar-rag needed the same scaffolding — but I noticed it *after* both had started growing their own. A little of that work was thrown away. The general lesson: the second time you build the same plumbing, stop and extract it; the third time, you've already lost. Two providers in one week was my signal, and I took it instead of building a third bespoke auth layer.
+
+## See it / build on it
+
+- [MCP-Host on GitHub](https://github.com/StanislavBG/MCP-Host) — gateway, SDK, CLI, three pilot providers
+- [signal-builder](/projects/signal-builder) — a pilot provider, trading signals
+- [How the providers came to exist](/blog/signal-builder-m0-to-m9) — the refactor that turned libraries into services
+
+## FAQ
+
+**Isn't a whole MCP storefront over-engineering for three providers?**
+It would be if three were the target. They're pilots. The shared parts — OAuth, an x402 wallet, per-tenant Postgres isolation, metering, registry syndication — are identical for provider four and provider forty, and they're exactly the parts nobody wants to rebuild per repo. MCP-Host is a bet that I'll keep peeling standalone MCP services off bigger projects, and that they should share one billing-and-auth plane.
+
+**Why x402 for billing?**
+Because the customers are AI agents, and x402 is built for machine-to-machine, pay-per-call settlement without a human entering a card. One shared wallet across all providers means an agent funds once and can call any MCP on the host. Fail-closed by default means an unpaid call doesn't reach provider code.
+
+**What does "per-provider RLS" buy me over just separate databases?**
+Isolation without operational sprawl. Row-Level Security schemas mean one Postgres instance enforces that provider A — and tenant A1 — can never read provider B's rows, at the database layer, not in application code. Separate databases would give the same isolation and ten times the ops burden. RLS is how one control plane stays one control plane.`,
+    'build-log',
+    '2026-06-03T17:30:00.000Z',
   );
 
   // Seed secret_metadata (idempotent — INSERT OR IGNORE, NULL last_rotated_at = never rotated)

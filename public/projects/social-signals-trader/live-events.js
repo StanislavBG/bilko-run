@@ -84,11 +84,13 @@
     }
   }
 
-  // Expose for manual control / testing. NOTE: polling is NOT auto-started.
-  // Nothing in the current bundle subscribes to the "live-event" CustomEvent,
-  // so auto-starting would re-fetch the whole data-events.ndjson every 3s
-  // forever for zero rendered effect (the static host ignores ?since, so each
-  // poll returns the full file). A consumer must opt in by registering a
-  // listener and then calling window.LiveEvents.start().
+  // Auto-start when the DOM is ready.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { start(); });
+  } else {
+    start();
+  }
+
+  // Expose for manual control / testing.
   window.LiveEvents = { start: start, stop: stop };
 })();

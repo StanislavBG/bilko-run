@@ -50,28 +50,10 @@
 
   const MAX_GRID = 200;
 
-  // The `?optApi=` override is for ad-hoc LOCAL testing only. Honoring an
-  // arbitrary URL from the query string would let a crafted link
-  // (…/?optApi=https://evil.com) forge every optimization POST to an
-  // attacker host and feed crafted responses back into the UI. Restrict the
-  // override to loopback or same-origin; anything else is ignored.
-  function _allowedOverride(raw) {
-    let u;
-    try { u = new URL(raw, window.location.href); } catch (_) { return null; }
-    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-    const loopback = u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname === "[::1]" || u.hostname === "::1";
-    if (loopback || u.origin === window.location.origin) return u.href.replace(/\/+$/, "");
-    if (window.console) console.warn("[optimization-client] ignoring non-local ?optApi override: " + raw);
-    return null;
-  }
-
   function apiBase() {
     const params = new URLSearchParams(window.location.search || "");
     const override = params.get("optApi");
-    if (override) {
-      const ok = _allowedOverride(override);
-      if (ok) return ok;
-    }
+    if (override) return override.replace(/\/+$/, "");
     if (window.OPTIMIZATION_API_URL) return String(window.OPTIMIZATION_API_URL).replace(/\/+$/, "");
     return "http://127.0.0.1:8765";
   }

@@ -7,8 +7,7 @@ function Sparkline({ data, width = 80, height = 22, color = "var(--pos)", fill =
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
-  // length 1 → width/0 = Infinity → NaN coordinates. Pin step to 0 (single dot).
-  const step = data.length > 1 ? width / (data.length - 1) : 0;
+  const step = width / (data.length - 1);
   const points = data
     .map((v, i) => `${i * step},${height - ((v - min) / range) * (height - 2) - 1}`)
     .join(" ");

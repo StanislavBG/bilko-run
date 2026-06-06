@@ -955,17 +955,10 @@ function ReportsPage() {
   };
 
   const renderMarkdown = (md) => {
-    const raw = typeof md === "string" ? md : "";
     if (typeof window.marked !== "undefined") {
-      const html = window.marked.parse(raw);
-      // Report content is overlaid from the server snapshot and ultimately
-      // derived from scraped social text — it is UNTRUSTED. marked v9 does not
-      // strip HTML, so sanitize before dangerouslySetInnerHTML. If DOMPurify
-      // somehow failed to load, fall back to escaped plain text, never raw HTML.
-      if (window.DOMPurify) return { __html: window.DOMPurify.sanitize(html) };
-      return { __html: `<pre style="white-space:pre-wrap;font-size:13px">${raw.replace(/</g, "&lt;")}</pre>` };
+      return { __html: window.marked.parse(md) };
     }
-    return { __html: `<pre style="white-space:pre-wrap;font-size:13px">${raw.replace(/</g, "&lt;")}</pre>` };
+    return { __html: `<pre style="white-space:pre-wrap;font-size:13px">${md.replace(/</g,"&lt;")}</pre>` };
   };
 
   return (

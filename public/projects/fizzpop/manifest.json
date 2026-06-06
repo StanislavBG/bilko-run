@@ -10,7 +10,7 @@
   },
   "golden": {
     "path": "/projects/fizzpop/",
-    "expect": "bilko-fizzpop"
+    "expect": "FizzPop"
   },
   "health": {},
   "bundle": {

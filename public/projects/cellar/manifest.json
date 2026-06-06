@@ -10,7 +10,7 @@
   },
   "golden": {
     "path": "/projects/cellar/",
-    "expect": "bilko-cellar"
+    "expect": "Welcome to Cellar"
   },
   "health": {},
   "bundle": {

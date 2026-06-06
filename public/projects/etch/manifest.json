@@ -10,7 +10,7 @@
   },
   "golden": {
     "path": "/projects/etch/",
-    "expect": "bilko-etch"
+    "expect": "Welcome to Etch"
   },
   "health": {},
   "bundle": {

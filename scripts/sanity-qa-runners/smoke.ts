@@ -74,8 +74,9 @@ async function runSudokuSmoke(page: Page): Promise<TargetResult> {
   const resp = await page.goto('https://bilko.run/projects/sudoku/', { timeout: TIMEOUT_MS, waitUntil: 'domcontentloaded' });
   if (!resp?.ok()) return { status: 'fail', durationMs: Date.now() - start, notes: `HTTP ${resp?.status()}` };
 
-  // Try to start a new game — look for common new-game trigger patterns
-  const newGameBtn = page.getByRole('button', { name: /new game|play|start/i }).first();
+  // Try to start a new game — match the live primary controls
+  // ("Play today", "New Easy/Medium/Hard", or "Play your first puzzle").
+  const newGameBtn = page.getByRole('button', { name: /play today|new (easy|medium|hard)|play your first|new game|play|start/i }).first();
   const newGameExists = await newGameBtn.isVisible({ timeout: 5_000 }).catch(() => false);
   if (newGameExists) {
     await newGameBtn.click();

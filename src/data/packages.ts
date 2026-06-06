@@ -8,6 +8,9 @@ export interface Package {
   npm: string;
   category: 'CLI' | 'Library' | 'Kit' | 'App';
   scope: 'public' | 'paid';
+  /** Internal infra (e.g. the host kit itself) — excluded from the public
+   *  projects hub entirely, not just admin-gated. */
+  internal?: boolean;
 }
 
 export const PACKAGES: readonly Package[] = [
@@ -21,6 +24,7 @@ export const PACKAGES: readonly Package[] = [
     npm: 'https://www.npmjs.com/package/@bilkobibitkov/host-kit',
     category: 'Kit',
     scope: 'public',
+    internal: true,
   },
   {
     slug: 'stepproof',

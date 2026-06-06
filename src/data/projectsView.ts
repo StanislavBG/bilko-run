@@ -30,7 +30,6 @@ export const PUBLIC_SLUGS: ReadonlySet<string> = new Set([
   'outdoor-hours',
   'git-viewer',
   // flagship public packages
-  'host-kit',
   'bilko-flow',
 ]);
 
@@ -126,7 +125,8 @@ export const HUB_CARDS: readonly HubCard[] = (() => {
   const projectSlugs = new Set(PROJECTS.map(p => p.slug));
   const cards: HubCard[] = [
     ...PROJECTS.map(projectCard),
-    ...PACKAGES.filter(pkg => !projectSlugs.has(pkg.slug)).map(packageCard),
+    // Internal-infra packages (e.g. host-kit) never appear in the hub.
+    ...PACKAGES.filter(pkg => !pkg.internal && !projectSlugs.has(pkg.slug)).map(packageCard),
   ];
   return cards.sort((a, b) => b.lastCommitAt - a.lastCommitAt);
 })();

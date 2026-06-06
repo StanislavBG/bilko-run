@@ -30,15 +30,6 @@ export interface PortfolioProject {
   isInternal: boolean;
 }
 
-export interface PortfolioGame {
-  id: string;
-  name: string;
-  genre: string;
-  plays: string;
-  blurb: string;
-  color: 'tang' | 'ink' | 'blue';
-  href?: string;
-}
 
 export interface AcademyLevel {
   n: number;
@@ -87,26 +78,16 @@ export const PORTFOLIO_PROJECTS: readonly PortfolioProject[] = PROJECTS.map((p, 
 
 const PROJECT_COUNT = PORTFOLIO_PROJECTS.length;
 const LIVE_COUNT = PORTFOLIO_PROJECTS.filter(p => p.status === 'Live').length;
-const GAME_COUNT = PROJECTS.filter(p => p.category?.includes('Game') && p.status === 'live').length;
 
 export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
-  { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
-  { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: `${GAME_COUNT} live` },
+  { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
   { id: 'academy',   label: 'Academy',     path: '/academy',   href: '/projects/academy/', icon: '▲', desc: 'Three-module AI fundamentals. Free, ad-free, every claim cited.', tag: '3 modules' },
   { id: 'workflows', label: 'Workflows',   path: '/workflows', icon: '↯', desc: 'Background AI agents and automations running 24/7.', tag: 'running' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
 ];
 
-export const GAMES: readonly PortfolioGame[] = [
-  { id: 'game-academy', name: 'Boat Shooter', genre: 'Arcade', plays: 'postponed', blurb: 'Postponed — browser-first arcade shooter. First entry in the Game Academy series; we paused it to focus on other apps.', color: 'tang' },
-  { id: 'sudoku',       name: 'Sudoku',       genre: 'Puzzle', plays: 'live', blurb: 'Daily-streak Sudoku with hints, themes, and a11y-first input.',         color: 'blue', href: '/projects/sudoku/' },
-  { id: 'mindswiffer',  name: 'Sweeper',      genre: 'Puzzle', plays: 'live', blurb: 'Minesweeper, no-guess mode, daily streaks, sound + haptics.',           color: 'ink',  href: '/projects/mindswiffer/' },
-  { id: 'fizzpop',      name: 'FizzPop',      genre: 'Arcade', plays: 'live', blurb: 'Pop-the-bubbles arcade reflex game. Short loops, satisfying juice.',    color: 'tang', href: '/projects/fizzpop/' },
-  { id: 'etch',         name: 'Etch',         genre: 'Puzzle', plays: 'live', blurb: "Mario's Picross-style nonogram with a verified no-guess generator.",    color: 'blue', href: '/projects/etch/' },
-  { id: 'cellar',       name: 'Cellar',       genre: 'Card',   plays: 'live', blurb: 'FreeCell solitaire with solver-verified daily deals.',                  color: 'ink',  href: '/projects/cellar/' },
-];
 
 export const ACADEMY_LEVELS: readonly AcademyLevel[] = [
   { n: 1, name: 'Beginner',    desc: 'What an LLM actually is. No mystique.' },

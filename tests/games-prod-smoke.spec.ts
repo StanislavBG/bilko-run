@@ -41,10 +41,12 @@ for (const g of GAMES) {
   });
 }
 
-test('studio page lists all 3 new games', async ({ page }) => {
-  await page.goto(`${BASE}/studio`);
-  for (const slug of ['fizzpop', 'etch', 'cellar', 'sudoku', 'mindswiffer']) {
-    const cardRe = new RegExp(slug.replace(/-/g, '[\\s-]?'), 'i');
-    await expect(page.locator('body')).toContainText(cardRe);
+// The standalone Game Studio tab/page was retired — games are projects now and
+// surface in the /projects hub (admin-gated). The old /studio and /games URLs
+// must redirect into the hub rather than 404.
+test('retired /studio and /games redirect to the projects hub', async ({ page }) => {
+  for (const path of ['/studio', '/games']) {
+    await page.goto(`${BASE}${path}`);
+    await expect(page).toHaveURL(/\/projects\/?$/);
   }
 });

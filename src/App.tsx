@@ -14,7 +14,6 @@ import { AdminCostPage } from './pages/AdminCostPage.js';
 import { ObservabilityPage } from './pages/admin/ObservabilityPage.js';
 import { SecretsPage } from './pages/admin/SecretsPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
-import { StudioPage } from './pages/StudioPage.js';
 import { AcademyPage } from './pages/AcademyPage.js';
 import { AcademyLevelPage } from './pages/AcademyLevelPage.js';
 import { WorkflowsPage } from './pages/WorkflowsPage.js';
@@ -138,8 +137,11 @@ function AppRoutes() {
             {/* /projects/<slug> (no trailing slash) — redirect to canonical /products/<slug> */}
             <Route path="/projects/*" element={<RedirectProjectsToProducts />} />
 
-            {/* /games -> /studio canonical (Studio Page is the long-term home) */}
-            <Route path="/games" element={<Navigate to="/studio" replace />} />
+            {/* Games are projects now — the standalone Game Studio tab/page was
+                retired. /games and /studio fold into the projects hub (games
+                surface there, admin-gated). */}
+            <Route path="/games" element={<Navigate to="/projects" replace />} />
+            <Route path="/studio" element={<Navigate to="/projects" replace />} />
             {/* /packages merged into the hub */}
             <Route path="/packages" element={<Navigate to="/projects" replace />} />
             <Route path="/blog" element={<BlogPage />} />
@@ -153,7 +155,6 @@ function AppRoutes() {
             <Route path="/admin/secrets" element={<SecretsPage />} />
 
             {/* ── Portfolio sections ── */}
-            <Route path="/studio" element={<StudioPage />} />
             <Route path="/academy" element={<AcademyPage />} />
             <Route path="/academy/:level" element={<AcademyLevelPage />} />
             <Route path="/workflows" element={<WorkflowsPage />} />

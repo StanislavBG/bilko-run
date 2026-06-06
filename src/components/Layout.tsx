@@ -16,7 +16,7 @@ function activeSectionPath(pathname: string): string {
   if (pathname === '/' || pathname === '/home') return '/';
   if (pathname.startsWith('/projects') || pathname.startsWith('/work')) return '/projects';
   if (pathname.startsWith('/products')) return '/projects';
-  if (pathname.startsWith('/studio')) return '/studio';
+  if (pathname.startsWith('/studio') || pathname.startsWith('/games')) return '/projects';
   if (pathname.startsWith('/blog')) return '/blog';
   if (pathname.startsWith('/academy')) return '/academy';
   if (pathname.startsWith('/workflows')) return '/workflows';

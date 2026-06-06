@@ -174,10 +174,7 @@
 
   function ABEquity({ resultA, resultB }) {
     const W = 720, H = 240, PAD_L = 48, PAD_R = 16, PAD_T = 12, PAD_B = 26;
-    const curveA = resultA && resultA.winner
-      ? (resultA.cells.find((c) => c.params === resultA.cells.find((x) => x.sharpe === resultA.winner.sharpe).params) || resultA.cells[0]).equity_curve
-      : null;
-    // Simpler: pick the winning cell by matching sharpe.
+    // Pick the winning cell by matching sharpe.
     function winnerCurve(r) {
       if (!r || !r.cells || !r.winner) return null;
       const w = r.cells.find((c) => c.sharpe === r.winner.sharpe);

@@ -26,12 +26,22 @@
       .then(function (snap) {
         var g = snap && snap.globals;
         if (!g || typeof g !== "object") throw new Error("snapshot missing globals");
-        var n = 0;
+        var n = 0, skipped = 0;
         for (var k in g) {
-          if (Object.prototype.hasOwnProperty.call(g, k)) { window[k] = g[k]; n++; }
+          if (!Object.prototype.hasOwnProperty.call(g, k)) continue;
+          var val = g[k];
+          // Never overlay a null/undefined value over a working bundled
+          // baseline — a partial snapshot must not blank a global the
+          // components dereference (e.g. PERF, EQUITY, TRADES). Keep the
+          // committed data.js value for that key instead.
+          if (val == null) { skipped++; continue; }
+          // Type-guard arrays: a non-array EQUITY/TRADES/WATCHLIST would crash
+          // .slice/.map/.filter consumers. Reject the shape, keep the baseline.
+          if (Array.isArray(window[k]) && !Array.isArray(val)) { skipped++; continue; }
+          window[k] = val; n++;
         }
-        window.__liveSnapshotMeta = { ok: true, count: n, generatedAt: snap.generatedAt || null };
-        if (window.console) console.info("[live-snapshot] overlaid " + n + " globals from server");
+        window.__liveSnapshotMeta = { ok: true, count: n, skipped: skipped, generatedAt: snap.generatedAt || null };
+        if (window.console) console.info("[live-snapshot] overlaid " + n + " globals from server" + (skipped ? " (" + skipped + " skipped: null/shape-mismatch)" : ""));
         return window.__liveSnapshotMeta;
       })
       .catch(function (e) {

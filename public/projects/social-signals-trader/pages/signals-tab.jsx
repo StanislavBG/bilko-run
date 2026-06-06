@@ -10,6 +10,14 @@
 
   const RANGE_DAYS = { "1d": 1, "7d": 7, "30d": 30, "90d": 90 };
   const DAY_MS = 86400 * 1000;
+
+  // Evidence-post URLs are scraped/untrusted. React won't block a
+  // `javascript:` href, so allow only http(s)/protocol-relative; else drop.
+  const safeHref = (u) => {
+    if (typeof u !== "string") return null;
+    const s = u.trim();
+    return /^https?:\/\//i.test(s) || s.startsWith("/") ? s : null;
+  };
   const STROKES = ["var(--pos)", "var(--info)", "var(--warn)", "var(--neg)", "var(--text-2)"];
 
   // ---------- helpers ----------
@@ -255,7 +263,7 @@
               </div>
               <div style={{ display: "grid", gap: 8 }}>
                 {(theme.evidence_posts || []).map((p) => (
-                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer"
+                  <a key={p.id} href={safeHref(p.url) || undefined} target="_blank" rel="noreferrer"
                      style={{ display: "block", padding: 10, border: "1px solid var(--line)", borderRadius: 6, color: "var(--text)", textDecoration: "none" }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{p.title}</div>
                     <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>

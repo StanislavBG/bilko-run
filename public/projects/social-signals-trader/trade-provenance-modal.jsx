@@ -13,6 +13,16 @@
 // `thesisKey` field, so the modal falls back to a best-effort lookup by
 // (ticker, opened date) when no key is attached.
 
+// Reddit permalinks/urls are scraped, server-overlaid, and untrusted. React
+// does NOT block `javascript:`/`data:` hrefs, so a crafted source URL would
+// execute on click. Allow only http(s) (and protocol-relative); else drop it.
+function safeHref(u) {
+  if (typeof u !== "string") return null;
+  const s = u.trim();
+  if (/^https?:\/\//i.test(s) || s.startsWith("/")) return s;
+  return null;
+}
+
 function findProvenanceForTrade(trade, provenanceDict) {
   if (!trade || !provenanceDict) return null;
   // Preferred: explicit thesisKey on the trade row.
@@ -39,7 +49,11 @@ function findProvenanceForTrade(trade, provenanceDict) {
   const score = (p) => {
     const ev = p && p.eventDate ? p.eventDate : "";
     if (!ev || !opened) return Number.POSITIVE_INFINITY;
-    return Math.abs(Date.parse(ev) - Date.parse(opened)) || 0;
+    // Math.abs(NaN) is NaN; the old `|| 0` made an UNPARSEABLE date score 0
+    // (nearest) and win the tie-break. An unparseable date is "no match" →
+    // worst possible score, not best.
+    const delta = Math.abs(Date.parse(ev) - Date.parse(opened));
+    return Number.isNaN(delta) ? Number.POSITIVE_INFINITY : delta;
   };
   candidates.sort((a, b) => score(a.p) - score(b.p));
   return candidates[0].p;
@@ -91,7 +105,7 @@ function SourcesList({ sources }) {
       {sources.map((s, i) => {
         const sub = s.subreddit ? `r/${s.subreddit}` : "";
         const author = s.author ? `u/${s.author}` : "";
-        const url = s.permalink || s.url || null;
+        const url = safeHref(s.permalink || s.url);
         const titleText = s.title || s.text || url || "(no title)";
         return (
           <li

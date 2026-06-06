@@ -26,7 +26,6 @@ import { PROJECTS } from './data/projectsRegistry.js';
 // Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
 // only non-tool landing pages are declared here.
 const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
-const PackagesPage = React.lazy(() => import('./pages/PackagesPage.js').then(m => ({ default: m.PackagesPage })));
 
 // Build one React.lazy component per registered tool so code-splitting still works.
 const TOOL_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentType>> = Object.fromEntries(
@@ -126,21 +125,23 @@ function AppRoutes() {
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
 
-            {/* /products/* — canonical */}
-            <Route path="/products" element={<ProjectsPage />} />
+            {/* /projects — canonical home of the combined Projects + Packages hub */}
+            <Route path="/projects" element={<ProjectsPage />} />
+            {/* /products (and its tool slugs) stay live; the bare listing canonicalizes to /projects */}
+            <Route path="/products" element={<Navigate to="/projects" replace />} />
             <Route path="/products/*">
               {toolRoutes()}
               {/* unknown slug under /products/* — maybe a static-path project? */}
               <Route path="*" element={<MaybeStandaloneRedirect />} />
             </Route>
 
-            {/* /projects/* — redirect to canonical /products/* */}
-            <Route path="/projects" element={<Navigate to="/products" replace />} />
+            {/* /projects/<slug> (no trailing slash) — redirect to canonical /products/<slug> */}
             <Route path="/projects/*" element={<RedirectProjectsToProducts />} />
 
             {/* /games -> /studio canonical (Studio Page is the long-term home) */}
             <Route path="/games" element={<Navigate to="/studio" replace />} />
-            <Route path="/packages" element={<React.Suspense fallback={null}><PackagesPage /></React.Suspense>} />
+            {/* /packages merged into the hub */}
+            <Route path="/packages" element={<Navigate to="/projects" replace />} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />
             <Route path="/pricing" element={<PricingPage />} />

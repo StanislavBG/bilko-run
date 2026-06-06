@@ -22,6 +22,11 @@ cd "$REPO_ROOT"
 
 echo "[sanity-qa-cron] Starting — $(TZ=America/Los_Angeles date '+%Y-%m-%d %H:%M %Z')"
 
+# Refresh the Projects-hub commit-order sidecar from the local sibling repos
+# (non-fatal: a stale order is better than aborting the QA run). Committed below
+# alongside the report so Render picks up the new ordering on next deploy.
+pnpm exec tsx scripts/refresh-commit-order.ts || echo "[sanity-qa-cron] commit-order refresh failed (non-fatal)"
+
 # Run the gate; capture exit code without aborting the script
 set +e
 pnpm exec tsx scripts/sanity-qa.ts --write-report="$REPORT_FILE"
@@ -70,6 +75,8 @@ fi
 # so we never sweep up the unrelated working-tree changes (outdoor-hours data).
 if [[ -f "$REPORT_FILE" ]]; then
   git add -f "$REPORT_FILE"
+  # Also stage the refreshed commit-order sidecar if it changed (tracked file).
+  git add src/data/commit-order.json 2>/dev/null || true
   if git commit -q -m "chore(qa): sanity-qa ${DECISION} ${TIMESTAMP}"; then
     git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"
     git push content-grade main || echo "[sanity-qa-cron] push content-grade failed (non-fatal)"

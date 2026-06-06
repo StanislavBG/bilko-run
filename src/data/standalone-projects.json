@@ -448,5 +448,23 @@
       "Signals",
       "Free"
     ]
+  },
+  {
+    "slug": "mcp-host",
+    "name": "MCP Host",
+    "tagline": "MCP server that lets sibling-repo Claude sessions register, publish, and inspect apps on bilko.run.",
+    "category": "Dev Tool · MCP",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "external-url",
+      "url": "https://github.com/StanislavBG/bilko-run/tree/main/mcp-host-server",
+      "sourceRepo": "github.com/StanislavBG/bilko-run/tree/main/mcp-host-server"
+    },
+    "tags": [
+      "MCP",
+      "Host",
+      "TypeScript"
+    ]
   }
 ]

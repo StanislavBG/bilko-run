@@ -857,6 +857,122 @@
 }
 .pf-ann::before { content: "✦ "; }
 
+/* ── Projects + Packages hub (/projects) ──────────────────────────── */
+/* Desktop: fit the whole list in the viewport with no page scroll. The list
+   region scrolls internally if an expanded card overflows. Mobile stacks and
+   scrolls normally. Topbar is ~58px sticky. */
+.pf-hub-page {
+  padding: 0 28px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* On the hub route the shell becomes a viewport-height flex column so the card
+   list fills the screen with no page scroll; the global footer is hidden. The
+   `hub-route` body class is toggled by ProjectsPage, so all other routes keep
+   their normal flow (footer below, page scrolls). */
+body.hub-route .portfolio-shell { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body.hub-route main { flex: 1; min-height: 0; }
+body.hub-route .pf-footer { display: none; }
+.pf-hub-header {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 28px 0 18px;
+  border-bottom: 1px solid var(--pf-rule);
+}
+.pf-hub-h1 {
+  font-family: var(--pf-font-display);
+  font-size: clamp(32px, 4.5vw, 52px);
+  font-weight: 400; line-height: 0.98; letter-spacing: -0.02em;
+  margin: 8px 0 8px;
+}
+.pf-hub-lede { color: var(--pf-ink-2); font-size: 15px; max-width: 560px; }
+.pf-hub-toggle {
+  cursor: pointer; border-color: var(--pf-rule-2); color: var(--pf-ink-2);
+  background: transparent; white-space: nowrap;
+}
+.pf-hub-toggle.on { background: var(--pf-ink); color: var(--pf-bg); border-color: var(--pf-ink); }
+
+.pf-hub-list {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column;
+  padding: 14px 0 24px;
+}
+.pf-hub-row {
+  border: 1px solid var(--pf-rule);
+  border-radius: 12px;
+  background: var(--pf-paper);
+  margin-bottom: 10px;
+  transition: border-color var(--pf-motion-fast), background var(--pf-motion-fast);
+}
+.pf-hub-row:hover { border-color: var(--pf-rule-2); }
+.pf-hub-row.expanded { border-color: var(--pf-accent); background: var(--pf-bg-2); }
+.pf-hub-head {
+  width: 100%; cursor: pointer; background: transparent; border: 0;
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 18px; text-align: left;
+}
+.pf-hub-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--pf-ink-3); }
+.pf-hub-dot.live { background: var(--pf-green, oklch(0.7 0.15 150)); }
+.pf-hub-dot.cooking { background: var(--pf-tang); }
+.pf-hub-dot.pkg { background: var(--pf-blue); }
+.pf-hub-dot.postponed { background: var(--pf-ink-3); }
+.pf-hub-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.pf-hub-name { font-family: var(--pf-font-display); font-size: 21px; letter-spacing: -0.015em; line-height: 1.05; }
+.pf-hub-blurb {
+  color: var(--pf-ink-2); font-size: 13px; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60ch;
+}
+.pf-hub-meta { display: flex; align-items: center; gap: 14px; flex: none; }
+.pf-hub-cat { font-family: var(--pf-font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pf-ink-3); }
+.pf-hub-when { font-family: var(--pf-font-mono); font-size: 11px; color: var(--pf-ink-3); }
+.pf-hub-status.live { color: var(--pf-green, oklch(0.45 0.12 150)); border-color: currentColor; }
+.pf-hub-status.pkg { color: var(--pf-blue); border-color: currentColor; }
+.pf-hub-caret { font-size: 20px; color: var(--pf-ink-3); transition: transform var(--pf-motion-fast); }
+.pf-hub-caret.open { transform: rotate(90deg); color: var(--pf-accent); }
+
+.pf-hub-body { padding: 0 18px 18px; display: flex; flex-direction: column; gap: 12px; }
+.pf-hub-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.pf-hub-install {
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--pf-bg); border: 1px solid var(--pf-rule);
+  border-radius: 8px; padding: 9px 12px;
+  font-family: var(--pf-font-mono); font-size: 12.5px; color: var(--pf-ink);
+  position: relative;
+}
+.pf-hub-install:hover { background: var(--pf-bg-2); }
+.pf-hub-dollar { color: var(--pf-ink-3); }
+.pf-hub-copy {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pf-accent);
+}
+.pf-hub-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.pf-hub-primary {
+  cursor: pointer; border: 0; border-radius: 8px;
+  background: var(--pf-ink); color: var(--pf-bg);
+  font-family: var(--pf-font-mono); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.04em; padding: 9px 16px;
+}
+.pf-hub-primary:hover { background: var(--pf-accent); }
+.pf-hub-link {
+  font-family: var(--pf-font-mono); font-size: 12px; font-weight: 700;
+  color: var(--pf-ink-2); text-decoration: none;
+}
+.pf-hub-link:hover { color: var(--pf-accent); }
+
+@media (max-width: 900px) {
+  /* Mobile: drop the fit-to-viewport constraint and scroll normally. */
+  body.hub-route .portfolio-shell { height: auto; display: block; overflow: visible; }
+  body.hub-route main { flex: none; }
+  body.hub-route .pf-footer { display: grid; }
+  .pf-hub-page { height: auto; overflow: visible; padding: 0 16px 48px; }
+  .pf-hub-list { overflow: visible; }
+  .pf-hub-blurb { white-space: normal; }
+  .pf-hub-meta { gap: 8px; }
+  .pf-hub-cat, .pf-hub-when { display: none; }
+}
+
 @media (max-width: 900px) {
   .pf-topbar { grid-template-columns: auto 1fr; gap: 12px; padding: 12px 16px; }
   .pf-topbar nav { display: none; }

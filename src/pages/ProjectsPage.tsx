@@ -1,150 +1,153 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { PageHeader } from '../components/portfolio/PageHeader.js';
-import { navigateProject } from '../components/portfolio/navigateProject.js';
-import { PORTFOLIO_PROJECTS, type PortfolioProject } from '../data/portfolio.js';
-
-const FILTERS = ['All', 'Live', 'Shipped', 'Cooking', 'Postponed'] as const;
-type Filter = typeof FILTERS[number];
+import { useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
+import { ADMIN_EMAILS } from '../constants.js';
+import { HUB_CARDS, PUBLIC_CARDS, lastWorkedLabel, type HubCard } from '../data/projectsView.js';
+import { track } from '../hooks/usePageView.js';
 
 /**
- * Display order for category groups. Anything not in this list falls to the
- * end and renders in the order it first appears in the registry.
+ * Combined Projects + Packages hub.
  *
- * Rule: distinct / non-remote-LLM categories first; Boat Shooter is on-hold
- * but stays above the AI block; live-LLM Gemini tools cluster at the bottom.
- * Within each category, registry array order applies.
+ * - Public visitors see only PUBLIC_CARDS (the 5 featured projects + flagship
+ *   packages), ordered most-recently-committed first.
+ * - The admin (Clerk email in ADMIN_EMAILS) gets a toggle that reveals every
+ *   card in HUB_CARDS.
+ * - Cards are full-width hero rows that expand inline on click with detail +
+ *   links. On desktop the collapsed list fits the viewport without page scroll;
+ *   the list area scrolls internally if an expansion overflows.
  */
-const CATEGORY_ORDER: readonly string[] = [
-  // distinct, top of page
-  'Data · Portfolio',         // git-viewer
-  'AI Tool · Productivity',   // outdoor-hours (then local-score within group)
-  'Game · Puzzle',            // sudoku, mindswiffer
-  'Dev Tool · CLI',           // session-manager
-  'Learn',                    // academy (also has its own /academy tab)
-  'Dev Tool · Library',       // bilko-flow
-  'Game',                     // Boat Shooter (on-hold) — last of distinct block
-  // live remote LLM (Gemini-backed)
-  'AI Tool · Data',           // social-signals-trader
-  'AI Tool · Marketing',      // page-roast, launch-grader
-  'AI Tool · Content',        // headline, thread, ad, email, audience
-  'AI Tool · Dev',            // stepproof
-  'AI Tool · Ops',            // stack-audit
-  'AI Tool · Design',         // bglabs
-];
 
-interface Group {
-  category: string;
-  projects: readonly PortfolioProject[];
+function statusMeta(card: HubCard): { label: string; cls: string } {
+  if (card.type === 'package') return { label: 'Package', cls: 'pkg' };
+  switch (card.status) {
+    case 'live':      return { label: 'Live', cls: 'live' };
+    case 'cooking':   return { label: 'Cooking', cls: 'cooking' };
+    case 'postponed': return { label: 'Postponed', cls: 'postponed' };
+    default:          return { label: 'Shipped', cls: 'shipped' };
+  }
 }
 
-function groupByCategory(list: readonly PortfolioProject[]): Group[] {
-  const map = new Map<string, PortfolioProject[]>();
-  for (const p of list) {
-    const arr = map.get(p.kind) ?? [];
-    arr.push(p);
-    map.set(p.kind, arr);
+function HubRow({ card, expanded, onToggle }: { card: HubCard; expanded: boolean; onToggle: () => void }) {
+  const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
+  const status = statusMeta(card);
+  const worked = lastWorkedLabel(card);
+
+  function open() {
+    if (!card.href) return;
+    track('hub_open', { tool: card.slug, metadata: { type: card.type } });
+    if (card.isInternal) navigate(card.href);
+    else window.location.href = card.href;
   }
-  const orderIndex = (cat: string) => {
-    const i = CATEGORY_ORDER.indexOf(cat);
-    return i === -1 ? CATEGORY_ORDER.length : i;
-  };
-  return [...map.entries()]
-    .map(([category, projects]) => ({ category, projects }))
-    .sort((a, b) => orderIndex(a.category) - orderIndex(b.category));
+
+  function copyInstall() {
+    if (!card.install) return;
+    void navigator.clipboard.writeText(card.install);
+    setCopied(true);
+    track('packages_install_copy', { tool: card.slug });
+    setTimeout(() => setCopied(false), 1400);
+  }
+
+  return (
+    <div className={`pf-hub-row${expanded ? ' expanded' : ''}`}>
+      <button className="pf-hub-head" onClick={onToggle} aria-expanded={expanded}>
+        <span className={`pf-hub-dot ${status.cls}`} aria-hidden="true" />
+        <span className="pf-hub-title">
+          <span className="pf-hub-name">{card.name}</span>
+          <span className="pf-hub-blurb">{card.blurb}</span>
+        </span>
+        <span className="pf-hub-meta">
+          <span className="pf-hub-cat">{card.category}</span>
+          {worked && <span className="pf-hub-when" title="Last commit">{worked}</span>}
+          <span className={`pf-chip pf-hub-status ${status.cls}`}>{status.label}</span>
+          <span className={`pf-hub-caret${expanded ? ' open' : ''}`} aria-hidden="true">›</span>
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="pf-hub-body">
+          <div className="pf-hub-tags">
+            {card.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}
+          </div>
+          {card.install && (
+            <button className="pf-hub-install" onClick={copyInstall} aria-label={`Copy install command for ${card.name}`}>
+              <span className="pf-hub-dollar">$</span> {card.install}
+              <span className="pf-hub-copy">{copied ? 'copied' : 'copy'}</span>
+            </button>
+          )}
+          <div className="pf-hub-links">
+            {card.href && card.status !== 'postponed' && (
+              <button className="pf-hub-primary" onClick={open}>
+                {card.type === 'package' ? 'View on GitHub' : 'Open'} →
+              </button>
+            )}
+            {card.npm && (
+              <a href={card.npm} target="_blank" rel="noopener noreferrer" className="pf-hub-link">npm →</a>
+            )}
+            {card.github && card.github !== card.href && (
+              <a href={card.github} target="_blank" rel="noopener noreferrer" className="pf-hub-link">GitHub →</a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ProjectsPage() {
-  const navigate = useNavigate();
-  const [filter, setFilter] = useState<Filter>('All');
+  const { user } = useUser();
+  const email = user?.primaryEmailAddress?.emailAddress ?? '';
+  const isAdmin = ADMIN_EMAILS.includes(email);
+
+  const [showAll, setShowAll] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Projects — Bilko Bibitkov';
+    track('page_view', { tool: 'projects' });
+    // Fit-to-viewport (no page scroll) is opt-in per route via this body class;
+    // the matching rules live in portfolio.css.
+    document.body.classList.add('hub-route');
+    return () => {
+      document.title = 'Bilko — AI Advisory for Small Business';
+      document.body.classList.remove('hub-route');
+    };
   }, []);
 
-  const list = useMemo(
-    () => filter === 'All' ? PORTFOLIO_PROJECTS : PORTFOLIO_PROJECTS.filter(p => p.status === filter),
-    [filter],
-  );
-
-  const groups = useMemo(() => groupByCategory(list), [list]);
+  const cards = useMemo(() => (isAdmin && showAll ? HUB_CARDS : PUBLIC_CARDS), [isAdmin, showAll]);
+  const hiddenCount = HUB_CARDS.length - PUBLIC_CARDS.length;
 
   return (
-    <div className="pf-page">
-      <PageHeader
-        eyebrow="Section 02 · Portfolio"
-        title="Projects."
-        lede={`${PORTFOLIO_PROJECTS.length} projects across ${groupByCategory(PORTFOLIO_PROJECTS).length} categories. Each one is a real attempt at making something useful — not a demo, not a screenshot.`}
-        what="Grouped by what they do. Click any card for the live tool. Filter by status to see what's live, shipped, or still cooking."
-      />
-      <div style={{ display: 'flex', gap: 8, marginBottom: 32, flexWrap: 'wrap' }}>
-        {FILTERS.map(f => {
-          const count = f === 'All' ? PORTFOLIO_PROJECTS.length : PORTFOLIO_PROJECTS.filter(p => p.status === f).length;
-          const isActive = filter === f;
-          return (
-            <button
-              key={f}
-              className="pf-chip"
-              onClick={() => setFilter(f)}
-              style={{
-                cursor: 'pointer',
-                background: isActive ? 'var(--pf-ink)' : 'transparent',
-                color: isActive ? 'var(--pf-bg)' : 'var(--pf-ink-2)',
-                borderColor: isActive ? 'var(--pf-ink)' : 'var(--pf-rule-2)',
-              }}
-            >
-              {f} <span style={{ opacity: 0.6 }}>· {count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {groups.length === 0 && (
-        <div className="pf-mono" style={{ padding: '40px 0', color: 'var(--pf-ink-3)' }}>
-          Nothing matches that filter.
+    <div className="pf-page pf-hub-page">
+      <header className="pf-hub-header">
+        <div>
+          <div className="pf-eyebrow">Section 02 · Portfolio</div>
+          <h1 className="pf-hub-h1">Projects &amp; Packages.</h1>
+          <p className="pf-hub-lede">
+            Live tools and open-source packages, newest work on top. Click any card to expand.
+          </p>
         </div>
-      )}
+        {isAdmin && (
+          <button
+            className={`pf-chip pf-hub-toggle${showAll ? ' on' : ''}`}
+            onClick={() => setShowAll(s => !s)}
+            title="Admin-only"
+          >
+            {showAll ? `Showing all · ${HUB_CARDS.length}` : `Show all (+${hiddenCount}) · admin`}
+          </button>
+        )}
+      </header>
 
-      {groups.map(({ category, projects }) => (
-        <section key={category} className="pf-category">
-          <header className="pf-category-header">
-            <h2 className="pf-serif">{category}</h2>
-            <span className="pf-mono">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</span>
-          </header>
-          <div className="pf-proj-grid">
-            {projects.map((p) => (
-              <div
-                key={p.id}
-                className={`pf-proj-card${p.status === 'Postponed' ? ' postponed' : ''}`}
-                onClick={() => navigateProject(navigate, p)}
-                style={p.status === 'Postponed' ? { cursor: 'default' } : undefined}
-              >
-                <div className={`pf-swatch ${p.color}`}></div>
-                <div className="pf-kind">
-                  <span>{p.kind}</span>
-                  <span className="pf-year">{p.year}</span>
-                </div>
-                <h3>{p.name}</h3>
-                <p className="pf-blurb">{p.blurb}</p>
-                <div className="pf-foot">
-                  <span className={`pf-status ${p.status.toLowerCase()}`}>{p.status}</span>
-                  {p.tags.slice(0, 2).map(t => <span key={t} className="pf-chip">{t}</span>)}
-                  {p.kind.includes('Game') && p.status !== 'Postponed' && (
-                    <Link
-                      to="/studio"
-                      className="pf-chip"
-                      onClick={e => e.stopPropagation()}
-                      style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}
-                    >
-                      Play →
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="pf-hub-list">
+        {cards.map(card => (
+          <HubRow
+            key={`${card.type}:${card.slug}`}
+            card={card}
+            expanded={expanded === card.slug}
+            onToggle={() => setExpanded(cur => (cur === card.slug ? null : card.slug))}
+          />
+        ))}
+      </div>
     </div>
   );
 }

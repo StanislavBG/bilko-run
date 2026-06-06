@@ -1,5 +1,4 @@
 import { PROJECTS, type Project, projectHref, isReactRoute } from './projectsRegistry.js';
-import { PACKAGES } from './packages.js';
 
 export interface Section {
   id: string;
@@ -92,8 +91,7 @@ const GAME_COUNT = PROJECTS.filter(p => p.category?.includes('Game') && p.status
 
 export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
-  { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Shipped work — productivity tools, AI experiments, side quests.', tag: `${LIVE_COUNT} live` },
-  { id: 'packages',  label: 'Packages',    path: '/packages',  icon: '⊟', desc: 'Open-source CLI tools and libraries — npm install and use locally.', tag: `${PACKAGES.length} live` },
+  { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
   { id: 'studio',    label: 'Game Studio', path: '/studio',    icon: '◆', desc: 'Small, weird, playable games. Browser-first.', tag: `${GAME_COUNT} live` },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
   { id: 'academy',   label: 'Academy',     path: '/academy',   href: '/projects/academy/', icon: '▲', desc: 'Three-module AI fundamentals. Free, ad-free, every claim cited.', tag: '3 modules' },

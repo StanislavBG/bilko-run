@@ -64,12 +64,18 @@ if [[ "$DECISION" == "FAIL" || "$DECISION" == "ERROR" ]]; then
   fi
 fi
 
-# Commit and push the report to both remotes
+# Commit and push the report to both remotes.
+# test-results/ is gitignored (playwright traces etc.), so force-add ONLY the
+# dated markdown report — the rest of the dir stays ignored. Commit without -a
+# so we never sweep up the unrelated working-tree changes (outdoor-hours data).
 if [[ -f "$REPORT_FILE" ]]; then
-  git add "$REPORT_FILE" || true
-  git commit -m "chore(qa): sanity-qa ${DECISION} ${TIMESTAMP}" || true
-  git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"
-  git push content-grade main || echo "[sanity-qa-cron] push content-grade failed (non-fatal)"
+  git add -f "$REPORT_FILE"
+  if git commit -q -m "chore(qa): sanity-qa ${DECISION} ${TIMESTAMP}"; then
+    git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"
+    git push content-grade main || echo "[sanity-qa-cron] push content-grade failed (non-fatal)"
+  else
+    echo "[sanity-qa-cron] nothing to commit (report unchanged?) — skipping push"
+  fi
 fi
 
 exit $EXIT_CODE

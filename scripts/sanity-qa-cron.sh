@@ -5,6 +5,10 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Cron runs with a bare PATH that omits user-local npm bins, so pnpm is not
+# found (exit 127). Prepend the install location so the gate can actually run.
+export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:$PATH"
+
 # Load cron-specific env (GITHUB_TOKEN, etc.) if present
 # shellcheck source=/dev/null
 [[ -f "$HOME/.env.cron" ]] && source "$HOME/.env.cron"
@@ -26,18 +30,21 @@ set -e
 
 echo "[sanity-qa-cron] Exit code: $EXIT_CODE"
 
-# PASS=0, WARN shows as WARN in report (exit 0), FAIL=1
-if [[ $EXIT_CODE -eq 1 ]]; then
-  DECISION="FAIL"
-elif [[ $EXIT_CODE -eq 2 ]]; then
-  DECISION="ERROR"
-else
+# PASS=0, WARN shows as WARN in report (exit 0), FAIL=1, ERROR=2.
+# Any other exit code (e.g. 127 = command not found) is an unexpected crash and
+# must NOT fall through to PASS — treat it as ERROR so it surfaces.
+if [[ $EXIT_CODE -eq 0 ]]; then
   # Check if report says WARN
   if grep -q '🟡 \*\*WARN\*\*' "$REPORT_FILE" 2>/dev/null; then
     DECISION="WARN"
   else
     DECISION="PASS"
   fi
+elif [[ $EXIT_CODE -eq 1 ]]; then
+  DECISION="FAIL"
+else
+  # 2 = gate-reported error, anything else = crash before the gate ran
+  DECISION="ERROR"
 fi
 
 echo "[sanity-qa-cron] Decision: $DECISION"

@@ -402,6 +402,14 @@ const MIGRATIONS = [
     token_out  INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE INDEX IF NOT EXISTS academy_quota_email_at ON academy_quota_daily(email_hash, call_at)`,
+  // Per-project live data snapshot (see server/routes/project-data.ts). One row
+  // per sibling app slug; payload is the app's JSON snapshot, replaced in place
+  // by the publisher so the live page can fetch fresh data without a git commit.
+  `CREATE TABLE IF NOT EXISTS project_snapshots (
+    slug       TEXT PRIMARY KEY,
+    payload    TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [

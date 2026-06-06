@@ -18,6 +18,7 @@ import { registerObservabilityRoutes } from './routes/admin-observability.js';
 import { registerSecretsRoutes } from './routes/admin-secrets.js';
 import { registerGameRoutes } from './routes/games.js';
 import { registerAcademyRoutes } from './routes/academy.js';
+import { registerProjectDataRoutes } from './routes/project-data.js';
 import { registerSecurityHeaders } from './security-headers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -78,6 +79,7 @@ registerObservabilityRoutes(app);
 registerSecretsRoutes(app);
 registerGameRoutes(app);
 registerAcademyRoutes(app);
+registerProjectDataRoutes(app);
 
 // Boot-time secret age check
 try {

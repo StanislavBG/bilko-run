@@ -22,17 +22,18 @@ export function HomePage() {
             <span style={{ display: 'block' }}>one at a time.</span>
           </h1>
           <div className="pf-who">
-            <span>Sofia · Studio of one</span>
+            <span>Studio of one</span>
             <span className="pf-line"></span>
             <span>est. 2024</span>
           </div>
           <p className="pf-blurb">
-            About a dozen small AI tools, each doing one thing. A roaster
-            for landing pages. A scorer for ads. A weather report that
-            tells you whether to go outside today. A Reddit-watching
-            pipeline, a few browser games, and a trading research engine
-            ticking along in the background. Most are free or a few bucks.
-            Build logs on the blog.
+            Two dozen small tools, each doing one thing. Brutally honest
+            landing-page roasts, plus graders for ads, headlines, emails,
+            and threads. Five no-guess puzzle games. A weather report that
+            tells you whether to go outside, and a doc analyzer that runs
+            entirely in your browser. Trading bots reading Reddit live, in
+            public — and a free, ad-free AI academy. Most are free or a few
+            bucks. Build logs on the blog.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
             <button className="pf-btn" onClick={() => navigate('/projects')}>See the work →</button>
@@ -91,7 +92,7 @@ export function HomePage() {
             <div className="pf-portrait-meta">
               <div className="pf-mono" style={{ color: 'var(--pf-ink-3)' }}>Bilko Bibitkov</div>
               <div className="pf-serif" style={{ fontSize: 22, lineHeight: 1.1, marginTop: 4 }}>
-                <em style={{ color: 'var(--pf-accent)' }}>About a dozen tools.</em><br />
+                <em style={{ color: 'var(--pf-accent)' }}>Two dozen tools.</em><br />
                 Build logs on the blog.
               </div>
             </div>

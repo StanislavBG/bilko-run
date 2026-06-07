@@ -22,10 +22,10 @@ export function ContactPage() {
           </div>
         </div>
         <div className="pf-links">
-          <a href="mailto:bilko@bilko.run"><span>bilko@bilko.run</span><span className="pf-where">Email · best</span></a>
+          <a href="mailto:BilkoBibitkov2000@gmail.com"><span>BilkoBibitkov2000@gmail.com</span><span className="pf-where">Email · best</span></a>
           <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer"><span>@BilkoBibitkov</span><span className="pf-where">Twitter</span></a>
-          <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer"><span>StanislavBG</span><span className="pf-where">GitHub</span></a>
-          <a href="https://www.linkedin.com/in/bilko-bibitkov-23b5b13b1/" target="_blank" rel="noopener noreferrer"><span>/in/bilko</span><span className="pf-where">LinkedIn</span></a>
+          <a href="https://bilko.run/projects/git-viewer/" target="_blank" rel="noopener noreferrer"><span>bilko</span><span className="pf-where">GitHub</span></a>
+          <a href="https://www.linkedin.com/in/bilko-bibitkov-403391412/" target="_blank" rel="noopener noreferrer"><span>/in/bilko-bibitkov</span><span className="pf-where">LinkedIn</span></a>
           <a><span>Forum (soon)</span><span className="pf-where">Community</span></a>
         </div>
       </div>

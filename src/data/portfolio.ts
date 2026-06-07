@@ -83,7 +83,7 @@ export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
-  { id: 'academy',   label: 'Academy',     path: '/academy',   href: '/projects/academy/', icon: '▲', desc: 'Three-module AI fundamentals. Free, ad-free, every claim cited.', tag: '3 modules' },
+  { id: 'academy',   label: 'Academy',     path: '/academy',   href: '/projects/academy/', icon: '▲', desc: 'Four-module AI fundamentals. Free, ad-free, every claim cited.', tag: '4 modules' },
   { id: 'workflows', label: 'Workflows',   path: '/workflows', icon: '↯', desc: 'Background AI agents and automations running 24/7.', tag: 'running' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
 ];
@@ -132,18 +132,19 @@ export const CHANNELS: readonly Channel[] = [
 ];
 
 export const NOW_ITEMS: readonly string[] = [
-  'Burrow (Reddit-watching pipeline) just went gather-only',
-  'Trading research engine: 1,023 passing tests this week',
-  'Session-manager harness shipped v0.12.1',
+  'Social Signals Trader running live, in public',
+  'Five no-guess puzzle games shipped — Cellar, Etch, FizzPop & co.',
+  'Academy module 1s live; lesson backfill cooking',
   'New build log up on the blog',
 ];
 
 export const TICKER_ITEMS: readonly string[] = [
   `${LIVE_COUNT} projects live · ${PROJECT_COUNT} total`,
-  'PageRoast — live',
+  'PageRoast — brutally honest CRO audits',
   'OutdoorHours — KOUT-7 weather report',
-  'LocalScore — runs in your browser, never sees data',
-  'Game Academy: Boat Shooter — work in progress',
+  'LocalScore — runs in your browser, never sees your data',
+  'Social Signals Trader — reading Reddit, trading in public',
+  'Cellar · Etch · FizzPop — no-guess puzzle games',
   'Open to collaborations',
   'Listening to: Aphex Twin',
 ];

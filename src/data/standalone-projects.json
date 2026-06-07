@@ -85,7 +85,7 @@
     "year": 2026,
     "host": {
       "kind": "external-url",
-      "url": "https://www.npmjs.com/package/claude-code-session-manager",
+      "url": "https://session-manager.bilko.run",
       "sourceRepo": "github.com/StanislavBG/session-manager"
     },
     "tags": [

@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Ticker } from '../components/portfolio/Ticker.js';
 import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { SECTIONS, PORTFOLIO_PROJECTS, NOW_ITEMS } from '../data/portfolio.js';
+import { PUBLIC_SLUGS } from '../data/projectsView.js';
+
+// Only surface projects that are publicly listed on /projects (PUBLIC_SLUGS);
+// keeps the homepage in sync with the hub so we never tease a delisted tool.
+const RECENT_BUILDS = PORTFOLIO_PROJECTS.filter(p => PUBLIC_SLUGS.has(p.id)).slice(0, 4);
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -27,13 +32,12 @@ export function HomePage() {
             <span>est. 2024</span>
           </div>
           <p className="pf-blurb">
-            Two dozen small tools, each doing one thing. Brutally honest
-            landing-page roasts, plus graders for ads, headlines, emails,
-            and threads. Five no-guess puzzle games. A weather report that
-            tells you whether to go outside, and a doc analyzer that runs
-            entirely in your browser. Trading bots reading Reddit live, in
-            public — and a free, ad-free AI academy. Most are free or a few
-            bucks. Build logs on the blog.
+            A handful of things that actually run. Trading bots that read
+            Reddit and trade in public. A weather report that tells you
+            whether to go outside. A live dashboard of everything on GitHub.
+            And the plumbing underneath — a session scheduler and an MCP
+            host that keep the whole studio shipping. Plus a free, ad-free
+            AI academy. Most are free or open source. Build logs on the blog.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
             <button className="pf-btn" onClick={() => navigate('/projects')}>See the work →</button>
@@ -153,7 +157,7 @@ export function HomePage() {
           </a>
         </div>
         <div className="pf-proj-grid">
-          {PORTFOLIO_PROJECTS.slice(0, 4).map((p, i) => (
+          {RECENT_BUILDS.map((p, i) => (
             <div key={p.id} className="pf-proj-card" onClick={() => navigateProject(navigate, p)}>
               <div className={`pf-swatch ${p.color}`}></div>
               <div className="pf-head">

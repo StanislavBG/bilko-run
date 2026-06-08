@@ -63,7 +63,7 @@ export function TermsPage() {
 
         <div>
           <h2 className="text-lg font-bold text-warm-900 mb-2">8. Intellectual Property</h2>
-          <p>The bilko.run service, code, and branding are owned by Bilko (Stanislav Bibitkov). You retain ownership of your content. By submitting URLs, you grant us a temporary license to fetch and analyze the publicly accessible content of those pages.</p>
+          <p>The bilko.run service, code, and branding are owned by Bilko Bibitkov. You retain ownership of your content. By submitting URLs, you grant us a temporary license to fetch and analyze the publicly accessible content of those pages.</p>
         </div>
 
         <div>

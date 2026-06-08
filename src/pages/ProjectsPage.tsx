@@ -27,11 +27,21 @@ function statusMeta(card: HubCard): { label: string; cls: string } {
   }
 }
 
-function HubRow({ card, expanded, onToggle }: { card: HubCard; expanded: boolean; onToggle: () => void }) {
+/** Color-coded accent rail/dot, cycled by row order for visual rhythm. */
+const ACCENTS = ['tang', 'ink', 'blue'] as const;
+
+/** Split "Data · Portfolio" into ["Data", "Portfolio"] for the chip column. */
+function categoryChips(category: string): string[] {
+  return category.split(/[·,/]/).map(s => s.trim()).filter(Boolean);
+}
+
+function HubRow({ card, index, expanded, onToggle }: { card: HubCard; index: number; expanded: boolean; onToggle: () => void }) {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const status = statusMeta(card);
   const worked = lastWorkedLabel(card);
+  const accent = ACCENTS[index % ACCENTS.length];
+  const chips = categoryChips(card.category);
 
   function open() {
     if (!card.href) return;
@@ -49,33 +59,48 @@ function HubRow({ card, expanded, onToggle }: { card: HubCard; expanded: boolean
   }
 
   return (
-    <div className={`pf-hub-row${expanded ? ' expanded' : ''}`}>
+    <div className={`pf-hub-row ${accent}${expanded ? ' expanded' : ''}`}>
       <button className="pf-hub-head" onClick={onToggle} aria-expanded={expanded}>
-        <span className={`pf-hub-dot ${status.cls}`} aria-hidden="true" />
-        <span className="pf-hub-title">
+        <span className="pf-hub-rail" aria-hidden="true" />
+        <span className="pf-hub-ord">{String(index + 1).padStart(2, '0')}</span>
+        <span className="pf-hub-dotcell"><span className={`pf-hub-dot ${accent}`} aria-hidden="true" /></span>
+        <span className="pf-hub-main">
           <span className="pf-hub-name">{card.name}</span>
-          <span className="pf-hub-blurb">{card.blurb}</span>
+          <span className="pf-hub-tagline">{card.blurb}</span>
         </span>
-        <span className="pf-hub-meta">
-          <span className="pf-hub-cat">{card.category}</span>
-          {worked && <span className="pf-hub-when" title="Last commit">{worked}</span>}
-          <span className={`pf-chip pf-hub-status ${status.cls}`}>{status.label}</span>
-          <span className={`pf-hub-caret${expanded ? ' open' : ''}`} aria-hidden="true">›</span>
+        <span className="pf-hub-cats">
+          {chips.map(c => <span key={c} className="pf-hub-cat">{c}</span>)}
         </span>
+        <span className="pf-hub-stat">
+          {card.metric && <span className="pf-hub-stat-n">{card.metric}</span>}
+          {card.metricLabel && <span className="pf-hub-stat-l">{card.metricLabel}</span>}
+        </span>
+        <span className="pf-hub-stat">
+          {card.lang && <span className="pf-hub-stat-n">{card.lang}</span>}
+          {card.lang && <span className="pf-hub-stat-l">primary lang</span>}
+        </span>
+        <span className="pf-hub-when" title="Last commit">{worked}</span>
+        <span className={`pf-hub-badge ${status.cls}`}>{status.label}</span>
+        <span className={`pf-hub-caret${expanded ? ' open' : ''}`} aria-hidden="true">›</span>
       </button>
 
       {expanded && (
         <div className="pf-hub-body">
-          <div className="pf-hub-tags">
-            {card.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}
+          <div className="pf-hub-detail-col">
+            <p className="pf-hub-detail">{card.detail ?? card.blurb}</p>
+            {card.tags.length > 0 && (
+              <div className="pf-hub-tags">
+                {card.tags.map(t => <span key={t} className="pf-pill-sm">{t}</span>)}
+              </div>
+            )}
+            {card.install && (
+              <button className="pf-hub-install" onClick={copyInstall} aria-label={`Copy install command for ${card.name}`}>
+                <span className="pf-hub-dollar">$</span> {card.install}
+                <span className="pf-hub-copy">{copied ? 'copied' : 'copy'}</span>
+              </button>
+            )}
           </div>
-          {card.install && (
-            <button className="pf-hub-install" onClick={copyInstall} aria-label={`Copy install command for ${card.name}`}>
-              <span className="pf-hub-dollar">$</span> {card.install}
-              <span className="pf-hub-copy">{copied ? 'copied' : 'copy'}</span>
-            </button>
-          )}
-          <div className="pf-hub-links">
+          <div className="pf-hub-actions">
             {card.href && card.status !== 'postponed' && (
               <button className="pf-hub-primary" onClick={open}>
                 {card.type === 'package' ? 'View on GitHub' : 'Open'} →
@@ -84,8 +109,10 @@ function HubRow({ card, expanded, onToggle }: { card: HubCard; expanded: boolean
             {card.npm && (
               <a href={card.npm} target="_blank" rel="noopener noreferrer" className="pf-hub-link">npm →</a>
             )}
-            {card.github && card.github !== card.href && (
-              <a href={card.github} target="_blank" rel="noopener noreferrer" className="pf-hub-link">GitHub →</a>
+            {card.github && (
+              <a href={card.github} target="_blank" rel="noopener noreferrer" className="pf-hub-src">
+                {card.github.replace(/^https?:\/\//, '')}
+              </a>
             )}
           </div>
         </div>
@@ -124,7 +151,7 @@ export function ProjectsPage() {
           <div className="pf-eyebrow">Section 02 · Portfolio</div>
           <h1 className="pf-hub-h1">Projects &amp; Packages.</h1>
           <p className="pf-hub-lede">
-            Live tools and open-source packages, newest work on top. Click any card to expand.
+            Live tools and open-source packages, newest on top. Click any row to expand the full story.
           </p>
         </div>
         {isAdmin && (
@@ -139,10 +166,11 @@ export function ProjectsPage() {
       </header>
 
       <div className="pf-hub-list">
-        {cards.map(card => (
+        {cards.map((card, i) => (
           <HubRow
             key={`${card.type}:${card.slug}`}
             card={card}
+            index={i}
             expanded={expanded === card.slug}
             onToggle={() => setExpanded(cur => (cur === card.slug ? null : card.slug))}
           />

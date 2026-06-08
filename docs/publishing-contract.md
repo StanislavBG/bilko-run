@@ -107,7 +107,7 @@ If none apply, leave the code in its host repo. Don't extract for vanity.
   "bugs": { "url": "https://github.com/StanislavBG/<repo>/issues" },
 
   "license": "MIT",
-  "author": "Stanislav Bibitkov",
+  "author": "Bilko Bibitkov",
 
   "keywords": ["bilko", "<domain>", "..."]
 }

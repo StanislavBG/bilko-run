@@ -133,18 +133,18 @@ export const CHANNELS: readonly Channel[] = [
 
 export const NOW_ITEMS: readonly string[] = [
   'Social Signals Trader running live, in public',
-  'Five no-guess puzzle games shipped — Cellar, Etch, FizzPop & co.',
+  'signal-builder split out into its own hosted MCP service',
   'Academy module 1s live; lesson backfill cooking',
   'New build log up on the blog',
 ];
 
 export const TICKER_ITEMS: readonly string[] = [
   `${LIVE_COUNT} projects live · ${PROJECT_COUNT} total`,
-  'PageRoast — brutally honest CRO audits',
   'OutdoorHours — KOUT-7 weather report',
-  'LocalScore — runs in your browser, never sees your data',
   'Social Signals Trader — reading Reddit, trading in public',
-  'Cellar · Etch · FizzPop — no-guess puzzle games',
+  'Git Viewer — live dashboard of everything on GitHub',
+  'Session Manager — schedules the whole studio',
+  'MCP Host — the plumbing under bilko.run',
   'Open to collaborations',
   'Listening to: Aphex Twin',
 ];

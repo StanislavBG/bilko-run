@@ -14,7 +14,7 @@ export function PrivacyPage() {
       <div className="prose-warm space-y-8 text-warm-700 text-sm leading-relaxed">
         <div>
           <h2 className="text-lg font-bold text-warm-900 mb-2">1. What bilko.run Is</h2>
-          <p>bilko.run is a collection of AI-powered tools for marketers, founders, and makers. Our flagship tool, PageRoast, analyzes landing pages and provides conversion feedback. The service is operated by Bilko (Stanislav Bibitkov) as a solo venture.</p>
+          <p>bilko.run is a collection of AI-powered tools for marketers, founders, and makers. Our flagship tool, PageRoast, analyzes landing pages and provides conversion feedback. The service is operated by Bilko Bibitkov as a solo venture.</p>
         </div>
 
         <div>

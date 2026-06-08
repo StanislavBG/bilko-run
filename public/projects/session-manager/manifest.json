@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "slug": "session-manager",
+  "version": "0.1.0",
+  "builtAt": "2026-06-08T04:39:32.501Z",
+  "gitSha": "d85f3cf",
+  "gitBranch": "fix/web-remote-hardening",
+  "hostKit": {
+    "version": "0.0.0"
+  },
+  "golden": {
+    "path": "/projects/session-manager/",
+    "expect": "Session Manager"
+  },
+  "health": {},
+  "bundle": {
+    "sizeBytesGz": 78131,
+    "fileCount": 4
+  }
+}

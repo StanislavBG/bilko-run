@@ -19,6 +19,8 @@ import { registerSecretsRoutes } from './routes/admin-secrets.js';
 import { registerGameRoutes } from './routes/games.js';
 import { registerAcademyRoutes } from './routes/academy.js';
 import { registerProjectDataRoutes } from './routes/project-data.js';
+import { registerSmRelayRoutes } from './routes/sm-relay.js';
+import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -80,6 +82,7 @@ registerSecretsRoutes(app);
 registerGameRoutes(app);
 registerAcademyRoutes(app);
 registerProjectDataRoutes(app);
+registerSmRelayRoutes(app);
 
 // Boot-time secret age check
 try {
@@ -227,6 +230,16 @@ if (isProd) {
 
 try {
   await app.listen({ port: PORT, host: '0.0.0.0' });
+  // Session Manager web-remote relay: claim WS upgrades on its path, same-origin.
+  // Returns false for any other path so future upgrade handlers can coexist.
+  app.server.on('upgrade', (req, socket, head) => {
+    try {
+      const handled = smRelayHandleUpgrade(req, socket as any, head);
+      if (!handled) socket.destroy();
+    } catch {
+      socket.destroy();
+    }
+  });
   console.log(`Bilko.run server running on http://0.0.0.0:${PORT}`);
 } catch (err) {
   console.error('Failed to start server:', err);

@@ -29,8 +29,6 @@ export const PUBLIC_SLUGS: ReadonlySet<string> = new Set([
   'mcp-host',
   'outdoor-hours',
   'git-viewer',
-  // flagship public packages
-  'bilko-flow',
 ]);
 
 /** Display-name overrides for the hub only (keeps registry names stable for

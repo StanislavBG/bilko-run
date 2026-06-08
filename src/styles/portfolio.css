@@ -907,7 +907,7 @@ body.hub-route .pf-footer { display: none; }
   width: 100%; cursor: pointer; background: transparent; border: 0; text-align: left;
   display: grid; align-items: center;
   grid-template-columns: 4px 34px 22px minmax(240px, 1.6fr) minmax(132px, 0.9fr) 92px 104px 112px 72px 22px;
-  gap: 22px; padding: 20px 18px 20px 0; position: relative;
+  gap: 22px; padding: 34px 18px 34px 0; min-height: 108px; position: relative;
   transition: background var(--pf-motion-fast);
 }
 .pf-hub-row:hover .pf-hub-head, .pf-hub-row.expanded .pf-hub-head { background: var(--pf-paper); }

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "academy",
   "version": "0.1.0",
-  "builtAt": "2026-06-08T02:01:12.311Z",
-  "gitSha": "281a5a9",
+  "builtAt": "2026-06-08T06:30:26.669Z",
+  "gitSha": "e8809fe",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 685127,
+    "sizeBytesGz": 703859,
     "fileCount": 30
   }
 }

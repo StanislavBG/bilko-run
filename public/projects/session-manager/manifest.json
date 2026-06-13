@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "slug": "session-manager",
   "version": "0.1.0",
-  "builtAt": "2026-06-08T07:09:06.523Z",
-  "gitSha": "acf2bdb",
-  "gitBranch": "fix/web-remote-hardening",
+  "builtAt": "2026-06-13T23:26:24.255Z",
+  "gitSha": "3f77ef5",
+  "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
   },
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 78219,
+    "sizeBytesGz": 79187,
     "fileCount": 4
   }
 }

@@ -96,8 +96,7 @@ function sendError(ws: WebSocket, code: string, retry?: number): void {
 }
 
 function routeFromBrowser(browser: BrowserConn, envelope: Envelope): void {
-  const { type, deviceId } = envelope;
-  if (type === 'ping' || type === 'pong') return;
+  const { deviceId } = envelope;
   if (!deviceId) { sendError(browser.ws, 'missing_device_id'); return; }
 
   const device = deviceConns.get(deviceId);
@@ -110,7 +109,6 @@ function routeFromBrowser(browser: BrowserConn, envelope: Envelope): void {
 }
 
 function routeFromDevice(device: DeviceConn, envelope: Envelope): void {
-  if (envelope.type === 'pong') return;
   for (const browser of browserConns.values()) {
     if (browser.userId === device.userId) {
       safeSend(browser.ws, { ...envelope, deviceId: device.deviceId, relay_ts: Date.now() });
@@ -130,6 +128,18 @@ function handleMessage(conn: BrowserConn | DeviceConn, role: 'browser' | 'agent'
   if (!result.success) { sendError(conn.ws, 'invalid_envelope'); return; }
 
   const envelope = result.data as Envelope;
+
+  // App-level keepalive. Both the desktop and the browser send {type:'ping'} on
+  // their own timers and self-terminate if no {type:'pong'} comes back. Answer it
+  // here directly — keepalives are between each peer and the relay, never routed
+  // across the bridge. (The relay also runs its own protocol-level ws.ping()
+  // heartbeat; the two are independent.)
+  if (envelope.type === 'ping') {
+    safeSend(conn.ws, { type: 'pong', id: envelope.id, ts: Date.now() });
+    return;
+  }
+  if (envelope.type === 'pong') return;
+
   if (role === 'browser') routeFromBrowser(conn as BrowserConn, envelope);
   else routeFromDevice(conn as DeviceConn, envelope);
 }

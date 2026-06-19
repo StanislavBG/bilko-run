@@ -900,6 +900,8 @@ function CurrentPositions({ positions }) {
   const fmt$ = (v) => (v >= 0 ? "+$" : "−$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const totalMv = rows.reduce((a, r) => a + (r.marketValue || 0), 0);
   const totalPl = rows.reduce((a, r) => a + (r.unrealizedPl || 0), 0);
+  const [expanded, setExpanded] = React.useState({});
+  const toggle = (ticker) => setExpanded((s) => ({ ...s, [ticker]: !s[ticker] }));
   return (
     <div className="card" id="positions">
       <div className="card-head">
@@ -908,7 +910,7 @@ function CurrentPositions({ positions }) {
           MV ${totalMv.toLocaleString("en-US", { maximumFractionDigits: 0 })} · <span className={totalPl >= 0 ? "up" : "down"}>{fmt$(totalPl)}</span> unrealized
         </span>
       </div>
-      <div className="card-body tight" style={{ maxHeight: 420, overflowY: "auto" }}>
+      <div className="card-body tight" style={{ maxHeight: 520, overflowY: "auto" }}>
         {rows.length === 0 ? (
           <div className="dim" style={{ padding: "12px 4px", fontSize: 12 }}>No open positions.</div>
         ) : (
@@ -926,21 +928,47 @@ function CurrentPositions({ positions }) {
           </thead>
           <tbody>
             {rows.map((p) => (
-              <tr key={p.ticker}>
-                <td className="ticker">
-                  {p.ticker}
-                  {window.TierBadge && <TierBadge tier={p.tier} />}
-                </td>
-                <td><span className={`pill ${p.side === "LONG" ? "long" : "short"}`}>{p.side}</span></td>
-                <td className="num dim">{p.qty}</td>
-                <td className="num">{(p.avgEntry || 0).toFixed(2)}</td>
-                <td className="num">{(p.currentPrice || 0).toFixed(2)}</td>
-                <td className="num dim">${Math.abs(p.marketValue || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
-                <td className={`num ${p.unrealizedPl >= 0 ? "up" : "down"}`}>
-                  {fmt$(p.unrealizedPl || 0)}
-                  <div className="sub-cell" style={{ color: p.unrealizedPl >= 0 ? "var(--pos)" : "var(--neg)", opacity: 0.7 }}>{p.unrealizedPlPct >= 0 ? "+" : ""}{(p.unrealizedPlPct || 0).toFixed(1)}%</div>
-                </td>
-              </tr>
+              <React.Fragment key={p.ticker}>
+                <tr
+                  onClick={() => (p.rationale || p.exit_intent) ? toggle(p.ticker) : null}
+                  style={(p.rationale || p.exit_intent) ? { cursor: "pointer" } : {}}
+                >
+                  <td className="ticker">
+                    {p.ticker}
+                    {window.TierBadge && <TierBadge tier={p.tier} />}
+                    {(p.rationale || p.exit_intent) && (
+                      <span style={{ marginLeft: 4, fontSize: 9, color: "var(--muted)", opacity: 0.7 }}>
+                        {expanded[p.ticker] ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </td>
+                  <td><span className={`pill ${p.side === "LONG" ? "long" : "short"}`}>{p.side}</span></td>
+                  <td className="num dim">{p.qty}</td>
+                  <td className="num">{(p.avgEntry || 0).toFixed(2)}</td>
+                  <td className="num">{(p.currentPrice || 0).toFixed(2)}</td>
+                  <td className="num dim">${Math.abs(p.marketValue || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
+                  <td className={`num ${p.unrealizedPl >= 0 ? "up" : "down"}`}>
+                    {fmt$(p.unrealizedPl || 0)}
+                    <div className="sub-cell" style={{ color: p.unrealizedPl >= 0 ? "var(--pos)" : "var(--neg)", opacity: 0.7 }}>{p.unrealizedPlPct >= 0 ? "+" : ""}{(p.unrealizedPlPct || 0).toFixed(1)}%</div>
+                  </td>
+                </tr>
+                {expanded[p.ticker] && (p.rationale || p.exit_intent) && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: "4px 8px 8px 28px", background: "var(--surface2, #1a1a2e)" }}>
+                      {p.rationale && (
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 3 }}>
+                          <span style={{ color: "var(--text)", fontWeight: 600 }}>why: </span>{p.rationale}
+                        </div>
+                      )}
+                      {p.exit_intent && (
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                          <span style={{ color: "var(--text)", fontWeight: 600 }}>exit: </span>{p.exit_intent}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

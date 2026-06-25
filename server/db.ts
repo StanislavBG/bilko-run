@@ -2313,6 +2313,36 @@ Single-sourcing it into \`analytics.db\` means the opinion gatherer, the MCP, an
     '2026-06-21T10:00:00.000Z',
   );
 
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'tracing-one-public-contract-used-to-take-a-month',
+    `Tracing one public contract used to take a month`,
+    'Sigma Plus maps Bulgarian public procurement — institution to company to contract — and this week it got the three things that turn raw records into understanding: a relationship graph you steer by clicking, a competition view that surfaces single-bid contracts, and a spending-over-time trend. Same public data; far less time from a name to a picture.',
+    `If you've ever tried to follow a public-procurement story, you know the shape of the work: a company wins a contract, but the interesting part is everything *around* it — the other contracts, the same authority, the suppliers that always seem to appear together. Bulgaria publishes the data, but it's spread across hundreds of records, and assembling the picture by hand took an expert weeks.
+
+That assembly is what [Sigma Plus](https://sigma-plus.replit.app) did this week.
+
+## You can see the network instead of reconstructing it
+
+Type in an institution or a company and Sigma draws the graph around it — every connected entity, every edge labelled with the money that flows along it. Click a node to recenter and follow the next hop. The thing a journalist used to build in a spreadsheet over days is now on screen in a second, and you steer it by clicking. Rows in the network table are links too, so you can jump from an edge straight to that company's profile.
+
+## You can see where competition is missing
+
+The new Competition page surfaces single-bid share and supplier concentration per authority. A contract that only ever drew one bidder is exactly the thing worth a closer look — and now it's a number you can sort by, not a pattern you have to notice.
+
+## You can see the shape of spending over time
+
+The Trend view lays out spending by month and year, so the seasonal spikes — the rush to spend a budget before it resets — show up as a curve instead of a hunch.
+
+Underneath, the hosted Plus build now refreshes daily on its own: the corpus lives in object storage and restores itself on every redeploy, so the live site stays current without anyone tending it.
+
+None of this is the *data* changing — Bulgaria's procurement registry is the same public record it always was. What changed is how fast a citizen, journalist, or NGO can get from "I have a name" to "I see who it's connected to and what's unusual." That's the whole point of Sigma: not new information, faster understanding.
+
+Pull a name you recognize → [sigma-plus.replit.app](https://sigma-plus.replit.app)`,
+    'product',
+    '2026-06-24T10:00:00.000Z',
+  );
+
   // Seed secret_metadata (idempotent — INSERT OR IGNORE, NULL last_rotated_at = never rotated)
   const SECRET_NAMES = [
     'STRIPE_API_KEY',

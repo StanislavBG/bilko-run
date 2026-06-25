@@ -18,6 +18,23 @@
     ]
   },
   {
+    "slug": "sigma",
+    "name": "СИГМА",
+    "tagline": "Public-procurement transparency: trace every Bulgarian contract — who, to whom, how much",
+    "category": "Data · Civic",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "external-url",
+      "url": "https://sigma-plus.replit.app",
+      "sourceRepo": "github.com/midt-bg/sigma"
+    },
+    "tags": [
+      "Open Data",
+      "Civic"
+    ]
+  },
+  {
     "slug": "outdoor-hours",
     "name": "OutdoorHours",
     "tagline": "KOUT-7: ten years of comfortable hours, scored",

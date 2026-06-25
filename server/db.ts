@@ -2315,30 +2315,18 @@ Single-sourcing it into \`analytics.db\` means the opinion gatherer, the MCP, an
 
   await dbRun(
     `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
-    'tracing-one-public-contract-used-to-take-a-month',
-    `Tracing one public contract used to take a month`,
-    'Sigma Plus maps Bulgarian public procurement — institution to company to contract — and this week it got the three things that turn raw records into understanding: a relationship graph you steer by clicking, a competition view that surfaces single-bid contracts, and a spending-over-time trend. Same public data; far less time from a name to a picture.',
-    `If you've ever tried to follow a public-procurement story, you know the shape of the work: a company wins a contract, but the interesting part is everything *around* it — the other contracts, the same authority, the suppliers that always seem to appear together. Bulgaria publishes the data, but it's spread across hundreds of records, and assembling the picture by hand took an expert weeks.
+    'i-gave-sigma-a-way-to-see-the-network',
+    `I gave Sigma a way to see the network, not just the rows`,
+    'Sigma always had the data — every Bulgarian public contract, authority, and supplier — but no way to see how they connect. This week I shipped the relationship graph: pick a company, see the network around it, click to walk the money outward one hop at a time. Plus a competition view and a spending trend. I even built multi-focus and ripped it back out.',
+    `Sigma has always had the data — every Bulgarian public contract, every authority, every supplier. What it didn't have was a way to *see* how they connect. You could read the rows; you couldn't see the shape. This week I fixed that.
 
-That assembly is what [Sigma Plus](https://sigma-plus.replit.app) did this week.
+The change I care most about is the relationship graph. Pick a company or an institution and Sigma draws the network around it, with the contract value written on each edge. Click a node and it recenters — so you walk the money outward one hop at a time instead of opening twenty pages and holding the connections in your head. I went back and forth on letting you focus on up to three entities at once, built it, and then ripped it back out: the multi-focus graph looked impressive and read like noise. One focus, click to move it, is the version that actually answers a question.
 
-## You can see the network instead of reconstructing it
+Two more views shipped alongside it. A Competition page that shows single-bid share and supplier concentration per authority — the contracts that only ever drew one bidder, sortable instead of buried. And a Trend view that lays spending out by month and year, so the end-of-budget-year spikes show up as a curve.
 
-Type in an institution or a company and Sigma draws the graph around it — every connected entity, every edge labelled with the money that flows along it. Click a node to recenter and follow the next hop. The thing a journalist used to build in a spreadsheet over days is now on screen in a second, and you steer it by clicking. Rows in the network table are links too, so you can jump from an edge straight to that company's profile.
+The unglamorous half was hosting. [Sigma Plus](https://sigma-plus.replit.app) is the live, daily-updated build, and I wanted redeploys to never wipe the data — so the corpus now lives in object storage and restores itself on every deploy, with a 30-minute refresh channel pushing new records in. It self-heals now, which means I stop babysitting it.
 
-## You can see where competition is missing
-
-The new Competition page surfaces single-bid share and supplier concentration per authority. A contract that only ever drew one bidder is exactly the thing worth a closer look — and now it's a number you can sort by, not a pattern you have to notice.
-
-## You can see the shape of spending over time
-
-The Trend view lays out spending by month and year, so the seasonal spikes — the rush to spend a budget before it resets — show up as a curve instead of a hunch.
-
-Underneath, the hosted Plus build now refreshes daily on its own: the corpus lives in object storage and restores itself on every redeploy, so the live site stays current without anyone tending it.
-
-None of this is the *data* changing — Bulgaria's procurement registry is the same public record it always was. What changed is how fast a citizen, journalist, or NGO can get from "I have a name" to "I see who it's connected to and what's unusual." That's the whole point of Sigma: not new information, faster understanding.
-
-Pull a name you recognize → [sigma-plus.replit.app](https://sigma-plus.replit.app)`,
+Next I want the graph to remember where you've been — a breadcrumb of the path you clicked through, so a long chase is reproducible. For now: pull a name you recognize and start clicking → [sigma-plus.replit.app](https://sigma-plus.replit.app)`,
     'product',
     '2026-06-24T10:00:00.000Z',
   );

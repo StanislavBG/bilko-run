@@ -10,6 +10,9 @@ data/*.db-wal
 local.db
 local.db-shm
 local.db-wal
+bilko.db
+bilko.db-shm
+bilko.db-wal
 .env
 .env.local
 .env.production

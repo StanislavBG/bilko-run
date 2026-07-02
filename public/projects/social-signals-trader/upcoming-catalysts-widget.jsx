@@ -212,14 +212,21 @@ function ThesisBlock({ thesis, tier, tierKind }) {
   );
 }
 
+// Explicit status disambiguates "checked, found nothing" from "call failed".
+// Legacy payloads (pre-PRD 346) carry no `status` field at all — treat those
+// as "ok" so old snapshots keep rendering the bar exactly as before.
+function sentimentStatus(sentiment) {
+  if (!sentiment) return "unavailable";
+  return sentiment.status || "ok";
+}
+
 // Sentiment — signal-builder social read (bull/bear + avg) shown side-by-side
 // with the trader's own thesis stance, so divergence is obvious at a glance.
 function SentimentBlock({ sentiment, thesis }) {
-  const hasSb = !!sentiment;
   const hasThesis = !!thesis;
-  if (!hasSb && !hasThesis) return null;
-  const bull = hasSb && sentiment.bullishPct != null ? sentiment.bullishPct : null;
-  const bear = hasSb && sentiment.bearishPct != null ? sentiment.bearishPct : null;
+  const status = sentimentStatus(sentiment);
+  const bull = sentiment && sentiment.bullishPct != null ? sentiment.bullishPct : null;
+  const bear = sentiment && sentiment.bearishPct != null ? sentiment.bearishPct : null;
   return (
     <div className="uc-pop-block">
       <div className="uc-pop-block-title">Sentiment</div>
@@ -227,7 +234,19 @@ function SentimentBlock({ sentiment, thesis }) {
         {/* signal-builder social sentiment */}
         <div className="uc-sent-col">
           <div className="uc-sent-col-head">Social <span className="dim">· signal-builder</span></div>
-          {hasSb ? (
+          {status === "unavailable" ? (
+            <div className="uc-sent-body">
+              <div className="uc-sent-meta mono warn">no data — signal-builder degraded/timeout</div>
+              {sentiment && sentiment.asOf && (
+                <div className="uc-sent-sub dim">last known {sentiment.asOf}</div>
+              )}
+            </div>
+          ) : status === "quiet" ? (
+            <div className="uc-sent-body">
+              <div className="uc-sent-meta mono dim">0 mentions — checked, quiet</div>
+              {sentiment.asOf && <div className="uc-sent-sub dim">as of {sentiment.asOf}</div>}
+            </div>
+          ) : (
             <div className="uc-sent-body">
               {(bull != null || bear != null) && (
                 <div className="uc-sent-bar" title={`bull ${bull ?? "—"}% / bear ${bear ?? "—"}%`}>
@@ -244,13 +263,12 @@ function SentimentBlock({ sentiment, thesis }) {
                 {bull != null && <span className="dim"> · bull {Math.round(bull)}%</span>}
                 {bear != null && <span className="dim"> / bear {Math.round(bear)}%</span>}
                 <span className="dim"> · {sentiment.mentions} mentions</span>
+                {sentiment.asOf && <span className="dim"> · as of {sentiment.asOf}</span>}
               </div>
               {sentiment.topSubreddit && (
                 <div className="uc-sent-sub dim">top: r/{sentiment.topSubreddit}</div>
               )}
             </div>
-          ) : (
-            <div className="uc-pop-empty">No social mentions yet.</div>
           )}
         </div>
         {/* trader thesis stance */}
@@ -271,6 +289,42 @@ function SentimentBlock({ sentiment, thesis }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Social · burrow — mentions/velocity/top-posts read routed via signal-builder
+// (PRD 347). Mirrors SentimentBlock's three-state status handling so a failed
+// SB route reads distinctly from a genuinely quiet ticker.
+function SocialBlock({ social }) {
+  const status = social && social.status ? social.status : "unavailable";
+  return (
+    <div className="uc-pop-block">
+      <div className="uc-pop-block-title">Social <span className="dim">· burrow</span></div>
+      {status === "unavailable" ? (
+        <div className="uc-sent-body">
+          <div className="uc-sent-meta mono warn">no data — SB route degraded/timeout</div>
+          {social && social.asOf && <div className="uc-sent-sub dim">last known {social.asOf}</div>}
+        </div>
+      ) : status === "quiet" ? (
+        <div className="uc-sent-body">
+          <div className="uc-sent-meta mono dim">0 mentions — checked, quiet</div>
+          {social.asOf && <div className="uc-sent-sub dim">as of {social.asOf}</div>}
+        </div>
+      ) : (
+        <div className="uc-sent-body">
+          <div className="uc-sent-meta mono">
+            {social.mentions ?? 0} mentions
+            {social.velocity != null && <span className="dim"> · velocity {social.velocity}</span>}
+            {social.asOf && <span className="dim"> · as of {social.asOf}</span>}
+          </div>
+          {(social.topPosts || []).slice(0, 2).map((p, i) => (
+            <div key={i} className="uc-sent-sub dim">
+              {p.title}{p.subreddit ? ` — r/${p.subreddit}` : ""}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -310,6 +364,7 @@ function UcDetail({ entry }) {
       {entry.subject && <div className="uc-pop-subject">{entry.subject}</div>}
       <PositionBlock position={entry.position} />
       <SentimentBlock sentiment={entry.sentiment} thesis={entry.thesis} />
+      <SocialBlock social={entry.social} />
       <ThesisBlock thesis={entry.thesis} tier={entry.tier} tierKind={entry.tierKind} />
       <ExitPlanBlock exitPlan={entry.exitPlan} entry={entry} />
     </div>
@@ -380,6 +435,7 @@ function UpcomingCatalystsWidget({ panel }) {
 
   const total = (data.counts && data.counts.total) || 0;
   const held = (data.counts && data.counts.held) || 0;
+  const knowledge = data.knowledge;
 
   return (
     <div className="card upcoming-catalysts">
@@ -387,9 +443,18 @@ function UpcomingCatalystsWidget({ panel }) {
         <h3>
           Upcoming Catalysts · next {data.withinDays || 10} days
         </h3>
-        <span className="uc-summary mono dim">
-          {total} events · {held} held
-        </span>
+        <div className="uc-head-right">
+          <span className="uc-summary mono dim">
+            {total} events · {held} held
+          </span>
+          {knowledge && knowledge.coveragePct != null && (
+            <span className="uc-knowledge mono dim">
+              Knowledge 7d: {knowledge.coveragePct}% · both {knowledge.knownBoth} · SB {knowledge.sbOnly}
+              {" "}· social {knowledge.socialOnly} ·{" "}
+              <span className={knowledge.blind > 0 ? "warn" : ""}>blind {knowledge.blind}</span>
+            </span>
+          )}
+        </div>
       </div>
       <div className="card-body tight uc-body">
         {total === 0 && (

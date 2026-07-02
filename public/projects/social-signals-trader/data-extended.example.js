@@ -165,6 +165,59 @@ window.RULE_BREAKS = [
   { trade: "T-0184", ticker: "PLTR", rule: "03 · Fixed-risk sizing",   outcome: "−$1,840", lesson: "Sized to 1% risk; stop hit; loss bounded as designed. Working as intended." },
 ];
 
+// ===== Upcoming Catalysts panel (PRD 346/347 — sentiment/social status + 7d knowledge) =====
+// Three events cover the three sentiment/social states (ok / quiet / unavailable)
+// so the widget's example payload exercises every render path with no build step.
+window.UPCOMING_CATALYSTS = {
+  asOf: "2026-07-02",
+  withinDays: 10,
+  entries: [
+    {
+      date: "2026-07-03", ticker: "NVDA", catalyst: "earnings", subject: "NVIDIA Q2 FY27 earnings",
+      confirmed: true, daysAway: 1,
+      position: null, thesis: null,
+      sentiment: {
+        status: "ok", asOf: "2026-07-02T14:00:00Z", degraded: false, source: "signal_builder",
+        mentions: 412, bullishPct: 68.0, bearishPct: 14.0, avgSentiment: 0.41,
+        label: "bullish", topSubreddit: "wallstreetbets",
+      },
+      social: {
+        status: "ok", asOf: "2026-07-02T14:00:00Z", mentions: 189, velocity: 2.4,
+        topPosts: [
+          { title: "NVDA earnings play — full position thesis with risk levels", subreddit: "wallstreetbets" },
+          { title: "Blackwell ramp is being underestimated by sellside", subreddit: "stocks" },
+        ],
+      },
+      exitPlan: { exitLagDays: 1, exitAt: "open", intradayOnly: false, timeStopDays: 10.0, dailyLossCircuitPct: 5.0, narrative: "" },
+      tier: "social", tierKind: "forecast",
+    },
+    {
+      date: "2026-07-06", ticker: "JPM", catalyst: "ex_div", subject: "JPMorgan Chase ex-dividend Q2 2026",
+      confirmed: true, daysAway: 4,
+      position: null, thesis: null,
+      sentiment: {
+        status: "quiet", asOf: "2026-07-02T14:00:00Z", degraded: false, source: "signal_builder",
+        mentions: 0, bullishPct: 0.0, bearishPct: 0.0, avgSentiment: 0.0,
+        label: "neutral", topSubreddit: null,
+      },
+      social: { status: "quiet", asOf: "2026-07-02T14:00:00Z", mentions: 0, velocity: 0.0, topPosts: [] },
+      exitPlan: { exitLagDays: 1, exitAt: "open", intradayOnly: false, timeStopDays: 10.0, dailyLossCircuitPct: 5.0, narrative: "" },
+      tier: "naive", tierKind: "forecast",
+    },
+    {
+      date: "2026-07-08", ticker: "SVAC", catalyst: "merger_close", subject: "Spring Valley Acquisition III shareholder vote for General Fusion merger",
+      confirmed: true, daysAway: 6,
+      position: null, thesis: null,
+      sentiment: { status: "unavailable", asOf: null, degraded: true, source: "signal_builder", mentions: 0, bullishPct: null, bearishPct: null, avgSentiment: null, label: null, topSubreddit: null },
+      social: { status: "unavailable", asOf: null, mentions: null, velocity: null, topPosts: [] },
+      exitPlan: { exitLagDays: 1, exitAt: "open", intradayOnly: false, timeStopDays: 10.0, dailyLossCircuitPct: 5.0, narrative: "" },
+      tier: "naive", tierKind: "forecast",
+    },
+  ],
+  counts: { total: 3, held: 0, withThesis: 0, withSentiment: 1 },
+  knowledge: { windowDays: 7, events: 3, sbKnown: 2, socialKnown: 2, knownBoth: 2, sbOnly: 0, socialOnly: 0, blind: 1, coveragePct: 66.7 },
+};
+
 window.METHOD_FAQ = [
   { q: "Is this fully autonomous?",         a: "Yes. The pipeline runs end-to-end without human intervention: ingest → score → decide → execute → log. The dashboard is a read-only window onto a live system." },
   { q: "How are strategies picked?",        a: "Each strategy is a different mapping from subreddit feeds to a signal. Some are single-sub momentum, some blend multiple subs, some pit two subs against each other (e.g. WSB vs SecurityAnalysis). All run live in parallel and are scored vs SPY." },

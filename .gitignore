@@ -13,6 +13,9 @@ local.db-wal
 bilko.db
 bilko.db-shm
 bilko.db-wal
+dev.db
+dev.db-shm
+dev.db-wal
 .env
 .env.local
 .env.production

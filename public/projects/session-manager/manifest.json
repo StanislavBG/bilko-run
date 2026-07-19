@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "session-manager",
   "version": "0.1.0",
-  "builtAt": "2026-06-14T21:17:40.203Z",
-  "gitSha": "3a280d9",
+  "builtAt": "2026-07-19T01:42:13.141Z",
+  "gitSha": "3e4e5f5",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 1071395,
+    "sizeBytesGz": 1071822,
     "fileCount": 66
   }
 }

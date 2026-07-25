@@ -2331,6 +2331,157 @@ Next I want the graph to remember where you've been — a breadcrumb of the path
     '2026-06-24T10:00:00.000Z',
   );
 
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'session-manager-034-dormant-tabs',
+    `Session Manager 0.34: tabs that cost nothing until you talk`,
+    'Tabs used to spawn a live process the moment you opened them. As of v0.34.0 a new tab is a dormant chat box — nothing runs until you send a message — and it remembers its conversation across restarts. Plus the chat engine rewrite that stopped parallel Claudes from eating the machine.',
+    `Session Manager tabs used to be expensive. Opening one spawned a real PTY and a real \`claude\` process immediately, so a window full of tabs was a window full of running processes, and every app restart re-spawned all of them. As of v0.34.0, a new tab opens as a lightweight chat box and stays dormant — no PTY, no process — until you actually send a message. Tabs also rehydrate their prior conversation on mount, so reopening the app shows history instead of a blank box.
+
+The chat engine behind this got rewritten once before shipping. The first version used a reject-at-capacity semaphore allowing 3 concurrent runs, which fanned out into parallel \`claude\` processes that ran the machine out of memory and got a scheduled job SIGKILLed mid-edit. The replacement is a FIFO queue copied from the scheduler, capped at one run at a time — bursts now queue with a visible position instead of erroring. The fix for too many Claudes came from the one part of the app that already knew how to run exactly one job.
+
+Also shipped in the 12 commits of this release (PRDs 318–325):
+
+- A **Timeline view** in the Knowledge Graph tab: searchable, newest-first conversation history per project, with expandable verbatim exchanges, logged to \`~/.claude/knowledge-log/\`.
+- The scheduler's orphan-requeue cap raised from 2 to 5.
+- An e2e test asserting zero \`claude\` processes on boot — which kept false-positiving on the app's own power-blocker, because \`systemd-inhibit --why\` contains the string "claude -p jobs". It now keys on the process name, not the command line.
+
+One skip to be honest about: the end-to-end Send round-trip test is checked in but disabled, marked "needs auth + spawns claude; run it manually when the machine is quiet."
+
+Session Manager is the local cockpit for the Claude Code CLI — multi-tab terminal, scheduler, voice dictation, live observability. It lives at [/projects/session-manager/](/projects/session-manager/).`,
+    'product',
+    '2026-06-28T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'sigma-quality-index-which-contracts-look-unhealthy',
+    `Sigma can now tell you which contracts look unhealthy`,
+    'Sigma always told you what happened in Bulgarian procurement. The new quality index tells you whether it looks healthy: a 0-1 score over five pillars, blended 60% mean / 40% worst pillar, across 194,481 contracts — with unknown never counting as zero.',
+    `Until now, [СИГМА](https://sigma.midt.bg) told you *what happened* in Bulgarian public procurement: who bought what, from whom, for how much, traceable to the source notice. Whether a contract looked *healthy* was your problem — you eyeballed single-bid awards, annex counts, and overruns one contract at a time.
+
+The new [Индекс на качеството](https://sigma.midt.bg/quality) page answers the question directly. Every contract gets a 0–1 health score built from five weighted pillars: contestability (how many bids, judged against comparable contracts, not an absolute count), procedure openness, value integrity (annexes, overruns, estimate accuracy), relationship health (repeat wins, buyer–supplier concentration), and transparency. The blend is 60% weighted mean, 40% worst pillar — so a contract can't average its way out of one catastrophic dimension.
+
+What you can do with it:
+
+- Rank authorities, suppliers, sectors, regions, years, and funding sources — **sorted weakest-first by default**. The page opens on the problems.
+- Click any bar of the score histogram to get the exact contracts behind it. "Every contract scoring under 20 in construction in 2024" is a URL, not an export-and-pivot exercise.
+- Open any contract's decomposition and see which pillar dragged it down, with each pillar's weight and contribution drawn to scale.
+
+The rule that shaped the whole index: **unknown never counts as zero**. A missing pillar drops out of the average entirely; a contract with under 40% data coverage gets no score at all rather than a misleading one; an authority needs 20 scored contracts before its average is published, so a municipality with three contracts can't top the worst-offender table. The UI renders missing data as „—" with a tooltip saying exactly that.
+
+That rule earned its keep during review. The lowball-then-amend detector — flagging contracts whose first amendment inflates them over 30% within 90 days — was silently comparing amendment values against signing values *without checking they were in the same currency*, and scoring unscorable rows as clean. Both paths now resolve to unknown.
+
+The numbers behind the launch: 194,481 contracts scored, 18 of 18 spec validation checks passing, and the pipeline's reconciliation gate verified against the full corpus — 193,902 contracts, EUR 51.7bn, residual 0.00.
+
+Next up: joint procurements (about 8% of authority records name multiple co-buyers on one notice) are currently excluded rather than misattributed — attributing them to each real co-authority without double-counting value is the open product decision.`,
+    'product',
+    '2026-07-02T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'signal-builder-tombstones-stop-retrying-the-dead',
+    `Teaching signal-builder to stop retrying the dead`,
+    'One unfetchable Reddit permalink could freeze a ticker\'s sentiment cursor forever — RKLB was held 29 times. The fix is a tombstone ledger: three attempts, four hours apart, one last salvage probe, then move on. Plus an honest bet about where the real bottleneck is.',
+    `I shipped a fix this week for a bug that was quietly freezing sentiment coverage for about 48 tickers.
+
+Signal-builder is the scoring layer between Burrow (which gathers Reddit and social content) and anything that consumes per-ticker sentiment — the [social-signals-trader](/projects/social-signals-trader/) being client number one. An hourly curator walks each ticker's new mentions behind a cursor. Some mention permalinks can never be resolved into a post body: the search index doesn't serve them and the mention carries no context fallback. The old code treated "something is missing" as "hold the cursor and try again next hour" — with no memory of *what* was missing or how many times it had already tried.
+
+One poison-pill permalink could therefore hold a ticker's cursor forever. The mention-scorer log counted the damage: RKLB held 29 times, SPCE 28, PYPL and BNB 24 each. For thin tickers the unfetchable post was often the day's *only* post, so the series stopped advancing and dropped out of the freshness window that decides whether a series is sellable — 157 of the 200 tickers on the worklist were blocked on exactly that recency criterion.
+
+The fix is a small ledger of unresolved items: each gets 3 fetch attempts spaced at least 4 hours apart (enough to absorb normal index lag), then a tombstone. Tombstoned items stop counting as "incomplete," so the cursor moves on, and they're never re-fetched. The one decision I'd highlight: tombstoning alone would silently accept a lost day, so before giving up, the code fires one last day-level probe to find *any other* fetchable post from that date. Only if that comes back empty is the day conceded. 554 lines, well over half of them tests.
+
+Honest caveat, written on the day of shipping: this bets that stuck cursors are the binding constraint on sellable series (currently 30, against a ~540-ticker ceiling). If the real bottleneck is somewhere else — say, how many tickers the scorer can actually visit per tick — unblocking cursors won't move that number. Mid-July will tell.`,
+    'build-log',
+    '2026-07-06T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'the-topic-tagger-kept-answering-only',
+    `The topic tagger kept answering „само"`,
+    'Measuring how Bulgarians react to Sigma on Facebook meant asking a 3B local model to tag topics — and it answered with the word "only." Three rounds of tag garbage, a format contract that broke silently, and the filter that removes noise and headlines alike.',
+    `Sigma-plus is a measurement pipeline that asks one question: is anyone actually reacting to [СИГМА](https://sigma.midt.bg), and what are they saying? Burrow monitors the two Facebook pages where the platform gets discussed, and a local model (qwen2.5:3b via Ollama, deliberately on-machine — the corpus is public speech by named citizens, and it stays here) tags each comment with sentiment and up to three Bulgarian topic tags.
+
+The topic tags came back garbage, three times, differently each time.
+
+Round one: on a corpus where every single item is about Sigma, the model tagged everything „сигма" and „платформа". Useless. The fix was a blocklist plus a rule that generalizes it: drop any tag attached to more than 60% of items, because a tag that describes most of the corpus describes none of it.
+
+Round two: with the catch-alls gone, the model reached for function words. The blocklist additions from that commit are the whole story: „само" (only), „още" (still), „вече" (already), „обаче" (however), „значи" (so). Ask a 3B model to name a topic and it hands you the word "only." The database still holds the fossil: a cached summary keyed to the topic „само", earnestly stitching together two unrelated citizen comments. What survived the filters was real — „реформа" (116 items), „корупция" (112).
+
+Round three was the summarizer. Fed a numbered list of tagged quotes and asked for two flowing sentences, it echoed the input format straight back — numbered list, \`[positive]\` labels and all. The fix bans the format in the prompt *and* strips it with a regex, because I didn't trust the prompt to hold.
+
+Meanwhile the corpus itself grew up. The first harvest crawled Burrow's embedding index with ~40 hand-written probe queries and snowballed from there — 120 queries recovered roughly 35 items from a 985-chunk collection, with no way to know the true fraction. Two things fixed that. A flag I'd simply missed (\`include_body:true\`, surfaced by Burrow's own root-cause writeup after I filed a "posts have no text" report that turned out to be reader-side) took one page's comments from 23 to 129 in a single run. Then Burrow shipped \`list_chunks\` on my request — plain cursor pagination over the whole collection — and coverage became exact: 1,005 of 1,005 chunks enumerated, footer switched from „частична извадка" to „ПЪЛНО".
+
+The sting came a day later. Burrow had declined to add structured comment fields because my parser read its excerpt labels fine — "parses beautifully — nice format." Then a new ingest changed the label prefix from \`[Facebook comment …]\` to \`[SIGMA comment …]\`. No error anywhere; about a thousand comments silently vanished from the classified set, caught only because a human noticed a reel with 200+ comments while the page total showed ~130.
+
+What I'd do differently: the moment two systems agree on a text format, write the format down and test it on both sides. The prefix-agnostic parser with its own test file exists now; it should have existed before the compliment.
+
+The cost worth admitting: the 60% cap that removes noise also removes the most common genuine tag — „прозрачност" (transparency), on 73% of items, which is both the corpus's actual subject and invisible in the topic list. The heuristic can't tell a catch-all from a headline.`,
+    'deep-dive',
+    '2026-07-11T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'sixty-five-hours-of-silence',
+    `65.6 hours: what a starved pipeline looks like`,
+    'Burrow\'s Facebook posting pipeline went 65.6 hours without a run while every individual scheduling decision was correct. The fix is one concept — starvation — plus two more repairs to instruments that were lying in both directions at once.',
+    `The number that moved this week: Burrow's Facebook posting pipeline went 65.6 hours without a single run — last post July 15 at 21:20 UTC, next on July 18 at 14:55, eleven minutes after the fix landed. Its sibling football-page pipeline: 63.2 hours. Both measured straight from the orchestrator's run database, both back to their normal twice-daily rhythm since.
+
+The cause is the interesting part: no single scheduling decision was ever wrong. The posting pipelines are restricted to a narrow daily window; after an outage, a backlog of always-available pipelines was legitimately winning the priority comparison every time that window came around. Starvation emerged from a day of individually correct choices. The fix adds one concept — a restricted-window pipeline overdue by 24+ hours is *starved* — and sorts starved work above everything else, with normal priority still breaking ties.
+
+That was one of three fixes in the same hardening pass, and the honest thread through all three is that Burrow's automation mostly worked while its instruments lied in both directions:
+
+- The activity report counted **in-flight runs as failures** — a health check that manufactured failures out of its own timing. For scale: the window July 10–19 actually saw 3,594 completed runs against 15 real failures.
+- The dashboard could show a pipeline as "running" **forever** — the running-state restore ran only at construction, never on refresh, so a pipeline mid-run when the dashboard started stayed "running" long after it finished. Introduced and fixed the same day, caught by code review.
+- The loudest one: Reddit's promoted posts open advertiser sites in new tabs when clicked, the gather pipeline clicks by screen coordinates with no concept of an ad, and nothing ever closed those tabs. Zero log trace — the leak was invisible to every monitor and was reported by the human watching ad tabs pile up on screen. One captured ad had even made it into the signal corpus as a "post." Popups now get closed on arrival and promoted posts are excluded from both click and capture paths.
+
+Next: the gather schedule itself is being rethought — more on that within the week.`,
+    'build-log',
+    '2026-07-18T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'the-web-remote-now-survives-a-reload',
+    `The web remote now survives a page reload`,
+    'Pairing a phone to the desktop cockpit meant re-verifying the SAS code on every reload, because the browser key was born fresh each time. The fix rests on a browser fact worth knowing: IndexedDB can store a non-extractable CryptoKey directly.',
+    `I shipped v0.35.17 and v0.35.18 of [Session Manager](/projects/session-manager/) this week; the part I want to write down is the phone remote's trust model.
+
+The web remote lets a browser drive the desktop cockpit end-to-end encrypted, with a short SAS code you compare on both screens to confirm the pairing. It worked, with one grinding flaw: every page reload generated a fresh browser keypair, so the desktop saw a stranger and demanded the SAS ceremony again. Reload, re-verify, forever.
+
+The naive fix is to persist the key in localStorage — which requires marking the private key extractable, trading a reload annoyance for an actual weakening of the encryption. The fix that shipped rests on a browser fact I didn't know: IndexedDB, unlike localStorage, can store a **non-extractable** CryptoKey directly via structured clone. The private key persists across reloads without ever existing in exportable form. The desktop side is trust-on-first-use: a manual SAS confirmation pins that browser's public key to the device, exact key match reconnects silently, any other key still gets the full ceremony.
+
+Same release, same theme of silent failure: the desktop's terminal-write handler reported success to the remote unconditionally — including when the write failed — so keystrokes from the phone could vanish while the phone showed everything fine. The write path now returns a real result and the remote surfaces it.
+
+One more fix worth its sentence: the scheduler was flagging jobs for review because they "passed without committing anything," when the true story was that someone else had already merged the target PR. The verifier now checks the world before judging the diff.
+
+Still rough, honestly: the fix for the mobile app hanging on its connect screen after pairing landed a day *after* the release tag, so it rides the next one. And the 772-test suite briefly broke main the morning after the big sweep — a test file written in the wrong framework's idiom, repaired the same day.`,
+    'product',
+    '2026-07-21T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'deleting-951-lines-to-hit-100-percent',
+    `Deleting 951 lines to hit 100%`,
+    'Burrow retired two of its three Reddit pipelines and pinned all 65 tracked subs to one honest target: once a day, every day. The scorecard reads 100% — because the target was made achievable, not because coverage multiplied. Plus two new repos in one day.',
+    `Burrow ran three separate Reddit gather pipelines with a tiered coverage target — some subreddits every 4 hours, some every 8, some every 12. This week two of the three pipelines were retired (26 files, +32/−951, archived rather than deleted) and every one of the 65 tracked trading subs was pinned to a single target: visited at least once a day, inside one 5-hour overnight window. The scorecard now reads 65/65, 100%, zero floor breaches.
+
+The honest version of that number: the target was made achievable and then achieved, not multiplied. The retirement commit says the quiet part out loud — a once-daily gather window can't deliver a 4-hour cadence, and nobody could point to a decision the tier distinction actually fed downstream. A KPI nobody consumes measuring a cadence nothing can deliver is a KPI that lies; this one no longer does.
+
+Also shipped this week:
+
+- **claude-agents**, a new repo that puts the always-on agent instructions under version control — the global config is now a two-line loader importing versioned persona files. Best find during the move: an HTML-comment canary placed to verify the import chain turned out to be *invisible* — comments are stripped before reaching model context — so a broken import would fail silently. The canaries are now visible plain-markdown footer lines.
+- **Shapes Foundation**, a new Expo app scaffolded in an afternoon: a shape-themed run-builder (triangle striker, square bulwark, circle arcanist) whose prototype game logic — 756 hand-written lines of typed Zustand store and view derivation — was ported out of a single-file HTML prototype, state machine intact, before any UI exists to consume it.
+
+Both new repos are a day old and neither has a tile on [/projects](/projects) yet; the game gets one when there's something to play.`,
+    'build-log',
+    '2026-07-24T16:00:00.000Z',
+  );
+
   // Seed secret_metadata (idempotent — INSERT OR IGNORE, NULL last_rotated_at = never rotated)
   const SECRET_NAMES = [
     'STRIPE_API_KEY',

@@ -337,11 +337,32 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       }
 
       const customerId = typeof session.customer === 'string' ? session.customer : undefined;
-      const licenseKey = await upsertLicenseKey(email, customerId, 'contentgrade_pro');
+
+      // Resolve the actually-purchased product from the session's line item, same
+      // pattern as the webhook handler above — do NOT hardcode a product key here.
+      let productKey: string = PRODUCT_KEYS.CONTENTGRADE_PRO;
+      try {
+        const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 1 });
+        const matched = entryForPriceId(lineItems.data[0]?.price?.id, process.env);
+        if (matched) productKey = matched.productKey;
+        // else: no catalog entry resolves for this price — fall back to contentgrade_pro
+        // as a last resort so any purchase path that doesn't cleanly resolve still gets
+        // a license rather than an error page.
+      } catch (err: any) {
+        console.error('[checkout_success] line item resolution failed, falling back to contentgrade_pro:', err.message, 'session:', sessionId);
+      }
+
+      const licenseKey = await upsertLicenseKey(email, customerId, productKey);
+
+      const isSessionManager = productKey === PRODUCT_KEYS.SESSION_MANAGER;
+      const title = isSessionManager ? 'Thanks for your support 🎉' : 'You\'re now Pro 🎉';
+      const intro = isSessionManager
+        ? `<p>Your Session Manager support purchase is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>`
+        : `<p>Payment confirmed for <strong>${escHtml(email)}</strong>.</p>`;
 
       reply.type('text/html');
-      return successHtml('You\'re now Pro 🎉', `
-        <p>Payment confirmed for <strong>${escHtml(email)}</strong>.</p>
+      return successHtml(title, `
+        ${intro}
         <p>Your license key:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${escHtml(licenseKey)}</pre>
         <p>Activate it in your terminal:</p>

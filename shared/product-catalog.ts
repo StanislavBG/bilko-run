@@ -15,6 +15,7 @@ export const PRODUCT_KEYS = {
   CONTENTGRADE_PRO: 'contentgrade_pro',
   CONTENTGRADE_BUSINESS: 'contentgrade_business',
   CONTENTGRADE_TEAM: 'contentgrade_team',
+  SESSION_MANAGER: 'session_manager',
 } as const;
 
 export type ProductKey = typeof PRODUCT_KEYS[keyof typeof PRODUCT_KEYS];
@@ -26,7 +27,8 @@ export type PriceType =
   | 'contentgrade_team'
   | 'pageroast_tokens'
   | 'pageroast_token_single'
-  | 'audiencedecoder_report';
+  | 'audiencedecoder_report'
+  | 'session_manager';
 
 /** Token bundles — Stripe credits this many app tokens when the purchase clears. */
 export const TOKENS_PER_BUNDLE = 7;
@@ -51,6 +53,7 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   { priceType: 'pageroast_tokens',       envVar: 'STRIPE_PRICE_TOKENS',                productKey: PRODUCT_KEYS.PAGEROAST_TOKENS,       mode: 'payment', tokenAmount: TOKENS_PER_BUNDLE },
   { priceType: 'pageroast_token_single', envVar: 'STRIPE_PRICE_TOKEN_SINGLE',          productKey: PRODUCT_KEYS.PAGEROAST_TOKENS,       mode: 'payment', tokenAmount: TOKENS_PER_SINGLE },
   { priceType: 'audiencedecoder_report', envVar: 'STRIPE_PRICE_AUDIENCEDECODER',       productKey: PRODUCT_KEYS.AUDIENCEDECODER_REPORT, mode: 'payment' },
+  { priceType: 'session_manager',        envVar: 'STRIPE_PRICE_SESSION_MANAGER',       productKey: PRODUCT_KEYS.SESSION_MANAGER,        mode: 'payment' },
 ];
 
 /** Lookup by priceType (what the frontend checkout request declares). */

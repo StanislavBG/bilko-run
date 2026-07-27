@@ -48,7 +48,7 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 - **OutdoorHours** (`/projects/outdoor-hours/`) → `~/Projects/Outdoor-Hours/` — KOUT-7 weather report
 - **LocalScore** (`/projects/local-score/`) → `~/Projects/Local-Score/` — Gemma/WebGPU doc analyzer
 - **Boat Shooter** (`/projects/game-academy/`) → `~/Projects/Bilko-Game-Academy/` — browser arcade
-- **Bilko-Academy** (`/projects/academy/`) → `~/Projects/Bilko-Academy/` — Interactive AI fundamentals course (23 MDX lessons across 4 modules: intro / what is an AI / prompting / safety & verification). Pure static-path; consumes `host-kit` (workspace package at `~/Projects/Bilko-Host-Kit/`) for shared chrome, telemetry, and the publish CLI. No Bilko-host server route.
+- **Bilko-Academy** (`/projects/academy/`) → `~/Projects/Bilko-Academy/` — Interactive AI fundamentals course (15 `.mdx` files total: 3 intro lessons — welcome + 2 demos — plus 12 chapters across 4 modules — Meet Claude, Working In Claude, Prompting, Trust And Next Steps). Pure static-path; consumes `host-kit` (workspace package at `~/Projects/Bilko-Host-Kit/`) for shared chrome, telemetry, and the publish CLI. No Bilko-host server route.
 - **Stepproof** (`/projects/stepproof/`) → `~/Projects/Stepproof/` — YAML scenario regression tests for AI pipelines (marketing page; CLI lives at github.com/StanislavBG/stepproof)
 - **StackAudit** (`/projects/stack-audit/`) → `~/Projects/Stack-Audit/` — SaaS tool stack cost + waste finder
 - **LaunchGrader** (`/projects/launch-grader/`) → `~/Projects/Launch-Grader/` — 5-dimension go-to-market readiness audit

@@ -77,11 +77,27 @@ const TOOL_PROJECTS: readonly Project[] = LISTING_TOOLS.map(t => ({
 import standaloneJson from './standalone-projects.json' with { type: 'json' };
 const STANDALONE_PROJECTS: readonly Project[] = standaloneJson as readonly Project[];
 
+/**
+ * Dedupe by slug, later entries winning. Needed because a project can be
+ * registered twice under one slug — e.g. session-manager has both a
+ * static-path sibling entry (the desktop app) and a react-route entry (its
+ * marketing/checkout page); TOOL_PROJECTS is spread last so the react-route
+ * entry (and its /products href) wins the hub card. projectsView.ts's
+ * project+package merge only handles PROJECTS vs. PACKAGES, not two
+ * PROJECTS entries sharing a slug — this is what prevents that from
+ * rendering as two separate hub cards.
+ */
+function dedupeBySlug(projects: readonly Project[]): readonly Project[] {
+  const bySlug = new Map<string, Project>();
+  for (const p of projects) bySlug.set(p.slug, p);
+  return Array.from(bySlug.values());
+}
+
 /** Every project on bilko.run, regardless of where it's hosted. */
-export const PROJECTS: readonly Project[] = [
+export const PROJECTS: readonly Project[] = dedupeBySlug([
   ...STANDALONE_PROJECTS,
   ...TOOL_PROJECTS,
-];
+]);
 
 export const LIVE_PROJECTS: readonly Project[] = PROJECTS.filter(p => p.status === 'live');
 export const COOKING_PROJECTS: readonly Project[] = PROJECTS.filter(p => p.status === 'cooking');

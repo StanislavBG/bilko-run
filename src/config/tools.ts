@@ -170,6 +170,33 @@ export const TOOLS: readonly ToolDefinition[] = [
       buttonShadow: 'shadow-warm-900/30',
     },
   },
+  // Marketing/purchase page for the Session Manager desktop cockpit. The app
+  // itself is a separately-built static-path sibling at /projects/session-manager/
+  // (see standalone-projects.json) — this react-route entry is just the landing
+  // page + Stripe checkout at /products/session-manager. Same slug is
+  // intentional: projectsRegistry.ts dedupes PROJECTS by slug so the two merge
+  // into a single hub card, with this react-route entry's href winning.
+  {
+    slug: 'session-manager',
+    name: 'Session Manager',
+    tagline: 'One cockpit for every Claude Code session',
+    description: 'A local desktop cockpit for the Claude Code CLI — scheduler, subagent hive, full session history, live usage, voice, an embedded browser, and a self-hosted web remote.',
+    features: ['Scheduler', 'Subagents · Hive', 'History', 'Usage', 'Voice', 'Browser', 'Web Remote'],
+    category: 'devtools',
+    status: 'live',
+    accent: { text: 'text-fire-500', bg: 'bg-fire-400', hoverBorder: 'hover:border-fire-300' },
+    theme: {
+      heroGradient: 'from-warm-900 via-warm-950 to-warm-900',
+      glowColor: 'rgba(255,107,26,0.10)',
+      accentText: 'text-fire-300',
+      accentTextLight: 'text-fire-500',
+      buttonBg: 'bg-fire-500',
+      buttonHover: 'hover:bg-fire-600',
+      buttonShadow: 'shadow-fire-500/20',
+    },
+    loader: () => import('../pages/SessionManagerPage.js'),
+    productKey: PRODUCT_KEYS.SESSION_MANAGER,
+  },
 ];
 
 /* ── Accessors ───────────────────────────────────────────── */

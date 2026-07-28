@@ -360,8 +360,17 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         ? `<p>Your Session Manager support purchase is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>`
         : `<p>Payment confirmed for <strong>${escHtml(email)}</strong>.</p>`;
 
-      reply.type('text/html');
-      return successHtml(title, `
+      // Session Manager is a free/open-source app with no license gate — a
+      // "your license key, activate it" body reads as Pro-subscription copy
+      // for what's really a one-time support purchase. Show the run command
+      // instead, mirroring the Claude Design mock's post-purchase state.
+      const body = isSessionManager
+        ? `
+        ${intro}
+        <p>Run this to launch:</p>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em">npx claude-code-session-manager@latest</pre>
+        <p style="font-size:0.9em;color:#888">Receipt on file for <strong>${escHtml(email)}</strong>.</p>`
+        : `
         ${intro}
         <p>Your license key:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${escHtml(licenseKey)}</pre>
@@ -369,8 +378,10 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${escHtml(licenseKey)}</pre>
         <p style="font-size:0.9em;color:#888">
           Retrieve it any time: <a href="/my-license?email=${encodeURIComponent(email)}">/my-license?email=${encodeURIComponent(email)}</a>
-        </p>
-      `);
+        </p>`;
+
+      reply.type('text/html');
+      return successHtml(title, body);
     } catch (err: any) {
       console.error('[checkout_success]', err.message);
       reply.type('text/html').status(500);

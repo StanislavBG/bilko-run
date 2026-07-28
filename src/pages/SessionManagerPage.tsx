@@ -1,24 +1,94 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
+import { usePageView } from '../hooks/usePageView.js';
 import { startSessionManagerCheckout } from '../lib/sessionManagerCheckout.js';
+
+const PRICE_LABEL = '$19.99';
 
 interface Feature {
   title: string;
-  description: string;
+  tagline: string;
+  body: string;
 }
 
 const FEATURES: readonly Feature[] = [
-  { title: 'Scheduler', description: 'Author PRDs, run them as claude -p jobs around the 5h token window, auto-pause and auto-resume.' },
-  { title: 'Subagents · Hive', description: 'Fan work across a live hive of subagents instead of one linear session.' },
-  { title: 'History', description: 'Every session, fully resumable — pick up exactly where you left off.' },
-  { title: 'Usage', description: 'Live token and cost burn-rate, right in the app.' },
-  { title: 'Voice', description: 'Local Whisper push-to-talk — nothing leaves the machine.' },
-  { title: 'Browser', description: 'An embedded dev browser Claude can drive directly.' },
-  { title: 'Web Remote', description: 'Pair your phone and issue commands over a self-hosted relay.' },
-  { title: 'Everything, one cockpit', description: '25+ config and observability surfaces, one left-nav.' },
+  {
+    title: 'Scheduler',
+    tagline: 'Author work once. Let it run around your token window.',
+    body: "Write a PRD, drop it in the queue, and Session Manager runs it as a claude -p job — timed around your plan's 5-hour token window. Rate-limited? It auto-pauses and picks back up the moment your window resets. No babysitting a terminal, no manual re-triggering after every reset.",
+  },
+  {
+    title: 'Subagents · Hive',
+    tagline: 'Fan work out across a live hive of subagents.',
+    body: 'Launch a whole crew of subagents against one problem, watch them work in real time, and race competing approaches against each other. Configured roles, live tool-use feed, and a results digest when they finish — orchestration you can actually see happening.',
+  },
+  {
+    title: 'History',
+    tagline: 'Every session, ever — fully resumable.',
+    body: "Every conversation you've ever had with Claude Code in this project is indexed, searchable, and resumable. Pick up any past thread exactly where you left it, weeks later, without hunting through terminal scrollback or re-explaining context.",
+  },
+  {
+    title: 'Usage',
+    tagline: 'Know your burn rate before you hit the wall.',
+    body: "Live token and cost burn-rate against your plan's rolling window, right inside the app — no separate dashboard, no guessing whether you're about to get rate-limited mid-task.",
+  },
+  {
+    title: 'Voice',
+    tagline: 'Push-to-talk, straight into any session.',
+    body: 'Dictate instructions instead of typing them. Transcription runs locally via Whisper — nothing leaves your machine. Hold a key, talk, and it lands in the session exactly like typed input would.',
+  },
+  {
+    title: 'Browser',
+    tagline: 'An embedded dev browser Claude can actually drive.',
+    body: 'Capture DOM state, record click-sequences, and let Claude interact with a real embedded browser without leaving the app. Useful for anything that needs visual verification, not just terminal output.',
+  },
+  {
+    title: 'Web Remote',
+    tagline: 'Pair your phone. Run commands from anywhere.',
+    body: 'Pair a phone once, then issue scheduler and terminal commands remotely over a relay you self-host — end-to-end encrypted between your devices. Check on a long-running job from the couch, not just the desk.',
+  },
+  {
+    title: 'Everything, one cockpit',
+    tagline: '25+ surfaces. Zero context-switching.',
+    body: 'Settings, Skills, Hooks, MCP Servers, Memory, Permissions, Plans, Tasks — every config and observability surface Claude Code has, in one left-nav, one app, one place you actually remember to check.',
+  },
 ];
 
-function PurchaseSection() {
+function StickyHeader({ onBuyClick }: { onBuyClick: () => void }) {
+  return (
+    <header className="sticky top-0 z-50 flex items-center justify-between px-7 py-3.5 border-b border-warm-200 bg-[rgba(250,244,235,0.92)] backdrop-blur-md">
+
+      <div className="flex items-center gap-2.5">
+        <span className="w-[26px] h-[26px] rounded-[7px] bg-fire-500 text-white flex items-center justify-center font-semibold text-sm">
+          S
+        </span>
+        <span className="text-base font-semibold text-warm-900">Session Manager</span>
+      </div>
+      <button
+        onClick={onBuyClick}
+        className="px-5 py-2.5 rounded-lg border-0 cursor-pointer bg-fire-500 hover:bg-fire-600 text-white text-sm font-bold transition-colors"
+      >
+        Buy Now — {PRICE_LABEL}
+      </button>
+    </header>
+  );
+}
+
+function FeatureSection({ f, index }: { f: Feature; index: number }) {
+  return (
+    <div className="max-w-2xl mx-auto px-6 py-16">
+      <div className="text-[11px] font-bold tracking-wide uppercase text-fire-500 mb-2.5">
+        {String(index + 1).padStart(2, '0')} · {f.title}
+      </div>
+      <h2 className="text-2xl md:text-display-md font-semibold text-warm-900 mb-2.5 leading-tight">
+        {f.tagline}
+      </h2>
+      <p className="text-[15px] text-warm-500 leading-relaxed">{f.body}</p>
+    </div>
+  );
+}
+
+function BuySection({ buyRef }: { buyRef: React.RefObject<HTMLDivElement> }) {
   const { email: savedEmail, setEmail } = useAuth();
   const [emailInput, setEmailInput] = useState(savedEmail);
   const [loading, setLoading] = useState(false);
@@ -42,11 +112,10 @@ function PurchaseSection() {
   }
 
   return (
-    <section className="max-w-2xl mx-auto px-6 pb-20 md:pb-28 text-center">
-      <h2 className="text-display-lg text-warm-900">Support the build</h2>
+    <section ref={buyRef} id="buy" className="max-w-2xl mx-auto px-6 pb-20 md:pb-28 text-center">
+      <h2 className="text-display-lg text-warm-900">Buy Session Manager — {PRICE_LABEL}</h2>
       <p className="mt-4 text-warm-500 leading-relaxed">
-        Session Manager is free and open source — this is a one-time, pay-what-you-want way to
-        back the project.
+        One-time purchase, $19.99 USD. Enter your email, check out, then run one command to launch.
       </p>
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
         <input
@@ -63,7 +132,7 @@ function PurchaseSection() {
           disabled={loading}
           className="px-6 py-3 text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-xl shadow-md shadow-fire-500/20 transition-all disabled:opacity-60"
         >
-          {loading ? 'Redirecting…' : 'Support Session Manager'}
+          {loading ? 'Redirecting…' : `Buy Now — ${PRICE_LABEL}`}
         </button>
       </form>
       {error && (
@@ -76,13 +145,20 @@ function PurchaseSection() {
 }
 
 export default function SessionManagerPage() {
+  usePageView();
+  const buyRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     document.title = 'Session Manager — bilko.run';
     return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
   }, []);
 
+  const scrollToBuy = () => buyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
   return (
-    <>
+    <div className="min-h-screen bg-white">
+      <StickyHeader onBuyClick={scrollToBuy} />
+
       <div className="max-w-4xl mx-auto px-6 pt-6 text-right">
         <a
           href="/projects/session-manager/"
@@ -93,28 +169,35 @@ export default function SessionManagerPage() {
       </div>
 
       <section className="max-w-4xl mx-auto px-6 pt-4 pb-10 md:pt-8 md:pb-14 text-center">
+        <div className="text-[11.5px] font-bold tracking-wide uppercase text-warm-400 mb-3.5">
+          Claude Code Session Manager
+        </div>
         <h1 className="text-display-xl text-warm-900">
-          One cockpit for every Claude Code session.
+          Your local cockpit for Claude Code
         </h1>
         <p className="mt-5 text-lg text-warm-500 leading-relaxed">
-          A local desktop cockpit for the Claude Code CLI — scheduler, subagent hive, full
-          session history, live usage, voice, an embedded browser, and a self-hosted web remote,
-          all in one left-nav.
+          Terminal, scheduler, subagent hive, memory, and 25+ config surfaces — one desktop app,
+          nothing sent anywhere it doesn't need to go.
         </p>
-      </section>
-
-      <section className="max-w-5xl mx-auto px-6 pb-16 md:pb-20">
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-5">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="bg-white rounded-2xl shadow-elevation-1 p-6">
-              <h3 className="text-sm font-bold text-warm-900">{f.title}</h3>
-              <p className="mt-2 text-sm text-warm-500 leading-relaxed">{f.description}</p>
-            </div>
-          ))}
+        <div className="mt-8">
+          <button
+            onClick={scrollToBuy}
+            className="inline-block px-8 py-3.5 rounded-xl bg-fire-500 hover:bg-fire-600 border-0 text-white text-[15px] font-bold cursor-pointer transition-colors"
+          >
+            Buy Now — {PRICE_LABEL} →
+          </button>
         </div>
       </section>
 
-      <PurchaseSection />
-    </>
+      <div className="border-t border-b border-warm-200">
+        {FEATURES.map((f, i) => (
+          <FeatureSection key={f.title} f={f} index={i} />
+        ))}
+      </div>
+
+      <div className="pt-8 pb-24">
+        <BuySection buyRef={buyRef} />
+      </div>
+    </div>
   );
 }

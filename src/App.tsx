@@ -101,11 +101,13 @@ function lazyRoute(El: React.ComponentType) {
   );
 }
 
-/** Tool routes shared between /projects/* and /products/* */
+/** Tool routes shared between /projects/* and /products/* — excludes
+ * session-manager, which renders outside Layout (own standalone chrome,
+ * no Bilko nav) and is routed separately below. */
 function toolRoutes() {
   return (
     <>
-      {ROUTABLE_TOOLS.map(t => (
+      {ROUTABLE_TOOLS.filter(t => t.slug !== 'session-manager').map(t => (
         <Route key={t.slug} path={t.slug} element={lazyRoute(TOOL_COMPONENTS[t.slug])} />
       ))}
       {/* Old /content-tools route (HeadlineGrader/AdScorer/ThreadGrader/EmailForge/AudienceDecoder
@@ -161,6 +163,14 @@ function AppRoutes() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />
           </Route>
+
+          {/* /products/session-manager — standalone marketing/checkout page.
+              Deliberately OUTSIDE <Layout /> so it renders zero Bilko site
+              chrome (no pf-topbar, no Bilko nav, no Cmd-K palette); it ships
+              its own sticky header instead. Still shares this repo's
+              AuthProvider (wraps <AppRoutes />, not Layout-scoped) and
+              Clerk/Stripe checkout wiring. */}
+          <Route path="/products/session-manager" element={lazyRoute(TOOL_COMPONENTS['session-manager'])} />
 
           {/* /app/* — legacy dashboard URLs redirect to canonical /products/* */}
           <Route path="/app" element={<RedirectAppToProducts />} />

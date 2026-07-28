@@ -114,6 +114,9 @@ function HubRow({ card, index, expanded, onToggle }: { card: HubCard; index: num
                 {card.github.replace(/^https?:\/\//, '')}
               </a>
             )}
+            {card.slug === 'session-manager' && (
+              <a href="/projects/session-manager/" className="pf-hub-link">Web Remote →</a>
+            )}
           </div>
         </div>
       )}

@@ -83,7 +83,16 @@ export default function SessionManagerPage() {
 
   return (
     <>
-      <section className="max-w-4xl mx-auto px-6 pt-16 pb-10 md:pt-24 md:pb-14 text-center">
+      <div className="max-w-4xl mx-auto px-6 pt-6 text-right">
+        <a
+          href="/projects/session-manager/"
+          className="text-xs text-warm-400 hover:text-warm-600 underline underline-offset-2"
+        >
+          Already own it? Open Web Remote →
+        </a>
+      </div>
+
+      <section className="max-w-4xl mx-auto px-6 pt-4 pb-10 md:pt-8 md:pb-14 text-center">
         <h1 className="text-display-xl text-warm-900">
           One cockpit for every Claude Code session.
         </h1>

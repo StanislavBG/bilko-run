@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "synthesizedAt": "2026-08-02T21:40:34.200Z",
+  "editedAt": null,
+  "model": "sonnet",
+  "purpose": "Bilko is a host platform (bilko.run) providing shared auth, credits, component kit, and brand chrome to a growing ecosystem of independently-built sibling apps and a shrinking set of in-repo React tools.",
+  "what": [
+    "Bilko (`StanislavBG/bilko-run`) is the **host**, not a product — each app under `~/Projects/` is its own repo with its own Claude session, registered into `src/data/standalone-projects.json` and served either as a `react-route` (in-bundle) or `static-path` (dropped into `public/projects/<slug>/`) app per the **static-path contract** in `docs/host-contract.md`.",
+    "All 9 original AI tools have been extracted to sibling repos; the host repo now ships only brand chrome (`Layout`, `HomePage`, `ProjectsPage`, `BlogPage`, `PricingPage`, `AdminPage`). Eight of those siblings still keep their Gemini-backed scoring endpoint in `server/routes/tools/<slug>.ts` (the **gateway pattern**) — same-origin calls via Clerk JWT, no CORS.",
+    "Stack is TypeScript throughout: React 18 + Vite 6 + Tailwind v4 frontend, Fastify 5 + Turso/libSQL backend, Clerk auth, Stripe credits, Gemini AI. Deploys from `origin`/`main` on Render — **never** the diverged `content-grade` remote.",
+    "An active Epic (`Hosting Platform Review`, discussion) is reviewing Bilko's capabilities/limitations to support the in-development **Session-Manager-Integration-Agent**, and recent git history shows heavy `session-manager` sibling activity (web-remote relay, marketing/checkout page, Stripe product) plus an Academy 15-lesson curriculum republish."
+  ],
+  "areas": [
+    {
+      "name": "session-manager sibling integration",
+      "files": 6,
+      "note": "marketing/checkout page, Stripe product, web-remote relay fixes — most active area in recent log; feeds the open Hosting Platform Review epic",
+      "epic": "Hosting Platform Review",
+      "heat": 0.9
+    },
+    {
+      "name": "Bilko-Academy sibling",
+      "files": 5,
+      "note": "15-lesson curriculum via host-kit; recent redesign + republish commits",
+      "epic": null,
+      "heat": 0.6
+    },
+    {
+      "name": "Blog (server/db.ts seeds + blogs.md)",
+      "files": 4,
+      "note": "backfilled 7 posts at 3-5 day cadence; shipped-note tone experiments",
+      "epic": null,
+      "heat": 0.5
+    },
+    {
+      "name": "Portfolio/registry (src/data/, src/components/portfolio/)",
+      "files": 6,
+      "note": "projectsRegistry.ts + standalone-projects.json drive /projects hub; recent PII scrub and row redesign",
+      "epic": null,
+      "heat": 0.4
+    },
+    {
+      "name": "social-signals-trader dashboard snapshot",
+      "files": 3,
+      "note": "published artifact under public/projects/, regenerated from sibling's dashboard/ — fix sibling, not host copy",
+      "epic": null,
+      "heat": 0.3
+    },
+    {
+      "name": "sanity-qa monitor",
+      "files": 1,
+      "note": "repeated automated FAIL commits (2026-06-06 through 06-14) — worth checking if still red",
+      "epic": null,
+      "heat": 0.2
+    }
+  ],
+  "scope": [
+    {
+      "when": "undated (CLAUDE.md)",
+      "kind": "decided",
+      "text": "Bilko repo is definitively `StanislavBG/bilko-run`; `content-grade` remote is a separate, unrelated project — never push Bilko there",
+      "src": "claude_md"
+    },
+    {
+      "when": "undated (CLAUDE.md)",
+      "kind": "decided",
+      "text": "New apps default to `static-path` (own sibling repo); `react-route` only for rare cases needing to live in-bundle — trend is fully away from in-repo apps",
+      "src": "claude_md"
+    },
+    {
+      "when": "undated (CLAUDE.md)",
+      "kind": "narrowed",
+      "text": "All 9 original AI tools extracted to sibling repos; host repo now ships brand chrome only, though 8 tools still route scoring calls back through host server endpoints (gateway pattern)",
+      "src": "claude_md"
+    },
+    {
+      "when": "2026-08-02 (active epic)",
+      "kind": "added",
+      "text": "Hosting Platform Review epic opened to audit Bilko's capabilities/limitations and expand docs for the in-development Session-Manager-Integration-Agent",
+      "src": "epics"
+    },
+    {
+      "when": "recent (git log)",
+      "kind": "added",
+      "text": "Session Manager shipped a dedicated marketing/checkout landing page and one-time Stripe product, plus web-remote relay fixes (auto-refresh on pairing, pty-write error surfacing)",
+      "src": "git_log"
+    }
+  ],
+  "conventions": [
+    "Never propose solutions — implement them directly",
+    "Each tool/app is independent — no cross-dependencies between them in frontend or backend",
+    "All SQL via parameterized statements through db helpers — never string interpolation",
+    "Static-path app bugs are fixed in the owning sibling repo, never in the published `public/projects/<slug>/` copy",
+    "New npm packages follow `docs/publishing-contract.md` (MIT LICENSE on disk, `--provenance`, Changesets CHANGELOG)"
+  ],
+  "pins": {
+    "what": false,
+    "conventions": false
+  },
+  "pinned": {
+    "what": null,
+    "conventions": null
+  }
+}

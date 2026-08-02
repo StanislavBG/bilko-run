@@ -1,0 +1,88 @@
+{
+  "sessions": {
+    "psess-msc9129l-29": {
+      "id": "psess-msc9129l-29",
+      "cwd": "/home/bilko/Projects/Bilko",
+      "goalText": "Hosting Platform Review\n\nWe are builing native integration from Session-Manager to host project to Bilko.run. Lets review our capabilites, limitations and extend and expand documentation as needed to assist the Session-Manager-Integration-Agent that is being developed currently.",
+      "claudeSessionId": "ce431f4d-5255-4993-b204-316d187cfdff",
+      "status": "active",
+      "createdAt": "2026-08-02T20:24:35.769Z",
+      "completedAt": null,
+      "tag": "discussion"
+    },
+    "psess-mscbr40o-2": {
+      "id": "psess-mscbr40o-2",
+      "cwd": "/home/bilko/Projects/Bilko",
+      "goalText": "Generate this project's Project Pages (Home/Marketing/Feature/Architecture).",
+      "claudeSessionId": "79c782e0-5fce-4314-b007-6671ee9620a1",
+      "status": "active",
+      "createdAt": "2026-08-02T21:40:50.328Z",
+      "completedAt": null,
+      "tag": "project-home-builder",
+      "agentType": "project-home-builder"
+    }
+  },
+  "events": {
+    "psess-msc9129l-29": [
+      {
+        "id": "pevt-msc9129l-30",
+        "promptSessionId": "psess-msc9129l-29",
+        "kind": "prompt",
+        "causedByEventId": null,
+        "at": "2026-08-02T20:24:35.769Z",
+        "text": "Hosting Platform Review\n\nWe are builing native integration from Session-Manager to host project to Bilko.run. Lets review our capabilites, limitations and extend and expand documentation as needed to assist the Session-Manager-Integration-Agent that is being developed currently."
+      },
+      {
+        "kind": "response",
+        "causedByEventId": "pevt-msc9129l-30",
+        "text": "Good, host-kit exists (`~/Projects/Bilko-Host-Kit`, currently at 0.7.2). That confirms the golden-spec template dependency is real infrastructure, not aspirational.\n\n## Findings\n\n**What's already solid:** Session-Manager's own integration spec (`session-manager-operations/architecture/bilko-host-integration.md`) is unusually well-grounded — it reads the actual MCP source and host contract rather than assuming, correctly reuses the existing `bilko-host` MCP instead of inventing a parallel publish path, and correctly separates its unrelated `web-remote/app` Render deploy from the Bilko `static-path` route. No architectural gap there.\n\n**Two real issues I found by reading the actual code, not just docs:**\n\n1. **The content-grade push bug is real, still live, and is being worked around rather than fixed.** `mcp-host-server/src/server.ts:138` still runs `git push content-grade main:master` on every `register_static_project`/`publish_static_project`/`unregister_project` call — directly contradicting this repo's own CLAUDE.md (\"never push Bilko to content-grade... histories have diverged\"). Session-Manager's integration spec noticed this and told its `bilko-host-publisher` agent to just treat a content-grade failure as expected noise. That's a workaround, not a fix — it silently relies on the push *failing*. If that push ever silently succeeds (remote state changes, branch resolves differently), it pollutes an unrelated repo, and every downstream integrator inherits the same landmine because the bug lives in Bilko, not in them.\n\n2. **Docs are stale in the same direction as the bug.** `docs/host-contract.md` (checklist step 5) and `mcp-host-server/README.md` both still instruct \"commit and push to both remotes\" — actively contradicting CLAUDE.md's current rule. Anyone reading the contract fresh (rather than the MCP source, like Session-Manager did) would be told to do the wrong thing.\n\n3. **Documentation gap, not a bug:** Session-Manager's design introduces a \"one slug, man…",
+        "id": "pevt-msc92mn6-33",
+        "promptSessionId": "psess-msc9129l-29",
+        "at": "2026-08-02T20:25:48.834Z"
+      },
+      {
+        "kind": "response",
+        "causedByEventId": "pevt-msc92mn6-33",
+        "text": "All three fixes are in and verified (`tsc` build passes, shell script syntax checks). My edits are scoped to exactly the 5 files I intended to touch — the other modified/untracked files in `git status` predate this session and aren't mine.\n\n## What I fixed\n\n1. **`mcp-host-server/src/server.ts`** — removed the `git push content-grade main:master` call from `commitAndPush()` (and its two description-string mentions). Every `register_static_project` / `publish_static_project` / `unregister_project` call now pushes to `origin` only, matching CLAUDE.md's actual rule instead of contradicting it. Rebuilt `dist/server.js` so the fix is live for any MCP client (including Session-Manager's `.mcp.json` wiring) without a manual `pnpm build` step on their end.\n2. **`scripts/sanity-qa-cron.sh`** — same bug, third live instance: the nightly QA cron was also pushing its report to `content-grade`. Removed.\n3. **Docs corrected** to match: `docs/host-contract.md` (checklist step 5, MCP section, sanity-QA section) and `mcp-host-server/README.md` (both remaining mentions) now say origin-only.\n4. **New doc section** — `docs/host-contract.md` § Manifest contract now has a \"Multi-document bundles\" subsection explaining that the `budget` gate (200KB gzip default) applies to the whole `dist/` tree, not per-document, and that `golden.path`/`golden.expect` only monitors the root document — directly answering the gap Session-Manager's \"one slug, many documents\" design would otherwise hit undocumented.\n\nNothing here required a decision I couldn't make — the fix direction (kill the dead remote at the source, not paper over it downstream) followed from your own CLAUDE.md rule, so I implemented it rather than re-asking. I did not commit or push these changes, since that wasn't requested.",
+        "id": "pevt-msca3g5h-44",
+        "promptSessionId": "psess-msc9129l-29",
+        "at": "2026-08-02T20:54:26.693Z"
+      },
+      {
+        "kind": "response",
+        "causedByEventId": "pevt-msca3g5h-44",
+        "text": "Committed as `4b7e10d` and pushed to `origin/main` (Render will auto-deploy). Only the 5 files I actually touched — I left the pre-existing unrelated changes in your working tree (outdoor-hours data, `session-manager-operations/`, etc.) untouched and uncommitted, since those weren't part of this task.",
+        "id": "pevt-mscbzfml-5",
+        "promptSessionId": "psess-msc9129l-29",
+        "at": "2026-08-02T21:47:18.621Z"
+      }
+    ],
+    "psess-mscbr40o-2": [
+      {
+        "id": "pevt-mscbr40o-3",
+        "promptSessionId": "psess-mscbr40o-2",
+        "kind": "prompt",
+        "causedByEventId": null,
+        "at": "2026-08-02T21:40:50.328Z",
+        "text": "Generate this project's Project Pages (Home/Marketing/Feature/Architecture)."
+      },
+      {
+        "kind": "response",
+        "causedByEventId": "pevt-mscbr40o-3",
+        "text": "Investigated before writing anything — found a mismatch worth flagging rather than guessing past.\n\n**What I found:**\n- Bilko (`~/Projects/Bilko`, this repo) has a `session-manager-operations/` folder, but it only contains `project-brief/`, `prompt-sessions/`, and `scheduler/` — no `architecture/project-pages-pipeline.md`, no `design-mocks/project-pages-component-library/`, and no `.claude/agents/project-home-builder.md`.\n- All three of those files **do exist**, fully populated, in the sibling repo `~/Projects/session-manager` (`session-manager-operations/design-mocks/project-pages-component-library/` and `.claude/agents/project-home-builder.md` are both there).\n\nSo the Project Pages pipeline this agent protocol depends on isn't missing infrastructure that needs building in Bilko — it's a different project's pipeline (`session-manager`), and this invocation's working directory is Bilko instead. Per this project's own standing guidance (stay in the Bilko lane, don't reach into sibling repos to fix or build things — that belongs in the sibling that owns the code), I stopped rather than either (a) hand-rolling a stripped-down pipeline in Bilko that ignores the real spec, or (b) reaching over into `~/Projects/session-manager` and running the actual protocol from here.\n\nI didn't generate any Project Pages content — there's nothing to summarize from a pipeline that doesn't exist in this repo, and fabricating placeholder output would violate the \"never fabricate summary content\" rule in the very protocol I was asked to follow.",
+        "id": "pevt-mscbs316-4",
+        "promptSessionId": "psess-mscbr40o-2",
+        "at": "2026-08-02T21:41:35.706Z"
+      },
+      {
+        "kind": "response",
+        "causedByEventId": "pevt-mscbs316-4",
+        "text": "**Confirmed with your correction: Bilko is the target, session-manager is where the pipeline was designed.** I read session-manager's actual implementation (not just the spec) — `src/renderer/lib/projectPages/*`, the two esbuild build scripts, and the 3 CLI wrappers — and confirmed Bilko already has the prerequisite dependencies (`esbuild`, `react`, `react-dom`, `typescript`) and its own working PRD scheduler (`session-manager-operations/scheduler/`) and Brief (`project-brief/brief.json`). This session's own conversation is already a live, human-approved Epic tagged `project-home-builder` (`psess-mscbr40o-2`), so the `/develop` skill's Epic-gate is satisfied — no extra approval step needed.\n\n**Queued two PRDs** (project-scoped numbers 744/745, next-free after the existing max of 743), written to `session-manager-operations/scheduler/epics/psess-mscbr40o-2/prds/` (the MCP scheduler tool wasn't reachable from this session, so I used the documented manual-numbering fallback and minted the epic dir via `mint-epic.cjs`):\n\n- **744 — Port Project Pages component library + logic source into Bilko** (~25 min). Vendors session-manager's design-mock library and the non-Electron logic modules (`summaryType.ts`, `select.ts`, `render.tsx`, the 4-lens component library, fonts) into `scripts/project-pages/lib/`, verified by a scoped `tsc --noEmit`.\n- **745 — Build the esbuild pipeline + CLI wrappers, wire npm scripts, verify end-to-end** (~30 min, depends on 744). Ports the 2 build scripts and 3 CLI wrappers (validate/select/render), adds `npm run build:project-pages(-logic)`, and proves the full validate→select→render chain against a throwaway fixture before writing `session-manager-operations/project-pages/README.md`.\n\n**Deliberately not a PRD:** computing Bilko's actual `ProjectPageSummary` content. Per the spec, that step is live agent work (read `brief.json`/CLAUDE.md/git log, compose `summary.json`, write it directly) done by a `project-home-builder` session — not something a…",
+        "id": "pevt-mscc2kar-6",
+        "promptSessionId": "psess-mscbr40o-2",
+        "at": "2026-08-02T21:49:44.643Z"
+      }
+    ]
+  },
+  "tombstones": {}
+}

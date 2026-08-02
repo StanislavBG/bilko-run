@@ -95,20 +95,15 @@ async function commitAndPush(message, paths) {
     }
     await exec('git', ['commit', '-m', message], { cwd: HOST_ROOT });
     const lines = [`committed: ${message}`];
-    // Push to both remotes per the host's CLAUDE.md rule.
+    // Push to origin only. content-grade is a separate, unrelated project
+    // (histories diverged) — never push there, per the host's CLAUDE.md rule.
     try {
         const a = await exec('git', ['push', 'origin', 'main'], { cwd: HOST_ROOT });
         lines.push(`origin: ${(a.stderr || a.stdout).trim().split('\n').slice(-1)[0]}`);
     }
     catch (e) {
         lines.push(`origin push FAILED: ${e.message}`);
-    }
-    try {
-        const b = await exec('git', ['push', 'content-grade', 'main:master'], { cwd: HOST_ROOT });
-        lines.push(`content-grade: ${(b.stderr || b.stdout).trim().split('\n').slice(-1)[0]}`);
-    }
-    catch (e) {
-        lines.push(`content-grade push FAILED: ${e.message}`);
+        return { committed: true, pushed: false, details: lines.join('\n') };
     }
     return { committed: true, pushed: true, details: lines.join('\n') };
 }
@@ -168,7 +163,7 @@ server.registerTool('list_projects', {
 // 3) register_static_project ────────────────────────────────────────────
 server.registerTool('register_static_project', {
     title: 'Register a static-path app',
-    description: 'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app shows up on /, /products, and ⌘K. Set autoCommit=true to also commit + push to both remotes (origin + content-grade) so Render auto-deploys.',
+    description: 'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app shows up on /, /products, and ⌘K. Set autoCommit=true to also commit + push to origin so Render auto-deploys.',
     inputSchema: {
         slug: z.string().min(1).describe('URL slug, kebab-case. Example: "outdoor-hours". Path will be /projects/<slug>/.'),
         name: z.string().min(1).describe('Display name. Example: "OutdoorHours".'),
@@ -179,7 +174,7 @@ server.registerTool('register_static_project', {
         sourceRepo: z.string().optional().describe('e.g. "github.com/StanislavBG/outdoor-hours"'),
         localPath: z.string().optional().describe('e.g. "~/Projects/Outdoor-Hours"'),
         tags: z.array(z.string()).optional().describe('Up to ~3 short tags, e.g. ["Free", "WebGPU"].'),
-        autoCommit: z.boolean().default(true).describe('Also commit + push to both host remotes.'),
+        autoCommit: z.boolean().default(true).describe('Also commit + push to origin.'),
     },
 }, async ({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags, autoCommit }) => {
     try {

@@ -19,7 +19,7 @@ Per the [host contract](../docs/host-contract.md), each app lives in its own rep
 | `publish_static_project` | yes (copies bytes + commit + push) | After every `vite build` in your app repo. |
 | `status` | no | Verify a publish landed; see uncommitted state. |
 
-All mutating tools default to `autoCommit: true` — they push to both `origin` and `content-grade`, so Render auto-deploys. Pass `autoCommit: false` to stage-only.
+All mutating tools default to `autoCommit: true` — they push to `origin`, so Render auto-deploys. Pass `autoCommit: false` to stage-only.
 
 ## Build
 
@@ -67,4 +67,4 @@ That's it. Render redeploys after step 4 and 5; bilko.run/projects/<slug>/ goes 
 - `register_static_project` refuses duplicate slugs — call `unregister_project` first if you want to replace.
 - `publish_static_project` requires the slug to already be registered (override with `requireRegistered: false`).
 - All commits use the message format `registry: add <slug> (<name>)`, `registry: remove <slug>`, or `publish: <slug> build`.
-- Pushes go to **both** `origin` (StanislavBG/bilko-run) and `content-grade` (Content-Grade/Content-Grade master), per the host's CLAUDE.md rule. A failure on one remote is reported but doesn't block the other.
+- Pushes go to `origin` (StanislavBG/bilko-run) only. `content-grade` (Content-Grade/Content-Grade) is a separate, unrelated project with diverged history — the server never pushes there, per the host's CLAUDE.md rule.

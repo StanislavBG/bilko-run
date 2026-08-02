@@ -95,7 +95,7 @@ A single entry in `src/data/projectsRegistry.ts`:
    - `static-path`: standalone repo, `vite build`, copy `dist/` into `public/projects/<slug>/`.
 3. Register it in `src/data/standalone-projects.json` (`static-path`/`external-url`) or `src/config/tools.ts` (`react-route`). Sibling sessions should use the [`bilko-host` MCP](../mcp-host-server/README.md) — see below.
 4. Run `pnpm test && pnpm exec tsc --noEmit && pnpm exec vite build` — all must pass.
-5. Commit and push to both remotes (`origin` and `content-grade`). Render auto-deploys.
+5. Commit and push to `origin`. Render auto-deploys. (Never push to `content-grade` — it's a separate, unrelated project with diverged history.)
 6. Verify the project shows up on `/`, `/products`, and in ⌘K.
 
 ## Adding from a sibling-repo Claude session (MCP)
@@ -124,7 +124,7 @@ Then per session:
 6. bilko-host__status                                    # verify
 ```
 
-The MCP commits + pushes to both host remotes automatically; Render redeploys within ~minute.
+The MCP commits + pushes to `origin` automatically; Render redeploys within ~minute.
 
 ## Removing an app
 
@@ -230,6 +230,32 @@ The script reads `package.json`, walks the `dist/` tree, computes gzip sizes, an
 - **green** — matches the highest version seen across all manifests (`current`)
 - **yellow** — exactly 1 minor version behind (`minor_behind`)
 - **red** — ≥2 minors behind or different major (`major_behind`)
+
+### Multi-document bundles
+
+A `static-path` app is one registry slug pointing at one `dist/` tree
+(`public/projects/<slug>/`), served verbatim by Fastify static — nothing
+requires that tree to contain only a single page. A sibling can ship any
+number of additional HTML documents alongside its root page, each reachable
+at `bilko.run/projects/<slug>/<subpath>/` for free, with no new host
+capability required (Academy already does this with its 15-chapter course
+tree; Session Manager's "Host on Bilko.run" cockpit generalizes the pattern
+to an explicit document list). Two things about the existing contract apply
+across the **whole bundle**, not per-document, and are easy to miss when
+building a multi-document `dist/`:
+
+- **`budget` gate is bundle-wide.** `bundle.sizeBytesGz` in the manifest —
+  and the 200 KB default limit it's checked against — is the gzip size of
+  *every* file under `dist/`, summed. Adding a second or third document
+  eats into the same budget as the root page, not a fresh allowance each.
+  Request a higher `app_budgets.max_size_gz_bytes` for the slug if a
+  multi-document bundle needs it.
+- **`golden` gate only covers the root document.** `manifest.golden.path`
+  is a single URL the synthetic monitor and publish gate check — point it
+  at the root (`/projects/<slug>/`) unless you deliberately want the
+  golden/synthetic check to watch a different document instead. There is
+  no per-document golden check; sub-path documents are not individually
+  monitored.
 
 ## Synthetic monitoring
 
@@ -376,7 +402,7 @@ Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md`. The nightly cron (03:00
 `10:00 UTC = 03:00 PDT` (DST anchor; during PST it fires at 02:00 PST — acceptable).
 
 - On FAIL or ERROR: opens a GitHub issue on `StanislavBG/bilko-run` tagged `qa-failure` with the first 60 lines of the report (requires `gh` CLI; token sourced from `~/.env.cron`).
-- Report committed to `test-results/` and pushed to both `origin` and `content-grade` remotes.
+- Report committed to `test-results/` and pushed to `origin`.
 - PRD: `~/.claude/session-manager/scheduled-plans/prds/93-sanity-qa-cron.md`.
 
 ### Prompt files (AI-subagent mode)

@@ -55,7 +55,9 @@
     "github-traffic": "node scripts/github-traffic.js",
     "synthetic": "tsx scripts/synthetic-monitor.ts",
     "cost-monitor": "tsx scripts/cost-monitor.ts",
-    "sanity-qa": "tsx scripts/sanity-qa.ts"
+    "sanity-qa": "tsx scripts/sanity-qa.ts",
+    "build:project-pages-logic": "node scripts/project-pages/build-logic.mjs",
+    "build:project-pages": "node scripts/project-pages/build-renderer.mjs"
   },
   "dependencies": {
     "@bilkobibitkov/ai-tool-kit": "^0.1.0",
@@ -93,6 +95,7 @@
     "@vitest/coverage-v8": "^3.2.4",
     "axe-core": "^4.11.4",
     "concurrently": "^8.2.2",
+    "esbuild": "^0.25.12",
     "lighthouse": "^13.3.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

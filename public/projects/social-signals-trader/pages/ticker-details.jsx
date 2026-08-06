@@ -329,6 +329,12 @@ function TickerDetailsPage({ panel }) {
         )}
       </header>
 
+      {window.OptionsTradeLog && (
+        <div style={{ marginTop: 12 }}>
+          <window.OptionsTradeLog log={window.SPREAD_LOG} />
+        </div>
+      )}
+
       {row ? <TickerCard row={row} params={params} /> : (
         <p style={{ color: "var(--text-3)", marginTop: 20 }}>
           Enter a ticker above to pull its chain.

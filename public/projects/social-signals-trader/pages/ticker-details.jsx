@@ -10,7 +10,7 @@
 // max-short-delta param (~POP >= 80%), DTE inside the window, and — for puts —
 // collateral under the per-contract cash ceiling.
 
-const { useState, useMemo } = React;
+const { useState, useEffect } = React;
 
 const pct = (v) => (v == null ? "—" : (v * 100).toFixed(1) + "%");
 const usd = (v) => (v == null ? "—" : "$" + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }));
@@ -194,15 +194,30 @@ function cheapestRisk(row) {
   return all.length ? Math.min(...all) : null;
 }
 
+// #options/AAPL and ?ticker=AAPL both deep-link a single stock. The hash form is
+// canonical (it survives the static-site routing); the query form is accepted so
+// a link pasted from anywhere still works.
+function tickerFromUrl() {
+  const fromHash = (location.hash || "").replace("#", "").split("/")[1];
+  if (fromHash) return decodeURIComponent(fromHash).toUpperCase();
+  const q = new URLSearchParams(location.search || "").get("ticker");
+  return q ? q.toUpperCase() : "";
+}
+
 // One ticker in, its option detail out. Live lookup goes through the local
 // trader API; if that isn't running we fall back to whatever the bundled
 // snapshot holds, so the page is useful on the published static site too.
 function TickerDetailsPage({ panel }) {
   const bundled = panel || window.OPTION_CHAIN || {};
   const bundledTickers = bundled.tickers || [];
+  const urlTicker = tickerFromUrl();
 
-  const [input, setInput] = useState("");
-  const [row, setRow] = useState(bundledTickers[0] || null);
+  const [input, setInput] = useState(urlTicker);
+  const [row, setRow] = useState(
+    urlTicker
+      ? bundledTickers.find((r) => r.ticker === urlTicker) || null
+      : bundledTickers[0] || null
+  );
   const [params, setParams] = useState(bundled.params || {});
   const [feed, setFeed] = useState(bundled.feed || "indicative");
   const [asOf, setAsOf] = useState(bundled.generatedAt || "");
@@ -214,6 +229,8 @@ function TickerDetailsPage({ panel }) {
     if (!t) return;
     setBusy(true);
     setNote("");
+    // Make the URL match what's on screen, so the view is shareable/bookmarkable.
+    if (tickerFromUrl() !== t) location.hash = `options/${t}`;
     const cached = bundledTickers.find((r) => r.ticker === t);
     try {
       const res = await window.OptimizationClient.optionChain(t, {
@@ -242,6 +259,22 @@ function TickerDetailsPage({ panel }) {
       setBusy(false);
     }
   };
+
+  // A deep link should render that ticker without the user touching anything.
+  // Runs once on mount, and again if the hash changes under us (back button).
+  useEffect(() => {
+    if (urlTicker) lookup(urlTicker);
+    const onHash = () => {
+      const t = tickerFromUrl();
+      if (t && t !== (row && row.ticker)) {
+        setInput(t);
+        lookup(t);
+      }
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <main className="shell" id="ticker-details">
@@ -275,7 +308,8 @@ function TickerDetailsPage({ panel }) {
             <span style={{ fontSize: 11, color: "var(--text-3)" }}>
               or:{" "}
               {bundledTickers.map((r) => (
-                <a key={r.ticker} href="#options" onClick={(e) => { e.preventDefault(); setInput(r.ticker); lookup(r.ticker); }}
+                <a key={r.ticker} href={`#options/${r.ticker}`}
+                   onClick={(e) => { e.preventDefault(); setInput(r.ticker); lookup(r.ticker); }}
                    style={{ marginRight: 8, fontFamily: "var(--mono)" }}>{r.ticker}</a>
               ))}
             </span>

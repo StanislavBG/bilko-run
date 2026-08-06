@@ -23,9 +23,15 @@ const ACCENT_MAP = {
 };
 
 function getInitialPage() {
-  const h = (location.hash || "").replace("#", "");
+  // Ticker Details is deep-linkable per ticker as #options/AAPL, so match on the
+  // segment before the slash — the page itself reads the ticker off the hash.
+  const h = (location.hash || "").replace("#", "").split("/")[0];
+  if (["dashboard","trades","watchlist","signals","optimization","options"].includes(h)) return h;
+  // ?ticker=AAPL with no hash is still a Ticker Details link — honour it rather
+  // than silently dropping the visitor on the dashboard.
+  if (new URLSearchParams(location.search || "").get("ticker")) return "options";
   // Paused tabs (strategies, macro, reddit, reports, methodology) fall back to dashboard.
-  return ["dashboard","trades","watchlist","signals","optimization","options"].includes(h) ? h : "dashboard";
+  return "dashboard";
 }
 
 function App() {

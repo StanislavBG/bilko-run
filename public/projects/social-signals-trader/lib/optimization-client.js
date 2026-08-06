@@ -219,7 +219,21 @@
     return body;
   }
 
+  /** On-demand option chain for ONE ticker. Rejects with a readable message so
+   *  the Ticker Details page can fall back to its bundled snapshot. */
+  async function optionChain(ticker, opts) {
+    const res = await fetch(apiBase() + "/options/chain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker, ...(opts || {}) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || body.error || `HTTP ${res.status}`);
+    return body;
+  }
+
   window.OptimizationClient = {
+    optionChain,
     listSleeves,
     paramSchema,
     rangeToValues,

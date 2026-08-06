@@ -74,10 +74,18 @@ function Header({ handle, bmcUrl, setPage }) {
     const el = document.getElementById("nav-toggle");
     if (el) el.checked = false;
   };
+  // Ticker Details is a real route, not an in-page anchor — it renders its own
+  // surface instead of a section of the dashboard.
+  const routes = [["options", "Ticker Details"]];
   const jumpTo = (id) => {
     closeNav();
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (setPage) setPage(id);
+  };
+  const goto = (page) => {
+    closeNav();
+    if (setPage) setPage(page);
   };
   return (
     <header className="header">
@@ -91,6 +99,10 @@ function Header({ handle, bmcUrl, setPage }) {
           <a key={id} href={`#${id}`}
              onClick={(e) => { e.preventDefault(); jumpTo(id); }}>{l}</a>
         ))}
+        {routes.map(([id, l]) => (
+          <a key={id} href={`#${id}`}
+             onClick={(e) => { e.preventDefault(); goto(id); }}>{l}</a>
+        ))}
       </nav>
       {/* Mobile hamburger — CSS-only via :checked sibling selector */}
       <input type="checkbox" id="nav-toggle" className="nav-toggle-input" aria-hidden="true" />
@@ -101,6 +113,10 @@ function Header({ handle, bmcUrl, setPage }) {
         {sections.map(([id, l]) => (
           <a key={id} href={`#${id}`}
              onClick={(e) => { e.preventDefault(); jumpTo(id); }}>{l}</a>
+        ))}
+        {routes.map(([id, l]) => (
+          <a key={id} href={`#${id}`}
+             onClick={(e) => { e.preventDefault(); goto(id); }}>{l}</a>
         ))}
       </nav>
       <a className="bmc-btn" href={bmcUrl} target="_blank" rel="noreferrer">

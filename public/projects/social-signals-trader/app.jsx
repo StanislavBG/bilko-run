@@ -25,7 +25,7 @@ const ACCENT_MAP = {
 function getInitialPage() {
   const h = (location.hash || "").replace("#", "");
   // Paused tabs (strategies, macro, reddit, reports, methodology) fall back to dashboard.
-  return ["dashboard","trades","watchlist","signals","optimization"].includes(h) ? h : "dashboard";
+  return ["dashboard","trades","watchlist","signals","optimization","options"].includes(h) ? h : "dashboard";
 }
 
 function App() {
@@ -56,6 +56,19 @@ function App() {
   // up → Current positions → Trade log → long-horizon Watchlist. All other
   // tabs (Trades/Strategies/Macro/Reddit/Signals/Optimization/Reports) are
   // retired; their component files remain on disk but are no longer mounted.
+  // Ticker Details (#options) is the one surface that is NOT part of the
+  // single-page dashboard — it's a full-width options worksheet, so it replaces
+  // the dashboard body rather than sitting inside it.
+  if (page === "options" && window.TickerDetailsPage) {
+    return (
+      <>
+        <StatusBar />
+        <Header handle={SITE.handle} bmcUrl={SITE.bmcUrl} setPage={setPage} />
+        <window.TickerDetailsPage panel={window.OPTION_CHAIN} />
+      </>
+    );
+  }
+
   return (
     <>
       <StatusBar />

@@ -963,34 +963,11 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 /* ============== Options / credit-spread surfaces ==============
    Scoped under .opt-* so nothing here can leak into the equity panels. */
 .opt-log { padding: 14px; }
-.opt-log-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .opt-log-title { margin: 0; font-size: 16px; }
-.opt-log-stats { display: flex; gap: 14px; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
-.opt-log-stats em { font-style: normal; color: var(--text); }
 .opt-log-empty, .opt-log-foot { font-size: 11px; color: var(--text-3); margin: 10px 0 0; max-width: 70ch; }
 
-.opt-log-filters { display: flex; gap: 6px; margin: 10px 0; }
-.opt-filter {
-  font-family: var(--mono); font-size: 11px; padding: 3px 10px; cursor: pointer;
-  background: var(--surface-2); color: var(--text-2);
-  border: 1px solid var(--line); border-radius: 999px; text-transform: uppercase; letter-spacing: .04em;
-}
-.opt-filter.is-active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-
-.opt-log-list { display: grid; gap: 8px; }
-
-.opt-trade { border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); overflow: hidden; }
-.opt-trade--open  { border-left: 3px solid var(--pos); }
-.opt-trade--close { border-left: 3px solid var(--info, var(--accent)); }
-
-.opt-trade-head {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 8px 12px; cursor: pointer; font-family: var(--mono); font-size: 12px;
-}
-.opt-trade-head:hover { background: color-mix(in oklch, var(--accent) 7%, transparent); }
 .opt-ticker { font-size: 13px; letter-spacing: .02em; }
-.opt-trade-ts { margin-left: auto; font-size: 10px; }
-.opt-chev { color: var(--text-3); }
+.opt-chev { color: var(--text-3); margin-right: 6px; }
 
 .opt-badge {
   font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
@@ -998,9 +975,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 }
 .opt-badge--open  { background: color-mix(in oklch, var(--pos) 18%, transparent); color: var(--pos); }
 .opt-badge--close { background: color-mix(in oklch, var(--accent) 18%, transparent); color: var(--accent); }
-.opt-badge--live  { background: color-mix(in oklch, var(--pos) 14%, transparent); color: var(--pos); }
-.opt-badge--dry   { background: var(--surface); color: var(--text-3); }
-.opt-badge--err   { background: color-mix(in oklch, var(--neg) 18%, transparent); color: var(--neg); }
 .opt-badge--fill-unfilled { background: var(--surface); color: var(--text-3); }
 .opt-badge--fill-partial  { background: color-mix(in oklch, var(--warn) 18%, transparent); color: var(--warn); }
 .opt-badge--fill-filled   { background: color-mix(in oklch, var(--pos) 14%, transparent); color: var(--pos); }
@@ -1029,6 +1003,25 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-table--legs { display: block; overflow-x: auto; }
 .mono-dim { color: var(--text-2); }
 .neg-tint { color: var(--neg); }
+
+/* Open Orders / Trade Log — two tables side by side, stacking under 900px. */
+.opt-log-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.opt-panel { padding: 14px; }
+.opt-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.opt-panel-title { margin: 0; font-size: 14px; }
+.opt-panel-stats { display: flex; gap: 12px; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+.opt-panel-stats em { font-style: normal; color: var(--text); }
+.opt-table-scroll { overflow-x: auto; margin-top: 10px; }
+.opt-table--orders th, .opt-table--orders td { white-space: nowrap; }
+.opt-row { cursor: pointer; }
+.opt-row:hover { background: color-mix(in oklch, var(--accent) 7%, transparent); }
+.opt-row-detail td { padding: 0; }
+.opt-row-detail .opt-trade-body { border-top: 1px solid var(--line); background: var(--surface); }
+.opt-badge--terminal { background: color-mix(in oklch, var(--neg) 12%, transparent); color: var(--neg); }
+
+@media (max-width: 900px) {
+  .opt-log-grid { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 640px) {
   .opt-trade-ts { margin-left: 0; width: 100%; }

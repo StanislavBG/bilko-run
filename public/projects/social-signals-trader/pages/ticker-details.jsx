@@ -129,6 +129,81 @@ function LadderTable({ rows, kind }) {
   );
 }
 
+// Fund policy — the CREDIT_SPREAD sleeve's live, actually-traded config,
+// exported by spread_trader.export_config() as window.SPREAD_CONFIG. This is
+// deliberately a separate surface from the ticker worksheet below: the
+// worksheet's filters come from options_chain's exploratory scanner constants,
+// which are looser on purpose (one explores, one trades) — merging the two
+// into a single parameter list is the bug this component exists to avoid.
+function StrategyPolicy() {
+  const sc = window.SPREAD_CONFIG;
+  if (!sc || !sc.config) {
+    return (
+      <section className="card" style={{ padding: 14, marginTop: 8, borderColor: "var(--neg)" }}>
+        <p style={{ color: "var(--neg)", fontSize: 13, margin: 0 }}>
+          Strategy config unavailable — dashboard/data-spread-config.js is missing or failed to
+          load. Not showing stand-in numbers here on purpose.
+        </p>
+      </section>
+    );
+  }
+  const c = sc.config;
+  const field = (label, value, gloss) => (
+    <div style={{ display: "grid", gap: 2 }}>
+      <span style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</span>
+      <span style={{ fontFamily: "var(--mono)", fontSize: 13 }}>{value}</span>
+      <span style={{ fontSize: 11, color: "var(--text-3)" }}>{gloss}</span>
+    </div>
+  );
+  const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginTop: 8 };
+  const h4 = { fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-3)", marginTop: 14, marginBottom: 0 };
+
+  return (
+    <section className="card" style={{ padding: 14, marginTop: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+        <h3 style={{ margin: 0, fontSize: 14 }}>CREDIT_SPREAD — fund policy</h3>
+        <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--mono)" }}>
+          config as of {String(sc.generatedAt || "unknown").replace("T", " ")}
+        </span>
+      </div>
+      <p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 6, maxWidth: 760 }}>
+        These are the live, actually-traded rules — loaded from data/spread_config.json with any
+        SST_SPREAD_* env overrides applied. The ticker worksheet below is an exploratory scan with
+        its own, looser filters; it is not this policy.
+      </p>
+
+      <h4 style={h4}>Universe</h4>
+      <p style={{ fontSize: 12, fontFamily: "var(--mono)", margin: "4px 0 0" }} title="The only tickers the sleeve scans and trades.">
+        {(c.tickers || []).join(", ")}
+      </p>
+
+      <h4 style={h4}>Entry gates</h4>
+      <div style={grid}>
+        {field("Short-leg delta", `|Δ| ≤ ${c.max_short_delta}`, "the short strike's delta ceiling — roughly its odds of finishing ITM")}
+        {field("Win probability", pct(c.min_pop), "minimum probability of profit required to enter")}
+        {field("DTE window", `${c.min_dte}–${c.max_dte}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over")}
+        {field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone")}
+        {field("Min credit", usd2(c.min_credit), "below this, fees dominate the trade")}
+        {field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this")}
+        {field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? "minimum annualized yield required" : "not used — a high yield floor mechanically forces 1-DTE risk")}
+      </div>
+
+      <h4 style={h4}>Book limits</h4>
+      <div style={grid}>
+        {field("Max positions", c.max_positions, "open spreads across the whole book at once")}
+        {field("Max total risk", usd(c.max_total_risk), "capital-at-risk ceiling across every open spread")}
+        {field("Max per underlying", c.max_per_underlying, "at most this many open spreads per name at a time")}
+      </div>
+
+      <h4 style={h4}>Exit policy</h4>
+      <p style={{ fontSize: 12, fontFamily: "var(--mono)", margin: "4px 0 0" }}>
+        profit target {pct(c.profit_target_pct)} — closes once {pct(c.profit_target_pct)} of the
+        entry credit is captured
+      </p>
+    </section>
+  );
+}
+
 function TickerCard({ row, params }) {
   const [tab, setTab] = useState("put_spreads");
   const rows = row[tab];
@@ -270,42 +345,45 @@ function TickerDetailsPage() {
         <h2 style={{ margin: 0 }}>Ticker Details</h2>
         <p style={{ color: "var(--text-2)", fontSize: 13, marginTop: 6, maxWidth: 760 }}>
           Give it one ticker; it returns everything the options market will tell
-          us about that name, scored for premium selling. Only structures with a
-          win probability at or above {pct(1 - (params.max_short_delta ?? 0.2))}{" "}
-          (|Δ| ≤ {params.max_short_delta ?? 0.2}) expiring within{" "}
-          {params.max_dte ?? 14} days are listed. Spreads are included so a
+          us about that name, scored for premium selling. Spreads are included so a
           $300 stock costs a few hundred dollars of risk instead of $30k of cash.
         </p>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value.toUpperCase())}
-            onKeyDown={(e) => { if (e.key === "Enter") lookup(); }}
-            placeholder="Ticker, e.g. AAPL"
-            style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 6, padding: "7px 12px", color: "var(--text)", fontFamily: "var(--mono)", fontSize: 13, width: 160 }}
-          />
-          <button
-            onClick={() => lookup()}
-            disabled={busy || !input.trim()}
-            style={{ padding: "7px 16px", background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--line)", borderRadius: 6, cursor: busy ? "wait" : "pointer", fontSize: 12, fontWeight: 600, opacity: busy || !input.trim() ? 0.6 : 1 }}
-          >
-            {busy ? "Loading…" : "Get options"}
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-          <Chip tone="neutral" title="The free Alpaca tier. OPRA requires a signed agreement + Algo Trader Plus.">feed: {feed}</Chip>
-          <Chip tone="neutral">≤ {params.max_dte ?? 14}d to expiry</Chip>
-          <Chip tone="neutral">risk ceiling {usd(params.max_collateral ?? 5000)}/position</Chip>
-          <Chip tone="neutral">min credit {usd2(params.min_credit ?? 5)}</Chip>
-          {asOf && <Chip tone="neutral">as of {String(asOf).replace("T", " ")}</Chip>}
-        </div>
-
-        {note && (
-          <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 10, maxWidth: 760 }}>{note}</p>
-        )}
       </header>
+
+      <StrategyPolicy />
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value.toUpperCase())}
+          onKeyDown={(e) => { if (e.key === "Enter") lookup(); }}
+          placeholder="Ticker, e.g. AAPL"
+          style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 6, padding: "7px 12px", color: "var(--text)", fontFamily: "var(--mono)", fontSize: 13, width: 160 }}
+        />
+        <button
+          onClick={() => lookup()}
+          disabled={busy || !input.trim()}
+          style={{ padding: "7px 16px", background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--line)", borderRadius: 6, cursor: busy ? "wait" : "pointer", fontSize: 12, fontWeight: 600, opacity: busy || !input.trim() ? 0.6 : 1 }}
+        >
+          {busy ? "Loading…" : "Get options"}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+        <Chip tone="neutral" title="The free Alpaca tier. OPRA requires a signed agreement + Algo Trader Plus.">feed: {feed}</Chip>
+        {Object.keys(params).length > 0 && (
+          <>
+            <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy above.">scan: ≤ {params.max_dte}d to expiry</Chip>
+            <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy above.">scan: risk ceiling {usd(params.max_collateral)}/position</Chip>
+            <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy above.">scan: min credit {usd2(params.min_credit)}</Chip>
+          </>
+        )}
+        {asOf && <Chip tone="neutral">as of {String(asOf).replace("T", " ")}</Chip>}
+      </div>
+
+      {note && (
+        <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 10, maxWidth: 760 }}>{note}</p>
+      )}
 
       {window.OptionsTradeLog && (
         <div style={{ marginTop: 12 }}>

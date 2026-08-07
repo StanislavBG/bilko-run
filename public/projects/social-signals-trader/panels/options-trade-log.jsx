@@ -3,8 +3,12 @@
 // full contract detail frozen at that moment. The point is reviewability: what
 // the greeks and prices actually were when we committed, not what they are now,
 // and whether the order actually filled — never implying money we don't have.
-
-const { useState: useLogState } = React;
+//
+// Two tables, never one: Open Orders (submitted, not yet fully filled — a
+// QUEUED order is not a trade) and Trade Log (Alpaca reports filled_qty === qty).
+// A row belongs in the Trade Log if and only if the broker says it filled
+// completely; everything else, including expired/cancelled/rejected history,
+// stays in Open Orders or is dropped, but never counted as a trade.
 
 const g4 = (v) => (v == null ? "—" : Number(v).toFixed(4));
 const money = (v) => (v == null ? "—" : (v < 0 ? "-$" : "$") + Math.abs(Number(v)).toLocaleString(undefined, { maximumFractionDigits: 2 }));
@@ -107,6 +111,48 @@ function creditReceived(record) {
   return avgPrice * 100 * fs.filled;
 }
 
+// --- Open Orders vs Trade Log classification ----------------------------
+// A row is a trade if and only if Alpaca reports it filled completely —
+// never inferred from our own submit-time `status` string.
+const TERMINAL_LABELS = {
+  canceled: "CANCELLED",
+  expired: "EXPIRED",
+  rejected: "REJECTED",
+  unknown_to_broker: "UNKNOWN",
+};
+
+function isFullyFilled(record) {
+  const resp = record.response || {};
+  const qty = num(resp.qty) ?? num(record.contracts);
+  const filled_qty = num(resp.filled_qty) ?? 0;
+  return qty != null && qty > 0 && filled_qty === qty;
+}
+
+// Buckets every submitted order into "trade" (Trade Log) or "open" (Open
+// Orders), with a reader-safe label — never a bare broker status string like
+// "accepted", which reads as done to a non-trader.
+// `kind` doubles as the CSS-badge selector and the "still at risk of not
+// filling" test (`kind === "terminal"` — expired/cancelled/rejected/unknown
+// orders are resolved, not pending).
+function classifyOrder(record) {
+  if (isFullyFilled(record)) {
+    return { bucket: "trade", label: "FILLED", kind: "filled" };
+  }
+  const resp = record.response || {};
+  const brokerStatus = resp.status;
+  const fs = fillState(record);
+  if (brokerStatus && TERMINAL_LABELS[brokerStatus]) {
+    const label = fs && fs.filled > 0
+      ? `${TERMINAL_LABELS[brokerStatus]} ${fs.filled}/${fs.total}`
+      : TERMINAL_LABELS[brokerStatus];
+    return { bucket: "open", label, kind: "terminal" };
+  }
+  if (fs && fs.state === "PARTIAL") {
+    return { bucket: "open", label: `PARTIAL ${fs.filled}/${fs.total}`, kind: "partial" };
+  }
+  return { bucket: "open", label: "QUEUED", kind: "unfilled" };
+}
+
 // Both legs side by side, each with its own greeks. Rendered for entry and,
 // once the spread is flattened, again for exit.
 function LegDetail({ title, legs, predatesSnapshots }) {
@@ -160,11 +206,15 @@ function LegDetail({ title, legs, predatesSnapshots }) {
   );
 }
 
-function TradeCard({ ev }) {
-  const [open, setOpen] = useState_(false);
-  const isClose = ev.event === "close";
-  const pnl = isClose ? ev.realized_pnl : null;
+// Local alias so this file doesn't collide with other panels' useState import.
+const useState_ = React.useState;
 
+// Derive every value a row (either table) needs to render, once per event.
+// `classification` is computed once per event by the caller (see
+// OptionsTradeLog's bucketing pass) and threaded through here rather than
+// re-run per row.
+function tradeFacts(ev, classification) {
+  const isClose = ev.event === "close";
   const shortParsed = parseOccSymbol(ev.short);
   const longParsed = parseOccSymbol(ev.long);
   const structure = spreadStructure(shortParsed, longParsed, ev.ticker);
@@ -174,111 +224,228 @@ function TradeCard({ ev }) {
   const maxLoss = ev.risk;
   const be = breakeven(shortParsed, ev.credit, ev.contracts);
   const riskReward = maxLoss != null && maxGain ? maxLoss / maxGain : null;
+  const pnl = isClose ? ev.realized_pnl : null;
+  return { isClose, shortParsed, longParsed, structure, fs, received, maxGain, maxLoss, be, riskReward, pnl, classification };
+}
 
-  let headline;
-  if (isClose) {
-    headline = <span className={pnl >= 0 ? "up" : "down"}>{money(pnl)}</span>;
-  } else if (!fs || fs.state === "UNFILLED") {
-    headline = <span className="mono-dim">target {money(maxGain)}</span>;
-  } else if (fs.state === "PARTIAL") {
-    headline = <span className="mono-dim">partial {money(received)} of {money(maxGain)} target</span>;
-  } else {
-    headline = <span className="up">+{money(received)}</span>;
-  }
-
+// Shared expanded-row content for both tables: structure blurb, decoded legs,
+// key/value detail grid, and both entry/exit greek snapshots.
+function TradeDetail({ ev, facts }) {
+  const { isClose, structure, fs, received, maxGain, maxLoss, be, riskReward, pnl, classification } = facts;
   return (
-    <div className={`opt-trade opt-trade--${isClose ? "close" : "open"}`}>
-      <div className="opt-trade-head" onClick={() => setOpen(!open)}>
-        <span className={`opt-badge opt-badge--${isClose ? "close" : "open"}`}>
-          {isClose ? "CLOSE" : "OPEN"}
-        </span>
-        {!isClose && fs && (
-          <span className={`opt-badge opt-badge--fill-${fs.state.toLowerCase()}`}>
-            {fs.state === "PARTIAL" ? `PARTIAL ${fs.filled}/${fs.total}` : fs.state}
-          </span>
-        )}
-        <span className={`opt-badge opt-badge--${ev.status === "submitted" ? "live" : ev.status === "error" ? "err" : "dry"}`}>
-          {ev.status}
-        </span>
-        <strong className="opt-ticker">{ev.ticker}</strong>
-        {structure && <span className="mono-dim">{structure.name}</span>}
-        <span className="mono-dim">
-          {shortParsed && longParsed
-            ? `$${shortParsed.strike}/$${longParsed.strike}`
-            : (ev.short_strike ? `${ev.short_strike}/${ev.long_strike}` : ev.short)}
-        </span>
-        <span className="mono-dim">×{ev.contracts}</span>
-        {headline}
-        {isClose && <span className="mono-dim">captured {pctv(ev.captured_pct)}</span>}
-        <span className="opt-trade-ts mono-dim">{String(ev.ts || "").replace("T", " ")}</span>
-        <span className="opt-chev">{open ? "▾" : "▸"}</span>
-      </div>
-
-      {open && (
-        <div className="opt-trade-body">
-          {structure && structure.gloss && (
-            <p className="opt-structure-gloss">{structure.name} — {structure.gloss}</p>
-          )}
-          <div className="opt-legblock">
-            <div className="opt-legblock-title">Legs</div>
-            <ul className="opt-leg-lines">
-              <li>
-                <span className="opt-leg-dir">{legDirection(ev, ev.short, isClose) || "—"}</span>{" "}
-                <span className="mono-dim">{ev.short}</span> — {plainEnglishLeg(ev.short)}
-              </li>
-              <li>
-                <span className="opt-leg-dir">{legDirection(ev, ev.long, isClose) || "—"}</span>{" "}
-                <span className="mono-dim">{ev.long}</span> — {plainEnglishLeg(ev.long)}
-              </li>
-            </ul>
-          </div>
-          <div className="opt-kv">
-            {[
-              ["Max gain (credit)", money(maxGain)],
-              ["Max loss (risk)", money(maxLoss)],
-              ["Breakeven", be != null ? money(be) : null],
-              ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null],
-              ["Credit if filled", money(ev.credit ?? ev.entry_credit)],
-              ["Credit received", !isClose ? money(received) : null],
-              ["Realized P&L", isClose ? money(pnl) : null],
-              ["Fill state", !isClose && fs ? (fs.state === "PARTIAL" ? `PARTIAL ${fs.filled}/${fs.total}` : fs.state) : null],
-              ["EV at entry", money(ev.ev)],
-              ["Win prob (POP)", pctv(ev.pop)],
-              ["DTE", ev.dte],
-              ["Expiry", ev.expiry || (shortParsed ? shortParsed.expiry : null)],
-              ["Spot at entry", money(ev.spot_at_entry)],
-              ["IV at entry", pctv(ev.iv_at_entry)],
-              ["Width", money(ev.width)],
-              ["Contracts", ev.contracts],
-              ["Credit per contract", money(ev.credit_per_contract)],
-              ["Profit target", pctv(ev.profit_target_pct)],
-              ["Exit cost", isClose ? money(ev.exit_cost) : null],
-              ["Reason", ev.reason],
-              ["Order id", ev.client_order_id],
-              ["Broker order status", ev.response ? ev.response.status : null],
-              ["Broker limit price", ev.response && ev.response.limit_price != null ? money(num(ev.response.limit_price)) : null],
-              ["Time in force", ev.response ? ev.response.time_in_force : null],
-            ].filter(([, v]) => v != null && v !== "—").map(([k, v]) => (
-              <div className="opt-kv-item" key={k}>
-                <span className="opt-kv-k">{k}</span>
-                <span className="opt-kv-v">{v}</span>
-              </div>
-            ))}
-          </div>
-          <LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} />
-          {isClose && <LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} />}
-        </div>
+    <div className="opt-trade-body">
+      {structure && structure.gloss && (
+        <p className="opt-structure-gloss">{structure.name} — {structure.gloss}</p>
       )}
+      <div className="opt-legblock">
+        <div className="opt-legblock-title">Legs</div>
+        <ul className="opt-leg-lines">
+          <li>
+            <span className="opt-leg-dir">{legDirection(ev, ev.short, isClose) || "—"}</span>{" "}
+            <span className="mono-dim">{ev.short}</span> — {plainEnglishLeg(ev.short)}
+          </li>
+          <li>
+            <span className="opt-leg-dir">{legDirection(ev, ev.long, isClose) || "—"}</span>{" "}
+            <span className="mono-dim">{ev.long}</span> — {plainEnglishLeg(ev.long)}
+          </li>
+        </ul>
+      </div>
+      <div className="opt-kv">
+        {[
+          ["Max gain (credit)", money(maxGain)],
+          ["Max loss (risk)", money(maxLoss)],
+          ["Breakeven", be != null ? money(be) : null],
+          ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null],
+          ["Credit if filled", money(ev.credit ?? ev.entry_credit)],
+          ["Credit received", classification.bucket === "trade" ? money(received) : null],
+          ["Realized P&L", isClose ? money(pnl) : null],
+          ["Fill state", classification.label],
+          ["EV at entry", money(ev.ev)],
+          ["Win prob (POP)", pctv(ev.pop)],
+          ["DTE", ev.dte],
+          ["Expiry", ev.expiry || (facts.shortParsed ? facts.shortParsed.expiry : null)],
+          ["Spot at entry", money(ev.spot_at_entry)],
+          ["IV at entry", pctv(ev.iv_at_entry)],
+          ["Width", money(ev.width)],
+          ["Contracts", ev.contracts],
+          ["Credit per contract", money(ev.credit_per_contract)],
+          ["Profit target", pctv(ev.profit_target_pct)],
+          ["Exit cost", isClose ? money(ev.exit_cost) : null],
+          ["Reason", ev.reason],
+          ["Order id", ev.client_order_id],
+          ["Broker order status", ev.response ? ev.response.status : null],
+          ["Broker limit price", ev.response && ev.response.limit_price != null ? money(num(ev.response.limit_price)) : null],
+          ["Time in force", ev.response ? ev.response.time_in_force : null],
+          ["Submitted at", ev.response && ev.response.submitted_at ? String(ev.response.submitted_at).replace("T", " ") : null],
+          ["Filled at", ev.response && ev.response.filled_at ? String(ev.response.filled_at).replace("T", " ") : null],
+        ].filter(([, v]) => v != null && v !== "—").map(([k, v]) => (
+          <div className="opt-kv-item" key={k}>
+            <span className="opt-kv-k">{k}</span>
+            <span className="opt-kv-v">{v}</span>
+          </div>
+        ))}
+      </div>
+      <LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} />
+      {isClose && <LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} />}
     </div>
   );
 }
 
-// Local alias so this file doesn't collide with other panels' useState import.
-const useState_ = React.useState;
+function StructureCell({ facts, ev }) {
+  return (
+    <>
+      <div>{facts.structure ? facts.structure.name : "Credit spread"}</div>
+      <div className="mono-dim">
+        {facts.shortParsed && facts.longParsed
+          ? `$${facts.shortParsed.strike}/$${facts.longParsed.strike}`
+          : (ev.short_strike ? `${ev.short_strike}/${ev.long_strike}` : ev.short)}
+      </div>
+    </>
+  );
+}
+
+// kind -> badge modifier class ("unfilled"/"filled" never reach Open Orders).
+const OPEN_ORDER_BADGE_CLASS = { terminal: "terminal", partial: "fill-partial", unfilled: "fill-unfilled" };
+
+// One resting/unfilled/partially-filled/terminal order. The label is never a
+// bare broker status string — QUEUED / PARTIAL n/N / EXPIRED / CANCELLED /
+// REJECTED / UNKNOWN only.
+function OpenOrderRow({ ev, classification }) {
+  const [open, setOpen] = useState_(false);
+  const facts = tradeFacts(ev, classification);
+  const resp = ev.response || {};
+  return (
+    <>
+      <tr className="opt-row" onClick={() => setOpen(!open)}>
+        <td className="al">
+          <span className="opt-chev">{open ? "▾" : "▸"}</span>
+          <span className={`opt-badge opt-badge--${OPEN_ORDER_BADGE_CLASS[classification.kind]}`}>
+            {classification.label}
+          </span>
+        </td>
+        <td className="al"><strong className="opt-ticker">{ev.ticker}</strong></td>
+        <td className="al"><StructureCell facts={facts} ev={ev} /></td>
+        <td>{ev.contracts}</td>
+        <td>{resp.limit_price != null ? money(num(resp.limit_price)) : "—"}</td>
+        <td className="mono-dim">{money(ev.credit ?? ev.entry_credit)}</td>
+        <td>{money(facts.maxLoss)}</td>
+        <td>{facts.be != null ? money(facts.be) : "—"}</td>
+        <td>{resp.submitted_at ? String(resp.submitted_at).replace("T", " ").slice(0, 19) : "—"}</td>
+        <td>{resp.time_in_force || "—"}</td>
+      </tr>
+      {open && (
+        <tr className="opt-row-detail">
+          <td colSpan={10}><TradeDetail ev={ev} facts={facts} /></td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// One order Alpaca reports 100% filled — the only rows that count as trades.
+function TradeLogRow({ ev, classification }) {
+  const [open, setOpen] = useState_(false);
+  const facts = tradeFacts(ev, classification);
+  const { isClose, received, pnl } = facts;
+  const resp = ev.response || {};
+  return (
+    <>
+      <tr className="opt-row" onClick={() => setOpen(!open)}>
+        <td className="al">
+          <span className="opt-chev">{open ? "▾" : "▸"}</span>
+          <span className={`opt-badge opt-badge--${isClose ? "close" : "open"}`}>{isClose ? "CLOSE" : "OPEN"}</span>
+        </td>
+        <td className="al"><strong className="opt-ticker">{ev.ticker}</strong></td>
+        <td className="al"><StructureCell facts={facts} ev={ev} /></td>
+        <td>{ev.contracts}</td>
+        <td className="up">{money(received)}</td>
+        <td>{resp.filled_at ? String(resp.filled_at).replace("T", " ").slice(0, 19) : "—"}</td>
+        <td>{isClose ? <span className={pnl >= 0 ? "up" : "down"}>{money(pnl)}</span> : "—"}</td>
+      </tr>
+      {open && (
+        <tr className="opt-row-detail">
+          <td colSpan={7}><TradeDetail ev={ev} facts={facts} /></td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function OpenOrdersTable({ orders }) {
+  const atRiskCredit = orders
+    .filter((o) => o.classification.kind !== "terminal")
+    .reduce((n, o) => n + (o.ev.credit ?? o.ev.entry_credit ?? 0), 0);
+  return (
+    <section className="card opt-panel">
+      <div className="opt-panel-head">
+        <h3 className="opt-panel-title">Open Orders</h3>
+        <div className="opt-panel-stats">
+          <span><em>{orders.length}</em> orders</span>
+          <span>target <em className="mono-dim">{money(atRiskCredit)}</em> if filled</span>
+        </div>
+      </div>
+      {!orders.length ? (
+        <p className="opt-log-empty">No open orders.</p>
+      ) : (
+        <div className="opt-table-scroll">
+          <table className="opt-table opt-table--orders">
+            <thead>
+              <tr>
+                <th className="al">Status</th><th className="al">Ticker</th><th className="al">Structure</th>
+                <th>Contracts</th><th>Limit</th><th>Credit if filled</th><th>Max loss</th><th>Breakeven</th>
+                <th>Submitted</th><th>TIF</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((o, i) => (
+                <OpenOrderRow key={(o.ev.client_order_id || "") + i} ev={o.ev} classification={o.classification} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TradeLogTable({ trades }) {
+  const realized = trades
+    .filter((t) => t.ev.event === "close")
+    .reduce((n, t) => n + (t.ev.realized_pnl || 0), 0);
+  return (
+    <section className="card opt-panel">
+      <div className="opt-panel-head">
+        <h3 className="opt-panel-title">Trade Log</h3>
+        <div className="opt-panel-stats">
+          <span><em>{trades.length}</em> trades</span>
+          <span>realized <em className={realized >= 0 ? "up" : "down"}>{money(realized)}</em></span>
+        </div>
+      </div>
+      {!trades.length ? (
+        <p className="opt-log-empty">No filled trades yet.</p>
+      ) : (
+        <div className="opt-table-scroll">
+          <table className="opt-table opt-table--orders">
+            <thead>
+              <tr>
+                <th className="al">Event</th><th className="al">Ticker</th><th className="al">Structure</th>
+                <th>Contracts</th><th>Credit received</th><th>Filled</th><th>Realized P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map((t, i) => (
+                <TradeLogRow key={(t.ev.client_order_id || "") + i} ev={t.ev} classification={t.classification} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function OptionsTradeLog({ log }) {
   const data = log || window.SPREAD_LOG;
-  const [filter, setFilter] = useLogState("all");
   if (!data || !data.events || !data.events.length) {
     return (
       <section className="card opt-log">
@@ -290,44 +457,28 @@ function OptionsTradeLog({ log }) {
       </section>
     );
   }
-  const events = data.events.filter((e) => {
-    if (filter === "live") return e.status === "submitted";
-    if (filter === "open") return (e.event || "open") === "open";
-    if (filter === "close") return e.event === "close";
-    return true;
+
+  const openOrders = [];
+  const trades = [];
+  data.events.forEach((ev) => {
+    const classification = classifyOrder(ev);
+    (classification.bucket === "trade" ? trades : openOrders).push({ ev, classification });
   });
-  const live = data.events.filter((e) => e.status === "submitted");
-  const realized = data.events.filter((e) => e.event === "close" && e.status === "submitted")
-    .reduce((n, e) => n + (e.realized_pnl || 0), 0);
 
   return (
-    <section className="card opt-log">
-      <div className="opt-log-head">
-        <h3 className="opt-log-title">Options trade log</h3>
-        <div className="opt-log-stats">
-          <span><em>{data.events.length}</em> events</span>
-          <span><em>{live.length}</em> live</span>
-          <span>realized <em className={realized >= 0 ? "up" : "down"}>{money(realized)}</em></span>
-        </div>
-      </div>
-      <div className="opt-log-filters">
-        {["all", "live", "open", "close"].map((f) => (
-          <button key={f} className={`opt-filter${filter === f ? " is-active" : ""}`} onClick={() => setFilter(f)}>
-            {f}
-          </button>
-        ))}
-      </div>
-      <div className="opt-log-list">
-        {events.map((e, i) => <TradeCard key={(e.client_order_id || "") + i} ev={e} />)}
+    <div className="opt-log">
+      <div className="opt-log-grid">
+        <OpenOrdersTable orders={openOrders} />
+        <TradeLogTable trades={trades} />
       </div>
       <p className="opt-log-foot">
         Greeks and prices are frozen at the moment of the order — entry legs from
         just before submission, exit legs from the close. Δ delta · Γ gamma ·
-        Θ theta · V vega · ρ rho. Quotes are Alpaca’s indicative feed. A grey
-        "target" figure is the limit-order goal, not money received — it only
-        turns green once the broker reports a fill.
+        Θ theta · V vega · ρ rho. Quotes are Alpaca’s indicative feed. Open
+        Orders shows a target credit, grey, not money received — a row only
+        moves to the Trade Log once Alpaca reports it filled completely.
       </p>
-    </section>
+    </div>
   );
 }
 

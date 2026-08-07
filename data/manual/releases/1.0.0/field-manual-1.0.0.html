@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>The Session Manager Field Manual — v1.0.0</title>
+<style>:root{--bg:#0d0d0d;--fg:#e8e8e8;--muted:#9a9a9a;--line:#2a2a2a;--accent:#5fdf9f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.7 system-ui,-apple-system,sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:48px 24px 96px}
+h1{font-size:2.1em;line-height:1.2;margin:2.5em 0 .4em;border-bottom:1px solid var(--line);padding-bottom:.3em}
+h1:first-child{margin-top:0}
+h2{font-size:1.35em;margin:2em 0 .5em}h3{font-size:1.1em;margin:1.6em 0 .4em}
+p{margin:.9em 0}.lede{font-size:1.12em;color:#cfcfcf}
+code{background:#191919;padding:.15em .4em;border-radius:4px;font-size:.9em}
+pre{background:#111;border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto}
+pre code{background:none;padding:0}
+.manual-table{width:100%;border-collapse:collapse;margin:1.2em 0;font-size:.94em}
+.manual-table th,.manual-table td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+.manual-table th{background:#161616;color:#fff}
+.manual-note{border-left:3px solid var(--accent);background:#131a16;padding:12px 16px;border-radius:0 6px 6px 0}
+.manual-incident{border:1px solid #4a3520;background:#1a1410;border-radius:8px;padding:4px 18px;margin:1.2em 0}
+.manual-steps li{margin:.5em 0}
+.manual-figure{margin:1.6em 0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#111}
+.manual-figure img{display:block;width:100%}
+.manual-figure__frame{min-height:180px;display:flex;align-items:center;justify-content:center;color:#666;font-size:.85em;background:repeating-linear-gradient(45deg,#141414,#141414 10px,#181818 10px,#181818 20px)}
+.manual-figure__frame::after{content:"figure pending capture: " attr(data-capture)}
+figcaption{padding:12px 16px;color:var(--muted);font-size:.88em;display:flex;flex-wrap:wrap;gap:14px}
+.callout{display:inline-flex;align-items:center;justify-content:center;width:1.5em;height:1.5em;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:.8em;margin-right:.4em}
+.toc{border:1px solid var(--line);border-radius:8px;padding:16px 24px;background:#111}
+a{color:#7fc4ff}</style></head>
+<body><div class="wrap">
+<h1>The Session Manager Field Manual</h1>
+<p class="lede">A tab-by-tab operator's guide to Claude Code Session Manager — what each surface is for, the one thing people get wrong about it, and the workflow that makes it pay for itself.</p>
+<p style="color:#9a9a9a">Version 1.0.0 · released 2026-08-07 · documents Session Manager v0.64.0</p>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#getting-started">Getting Started — the 10-minute setup</a></li><li><a href="#epics-and-sessions">Epics & Sessions — Terminal and Chat are one session</a></li><li><a href="#scheduler">Scheduler — author once, run around your token window</a></li></ol></nav>
+<section id="getting-started"><h1>Getting Started — the 10-minute setup</h1>
+
+<p class="lede">Session Manager is a local cockpit for the Claude Code CLI. It does not replace
+<code>claude</code>; it wraps it — giving you a terminal, a scheduler that runs work while you sleep,
+and roughly two dozen configuration and observability surfaces over the same
+<code>~/.claude/</code> directory the CLI already reads.</p>
+
+<h2>1. Install and launch</h2>
+
+<p>There is nothing to build. The app ships on npm and runs straight from <code>npx</code>:</p>
+
+<pre><code>npx claude-code-session-manager@latest</code></pre>
+
+<p>First launch recompiles the native terminal backend (<code>node-pty</code>) for your Electron
+runtime, so give it a minute. Linux and macOS only.</p>
+
+<p>If you want the stripped-down version — one terminal, no tabs, no config surface — add
+<code>--simple</code>:</p>
+
+<pre><code>npx claude-code-session-manager@latest --simple</code></pre>
+
+<figure class="manual-figure" data-figure="first-launch">
+  <div class="manual-figure__frame" data-capture="app boot, Home tab, empty project list"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> The left nav — every surface lives here.
+    <span class="callout" data-arrow="up">2</span> <strong>Open / Start Project</strong> — the only
+    way a project enters the app.
+    <span class="callout" data-arrow="down">3</span> The Almanac footer: connection dot, 5-hour usage,
+    active branch, app version.
+  </figcaption>
+</figure>
+
+<h2>2. The one idea to internalise: TAB = project, EPIC = unit of work</h2>
+
+<p>Almost every mistake new users make comes from missing this. Session Manager has exactly two
+levels of scope, and they are not interchangeable:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Concept</th><th>What it actually is</th><th>How many</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>TAB</strong></td>
+      <td>A working directory. The cwd <em>is</em> the project identity — everything the app stores
+      for a project keys off that path.</td>
+      <td>One per project. Picking an already-open project re-activates its tab; it never opens a second.</td>
+    </tr>
+    <tr>
+      <td><strong>EPIC</strong></td>
+      <td>One small unit of work inside that project, backed by its own tagged Claude session.</td>
+      <td>Many per tab. Short-lived by design — one Epic per thing you're doing.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note"><strong>The rule that follows:</strong> if you want a second conversation in
+the same project, you want a second <em>Epic</em>, not a second tab. Tabs are for switching projects.</p>
+
+<h2>3. Where your data lives</h2>
+
+<p>When a tab first opens on a directory, Session Manager creates one folder inside it:</p>
+
+<pre><code>&lt;your-project&gt;/session-manager-operations/
+├── prompt-sessions/   # your Epics — active index + archived Epics
+├── scheduler/         # PRDs, queue, and run state
+├── project-brief/     # the Home tab's project brief
+└── logs/</code></pre>
+
+<p>It is plain JSON and Markdown, it sits inside your repo, and it is meant to be read by humans and
+committed if you want it committed. Nothing about your project is stored in a cloud service by this
+app — the marketing page's "local-first" claim is literal.</p>
+
+<h2>4. Your first five minutes</h2>
+
+<ol class="manual-steps">
+  <li><strong>Open / Start Project</strong> in the left nav, and pick a repo you actually work in.
+  A native folder picker opens; "New Folder" starts a fresh one.</li>
+  <li>The Terminal tab boots a real <code>claude</code> session in that directory. This is the same
+  CLI you already use — same settings, same skills, same MCP servers.</li>
+  <li>Press <strong>New Epic</strong>. Pick an <em>Agent</em> (who works) and a <em>Mission</em>
+  (feature / bug / discussion), type what you want, and submit.</li>
+  <li>Watch it run. That's the loop. Everything else in this manual is about doing that loop
+  faster, cheaper, and unattended.</li>
+</ol>
+
+<h2>5. What to read next</h2>
+
+<p>If you only read two more chapters, read <a href="#epics-and-sessions">Epics &amp; Sessions</a>
+(so you stop losing context) and <a href="#scheduler">Scheduler</a> (so the app starts working
+while you don't).</p>
+</section>
+<section id="epics-and-sessions"><h1>Epics &amp; Sessions — Terminal and Chat are one session</h1>
+
+<p class="lede">An Epic <em>is</em> a tagged Claude session. Not a folder of sessions, not a wrapper
+around one — a 1:1 relationship. Once that clicks, the two views over it stop being confusing.</p>
+
+<h2>One session, two views</h2>
+
+<p>Every Epic mints exactly one <code>claudeSessionId</code> when it is created. Both ways of
+talking to it attach to that same id:</p>
+
+<table class="manual-table">
+  <thead><tr><th>View</th><th>What runs underneath</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Terminal</strong></td>
+      <td>An interactive PTY: <code>claude --resume &lt;sessionId&gt;</code> in the Epic's cwd.</td>
+      <td>Anything needing approvals, interruptions, or you watching closely.</td>
+    </tr>
+    <tr>
+      <td><strong>Chat</strong></td>
+      <td>Headless: <code>claude -p --resume &lt;sessionId&gt;</code>, streamed back as a feed.</td>
+      <td>Long unattended turns, and reading back what happened.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note"><strong>Switching views hands the session over — it never forks it.</strong>
+Attachment is mutually exclusive: exactly one view holds the session at a time. Context continuity
+across the switch is the whole point, so if you ever see a fresh empty session after switching,
+that's a bug worth reporting, not expected behaviour.</p>
+
+<figure class="manual-figure" data-figure="epic-views">
+  <div class="manual-figure__frame" data-capture="Epic detail with the Terminal/Chat view toggle visible"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> The view toggle — one session, two renderings.
+    <span class="callout" data-arrow="right">2</span> The verbosity dial (1 loudest → 5 quietest).
+    <span class="callout" data-arrow="left">3</span> The Epic's event chain: prompt → PRD → response.
+  </figcaption>
+</figure>
+
+<h2>Creating an Epic: two independent choices</h2>
+
+<p>The New Epic card asks two separate questions, and it is worth being deliberate about both:</p>
+
+<ol class="manual-steps">
+  <li><strong>Agent — who is working.</strong> A persona from your Agent Library
+  (<code>~/.claude/agents/*.md</code>). This also decides which model the session launches with:
+  the persona's own <code>model:</code> field wins, falling back to your global default.</li>
+  <li><strong>Mission — how they work.</strong> One of <em>feature</em>, <em>bug</em>, or
+  <em>discussion</em>. This sets the grounding template the session opens with, and how eagerly
+  the agent should decompose work into scheduled PRDs.</li>
+</ol>
+
+<p>Those two, plus a one-line summary of what's actually grounding the session, compose the
+opening prompt in a fixed order — <strong>Actor, Input, Mission</strong>, then your own goal text.
+That's the AIM framework, and it's why an Epic tends to start productively instead of spending
+three turns establishing context.</p>
+
+<h3>The "advanced" flip: the grounding board</h3>
+
+<p>Flip the New Epic card and you get an inventory of what this session will really load —
+the CLAUDE.md files, skills, MCP servers, and hooks it will discover on disk, plus your git branch
+and the other Epics in the project. It is an <strong>inspector, not a control panel</strong>: there
+is no toggle to make the CLI skip a file it would otherwise find. Read it to understand why an
+agent behaved a certain way.</p>
+
+<h2>Lifecycle: three states, one transition you care about</h2>
+
+<pre><code>proposed ──(Approve &amp; start, or submitting the first prompt)──▶ active ──▶ completed</code></pre>
+
+<ul>
+  <li><strong>proposed</strong> — reserved but not started. <em>Nothing has been spent yet.</em>
+  Every Epic is born here.</li>
+  <li><strong>active</strong> — the session is running, authoring PRDs, receiving scheduler updates.</li>
+  <li><strong>completed</strong> — archived to its own JSON file. The session id is dead; resuming
+  mints a new one that traces back.</li>
+</ul>
+
+<p class="manual-note"><strong>Don't repurpose an Epic.</strong> Its title and objective are fixed
+for the life of its session — that objective <em>is</em> the first prompt. Iterate in follow-up
+messages; when the unit of work changes, start a new Epic. The rename action in the row menu is for
+fixing a typo, not for changing what an Epic is about.</p>
+
+<h2>Where per-task behaviour belongs (and where it doesn't)</h2>
+
+<p>This is the most common architectural mistake users make. Settings — including Permissions,
+Hooks, MCP Servers — edits <em>on-disk files that the CLI reads on every single invocation</em>.
+A Project-scope Settings change alters the substrate for every current and future Epic in that
+project. It is not per-conversation curation and never was.</p>
+
+<table class="manual-table">
+  <thead><tr><th>You want…</th><th>Correct lever</th></tr></thead>
+  <tbody>
+    <tr><td>This kind of task to behave differently</td><td>A custom <strong>Mission tag</strong> (its prompt template)</td></tr>
+    <tr><td>A different reviewer/implementer style or model</td><td>A custom <strong>Agent persona</strong></td></tr>
+    <tr><td>Different permissions, hooks, env vars, MCP servers</td><td><strong>Settings</strong> — genuinely substrate</td></tr>
+  </tbody>
+</table>
+
+<h2>Reading a session without drowning</h2>
+
+<p>The Chat feed has a five-level density dial, numbered loudest-first: <strong>1 raw</strong>,
+2 detail, 3 standard, 4 brief, <strong>5 summary</strong>. Tool cards appear only at levels 1–2.
+Nothing is ever discarded from the store — raise the level and the byte-exact record comes back
+with no re-read.</p>
+
+<p>Two things ignore the dial on purpose, and you should know why:</p>
+
+<ul>
+  <li>A turn <strong>asking you something</strong> is never hidden or clamped at any level. Hiding
+  a question strands a run waiting on an answer nobody can see.</li>
+  <li>The <strong>in-flight</strong> bubble keeps its tool strip at every level — mid-run it's the
+  only progress signal there is.</li>
+</ul>
+</section>
+<section id="scheduler"><h1>Scheduler — author once, run around your token window</h1>
+
+<p class="lede">The Scheduler is the feature that pays for the app. You write a PRD, it lands in a
+queue, and Session Manager runs it as a headless <code>claude -p</code> job timed around your plan's
+rolling 5-hour token window — auto-pausing when you're rate-limited and resuming the moment the
+window resets.</p>
+
+<h2>What the Scheduler is a browser over</h2>
+
+<p>It is a viewer and operator surface on one hierarchy, scoped to the active tab's project by
+default ("All projects" is the explicit escape hatch):</p>
+
+<pre><code>TAB (project)
+└── EPIC (unit of work)
+    └── PRD (one scheduled job)</code></pre>
+
+<p>On disk, PRDs live at
+<code>&lt;project&gt;/session-manager-operations/scheduler/epics/&lt;epic-id&gt;/prds/</code>, with the
+queue and history sharded alongside in <code>scheduler/state/</code>. Every PRD belongs to an Epic —
+there is no such thing as a free-floating PRD.</p>
+
+<figure class="manual-figure" data-figure="scheduler-queue">
+  <div class="manual-figure__frame" data-capture="Scheduler tab, Queue view, at least one running job"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Queue / PRDs / History — three views, one panel.
+    <span class="callout" data-arrow="up">2</span> Mode selector: manual · on-reset · when-available.
+    <span class="callout" data-arrow="right">3</span> A job's status badge — <em>needs_review</em> is a
+    question, not a failure.
+  </figcaption>
+</figure>
+
+<h2>The three run modes</h2>
+
+<table class="manual-table">
+  <thead><tr><th>Mode</th><th>Behaviour</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td><code>manual</code></td><td>Nothing runs until you press go.</td><td>You're debugging the queue itself.</td></tr>
+    <tr><td><code>on-reset</code></td><td>Fires at each 5-hour window reset.</td><td>You want a predictable burst, not a trickle.</td></tr>
+    <tr><td><code>when-available</code></td><td>Polls your billing usage every 60 s and runs whenever there's headroom. <strong>The default.</strong></td><td>Almost always.</td></tr>
+  </tbody>
+</table>
+
+<h2>Concurrency: one pool, machine-wide</h2>
+
+<p>Scheduler jobs and Chat runs draw from the <em>same</em> pool of concurrent <code>claude -p</code>
+sessions (default 5, adjustable from the Home tab). On top of that sits a memory gate: a job won't
+start if the machine doesn't have headroom for it. That gate is machine-aware rather than a
+hardcoded job count, which is what makes running five parallel agents on a laptop survivable.</p>
+
+<h2>Writing a PRD that actually finishes</h2>
+
+<p>Two real incidents shaped every rule here, and both are worth internalising:</p>
+
+<div class="manual-incident">
+  <h3>The poll-hang</h3>
+  <p>A PRD used <code>until $(curl … | jq .uptime)</code> to wait for a deploy. The condition was
+  unsatisfiable — that deploy type never restarts the API — so the job spun for
+  <strong>2 h 47 m</strong> until the watchdog killed it.</p>
+  <p><strong>Rule:</strong> never write an unbounded wait. Every loop gets a maximum iteration
+  count and an explicit give-up branch.</p>
+</div>
+
+<div class="manual-incident">
+  <h3>The post-AC overrun</h3>
+  <p>A PRD declared success, then launched a fixture generator over 50,000 seeds that appeared
+  nowhere in its acceptance criteria. It ran <strong>2 h 44 m</strong> before a human killed it.</p>
+  <p><strong>Rule:</strong> the acceptance criteria are the <em>ceiling</em>, not the floor. When
+  the AC are met, stop.</p>
+</div>
+
+<h3>The checklist</h3>
+
+<ol class="manual-steps">
+  <li>One PRD, one outcome. If you can't state the outcome in a sentence, it's two PRDs.</li>
+  <li>Acceptance criteria must be checkable <strong>headlessly</strong>. "Launch the app and click
+  through the tabs" cannot be verified by a <code>claude -p</code> job — it has no GUI and will be
+  SIGTERM'd.</li>
+  <li>Every loop is bounded. Every wait has a timeout.</li>
+  <li>Ordering comes from <code>dependsOn</code> — nothing else gates a batch.</li>
+  <li>Never reuse a PRD number.</li>
+</ol>
+
+<h2>When a job parks in <code>needs_review</code></h2>
+
+<p><code>needs_review</code> is <strong>a question, not a result</strong>. When a job lands there,
+Session Manager writes a deterministic root-cause report next to that run's own log and appends it
+as a response on the Epic that authored the PRD — so the question comes back to the conversation
+that asked it, not to a global inbox you'll never check.</p>
+
+<p>This is also the strongest argument for writing tight PRDs: the clearer the PRD, the less there
+is to route back to you.</p>
+
+<h2>Self-healing you don't have to think about</h2>
+
+<ul>
+  <li><strong>Boot reconciliation</strong> — on startup, jobs whose processes died are reaped and
+  classified (success / timeout / error). A still-alive orphan is terminated gracefully first so its
+  log isn't misread mid-write.</li>
+  <li><strong>Dead-process reaper</strong> — periodic PID-liveness checks catch hung jobs.</li>
+  <li><strong>Supervisor</strong> — every 15 minutes, a probe per running job; it kills a stuck
+  poll-loop's shell without killing the agent that spawned it.</li>
+  <li><strong>Definition-of-done gate</strong> — when the queue drains, completed PRDs are
+  re-verified against their own acceptance criteria and a report is written. Idempotent, so a
+  re-drain over the same set is a no-op.</li>
+  <li><strong>External watchdog</strong> — an out-of-process timer relaunches the app if its
+  heartbeat goes stale while jobs are outstanding.</li>
+</ul>
+
+<p class="manual-note">All of it exists so that "queue it and go to bed" is a real workflow rather
+than an aspiration.</p>
+</section>
+<hr style="border:0;border-top:1px solid #2a2a2a;margin:48px 0 24px"/>
+<p style="color:#666;font-size:.85em">© Bilko.run · Your copy of The Session Manager Field Manual. Updates for this
+edition are free — re-download the latest at bilko.run/manual.</p>
+</div></body></html>

@@ -259,3 +259,38 @@ body {
 .stagger-children > *:nth-child(5) { animation-delay: 320ms; }
 .stagger-children > *:nth-child(6) { animation-delay: 400ms; }
 
+
+/* ── Session Manager Field Manual reader (/manual) ────────────────────────────
+   Styles the first-party chapter HTML served by /api/manual/chapter/:slug.
+   The same rule set is inlined into the offline HTML edition by
+   session-manager's scripts/build-manual.mjs — keep the two in sync when
+   either changes. */
+.manual-prose { color: #d4d4d4; line-height: 1.75; max-width: 46rem; }
+.manual-prose h1 { font-size: 2rem; line-height: 1.2; color: #f5f5f5; margin: 0 0 .5em; }
+.manual-prose h2 { font-size: 1.35rem; color: #f5f5f5; margin: 2em 0 .5em; }
+.manual-prose h3 { font-size: 1.08rem; color: #ededed; margin: 1.6em 0 .4em; }
+.manual-prose p { margin: .9em 0; }
+.manual-prose .lede { font-size: 1.1rem; color: #cfcfcf; }
+.manual-prose a { color: #7fc4ff; }
+.manual-prose code { background: #191919; padding: .15em .4em; border-radius: 4px; font-size: .9em; }
+.manual-prose pre { background: #111; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px; overflow-x: auto; }
+.manual-prose pre code { background: none; padding: 0; }
+.manual-prose ol, .manual-prose ul { padding-left: 1.4em; }
+.manual-prose li { margin: .45em 0; }
+.manual-table { width: 100%; border-collapse: collapse; margin: 1.2em 0; font-size: .94em; }
+.manual-table th, .manual-table td { border: 1px solid #2a2a2a; padding: 10px 12px; text-align: left; vertical-align: top; }
+.manual-table th { background: #161616; color: #fff; }
+.manual-note { border-left: 3px solid #5fdf9f; background: #131a16; padding: 12px 16px; border-radius: 0 6px 6px 0; }
+.manual-incident { border: 1px solid #4a3520; background: #1a1410; border-radius: 8px; padding: 4px 18px; margin: 1.2em 0; }
+.manual-figure { margin: 1.6em 0; border: 1px solid #2a2a2a; border-radius: 8px; overflow: hidden; background: #111; }
+.manual-figure img { display: block; width: 100%; }
+/* Until the capture pipeline fills a figure in, the slot states what is still
+   missing rather than rendering a broken image. */
+.manual-figure__frame { min-height: 180px; display: flex; align-items: center; justify-content: center;
+  color: #666; font-size: .85em; padding: 12px; text-align: center;
+  background: repeating-linear-gradient(45deg, #141414, #141414 10px, #181818 10px, #181818 20px); }
+.manual-figure__frame::after { content: "figure pending capture: " attr(data-capture); }
+.manual-figure figcaption { padding: 12px 16px; color: #9a9a9a; font-size: .88em; display: flex; flex-wrap: wrap; gap: 14px; }
+.manual-figure .callout { display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5em; height: 1.5em; border-radius: 50%; background: #5fdf9f; color: #000;
+  font-weight: 700; font-size: .8em; margin-right: .4em; }

@@ -113,9 +113,15 @@ function BuySection({ buyRef }: { buyRef: React.RefObject<HTMLDivElement> }) {
 
   return (
     <section ref={buyRef} id="buy" className="max-w-2xl mx-auto px-6 pb-20 md:pb-28 text-center">
-      <h2 className="text-display-lg text-warm-900">Buy Session Manager — {PRICE_LABEL}</h2>
+      <h2 className="text-display-lg text-warm-900">The Field Manual — {PRICE_LABEL}</h2>
       <p className="mt-4 text-warm-500 leading-relaxed">
-        One-time purchase, $19.99 USD. Enter your email, check out, then run one command to launch.
+        The app is free — <code className="px-1.5 py-0.5 rounded bg-warm-100 text-warm-800">npx claude-code-session-manager@latest</code>.
+        What ${'19.99'} buys is <strong className="text-warm-900">The Session Manager Field Manual</strong>:
+        a tab-by-tab operator's guide with annotated screenshots, the workflows that actually pay off, and
+        the mistakes worth skipping. One-time purchase — every future revision is included.
+      </p>
+      <p className="mt-3 text-sm text-warm-500">
+        <a href="/manual" className="underline hover:text-fire-600">Read the free sample chapter →</a>
       </p>
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
         <input

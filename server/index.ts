@@ -20,6 +20,7 @@ import { registerGameRoutes } from './routes/games.js';
 import { registerAcademyRoutes } from './routes/academy.js';
 import { registerProjectDataRoutes } from './routes/project-data.js';
 import { registerSmRelayRoutes } from './routes/sm-relay.js';
+import { registerManualRoutes } from './routes/manual.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
 
@@ -83,6 +84,7 @@ registerGameRoutes(app);
 registerAcademyRoutes(app);
 registerProjectDataRoutes(app);
 registerSmRelayRoutes(app);
+registerManualRoutes(app);
 
 // Boot-time secret age check
 try {

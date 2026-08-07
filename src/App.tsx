@@ -25,6 +25,9 @@ import { PROJECTS } from './data/projectsRegistry.js';
 // Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
 // only non-tool landing pages are declared here.
 const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
+// The paid Session Manager Field Manual reader — lazy because its bundle is only
+// ever needed by the small slice of visitors who bought (or are buying) it.
+const ManualPage = React.lazy(() => import('./pages/ManualPage.js'));
 
 // Build one React.lazy component per registered tool so code-splitting still works.
 const TOOL_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentType>> = Object.fromEntries(
@@ -162,6 +165,9 @@ function AppRoutes() {
             <Route path="/workflows" element={<WorkflowsPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />
+
+            {/* ── Paid digital products ── */}
+            <Route path="/manual" element={<React.Suspense fallback={null}><ManualPage /></React.Suspense>} />
           </Route>
 
           {/* /products/session-manager — standalone marketing/checkout page.

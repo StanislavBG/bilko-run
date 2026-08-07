@@ -1,15 +1,28 @@
 window.SPREAD_CONFIG = {
-  "generatedAt": "2026-08-07T05:04:43+00:00",
+  "generatedAt": "2026-08-07T06:00:44+00:00",
   "strategy": "CREDIT_SPREAD",
   "config": {
     "tickers": [
       "SPY",
-      "QQQ",
-      "AAPL",
-      "MSFT",
       "NVDA",
+      "TLT",
+      "NFLX",
       "TSLA",
-      "AMD"
+      "IWM",
+      "PLTR",
+      "DIA",
+      "ORCL",
+      "SOFI",
+      "SLV",
+      "CRM",
+      "XLE",
+      "BAC",
+      "WMT",
+      "MSFT",
+      "NKE",
+      "AAL",
+      "UNH",
+      "C"
     ],
     "max_short_delta": 0.15,
     "min_pop": 0.85,
@@ -21,9 +34,11 @@ window.SPREAD_CONFIG = {
     "require_positive_ev": true,
     "min_ann_yield": 0.0,
     "min_credit": 5.0,
-    "max_positions": 5,
-    "max_total_risk": 40000.0,
+    "max_positions": 20,
+    "max_total_risk": 150000.0,
     "max_per_underlying": 1,
+    "target_invested_pct": 0.9,
+    "deploy_band_pct": 0.05,
     "profit_target_pct": 0.8,
     "live": false
   }

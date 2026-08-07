@@ -972,8 +972,13 @@ function groupPositionLegsIntoSpreads(positions) {
   const unpaired = [];
   Object.keys(buckets).forEach((key) => {
     const legs = buckets[key];
-    const shorts = legs.filter((l) => l.side === "SHORT");
-    const longs = legs.filter((l) => l.side === "LONG");
+    // Sort by strike before pairing so a bucket holding more than one vertical
+    // (e.g. two puts spreads on the same underlying/expiry) pairs each short
+    // with its nearest long by strike, not an arbitrary array-order neighbor —
+    // reduces (never fully eliminates without an explicit leg-group id from
+    // the broker) the chance of pairing legs from unrelated verticals.
+    const shorts = legs.filter((l) => l.side === "SHORT").sort((a, b) => a.parsed.strike - b.parsed.strike);
+    const longs = legs.filter((l) => l.side === "LONG").sort((a, b) => a.parsed.strike - b.parsed.strike);
     while (shorts.length && longs.length) {
       spreads.push(buildSpreadRow(shorts.shift(), longs.shift()));
     }

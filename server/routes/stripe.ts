@@ -354,21 +354,29 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 
       const licenseKey = await upsertLicenseKey(email, customerId, productKey);
 
-      const isSessionManager = productKey === PRODUCT_KEYS.SESSION_MANAGER;
-      const title = isSessionManager ? 'Thanks for your support 🎉' : 'You\'re now Pro 🎉';
-      const intro = isSessionManager
-        ? `<p>Your Session Manager support purchase is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>`
+      // Products in this set are one-time support/tip purchases with no license
+      // gate — a "your license key, activate it" body reads as Pro-subscription
+      // copy for what's really a thank-you. Route them all through the same
+      // no-license branch instead of adding a parallel `if` per product.
+      const NO_LICENSE_SUPPORT_PRODUCTS = new Set<string>([
+        PRODUCT_KEYS.SESSION_MANAGER,
+        PRODUCT_KEYS.PUBLICTRADES_COFFEE,
+      ]);
+      const isSupportPurchase = NO_LICENSE_SUPPORT_PRODUCTS.has(productKey);
+      const title = isSupportPurchase ? 'Thanks for your support 🎉' : 'You\'re now Pro 🎉';
+      const intro = isSupportPurchase
+        ? `<p>Your support purchase is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>`
         : `<p>Payment confirmed for <strong>${escHtml(email)}</strong>.</p>`;
 
-      // Session Manager is a free/open-source app with no license gate — a
-      // "your license key, activate it" body reads as Pro-subscription copy
-      // for what's really a one-time support purchase. Show the run command
-      // instead, mirroring the Claude Design mock's post-purchase state.
-      const body = isSessionManager
+      const body = productKey === PRODUCT_KEYS.SESSION_MANAGER
         ? `
         ${intro}
         <p>Run this to launch:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em">npx claude-code-session-manager@latest</pre>
+        <p style="font-size:0.9em;color:#888">Receipt on file for <strong>${escHtml(email)}</strong>.</p>`
+        : isSupportPurchase
+        ? `
+        ${intro}
         <p style="font-size:0.9em;color:#888">Receipt on file for <strong>${escHtml(email)}</strong>.</p>`
         : `
         ${intro}
@@ -463,6 +471,39 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     const proLink = process.env.STRIPE_PAYMENT_LINK_CONTENTGRADE_PRO
       ?? 'https://buy.stripe.com/4gM14p87GeCh9vn9ks8k80a'; // Pro $9/mo direct checkout
     return reply.redirect(proLink, 302);
+  });
+
+  // Coffee-tip redirect — a stable top-level URL other projects (e.g. the
+  // social-signals-trader dashboard, a static bundle with no auth/email UI)
+  // can point a plain <a href> at. Must never 404/5xx: when nothing is
+  // configured yet, show a 200 "temporarily unavailable" page instead.
+  app.get('/coffee', async (_req, reply) => {
+    const paymentLink = process.env.STRIPE_PAYMENT_LINK_PUBLICTRADES_COFFEE;
+    if (paymentLink) {
+      return reply.redirect(paymentLink, 302);
+    }
+
+    const priceId = process.env.STRIPE_PRICE_PUBLICTRADES_COFFEE;
+    const stripe = getStripe();
+    if (priceId && stripe) {
+      try {
+        const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
+        const session = await stripe.checkout.sessions.create({
+          mode: 'payment',
+          line_items: [{ price: priceId, quantity: 1 }],
+          success_url: `${publicUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${publicUrl}?checkout=cancel`,
+        });
+        if (session.url) {
+          return reply.redirect(session.url, 302);
+        }
+      } catch (err: any) {
+        console.error('[coffee] checkout session creation failed:', err.message);
+      }
+    }
+
+    reply.type('text/html');
+    return successHtml('Tipping is temporarily unavailable', '<p>This link isn\'t configured yet — check back soon.</p>');
   });
 
   app.get('/api/stripe/subscription-status', async (req, reply) => {

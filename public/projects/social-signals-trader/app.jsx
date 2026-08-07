@@ -70,7 +70,7 @@ function App() {
       <>
         <StatusBar />
         <Header handle={SITE.handle} bmcUrl={SITE.bmcUrl} setPage={setPage} />
-        <window.TickerDetailsPage panel={window.OPTION_CHAIN} />
+        <window.TickerDetailsPage />
       </>
     );
   }

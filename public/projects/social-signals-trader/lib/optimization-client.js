@@ -7,8 +7,13 @@
  *   3. `?fixture=opt`                — bypass network entirely, resolve
  *      against window.OPTIMIZATION_FIXTURE so the tab renders with no
  *      backend (this is the dev/Playwright path).
- *   4. http://127.0.0.1:8765         — default loopback port the
- *      stdlib HTTP server in optimization_api.py binds to.
+ *   4. Health-probe discovery        — GET /health on candidate loopback
+ *      ports [8787, 8791, 8765] in order, first responder whose body has
+ *      service === "optimization_api" wins. 8787 is the current default
+ *      (see optimization_api.py); 8791/8765 are legacy fallbacks for
+ *      already-running instances. A responder that answers /health but
+ *      isn't the optimization_api (e.g. an unrelated service squatting the
+ *      port) is rejected, not accepted.
  *
  * The sleeve param schema is hard-coded here to keep the dashboard fully
  * static (no MCP round-trip just to populate a <select>). It MUST stay in
@@ -50,12 +55,47 @@
 
   const MAX_GRID = 200;
 
-  function apiBase() {
+  const DISCOVERY_PORTS = [8787, 8791, 8765];
+  const PROBE_TIMEOUT_MS = 1500;
+
+  let _resolvedBase = null;
+
+  async function _probeCandidate(base) {
+    let res;
+    try {
+      res = await fetch(base + "/health", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    } catch (_err) {
+      return false;
+    }
+    if (!res.ok) return false;
+    const body = await res.json().catch(() => ({}));
+    return body && body.service === "optimization_api";
+  }
+
+  /** Resolve the trader optimization API base URL, memoised for the page
+   *  lifetime. Priority: ?optApi= override -> window.OPTIMIZATION_API_URL ->
+   *  health-probe discovery across DISCOVERY_PORTS. Rejects (uncached, so a
+   *  retry after starting the server works without a reload) when nothing
+   *  answers as optimization_api. */
+  async function resolveApiBase() {
     const params = new URLSearchParams(window.location.search || "");
     const override = params.get("optApi");
     if (override) return override.replace(/\/+$/, "");
     if (window.OPTIMIZATION_API_URL) return String(window.OPTIMIZATION_API_URL).replace(/\/+$/, "");
-    return "http://127.0.0.1:8765";
+
+    if (_resolvedBase) return _resolvedBase;
+
+    for (const port of DISCOVERY_PORTS) {
+      const base = `http://127.0.0.1:${port}`;
+      // eslint-disable-next-line no-await-in-loop -- sequential by design: try in priority order, stop at first hit
+      if (await _probeCandidate(base)) {
+        _resolvedBase = base;
+        return base;
+      }
+    }
+    throw new Error(
+      `trader API not reachable on ${DISCOVERY_PORTS.join("/")}`,
+    );
   }
 
   function useFixture() {
@@ -136,7 +176,7 @@
 
   async function sweep(sleeveId, paramGrid, dateRange) {
     if (useFixture()) return _fixtureSweep(sleeveId, paramGrid);
-    const url = apiBase() + "/optimization/sweep";
+    const url = (await resolveApiBase()) + "/optimization/sweep";
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -157,7 +197,7 @@
       return { ok: true, sleeve_id: sleeveId, entry: { params, source: "fixture",
                promoted_at: new Date().toISOString(), sweep_id: sweepId || "fixture" } };
     }
-    const url = apiBase() + "/optimization/promote";
+    const url = (await resolveApiBase()) + "/optimization/promote";
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -180,7 +220,7 @@
       if (fx && Array.isArray(fx.variants)) return { variants: fx.variants };
       return { variants: [] };
     }
-    const url = apiBase() + "/variants/list";
+    const url = (await resolveApiBase()) + "/variants/list";
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -202,7 +242,7 @@
       const filtered = fxRows.filter((r) => variants.includes(r.variant_id));
       return { rows: filtered.length ? filtered : fxRows };
     }
-    const url = apiBase() + "/variants/evaluate";
+    const url = (await resolveApiBase()) + "/variants/evaluate";
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -222,7 +262,8 @@
   /** On-demand option chain for ONE ticker. Rejects with a readable message so
    *  the Ticker Details page can fall back to its bundled snapshot. */
   async function optionChain(ticker, opts) {
-    const res = await fetch(apiBase() + "/options/chain", {
+    const base = await resolveApiBase();
+    const res = await fetch(base + "/options/chain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ticker, ...(opts || {}) }),
@@ -233,6 +274,7 @@
   }
 
   window.OptimizationClient = {
+    resolveApiBase,
     optionChain,
     listSleeves,
     paramSchema,

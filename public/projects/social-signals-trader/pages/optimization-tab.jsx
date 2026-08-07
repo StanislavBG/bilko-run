@@ -2,9 +2,9 @@
 /* dashboard/pages/optimization-tab.jsx — PRD 47 Optimization tab.
  *
  * Reads window.OptimizationClient (dashboard/lib/optimization-client.js) which
- * either POSTs to the trader's loopback http://127.0.0.1:8765/optimization
- * endpoints or, when `?fixture=opt`, resolves against
- * window.OPTIMIZATION_FIXTURE.
+ * either POSTs to the trader's loopback optimization API (discovered via
+ * health-probe across 127.0.0.1:8787/8791/8765) or, when `?fixture=opt`,
+ * resolves against window.OPTIMIZATION_FIXTURE.
  *
  * Mobile (<=820px): heatmap collapses to a list view. A/B view stacks.
  */

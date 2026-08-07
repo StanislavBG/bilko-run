@@ -1,10 +1,10 @@
 /* global React */
 // Ticker Details — the premium-selling worksheet.
 //
-// Renders window.OPTION_CHAIN (produced by src/social_signals_trader/options_chain.py)
-// as one card per underlying: what the free indicative feed actually knows, then
-// the two ladders we care about — cash-secured puts (deploy idle cash) and
-// covered calls (rent out shares we already own).
+// Live-only: every card comes from a real-time /options/chain call through
+// the trader API. What it shows: what the free indicative feed actually
+// knows, then the two ladders we care about — cash-secured puts (deploy idle
+// cash) and covered calls (rent out shares we already own).
 //
 // Every contract shown already passed the producer's filters: |delta| <= the
 // max-short-delta param (~POP >= 80%), DTE inside the window, and — for puts —
@@ -204,23 +204,18 @@ function tickerFromUrl() {
   return q ? q.toUpperCase() : "";
 }
 
-// One ticker in, its option detail out. Live lookup goes through the local
-// trader API; if that isn't running we fall back to whatever the bundled
-// snapshot holds, so the page is useful on the published static site too.
-function TickerDetailsPage({ panel }) {
-  const bundled = panel || window.OPTION_CHAIN || {};
-  const bundledTickers = bundled.tickers || [];
+// One ticker in, its option detail out. Live-only: every render comes from
+// window.OptimizationClient.optionChain() (a real Alpaca call through the
+// trader API), never a bundled snapshot. The only snapshotting in this app
+// happens at trade time (options_chain.snapshot_legs), not here.
+function TickerDetailsPage() {
   const urlTicker = tickerFromUrl();
 
   const [input, setInput] = useState(urlTicker);
-  const [row, setRow] = useState(
-    urlTicker
-      ? bundledTickers.find((r) => r.ticker === urlTicker) || null
-      : bundledTickers[0] || null
-  );
-  const [params, setParams] = useState(bundled.params || {});
-  const [feed, setFeed] = useState(bundled.feed || "indicative");
-  const [asOf, setAsOf] = useState(bundled.generatedAt || "");
+  const [row, setRow] = useState(null);
+  const [params, setParams] = useState({});
+  const [feed, setFeed] = useState("indicative");
+  const [asOf, setAsOf] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
 
@@ -231,7 +226,6 @@ function TickerDetailsPage({ panel }) {
     setNote("");
     // Make the URL match what's on screen, so the view is shareable/bookmarkable.
     if (tickerFromUrl() !== t) location.hash = `options/${t}`;
-    const cached = bundledTickers.find((r) => r.ticker === t);
     try {
       const res = await window.OptimizationClient.optionChain(t, {
         max_dte: params.max_dte,
@@ -243,18 +237,12 @@ function TickerDetailsPage({ panel }) {
       setAsOf(new Date().toISOString().slice(0, 19));
       if (res.ticker && res.ticker.error) setNote(`Chain error: ${res.ticker.error}`);
     } catch (err) {
-      if (cached) {
-        setRow(cached);
-        setAsOf(bundled.generatedAt || "");
-        setNote(`Live lookup unavailable (${err.message}) — showing the bundled snapshot.`);
-      } else {
-        setRow(null);
-        setNote(
-          `Live lookup failed (${err.message}) and ${t} isn't in the bundled snapshot. ` +
-          `Start the local API with \`.venv/bin/python -m social_signals_trader.optimization_api\`, ` +
-          `or generate a snapshot with \`python -m social_signals_trader.options_chain ${t} --write\`.`
-        );
-      }
+      setRow(null);
+      setAsOf("");
+      setNote(
+        `Live lookup failed (${err.message}). Start the local API with ` +
+        `\`.venv/bin/python -m social_signals_trader.optimization_api\`.`
+      );
     } finally {
       setBusy(false);
     }
@@ -304,16 +292,6 @@ function TickerDetailsPage({ panel }) {
           >
             {busy ? "Loading…" : "Get options"}
           </button>
-          {bundledTickers.length > 0 && (
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-              or:{" "}
-              {bundledTickers.map((r) => (
-                <a key={r.ticker} href={`#options/${r.ticker}`}
-                   onClick={(e) => { e.preventDefault(); setInput(r.ticker); lookup(r.ticker); }}
-                   style={{ marginRight: 8, fontFamily: "var(--mono)" }}>{r.ticker}</a>
-              ))}
-            </span>
-          )}
         </div>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
@@ -335,7 +313,11 @@ function TickerDetailsPage({ panel }) {
         </div>
       )}
 
-      {row ? <TickerCard row={row} params={params} /> : (
+      {row ? (
+        <TickerCard row={row} params={params} />
+      ) : busy ? (
+        <p style={{ color: "var(--text-3)", marginTop: 20 }}>Loading…</p>
+      ) : (
         <p style={{ color: "var(--text-3)", marginTop: 20 }}>
           Enter a ticker above to pull its chain.
         </p>

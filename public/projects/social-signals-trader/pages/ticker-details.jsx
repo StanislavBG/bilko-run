@@ -385,6 +385,12 @@ function TickerDetailsPage() {
         <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 10, maxWidth: 760 }}>{note}</p>
       )}
 
+      {window.OptionsSummaryPanel && (
+        <div id="options-summary" style={{ marginTop: 12 }}>
+          <window.OptionsSummaryPanel />
+        </div>
+      )}
+
       {window.OptionsTradeLog && (
         <div id="options-trade-log" style={{ marginTop: 12 }}>
           <window.OptionsTradeLog log={window.SPREAD_LOG} />

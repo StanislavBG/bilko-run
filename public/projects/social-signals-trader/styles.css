@@ -1062,6 +1062,56 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   .opt-kv { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
 }
 
+/* ============== Options Summary panel (PRD 1010) ==============
+   opts-* : the headline is the single most prominent element on the page —
+   everything else is a stacked .opt-panel card, same primitives as the
+   trade log above so dark/light/density/accent all keep working for free. */
+.opts-summary { display: grid; gap: 14px; }
+.opts-headline {
+  padding: 18px 20px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.opts-headline-text { font-size: 18px; font-weight: 600; line-height: 1.45; letter-spacing: -0.005em; }
+.opts-stale-banner {
+  margin-top: 8px; display: inline-block; font-size: 11px; font-weight: 600;
+  color: var(--warn); background: color-mix(in oklch, var(--warn) 16%, transparent);
+  border: 1px solid color-mix(in oklch, var(--warn) 40%, transparent);
+  border-radius: 6px; padding: 4px 10px;
+}
+
+.opts-bullets { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; line-height: 1.5; }
+.opts-bullets li::before { content: "\2013"; color: var(--text-3); margin-right: 7px; }
+.opts-line-warn { color: var(--warn); }
+
+.opts-what-we-think li { padding: 8px 10px; background: var(--surface-2); border-radius: 6px; }
+.opts-what-we-think li::before { content: none; }
+
+.opts-action-queue { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; }
+.opts-action { padding: 6px 10px; border-radius: 4px; border-left: 3px solid var(--line); }
+.opts-action--breached { border-left-color: var(--neg); background: var(--neg-bg); }
+.opts-action--danger { border-left-color: var(--neg); background: color-mix(in oklch, var(--neg) 10%, transparent); }
+.opts-action--watch { border-left-color: var(--warn); background: color-mix(in oklch, var(--warn) 10%, transparent); }
+.opts-action--safe { border-left-color: var(--pos); background: var(--pos-bg); }
+.opts-action--neutral { border-left-color: var(--line); }
+
+/* Cushion bands — same colour language (BREACHED/DANGER/WATCH/SAFE) used for
+   severity everywhere else in the dashboard: neg for breached/danger, warn
+   for watch, pos for safe. */
+.opts-band {
+  font-size: 9px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line);
+}
+.opts-band--safe { background: var(--pos-bg); color: var(--pos); }
+.opts-band--watch { background: color-mix(in oklch, var(--warn) 16%, transparent); color: var(--warn); }
+.opts-band--danger { background: color-mix(in oklch, var(--neg) 14%, transparent); color: var(--neg); }
+.opts-band--breached { background: var(--neg-bg); color: var(--neg); font-weight: 700; }
+
+/* Frozen entry columns vs live now columns — a visible seam, not just a
+   header label, so "what we paid" and "what it's worth now" never blur
+   together while scanning. */
+.opts-col-frozen { background: color-mix(in oklch, var(--surface-2) 60%, transparent); }
+.opts-col-live-first { border-left: 2px solid var(--line-2); }
+
 /* ============== Trade detail page — narrative sections (PRD 1014) ==============
    optd-* : page-only classes layered on the opt-* primitives above, so dark
    mode / light mode / the accent tweak / density all keep working for free. */

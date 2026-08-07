@@ -386,7 +386,7 @@ function TickerDetailsPage() {
       )}
 
       {window.OptionsTradeLog && (
-        <div style={{ marginTop: 12 }}>
+        <div id="options-trade-log" style={{ marginTop: 12 }}>
           <window.OptionsTradeLog log={window.SPREAD_LOG} />
         </div>
       )}

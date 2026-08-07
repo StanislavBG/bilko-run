@@ -1061,3 +1061,59 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   .opt-trade-ts { margin-left: 0; width: 100%; }
   .opt-kv { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
 }
+
+/* ============== Trade detail page — narrative sections (PRD 1014) ==============
+   optd-* : page-only classes layered on the opt-* primitives above, so dark
+   mode / light mode / the accent tweak / density all keep working for free. */
+.optd-section { margin-top: 14px; }
+.optd-h2 { margin: 0 0 8px; font-size: 15px; letter-spacing: .01em; }
+.optd-explainer { font-size: 12px; color: var(--text-2); margin: 0 0 10px; max-width: 70ch; }
+.optd-note { font-size: 11px; color: var(--text-3); margin: 4px 0 10px; }
+
+.optd-headline { font-size: 16px; line-height: 1.5; margin: 10px 0; max-width: 70ch; }
+.optd-banner {
+  display: inline-block; font-size: 12px; font-weight: 600; padding: 5px 12px;
+  border-radius: 6px; border: 1px solid var(--line);
+}
+.optd-banner--pos { color: var(--pos); background: var(--pos-bg); border-color: color-mix(in oklch, var(--pos) 40%, transparent); }
+.optd-banner--neg { color: var(--neg); background: var(--neg-bg); border-color: color-mix(in oklch, var(--neg) 40%, transparent); }
+.optd-banner--neutral { color: var(--text-2); background: var(--surface-2); }
+
+.optd-leg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.optd-leg-sentence { margin: 0 0 2px; font-size: 13px; }
+.optd-occ { font-size: 10px; }
+
+.optd-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.optd-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
+.optd-stat-value { font-family: var(--mono); font-size: 18px; margin: 2px 0; }
+.optd-stat-caption { font-size: 11px; color: var(--text-3); }
+
+.optd-payoff { margin-top: 6px; }
+.optd-payoff-track { position: relative; height: 40px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.optd-payoff-zone { position: absolute; top: 0; bottom: 0; }
+.optd-payoff-zone--profit { background: color-mix(in oklch, var(--pos) 22%, transparent); }
+.optd-payoff-zone--loss { background: color-mix(in oklch, var(--neg) 22%, transparent); }
+.optd-payoff-marker { position: absolute; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%); }
+.optd-payoff-dot { width: 2px; height: 100%; background: var(--text); opacity: .6; }
+.optd-payoff-marker--be .optd-payoff-dot { background: var(--accent); opacity: 1; }
+.optd-payoff-marker--spot .optd-payoff-dot { background: var(--warn); opacity: 1; }
+.optd-payoff-tag { position: absolute; top: 100%; margin-top: 4px; font-size: 10px; font-family: var(--mono); color: var(--text-3); white-space: nowrap; }
+.optd-payoff-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-3); margin-top: 28px; }
+.optd-payoff-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.optd-payoff-swatch--profit { background: color-mix(in oklch, var(--pos) 40%, transparent); }
+.optd-payoff-swatch--loss { background: color-mix(in oklch, var(--neg) 40%, transparent); }
+.optd-payoff-empty { font-size: 11px; color: var(--text-3); font-style: italic; }
+
+.optd-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.optd-timeline li { display: flex; gap: 10px; align-items: flex-start; }
+.optd-timeline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 4px; flex: none; }
+.optd-timeline-label { font-size: 12px; }
+.optd-timeline-ts { font-size: 10px; }
+.optd-reason { font-size: 12px; color: var(--text-2); margin-top: 10px; }
+
+.optd-kv-group { margin-bottom: 14px; }
+.optd-kv-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); margin-bottom: 6px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+
+@media (max-width: 640px) {
+  .optd-stat-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+}

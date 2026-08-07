@@ -5,7 +5,7 @@ window.SITE = {
   handle: "publictrades.dev",
   tagline: "Autonomous trading bots reading 10 subreddits. Live results, in public.",
   startedISO: "2025-01-06",
-  bmcUrl: "https://buymeacoffee.com/publictrades",
+  bmcUrl: "https://bilko.run/coffee",
 };
 
 // Per-strategy / index summary. Each is a fully autonomous bot fed by a different

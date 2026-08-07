@@ -183,10 +183,21 @@ export function registerStripeRoutes(app: FastifyInstance): void {
           try {
             const s = getStripe()!;
             const lineItems = await s.checkout.sessions.listLineItems(data.id, { limit: 1 });
-            const matched = entryForPriceId(lineItems.data[0]?.price?.id, process.env);
+            const seenPriceId = lineItems.data[0]?.price?.id;
+            const matched = entryForPriceId(seenPriceId, process.env);
             if (matched) {
               productKey = matched.productKey;
               tokenAmount = matched.tokenAmount ?? 0;
+            } else {
+              // entryForPriceId matches on the STRIPE_PRICE_* env vars, so a live
+              // price that is only reachable via a STRIPE_PAYMENT_LINK_* env var
+              // resolves to NOTHING and silently books the sale as an
+              // AudienceDecoder report. Never let that pass quietly.
+              console.error(
+                `[stripe_webhook] price ${seenPriceId} matches no STRIPE_PRICE_* env var — ` +
+                `recording as ${productKey}. If this is a payment-link product, its ` +
+                `STRIPE_PRICE_* var must ALSO be set for attribution to work.`,
+              );
             }
           } catch { /* default to audiencedecoder */ }
 
@@ -343,11 +354,21 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       let productKey: string = PRODUCT_KEYS.CONTENTGRADE_PRO;
       try {
         const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 1 });
-        const matched = entryForPriceId(lineItems.data[0]?.price?.id, process.env);
+        const seenPriceId = lineItems.data[0]?.price?.id;
+        const matched = entryForPriceId(seenPriceId, process.env);
         if (matched) productKey = matched.productKey;
         // else: no catalog entry resolves for this price — fall back to contentgrade_pro
         // as a last resort so any purchase path that doesn't cleanly resolve still gets
-        // a license rather than an error page.
+        // a license rather than an error page. That fallback hands a Pro LICENSE KEY to
+        // whoever paid, so an unmatched price is never routine — a $5 tip bought through
+        // a payment link whose STRIPE_PRICE_* var is unset lands here. Log it loudly.
+        else {
+          console.error(
+            `[checkout_success] price ${seenPriceId} matches no STRIPE_PRICE_* env var — ` +
+            `issuing a ${productKey} license by fallback. Set the product's STRIPE_PRICE_* ` +
+            `var (payment-link products need it too) to stop mis-issuing licenses.`,
+          );
+        }
       } catch (err: any) {
         console.error('[checkout_success] line item resolution failed, falling back to contentgrade_pro:', err.message, 'session:', sessionId);
       }

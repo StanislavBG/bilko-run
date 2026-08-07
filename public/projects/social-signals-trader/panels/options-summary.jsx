@@ -200,7 +200,69 @@ function ConfCell({ value }) {
   return <span className="mono-dim">{value}</span>;
 }
 
-function PositionsTable({ lines }) {
+// --- row -> record.positions[] identity match --------------------------
+// The "Spread" cell is rendered by options_summary_render.py as
+// `f"{underlying} {right} {short_strike}/{long_strike} {expiry}"` — parse it
+// back into typed fields rather than string-comparing against the record's
+// own formatting (float repr can drift, e.g. "255" vs "255.0").
+const SPREAD_LABEL_RE = /^(\S+)\s+(call|put)\s+([\d.]+)\/([\d.]+)\s+(\d\d\d\d-\d\d-\d\d)$/i;
+
+function parseSpreadLabel(label) {
+  const m = SPREAD_LABEL_RE.exec((label || "").trim());
+  if (!m) return null;
+  return {
+    underlying: m[1],
+    right: m[2].toLowerCase(),
+    shortStrike: Number(m[3]),
+    longStrike: Number(m[4]),
+    expiry: m[5],
+  };
+}
+
+function positionMatchesLabel(pos, parsed) {
+  if (!pos || !parsed) return false;
+  return (
+    pos.underlying === parsed.underlying &&
+    String(pos.right).toLowerCase() === parsed.right &&
+    Number(pos.short_strike) === parsed.shortStrike &&
+    Number(pos.long_strike) === parsed.longStrike &&
+    pos.expiry === parsed.expiry
+  );
+}
+
+// A row only becomes a link when its `entry.tag` (== client_order_id) both
+// resolves to exactly one SPREAD_LOG event AND that event describes the same
+// spread (underlying/right/short strike/expiry) as the position — a stale or
+// reused client_order_id must never link to the wrong trade.
+function eventMatchesPosition(pos, ev) {
+  if (!pos || !ev || !window.SpreadFormat) return false;
+  const parsed = window.SpreadFormat.parseOccSymbol(ev.short);
+  if (!parsed) return false;
+  return (
+    parsed.root === pos.underlying &&
+    parsed.right.toLowerCase() === String(pos.right).toLowerCase() &&
+    Number(parsed.strike) === Number(pos.short_strike) &&
+    parsed.expiry === pos.expiry
+  );
+}
+
+function tradeKeyForPosition(pos) {
+  const tag = pos && pos.entry && pos.entry.tag;
+  const events = (window.SPREAD_LOG && window.SPREAD_LOG.events) || [];
+  const internals = window.OptionsTradeLogInternals;
+  if (!tag || !events.length || !internals) return null;
+  const candidates = [];
+  events.forEach((ev, i) => {
+    if (ev && ev.client_order_id === tag && eventMatchesPosition(pos, ev)) {
+      candidates.push({ ev, i });
+    }
+  });
+  if (candidates.length !== 1) return null;
+  const { ev, i } = candidates[0];
+  return internals.tradeKey(ev, i);
+}
+
+function PositionsTable({ lines, positions }) {
   const table = tableOf(lines);
   if (!table) {
     return (
@@ -212,6 +274,8 @@ function PositionsTable({ lines }) {
   const { header, body } = table;
   const bandCol = header.findIndex((h) => h === "LIVE band");
   const confCol = header.findIndex((h) => h === "conf");
+  const spreadCol = header.findIndex((h) => h === "Spread");
+  const posList = positions || [];
   return (
     <div className="opt-table-scroll">
       <table className="opt-table opt-table--orders opts-positions-table">
@@ -225,33 +289,54 @@ function PositionsTable({ lines }) {
           </tr>
         </thead>
         <tbody>
-          {body.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((cell, ci) => (
-                <td key={ci} className={colClass(ci, "mono-dim")}>
-                  {ci === bandCol ? (
-                    <BandBadge value={cell} />
-                  ) : ci === confCol ? (
-                    <ConfCell value={cell} />
-                  ) : FROZEN_COLS.has(ci) ? (
-                    cell
-                  ) : (
-                    colorizeSigned(cell)
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {body.map((row, ri) => {
+            const parsedLabel = spreadCol >= 0 ? parseSpreadLabel(row[spreadCol]) : null;
+            const pos = parsedLabel ? posList.find((p) => positionMatchesLabel(p, parsedLabel)) : null;
+            const key = pos ? tradeKeyForPosition(pos) : null;
+            const openDetail = key != null ? () => { location.hash = "trade/" + encodeURIComponent(key); } : null;
+            const onKeyDown = openDetail
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openDetail();
+                  }
+                }
+              : undefined;
+            return (
+              <tr
+                key={ri}
+                className={openDetail ? "opt-row" : undefined}
+                onClick={openDetail || undefined}
+                tabIndex={openDetail ? 0 : undefined}
+                role={openDetail ? "link" : undefined}
+                onKeyDown={onKeyDown}
+              >
+                {row.map((cell, ci) => (
+                  <td key={ci} className={colClass(ci, "mono-dim")}>
+                    {ci === bandCol ? (
+                      <BandBadge value={cell} />
+                    ) : ci === confCol ? (
+                      <ConfCell value={cell} />
+                    ) : FROZEN_COLS.has(ci) ? (
+                      cell
+                    ) : (
+                      colorizeSigned(cell)
+                    )}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-function PositionsSection({ lines }) {
+function PositionsSection({ lines, positions }) {
   return (
     <Section title="Positions — entry snapshot (frozen) vs now (live)">
-      <PositionsTable lines={lines} />
+      <PositionsTable lines={lines} positions={positions} />
     </Section>
   );
 }
@@ -391,7 +476,10 @@ function OptionsSummaryPanel({ data }) {
       <div className="opt-log-stack">
         <Headline text={headlineText} staleLabel={staleLabel} />
         <WhereBookStands lines={findSection(sections, "Where the book stands").lines} />
-        <PositionsSection lines={findSection(sections, "Positions — entry snapshot (frozen) vs now (live)").lines} />
+        <PositionsSection
+          lines={findSection(sections, "Positions — entry snapshot (frozen) vs now (live)").lines}
+          positions={summaryData.record.positions}
+        />
         <WhatWeThink lines={findSection(sections, "What we think right now").lines} />
         <ActionQueue lines={findSection(sections, "Action queue").lines} />
         <OpenQueue lines={findSection(sections, "Open queue").lines} />

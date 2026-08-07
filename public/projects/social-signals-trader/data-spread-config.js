@@ -1,5 +1,5 @@
 window.SPREAD_CONFIG = {
-  "generatedAt": "2026-08-07T13:00:58+00:00",
+  "generatedAt": "2026-08-07T13:45:35+00:00",
   "strategy": "CREDIT_SPREAD",
   "config": {
     "tickers": [

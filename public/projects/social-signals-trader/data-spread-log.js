@@ -1,7 +1,542 @@
 window.SPREAD_LOG = {
-  "generatedAt": "2026-08-07T13:00:58+00:00",
+  "generatedAt": "2026-08-07T13:45:35+00:00",
   "strategy": "CREDIT_SPREAD",
   "events": [
+    {
+      "ts": "2026-08-07T13:45:24+00:00",
+      "event": "open",
+      "strategy": "CREDIT_SPREAD",
+      "ticker": "TLT",
+      "spot_at_entry": 82.83,
+      "short": "TLT260817P00081000",
+      "long": "TLT260817P00080500",
+      "short_strike": 81.0,
+      "long_strike": 80.5,
+      "width": 0.5,
+      "expiry": "2026-08-17",
+      "contracts": 227,
+      "credit": 1362.0,
+      "credit_per_contract": 6.0,
+      "risk": 9988.0,
+      "ev": 36.32,
+      "pop": 0.8831,
+      "dte": 10,
+      "iv_at_entry": 0.1201,
+      "profit_target_pct": 0.8,
+      "entry_legs": {
+        "TLT260817P00080500": {
+          "symbol": "TLT260817P00080500",
+          "underlying": "TLT",
+          "right": "put",
+          "strike": 80.5,
+          "expiry": "2026-08-17",
+          "dte": 10,
+          "bid": 0.02,
+          "ask": 0.03,
+          "mid": 0.025,
+          "last": 0.1,
+          "iv": 0.1039,
+          "greeks": {
+            "delta": -0.0428,
+            "gamma": 0.0639,
+            "theta": -0.0061,
+            "vega": 0.0125,
+            "rho": -0.001
+          },
+          "volume": 4,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:41:39.630397363Z"
+        },
+        "TLT260817P00081000": {
+          "symbol": "TLT260817P00081000",
+          "underlying": "TLT",
+          "right": "put",
+          "strike": 81.0,
+          "expiry": "2026-08-17",
+          "dte": 10,
+          "bid": 0.09,
+          "ask": 0.1,
+          "mid": 0.095,
+          "last": 0.15,
+          "iv": 0.1192,
+          "greeks": {
+            "delta": -0.1177,
+            "gamma": 0.1207,
+            "theta": -0.0151,
+            "vega": 0.027,
+            "rho": -0.0027
+          },
+          "volume": 19,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:41:51.875255919Z"
+        }
+      },
+      "status": "submitted",
+      "client_order_id": "CREDIT_SPREAD_TLT_20260817_8100",
+      "response": {
+        "client_order_id": "CREDIT_SPREAD_TLT_20260817_8100",
+        "created_at": "2026-08-07T13:45:24.924665352Z",
+        "filled_qty": "0",
+        "id": "f56cf482-f777-469a-a4a7-47209d80d415",
+        "legs": [
+          {
+            "filled_avg_price": null,
+            "filled_qty": "0",
+            "status": "new",
+            "symbol": "TLT260817P00081000"
+          },
+          {
+            "filled_avg_price": null,
+            "filled_qty": "0",
+            "status": "new",
+            "symbol": "TLT260817P00080500"
+          }
+        ],
+        "limit_price": "0.06",
+        "notional": null,
+        "order_class": "mleg",
+        "order_type": "limit",
+        "qty": "227",
+        "status": "new",
+        "submitted_at": "2026-08-07T13:45:24.924665352Z",
+        "time_in_force": "day",
+        "type": "limit",
+        "updated_at": "2026-08-07T13:45:24.936376312Z",
+        "canceled_at": null,
+        "expired_at": null,
+        "filled_at": null,
+        "filled_avg_price": null,
+        "reconciled_at": "2026-08-07T13:45:35+00:00"
+      }
+    },
+    {
+      "ts": "2026-08-07T13:45:24+00:00",
+      "event": "open",
+      "strategy": "CREDIT_SPREAD",
+      "ticker": "NFLX",
+      "spot_at_entry": 73.67,
+      "short": "NFLX260821P00065000",
+      "long": "NFLX260821P00064000",
+      "short_strike": 65.0,
+      "long_strike": 64.0,
+      "width": 1.0,
+      "expiry": "2026-08-21",
+      "contracts": 105,
+      "credit": 525.0,
+      "credit_per_contract": 5.0,
+      "risk": 9975.0,
+      "ev": 89.25,
+      "pop": 0.9585,
+      "dte": 14,
+      "iv_at_entry": 0.3806,
+      "profit_target_pct": 0.8,
+      "entry_legs": {
+        "NFLX260821P00064000": {
+          "symbol": "NFLX260821P00064000",
+          "underlying": "NFLX",
+          "right": "put",
+          "strike": 64.0,
+          "expiry": "2026-08-21",
+          "dte": 14,
+          "bid": 0.03,
+          "ask": 0.04,
+          "mid": 0.035,
+          "last": 0.07,
+          "iv": 0.3555,
+          "greeks": {
+            "delta": -0.0183,
+            "gamma": 0.0088,
+            "theta": -0.0081,
+            "vega": 0.0065,
+            "rho": -0.0005
+          },
+          "volume": 132,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:44:59.55319743Z"
+        },
+        "NFLX260821P00065000": {
+          "symbol": "NFLX260821P00065000",
+          "underlying": "NFLX",
+          "right": "put",
+          "strike": 65.0,
+          "expiry": "2026-08-21",
+          "dte": 14,
+          "bid": 0.05,
+          "ask": 0.1,
+          "mid": 0.075,
+          "last": 0.1,
+          "iv": 0.3665,
+          "greeks": {
+            "delta": -0.0349,
+            "gamma": 0.0146,
+            "theta": -0.0143,
+            "vega": 0.0111,
+            "rho": -0.001
+          },
+          "volume": 189,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:44:56.167051689Z"
+        }
+      },
+      "status": "submitted",
+      "client_order_id": "CREDIT_SPREAD_NFLX_20260821_6500",
+      "response": {
+        "client_order_id": "CREDIT_SPREAD_NFLX_20260821_6500",
+        "created_at": "2026-08-07T13:45:24.120202138Z",
+        "filled_qty": "105",
+        "id": "cecbf318-1780-4f02-b0f5-f64ecd9de099",
+        "legs": [
+          {
+            "filled_avg_price": "0.07",
+            "filled_qty": "105",
+            "status": "filled",
+            "symbol": "NFLX260821P00065000"
+          },
+          {
+            "filled_avg_price": "0.06",
+            "filled_qty": "105",
+            "status": "filled",
+            "symbol": "NFLX260821P00064000"
+          }
+        ],
+        "limit_price": "0.05",
+        "notional": null,
+        "order_class": "mleg",
+        "order_type": "limit",
+        "qty": "105",
+        "status": "filled",
+        "submitted_at": "2026-08-07T13:45:24.120202138Z",
+        "time_in_force": "day",
+        "type": "limit",
+        "updated_at": "2026-08-07T13:45:24.136419618Z",
+        "canceled_at": null,
+        "expired_at": null,
+        "filled_at": "2026-08-07T13:45:24.24418993Z",
+        "filled_avg_price": "-0.01",
+        "reconciled_at": "2026-08-07T13:45:35+00:00"
+      }
+    },
+    {
+      "ts": "2026-08-07T13:45:23+00:00",
+      "event": "open",
+      "strategy": "CREDIT_SPREAD",
+      "ticker": "PLTR",
+      "spot_at_entry": 164.8,
+      "short": "PLTR260814P00150000",
+      "long": "PLTR260814P00149000",
+      "short_strike": 150.0,
+      "long_strike": 149.0,
+      "width": 1.0,
+      "expiry": "2026-08-14",
+      "contracts": 181,
+      "credit": 8145.0,
+      "credit_per_contract": 45.0,
+      "risk": 9955.0,
+      "ev": 5487.92,
+      "pop": 0.8532,
+      "dte": 7,
+      "iv_at_entry": 0.6825,
+      "profit_target_pct": 0.8,
+      "entry_legs": {
+        "PLTR260814P00149000": {
+          "symbol": "PLTR260814P00149000",
+          "underlying": "PLTR",
+          "right": "put",
+          "strike": 149.0,
+          "expiry": "2026-08-14",
+          "dte": 7,
+          "bid": 0.55,
+          "ask": 0.57,
+          "mid": 0.56,
+          "last": 0.57,
+          "iv": 0.5638,
+          "greeks": {
+            "delta": -0.0908,
+            "gamma": 0.0127,
+            "theta": -0.1486,
+            "vega": 0.0373,
+            "rho": -0.003
+          },
+          "volume": 1,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:41:40.98410912Z"
+        },
+        "PLTR260814P00150000": {
+          "symbol": "PLTR260814P00150000",
+          "underlying": "PLTR",
+          "right": "put",
+          "strike": 150.0,
+          "expiry": "2026-08-14",
+          "dte": 7,
+          "bid": 1.02,
+          "ask": 1.44,
+          "mid": 1.23,
+          "last": 1.05,
+          "iv": 0.6815,
+          "greeks": {
+            "delta": -0.147,
+            "gamma": 0.0148,
+            "theta": -0.253,
+            "vega": 0.0525,
+            "rho": -0.0049
+          },
+          "volume": 15,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:30:01.959419317Z"
+        }
+      },
+      "status": "submitted",
+      "client_order_id": "CREDIT_SPREAD_PLTR_20260814_15000",
+      "response": {
+        "client_order_id": "CREDIT_SPREAD_PLTR_20260814_15000",
+        "created_at": "2026-08-07T13:45:23.306479494Z",
+        "filled_qty": "0",
+        "id": "89d949f0-34c6-4730-a3ce-b1cfde783866",
+        "legs": [
+          {
+            "filled_avg_price": null,
+            "filled_qty": "0",
+            "status": "new",
+            "symbol": "PLTR260814P00150000"
+          },
+          {
+            "filled_avg_price": null,
+            "filled_qty": "0",
+            "status": "new",
+            "symbol": "PLTR260814P00149000"
+          }
+        ],
+        "limit_price": "0.45",
+        "notional": null,
+        "order_class": "mleg",
+        "order_type": "limit",
+        "qty": "181",
+        "status": "new",
+        "submitted_at": "2026-08-07T13:45:23.306479494Z",
+        "time_in_force": "day",
+        "type": "limit",
+        "updated_at": "2026-08-07T13:45:23.312216074Z",
+        "canceled_at": null,
+        "expired_at": null,
+        "filled_at": null,
+        "filled_avg_price": null,
+        "reconciled_at": "2026-08-07T13:45:35+00:00"
+      }
+    },
+    {
+      "ts": "2026-08-07T13:40:01+00:00",
+      "event": "open",
+      "strategy": "CREDIT_SPREAD",
+      "ticker": "SLV",
+      "spot_at_entry": 58.13,
+      "short": "SLV260814P00053500",
+      "long": "SLV260814P00053000",
+      "short_strike": 53.5,
+      "long_strike": 53.0,
+      "width": 0.5,
+      "expiry": "2026-08-14",
+      "contracts": 222,
+      "credit": 1110.0,
+      "credit_per_contract": 5.0,
+      "risk": 9990.0,
+      "ev": 17.76,
+      "pop": 0.9015,
+      "dte": 7,
+      "iv_at_entry": 0.4808,
+      "profit_target_pct": 0.8,
+      "entry_legs": {
+        "SLV260814P00053000": {
+          "symbol": "SLV260814P00053000",
+          "underlying": "SLV",
+          "right": "put",
+          "strike": 53.0,
+          "expiry": "2026-08-14",
+          "dte": 7,
+          "bid": 0.14,
+          "ask": 0.15,
+          "mid": 0.145,
+          "last": 0.39,
+          "iv": 0.4895,
+          "greeks": {
+            "delta": -0.0791,
+            "gamma": 0.0374,
+            "theta": -0.041,
+            "vega": 0.0119,
+            "rho": -0.0009
+          },
+          "volume": 102,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:39:33.162632453Z"
+        },
+        "SLV260814P00053500": {
+          "symbol": "SLV260814P00053500",
+          "underlying": "SLV",
+          "right": "put",
+          "strike": 53.5,
+          "expiry": "2026-08-14",
+          "dte": 7,
+          "bid": 0.12,
+          "ask": 0.17,
+          "mid": 0.145,
+          "last": 0.49,
+          "iv": 0.4517,
+          "greeks": {
+            "delta": -0.0848,
+            "gamma": 0.0427,
+            "theta": -0.0398,
+            "vega": 0.0125,
+            "rho": -0.001
+          },
+          "volume": 64,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:39:32.673225688Z"
+        }
+      },
+      "status": "submitted",
+      "client_order_id": "CREDIT_SPREAD_SLV_20260814_5350",
+      "response": {
+        "client_order_id": "CREDIT_SPREAD_SLV_20260814_5350",
+        "created_at": "2026-08-07T13:40:01.476793934Z",
+        "filled_qty": "0",
+        "id": "79cdd41f-24f5-47ee-af7b-ee38999058c4",
+        "legs": [
+          {
+            "filled_avg_price": null,
+            "filled_qty": "0",
+            "status": "new",
+            "symbol": "SLV260814P00053500"
+          },
+          {
+            "filled_avg_price": null,
+            "filled_qty": "0",
+            "status": "new",
+            "symbol": "SLV260814P00053000"
+          }
+        ],
+        "limit_price": "0.05",
+        "notional": null,
+        "order_class": "mleg",
+        "order_type": "limit",
+        "qty": "222",
+        "status": "new",
+        "submitted_at": "2026-08-07T13:40:01.476793934Z",
+        "time_in_force": "day",
+        "type": "limit",
+        "updated_at": "2026-08-07T13:40:01.521767015Z",
+        "canceled_at": null,
+        "expired_at": null,
+        "filled_at": null,
+        "filled_avg_price": null,
+        "reconciled_at": "2026-08-07T13:45:35+00:00"
+      }
+    },
+    {
+      "ts": "2026-08-07T13:40:00+00:00",
+      "event": "open",
+      "strategy": "CREDIT_SPREAD",
+      "ticker": "TSLA",
+      "spot_at_entry": 324.2,
+      "short": "TSLA260812P00305000",
+      "long": "TSLA260812P00302500",
+      "short_strike": 305.0,
+      "long_strike": 302.5,
+      "width": 2.5,
+      "expiry": "2026-08-12",
+      "contracts": 46,
+      "credit": 1610.0,
+      "credit_per_contract": 35.0,
+      "risk": 9890.0,
+      "ev": 252.08,
+      "pop": 0.8819,
+      "dte": 5,
+      "iv_at_entry": 0.4539,
+      "profit_target_pct": 0.8,
+      "entry_legs": {
+        "TSLA260812P00302500": {
+          "symbol": "TSLA260812P00302500",
+          "underlying": "TSLA",
+          "right": "put",
+          "strike": 302.5,
+          "expiry": "2026-08-12",
+          "dte": 5,
+          "bid": 0.62,
+          "ask": 0.65,
+          "mid": 0.635,
+          "last": 1.2,
+          "iv": 0.4355,
+          "greeks": {
+            "delta": -0.0826,
+            "gamma": 0.0092,
+            "theta": -0.2488,
+            "vega": 0.0578,
+            "rho": -0.0038
+          },
+          "volume": 95,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:39:11.185912561Z"
+        },
+        "TSLA260812P00305000": {
+          "symbol": "TSLA260812P00305000",
+          "underlying": "TSLA",
+          "right": "put",
+          "strike": 305.0,
+          "expiry": "2026-08-12",
+          "dte": 5,
+          "bid": 1.0,
+          "ask": 1.04,
+          "mid": 1.02,
+          "last": 1.51,
+          "iv": 0.4523,
+          "greeks": {
+            "delta": -0.1184,
+            "gamma": 0.0116,
+            "theta": -0.3361,
+            "vega": 0.0752,
+            "rho": -0.0054
+          },
+          "volume": 345,
+          "open_interest": 0,
+          "quote_ts": "2026-08-07T13:37:54.683322441Z"
+        }
+      },
+      "status": "submitted",
+      "client_order_id": "CREDIT_SPREAD_TSLA_20260812_30500",
+      "response": {
+        "client_order_id": "CREDIT_SPREAD_TSLA_20260812_30500",
+        "created_at": "2026-08-07T13:40:00.643292046Z",
+        "filled_qty": "46",
+        "id": "bd62d8b4-31d1-4167-8694-ed0ebd52ecb3",
+        "legs": [
+          {
+            "filled_avg_price": "0.98",
+            "filled_qty": "46",
+            "status": "filled",
+            "symbol": "TSLA260812P00305000"
+          },
+          {
+            "filled_avg_price": "0.62",
+            "filled_qty": "46",
+            "status": "filled",
+            "symbol": "TSLA260812P00302500"
+          }
+        ],
+        "limit_price": "0.35",
+        "notional": null,
+        "order_class": "mleg",
+        "order_type": "limit",
+        "qty": "46",
+        "status": "filled",
+        "submitted_at": "2026-08-07T13:40:00.643292046Z",
+        "time_in_force": "day",
+        "type": "limit",
+        "updated_at": "2026-08-07T13:40:00.667852476Z",
+        "canceled_at": null,
+        "expired_at": null,
+        "filled_at": "2026-08-07T13:40:17.618555Z",
+        "filled_avg_price": "-0.36",
+        "reconciled_at": "2026-08-07T13:45:35+00:00"
+      }
+    },
     {
       "ts": "2026-08-06T23:19:51+00:00",
       "strategy": "CREDIT_SPREAD",
@@ -19,19 +554,19 @@ window.SPREAD_LOG = {
       "response": {
         "client_order_id": "CREDIT_SPREAD_SPY_20260810_77700",
         "created_at": "2026-08-06T23:19:51.795287746Z",
-        "filled_qty": "0",
+        "filled_qty": "121",
         "id": "fcceee63-4644-4475-879a-051bfdf23913",
         "legs": [
           {
-            "filled_avg_price": null,
-            "filled_qty": "0",
-            "status": "accepted",
+            "filled_avg_price": "0.69",
+            "filled_qty": "121",
+            "status": "filled",
             "symbol": "SPY260810C00777000"
           },
           {
-            "filled_avg_price": null,
-            "filled_qty": "0",
-            "status": "accepted",
+            "filled_avg_price": "0.54",
+            "filled_qty": "121",
+            "status": "filled",
             "symbol": "SPY260810C00778000"
           }
         ],
@@ -40,16 +575,16 @@ window.SPREAD_LOG = {
         "order_class": "mleg",
         "order_type": "limit",
         "qty": "121",
-        "status": "accepted",
+        "status": "filled",
         "submitted_at": "2026-08-06T23:19:51.795287746Z",
         "time_in_force": "day",
         "type": "limit",
         "updated_at": "2026-08-06T23:19:51.797354956Z",
         "canceled_at": null,
         "expired_at": null,
-        "filled_at": null,
-        "filled_avg_price": null,
-        "reconciled_at": "2026-08-07T13:00:58+00:00"
+        "filled_at": "2026-08-07T13:30:42.607025Z",
+        "filled_avg_price": "-0.15",
+        "reconciled_at": "2026-08-07T13:40:08+00:00"
       }
     }
   ]

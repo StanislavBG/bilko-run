@@ -27,6 +27,9 @@
   <script src="lib/live-snapshot.js"></script>
   <script src="lib/sb-client.js"></script>
   <script src="lib/optimization-client.js"></script>
+  <!-- Shared OCC parser + spread classifier + breakeven math — CurrentPositions,
+       TradesTable, and options-trade-log.jsx all reuse this, not three parsers. -->
+  <script src="lib/spread-format.js"></script>
   <script src="fixtures/signals_history.example.js"></script>
   <script src="fixtures/optimization_history.example.js"></script>
   <script type="text/babel" src="pages/signals-tab.jsx"></script>

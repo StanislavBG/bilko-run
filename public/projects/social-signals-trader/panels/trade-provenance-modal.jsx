@@ -337,6 +337,47 @@ function RationaleList({ rationale }) {
   );
 }
 
+// PRD 999 — a PRD 998 spread row (`type: "OPTION_SPREAD"`) carries its own
+// `legs[]` (parsed OCC symbol, side, qty, entry/exit price per leg) instead of
+// thesis provenance sources. Expand those on click rather than showing the
+// equity-flavoured Sources/Conviction sections, which have nothing to say
+// about a two-leg vertical.
+function SpreadLegsList({ legs }) {
+  const { money } = window.SpreadFormat;
+  if (!Array.isArray(legs) || legs.length === 0) {
+    return (
+      <div className="dim" style={{ fontFamily: "var(--mono)", fontSize: 11 }}>
+        no leg detail captured
+      </div>
+    );
+  }
+  return (
+    <table className="opt-table" style={{ width: "100%" }}>
+      <thead>
+        <tr>
+          <th className="al">Leg</th><th className="al">Side</th><th>Qty</th>
+          <th>Entry</th><th>Exit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {legs.map((l, i) => (
+          <tr key={l.symbol || i}>
+            <td className="al mono-dim">
+              {l.underlying && l.strike != null && l.right
+                ? `${l.underlying} $${l.strike} ${l.right} exp ${l.expiry}`
+                : l.symbol}
+            </td>
+            <td className="al">{l.side || l.positionIntent || "—"}</td>
+            <td>{l.qty}</td>
+            <td>{money(l.entryPrice)}</td>
+            <td>{l.exitPrice != null ? money(l.exitPrice) : "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function TradeProvenanceModal({ trade, provenance, onClose }) {
   // Esc closes; clicks on the backdrop close; clicks inside the modal don't.
   React.useEffect(() => {
@@ -498,6 +539,12 @@ function TradeProvenanceModal({ trade, provenance, onClose }) {
             )}
           </span>
         </div>
+
+        {trade.type === "OPTION_SPREAD" && (
+          <_Section title="Legs">
+            <SpreadLegsList legs={trade.legs} />
+          </_Section>
+        )}
 
         {!p ? (
           <p

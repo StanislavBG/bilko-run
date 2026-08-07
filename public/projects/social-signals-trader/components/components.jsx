@@ -601,6 +601,20 @@ function TierBadge({ tier }) {
 }
 window.TierBadge = TierBadge;
 
+// A PRD 998 mleg spread row (`type: "OPTION_SPREAD"`) — one row per spread,
+// never one per leg. `side`/`entry`/`exit` are null on these rows (there's no
+// single entry/exit price for a two-leg vertical), so the table renders
+// structure/credit/breakeven in their place instead of crashing on
+// `null.toFixed`.
+function tradeStructureLabel(t) {
+  if (t.type !== "OPTION_SPREAD" || !t.right) return null;
+  const { spreadStructure } = window.SpreadFormat;
+  const shortParsed = { right: t.right, strike: t.shortStrike };
+  const longParsed = { right: t.right, strike: t.longStrike };
+  const s = spreadStructure(shortParsed, longParsed, t.ticker);
+  return s ? s.name : "Credit spread";
+}
+
 // ============== Trades table ==============
 function TradesTable({ trades, bmcUrl }) {
   const [filter, setFilter] = useState("ALL");
@@ -613,6 +627,7 @@ function TradesTable({ trades, bmcUrl }) {
     return true;
   });
   const fmt$ = (v) => (v >= 0 ? "+$" : "−$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const { money } = window.SpreadFormat;
   return (
     <div className="card">
       <div className="card-head">
@@ -641,38 +656,58 @@ function TradesTable({ trades, bmcUrl }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((t) => (
-              <tr
-                key={t.id}
-                onClick={() => setOpenTrade(t)}
-                style={{ cursor: "pointer" }}
-                title="Click for provenance"
-              >
-                <td className="dim">{t.id}</td>
-                <td>
-                  <div className="ticker">{t.ticker}</div>
-                  <div className="sub-cell">{t.opened}{t.closed ? ` → ${t.closed}` : " · open"}</div>
-                </td>
-                <td><span className={`pill ${t.side === "LONG" ? "long" : "short"}`}>{t.side}</span></td>
-                <td className="dim">{t.type}</td>
-                <td><span className={`pill ${t.status === "OPEN" ? "open" : "closed"}`}>{t.status}</span></td>
-                <td className="num">{t.entry.toFixed(2)}</td>
-                <td className="num dim">{t.exit ? t.exit.toFixed(2) : "—"}</td>
-                <td className="num dim">{t.qty}</td>
-                <td className={`num ${t.pnl >= 0 ? "up" : "down"}`}>
-                  {fmt$(t.pnl)}
-                  <div className="sub-cell" style={{ color: t.pnl >= 0 ? "var(--pos)" : "var(--neg)", opacity: 0.7 }}>{t.pnlPct >= 0 ? "+" : ""}{t.pnlPct.toFixed(1)}%</div>
-                  {t.pnl > 1000 && t.status === "CLOSED" && (
-                    <a className="tip-inline" href={bmcUrl} target="_blank" rel="noreferrer" title="Tip the trader" onClick={(e) => e.stopPropagation()}>☕ tip</a>
+            {filtered.map((t) => {
+              const isSpread = t.type === "OPTION_SPREAD";
+              const structureLabel = tradeStructureLabel(t);
+              return (
+                <tr
+                  key={t.id}
+                  onClick={() => setOpenTrade(t)}
+                  style={{ cursor: "pointer" }}
+                  title="Click for provenance"
+                >
+                  <td className="dim">{t.id}</td>
+                  <td>
+                    <div className="ticker">{t.ticker}</div>
+                    <div className="sub-cell">{t.opened}{t.closed ? ` → ${t.closed}` : " · open"}</div>
+                  </td>
+                  <td>
+                    {isSpread
+                      ? <span className="pill">{t.right || "SPREAD"}</span>
+                      : <span className={`pill ${t.side === "LONG" ? "long" : "short"}`}>{t.side}</span>}
+                  </td>
+                  <td className="dim">{isSpread ? (structureLabel || "SPREAD") : t.type}</td>
+                  <td><span className={`pill ${t.status === "OPEN" ? "open" : "closed"}`}>{t.status}</span></td>
+                  {isSpread ? (
+                    <>
+                      <td className="num" title="Credit received">{money(t.credit)}</td>
+                      <td className="num dim" title="Breakeven">{t.breakeven != null ? money(t.breakeven) : "—"}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="num">{t.entry != null ? t.entry.toFixed(2) : "—"}</td>
+                      <td className="num dim">{t.exit != null ? t.exit.toFixed(2) : "—"}</td>
+                    </>
                   )}
-                </td>
-                <td className="dim">{t.source}</td>
-                <td className="dim" style={{ fontSize: 10.5, maxWidth: 180 }}>
-                  <TierBadge tier={t.tier} />
-                  {t.note}
-                </td>
-              </tr>
-            ))}
+                  <td className="num dim">{t.qty}</td>
+                  <td className={`num ${t.pnl >= 0 ? "up" : "down"}`}>
+                    {fmt$(t.pnl)}
+                    <div className="sub-cell" style={{ color: t.pnl >= 0 ? "var(--pos)" : "var(--neg)", opacity: 0.7 }}>{(t.pnlPct >= 0 ? "+" : "") + (t.pnlPct || 0).toFixed(1)}%</div>
+                    {t.pnl > 1000 && t.status === "CLOSED" && (
+                      <a className="tip-inline" href={bmcUrl} target="_blank" rel="noreferrer" title="Tip the trader" onClick={(e) => e.stopPropagation()}>☕ tip</a>
+                    )}
+                  </td>
+                  <td className="dim">{t.source}</td>
+                  <td className="dim" style={{ fontSize: 10.5, maxWidth: 180 }}>
+                    <TierBadge tier={t.tier} />
+                    {isSpread && t.shortStrike != null && t.longStrike != null && (
+                      <span className="mono-dim">${t.shortStrike}/${t.longStrike} exp {t.expiry} (DTE {t.dte}) · </span>
+                    )}
+                    {t.note}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -909,85 +944,265 @@ function Watchlist({ detail, passed }) {
   );
 }
 
+// --- Option-leg grouping for CurrentPositions ---------------------------
+// window.POSITIONS is the raw Alpaca book: one row PER OPTION LEG, not per
+// spread — a 2-leg vertical shows up as two SHORT/LONG rows on the same
+// underlying. Pair legs into verticals by (underlying, expiry, right):
+// exactly one SHORT + one LONG in a bucket is a clean vertical; anything left
+// over (assignment leftover, one leg already closed, three legs on one
+// expiry) renders as an explicit unpaired-leg row rather than being dropped
+// or mis-paired with an unrelated leg on the same underlying. Two spreads on
+// the same underlying at different expiries land in different buckets (the
+// key includes expiry) so they never collapse into one row.
+function groupPositionLegsIntoSpreads(positions) {
+  const { parseOccSymbol } = window.SpreadFormat;
+  const equity = [];
+  const buckets = {};
+  (positions || []).forEach((p) => {
+    const parsed = parseOccSymbol(p.ticker);
+    if (!parsed) {
+      equity.push(p);
+      return;
+    }
+    const key = `${parsed.root}|${parsed.expiry}|${parsed.right}`;
+    (buckets[key] = buckets[key] || []).push(Object.assign({}, p, { parsed }));
+  });
+
+  const spreads = [];
+  const unpaired = [];
+  Object.keys(buckets).forEach((key) => {
+    const legs = buckets[key];
+    const shorts = legs.filter((l) => l.side === "SHORT");
+    const longs = legs.filter((l) => l.side === "LONG");
+    while (shorts.length && longs.length) {
+      spreads.push(buildSpreadRow(shorts.shift(), longs.shift()));
+    }
+    shorts.forEach((l) => unpaired.push(l));
+    longs.forEach((l) => unpaired.push(l));
+  });
+
+  return { spreads, unpaired, equity };
+}
+
+function buildSpreadRow(shortLeg, longLeg) {
+  const { spreadStructure, breakeven, dteFromExpiry, money } = window.SpreadFormat;
+  const structure = spreadStructure(shortLeg.parsed, longLeg.parsed, shortLeg.parsed.root);
+  const contracts = shortLeg.qty || longLeg.qty || 0;
+  // Credit received at entry ≈ (short avg price − long avg price) × contracts
+  // × 100, mirroring aggregations._build_spread_row's per-leg credit math.
+  const credit = (Number(shortLeg.avgEntry || 0) - Number(longLeg.avgEntry || 0)) * contracts * 100;
+  const width = Math.abs(shortLeg.parsed.strike - longLeg.parsed.strike);
+  const maxRisk = width * contracts * 100 - credit;
+  const be = breakeven(shortLeg.parsed, credit, contracts);
+  const pnl = (shortLeg.unrealizedPl || 0) + (longLeg.unrealizedPl || 0);
+  const dte = dteFromExpiry(shortLeg.parsed.expiry);
+  const name = structure ? structure.name : "Credit spread";
+  const rationale = `${name} on ${shortLeg.parsed.root}: short $${shortLeg.parsed.strike} / ` +
+    `long $${longLeg.parsed.strike} exp ${shortLeg.parsed.expiry} — collected ${money(credit)} credit.`;
+  const dteTxt = dte != null ? `${dte}d` : "—";
+  const exitIntent = `Intend to close at the profit target or let it ride to expiry ${shortLeg.parsed.expiry} ` +
+    `(DTE ${dteTxt}); early-assignment risk on the short $${shortLeg.parsed.strike} leg if it goes ` +
+    `in-the-money before then; hard time-stop still applies.`;
+  return {
+    key: `${shortLeg.parsed.root}:${shortLeg.parsed.expiry}:${shortLeg.parsed.right}`,
+    ticker: shortLeg.parsed.root,
+    structure, contracts, credit, maxRisk, breakeven: be, pnl,
+    dte, expiry: shortLeg.parsed.expiry,
+    shortStrike: shortLeg.parsed.strike, longStrike: longLeg.parsed.strike,
+    right: shortLeg.parsed.right,
+    rationale, exitIntent,
+  };
+}
+
+// One row for an option leg that couldn't be paired — still renders (never
+// silently dropped), decoded to plain English, flagged as unpaired.
+function UnpairedLegRow({ p }) {
+  const { plainEnglishLeg, money } = window.SpreadFormat;
+  const fmt$ = (v) => (v >= 0 ? "+$" : "−$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    <tr>
+      <td className="ticker">
+        {p.parsed.root}
+        <span className="pill" style={{ marginLeft: 6, fontSize: 9, borderColor: "var(--warn)", color: "var(--warn)" }}>UNPAIRED LEG</span>
+      </td>
+      <td className="dim">{plainEnglishLeg(p.ticker)}</td>
+      <td><span className={`pill ${p.side === "LONG" ? "long" : "short"}`}>{p.side}</span></td>
+      <td className="num dim">{p.qty}</td>
+      <td className="num">{money(p.avgEntry)}</td>
+      <td className={`num ${p.unrealizedPl >= 0 ? "up" : "down"}`}>{fmt$(p.unrealizedPl || 0)}</td>
+    </tr>
+  );
+}
+
+// One paired vertical spread row: structure, strikes, expiry/DTE, credit,
+// max risk, breakeven, live mark-to-market P&L. Click to expand the
+// spread-flavoured rationale/exit-intent (profit target, DTE, assignment risk
+// — never the equity "cover at the open on T+1" copy).
+function SpreadRow({ s, open, onToggle }) {
+  const { money } = window.SpreadFormat;
+  return (
+    <React.Fragment>
+      <tr onClick={onToggle} style={{ cursor: "pointer" }}>
+        <td className="ticker">
+          {s.ticker}
+          <span style={{ marginLeft: 4, fontSize: 9, color: "var(--muted)", opacity: 0.7 }}>{open ? "▲" : "▼"}</span>
+        </td>
+        <td className="dim">{s.structure ? s.structure.name : "Credit spread"}</td>
+        <td className="dim mono">${s.shortStrike}/${s.longStrike}</td>
+        <td className="dim">{s.expiry} <span className="mono-dim">({s.dte != null ? `${s.dte}d` : "—"})</span></td>
+        <td className="num">{money(s.credit)}</td>
+        <td className="num dim">{money(s.maxRisk)}</td>
+        <td className="num dim">{s.breakeven != null ? money(s.breakeven) : "—"}</td>
+        <td className={`num ${s.pnl >= 0 ? "up" : "down"}`}>{money(s.pnl)}</td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={8} style={{ padding: "4px 8px 8px 28px", background: "var(--surface2, #1a1a2e)" }}>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 3 }}>
+              <span style={{ color: "var(--text)", fontWeight: 600 }}>why: </span>{s.rationale}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>
+              <span style={{ color: "var(--text)", fontWeight: 600 }}>exit: </span>{s.exitIntent}
+            </div>
+          </td>
+        </tr>
+      )}
+    </React.Fragment>
+  );
+}
+
 // Current positions — the FULL open book from Alpaca (source of truth), so the
 // whole book shows, not just catalyst-linked tickers. Reads window.POSITIONS.
+// Option legs are grouped into spreads (PRD 999) — never rendered as bare
+// unpaired OCC rows unless they genuinely have no partner.
 function CurrentPositions({ positions }) {
-  const rows = Array.isArray(positions) ? positions : [];
+  const rawRows = Array.isArray(positions) ? positions : [];
   const fmt$ = (v) => (v >= 0 ? "+$" : "−$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const totalMv = rows.reduce((a, r) => a + (r.marketValue || 0), 0);
-  const totalPl = rows.reduce((a, r) => a + (r.unrealizedPl || 0), 0);
+  const totalMv = rawRows.reduce((a, r) => a + (r.marketValue || 0), 0);
+  const totalPl = rawRows.reduce((a, r) => a + (r.unrealizedPl || 0), 0);
+  const { spreads, unpaired, equity } = React.useMemo(
+    () => groupPositionLegsIntoSpreads(rawRows),
+    [rawRows]
+  );
+  const rowCount = spreads.length + unpaired.length + equity.length;
   const [expanded, setExpanded] = React.useState({});
-  const toggle = (ticker) => setExpanded((s) => ({ ...s, [ticker]: !s[ticker] }));
+  const toggleSpread = (key) => setExpanded((s) => ({ ...s, [key]: !s[key] }));
+  const toggleEquity = (ticker) => setExpanded((s) => ({ ...s, [`eq:${ticker}`]: !s[`eq:${ticker}`] }));
+
   return (
     <div className="card" id="positions">
       <div className="card-head">
-        <h3>Current Positions · {rows.length} open</h3>
+        <h3>Current Positions · {rowCount} open</h3>
         <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>
           MV ${totalMv.toLocaleString("en-US", { maximumFractionDigits: 0 })} · <span className={totalPl >= 0 ? "up" : "down"}>{fmt$(totalPl)}</span> unrealized
         </span>
       </div>
-      <div className="card-body tight" style={{ maxHeight: 520, overflowY: "auto" }}>
-        {rows.length === 0 ? (
+      <div className="card-body tight" style={{ maxHeight: 640, overflowY: "auto" }}>
+        {rowCount === 0 ? (
           <div className="dim" style={{ padding: "12px 4px", fontSize: 12 }}>No open positions.</div>
         ) : (
-        <table className="trades">
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Side</th>
-              <th className="num">Qty</th>
-              <th className="num">Avg Entry</th>
-              <th className="num">Last</th>
-              <th className="num">Mkt Value</th>
-              <th className="num">Unrealized</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <React.Fragment key={p.ticker}>
-                <tr
-                  onClick={() => (p.rationale || p.exit_intent) ? toggle(p.ticker) : null}
-                  style={(p.rationale || p.exit_intent) ? { cursor: "pointer" } : {}}
-                >
-                  <td className="ticker">
-                    {p.ticker}
-                    {window.TierBadge && <TierBadge tier={p.tier} />}
-                    {(p.rationale || p.exit_intent) && (
-                      <span style={{ marginLeft: 4, fontSize: 9, color: "var(--muted)", opacity: 0.7 }}>
-                        {expanded[p.ticker] ? "▲" : "▼"}
-                      </span>
-                    )}
-                  </td>
-                  <td><span className={`pill ${p.side === "LONG" ? "long" : "short"}`}>{p.side}</span></td>
-                  <td className="num dim">{p.qty}</td>
-                  <td className="num">{(p.avgEntry || 0).toFixed(2)}</td>
-                  <td className="num">{(p.currentPrice || 0).toFixed(2)}</td>
-                  <td className="num dim">${Math.abs(p.marketValue || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
-                  <td className={`num ${p.unrealizedPl >= 0 ? "up" : "down"}`}>
-                    {fmt$(p.unrealizedPl || 0)}
-                    <div className="sub-cell" style={{ color: p.unrealizedPl >= 0 ? "var(--pos)" : "var(--neg)", opacity: 0.7 }}>{p.unrealizedPlPct >= 0 ? "+" : ""}{(p.unrealizedPlPct || 0).toFixed(1)}%</div>
-                  </td>
-                </tr>
-                {expanded[p.ticker] && (p.rationale || p.exit_intent) && (
+          <>
+            {spreads.length > 0 && (
+              <table className="trades">
+                <thead>
                   <tr>
-                    <td colSpan={7} style={{ padding: "4px 8px 8px 28px", background: "var(--surface2, #1a1a2e)" }}>
-                      {p.rationale && (
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 3 }}>
-                          <span style={{ color: "var(--text)", fontWeight: 600 }}>why: </span>{p.rationale}
-                        </div>
-                      )}
-                      {p.exit_intent && (
-                        <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                          <span style={{ color: "var(--text)", fontWeight: 600 }}>exit: </span>{p.exit_intent}
-                        </div>
-                      )}
-                    </td>
+                    <th>Underlying</th>
+                    <th>Structure</th>
+                    <th>Strikes (short/long)</th>
+                    <th>Expiry (DTE)</th>
+                    <th className="num">Credit</th>
+                    <th className="num">Max risk</th>
+                    <th className="num">Breakeven</th>
+                    <th className="num">P&amp;L</th>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+                </thead>
+                <tbody>
+                  {spreads.map((s) => (
+                    <SpreadRow key={s.key} s={s} open={!!expanded[s.key]} onToggle={() => toggleSpread(s.key)} />
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {unpaired.length > 0 && (
+              <table className="trades" style={{ marginTop: spreads.length ? 12 : 0 }}>
+                <thead>
+                  <tr>
+                    <th>Underlying</th>
+                    <th>Leg</th>
+                    <th>Side</th>
+                    <th className="num">Qty</th>
+                    <th className="num">Avg Entry</th>
+                    <th className="num">Unrealized</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unpaired.map((p) => <UnpairedLegRow key={p.ticker + ":" + p.side} p={p} />)}
+                </tbody>
+              </table>
+            )}
+
+            {equity.length > 0 && (
+              <table className="trades" style={{ marginTop: (spreads.length || unpaired.length) ? 12 : 0 }}>
+                <thead>
+                  <tr>
+                    <th>Ticker</th>
+                    <th>Side</th>
+                    <th className="num">Qty</th>
+                    <th className="num">Avg Entry</th>
+                    <th className="num">Last</th>
+                    <th className="num">Mkt Value</th>
+                    <th className="num">Unrealized</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {equity.map((p) => (
+                    <React.Fragment key={p.ticker}>
+                      <tr
+                        onClick={() => (p.rationale || p.exit_intent) ? toggleEquity(p.ticker) : null}
+                        style={(p.rationale || p.exit_intent) ? { cursor: "pointer" } : {}}
+                      >
+                        <td className="ticker">
+                          {p.ticker}
+                          {window.TierBadge && <TierBadge tier={p.tier} />}
+                          {(p.rationale || p.exit_intent) && (
+                            <span style={{ marginLeft: 4, fontSize: 9, color: "var(--muted)", opacity: 0.7 }}>
+                              {expanded[`eq:${p.ticker}`] ? "▲" : "▼"}
+                            </span>
+                          )}
+                        </td>
+                        <td><span className={`pill ${p.side === "LONG" ? "long" : "short"}`}>{p.side}</span></td>
+                        <td className="num dim">{p.qty}</td>
+                        <td className="num">{(p.avgEntry || 0).toFixed(2)}</td>
+                        <td className="num">{(p.currentPrice || 0).toFixed(2)}</td>
+                        <td className="num dim">${Math.abs(p.marketValue || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}</td>
+                        <td className={`num ${p.unrealizedPl >= 0 ? "up" : "down"}`}>
+                          {fmt$(p.unrealizedPl || 0)}
+                          <div className="sub-cell" style={{ color: p.unrealizedPl >= 0 ? "var(--pos)" : "var(--neg)", opacity: 0.7 }}>{p.unrealizedPlPct >= 0 ? "+" : ""}{(p.unrealizedPlPct || 0).toFixed(1)}%</div>
+                        </td>
+                      </tr>
+                      {expanded[`eq:${p.ticker}`] && (p.rationale || p.exit_intent) && (
+                        <tr>
+                          <td colSpan={7} style={{ padding: "4px 8px 8px 28px", background: "var(--surface2, #1a1a2e)" }}>
+                            {p.rationale && (
+                              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 3 }}>
+                                <span style={{ color: "var(--text)", fontWeight: 600 }}>why: </span>{p.rationale}
+                              </div>
+                            )}
+                            {p.exit_intent && (
+                              <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                                <span style={{ color: "var(--text)", fontWeight: 600 }}>exit: </span>{p.exit_intent}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
     </div>

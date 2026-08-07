@@ -13,7 +13,7 @@
 // OCC parsing + spread classification + money formatting are shared with
 // CurrentPositions/TradesTable via window.SpreadFormat (dashboard/lib/spread-format.js)
 // — one parser/classifier, not three.
-const { g4, money, pctv, num, parseOccSymbol, plainEnglishLeg, spreadStructure, breakeven } = window.SpreadFormat;
+const { g4, money, pctv, num, parseOccSymbol, plainEnglishLeg, spreadStructure, breakeven, dteFromExpiry } = window.SpreadFormat;
 
 // Prefer the broker's own leg intent (authoritative); fall back to
 // short=sold / long=bought inference keyed on open vs close event.
@@ -247,6 +247,138 @@ function StructureCell({ facts, ev }) {
   );
 }
 
+// --- Expiry ladder + Expires column --------------------------------------
+// `expiry` is frozen purchase-time data; the day count is always recomputed
+// from it at render time (never read back from the stored `dte`, which
+// would freeze at its entry-time value forever).
+function resolveExpiry(ev, facts) {
+  return ev.expiry
+    || (facts.shortParsed ? facts.shortParsed.expiry : null)
+    || (facts.longParsed ? facts.longParsed.expiry : null)
+    || null;
+}
+
+function formatExpiryDate(expiry) {
+  if (!expiry) return null;
+  const d = new Date(expiry + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function formatLadderDate(expiry) {
+  const d = new Date(expiry + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return expiry;
+  const dow = d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return `${dow} ${date}`;
+}
+
+function dteUrgencyClass(dte) {
+  if (dte <= 2) return "neg-tint";
+  if (dte <= 5) return "warn";
+  return "mono-dim";
+}
+
+function closeDateLabel(ev) {
+  const resp = ev.response || {};
+  const ts = resp.filled_at || ev.ts;
+  const d = ts ? new Date(ts) : null;
+  if (!d || Number.isNaN(d.getTime())) return "Closed";
+  return `Closed ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`;
+}
+
+// `outcome`, when set, overrides the live countdown for rows that are done
+// (a filled close, or an order the broker reports expired) — dte alone
+// can't distinguish "resolved" from "still ticking down".
+function ExpiresCell({ ev, facts, outcome }) {
+  if (outcome) return <span className="mono-dim">{outcome}</span>;
+  const expiry = resolveExpiry(ev, facts);
+  const dateStr = formatExpiryDate(expiry);
+  if (!dateStr) return <span className="mono-dim">—</span>;
+  const dte = dteFromExpiry(expiry);
+  if (dte == null) return <span className="mono-dim">{dateStr}</span>;
+  if (dte < 0) return <span className="mono-dim">Expired</span>;
+  return <span className={dteUrgencyClass(dte)}>{dateStr} · {dte}d</span>;
+}
+
+// One row per distinct expiry date across every still-open position — an
+// open trade-log "open" event with no matching "close" for the same
+// ticker/short/long. Matched FIFO in chronological order so re-entering the
+// identical contract combo after a prior close (same ticker/short/long,
+// different day) nets out only the one close it actually pairs with, not
+// every open sharing that key. Risk is summed from facts.maxLoss (ev.risk),
+// the same value already rendered per-row — never recomputed a second way.
+function computeOpenPositions(trades) {
+  const byTime = [...trades].sort((a, b) => new Date(a.ev.ts) - new Date(b.ev.ts));
+  const openQueues = new Map(); // key -> FIFO queue of still-open {ev, classification}
+  byTime.forEach((t) => {
+    const { ev } = t;
+    const key = `${ev.ticker}|${ev.short}|${ev.long}`;
+    if (ev.event === "close") {
+      const q = openQueues.get(key);
+      if (q && q.length) q.shift();
+    } else {
+      if (!openQueues.has(key)) openQueues.set(key, []);
+      openQueues.get(key).push(t);
+    }
+  });
+  const remaining = [];
+  openQueues.forEach((q) => remaining.push(...q));
+  return remaining.map(({ ev, classification }) => ({ ev, facts: tradeFacts(ev, classification) }));
+}
+
+function ExpiryLadder({ positions }) {
+  if (!positions.length) return null;
+  const groups = new Map();
+  positions.forEach(({ ev, facts }) => {
+    const expiry = resolveExpiry(ev, facts);
+    if (!expiry) return;
+    if (!groups.has(expiry)) groups.set(expiry, { expiry, tickers: [], risk: 0 });
+    const g = groups.get(expiry);
+    g.tickers.push(ev.ticker);
+    g.risk += facts.maxLoss || 0;
+  });
+  const rows = Array.from(groups.values()).sort((a, b) => a.expiry.localeCompare(b.expiry));
+  if (!rows.length) return null;
+  return (
+    <section className="card opt-panel opt-ladder">
+      <div className="opt-panel-head">
+        <h3 className="opt-panel-title">Expiry ladder</h3>
+        <div className="opt-panel-stats">
+          <span><em>{positions.length}</em> open positions</span>
+        </div>
+      </div>
+      <div className="opt-table-scroll">
+        <table className="opt-table opt-table--orders">
+          <thead>
+            <tr>
+              <th className="al">Expires</th><th>DTE</th><th>Positions</th>
+              <th className="al">Tickers</th><th>Risk rolling off</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const dte = dteFromExpiry(r.expiry);
+              const clamped = dte == null ? null : Math.max(0, dte);
+              return (
+                <tr key={r.expiry}>
+                  <td className="al">{formatLadderDate(r.expiry)}</td>
+                  <td className={clamped == null ? "mono-dim" : dteUrgencyClass(clamped)}>
+                    {clamped == null ? "—" : `${clamped}d`}
+                  </td>
+                  <td>{r.tickers.length}</td>
+                  <td className="al mono-dim">{r.tickers.join(", ")}</td>
+                  <td>{money(r.risk)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 // kind -> badge modifier class ("unfilled"/"filled" never reach Open Orders).
 const OPEN_ORDER_BADGE_CLASS = { terminal: "terminal", partial: "fill-partial", unfilled: "fill-unfilled" };
 
@@ -268,6 +400,13 @@ function OpenOrderRow({ ev, classification }) {
         </td>
         <td className="al"><strong className="opt-ticker">{ev.ticker}</strong></td>
         <td className="al"><StructureCell facts={facts} ev={ev} /></td>
+        <td>
+          <ExpiresCell
+            ev={ev}
+            facts={facts}
+            outcome={classification.kind === "terminal" && classification.label.startsWith("EXPIRED") ? "Expired" : null}
+          />
+        </td>
         <td>{ev.contracts}</td>
         <td>{resp.limit_price != null ? money(num(resp.limit_price)) : "—"}</td>
         <td className="mono-dim">{money(ev.credit ?? ev.entry_credit)}</td>
@@ -278,7 +417,7 @@ function OpenOrderRow({ ev, classification }) {
       </tr>
       {open && (
         <tr className="opt-row-detail">
-          <td colSpan={10}><TradeDetail ev={ev} facts={facts} /></td>
+          <td colSpan={11}><TradeDetail ev={ev} facts={facts} /></td>
         </tr>
       )}
     </>
@@ -300,6 +439,7 @@ function TradeLogRow({ ev, classification }) {
         </td>
         <td className="al"><strong className="opt-ticker">{ev.ticker}</strong></td>
         <td className="al"><StructureCell facts={facts} ev={ev} /></td>
+        <td><ExpiresCell ev={ev} facts={facts} outcome={isClose ? closeDateLabel(ev) : null} /></td>
         <td>{ev.contracts}</td>
         <td className="up">{money(received)}</td>
         <td>{resp.filled_at ? String(resp.filled_at).replace("T", " ").slice(0, 19) : "—"}</td>
@@ -307,7 +447,7 @@ function TradeLogRow({ ev, classification }) {
       </tr>
       {open && (
         <tr className="opt-row-detail">
-          <td colSpan={7}><TradeDetail ev={ev} facts={facts} /></td>
+          <td colSpan={8}><TradeDetail ev={ev} facts={facts} /></td>
         </tr>
       )}
     </>
@@ -335,6 +475,7 @@ function OpenOrdersTable({ orders }) {
             <thead>
               <tr>
                 <th className="al">Status</th><th className="al">Ticker</th><th className="al">Structure</th>
+                <th>Expires</th>
                 <th>Contracts</th><th>Limit</th><th>Credit if filled</th><th>Max loss</th><th>Breakeven</th>
                 <th>Submitted</th><th>TIF</th>
               </tr>
@@ -372,6 +513,7 @@ function TradeLogTable({ trades }) {
             <thead>
               <tr>
                 <th className="al">Event</th><th className="al">Ticker</th><th className="al">Structure</th>
+                <th>Expires</th>
                 <th>Contracts</th><th>Credit received</th><th>Filled</th><th>Realized P&amp;L</th>
               </tr>
             </thead>
@@ -407,6 +549,7 @@ function OptionsTradeLog({ log }) {
     const classification = classifyOrder(ev);
     (classification.bucket === "trade" ? trades : openOrders).push({ ev, classification });
   });
+  const openPositions = computeOpenPositions(trades);
 
   return (
     // Trade Log leads at full width: it is the denser table and the one that
@@ -415,6 +558,7 @@ function OptionsTradeLog({ log }) {
     // numeric columns wrapped.
     <div className="opt-log opt-log--stacked">
       <div className="opt-log-stack">
+        <ExpiryLadder positions={openPositions} />
         <TradeLogTable trades={trades} />
         <OpenOrdersTable orders={openOrders} />
       </div>

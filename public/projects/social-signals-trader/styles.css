@@ -1004,15 +1004,47 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .mono-dim { color: var(--text-2); }
 .neg-tint { color: var(--neg); }
 
-/* Open Orders / Trade Log — two tables side by side, stacking under 900px. */
-.opt-log-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
-.opt-panel { padding: 14px; }
-.opt-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.opt-panel-title { margin: 0; font-size: 14px; }
-.opt-panel-stats { display: flex; gap: 12px; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+/* Open Orders / Trade Log — full-width cards stacked, Trade Log first.
+   Previously a 1fr 1fr grid. Two dense numeric tables in half a column each
+   forced a horizontal scrollbar on both at any normal window size, so neither
+   could be read without dragging. One column gives each table the whole page. */
+/* The stacked wrapper holds cards, which bring their own padding — the outer
+   inset would double it and push the tables out of line with every other
+   panel on the page. The empty state IS a card, so .opt-log keeps its own. */
+.opt-log--stacked { padding: 0; }
+.opt-log-stack { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+
+.opt-panel { padding: 16px 18px; }
+/* Divider under the head so the title block reads as its own row rather than
+   floating against the first table row. */
+.opt-panel-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.opt-panel-title { margin: 0; font-size: 14px; letter-spacing: .01em; }
+.opt-panel-stats { display: flex; gap: 16px; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
 .opt-panel-stats em { font-style: normal; color: var(--text); }
-.opt-table-scroll { overflow-x: auto; margin-top: 10px; }
+.opt-table-scroll { overflow-x: auto; margin-top: 0; }
 .opt-table--orders th, .opt-table--orders td { white-space: nowrap; }
+
+/* Alignment. Tabular figures make every digit the same width, so decimal
+   points line up down a column instead of drifting with the glyphs. Applied
+   to the header too, otherwise the label sits a fraction off its own column. */
+.opt-table--orders { table-layout: auto; }
+.opt-table--orders th, .opt-table--orders td { font-variant-numeric: tabular-nums; }
+/* First column carries the badge; give it room so the badge never wraps under
+   its own row and knocks the row height out of step with its neighbours. */
+.opt-table--orders th:first-child, .opt-table--orders td:first-child { padding-left: 0; }
+.opt-table--orders th:last-child, .opt-table--orders td:last-child { padding-right: 0; }
+/* Sticky header: the Trade Log is the long table, and a full-width one is
+   longer still — the column labels have to survive the scroll. */
+.opt-table--orders thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--bg); padding-top: 0; padding-bottom: 8px;
+}
+.opt-table--orders tbody td { padding: 6px; height: 28px; }
+.opt-table--orders tbody tr:first-child td { border-top: none; }
 .opt-row { cursor: pointer; }
 .opt-row:hover { background: color-mix(in oklch, var(--accent) 7%, transparent); }
 .opt-row-detail td { padding: 0; }
@@ -1020,7 +1052,9 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-badge--terminal { background: color-mix(in oklch, var(--neg) 12%, transparent); color: var(--neg); }
 
 @media (max-width: 900px) {
-  .opt-log-grid { grid-template-columns: 1fr; }
+  /* Already one column at every width — kept so the panels tighten up on
+     narrow screens where the outer page padding is doing less work. */
+  .opt-panel { padding: 12px 12px; }
 }
 
 @media (max-width: 640px) {

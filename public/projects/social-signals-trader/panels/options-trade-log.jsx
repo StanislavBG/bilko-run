@@ -466,10 +466,14 @@ function OptionsTradeLog({ log }) {
   });
 
   return (
-    <div className="opt-log">
-      <div className="opt-log-grid">
-        <OpenOrdersTable orders={openOrders} />
+    // Trade Log leads at full width: it is the denser table and the one that
+    // records what actually happened. Open Orders sits below it — intent, not
+    // history. Side by side, both were squeezed into half a column and the
+    // numeric columns wrapped.
+    <div className="opt-log opt-log--stacked">
+      <div className="opt-log-stack">
         <TradeLogTable trades={trades} />
+        <OpenOrdersTable orders={openOrders} />
       </div>
       <p className="opt-log-foot">
         Greeks and prices are frozen at the moment of the order — entry legs from

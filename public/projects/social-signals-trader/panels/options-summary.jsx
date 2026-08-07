@@ -1,4 +1,5 @@
 /* global React */
+const { useMemo } = React;
 // Options Summary panel — renders window.OPTIONS_SUMMARY (PRD 1007 record +
 // PRD 1008's rendered markdown, refreshed every 2h by PRD 1009). Full
 // disclosure: real dollars, equity, greeks, entry fills, action queue — it's
@@ -15,6 +16,7 @@
 // render module's own STALE_AFTER assumes 30m pending that job, so staleness
 // here is computed independently, live, against wall-clock at render time.
 const REFRESH_INTERVAL_MINUTES = 120;
+const REFRESH_INTERVAL_HOURS = REFRESH_INTERVAL_MINUTES / 60;
 const STALE_AFTER_MS = REFRESH_INTERVAL_MINUTES * 2 * 60 * 1000;
 
 const BAND_LABEL_CLASS = {
@@ -90,11 +92,11 @@ const SIGNED_TOKEN_RE = /([+-]\$[\d,]+(?:\.\d+)?|[+-]\d+(?:\.\d+)?%)/g;
 function colorizeSigned(text) {
   if (!text) return text;
   const out = [];
-  const re = new RegExp(SIGNED_TOKEN_RE);
+  SIGNED_TOKEN_RE.lastIndex = 0;
   let last = 0;
   let m;
   let key = 0;
-  while ((m = re.exec(text))) {
+  while ((m = SIGNED_TOKEN_RE.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     out.push(
@@ -148,29 +150,44 @@ function Paragraphs({ items }) {
 
 // --- section renderers -------------------------------------------------------
 
+// Every section below is the same card/head/title shell around a different
+// body — one wrapper instead of seven copies of the same markup.
+function Section({ title, children }) {
+  return (
+    <section className="card opt-panel">
+      <div className="opt-panel-head">
+        <h3 className="opt-panel-title">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function Headline({ text, staleLabel }) {
   return (
     <div className="opts-headline">
       <div className="opts-headline-text">{colorizeSigned(text)}</div>
-      {staleLabel && <div className="opts-stale-banner">⚠ STALE — refreshed {staleLabel}, expected every {REFRESH_INTERVAL_MINUTES / 60}h</div>}
+      {staleLabel && <div className="opts-stale-banner">⚠ STALE — refreshed {staleLabel}, expected every {REFRESH_INTERVAL_HOURS}h</div>}
     </div>
   );
 }
 
 function WhereBookStands({ lines }) {
   return (
-    <section className="card opt-panel">
-      <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Where the book stands</h3>
-      </div>
+    <Section title="Where the book stands">
       <BulletList items={bulletsOf(lines)} />
-    </section>
+    </Section>
   );
 }
 
 // Frozen entry columns (0-1) get a visual break from the live/now columns
 // (2-8) via a left border on the first live column — same table, two eras.
 const FROZEN_COLS = new Set([0, 1]);
+
+function colClass(i, extra) {
+  if (FROZEN_COLS.has(i)) return `al ${extra || ""} opts-col-frozen`.trim();
+  return i === 2 ? "opts-col-live-first" : undefined;
+}
 
 function BandBadge({ value }) {
   const cls = BAND_LABEL_CLASS[value];
@@ -201,10 +218,7 @@ function PositionsTable({ lines }) {
         <thead>
           <tr>
             {header.map((h, i) => (
-              <th
-                key={i}
-                className={FROZEN_COLS.has(i) ? "al opts-col-frozen" : i === 2 ? "opts-col-live-first" : undefined}
-              >
+              <th key={i} className={colClass(i)}>
                 {h}
               </th>
             ))}
@@ -214,10 +228,7 @@ function PositionsTable({ lines }) {
           {body.map((row, ri) => (
             <tr key={ri}>
               {row.map((cell, ci) => (
-                <td
-                  key={ci}
-                  className={FROZEN_COLS.has(ci) ? "al mono-dim opts-col-frozen" : ci === 2 ? "opts-col-live-first" : undefined}
-                >
+                <td key={ci} className={colClass(ci, "mono-dim")}>
                   {ci === bandCol ? (
                     <BandBadge value={cell} />
                   ) : ci === confCol ? (
@@ -239,34 +250,22 @@ function PositionsTable({ lines }) {
 
 function PositionsSection({ lines }) {
   return (
-    <section className="card opt-panel">
-      <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Positions — entry snapshot (frozen) vs now (live)</h3>
-      </div>
+    <Section title="Positions — entry snapshot (frozen) vs now (live)">
       <PositionsTable lines={lines} />
-    </section>
+    </Section>
   );
 }
 
 function WhatWeThink({ lines }) {
   const items = bulletsOf(lines);
-  if (!items.length) {
-    return (
-      <section className="card opt-panel">
-        <div className="opt-panel-head">
-          <h3 className="opt-panel-title">What we think right now</h3>
-        </div>
-        <p className="opt-log-empty">{plainLinesOf(lines)[0] || "No open options positions — nothing to assess."}</p>
-      </section>
-    );
-  }
   return (
-    <section className="card opt-panel">
-      <div className="opt-panel-head">
-        <h3 className="opt-panel-title">What we think right now</h3>
-      </div>
-      <BulletList items={items} render={renderInlineMd} className="opts-bullets opts-what-we-think" />
-    </section>
+    <Section title="What we think right now">
+      {items.length ? (
+        <BulletList items={items} render={renderInlineMd} className="opts-bullets opts-what-we-think" />
+      ) : (
+        <p className="opt-log-empty">{plainLinesOf(lines)[0] || "No open options positions — nothing to assess."}</p>
+      )}
+    </Section>
   );
 }
 
@@ -275,10 +274,7 @@ const ACTION_SEVERITY = { "🔴": "breached", "🟠": "danger", "⚠": "watch", 
 function ActionQueue({ lines }) {
   const items = bulletsOf(lines);
   return (
-    <section className="card opt-panel">
-      <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Action queue</h3>
-      </div>
+    <Section title="Action queue">
       {!items.length || items[0] === "Nothing needs attention right now." ? (
         <p className="opt-log-empty">Nothing needs attention right now.</p>
       ) : (
@@ -293,7 +289,7 @@ function ActionQueue({ lines }) {
           })}
         </ul>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -302,10 +298,7 @@ function OpenQueue({ lines }) {
   const table = tableOf(lines);
   const plain = plainLinesOf(lines);
   return (
-    <section className="card opt-panel">
-      <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Open queue</h3>
-      </div>
+    <Section title="Open queue">
       {bullets.length ? <BulletList items={bullets} /> : <Paragraphs items={plain} />}
       {table && (
         <div className="opt-table-scroll" style={{ marginTop: 10 }}>
@@ -333,7 +326,7 @@ function OpenQueue({ lines }) {
           </table>
         </div>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -343,10 +336,7 @@ function RulesInForce({ lines }) {
     return m ? { key: m[1], value: m[2] } : { key: l, value: "" };
   });
   return (
-    <section className="card opt-panel">
-      <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Rules in force</h3>
-      </div>
+    <Section title="Rules in force">
       <div className="opt-kv">
         {items.map((it, i) => (
           <div className="opt-kv-item" key={i}>
@@ -355,18 +345,15 @@ function RulesInForce({ lines }) {
           </div>
         ))}
       </div>
-    </section>
+    </Section>
   );
 }
 
 function Provenance({ lines }) {
   return (
-    <section className="card opt-panel">
-      <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Provenance</h3>
-      </div>
+    <Section title="Provenance">
       <BulletList items={bulletsOf(lines)} className="opts-bullets mono-dim" />
-    </section>
+    </Section>
   );
 }
 
@@ -376,7 +363,7 @@ function EmptyState() {
       <h3 className="opt-log-title">Options book summary</h3>
       <p className="opt-log-empty">
         No summary yet — the <code>options-status-refresh-summary</code> job hasn't run for the first
-        time. It's scheduled every {REFRESH_INTERVAL_MINUTES / 60}h.
+        time. It's scheduled every {REFRESH_INTERVAL_HOURS}h.
       </p>
     </section>
   );
@@ -384,11 +371,14 @@ function EmptyState() {
 
 function OptionsSummaryPanel({ data }) {
   const summaryData = data || window.OPTIONS_SUMMARY;
+  const summaryText = summaryData && summaryData.summary;
+  // Hooks must run unconditionally, so this memo sits ahead of the
+  // empty-state guard below even though its result is unused in that case.
+  const sections = useMemo(() => parseSections(summaryText), [summaryText]);
   if (!summaryData || !summaryData.record || !summaryData.summary) {
     return <EmptyState />;
   }
 
-  const sections = parseSections(summaryData.summary);
   const headlineText = (sections[0].lines.find((l) => l.trim()) || "").trim();
   const staleLabel = (() => {
     const t = new Date(summaryData.generatedAt).getTime();
@@ -413,4 +403,3 @@ function OptionsSummaryPanel({ data }) {
 }
 
 window.OptionsSummaryPanel = OptionsSummaryPanel;
-window.OptionsSummaryPanelInternals = { parseSections, colorizeSigned, ageLabel };

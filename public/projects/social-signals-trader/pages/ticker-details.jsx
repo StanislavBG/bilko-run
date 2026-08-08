@@ -194,8 +194,9 @@ function StrategyPolicy() {
       <h4 style={h4}>Book limits</h4>
       <div style={grid}>
         {field("Max positions", c.max_positions, "open spreads across the whole book at once", "max_positions")}
-        {field("Max total risk", usd(c.max_total_risk), "capital-at-risk ceiling across every open spread", "max_total_risk")}
+        {field("Max total risk", `${c.max_total_risk_equity_multiple}× equity`, "capital-at-risk ceiling across every open spread, scaled to live equity", "max_total_risk")}
         {field("Max per underlying", c.max_per_underlying, "at most this many open spreads per name at a time", "max_per_underlying")}
+        {field("Margin buffer", pct(c.margin_buffer_pct), "new entries are refused once maintenance margin would exceed equity minus this buffer", "margin_buffer_pct")}
       </div>
 
       <h4 style={h4}>Exit policy</h4>

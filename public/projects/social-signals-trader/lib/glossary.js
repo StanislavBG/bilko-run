@@ -293,13 +293,18 @@
     },
     max_total_risk: {
       label: "Max total risk",
-      short: "The most capital the whole book is allowed to have on the line at once, across every open spread.",
-      long: "Each new trade's max loss counts against this ceiling — once it's hit, no new positions open even if individual position limits allow it.",
+      short: "The most capital the whole book is allowed to have on the line at once, across every open spread — scaled to live equity, not a fixed dollar figure.",
+      long: "Each new trade's max loss counts against this ceiling — once it's hit, no new positions open even if individual position limits allow it. Expressed as a multiple of equity so it can't drift above the account's own size the way a fixed dollar cap can.",
     },
     max_per_underlying: {
       label: "Max per underlying",
       short: "The most open spreads allowed on a single stock at the same time.",
       long: "Keeps the book from concentrating too much risk in one name, even if that name keeps generating attractive-looking setups.",
+    },
+    margin_buffer_pct: {
+      label: "Margin buffer",
+      short: "How much of equity is kept as broker-margin cushion — new entries are refused once maintenance margin plus the order's own risk would eat into it.",
+      long: "The only sizing cap denominated in the broker's own maintenance-margin figure rather than the sleeve's internal risk accounting. Read fresh from the broker every tick, so a stale equity or margin reading can never mask a breach.",
     },
     hold_to_expiry: {
       label: "Hold to expiry",

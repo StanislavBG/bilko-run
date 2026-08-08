@@ -39,6 +39,18 @@ function ageLabel(iso) {
   return `${(h / 24).toFixed(1)}d ago`;
 }
 
+// Shared staleness test — a snapshot is stale once it's older than 2 refresh
+// cycles. Kept as one function (rather than each caller re-deriving
+// `Date.now() - t > STALE_AFTER_MS`) so this panel and any other reader of
+// window.OPTIONS_SUMMARY (dashboard/pages/option-trade-detail.jsx) can never
+// disagree on what "stale" means.
+function isStaleAsOf(iso) {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t > STALE_AFTER_MS;
+}
+
 // --- markdown-lite parsing -------------------------------------------------
 // The render's shape is fixed (owned by PRDs 1007/1008 — out of scope here),
 // so a small dedicated parser beats pulling in a full markdown lib for one
@@ -772,11 +784,7 @@ function OptionsSummaryPanel({ data }) {
   }
 
   const headlineText = (sections[0].lines.find((l) => l.trim()) || "").trim();
-  const staleLabel = (() => {
-    const t = new Date(summaryData.generatedAt).getTime();
-    if (Number.isNaN(t)) return null;
-    return Date.now() - t > STALE_AFTER_MS ? ageLabel(summaryData.generatedAt) : null;
-  })();
+  const staleLabel = isStaleAsOf(summaryData.generatedAt) ? ageLabel(summaryData.generatedAt) : null;
 
   const record = summaryData.record;
   // PRD 1026: single fallback stamp for any price-derived calc that has no
@@ -810,5 +818,14 @@ function OptionsSummaryPanel({ data }) {
     </div>
   );
 }
+
+// Shared with dashboard/pages/option-trade-detail.jsx so it can resolve a
+// trade-log event to its live record.positions[] entry (for the current
+// price) using the same row<->position identity rules this panel uses —
+// rather than a third, drift-prone matcher.
+window.OptionsSummaryInternals = {
+  parseSpreadLabel, positionMatchesLabel, eventMatchesPosition, tradeKeyForPosition,
+  ageLabel, isStaleAsOf, STALE_AFTER_MS, REFRESH_INTERVAL_HOURS, REFRESH_INTERVAL_MINUTES,
+};
 
 window.OptionsSummaryPanel = OptionsSummaryPanel;

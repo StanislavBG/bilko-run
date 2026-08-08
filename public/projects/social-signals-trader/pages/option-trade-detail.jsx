@@ -153,6 +153,56 @@ function breakevenCaption(facts) {
   return `Breakeven ${money(facts.be)} — ${dir} this price we start losing money.`;
 }
 
+// --- Current price (header + payoff bar) -------------------------------------
+
+// This trade's own row in window.OPTIONS_SUMMARY.record.positions[] — reuses
+// the exact matcher the Options Summary panel already trusts
+// (window.OptionsSummaryInternals.eventMatchesPosition, options-summary.jsx)
+// rather than writing a third one, and additionally checks the long strike so
+// two open spreads that happen to share a short leg don't collide. A closed
+// or unfilled trade has no "now" — never asked to match one.
+function matchedPosition(ev, facts) {
+  if (facts.isClose || facts.classification.bucket !== "trade" || !ev.short) return null;
+  const summary = window.OPTIONS_SUMMARY;
+  const internals = window.OptionsSummaryInternals;
+  const positions = summary && summary.record && summary.record.positions;
+  if (!Array.isArray(positions) || !positions.length || !internals) return null;
+  const longParsed = ev.long ? parseOccSymbol(ev.long) : null;
+  const candidates = positions.filter((pos) => {
+    if (!internals.eventMatchesPosition(pos, ev)) return false;
+    if (longParsed && pos.long_strike != null && Number(pos.long_strike) !== Number(longParsed.strike)) return false;
+    return true;
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+// Header price element: the live spot from the matched position when one
+// exists, else the frozen entry spot labelled as such, else nothing — never
+// a `$null`/`$NaN` and never a stale live price passed off as current.
+function CurrentPrice({ ev, facts, pos }) {
+  const internals = window.OptionsSummaryInternals;
+  const livePrice = pos ? num(pos.now && pos.now.spot) : null;
+  if (livePrice == null) {
+    const entrySpot = num(ev.spot_at_entry);
+    return entrySpot != null ? <span className="optd-price mono-dim">Spot at entry {money(entrySpot)}</span> : null;
+  }
+  const summary = window.OPTIONS_SUMMARY;
+  const asOfIso = pos.oldest_quote_ts || (summary && summary.generatedAt);
+  const ageStr = internals && asOfIso ? internals.ageLabel(asOfIso) : null;
+  const stale = !!(internals && asOfIso && internals.isStaleAsOf(asOfIso));
+  return (
+    <span className="optd-price">
+      {money(livePrice)}
+      <Help term="spot" inputs={{ spot: livePrice }} asOf={{ quotes: asOfIso }} />
+      {ageStr && (
+        <span className={stale ? "opts-stale-banner optd-price-asof" : "optd-price-asof mono-dim"}>
+          {stale ? "⚠ stale — " : "as of "}{ageStr}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // --- "What we did" ----------------------------------------------------------
 
 function LegRow({ ev, symbol, isClose, roleText }) {
@@ -213,7 +263,7 @@ function WhatWeDid({ ev, facts }) {
 
 // --- "What had to happen for this to win" -----------------------------------
 
-function payoffAnchors(facts, ev) {
+function payoffAnchors(facts, ev, livePrice) {
   const short = facts.shortParsed;
   if (!short || facts.be == null) return null;
   const long = facts.longParsed;
@@ -221,6 +271,7 @@ function payoffAnchors(facts, ev) {
   const values = [short.strike, facts.be];
   if (long) values.push(long.strike);
   if (spot != null) values.push(spot);
+  if (livePrice != null) values.push(livePrice);
   const lo = Math.min(...values);
   const hi = Math.max(...values);
   if (!(hi > lo)) return null;
@@ -233,12 +284,13 @@ function payoffAnchors(facts, ev) {
     longPct: long ? pct(long.strike) : null,
     bePct: pct(facts.be),
     spotPct: spot != null ? pct(spot) : null,
+    nowPct: livePrice != null ? pct(livePrice) : null,
     profitSide: profitDirection(short) === "below" ? "left" : "right",
   };
 }
 
-function PayoffStrip({ facts, ev }) {
-  const a = payoffAnchors(facts, ev);
+function PayoffStrip({ facts, ev, livePrice }) {
+  const a = payoffAnchors(facts, ev, livePrice);
   if (!a) {
     return <p className="optd-payoff-empty">Not enough data to draw the payoff strip.</p>;
   }
@@ -271,7 +323,13 @@ function PayoffStrip({ facts, ev }) {
         {a.spotPct != null && (
           <div className="optd-payoff-marker optd-payoff-marker--spot" style={{ left: `${a.spotPct}%` }} title={`Spot at entry ${money(ev.spot_at_entry)}`}>
             <span className="optd-payoff-dot" />
-            <span className="optd-payoff-tag">Spot {money(ev.spot_at_entry)}</span>
+            <span className="optd-payoff-tag">Spot at entry {money(ev.spot_at_entry)}</span>
+          </div>
+        )}
+        {a.nowPct != null && (
+          <div className="optd-payoff-marker optd-payoff-marker--now" style={{ left: `${a.nowPct}%` }} title={`Stock trading at ${money(livePrice)} now`}>
+            <span className="optd-payoff-dot" />
+            <span className="optd-payoff-tag">Now {money(livePrice)}</span>
           </div>
         )}
       </div>
@@ -287,7 +345,7 @@ function PayoffStrip({ facts, ev }) {
   );
 }
 
-function WhatHadToHappen({ ev, facts }) {
+function WhatHadToHappen({ ev, facts, livePrice }) {
   const calc = tradeCalcProps(ev, facts);
   return (
     <section className="card opt-panel optd-section">
@@ -330,7 +388,7 @@ function WhatHadToHappen({ ev, facts }) {
           <div className="optd-stat-caption">The modeled odds this trade finishes a winner.</div>
         </div>
       </div>
-      <PayoffStrip ev={ev} facts={facts} />
+      <PayoffStrip ev={ev} facts={facts} livePrice={livePrice} />
     </section>
   );
 }
@@ -567,6 +625,8 @@ function OptionTradeDetailPage() {
   const facts = internals.tradeFacts(ev, classification);
   const isClose = facts.isClose;
   const banner = outcomeBanner(ev, facts);
+  const pos = matchedPosition(ev, facts);
+  const livePrice = pos ? num(pos.now && pos.now.spot) : null;
 
   return (
     <main className="shell" id="trade-detail">
@@ -577,6 +637,7 @@ function OptionTradeDetailPage() {
         <div className="opt-panel-head">
           <h3 className="opt-panel-title">
             <strong className="opt-ticker">{ev.ticker}</strong>
+            <CurrentPrice ev={ev} facts={facts} pos={pos} />
           </h3>
           <div className="opt-panel-stats">
             <span className={`opt-badge opt-badge--${isClose ? "close" : "open"}`}>{isClose ? "CLOSE" : "OPEN"}</span>
@@ -589,7 +650,7 @@ function OptionTradeDetailPage() {
         <span className={`optd-banner optd-banner--${banner.tone}`}>{banner.text}</span>
       </section>
       <WhatWeDid ev={ev} facts={facts} />
-      <WhatHadToHappen ev={ev} facts={facts} />
+      <WhatHadToHappen ev={ev} facts={facts} livePrice={livePrice} />
       <WhatActuallyHappened ev={ev} facts={facts} />
       <TheNumbers ev={ev} facts={facts} />
       <Greeks ev={ev} facts={facts} />

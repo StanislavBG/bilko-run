@@ -1126,6 +1126,13 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .optd-explainer { font-size: 12px; color: var(--text-2); margin: 0 0 10px; max-width: 70ch; }
 .optd-note { font-size: 11px; color: var(--text-3); margin: 4px 0 10px; }
 
+/* Current price, next to the ticker (PRD 1033) — visually secondary to the
+   ticker itself; wraps under it on narrow widths since it's inline content
+   inside the same h3, no separate flex item needed. */
+.optd-price { margin-left: 10px; font-family: var(--mono); font-size: 13px; color: var(--text-2); }
+.optd-price-asof { margin-left: 6px; font-size: 10px; }
+.optd-price-asof.opts-stale-banner { margin-top: 0; padding: 1px 6px; }
+
 .optd-headline { font-size: 16px; line-height: 1.5; margin: 10px 0; max-width: 70ch; }
 .optd-banner {
   display: inline-block; font-size: 12px; font-weight: 600; padding: 5px 12px;
@@ -1154,6 +1161,7 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .optd-payoff-dot { width: 2px; height: 100%; background: var(--text); opacity: .6; }
 .optd-payoff-marker--be .optd-payoff-dot { background: var(--accent); opacity: 1; }
 .optd-payoff-marker--spot .optd-payoff-dot { background: var(--warn); opacity: 1; }
+.optd-payoff-marker--now .optd-payoff-dot { background: var(--pos); opacity: 1; }
 .optd-payoff-tag { position: absolute; top: 100%; margin-top: 4px; font-size: 10px; font-family: var(--mono); color: var(--text-3); white-space: nowrap; }
 .optd-payoff-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-3); margin-top: 28px; }
 .optd-payoff-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
@@ -1188,8 +1196,12 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 }
 .help-btn:hover, .help-btn:focus-visible { color: var(--text); border-color: var(--line-2); }
 .help-tip {
-  position: absolute; z-index: 30; top: calc(100% + 6px); left: 50%;
-  transform: translateX(-50%);
+  /* Anchored to the trigger's left edge (not centered) so the popover always
+     grows rightward from the button — a centered popover half its own width
+     past a button sitting near a card's left edge gets silently clipped by
+     that card's `overflow: hidden` (found via PRD 1028 visual capture: the
+     Open-queue "Deployed" bullet's first-column button). */
+  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
   width: max-content; max-width: min(260px, calc(100vw - 24px));
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
   padding: 8px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);

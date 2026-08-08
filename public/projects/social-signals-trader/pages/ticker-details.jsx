@@ -37,10 +37,18 @@ function Chip({ tone = "neutral", children, title }) {
   );
 }
 
-function Stat({ label, value, tone }) {
+// `term` is optional: most Stats here are raw counts with no glossary
+// concept behind them. When present with no matching `calc` (e.g. "iv" —
+// definition/example only), <Help/> renders the definition and never
+// invents a formula for a number that's really just what the live chain
+// response reported.
+function Stat({ label, value, tone, term, inputs, asOf }) {
   return (
     <div style={{ display: "grid", gap: 2 }}>
-      <span style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</span>
+      <span style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+        {label}
+        {term && <window.Help term={term} inputs={inputs} asOf={asOf} />}
+      </span>
       <span className={tone} style={{ fontFamily: "var(--mono)", fontSize: 15 }}>{value}</span>
     </div>
   );
@@ -148,11 +156,21 @@ function StrategyPolicy() {
     );
   }
   const c = sc.config;
+  // Most of these terms describe a config *threshold* (a band, a ceiling),
+  // not a value this file can plug into that term's own calc — the calc's
+  // input keys (e.g. pop's short_leg_delta) don't correspond to a single
+  // static config field. `max_per_underlying`'s glossary calc is the
+  // identity `v => v.max_per_underlying`, so it's the one term here whose
+  // live config value substitutes straight in — same additive pattern as
+  // options-summary.jsx's RulesInForce (PRD 1026).
+  const FIELD_TERM_CONFIG_INPUT = {
+    max_per_underlying: { max_per_underlying: c.max_per_underlying },
+  };
   const field = (label, value, gloss, term) => (
     <div style={{ display: "grid", gap: 2 }}>
       <span style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
         {label}
-        {term && <window.Help term={term} />}
+        {term && <window.Help term={term} inputs={FIELD_TERM_CONFIG_INPUT[term]} />}
       </span>
       <span style={{ fontFamily: "var(--mono)", fontSize: 13 }}>{value}</span>
       <span style={{ fontSize: 11, color: "var(--text-3)" }}>{gloss}</span>
@@ -208,10 +226,14 @@ function StrategyPolicy() {
   );
 }
 
-function TickerCard({ row, params }) {
+function TickerCard({ row, params, asOf }) {
   const [tab, setTab] = useState("put_spreads");
   const rows = row[tab];
   const active = LADDERS.find((l) => l.key === tab);
+  // The page's own asOf is the client-observed completion time of the live
+  // optionChain() call this row came from — the closest thing to "the
+  // timestamp the live response actually carries" available here.
+  const ivAsOf = asOf ? { quotes: asOf } : undefined;
 
   return (
     <section className="card" style={{ padding: 14, marginTop: 12 }}>
@@ -236,7 +258,7 @@ function TickerCard({ row, params }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12, marginTop: 12 }}>
         <Stat label="Contracts scanned" value={row.contracts_scanned} />
         <Stat label="Expiries in window" value={row.expiries?.length || 0} />
-        <Stat label="Avg IV" value={pct(row.atm_iv)} />
+        <Stat label="Avg IV" value={pct(row.atm_iv)} term="iv" asOf={ivAsOf} />
         <Stat label="Shares owned" value={row.shares_owned} />
         <Stat label="Cheapest defined risk" value={usd(cheapestRisk(row))} />
         <Stat label="Candidates" value={LADDERS.reduce((n, l) => n + (row[l.key]?.length || 0), 0)} />
@@ -402,7 +424,7 @@ function TickerDetailsPage() {
       )}
 
       {row ? (
-        <TickerCard row={row} params={params} />
+        <TickerCard row={row} params={params} asOf={asOf} />
       ) : busy ? (
         <p style={{ color: "var(--text-3)", marginTop: 20 }}>Loading…</p>
       ) : (

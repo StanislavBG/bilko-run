@@ -288,30 +288,43 @@ function PayoffStrip({ facts, ev }) {
 }
 
 function WhatHadToHappen({ ev, facts }) {
+  const calc = tradeCalcProps(ev, facts);
   return (
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">What had to happen for this to win</h2>
       <div className="optd-stat-grid">
         <div className="optd-stat">
-          <div className="optd-stat-label">Most we can make<Help term="max_gain" /></div>
+          <div className="optd-stat-label">
+            Most we can make
+            <Help term="max_gain" inputs={calc.max_gain.inputs} asOf={calc.max_gain.asOf} />
+          </div>
           <div className="optd-stat-value up">{money(facts.maxGain)}</div>
           <div className="optd-stat-sub">Max gain</div>
           <div className="optd-stat-caption">The most we can make — the full credit, if the trade finishes on the safe side.</div>
         </div>
         <div className="optd-stat">
-          <div className="optd-stat-label">Most we can lose<Help term="max_loss" /></div>
+          <div className="optd-stat-label">
+            Most we can lose
+            <Help term="max_loss" inputs={calc.max_loss.inputs} asOf={calc.max_loss.asOf} />
+          </div>
           <div className="optd-stat-value down">{money(facts.maxLoss)}</div>
           <div className="optd-stat-sub">Max loss</div>
           <div className="optd-stat-caption">The most we can lose if the stock moves fully against us.</div>
         </div>
         <div className="optd-stat">
-          <div className="optd-stat-label">Break-even price<Help term="breakeven" /></div>
+          <div className="optd-stat-label">
+            Break-even price
+            <Help term="breakeven" inputs={calc.breakeven.inputs} asOf={calc.breakeven.asOf} />
+          </div>
           <div className="optd-stat-value">{facts.be != null ? money(facts.be) : "—"}</div>
           <div className="optd-stat-sub">Breakeven</div>
           <div className="optd-stat-caption">{breakevenCaption(facts)}</div>
         </div>
         <div className="optd-stat">
-          <div className="optd-stat-label">Chance this wins<Help term="pop" /></div>
+          <div className="optd-stat-label">
+            Chance this wins
+            <Help term="pop" inputs={calc.pop.inputs} asOf={calc.pop.asOf} />
+          </div>
           <div className="optd-stat-value">{pctv(ev.pop)}</div>
           <div className="optd-stat-sub">Win prob (POP)</div>
           <div className="optd-stat-caption">The modeled odds this trade finishes a winner.</div>
@@ -372,27 +385,76 @@ function WhatActuallyHappened({ ev, facts }) {
 
 // --- "The numbers" ------------------------------------------------------------
 
+// The short leg's own entry-snapshot row (from ev.entry_legs) — the source
+// of the short-leg delta that drives PoP/EV's live-quote-clock inputs. Same
+// shape resolution as LegDetail's own rows: array or {short, long} object.
+function shortEntryLeg(ev) {
+  const legs = ev.entry_legs;
+  if (!legs) return null;
+  const rows = Array.isArray(legs) ? legs : Object.values(legs).filter((l) => l && l.symbol);
+  return rows.find((l) => l.symbol === ev.short) || null;
+}
+
+// One place computing every calc-driving `{inputs, asOf}` pair for this
+// trade's own numbers — reused by both the hero stat grid and "The numbers"
+// KvGroups so the two surfaces can never drift out of sync with each other.
+function tradeCalcProps(ev, facts) {
+  const entryTs = (ev.response && ev.response.filled_at) || ev.ts;
+  const asOfEntry = { entry: entryTs };
+  const leg = shortEntryLeg(ev);
+  const quoteTs = leg && leg.quote_ts;
+  const shortDelta = leg && leg.greeks ? leg.greeks.delta : undefined;
+  const shortStrike = facts.shortParsed ? facts.shortParsed.strike : undefined;
+  const longStrike = facts.longParsed ? facts.longParsed.strike : undefined;
+  const right = facts.shortParsed ? facts.shortParsed.right : undefined;
+  const credit = facts.maxGain;
+  const maxLossCalc = { inputs: { width: ev.width, contracts: ev.contracts, credit }, asOf: asOfEntry };
+  return {
+    max_gain: { inputs: { credit }, asOf: asOfEntry },
+    max_loss: maxLossCalc,
+    risk: maxLossCalc,
+    breakeven: { inputs: { short_strike: shortStrike, credit, contracts: ev.contracts, right }, asOf: asOfEntry },
+    pop: { inputs: { short_leg_delta: shortDelta }, asOf: { quotes: quoteTs } },
+    risk_reward: { inputs: { max_loss: facts.maxLoss, max_gain: facts.maxGain }, asOf: asOfEntry },
+    credit_if_filled: { inputs: { limit_price: num(ev.response && ev.response.limit_price), contracts: ev.contracts } },
+    credit_received: {
+      inputs: { net_per_contract: num(ev.response && ev.response.filled_avg_price), contracts: facts.fs && facts.fs.filled },
+      asOf: asOfEntry,
+    },
+    realized_pl: { inputs: { credit_received: ev.entry_credit, exit_cost: ev.exit_cost }, asOf: asOfEntry },
+    ev: { inputs: { short_leg_delta: shortDelta, credit, width: ev.width, contracts: ev.contracts }, asOf: { entry: entryTs, quotes: quoteTs } },
+    width: { inputs: { short_strike: shortStrike, long_strike: longStrike } },
+    credit_per_contract: { inputs: { credit, contracts: ev.contracts }, asOf: asOfEntry },
+    profit_target: { inputs: { credit, profit_target_pct: ev.profit_target_pct }, asOf: asOfEntry },
+  };
+}
+
 // Each row is [label, value, glossaryTerm, secondaryTechnicalLabel?] — the
 // label is the plain-English wording, the glossary term drives the <Help/>
 // tooltip, and the optional secondary label surfaces the trader shorthand
 // underneath so a reader who already knows it isn't retaught nothing.
-function KvGroup({ title, items }) {
+// `calc` (keyed by term) supplies that term's live `inputs`/`asOf` — absent
+// for terms with no matching calc, which degrades <Help/> to definition-only.
+function KvGroup({ title, items, calc }) {
   const rows = items.filter((item) => item[1] != null && item[1] !== "—");
   if (!rows.length) return null;
   return (
     <div className="optd-kv-group">
       <div className="optd-kv-group-title">{title}</div>
       <div className="opt-kv">
-        {rows.map(([label, v, term, secondary]) => (
-          <div className="opt-kv-item" key={label}>
-            <span className="opt-kv-k">
-              {label}
-              {term && <Help term={term} />}
-            </span>
-            {secondary && <span className="opt-kv-sub">{secondary}</span>}
-            <span className="opt-kv-v">{v}</span>
-          </div>
-        ))}
+        {rows.map(([label, v, term, secondary]) => {
+          const props = (calc && term && calc[term]) || {};
+          return (
+            <div className="opt-kv-item" key={label}>
+              <span className="opt-kv-k">
+                {label}
+                {term && <Help term={term} inputs={props.inputs} asOf={props.asOf} />}
+              </span>
+              {secondary && <span className="opt-kv-sub">{secondary}</span>}
+              <span className="opt-kv-v">{v}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -400,11 +462,13 @@ function KvGroup({ title, items }) {
 
 function TheNumbers({ ev, facts }) {
   const { isClose, received, maxGain, maxLoss, be, riskReward, pnl, classification } = facts;
+  const calc = tradeCalcProps(ev, facts);
   return (
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">The numbers</h2>
       <KvGroup
         title="Money"
+        calc={calc}
         items={[
           ["Most we can make", money(maxGain), "max_gain", "Max gain (credit)"],
           ["Most we can lose", money(maxLoss), "max_loss", "Max loss (risk)"],
@@ -420,6 +484,7 @@ function TheNumbers({ ev, facts }) {
       />
       <KvGroup
         title="The contract"
+        calc={calc}
         items={[
           ["Days until it expires", ev.dte, "dte", "DTE"],
           ["Expiry", expiryOf(ev, facts), "expiry"],
@@ -463,9 +528,9 @@ function Greeks({ ev, facts }) {
         header below for what a delta, gamma, theta, vega, or rho actually means.
       </p>
       <p className="optd-note">These were frozen at the moment of the order — not live prices.</p>
-      <internals.LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} />
+      <internals.LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} contracts={ev.contracts} />
       {facts.isClose && (
-        <internals.LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} />
+        <internals.LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} contracts={ev.contracts} />
       )}
     </section>
   );

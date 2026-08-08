@@ -376,10 +376,12 @@ function ExpiryLadder({ positions }) {
   positions.forEach(({ ev, facts }) => {
     const expiry = resolveExpiry(ev, facts);
     if (!expiry) return;
-    if (!groups.has(expiry)) groups.set(expiry, { expiry, tickers: [], risk: 0 });
+    if (!groups.has(expiry)) groups.set(expiry, { expiry, tickers: [], risk: 0, latestEntryTs: null });
     const g = groups.get(expiry);
     g.tickers.push(ev.ticker);
     g.risk += facts.maxLoss || 0;
+    const entryTs = (ev.response && ev.response.filled_at) || ev.ts;
+    if (entryTs && (!g.latestEntryTs || entryTs > g.latestEntryTs)) g.latestEntryTs = entryTs;
   });
   const rows = Array.from(groups.values()).sort((a, b) => a.expiry.localeCompare(b.expiry));
   if (!rows.length) return null;
@@ -412,9 +414,22 @@ function ExpiryLadder({ positions }) {
                   <td className={clamped == null ? "mono-dim" : dteUrgencyClass(clamped)}>
                     {clamped == null ? "—" : `${clamped}d`}
                   </td>
-                  <td>{r.tickers.length}</td>
+                  <td>
+                    {r.tickers.length}
+                    <window.Help
+                      term="positions_count"
+                      inputs={{ positions_count: r.tickers.length }}
+                    />
+                  </td>
                   <td className="al mono-dim">{r.tickers.join(", ")}</td>
-                  <td>{money(r.risk)}</td>
+                  <td>
+                    {money(r.risk)}
+                    <window.Help
+                      term="risk_rolling_off"
+                      inputs={{ risk_rolling_off: r.risk }}
+                      asOf={{ entry: r.latestEntryTs }}
+                    />
+                  </td>
                 </tr>
               );
             })}
@@ -441,6 +456,15 @@ function OpenOrderRow({ ev, classification, index }) {
       openDetail();
     }
   };
+  // A PARTIAL fill has already put `fs.filled` contracts' worth of risk on
+  // the books — an unfilled/QUEUED order hasn't put any on yet, so its
+  // hypothetical numbers use the full ordered count. Never the ordered
+  // count for a PARTIAL, which would overstate what's actually at risk.
+  const calcContracts = facts.fs && facts.fs.state === "PARTIAL" ? facts.fs.filled : ev.contracts;
+  const orderCredit = ev.credit ?? ev.entry_credit;
+  const asOf = { entry: resp.submitted_at };
+  const shortStrike = facts.shortParsed ? facts.shortParsed.strike : undefined;
+  const right = facts.shortParsed ? facts.shortParsed.right : undefined;
   return (
     <tr className="opt-row" onClick={openDetail} tabIndex={0} role="link" onKeyDown={onKeyDown}>
       <td className="al">
@@ -460,9 +484,26 @@ function OpenOrderRow({ ev, classification, index }) {
       </td>
       <td>{ev.contracts}</td>
       <td>{resp.limit_price != null ? money(num(resp.limit_price)) : "—"}</td>
-      <td className="mono-dim">{money(ev.credit ?? ev.entry_credit)}</td>
-      <td>{money(facts.maxLoss)}</td>
-      <td>{facts.be != null ? money(facts.be) : "—"}</td>
+      <td className="mono-dim">
+        {money(orderCredit)}
+        <Help
+          term="credit_if_filled"
+          inputs={{ limit_price: num(resp.limit_price), contracts: calcContracts }}
+          asOf={asOf}
+        />
+      </td>
+      <td>
+        {money(facts.maxLoss)}
+        <Help term="max_loss" inputs={{ width: ev.width, contracts: calcContracts, credit: orderCredit }} asOf={asOf} />
+      </td>
+      <td>
+        {facts.be != null ? money(facts.be) : "—"}
+        <Help
+          term="breakeven"
+          inputs={{ short_strike: shortStrike, credit: orderCredit, contracts: calcContracts, right }}
+          asOf={asOf}
+        />
+      </td>
       <td>{resp.submitted_at ? String(resp.submitted_at).replace("T", " ").slice(0, 19) : "—"}</td>
       <td>{resp.time_in_force || "—"}</td>
     </tr>
@@ -472,7 +513,7 @@ function OpenOrderRow({ ev, classification, index }) {
 // One order Alpaca reports 100% filled — the only rows that count as trades.
 function TradeLogRow({ ev, classification, index }) {
   const facts = tradeFacts(ev, classification);
-  const { isClose, received, pnl } = facts;
+  const { isClose, received, pnl, maxGain } = facts;
   const resp = ev.response || {};
   const openDetail = () => { location.hash = "trade/" + encodeURIComponent(tradeKey(ev, index)); };
   const onKeyDown = (e) => {
@@ -481,6 +522,9 @@ function TradeLogRow({ ev, classification, index }) {
       openDetail();
     }
   };
+  // Closed trades are final — stamp with the fill/close time, never a live
+  // quote, so a settled number can never read as a moving mark.
+  const asOf = { entry: resp.filled_at };
   return (
     <tr className="opt-row" onClick={openDetail} tabIndex={0} role="link" onKeyDown={onKeyDown}>
       <td className="al">
@@ -491,9 +535,21 @@ function TradeLogRow({ ev, classification, index }) {
       <td className="al"><StructureCell facts={facts} ev={ev} /></td>
       <td><ExpiresCell ev={ev} facts={facts} outcome={isClose ? closeDateLabel(ev) : null} /></td>
       <td>{ev.contracts}</td>
-      <td className="up">{money(received)}</td>
+      <td className="up">
+        {money(received)}
+        <Help
+          term="credit_received"
+          inputs={{ net_per_contract: num(resp.filled_avg_price), contracts: facts.fs && facts.fs.filled }}
+          asOf={asOf}
+        />
+      </td>
       <td>{resp.filled_at ? String(resp.filled_at).replace("T", " ").slice(0, 19) : "—"}</td>
-      <td>{isClose ? <span className={pnl >= 0 ? "up" : "down"}>{money(pnl)}</span> : "—"}</td>
+      <td>
+        {isClose ? <span className={pnl >= 0 ? "up" : "down"}>{money(pnl)}</span> : "—"}
+        {isClose && (
+          <Help term="realized_pl" inputs={{ credit_received: maxGain, exit_cost: ev.exit_cost }} asOf={asOf} />
+        )}
+      </td>
     </tr>
   );
 }

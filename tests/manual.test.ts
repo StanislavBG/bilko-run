@@ -278,7 +278,9 @@ describe('entitled path (route-level)', () => {
     // Swap the token's target asset in the URL — the token was signed for
     // 'pdf' only, so redirecting it at 'offline-html' must be refused rather
     // than acting as a general-purpose bearer credential for the release.
-    const swapped = url.replace(`/api/manual/download/1.0.0/pdf`, `/api/manual/download/1.0.0/offline-html`);
+    // Swap only the trailing asset segment so this doesn't hardcode a release
+    // version that will drift as new manual editions ship.
+    const swapped = url.replace(/\/pdf(\?|$)/, '/offline-html$1');
     expect(swapped).not.toBe(url);
 
     const res = await app.inject({ method: 'GET', url: swapped });

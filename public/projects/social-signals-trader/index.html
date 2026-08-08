@@ -31,6 +31,11 @@
   <!-- Shared OCC parser + spread classifier + breakeven math — CurrentPositions,
        TradesTable, and options-trade-log.jsx all reuse this, not three parsers. -->
   <script src="lib/spread-format.js"></script>
+  <!-- Shared options glossary + <Help term="..."/> tooltip primitive — the
+       ONE definition per concept, project-wide (PRD 1018). Wired into
+       pages/option-trade-detail.jsx and panels/options-trade-log.jsx's
+       shared LegDetail (PRD 1020); PRD 1019 wires it into options-summary.jsx. -->
+  <script src="lib/glossary.js"></script>
   <script src="fixtures/signals_history.example.js"></script>
   <script src="fixtures/optimization_history.example.js"></script>
   <script type="text/babel" src="pages/signals-tab.jsx"></script>

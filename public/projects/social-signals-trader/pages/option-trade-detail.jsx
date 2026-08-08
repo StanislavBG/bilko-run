@@ -8,6 +8,7 @@
 
 const { useState, useEffect } = React;
 const { money, pctv, num, parseOccSymbol, plainEnglishLeg } = window.SpreadFormat;
+const Help = window.Help;
 
 // #trade/<key> is the only shape this page reads — the key itself is opaque
 // (see tradeKey in options-trade-log.jsx), so this just decodes the segment
@@ -278,6 +279,10 @@ function PayoffStrip({ facts, ev }) {
         <span><span className="optd-payoff-swatch optd-payoff-swatch--profit" /> Profit zone</span>
         <span><span className="optd-payoff-swatch optd-payoff-swatch--loss" /> Loss zone</span>
       </div>
+      <p className="optd-payoff-caption">
+        Green is where the stock can trade and this trade still wins; red is where it starts
+        losing money — both relative to where the stock trades today.
+      </p>
     </div>
   );
 }
@@ -288,23 +293,27 @@ function WhatHadToHappen({ ev, facts }) {
       <h2 className="optd-h2">What had to happen for this to win</h2>
       <div className="optd-stat-grid">
         <div className="optd-stat">
-          <div className="optd-stat-label">Max gain</div>
+          <div className="optd-stat-label">Most we can make<Help term="max_gain" /></div>
           <div className="optd-stat-value up">{money(facts.maxGain)}</div>
+          <div className="optd-stat-sub">Max gain</div>
           <div className="optd-stat-caption">The most we can make — the full credit, if the trade finishes on the safe side.</div>
         </div>
         <div className="optd-stat">
-          <div className="optd-stat-label">Max loss</div>
+          <div className="optd-stat-label">Most we can lose<Help term="max_loss" /></div>
           <div className="optd-stat-value down">{money(facts.maxLoss)}</div>
+          <div className="optd-stat-sub">Max loss</div>
           <div className="optd-stat-caption">The most we can lose if the stock moves fully against us.</div>
         </div>
         <div className="optd-stat">
-          <div className="optd-stat-label">Breakeven</div>
+          <div className="optd-stat-label">Break-even price<Help term="breakeven" /></div>
           <div className="optd-stat-value">{facts.be != null ? money(facts.be) : "—"}</div>
+          <div className="optd-stat-sub">Breakeven</div>
           <div className="optd-stat-caption">{breakevenCaption(facts)}</div>
         </div>
         <div className="optd-stat">
-          <div className="optd-stat-label">Win probability</div>
+          <div className="optd-stat-label">Chance this wins<Help term="pop" /></div>
           <div className="optd-stat-value">{pctv(ev.pop)}</div>
+          <div className="optd-stat-sub">Win prob (POP)</div>
           <div className="optd-stat-caption">The modeled odds this trade finishes a winner.</div>
         </div>
       </div>
@@ -363,45 +372,24 @@ function WhatActuallyHappened({ ev, facts }) {
 
 // --- "The numbers" ------------------------------------------------------------
 
-const KV_TOOLTIPS = {
-  "Max gain (credit)": "The most this trade can make — the full credit, collected if it expires worthless.",
-  "Max loss (risk)": "The most this trade can lose if the stock moves fully against us.",
-  "Breakeven": "The stock price at which the trade neither makes nor loses money.",
-  "Risk:reward": "How many dollars are risked for every dollar of potential profit.",
-  "Credit if filled": "The premium we intended to collect when the order was submitted.",
-  "Credit received": "The premium actually collected once the broker filled the order.",
-  "Realized P&L": "The actual profit or loss booked when the position was closed.",
-  "EV at entry": "Expected value — the modeled average outcome across many similar trades.",
-  "Win prob (POP)": "Probability of profit — the modeled odds this trade finishes a winner.",
-  "Exit cost": "What it cost to buy back the spread and close the position.",
-  "DTE": "Days to expiration — calendar days left until the options expire.",
-  "Expiry": "The date the options contracts expire.",
-  "Spot at entry": "The stock's price at the moment we opened the trade.",
-  "IV at entry": "Implied volatility — the market's expected swing, priced into the option.",
-  "Width": "The distance between the two strike prices, in dollars.",
-  "Contracts": "How many spread contracts were traded.",
-  "Credit per contract": "The premium collected per single spread contract.",
-  "Profit target": "The percentage of max profit we planned to lock in early.",
-  "Fill state": "Whether the broker filled none, some, or all of the contracts.",
-  "Reason": "Why the position was opened or closed.",
-  "Order id": "The broker's identifier for this order.",
-  "Broker order status": "The broker's own status label for this order.",
-  "Broker limit price": "The most we were willing to pay or accept per share for the fill.",
-  "Time in force": "How long the order stays working before the broker cancels it.",
-  "Submitted at": "When the order was sent to the broker.",
-  "Filled at": "When the broker completed the fill.",
-};
-
+// Each row is [label, value, glossaryTerm, secondaryTechnicalLabel?] — the
+// label is the plain-English wording, the glossary term drives the <Help/>
+// tooltip, and the optional secondary label surfaces the trader shorthand
+// underneath so a reader who already knows it isn't retaught nothing.
 function KvGroup({ title, items }) {
-  const rows = items.filter(([, v]) => v != null && v !== "—");
+  const rows = items.filter((item) => item[1] != null && item[1] !== "—");
   if (!rows.length) return null;
   return (
     <div className="optd-kv-group">
       <div className="optd-kv-group-title">{title}</div>
       <div className="opt-kv">
-        {rows.map(([k, v]) => (
-          <div className="opt-kv-item" key={k} title={KV_TOOLTIPS[k] || undefined}>
-            <span className="opt-kv-k">{k}</span>
+        {rows.map(([label, v, term, secondary]) => (
+          <div className="opt-kv-item" key={label}>
+            <span className="opt-kv-k">
+              {label}
+              {term && <Help term={term} />}
+            </span>
+            {secondary && <span className="opt-kv-sub">{secondary}</span>}
             <span className="opt-kv-v">{v}</span>
           </div>
         ))}
@@ -418,29 +406,29 @@ function TheNumbers({ ev, facts }) {
       <KvGroup
         title="Money"
         items={[
-          ["Max gain (credit)", money(maxGain)],
-          ["Max loss (risk)", money(maxLoss)],
-          ["Breakeven", be != null ? money(be) : null],
-          ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null],
-          ["Credit if filled", money(ev.credit ?? ev.entry_credit)],
-          ["Credit received", classification.bucket === "trade" ? money(received) : null],
-          ["Realized P&L", isClose ? money(pnl) : null],
-          ["EV at entry", money(ev.ev)],
-          ["Win prob (POP)", pctv(ev.pop)],
-          ["Exit cost", isClose ? money(ev.exit_cost) : null],
+          ["Most we can make", money(maxGain), "max_gain", "Max gain (credit)"],
+          ["Most we can lose", money(maxLoss), "max_loss", "Max loss (risk)"],
+          ["Break-even price", be != null ? money(be) : null, "breakeven", "Breakeven"],
+          ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null, "risk_reward"],
+          ["Credit if filled", money(ev.credit ?? ev.entry_credit), "credit_if_filled"],
+          ["Credit received", classification.bucket === "trade" ? money(received) : null, "credit_received"],
+          ["Realized P&L", isClose ? money(pnl) : null, "realized_pl"],
+          ["EV at entry", money(ev.ev), "ev"],
+          ["Chance this wins", pctv(ev.pop), "pop", "Win prob (POP)"],
+          ["Exit cost", isClose ? money(ev.exit_cost) : null, "exit_cost"],
         ]}
       />
       <KvGroup
         title="The contract"
         items={[
-          ["DTE", ev.dte],
-          ["Expiry", expiryOf(ev, facts)],
-          ["Spot at entry", money(ev.spot_at_entry)],
-          ["IV at entry", pctv(ev.iv_at_entry)],
-          ["Width", money(ev.width)],
-          ["Contracts", ev.contracts],
-          ["Credit per contract", money(ev.credit_per_contract)],
-          ["Profit target", pctv(ev.profit_target_pct)],
+          ["Days until it expires", ev.dte, "dte", "DTE"],
+          ["Expiry", expiryOf(ev, facts), "expiry"],
+          ["Spot at entry", money(ev.spot_at_entry), "spot_at_entry"],
+          ["IV at entry", pctv(ev.iv_at_entry), "iv"],
+          ["Width", money(ev.width), "width"],
+          ["Contracts", ev.contracts, "contracts"],
+          ["Credit per contract", money(ev.credit_per_contract), "credit_per_contract"],
+          ["Profit target", pctv(ev.profit_target_pct), "profit_target"],
         ]}
       />
       <KvGroup
@@ -448,14 +436,14 @@ function TheNumbers({ ev, facts }) {
         items={(() => {
           const resp = ev.response || {};
           return [
-            ["Fill state", classification.label],
-            ["Reason", ev.reason],
-            ["Order id", ev.client_order_id],
-            ["Broker order status", resp.status],
-            ["Broker limit price", resp.limit_price != null ? money(num(resp.limit_price)) : null],
-            ["Time in force", resp.time_in_force],
-            ["Submitted at", tsPretty(resp.submitted_at)],
-            ["Filled at", tsPretty(resp.filled_at)],
+            ["Fill state", classification.label, "fill_state"],
+            ["Reason", ev.reason, "reason"],
+            ["Order id", ev.client_order_id, "order_id"],
+            ["Broker order status", resp.status, "broker_order_status"],
+            ["Broker limit price", resp.limit_price != null ? money(num(resp.limit_price)) : null, "broker_limit_price"],
+            ["Time in force", resp.time_in_force, "time_in_force"],
+            ["Submitted at", tsPretty(resp.submitted_at), "submitted_at"],
+            ["Filled at", tsPretty(resp.filled_at), "filled_at"],
           ];
         })()}
       />
@@ -471,9 +459,8 @@ function Greeks({ ev, facts }) {
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">The greeks</h2>
       <p className="optd-explainer">
-        Δ delta — how much the option moves per $1 of stock. Γ gamma — how fast delta changes.
-        Θ theta — how much value the option loses per day. V vega — sensitivity to volatility.
-        ρ rho — sensitivity to interest rates. IV — the market&rsquo;s expected swing, priced into the option.
+        These are the risk sensitivities for each leg — tap the <strong>?</strong> on a column
+        header below for what a delta, gamma, theta, vega, or rho actually means.
       </p>
       <p className="optd-note">These were frozen at the moment of the order — not live prices.</p>
       <internals.LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} />

@@ -14,6 +14,7 @@
 // CurrentPositions/TradesTable via window.SpreadFormat (dashboard/lib/spread-format.js)
 // — one parser/classifier, not three.
 const { g4, money, pctv, num, parseOccSymbol, plainEnglishLeg, spreadStructure, breakeven, dteFromExpiry } = window.SpreadFormat;
+const Help = window.Help;
 
 // Prefer the broker's own leg intent (authoritative); fall back to
 // short=sold / long=bought inference keyed on open vs close event.
@@ -118,7 +119,13 @@ function LegDetail({ title, legs, predatesSnapshots }) {
         <thead>
           <tr>
             <th className="al">Contract</th><th>Bid</th><th>Ask</th><th>Mid</th><th>Last</th>
-            <th>IV</th><th>Δ</th><th>Γ</th><th>Θ</th><th>V</th><th>ρ</th><th>Vol</th><th>OI</th><th>Quote time</th>
+            <th>IV<Help term="iv" /></th>
+            <th>Δ<Help term="delta" /></th>
+            <th>Γ<Help term="gamma" /></th>
+            <th>Θ<Help term="theta" /></th>
+            <th>V<Help term="vega" /></th>
+            <th>ρ<Help term="rho" /></th>
+            <th>Vol</th><th>OI</th><th>Quote time</th>
           </tr>
         </thead>
         <tbody>
@@ -383,8 +390,11 @@ function ExpiryLadder({ positions }) {
         <table className="opt-table opt-table--orders">
           <thead>
             <tr>
-              <th className="al">Expires</th><th>DTE</th><th>Positions</th>
-              <th className="al">Tickers</th><th>Risk rolling off</th>
+              <th className="al">Expires<window.Help term="expiry" /></th>
+              <th>DTE<window.Help term="dte" /></th>
+              <th>Positions<window.Help term="positions_count" /></th>
+              <th className="al">Tickers</th>
+              <th>Risk rolling off<window.Help term="risk_rolling_off" /></th>
             </tr>
           </thead>
           <tbody>
@@ -505,8 +515,13 @@ function OpenOrdersTable({ orders }) {
               <tr>
                 <th className="al">Status</th><th className="al">Ticker</th><th className="al">Structure</th>
                 <th>Expires</th>
-                <th>Contracts</th><th>Limit</th><th>Credit if filled</th><th>Max loss</th><th>Breakeven</th>
-                <th>Submitted</th><th>TIF</th>
+                <th>Contracts</th>
+                <th>Limit<window.Help term="limit_price" /></th>
+                <th>Credit if filled<window.Help term="credit_if_filled" /></th>
+                <th>Max loss<window.Help term="max_loss" /></th>
+                <th>Breakeven<window.Help term="breakeven" /></th>
+                <th>Submitted</th>
+                <th>TIF<window.Help term="tif" /></th>
               </tr>
             </thead>
             <tbody>
@@ -541,9 +556,14 @@ function TradeLogTable({ trades }) {
           <table className="opt-table opt-table--orders">
             <thead>
               <tr>
-                <th className="al">Event</th><th className="al">Ticker</th><th className="al">Structure</th>
-                <th>Expires</th>
-                <th>Contracts</th><th>Credit received</th><th>Filled</th><th>Realized P&amp;L</th>
+                <th className="al">Event<window.Help term="trade_event" /></th>
+                <th className="al">Ticker</th>
+                <th className="al">Structure<window.Help term="spread" /></th>
+                <th>Expires<window.Help term="expiry" /></th>
+                <th>Contracts<window.Help term="contracts" /></th>
+                <th>Credit received<window.Help term="credit_received" /></th>
+                <th>Filled<window.Help term="filled_at" /></th>
+                <th>Realized P&amp;L<window.Help term="realized_pl" /></th>
               </tr>
             </thead>
             <tbody>

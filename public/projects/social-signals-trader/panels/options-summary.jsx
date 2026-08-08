@@ -110,6 +110,103 @@ function colorizeSigned(text) {
   return out;
 }
 
+// --- glossary term matching in freeform bullet text ------------------------
+// Same "one definition per concept" rule as everywhere else — this only maps
+// a plain-English label already present in the rendered text to the
+// glossary's `term` key, it never writes a second copy of any definition.
+// Longest label first so e.g. "% captured" claims its match before the
+// shorter "captured" pattern gets a chance to.
+const PROSE_TERMS = [
+  ["Account equity", "equity"],
+  ["unpaired legs", "unpaired_leg"],
+  ["close cost", "close_cost"],
+  ["open P/L", "open_pl"],
+  ["open marks", "open_pl"],
+  ["max loss", "max_loss"],
+  ["wide-quoted", "wide_quote"],
+  ["wide quote", "wide_quote"],
+  ["strike BREACHED", "strike_breach_exit"],
+  ["profit target", "profit_target"],
+  ["Spot quotes", "spot"],
+  ["% captured", "pct_captured"],
+  ["captured", "pct_captured"],
+  ["Realized", "realized_pl"],
+  ["Deployment cap", "deployment"],
+  ["Deployed", "deployment"],
+  ["headroom", "deployment"],
+  ["decay", "decay"],
+  ["PoP", "pop"],
+  ["Cash", "cash"],
+  ["Bands", "band"],
+  ["DANGER", "band"],
+  ["cushion", "cushion"],
+  ["DTE", "dte"],
+  ["credit", "credit_received"],
+  ["delta", "delta"],
+  ["theta", "theta"],
+  ["vega", "vega"],
+  ["gamma", "gamma"],
+  ["Beta", "variance_risk_premium"],
+  ["Risk", "risk"],
+  ["EV", "ev"],
+  ["breach", "strike_breach_exit"],
+].sort((a, b) => b[0].length - a[0].length);
+const PROSE_TERM_MAP = new Map(PROSE_TERMS);
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Word-boundary the pattern on whichever ends actually start/end on a word
+// character, so e.g. "breach" doesn't also swallow half of "breached".
+function wordBoundedPattern(label) {
+  const escaped = escapeRegExp(label);
+  const pre = /^\w/.test(label) ? "\\b" : "";
+  const post = /\w$/.test(label) ? "\\b" : "";
+  return `${pre}${escaped}${post}`;
+}
+
+const GLOSSY_LINE_RE = new RegExp(
+  PROSE_TERMS.map(([label]) => wordBoundedPattern(label)).join("|") + "|" + SIGNED_TOKEN_RE.source,
+  "g"
+);
+
+const SIGNED_TOKEN_WHOLE_RE = /^[+-]\$[\d,]+(?:\.\d+)?$|^[+-]\d+(?:\.\d+)?%$/;
+
+// Same tokenizing shape as colorizeSigned, but scanning for BOTH signed
+// money/pct tokens (colour) and known glossary labels (a <Help/> button) in
+// one pass, so a bullet like "max loss $1,234" gets both.
+function glossify(text) {
+  if (!text) return text;
+  const out = [];
+  GLOSSY_LINE_RE.lastIndex = 0;
+  let last = 0;
+  let m;
+  let key = 0;
+  const used = new Set();
+  while ((m = GLOSSY_LINE_RE.exec(text))) {
+    const tok = m[0];
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (SIGNED_TOKEN_WHOLE_RE.test(tok)) {
+      out.push(
+        <span key={key++} className={tok.startsWith("-") ? "down" : "up"}>
+          {tok}
+        </span>
+      );
+    } else {
+      out.push(tok);
+      const term = PROSE_TERM_MAP.get(tok);
+      if (term && !used.has(term)) {
+        used.add(term);
+        out.push(<window.Help key={"h" + key++} term={term} />);
+      }
+    }
+    last = m.index + tok.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 // Bold (`**text**`) plus the same signed-token colouring, for "What we think
 // right now" lines.
 function renderInlineMd(text) {
@@ -119,6 +216,19 @@ function renderInlineMd(text) {
       return <strong key={i}>{colorizeSigned(p.slice(2, -2))}</strong>;
     }
     return <React.Fragment key={i}>{colorizeSigned(p)}</React.Fragment>;
+  });
+}
+
+// Same bold-handling as renderInlineMd, but glossifying instead of just
+// colour-coding — used where the bullet text itself contains a jargon term
+// (Action queue).
+function renderInlineMdGlossy(text) {
+  const parts = String(text).split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**")) {
+      return <strong key={i}>{glossify(p.slice(2, -2))}</strong>;
+    }
+    return <React.Fragment key={i}>{glossify(p)}</React.Fragment>;
   });
 }
 
@@ -152,11 +262,14 @@ function Paragraphs({ items }) {
 
 // Every section below is the same card/head/title shell around a different
 // body — one wrapper instead of seven copies of the same markup.
-function Section({ title, children }) {
+function Section({ title, titleTerm, children }) {
   return (
     <section className="card opt-panel">
       <div className="opt-panel-head">
-        <h3 className="opt-panel-title">{title}</h3>
+        <h3 className="opt-panel-title">
+          {title}
+          {titleTerm && <window.Help term={titleTerm} />}
+        </h3>
       </div>
       {children}
     </section>
@@ -166,16 +279,32 @@ function Section({ title, children }) {
 function Headline({ text, staleLabel }) {
   return (
     <div className="opts-headline">
-      <div className="opts-headline-text">{colorizeSigned(text)}</div>
+      <div className="opts-headline-text">{glossify(text)}</div>
       {staleLabel && <div className="opts-stale-banner">⚠ STALE — refreshed {staleLabel}, expected every {REFRESH_INTERVAL_HOURS}h</div>}
     </div>
+  );
+}
+
+// 3-4 plain-English sentences on what a credit spread even is, shown once at
+// the top of the panel so every jargon term below has a home to point back
+// to — the per-term <Help/> buttons handle the specifics.
+function HowToReadThisPage() {
+  return (
+    <p className="opt-log-empty opts-howto">
+      We sell credit spreads: a defined-risk options trade where the broker pays us cash (the
+      credit) up front, in exchange for us taking on the risk that the stock crosses a price we
+      picked (the strike). We keep that cash if the stock stays on the safe side of the strike
+      through expiration; we owe money if it doesn't. Every number below traces back to that one
+      idea — how much cash we collected, how much room the stock has before we're at risk, and
+      whether that room is shrinking.
+    </p>
   );
 }
 
 function WhereBookStands({ lines }) {
   return (
     <Section title="Where the book stands">
-      <BulletList items={bulletsOf(lines)} />
+      <BulletList items={bulletsOf(lines)} render={glossify} />
     </Section>
   );
 }
@@ -262,6 +391,20 @@ function tradeKeyForPosition(pos) {
   return internals.tradeKey(ev, i);
 }
 
+// Header text comes verbatim from options_summary_render.py's markdown table
+// (out of scope to change) — mapped to the shared glossary term it explains.
+const POSITIONS_HEADER_TERM = {
+  Spread: "spread",
+  "FROZEN entry (filled / net / credit)": "frozen_entry",
+  "LIVE spot": "spot",
+  "LIVE cushion (Δ)": "cushion",
+  "LIVE band": "band",
+  "LIVE open P/L (Δ)": "open_pl",
+  "% captured": "pct_captured",
+  "short Δ (Δ)": "short_leg_delta",
+  conf: "wide_quote",
+};
+
 function PositionsTable({ lines, positions }) {
   const table = tableOf(lines);
   if (!table) {
@@ -284,6 +427,7 @@ function PositionsTable({ lines, positions }) {
             {header.map((h, i) => (
               <th key={i} className={colClass(i)}>
                 {h}
+                {POSITIONS_HEADER_TERM[h] && <window.Help term={POSITIONS_HEADER_TERM[h]} />}
               </th>
             ))}
           </tr>
@@ -368,7 +512,7 @@ function ActionQueue({ lines }) {
             const sev = ACTION_SEVERITY[t.slice(0, 2).trim()] || ACTION_SEVERITY[t[0]] || "neutral";
             return (
               <li key={i} className={`opts-action opts-action--${sev}`}>
-                {renderInlineMd(t)}
+                {renderInlineMdGlossy(t)}
               </li>
             );
           })}
@@ -378,13 +522,25 @@ function ActionQueue({ lines }) {
   );
 }
 
+const OPEN_QUEUE_HEADER_TERM = {
+  Short: "short_leg",
+  Long: "long_leg",
+  Contracts: "contracts",
+  Expiry: "expiry",
+  DTE: "dte",
+  PoP: "pop",
+  Risk: "risk",
+  Credit: "credit_received",
+  EV: "ev",
+};
+
 function OpenQueue({ lines }) {
   const bullets = bulletsOf(lines);
   const table = tableOf(lines);
   const plain = plainLinesOf(lines);
   return (
     <Section title="Open queue">
-      {bullets.length ? <BulletList items={bullets} /> : <Paragraphs items={plain} />}
+      {bullets.length ? <BulletList items={bullets} render={glossify} /> : <Paragraphs items={plain} />}
       {table && (
         <div className="opt-table-scroll" style={{ marginTop: 10 }}>
           <table className="opt-table opt-table--orders">
@@ -393,6 +549,7 @@ function OpenQueue({ lines }) {
                 {table.header.map((h, i) => (
                   <th key={i} className={i === 0 ? "al" : undefined}>
                     {h}
+                    {OPEN_QUEUE_HEADER_TERM[h] && <window.Help term={OPEN_QUEUE_HEADER_TERM[h]} />}
                   </th>
                 ))}
               </tr>
@@ -415,17 +572,36 @@ function OpenQueue({ lines }) {
   );
 }
 
+// `key` here is the raw config field name from options_summary_render.py's
+// `_RULES_FIELDS` (out of scope to change) — mapped to the existing glossary
+// term for that concept, reusing definitions rather than writing new ones.
+const RULES_FIELD_TERM = {
+  hold_to_expiry: "hold_to_expiry",
+  profit_target_pct: "profit_target",
+  close_on_strike_breach: "strike_breach_exit",
+  strike_breach_buffer_pct: "strike_breach_buffer",
+  max_short_delta: "short_leg_delta",
+  min_pop: "pop",
+  min_dte: "dte",
+  max_dte: "dte",
+  max_per_underlying: "max_per_underlying",
+  live: "live_flag",
+};
+
 function RulesInForce({ lines }) {
   const items = bulletsOf(lines).map((l) => {
     const m = /^`([^`]+)`:\s*(.*)$/.exec(l);
-    return m ? { key: m[1], value: m[2] } : { key: l, value: "" };
+    return m ? { key: m[1], value: m[2], term: RULES_FIELD_TERM[m[1]] } : { key: l, value: "", free: true };
   });
   return (
     <Section title="Rules in force">
       <div className="opt-kv">
         {items.map((it, i) => (
           <div className="opt-kv-item" key={i}>
-            <span className="opt-kv-k">{it.key}</span>
+            <span className="opt-kv-k">
+              {it.free ? glossify(it.key) : it.key}
+              {it.term && <window.Help term={it.term} />}
+            </span>
             <span className="opt-kv-v">{it.value}</span>
           </div>
         ))}
@@ -436,7 +612,7 @@ function RulesInForce({ lines }) {
 
 function Provenance({ lines }) {
   return (
-    <Section title="Provenance">
+    <Section title="Provenance" titleTerm="provenance">
       <BulletList items={bulletsOf(lines)} className="opts-bullets mono-dim" />
     </Section>
   );
@@ -446,6 +622,7 @@ function EmptyState() {
   return (
     <section className="card opt-log">
       <h3 className="opt-log-title">Options book summary</h3>
+      <HowToReadThisPage />
       <p className="opt-log-empty">
         No summary yet — the <code>options-status-refresh-summary</code> job hasn't run for the first
         time. It's scheduled every {REFRESH_INTERVAL_HOURS}h.
@@ -474,6 +651,7 @@ function OptionsSummaryPanel({ data }) {
   return (
     <div className="opt-log opt-log--stacked opts-summary">
       <div className="opt-log-stack">
+        <HowToReadThisPage />
         <Headline text={headlineText} staleLabel={staleLabel} />
         <WhereBookStands lines={findSection(sections, "Where the book stands").lines} />
         <PositionsSection

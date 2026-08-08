@@ -148,9 +148,12 @@ function StrategyPolicy() {
     );
   }
   const c = sc.config;
-  const field = (label, value, gloss) => (
+  const field = (label, value, gloss, term) => (
     <div style={{ display: "grid", gap: 2 }}>
-      <span style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</span>
+      <span style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+        {label}
+        {term && <window.Help term={term} />}
+      </span>
       <span style={{ fontFamily: "var(--mono)", fontSize: 13 }}>{value}</span>
       <span style={{ fontSize: 11, color: "var(--text-3)" }}>{gloss}</span>
     </div>
@@ -179,20 +182,20 @@ function StrategyPolicy() {
 
       <h4 style={h4}>Entry gates</h4>
       <div style={grid}>
-        {field("Short-leg delta", `|Δ| ≤ ${c.max_short_delta}`, "the short strike's delta ceiling — roughly its odds of finishing ITM")}
-        {field("Win probability", pct(c.min_pop), "minimum probability of profit required to enter")}
-        {field("DTE window", `${c.min_dte}–${c.max_dte}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over")}
-        {field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone")}
-        {field("Min credit", usd2(c.min_credit), "below this, fees dominate the trade")}
-        {field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this")}
-        {field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? "minimum annualized yield required" : "not used — a high yield floor mechanically forces 1-DTE risk")}
+        {field("Short-leg delta", `|Δ| ≤ ${c.max_short_delta}`, "the short strike's delta ceiling — roughly its odds of finishing ITM", "short_leg_delta")}
+        {field("Win probability", pct(c.min_pop), "minimum probability of profit required to enter", "pop")}
+        {field("DTE window", `${c.min_dte}–${c.max_dte}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte")}
+        {field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone", "risk")}
+        {field("Min credit", usd2(c.min_credit), "below this, fees dominate the trade", "min_credit")}
+        {field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev")}
+        {field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? "minimum annualized yield required" : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")}
       </div>
 
       <h4 style={h4}>Book limits</h4>
       <div style={grid}>
-        {field("Max positions", c.max_positions, "open spreads across the whole book at once")}
-        {field("Max total risk", usd(c.max_total_risk), "capital-at-risk ceiling across every open spread")}
-        {field("Max per underlying", c.max_per_underlying, "at most this many open spreads per name at a time")}
+        {field("Max positions", c.max_positions, "open spreads across the whole book at once", "max_positions")}
+        {field("Max total risk", usd(c.max_total_risk), "capital-at-risk ceiling across every open spread", "max_total_risk")}
+        {field("Max per underlying", c.max_per_underlying, "at most this many open spreads per name at a time", "max_per_underlying")}
       </div>
 
       <h4 style={h4}>Exit policy</h4>

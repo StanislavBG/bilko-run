@@ -1,0 +1,31 @@
+{
+  "session": {
+    "id": "psess-mscdpilw-13",
+    "cwd": "/home/bilko/Projects/Bilko",
+    "goalText": "Hosting Platform Review\n\nWe are builing native integration from Session-Manager to host project to Bilko.run. Lets review our capabilites, limitations and extend and expand documentation as needed to assist the Session-Manager-Integration-Agent that is being developed currently.",
+    "claudeSessionId": "4aeee278-c24d-4f4f-9b1d-fda18a9b9119",
+    "status": "completed",
+    "createdAt": "2026-08-02T22:35:35.156Z",
+    "completedAt": "2026-08-02T22:35:46.998Z",
+    "resumedFromId": "psess-msc9129l-29"
+  },
+  "events": [
+    {
+      "id": "pevt-mscdpilw-14",
+      "promptSessionId": "psess-mscdpilw-13",
+      "kind": "prompt",
+      "causedByEventId": null,
+      "at": "2026-08-02T22:35:35.156Z",
+      "text": "Hosting Platform Review\n\nWe are builing native integration from Session-Manager to host project to Bilko.run. Lets review our capabilites, limitations and extend and expand documentation as needed to assist the Session-Manager-Integration-Agent that is being developed currently."
+    },
+    {
+      "kind": "closed",
+      "causedByEventId": "pevt-mscdpilw-14",
+      "id": "pevt-mscdprqt-16",
+      "promptSessionId": "psess-mscdpilw-13",
+      "at": "2026-08-02T22:35:46.997Z"
+    }
+  ],
+  "transcript": "",
+  "archivedAt": "2026-08-02T22:35:46.998Z"
+}

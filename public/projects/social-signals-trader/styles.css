@@ -1207,6 +1207,11 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   padding: 8px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   display: flex; flex-direction: column; gap: 4px;
   font-size: 12px; line-height: 1.4; white-space: normal; text-align: left;
+  /* Reset — a `?` badge can sit inside an ancestor styled with
+     `text-transform: uppercase` (e.g. `.opt-kv-k`'s field-label styling);
+     without this the whole prose popover inherits it and reads as shouted
+     caps instead of a normal sentence. */
+  text-transform: none;
 }
 .help-tip-label { font-weight: 600; color: var(--text); }
 .help-tip-short { color: var(--text); }
@@ -1229,6 +1234,15 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .help-tip-calc-unavailable { color: var(--text-2); font-style: italic; font-size: 11px; }
 .help-tip-calc-asof { color: var(--text-2); font-size: 10px; }
 .help-tip-calc-asof--stale { color: var(--text); font-weight: 600; }
+
+/* The taller calc-block popover (PRD 1024) routinely exceeds the height of
+   a short `.card` (e.g. a 2-line "Open queue" section), and `.card`'s own
+   `overflow: hidden` — there for rounded corners around tables/dividers —
+   then silently clips the bottom of the tip. `.help-tip` only exists in the
+   DOM while its popover is open, so relaxing clipping on its ancestor card
+   only while one is actually open is safe: every other state (no open
+   tooltip) keeps the card's normal clipping unchanged. */
+.card:has(.help-tip) { overflow: visible; }
 
 /* Narrow screens: centered popover can overflow the viewport edge — pin it
    to the right of the button instead of centering, and clamp its width. */

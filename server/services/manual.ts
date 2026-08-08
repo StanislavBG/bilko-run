@@ -4,17 +4,21 @@
  * Responsibilities, and deliberately nothing else:
  *   1. Resolve the release bundle on disk and read its manifest.
  *   2. Answer "is this email entitled?" (one-time purchase of MANUAL_PRODUCT_KEY).
- *   3. Mint + verify short-lived signed download tokens.
  *
- * Why signed tokens at all: a browser `<a download>` / `window.location` can't
- * carry an `Authorization: Bearer` header, so the download endpoint can't use
- * Clerk directly. The authenticated endpoint mints a 5-minute HMAC token bound
- * to (email, version, assetId); the download endpoint verifies that instead.
- * The bundle itself lives under `data/manual/`, NOT `dist/`, so the static
- * plugin can never serve a chapter or PDF by guessed URL.
+ * There is deliberately NO download-token machinery here. Entitlement already
+ * lives in one durable place — the `stripe_one_time_purchases` row that
+ * `hasPurchased` reads — so every route, downloads included, checks that row
+ * directly. An earlier revision signed short-lived HMAC download URLs because a
+ * browser navigation can't carry an `Authorization` header; that bought nothing
+ * except a `MANUAL_DOWNLOAD_SECRET` to configure, rotate, and keep in sync
+ * across instances. The client now fetches the asset WITH its bearer token and
+ * saves the blob (src/lib/manualClient.ts), so the header problem disappears
+ * and so does the secret.
+ *
+ * The bundle lives under `data/manual/`, NOT `dist/`, so the static plugin can
+ * never serve a chapter or PDF by guessed URL.
  */
 
-import crypto from 'crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -31,9 +35,6 @@ import {
 import { hasPurchased } from './stripe.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/** Token lifetime. Long enough to click through a download, short enough to not be a share link. */
-export const DOWNLOAD_TOKEN_TTL_MS = 5 * 60 * 1000;
 
 // ── Bundle location ──────────────────────────────────────────────────────────
 
@@ -143,71 +144,4 @@ export async function isEntitledToManual(email: string): Promise<boolean> {
   const normalized = (email ?? '').trim().toLowerCase();
   if (!normalized) return false;
   return hasPurchased(normalized, MANUAL_PRODUCT_KEY);
-}
-
-// ── Signed download tokens ───────────────────────────────────────────────────
-
-let _warnedAboutSecret = false;
-/** Per-process fallback so a missing env var degrades to "tokens die on restart", not "no signing". */
-const _ephemeralSecret = crypto.randomBytes(32).toString('hex');
-
-function signingSecret(): string {
-  const configured = process.env.MANUAL_DOWNLOAD_SECRET ?? process.env.CLERK_SECRET_KEY;
-  if (configured) return configured;
-  if (!_warnedAboutSecret) {
-    _warnedAboutSecret = true;
-    console.warn(
-      '[manual] MANUAL_DOWNLOAD_SECRET not set — signing download tokens with a ' +
-      'per-process key. Tokens issued before a restart or on another instance ' +
-      'will be rejected. Set MANUAL_DOWNLOAD_SECRET in production.',
-    );
-  }
-  return _ephemeralSecret;
-}
-
-function b64url(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-export interface DownloadTokenClaims {
-  email: string;
-  version: string;
-  assetId: string;
-  exp: number;
-}
-
-export function mintDownloadToken(
-  claims: Omit<DownloadTokenClaims, 'exp'>,
-  now = Date.now(),
-): string {
-  const payload: DownloadTokenClaims = { ...claims, exp: now + DOWNLOAD_TOKEN_TTL_MS };
-  const body = b64url(Buffer.from(JSON.stringify(payload), 'utf-8'));
-  const sig = b64url(crypto.createHmac('sha256', signingSecret()).update(body).digest());
-  return `${body}.${sig}`;
-}
-
-export function verifyDownloadToken(
-  token: string,
-  expected: { version: string; assetId: string },
-  now = Date.now(),
-): DownloadTokenClaims | null {
-  const [body, sig] = (token ?? '').split('.');
-  if (!body || !sig) return null;
-
-  const want = b64url(crypto.createHmac('sha256', signingSecret()).update(body).digest());
-  // Length-mismatched inputs make timingSafeEqual throw, so guard before comparing.
-  if (sig.length !== want.length) return null;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
-
-  let claims: DownloadTokenClaims;
-  try {
-    claims = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8'));
-  } catch {
-    return null;
-  }
-
-  if (typeof claims.exp !== 'number' || claims.exp < now) return null;
-  // A token minted for one asset must never unlock another.
-  if (claims.version !== expected.version || claims.assetId !== expected.assetId) return null;
-  return claims;
 }

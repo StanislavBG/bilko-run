@@ -6,8 +6,7 @@
  *   GET  /api/manual/toc                     public   table of contents (sales page)
  *   GET  /api/manual/status                  auth     { entitled, toc } for the signed-in user
  *   GET  /api/manual/chapter/:slug           mixed    free chapters public, rest 402 unless entitled
- *   POST /api/manual/download-token          auth     mints a 5-min signed URL for one asset
- *   GET  /api/manual/download/:version/:id   token    streams the PDF/EPUB/bundle
+ *   GET  /api/manual/download/:assetId       auth     streams the PDF / offline HTML
  *   GET  /my-manual                          public   email-based recovery page (payment-link buyers)
  *
  * Entitlement itself is the already-wired `session_manager` one-time purchase —
@@ -19,18 +18,14 @@ import { createReadStream } from 'fs';
 import { requireAuth, verifyClerkToken, EMAIL_RE } from '../clerk.js';
 import {
   latestManifest,
-  readManifest,
   findChapter,
   findAsset,
   readChapterHtml,
   resolveReleaseFile,
   isEntitledToManual,
-  mintDownloadToken,
-  verifyDownloadToken,
 } from '../services/manual.js';
 import {
   tocFromManifest,
-  isValidManualVersion,
   isValidManualSlug,
   MANUAL_PRICE_LABEL,
   MANUAL_TITLE,
@@ -118,8 +113,20 @@ export function registerManualRoutes(app: FastifyInstance): void {
     return { version: m.version, slug: chapter.slug, title: chapter.title, html };
   });
 
-  // ── Auth: mint a short-lived download URL ──────────────────────────────────
-  app.post('/api/manual/download-token', async (req, reply) => {
+  // ── Auth: the actual bytes ─────────────────────────────────────────────────
+  //
+  // Entitlement is checked HERE, on the request that serves the file, against
+  // the persisted purchase row — the same check every other route uses. There
+  // is no signed URL, no download token, and no shared signing secret to
+  // configure or rotate.
+  //
+  // This works because the browser never navigates to this URL: ManualPage
+  // fetches it with the Clerk bearer header and saves the resulting blob (see
+  // src/lib/manualClient.ts). A plain `window.location = url` couldn't send
+  // that header, which is the only reason a signed-URL scheme was ever
+  // needed. The assets are a few hundred KB, so buffering one client-side
+  // costs nothing.
+  app.get('/api/manual/download/:assetId', async (req, reply) => {
     const email = await requireAuth(req, reply);
     if (!email) return;
 
@@ -128,8 +135,12 @@ export function registerManualRoutes(app: FastifyInstance): void {
       return { error: 'Purchase required.', locked: true, priceLabel: MANUAL_PRICE_LABEL };
     }
 
-    const body = req.body as { assetId?: string } | null;
-    const assetId = (body?.assetId ?? '').trim();
+    const { assetId } = req.params as { assetId: string };
+    if (!isValidManualSlug(assetId)) {
+      reply.status(400);
+      return { error: 'Invalid download.' };
+    }
+
     const m = latestManifest();
     if (!m) {
       reply.status(503);
@@ -142,48 +153,16 @@ export function registerManualRoutes(app: FastifyInstance): void {
       return { error: 'Unknown download.' };
     }
 
-    const token = mintDownloadToken({ email, version: m.version, assetId: asset.id });
-    return {
-      url: `/api/manual/download/${m.version}/${asset.id}?token=${encodeURIComponent(token)}`,
-      filename: asset.file,
-      bytes: asset.bytes,
-      expiresInSeconds: 300,
-    };
-  });
-
-  // ── Token: the actual bytes ────────────────────────────────────────────────
-  app.get('/api/manual/download/:version/:assetId', async (req, reply) => {
-    const { version, assetId } = req.params as { version: string; assetId: string };
-    const { token } = req.query as { token?: string };
-
-    if (!isValidManualVersion(version) || !isValidManualSlug(assetId)) {
-      reply.status(400);
-      return { error: 'Invalid download.' };
-    }
-
-    const claims = verifyDownloadToken(token ?? '', { version, assetId });
-    if (!claims) {
-      reply.status(403);
-      return { error: 'Download link is invalid or expired. Reload the manual page and try again.' };
-    }
-
-    const m = readManifest(version);
-    const asset = m ? findAsset(m, assetId) : null;
-    if (!m || !asset) {
-      reply.status(404);
-      return { error: 'Download not found.' };
-    }
-
-    const full = resolveReleaseFile(version, asset.file);
+    const full = resolveReleaseFile(m.version, asset.file);
     if (!full) {
-      console.error(`[manual] asset ${assetId} listed in manifest ${version} but its file is missing`);
+      console.error(`[manual] asset ${assetId} listed in manifest ${m.version} but its file is missing`);
       reply.status(500);
       return { error: 'Download is unavailable.' };
     }
 
     reply.header('Content-Type', asset.mime);
     reply.header('Content-Disposition', `attachment; filename="${asset.file.replace(/[^\w.\-]/g, '_')}"`);
-    // Signed, per-user, expiring — must never be cached by a shared proxy.
+    // Per-user paid content — must never be cached by a shared proxy.
     reply.header('Cache-Control', 'private, no-store');
     return reply.send(createReadStream(full));
   });

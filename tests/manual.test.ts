@@ -95,56 +95,6 @@ describe('manual catalog', () => {
   });
 });
 
-describe('download tokens', () => {
-  // Import lazily so the env var below is set before the module caches a secret.
-  async function svc() {
-    process.env.MANUAL_DOWNLOAD_SECRET = 'test-secret-for-manual-downloads';
-    return import('../server/services/manual.js');
-  }
-
-  beforeEach(() => { vi.restoreAllMocks(); });
-
-  it('round-trips a token for the asset it was minted for', async () => {
-    const { mintDownloadToken, verifyDownloadToken } = await svc();
-    const token = mintDownloadToken({ email: 'buyer@example.com', version: '1.0.0', assetId: 'pdf' });
-    const claims = verifyDownloadToken(token, { version: '1.0.0', assetId: 'pdf' });
-    expect(claims?.email).toBe('buyer@example.com');
-  });
-
-  it('refuses a token minted for a different asset or version', async () => {
-    const { mintDownloadToken, verifyDownloadToken } = await svc();
-    const token = mintDownloadToken({ email: 'buyer@example.com', version: '1.0.0', assetId: 'pdf' });
-    expect(verifyDownloadToken(token, { version: '1.0.0', assetId: 'offline-html' })).toBeNull();
-    expect(verifyDownloadToken(token, { version: '2.0.0', assetId: 'pdf' })).toBeNull();
-  });
-
-  it('refuses an expired token', async () => {
-    const { mintDownloadToken, verifyDownloadToken, DOWNLOAD_TOKEN_TTL_MS } = await svc();
-    const now = 1_700_000_000_000;
-    const token = mintDownloadToken({ email: 'a@b.com', version: '1.0.0', assetId: 'pdf' }, now);
-    expect(verifyDownloadToken(token, { version: '1.0.0', assetId: 'pdf' }, now + 1000)).not.toBeNull();
-    expect(verifyDownloadToken(token, { version: '1.0.0', assetId: 'pdf' }, now + DOWNLOAD_TOKEN_TTL_MS + 1)).toBeNull();
-  });
-
-  it('refuses a tampered payload and malformed input without throwing', async () => {
-    const { mintDownloadToken, verifyDownloadToken } = await svc();
-    const token = mintDownloadToken({ email: 'a@b.com', version: '1.0.0', assetId: 'pdf' });
-    const [body, sig] = token.split('.');
-
-    // Re-encode the payload with a longer expiry but keep the original signature.
-    const forgedBody = Buffer.from(JSON.stringify({
-      email: 'a@b.com', version: '1.0.0', assetId: 'pdf', exp: Date.now() + 10 ** 9,
-    })).toString('base64url');
-    expect(verifyDownloadToken(`${forgedBody}.${sig}`, { version: '1.0.0', assetId: 'pdf' })).toBeNull();
-
-    // A signature of a different length must not blow up timingSafeEqual.
-    for (const bad of ['', 'garbage', `${body}.`, `.${sig}`, `${body}.short`, `${body}.${sig}extra`]) {
-      expect(() => verifyDownloadToken(bad, { version: '1.0.0', assetId: 'pdf' })).not.toThrow();
-      expect(verifyDownloadToken(bad, { version: '1.0.0', assetId: 'pdf' })).toBeNull();
-    }
-  });
-});
-
 describe('release bundle on disk', () => {
   it('exposes the shipped v1.0.0 bundle with a free sample chapter', async () => {
     const { listManualVersions, latestManifest, findChapter, readChapterHtml, resolveReleaseFile } =
@@ -183,7 +133,6 @@ describe('entitled path (route-level)', () => {
   const BUYER = 'buyer@entitled-test.com';
 
   async function buildApp() {
-    process.env.MANUAL_DOWNLOAD_SECRET = 'test-secret-for-manual-downloads';
     const { registerManualRoutes } = await import('../server/routes/manual.js');
     const app = Fastify({ logger: false });
     registerManualRoutes(app);
@@ -204,7 +153,7 @@ describe('entitled path (route-level)', () => {
     authAs(null);
   });
 
-  it('walks status → paid chapter → download-token → streamed bytes for an entitled buyer', async () => {
+  it('walks status → paid chapter → downloaded bytes for an entitled buyer', async () => {
     hasPurchased.mockImplementation(async (email, productKey) => email === BUYER && productKey === MANUAL_PRODUCT_KEY);
     authAs(BUYER);
     const app = await buildApp();
@@ -232,59 +181,42 @@ describe('entitled path (route-level)', () => {
     expect(typeof chapterBody.html).toBe('string');
     expect(chapterBody.html.length).toBeGreaterThan(0);
 
-    // 3. mint a download token for the PDF asset
+    // 3. download the PDF with the same bearer credential — no token step
     const assetId = statusBody.toc.assets.find((a: { id: string }) => a.id === 'pdf')?.id;
     expect(assetId).toBe('pdf');
-    const mint = await app.inject({
-      method: 'POST',
-      url: '/api/manual/download-token',
-      headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },
-      payload: { assetId },
-    });
-    expect(mint.statusCode).toBe(200);
-    const mintBody = mint.json();
-    expect(typeof mintBody.url).toBe('string');
-    expect(mintBody.bytes).toBeGreaterThan(0);
+    const declaredBytes = statusBody.toc.assets.find((a: { id: string }) => a.id === 'pdf')!.bytes;
 
-    // 4. the minted URL streams the full declared byte count with the right headers
-    const download = await app.inject({ method: 'GET', url: mintBody.url });
+    const download = await app.inject({
+      method: 'GET',
+      url: `/api/manual/download/${assetId}`,
+      headers: { authorization: 'Bearer test-token' },
+    });
     expect(download.statusCode).toBe(200);
+    expect(download.headers['content-type']).toContain('application/pdf');
     expect(download.headers['content-disposition']).toContain('attachment');
     expect(download.headers['cache-control']).toBe('private, no-store');
-    expect(download.rawPayload.length).toBe(mintBody.bytes);
+    expect(download.rawPayload.length).toBe(declaredBytes);
 
     await app.close();
   });
 
-  it('mints a token that unlocks only the asset it names, even for an entitled buyer', async () => {
-    hasPurchased.mockImplementation(async (email, productKey) => email === BUYER && productKey === MANUAL_PRODUCT_KEY);
-    authAs(BUYER);
+  it('refuses the download to an anonymous request and to a non-buyer', async () => {
     const app = await buildApp();
 
-    const status = await app.inject({ method: 'GET', url: '/api/manual/status', headers: { authorization: 'Bearer test-token' } });
-    const { toc } = status.json();
-    const assetIds: string[] = toc.assets.map((a: { id: string }) => a.id);
-    expect(assetIds).toContain('offline-html');
-    expect(assetIds).toContain('pdf');
+    // No bearer at all — the URL is not a credential, so it grants nothing.
+    authAs(null);
+    const anon = await app.inject({ method: 'GET', url: '/api/manual/download/pdf' });
+    expect(anon.statusCode).toBe(401);
 
-    const mint = await app.inject({
-      method: 'POST',
-      url: '/api/manual/download-token',
-      headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },
-      payload: { assetId: 'pdf' },
+    // Signed in, but has not bought it.
+    hasPurchased.mockResolvedValue(false);
+    authAs('nobody@example.com');
+    const notBuyer = await app.inject({
+      method: 'GET',
+      url: '/api/manual/download/pdf',
+      headers: { authorization: 'Bearer test-token' },
     });
-    const { url } = mint.json();
-
-    // Swap the token's target asset in the URL — the token was signed for
-    // 'pdf' only, so redirecting it at 'offline-html' must be refused rather
-    // than acting as a general-purpose bearer credential for the release.
-    // Swap only the trailing asset segment so this doesn't hardcode a release
-    // version that will drift as new manual editions ship.
-    const swapped = url.replace(/\/pdf(\?|$)/, '/offline-html$1');
-    expect(swapped).not.toBe(url);
-
-    const res = await app.inject({ method: 'GET', url: swapped });
-    expect(res.statusCode).toBe(403);
+    expect(notBuyer.statusCode).toBe(402);
 
     await app.close();
   });
@@ -297,13 +229,12 @@ describe('entitled path (route-level)', () => {
     const status = await app.inject({ method: 'GET', url: '/api/manual/status', headers: { authorization: 'Bearer test-token' } });
     expect(status.json().entitled).toBe(false);
 
-    const mint = await app.inject({
-      method: 'POST',
-      url: '/api/manual/download-token',
-      headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },
-      payload: { assetId: 'pdf' },
+    const download = await app.inject({
+      method: 'GET',
+      url: '/api/manual/download/pdf',
+      headers: { authorization: 'Bearer test-token' },
     });
-    expect(mint.statusCode).toBe(402);
+    expect(download.statusCode).toBe(402);
 
     await app.close();
   });

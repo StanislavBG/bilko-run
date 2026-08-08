@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth, useUser, SignInButton } from '@clerk/clerk-react';
 import { usePageView } from '../hooks/usePageView.js';
 import {
-  fetchManualToc, fetchManualStatus, fetchManualChapter, requestManualDownload,
+  fetchManualToc, fetchManualStatus, fetchManualChapter, downloadManualAsset,
   type ManualStatus, type ManualChapterBody, type ManualChapterLocked,
 } from '../lib/manualClient.js';
 import { startSessionManagerCheckout } from '../lib/sessionManagerCheckout.js';
@@ -94,11 +94,16 @@ export default function ManualPage() {
     if (!result.ok) { setError(result.error ?? 'Checkout failed.'); setBuying(false); }
   }, [email]);
 
+  const [downloading, setDownloading] = useState<string | null>(null);
+
   const handleDownload = useCallback(async (assetId: string) => {
     setError('');
-    const result = await requestManualDownload(assetId, getToken);
-    if (!result.ok) { setError(result.error); return; }
-    window.location.href = result.download.url;
+    setDownloading(assetId);
+    // Fetches with the auth header and saves the blob — no signed URL, so the
+    // server needs no download secret. See lib/manualClient.ts.
+    const result = await downloadManualAsset(assetId, getToken);
+    setDownloading(null);
+    if (!result.ok) setError(result.error);
   }, [getToken]);
 
   if (loading) {
@@ -168,9 +173,10 @@ export default function ManualPage() {
               <button
                 key={a.id}
                 onClick={() => handleDownload(a.id)}
-                className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:border-emerald-500"
+                disabled={downloading === a.id}
+                className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:border-emerald-500 disabled:opacity-60"
               >
-                ↓ {a.label} <span className="text-neutral-500">({formatBytes(a.bytes)})</span>
+                {downloading === a.id ? 'Downloading…' : <>↓ {a.label} <span className="text-neutral-500">({formatBytes(a.bytes)})</span></>}
               </button>
             ))}
           </div>

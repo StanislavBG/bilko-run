@@ -14,7 +14,6 @@ the team is one person, but the principle stands).
 | `CLERK_SECRET_KEY` | Clerk | server: token verification | impersonation |
 | `CLERK_WEBHOOK_SECRET` | Clerk | server: user-event webhook | spoofed user events |
 | `TURSO_AUTH_TOKEN` | Turso | server: DB connection | full DB read/write |
-| `MANUAL_DOWNLOAD_SECRET` | self | server: signs Field Manual download tokens | forged/never-expiring manual download links |
 
 ## General principles
 
@@ -67,22 +66,3 @@ the team is one person, but the principle stands).
 4. Revoke old token: `turso db tokens revoke <id>`.
 5. Mark rotated.
 
-### `MANUAL_DOWNLOAD_SECRET`
-
-**Required in production.** `server/services/manual.ts` signs the Field Manual's short-lived
-download tokens with this key. If it's unset, the server falls back to a random per-process key —
-tokens then break across a restart and disagree between instances behind a load balancer, so a
-buyer's download link can fail mid-session. There's no vendor rotation flow; generate a fresh
-random value and roll it like any HMAC secret.
-
-1. Generate a new value: `openssl rand -hex 32`.
-2. Render dashboard → bilko-run service → Environment → set `MANUAL_DOWNLOAD_SECRET`. Save.
-3. Render redeploys. Rolling this secret invalidates any download link minted in the last 5
-   minutes (`DOWNLOAD_TOKEN_TTL_MS`) — negligible blast radius, no coordination needed.
-4. Verify: sign in as an entitled buyer at `/manual`, download an asset, confirm it completes.
-5. Mark rotated.
-
-## After every rotation
-
-- Add a note in `secret_metadata.notes` describing what triggered it (90d, leak, off-boarding).
-- If rotation was due to a leak, also: invalidate any user sessions older than the leak window.

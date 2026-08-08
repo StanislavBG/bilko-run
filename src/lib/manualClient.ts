@@ -36,10 +36,8 @@ export interface ManualChapterLocked {
 }
 
 export interface ManualDownload {
-  url: string;
   filename: string;
   bytes: number;
-  expiresInSeconds: number;
 }
 
 interface ClientOptions {
@@ -100,28 +98,63 @@ export async function fetchManualChapter(
   }
 }
 
+/** Injectable so tests don't need a DOM; defaults to a real anchor click. */
+export interface SaveBlobFn {
+  (blob: Blob, filename: string): void;
+}
+
+const defaultSaveBlob: SaveBlobFn = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Release the object URL on the next tick — revoking synchronously can race
+  // the browser's own read of the blob in some engines.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+};
+
 /**
- * Mints a short-lived signed URL and hands it back. The caller navigates to it;
- * the URL carries its own token so no auth header is needed on the download.
+ * Downloads a manual asset and saves it to disk.
+ *
+ * Fetches WITH the Clerk bearer header rather than navigating the browser at a
+ * signed URL. That's why the server needs no download token and no signing
+ * secret: entitlement is re-checked server-side on this very request, against
+ * the persisted purchase row. Assets are a few hundred KB, so buffering one in
+ * memory is not a concern.
  */
-export async function requestManualDownload(
+export async function downloadManualAsset(
   assetId: string,
   getToken: TokenGetter,
-  opts: ClientOptions = {},
+  opts: ClientOptions & { saveBlob?: SaveBlobFn } = {},
 ): Promise<{ ok: true; download: ManualDownload } | { ok: false; error: string }> {
   const f = opts.fetchImpl ?? fetch;
+  const save = opts.saveBlob ?? defaultSaveBlob;
   try {
-    const res = await f(`${API}/manual/download-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(await authHeaders(getToken)) },
-      body: JSON.stringify({ assetId }),
+    const res = await f(`${API}/manual/download/${encodeURIComponent(assetId)}`, {
+      headers: await authHeaders(getToken),
     });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.url) {
+
+    if (!res.ok) {
+      // The error body is JSON even though a success is binary.
+      const data = await res.json().catch(() => null);
       return { ok: false, error: data?.error ?? 'Download failed. Please try again.' };
     }
-    return { ok: true, download: data as ManualDownload };
+
+    const blob = await res.blob();
+    const filename = filenameFromDisposition(res.headers.get('content-disposition')) ?? assetId;
+    save(blob, filename);
+    return { ok: true, download: { filename, bytes: blob.size } };
   } catch {
     return { ok: false, error: 'Network error — please try again.' };
   }
+}
+
+/** Pulls `filename="..."` out of a Content-Disposition header, if present. */
+export function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const match = /filename="([^"]+)"/.exec(header);
+  return match ? match[1] : null;
 }

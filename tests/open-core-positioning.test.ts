@@ -26,9 +26,21 @@ describe('open-core positioning: the app is free, the manual is the product', ()
   it('the marketing page states the app is free and shows the install command', () => {
     const src = read(MARKETING_PAGE);
     expect(src).toContain('npx claude-code-session-manager@latest');
-    expect(src).toMatch(/The app is free/i);
-    // The explainer section is the one that makes the split unambiguous.
+    // The line that makes the split unambiguous.
     expect(src).toMatch(/The tool is free\. The knowledge of how to run it isn't\./);
+    // And the promise that the app is never crippled to sell the book.
+    expect(src).toMatch(/never gated to sell the book/i);
+  });
+
+  it('binds checkout to the signed-in identity, never a free-text email field', () => {
+    const src = read(MARKETING_PAGE);
+    // Entitlement is looked up by the Clerk account's email. A typed <input
+    // type="email"> here let someone pay as one address while signed in as
+    // another — they'd be charged and then told they own nothing.
+    expect(src).not.toMatch(/type="email"/);
+    expect(src).toContain('primaryEmailAddress');
+    // Signed-out visitors must be sent through sign-in, not straight to Stripe.
+    expect(src).toContain('SignInButton');
   });
 
   it('every price mention on the marketing page is attached to the manual, never the app', () => {

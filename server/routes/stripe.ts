@@ -104,6 +104,16 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         customer: stripeCustomerId,
         client_reference_id: email,
         line_items: [{ price: priceId, quantity: 1 }],
+        // Lets Stripe's own "Add promotion code" field appear at checkout. This
+        // is how the full purchase → webhook → entitlement flow gets tested in
+        // production without editing the live price: create a 100%-off coupon,
+        // redeem it once, and every downstream step (payment_intent, the
+        // checkout.session.completed webhook, the stripe_one_time_purchases
+        // row, /manual unlocking) runs exactly as it does for a paying buyer.
+        // Dropping the price to $0 instead would NOT be equivalent — Stripe
+        // skips payment collection entirely for a zero-amount line item, so the
+        // paid path never actually executes.
+        allow_promotion_codes: true,
         success_url: safeUrl(body?.successUrl, defaultSuccessUrl),
         cancel_url: safeUrl(body?.cancelUrl, `${publicUrl}?checkout=cancel`),
       });

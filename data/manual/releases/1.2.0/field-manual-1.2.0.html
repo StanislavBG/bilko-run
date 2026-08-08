@@ -1,0 +1,2426 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>The Session Manager Field Manual — v1.2.0</title>
+<style>:root{--bg:#0d0d0d;--fg:#e8e8e8;--muted:#9a9a9a;--line:#2a2a2a;--accent:#5fdf9f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.7 system-ui,-apple-system,sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:48px 24px 96px}
+h1{font-size:2.1em;line-height:1.2;margin:2.5em 0 .4em;border-bottom:1px solid var(--line);padding-bottom:.3em}
+h1:first-child{margin-top:0}
+h2{font-size:1.35em;margin:2em 0 .5em}h3{font-size:1.1em;margin:1.6em 0 .4em}
+p{margin:.9em 0}.lede{font-size:1.12em;color:#cfcfcf}
+code{background:#191919;padding:.15em .4em;border-radius:4px;font-size:.9em}
+pre{background:#111;border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto}
+pre code{background:none;padding:0}
+.manual-table{width:100%;border-collapse:collapse;margin:1.2em 0;font-size:.94em}
+.manual-table th,.manual-table td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+.manual-table th{background:#161616;color:#fff}
+.manual-note{border-left:3px solid var(--accent);background:#131a16;padding:12px 16px;border-radius:0 6px 6px 0}
+.manual-incident{border:1px solid #4a3520;background:#1a1410;border-radius:8px;padding:4px 18px;margin:1.2em 0}
+.manual-steps li{margin:.5em 0}
+.manual-figure{margin:1.6em 0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#111}
+.manual-figure img{display:block;width:100%}
+.manual-figure__frame{min-height:180px;display:flex;align-items:center;justify-content:center;color:#666;font-size:.85em;background:repeating-linear-gradient(45deg,#141414,#141414 10px,#181818 10px,#181818 20px)}
+.manual-figure__frame::after{content:"figure pending capture: " attr(data-capture)}
+figcaption{padding:12px 16px;color:var(--muted);font-size:.88em;display:flex;flex-wrap:wrap;gap:14px}
+.callout{display:inline-flex;align-items:center;justify-content:center;width:1.5em;height:1.5em;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:.8em;margin-right:.4em}
+.toc{border:1px solid var(--line);border-radius:8px;padding:16px 24px;background:#111}
+a{color:#7fc4ff}</style></head>
+<body><div class="wrap">
+<h1>The Session Manager Field Manual</h1>
+<p class="lede">A tab-by-tab operator's guide to Claude Code Session Manager — what each surface is for, the one thing people get wrong about it, and the workflow that makes it pay for itself.</p>
+<p style="color:#9a9a9a">Version 1.2.0 · released 2026-08-07 · documents Session Manager v0.66.0</p>
+<nav class="toc"><strong>Contents</strong><ol><li><a href="#getting-started">Getting Started — the 10-minute setup</a></li><li><a href="#epics-and-sessions">Epics & Sessions — Terminal and Chat are one session</a></li><li><a href="#scheduler">Scheduler — author once, run around your token window</a></li><li><a href="#settings-and-scopes">Settings & Scopes — editing the substrate, not the conversation</a></li><li><a href="#mcp-servers">MCP Servers — registering tools, and proving they actually connected</a></li><li><a href="#permissions">Permissions — stop the interruptions, don't disable the guardrail</a></li><li><a href="#agent-library">Agent Library — authoring the "who" of an Epic</a></li><li><a href="#skills">Skills — what auto-fires, what you type, and where it lives</a></li><li><a href="#home-and-project-brief">Home & Project Brief — the cockpit's dashboard</a></li><li><a href="#hooks">Hooks — edit the CLI's own shell-outs, safely</a></li><li><a href="#tag-library">Tag Library — the mission that ships with every Epic</a></li><li><a href="#history-analytics">History — where your Claude time and money went</a></li><li><a href="#memory-clusters">Memory Clusters — what an agent has actually been remembering</a></li><li><a href="#usage">Usage — reading the 5-hour window before it reads you</a></li><li><a href="#voice">Voice Input — dictate into any session, offline</a></li><li><a href="#plans-and-tasks">Plans & Tasks — reading what the agent already told you</a></li><li><a href="#simple-mode">Simple Mode — the chrome-free single-terminal cockpit</a></li></ol></nav>
+<section id="getting-started"><h1>Getting Started — the 10-minute setup</h1>
+
+<p class="lede">Session Manager is a local cockpit for the Claude Code CLI. It does not replace
+<code>claude</code>; it wraps it — giving you a terminal, a scheduler that runs work while you sleep,
+and roughly two dozen configuration and observability surfaces over the same
+<code>~/.claude/</code> directory the CLI already reads.</p>
+
+<h2>1. Install and launch</h2>
+
+<p>There is nothing to build. The app ships on npm and runs straight from <code>npx</code>:</p>
+
+<pre><code>npx claude-code-session-manager@latest</code></pre>
+
+<p>First launch recompiles the native terminal backend (<code>node-pty</code>) for your Electron
+runtime, so give it a minute. Linux and macOS only.</p>
+
+<p>If you want the stripped-down version — one terminal, no tabs, no config surface — add
+<code>--simple</code>:</p>
+
+<pre><code>npx claude-code-session-manager@latest --simple</code></pre>
+
+<figure class="manual-figure" data-figure="first-launch">
+  <div class="manual-figure__frame" data-capture="app boot, Home tab, empty project list"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> The left nav — every surface lives here.
+    <span class="callout" data-arrow="up">2</span> <strong>Open / Start Project</strong> — the only
+    way a project enters the app.
+    <span class="callout" data-arrow="down">3</span> The Almanac footer: connection dot, 5-hour usage,
+    active branch, app version.
+  </figcaption>
+</figure>
+
+<h2>2. The one idea to internalise: TAB = project, SESSION = unit of work</h2>
+
+<p>Almost every mistake new users make comes from missing this. Session Manager has exactly two
+levels of scope, and they are not interchangeable:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Concept</th><th>What it actually is</th><th>How many</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>TAB</strong></td>
+      <td>A working directory. The cwd <em>is</em> the project identity — everything the app stores
+      for a project keys off that path.</td>
+      <td>One per project. Picking an already-open project re-activates its tab; it never opens a second.</td>
+    </tr>
+    <tr>
+      <td><strong>SESSION</strong></td>
+      <td>One small unit of work inside that project, backed by its own tagged Claude session.</td>
+      <td>Many per tab. Short-lived by design — one Session per thing you're doing.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note"><strong>The rule that follows:</strong> if you want a second conversation in
+the same project, you want a second <em>Session</em>, not a second tab. Tabs are for switching projects.</p>
+
+<h2>3. Where your data lives</h2>
+
+<p>When a tab first opens on a directory, Session Manager creates one folder inside it:</p>
+
+<pre><code>&lt;your-project&gt;/session-manager-operations/
+├── prompt-sessions/   # your Sessions — active index + archived Sessions
+├── scheduler/         # PRDs, queue, and run state
+├── project-brief/     # the Home tab's project brief
+└── logs/</code></pre>
+
+<p>It is plain JSON and Markdown, it sits inside your repo, and it is meant to be read by humans and
+committed if you want it committed. Nothing about your project is stored in a cloud service by this
+app — the marketing page's "local-first" claim is literal.</p>
+
+<h2>4. Your first five minutes</h2>
+
+<ol class="manual-steps">
+  <li><strong>Open / Start Project</strong> in the left nav, and pick a repo you actually work in.
+  A native folder picker opens; "New Folder" starts a fresh one.</li>
+  <li>The Terminal tab boots a real <code>claude</code> session in that directory. This is the same
+  CLI you already use — same settings, same skills, same MCP servers.</li>
+  <li>Press <strong>New Session</strong>. Pick an <em>Agent</em> (who works) and a <em>Mission</em>
+  (feature / bug / discussion), type what you want, and submit.</li>
+  <li>Watch it run. That's the loop. Everything else in this manual is about doing that loop
+  faster, cheaper, and unattended.</li>
+</ol>
+
+<h2>5. What to read next</h2>
+
+<p>If you only read two more chapters, read <a href="#epics-and-sessions">Sessions</a>
+(so you stop losing context) and <a href="#scheduler">Scheduler</a> (so the app starts working
+while you don't).</p>
+</section>
+<section id="epics-and-sessions"><h1>Sessions — Terminal and Chat are one session</h1>
+
+<p class="lede">A Session <em>is</em> a tagged Claude session. Not a folder of sessions, not a wrapper
+around one — a 1:1 relationship. Once that clicks, the two views over it stop being confusing.</p>
+
+<h2>One session, two views</h2>
+
+<p>Every Session mints exactly one <code>claudeSessionId</code> when it is created. Both ways of
+talking to it attach to that same id:</p>
+
+<table class="manual-table">
+  <thead><tr><th>View</th><th>What runs underneath</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Terminal</strong></td>
+      <td>An interactive PTY: <code>claude --resume &lt;sessionId&gt;</code> in the Session's cwd.</td>
+      <td>Anything needing approvals, interruptions, or you watching closely.</td>
+    </tr>
+    <tr>
+      <td><strong>Chat</strong></td>
+      <td>Headless: <code>claude -p --resume &lt;sessionId&gt;</code>, streamed back as a feed.</td>
+      <td>Long unattended turns, and reading back what happened.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note"><strong>Switching views hands the session over — it never forks it.</strong>
+Attachment is mutually exclusive: exactly one view holds the session at a time. Context continuity
+across the switch is the whole point, so if you ever see a fresh empty session after switching,
+that's a bug worth reporting, not expected behaviour.</p>
+
+<figure class="manual-figure" data-figure="epic-views">
+  <div class="manual-figure__frame" data-capture="Session detail with the Terminal/Chat view toggle visible"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> The view toggle — one session, two renderings.
+    <span class="callout" data-arrow="right">2</span> The verbosity dial (1 loudest → 5 quietest).
+    <span class="callout" data-arrow="left">3</span> The Session's event chain: prompt → PRD → response.
+  </figcaption>
+</figure>
+
+<h2>Creating a Session: two independent choices</h2>
+
+<p>The New Session card asks two separate questions, and it is worth being deliberate about both:</p>
+
+<ol class="manual-steps">
+  <li><strong>Agent — who is working.</strong> A persona from your Agent Library
+  (<code>~/.claude/agents/*.md</code>). This also decides which model the session launches with:
+  the persona's own <code>model:</code> field wins, falling back to your global default.</li>
+  <li><strong>Mission — how they work.</strong> One of <em>feature</em>, <em>bug</em>, or
+  <em>discussion</em>. This sets the grounding template the session opens with, and how eagerly
+  the agent should decompose work into scheduled PRDs.</li>
+</ol>
+
+<p>Those two, plus a one-line summary of what's actually grounding the session, compose the
+opening prompt in a fixed order — <strong>Actor, Input, Mission</strong>, then your own goal text.
+That's the AIM framework, and it's why a Session tends to start productively instead of spending
+three turns establishing context.</p>
+
+<h3>The "advanced" flip: the grounding board</h3>
+
+<p>Flip the New Session card and you get an inventory of what this session will really load —
+the CLAUDE.md files, skills, MCP servers, and hooks it will discover on disk, plus your git branch
+and the other Sessions in the project. It is an <strong>inspector, not a control panel</strong>: there
+is no toggle to make the CLI skip a file it would otherwise find. Read it to understand why an
+agent behaved a certain way.</p>
+
+<h2>Lifecycle: three states, one transition you care about</h2>
+
+<pre><code>proposed ──(Approve &amp; start, or submitting the first prompt)──▶ active ──▶ completed</code></pre>
+
+<ul>
+  <li><strong>proposed</strong> — reserved but not started. <em>Nothing has been spent yet.</em>
+  Every Session is born here.</li>
+  <li><strong>active</strong> — the session is running, authoring PRDs, receiving scheduler updates.</li>
+  <li><strong>completed</strong> — archived to its own JSON file. The session id is dead; resuming
+  mints a new one that traces back.</li>
+</ul>
+
+<p class="manual-note"><strong>Don't repurpose a Session.</strong> Its title and objective are fixed
+for the life of its session — that objective <em>is</em> the first prompt. Iterate in follow-up
+messages; when the unit of work changes, start a new Session. The rename action in the row menu is for
+fixing a typo, not for changing what a Session is about.</p>
+
+<h2>Where per-task behaviour belongs (and where it doesn't)</h2>
+
+<p>This is the most common architectural mistake users make. Settings — including Permissions,
+Hooks, MCP Servers — edits <em>on-disk files that the CLI reads on every single invocation</em>.
+A Project-scope Settings change alters the substrate for every current and future Session in that
+project. It is not per-conversation curation and never was.</p>
+
+<table class="manual-table">
+  <thead><tr><th>You want…</th><th>Correct lever</th></tr></thead>
+  <tbody>
+    <tr><td>This kind of task to behave differently</td><td>A custom <strong>Mission tag</strong> (its prompt template)</td></tr>
+    <tr><td>A different reviewer/implementer style or model</td><td>A custom <strong>Agent persona</strong></td></tr>
+    <tr><td>Different permissions, hooks, env vars, MCP servers</td><td><strong>Settings</strong> — genuinely substrate</td></tr>
+  </tbody>
+</table>
+
+<h2>Actions: a one-click shortcut, not a fourth concept</h2>
+
+<p>Every project's Sessions toolbar can carry its own row of <strong>Action</strong> buttons —
+one per Agent Library persona that declares a project scope. Pressing one is exactly the same act
+as pressing <strong>+ New Session</strong>: it goes through the same mint → approve → send path,
+with that persona as the Actor, its first Tag Library mission as the Mission, and the persona's own
+<code>action:</code> instruction as the goal. There is no second creation path and no per-project
+registry — scope lives on the persona file itself. See Agent Library for how to author one.</p>
+
+<h2>Reading a session without drowning</h2>
+
+<p>The Chat feed has a five-level density dial, numbered loudest-first: <strong>1 raw</strong>,
+2 detail, 3 standard, 4 brief, <strong>5 summary</strong>. Tool cards appear only at levels 1–2.
+Nothing is ever discarded from the store — raise the level and the byte-exact record comes back
+with no re-read.</p>
+
+<p>Two things ignore the dial on purpose, and you should know why:</p>
+
+<ul>
+  <li>A turn <strong>asking you something</strong> is never hidden or clamped at any level. Hiding
+  a question strands a run waiting on an answer nobody can see.</li>
+  <li>The <strong>in-flight</strong> bubble keeps its tool strip at every level — mid-run it's the
+  only progress signal there is.</li>
+</ul>
+</section>
+<section id="scheduler"><h1>Scheduler — author once, run around your token window</h1>
+
+<p class="lede">The Scheduler is the feature that pays for the app. You write a PRD, it lands in a
+queue, and Session Manager runs it as a headless <code>claude -p</code> job timed around your plan's
+rolling 5-hour token window — auto-pausing when you're rate-limited and resuming the moment the
+window resets.</p>
+
+<h2>What the Scheduler is a browser over</h2>
+
+<p>It is a viewer and operator surface on one hierarchy, scoped to the active tab's project by
+default ("All projects" is the explicit escape hatch):</p>
+
+<pre><code>TAB (project)
+└── SESSION (unit of work)
+    └── PRD (one scheduled job)</code></pre>
+
+<p>On disk, PRDs live at
+<code>&lt;project&gt;/session-manager-operations/scheduler/epics/&lt;epic-id&gt;/prds/</code>, with the
+queue and history sharded alongside in <code>scheduler/state/</code>. Every PRD belongs to a Session —
+there is no such thing as a free-floating PRD.</p>
+
+<figure class="manual-figure" data-figure="scheduler-queue">
+  <div class="manual-figure__frame" data-capture="Scheduler tab, Queue view, at least one running job"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Queue / PRDs / History — three views, one panel.
+    <span class="callout" data-arrow="up">2</span> Mode selector: manual · on-reset · when-available.
+    <span class="callout" data-arrow="right">3</span> A job's status badge — <em>needs_review</em> is a
+    question, not a failure.
+  </figcaption>
+</figure>
+
+<h2>The three run modes</h2>
+
+<table class="manual-table">
+  <thead><tr><th>Mode</th><th>Behaviour</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td><code>manual</code></td><td>Nothing runs until you press go.</td><td>You're debugging the queue itself.</td></tr>
+    <tr><td><code>on-reset</code></td><td>Fires at each 5-hour window reset.</td><td>You want a predictable burst, not a trickle.</td></tr>
+    <tr><td><code>when-available</code></td><td>Polls your billing usage every 60 s and runs whenever there's headroom. <strong>The default.</strong></td><td>Almost always.</td></tr>
+  </tbody>
+</table>
+
+<h2>Concurrency: one pool, machine-wide</h2>
+
+<p>Scheduler jobs and Chat runs draw from the <em>same</em> pool of concurrent <code>claude -p</code>
+sessions (default 5, adjustable from the Home tab). On top of that sits a memory gate: a job won't
+start if the machine doesn't have headroom for it. That gate is machine-aware rather than a
+hardcoded job count, which is what makes running five parallel agents on a laptop survivable.</p>
+
+<h2>Writing a PRD that actually finishes</h2>
+
+<p>Two real incidents shaped every rule here, and both are worth internalising:</p>
+
+<div class="manual-incident">
+  <h3>The poll-hang</h3>
+  <p>A PRD used <code>until $(curl … | jq .uptime)</code> to wait for a deploy. The condition was
+  unsatisfiable — that deploy type never restarts the API — so the job spun for
+  <strong>2 h 47 m</strong> until the watchdog killed it.</p>
+  <p><strong>Rule:</strong> never write an unbounded wait. Every loop gets a maximum iteration
+  count and an explicit give-up branch.</p>
+</div>
+
+<div class="manual-incident">
+  <h3>The post-AC overrun</h3>
+  <p>A PRD declared success, then launched a fixture generator over 50,000 seeds that appeared
+  nowhere in its acceptance criteria. It ran <strong>2 h 44 m</strong> before a human killed it.</p>
+  <p><strong>Rule:</strong> the acceptance criteria are the <em>ceiling</em>, not the floor. When
+  the AC are met, stop.</p>
+</div>
+
+<h3>The checklist</h3>
+
+<ol class="manual-steps">
+  <li>One PRD, one outcome. If you can't state the outcome in a sentence, it's two PRDs.</li>
+  <li>Acceptance criteria must be checkable <strong>headlessly</strong>. "Launch the app and click
+  through the tabs" cannot be verified by a <code>claude -p</code> job — it has no GUI and will be
+  SIGTERM'd.</li>
+  <li>Every loop is bounded. Every wait has a timeout.</li>
+  <li>Ordering comes from <code>dependsOn</code> — nothing else gates a batch.</li>
+  <li>Never reuse a PRD number.</li>
+</ol>
+
+<p class="manual-note"><strong>PRD authoring is API-only.</strong> The <code>scheduler_create_prd</code>
+MCP tool is the sole sanctioned way to write a PRD file — a hook blocks any other tool from writing
+directly into a project's <code>scheduler/epics/&lt;epic-id&gt;/prds/</code> folder. It validates
+frontmatter, atomically allocates the PRD number, and enforces that every PRD joins an existing
+Session rather than floating free. You will never need to hand-write a PRD file yourself.</p>
+
+<h2>When a job parks in <code>needs_review</code></h2>
+
+<p><code>needs_review</code> is <strong>a question, not a result</strong>. When a job lands there,
+Session Manager writes a deterministic root-cause report next to that run's own log and appends it
+as a response on the Session that authored the PRD — so the question comes back to the conversation
+that asked it, not to a global inbox you'll never check.</p>
+
+<p>This is also the strongest argument for writing tight PRDs: the clearer the PRD, the less there
+is to route back to you.</p>
+
+<h2>Self-healing you don't have to think about</h2>
+
+<ul>
+  <li><strong>Boot reconciliation</strong> — on startup, jobs whose processes died are reaped and
+  classified (success / timeout / error). A still-alive orphan is terminated gracefully first so its
+  log isn't misread mid-write.</li>
+  <li><strong>Dead-process reaper</strong> — periodic PID-liveness checks catch hung jobs.</li>
+  <li><strong>Supervisor</strong> — every 15 minutes, a probe per running job; it kills a stuck
+  poll-loop's shell without killing the agent that spawned it.</li>
+  <li><strong>Definition-of-done gate</strong> — when the queue drains, completed PRDs are
+  re-verified against their own acceptance criteria and a report is written. Idempotent, so a
+  re-drain over the same set is a no-op.</li>
+  <li><strong>External watchdog</strong> — an out-of-process timer relaunches the app if its
+  heartbeat goes stale while jobs are outstanding.</li>
+</ul>
+
+<p class="manual-note">All of it exists so that "queue it and go to bed" is a real workflow rather
+than an aspiration.</p>
+</section>
+<section id="settings-and-scopes"><h1>Settings &amp; Scopes — editing the substrate, not the conversation</h1>
+
+<p class="lede">The Settings tab is a scoped editor over the three files the <code>claude</code> CLI
+itself reads on every launch. It looks like a normal per-project config screen, and that similarity
+is exactly what causes the most common mistake in this app: reaching for Settings when what you
+actually wanted was a Tag or an Agent persona. This chapter covers the scope model, the one field
+that legitimately crosses the line into per-Session territory, and how to stop yourself before you
+edit the wrong layer.</p>
+
+<h2>The three scopes</h2>
+
+<p>Settings, Permissions, Hooks, MCP Servers and Skills all share one shape — <strong>ScopeSwitcher +
+SaveBar + JsonEditor</strong> — over the same three on-disk files, resolved by
+<code>lib/scopes.ts</code>'s <code>SETTINGS_SCOPES</code>:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Scope</th><th>File</th><th>Applies to</th></tr></thead>
+  <tbody>
+    <tr><td><strong>User</strong></td><td><code>~/.claude/settings.json</code></td>
+    <td>Every project on the machine.</td></tr>
+    <tr><td><strong>Project</strong></td><td><code>&lt;cwd&gt;/.claude/settings.json</code></td>
+    <td>This project only — meant to be checked into git and shared with collaborators.</td></tr>
+    <tr><td><strong>Local</strong></td><td><code>&lt;cwd&gt;/.claude/settings.local.json</code></td>
+    <td>This project, this machine only — gitignored, for machine-specific overrides.</td></tr>
+  </tbody>
+</table>
+
+<p>Permissions is the same three files under the hood — it's a structured UI over the
+<code>permissions</code> subtree of the identical <code>settings.json</code>, not a separate file. The
+tab defaults to <strong>Project</strong> scope when you're looking at an open project tab and
+<strong>User</strong> scope on the Home face, but that's a starting point, not a boundary — you can
+switch scope at any time, and the toolbar always tells you which file is active
+(<code>overrides → &lt;path&gt;</code> in Guided view, the raw path in Tree/Raw view).</p>
+
+<figure class="manual-figure" data-figure="settings-scope-switcher">
+  <div class="manual-figure__frame" data-capture="Settings tab, Guided view, ScopeSwitcher showing User/Project/Local with one dirty scope"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Guided / Tree / Raw — three views of the same
+    merged config.
+    <span class="callout" data-arrow="up">2</span> Scope switcher — User, Project, Local, each
+    annotated with exists/dirty state.
+    <span class="callout" data-arrow="right">3</span> The active file path, so you always know
+    exactly what you're about to save.
+  </figcaption>
+</figure>
+
+<p>Guided view (<code>EffectiveCards</code>) and Tree view (<code>EffectiveTree</code>) both show the
+<strong>merged, effective</strong> config across all three scopes — editing a value there writes an
+override into whichever scope is currently selected. Raw view is the literal JSON of the one active
+scope's file, through Monaco with schemastore.org validation. Switching to Raw and saving directly
+is the fastest path when you already know the exact key you want; Guided is the safer path when
+you're not sure what's already set somewhere else.</p>
+
+<h2>Settings is machine/project substrate — not per-conversation curation</h2>
+
+<div class="manual-note">
+  <p><strong>The rule that matters most in this chapter:</strong> every file Settings edits is a file
+  the <code>claude</code> CLI reads fresh on <em>every single invocation it launches</em> — every
+  Session, every Terminal tab, every scheduled PRD job, in that project (Project/Local scope) or on the
+  machine (User scope). Settings is not scoped to one conversation, one Session, or one task. There is
+  no "just for this chat" checkbox, because the file underneath has no concept of "this chat."</p>
+</div>
+
+<p>That means a Project-scope edit changes behaviour for <strong>every current and future Session in
+that project</strong>, and a User-scope edit changes it for <strong>every project on the
+machine</strong> — retroactively, for sessions that already exist and ones you haven't created yet.
+If you only wanted one Session to behave differently, you just changed the wrong number of things.</p>
+
+<table class="manual-table">
+  <thead><tr><th>You want…</th><th>Wrong lever</th><th>Right lever</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>"This one Session should follow a different process / think about the problem differently"</td>
+      <td>Editing Settings for the duration of the task, then editing it back</td>
+      <td>A Tag (Tag Library, <code>initialPromptTemplate</code>) or an Agent persona (Agent Library)
+      chosen when you create the Session</td>
+    </tr>
+    <tr>
+      <td>"This kind of task should always run with a particular persona/model"</td>
+      <td>Flipping the Settings model default before starting, back after</td>
+      <td>An Agent persona with its own <code>model</code> frontmatter field, selected as that Session's
+      Agent</td>
+    </tr>
+    <tr>
+      <td>"Every project on this machine should allow a tool / set an env var / register an MCP
+      server"</td>
+      <td>—</td>
+      <td>Settings, User scope. This one <em>is</em> the right lever — it's genuinely
+      machine-wide, task-independent config.</td>
+    </tr>
+    <tr>
+      <td>"This project's hooks/permissions/MCP servers should be the same for anyone who clones the
+      repo"</td>
+      <td>—</td>
+      <td>Settings, Project scope, committed to git. Also correct — it's project-wide substrate, not
+      task curation.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Put another way: Settings holds what's legitimately identical <em>regardless of what task you're
+about to run</em> — permissions, hooks, MCP servers, env vars, output style. If a value should
+differ depending on <em>what kind of work</em> a Session is doing, it doesn't belong in Settings at
+all; it belongs on the Session's Tag or Agent, chosen fresh at that Session's creation and folded into its
+opening prompt.</p>
+
+<h2>The one field that's carved out per-Session: <code>model</code></h2>
+
+<p>There is exactly one exception, and it's deliberately narrow. An Agent persona
+(<code>~/.claude/agents/&lt;name&gt;.md</code>, edited from Agent Library) can carry its own
+<code>model</code> frontmatter field. When a Session is created with that persona as its Agent,
+<code>src/main/lib/agentModelResolve.cjs</code>'s <code>resolveEpicModel</code> looks up the persona's
+<code>model</code> field first — and only falls back to Settings' "Model &amp; Reasoning" default
+(<code>sonnet</code>) when the persona has no <code>model</code> set, or it's explicitly
+<code>'inherit'</code>. This is the same resolution both views of that Session use: Chat
+(<code>chatRunner.cjs</code>) and Terminal (<code>EpicTerminalPane.tsx</code>'s own mirrored
+resolver) agree on which model a Session launches with, because they're two views over the same
+session.</p>
+
+<p>Every <em>other</em> field in Settings' "Model &amp; Reasoning" group —
+<code>effortLevel</code>, <code>fastMode</code>, <code>alwaysThinkingEnabled</code>, and the rest —
+has no per-Session override today. Editing them changes the default for every Session that doesn't specify
+otherwise, and there's currently no per-Session escape hatch for them the way there is for
+<code>model</code>.</p>
+
+<div class="manual-note">
+  <p><strong>Rule of thumb:</strong> if you're about to open Settings to change how one Session behaves,
+  stop — open Agent Library or Tag Library instead. If you're about to open Agent Library or Tag
+  Library to change something for every project on the machine, stop — that's Settings, User scope.</p>
+</div>
+
+<h2>What lives outside the three scoped files</h2>
+
+<p>Settings' toolbar has two more views that aren't scoped at all — <strong>Telemetry</strong> and
+<strong>Session Manager</strong> — visible only on the Home face, because both are genuinely
+machine-wide with no cwd or scope input:</p>
+
+<ul>
+  <li><strong>Telemetry</strong> (<code>SettingsTelemetry.tsx</code>) — opt-in OTEL export of
+  classified transcript events, persisted to <code>~/.config/session-manager/otel.json</code>. Not a
+  Claude Code file at all; this is Session Manager's own instrumentation, off by default. An
+  "Include content" toggle controls whether tool inputs/plan text/agent prompts are exported, mirroring
+  upstream Claude Code's own <code>OTEL_LOG_USER_PROMPTS</code> opt-in — structural metadata (tool
+  names, todo counts, usage tokens) goes out either way.</li>
+  <li><strong>Session Manager</strong> (<code>SettingsAppPrefs.tsx</code>) — native app preferences
+  stored in <code>localStorage</code>, applied immediately with no save/revert cycle. Today this is
+  one setting: the default model for a <em>raw</em> interactive session (one opened without going
+  through a Session at all) — separate from <code>resolveEpicModel</code>'s persona-first resolution,
+  since a raw session has no Agent to read a <code>model</code> field from.</li>
+</ul>
+
+<p>Both switch away automatically if you flip from the Home face to a Project tab while one is open —
+they have nothing project-scoped to show, so the toolbar never displays a tab that no longer applies.</p>
+
+<h2>Reading the merged view before you touch a scope</h2>
+
+<p>Guided and Tree views compute one merged object across User → Project → Local (precedence rising
+in that order, plus Managed and CLI-flag layers the app doesn't edit) via <code>mergeScopes</code>.
+Before overriding a key, check <em>which</em> scope already holds it — the Guided view's reset-to-default
+button targets the most-specific scope currently holding that key, not blindly the scope you happen
+to have selected. Writing an override at User scope when Project scope already sets the same key
+does nothing observable until someone deletes the Project-scope value — a quiet trap if you're
+debugging "why didn't my setting take effect."</p>
+
+<p class="manual-note">The schema-reference link in the toolbar (<code>code.claude.com/docs/en/settings</code>)
+is the authoritative field list. Monaco's own <code>jsonDefaults</code> validates against
+schemastore.org as you type in Raw view — there's no hand-rolled validation layer to fight with.</p>
+</section>
+<section id="mcp-servers"><h1>MCP Servers — registering tools, and proving they actually connected</h1>
+
+<p class="lede">The MCP Servers tab edits the same JSON the <code>claude</code> CLI reads on every
+launch — <code>~/.claude.json</code> at User scope, <code>.mcp.json</code> at Project scope — and
+adds one thing raw JSON editing can't give you: a live probe that tells you whether a registered
+server actually connected, before you build a Session that assumes its tools exist.</p>
+
+<h2>Where a server definition lives</h2>
+
+<p>There is no session-manager-owned server registry. The tab is a scoped editor over two files,
+switched with the same <strong>User / Project</strong> scope switcher used elsewhere in the app:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Scope</th><th>File</th><th>Applies to</th></tr></thead>
+  <tbody>
+    <tr><td>User</td><td><code>~/.claude.json</code></td><td>Every project, every session, on this machine.</td></tr>
+    <tr><td>Project</td><td><code>&lt;project cwd&gt;/.mcp.json</code></td><td>This project only — checked into the repo if you commit it.</td></tr>
+  </tbody>
+</table>
+
+<p>Both files share the same shape: a top-level <code>mcpServers</code> object keyed by server
+name. This repo's own <code>.mcp.json</code> is a real example — it registers two servers,
+<code>session-manager-scheduler</code> (<code>node scripts/scheduler-mcp-server.cjs</code>, a
+wrapper that exposes the admin API's <code>scheduler_list_jobs</code>/<code>scheduler_reset_job</code>
+tools) and <code>bilko-host</code> (<code>node</code> against a path in the sibling
+<code>Bilko</code> repo) — both plain <code>stdio</code> servers with no <code>type</code> field
+set, since <code>stdio</code> is the default transport.</p>
+
+<figure class="manual-figure" data-figure="mcp-servers-list">
+  <div class="manual-figure__frame" data-capture="MCP Servers tab, User scope, several servers with mixed connection states"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Scope switcher — User vs Project, same file the
+    CLI reads.
+    <span class="callout" data-arrow="up">2</span> Status dot per server: live probe result, not a
+    guess from the config alone.
+    <span class="callout" data-arrow="right">3</span> <strong>⟳ test connections</strong> — re-runs the
+    probe on demand.
+  </figcaption>
+</figure>
+
+<h2>The field you'll actually touch, per server</h2>
+
+<table class="manual-table">
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>type</code></td><td><code>stdio</code> (default) · <code>http</code> · <code>streamable-http</code> · <code>sse</code> (deprecated — the editor flags it) · <code>ws</code>.</td></tr>
+    <tr><td><code>command</code> / <code>args</code></td><td>For <code>stdio</code> servers — the process the CLI spawns.</td></tr>
+    <tr><td><code>url</code> / <code>headers</code></td><td>For the HTTP-family transports.</td></tr>
+    <tr><td><code>env</code></td><td>Environment variables passed to a <code>stdio</code> server's process.</td></tr>
+    <tr><td><code>alwaysLoad</code></td><td>Bypasses tool-search deferral (Claude Code v2.1.121+) — the server's tools are always in context instead of loaded on demand.</td></tr>
+    <tr><td><code>enabled</code></td><td>Session-Manager-editable toggle: unchecking it sets <code>enabled: false</code> so the server is skipped in new sessions without deleting its definition.</td></tr>
+    <tr><td><code>disabledTools</code></td><td>Per-server tool denylist — same list <code>/mcp</code> surfaces inside a Claude session.</td></tr>
+    <tr><td><code>permissions.tools</code></td><td><code>inherit</code> (default) · <code>allow</code> all · <code>deny</code> all · an explicit allowlist array.</td></tr>
+    <tr><td><code>description</code></td><td>Not a Claude Code config field — a Session-Manager-only purpose note, so a server list of ten names isn't ten mystery strings later.</td></tr>
+  </tbody>
+</table>
+
+<p class="manual-note">One name is off-limits: Claude Code refuses to load a server named
+<code>workspace</code> (reserved as of CLI v2.1.128). The editor blocks it with a hard warning.
+<code>ide</code> and <code>tasks</code> aren't reserved, just commonly used by other tooling — the
+editor flags those as a caution, not a block.</p>
+
+<h2>The common mistake: registering a server and trusting it works</h2>
+
+<p>Adding an entry to <code>mcpServers</code> only proves the JSON is well-formed — it says nothing
+about whether the CLI can actually reach the server. A <code>stdio</code> command that's misspelled,
+an HTTP server that needs an OAuth flow you haven't completed, or a plugin-provided server still
+waiting on your approval all look identical in the raw file: present, and untested. The mistake
+is starting a Session that assumes a server's tools are available, discovering three turns in that
+the agent silently has none of them.</p>
+
+<h2>The workflow that pays off</h2>
+
+<ol class="manual-steps">
+  <li>Add or edit the server entry, then <strong>Save</strong> — it writes straight to
+  <code>~/.claude.json</code> or <code>.mcp.json</code>, whichever scope is active.</li>
+  <li>Press <strong>⟳ test connections</strong>. This shells out to <code>claude mcp list</code> —
+  a plain subcommand, no model call — and matches each configured server name against what came
+  back.</li>
+  <li>Read the status dot before relying on the server anywhere:
+    <table class="manual-table">
+      <thead><tr><th>Status</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td>Ready</td><td>Connected. Safe to build a Session around its tools.</td></tr>
+        <tr><td>Failed</td><td>The CLI tried and couldn't connect — check the command/URL first.</td></tr>
+        <tr><td>Needs auth</td><td>An OAuth-style server waiting on you to authorize it.</td></tr>
+        <tr><td>Pending approval</td><td>A plugin-registered server waiting on a trust decision.</td></tr>
+        <tr><td>Not checked</td><td>No probe result yet for this name — press test connections, don't assume.</td></tr>
+      </tbody>
+    </table>
+  </li>
+  <li>Only then start (or resume) the Session that depends on this server's tools. A session started
+  before the server was reachable won't retroactively pick it up — the tools are discovered at
+  launch, not mid-conversation.</li>
+</ol>
+
+<p>The probe has a 30-second ceiling and coalesces concurrent requests onto one in-flight
+<code>claude mcp list</code> call, so mashing the button doesn't fan out into parallel CLI
+processes — but it also means the result can lag a few seconds behind a config change you just
+saved. Re-test after every edit that touches connectivity (command, URL, env, headers), not just
+once at the start of a session.</p>
+
+<h2>The Library view: catalog, not installer state</h2>
+
+<p>The view switcher next to the scope switcher flips between <strong>Installed</strong> (the
+editor above) and <strong>Library</strong> — a browsable catalog of known MCP servers you can add
+with one click. The Library only ever reads <code>~/.claude.json</code>'s <code>mcpServers</code>
+keys to mark which catalog entries are already installed; it has no separate connection state of
+its own. Installing from the Library still lands you back in the same "unprobed until you test it"
+situation above — a catalog entry existing doesn't mean the server it describes is reachable on
+your machine.</p>
+</section>
+<section id="permissions"><h1>Permissions — stop the interruptions, don't disable the guardrail</h1>
+
+<p class="lede">The Permissions tab edits the same <code>permissions</code> block the <code>claude</code>
+CLI itself reads out of <code>settings.json</code> — allow, deny, and ask rules, plus a default
+mode and a list of additional directories. It is a scoped editor over real config, not a
+session-manager-only feature: every rule you write here is exactly what the CLI enforces on its
+own, with or without this app open.</p>
+
+<h2>What it's actually for</h2>
+
+<p>The honest framing is <strong>reducing prompt interruptions</strong>, not building a security
+boundary. Claude Code already asks before anything destructive by default — the Permissions tab
+exists so you stop re-approving the same handful of safe, read-only commands every session. <code>deny</code>
+rules are a real hard stop and worth using for genuinely dangerous patterns, but the tab's daily
+value is in <code>allow</code>: tell the CLI once that <code>Bash(ls:*)</code> or
+<code>Read(~/.claude/**)</code> never needs a prompt, and it stops asking.</p>
+
+<h2>The three lists, and the mode</h2>
+
+<table class="manual-table">
+  <thead><tr><th>Field</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>allow</code></td><td>Rules that auto-approve without a prompt — the one you'll edit most.</td></tr>
+    <tr><td><code>deny</code></td><td>Rules that hard-block, no prompt, no override at run time.</td></tr>
+    <tr><td><code>ask</code></td><td>Rules that force an explicit prompt even if something else would allow it.</td></tr>
+    <tr><td><code>defaultMode</code></td><td>One of <code>default</code>, <code>acceptEdits</code>, <code>plan</code>, or <code>bypassPermissions</code> — the CLI's baseline posture before any rule list is consulted.</td></tr>
+    <tr><td><code>additionalDirectories</code></td><td>Extra paths the session may touch beyond its own working directory.</td></tr>
+  </tbody>
+</table>
+
+<p>Rules use the CLI's own syntax (<code>Tool(pattern)</code>, e.g. <code>Bash(ls:*)</code>,
+<code>Write(/etc/**)</code>) — the tab links straight to the CLI's own rule-syntax docs rather than
+re-documenting it, and this manual won't either. Get the pattern right there, not by guessing here.</p>
+
+<figure class="manual-figure" data-figure="permissions-rules">
+  <div class="manual-figure__frame" data-capture="Permissions tab, Rules view, Project scope, an allow rule being added"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Effective / Rules / Presets — three views over
+    the same scope.
+    <span class="callout" data-arrow="up">2</span> Scope switcher: User / Project / Local.
+    <span class="callout" data-arrow="down">3</span> Allow / Deny / Ask — add a rule, hit Enter.
+  </figcaption>
+</figure>
+
+<h2>Effective vs. Rules — read before you write</h2>
+
+<p>The tab opens on <strong>Effective</strong>, not Rules, and that ordering is deliberate: it shows
+the merged result of every scope stacked together, so you can see what the CLI will actually do
+before you go add a rule that's already covered — or that a higher scope already blocks. Switching
+to <strong>Rules</strong> edits the raw list for whichever single scope is selected. From Effective,
+clicking an inherited value can push an override straight into the active scope instead of
+retyping it by hand.</p>
+
+<h2>Scope: the mistake people make</h2>
+
+<p>Permissions has the same three scopes as Settings — <strong>User</strong>
+(<code>~/.claude/</code>, every project on the machine), <strong>Project</strong>
+(<code>&lt;cwd&gt;/.claude/settings.json</code>, checked into git, shared with the team),
+<strong>Local</strong> (<code>&lt;cwd&gt;/.claude/settings.local.json</code>, gitignored,
+per-machine). The common mistake is adding a personal convenience rule — allowlisting a command you
+happen to trust on your own machine — at <strong>Project</strong> scope, where it ships to every
+teammate who pulls the repo and silently changes what their sessions auto-approve too.</p>
+
+<div class="manual-note"><strong>The workflow that pays off:</strong> allowlist genuinely safe,
+read-only commands (status checks, linters, <code>git diff</code>, read-only greps) at
+<strong>User</strong> scope so they stop interrupting you everywhere. Reserve <strong>Project</strong>
+scope for rules the whole team should share — a build step everyone runs, a deploy command the
+team has agreed is safe. Keep anything machine-specific or experimental in <strong>Local</strong>,
+where it never leaves your disk.</p></div>
+
+<h2>Presets</h2>
+
+<p>The Home face adds a fourth view, <strong>Presets</strong> — a static reference library of rule
+bundles, distinct from Rules/Effective in that it has no scope or cwd input of its own. It isn't
+offered on the Project face; landing there with Presets selected bounces you back to Effective.
+Use it to see or copy a starting bundle, not to edit a live scope directly.</p>
+
+<h2>The default-mode buttons</h2>
+
+<p>Above the rule lists sits one more control: <code>defaultMode</code>, a single choice among
+<code>default</code>, <code>acceptEdits</code>, <code>plan</code>, and <code>bypassPermissions</code>.
+This is the CLI's baseline stance before any allow/deny/ask rule is even consulted — the widest,
+bluntest lever on the tab. Set it at the scope where it belongs: a personal <code>acceptEdits</code>
+habit belongs in User or Local, not pushed into the Project file everyone inherits.</p>
+
+<h2>Automating the allowlist</h2>
+
+<p>You don't have to build the allow list by hand. The <code>fewer-permission-prompts</code> skill
+scans your own transcripts for the read-only Bash and MCP calls you keep re-approving, and writes a
+prioritized allowlist straight into <code>.claude/settings.json</code> — the same file this tab
+edits. Run it, then open Permissions → Rules to review what landed before you save; it's a
+generator for the list, not a replacement for looking at it.</p>
+
+<ol class="manual-steps">
+  <li>Work normally for a session or two — approve prompts as they come.</li>
+  <li>Run the <code>fewer-permission-prompts</code> skill to mine those approvals into a candidate
+  allowlist.</li>
+  <li>Open the Permissions tab, switch to <strong>Rules</strong> at the scope the skill wrote to,
+  and read what it added.</li>
+  <li>Move anything personal-only down to Local; leave anything genuinely team-safe at Project.</li>
+  <li>Save. The next session with a matching command runs without a prompt.</li>
+</ol>
+
+<p class="manual-note">Permissions is a friction dial, not a lockbox. If you actually need to stop
+an agent from doing something, write a <code>deny</code> rule — but most of what people reach for
+this tab to do is just "stop asking me," and <code>allow</code> at the right scope is the whole
+answer.</p>
+</section>
+<section id="agent-library"><h1>Agent Library — authoring the "who" of a Session</h1>
+
+<p class="lede">Agent Library is a full CRUD editor over <code>~/.claude/agents/*.md</code> — the
+same persona files the <code>claude</code> CLI already reads. It is not a viewer bolted onto the
+filesystem; New, Duplicate, Save, Revert, and Delete all write straight through to disk, and every
+persona you author here becomes a pickable <em>Agent</em> in the New Session card's "who is working"
+column.</p>
+
+<h2>What a persona actually controls</h2>
+
+<p>A Session is always grounded by two independent choices: an <strong>Agent</strong> (this page —
+the "who") and a <strong>Mission</strong> tag (Tag Library — the "what"). Picking a persona in the
+New Session card does three concrete things, and only three:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Field</th><th>Where it lands</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>description</code></td>
+      <td>Folded into the Session's opening prompt as an Actor framing line, before the grounding
+      summary and the Mission template.</td>
+      <td>Read once, at Session creation. Editing the persona afterward does not rewrite an existing
+      Session's opening prompt.</td>
+    </tr>
+    <tr>
+      <td><code>model</code></td>
+      <td>Sets the <code>--model</code> the Session launches with, for <strong>both</strong>
+      the Terminal view and the headless Chat view.</td>
+      <td>Only fires when set to something other than <code>inherit</code>. Otherwise each view
+      falls back to its own default (Chat: <code>sonnet</code>; Terminal: the raw-session-model
+      toggle).</td>
+    </tr>
+    <tr>
+      <td><code>tools</code>, <code>color</code>, <code>tags</code>, definition body</td>
+      <td>Written verbatim into the persona's frontmatter/body — read by the <code>claude</code>
+      CLI or Tag Library, not re-interpreted by session-manager.</td>
+      <td><code>tags</code> is a session-manager-only extension; the CLI itself never reads it.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note">Beyond those, <code>agentType</code> stays display-only. Picking a persona
+does not change which <code>claude</code> binary spawns, and it does not swap out permissions,
+hooks, or MCP servers — that substrate is Settings, not Agent Library. See the domain-model rule
+in this manual's project reference: if you want a task to run under different settings, that's a
+Settings edit; if you want it to run as a different <em>persona</em>, that's this page.</p>
+
+<figure class="manual-figure" data-figure="agent-library-editor">
+  <div class="manual-figure__frame" data-capture="Agent Library tab, a persona selected in the list, detail pane open showing model/tools/tags fields"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> The persona list — filterable, each row shows
+    its color swatch and override count.
+    <span class="callout" data-arrow="up">2</span> <strong>default model</strong> — sets
+    <code>--model</code> for this persona's Sessions.
+    <span class="callout" data-arrow="right">3</span> <strong>tags</strong> — the many-to-many link
+    to Tag Library, editable from either side.
+  </figcaption>
+</figure>
+
+<h2>The fields, in the order you'll fill them</h2>
+
+<ol class="manual-steps">
+  <li><strong>name</strong> — the filename on disk (<code>~/.claude/agents/&lt;name&gt;.md</code>).
+  Must be lowercase and hyphenated (<code>^[a-z][a-z0-9-]*$</code>); the app rejects anything else
+  before it ever hits disk.</li>
+  <li><strong>description</strong> — shown in the persona list and in every Agent picker. This is
+  the line that gets folded into a Session's opening prompt, so write it as a sentence about what
+  this persona does, not a label.</li>
+  <li><strong>default model</strong> — one of <code>inherit</code> / <code>haiku</code> /
+  <code>sonnet</code> / <code>opus</code>. Leave it <code>inherit</code> only if you genuinely
+  want this persona to ride whatever the launching view's own default is; otherwise pin it.</li>
+  <li><strong>tools</strong> — a checklist of the tools this persona is granted
+  (<code>Read</code>, <code>Grep</code>, <code>Glob</code>, <code>Bash</code>, <code>Write</code>,
+  <code>Edit</code>, <code>WebFetch</code>, <code>WebSearch</code>, <code>Task</code>). Anything not
+  ticked is refused at call time by the CLI, not by session-manager.</li>
+  <li><strong>color</strong> — cosmetic only; shows as a swatch dot in the persona list.</li>
+  <li><strong>tags</strong> — which Tag Library missions this persona is associated with. Purely a
+  many-to-many bookkeeping field (see below), not a restriction on which Mission a Session can pair
+  it with.</li>
+  <li><strong>definition</strong> — the system prompt body this persona runs under.</li>
+</ol>
+
+<h2>Model resolution: how <code>--model</code> actually gets picked</h2>
+
+<p>Both launch paths — <code>chatRunner.cjs</code>'s headless Chat run and
+<code>EpicTerminalPane.tsx</code>'s interactive Terminal — resolve the same way, mirrored so the
+two views of one Session never disagree on which model they're running:</p>
+
+<ol class="manual-steps">
+  <li>Look up the Session's <code>agentType</code> (the persona it was created with).</li>
+  <li>Read that persona's own <code>model</code> frontmatter field from
+  <code>~/.claude/agents/&lt;agentType&gt;.md</code>.</li>
+  <li>If it's set and isn't <code>inherit</code>, use it.</li>
+  <li>Otherwise fall back — Chat falls back to the hardcoded <code>sonnet</code> floor; Terminal
+  falls back to its own raw-session-model toggle.</li>
+</ol>
+
+<p>Any failure in that chain — no matching Session, no persona file, an unreadable file — falls back
+silently rather than throwing. The lookup never blocks a launch; the worst case is you get the
+fallback model instead of the one you thought you set.</p>
+
+<h2>Tags: the same relationship, editable from two pages</h2>
+
+<p>A persona's <code>tags</code> field records which of Tag Library's missions it's associated
+with. This is a genuine many-to-many relationship with one source of truth: assigning a tag from
+this page's chip row and assigning an agent from Tag Library's own detail pane both write through
+the identical <code>savePersona</code> call, to the identical frontmatter line. There is no second
+copy to drift.</p>
+
+<h2>Turning a persona into an Action button</h2>
+
+<p>Any persona can carry a project scope, which promotes it to its own button in that project's
+Sessions toolbar — a shortcut around the New Session card, never a second creation path. Three
+frontmatter fields, all editable from this page's detail pane:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Field</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>projects</code></td><td>Which project cwds show this Action, or <code>*</code> for every project.</td></tr>
+    <tr><td><code>action</code></td><td>The opening instruction — becomes the Session's goal, the way your own typed goal does from the New Session card.</td></tr>
+    <tr><td><code>actionLabel</code></td><td>The button's text. Defaults to the persona name if left blank.</td></tr>
+  </tbody>
+</table>
+
+<p class="manual-note">Pressing an Action button composes a Session exactly the way New Session does:
+this persona is the Actor, its first Tag Library mission is the Mission, and <code>action</code> is
+the goal text — same mint → approve → send path, same single-creator rule. The one built-in
+exception is the <code>builder</code> persona, which is deliberately excluded from the dynamic
+Action list because its own <strong>Run Build</strong> button already covers publish-target gating
+and in-flight dedup that a generic Action can't express.</p>
+
+<h2>Project overrides — the mistake that costs the most time</h2>
+
+<p>Claude Code itself resolves a project-local agent file
+(<code>&lt;project-cwd&gt;/.claude/agents/&lt;name&gt;.md</code>) ahead of the global one at
+<code>~/.claude/agents/&lt;name&gt;.md</code>, for any project that has one. Agent Library shows
+you this directly: a persona row with an <strong>override</strong> badge names every currently-open
+project shadowing it, and the detail pane's "project overrides" field lists them with a one-click
+<strong>×</strong> to drop a project's local copy.</p>
+
+<div class="manual-incident">
+  <h3>Editing the global persona and wondering why nothing changed</h3>
+  <p>You open a persona, tighten its tool grants or rewrite its definition, save — and the next
+  Session launched from a specific project behaves exactly as before. The project has its own
+  <code>.claude/agents/&lt;name&gt;.md</code> silently winning every time, and Agent Library's edit
+  form never touches it — this page only creates and edits the <em>global</em> copy.</p>
+  <p><strong>Rule:</strong> before editing a misbehaving persona, check the "project overrides"
+  field for that name. If a project you're testing against is listed, either edit that project's
+  local file directly or drop the override from here first.</p>
+</div>
+
+<p class="manual-note">Agent Library itself can only create the global definition — it has no
+per-tab cwd context of its own, so there is no "create an override" button here. Overrides are
+created by Claude Code's own file-discovery, or by hand; this page can only read and delete them.</p>
+
+<h2>The workflow that pays off: focused personas instead of repeated instructions</h2>
+
+<p>The failure mode this page exists to fix is retyping the same paragraph of constraints into
+every prompt — "only read, never edit," "use opus for this, it needs judgement," "stick to these
+three tools." Every one of those is a one-time persona edit instead of a recurring tax on your
+attention:</p>
+
+<ul>
+  <li>A read-only research persona: tools trimmed to <code>Read</code>/<code>Grep</code>/<code>Glob</code>,
+  model left cheap. Reuse it for every "just look and report" Session without re-explaining the
+  constraint each time.</li>
+  <li>A judgement-call persona: <code>model</code> pinned to <code>opus</code>, tagged against the
+  Mission it's meant to pair with in Tag Library, so it surfaces as the suggested default there.</li>
+  <li><strong>Duplicate</strong> an existing persona that's 90% right rather than authoring from
+  scratch — it clones the full draft (name suffixed <code>-copy</code>) so you're editing, not
+  retyping.</li>
+</ul>
+
+<p>The description field is the lever most people under-use: because it's folded into the Session's
+opening prompt ahead of the Mission template, a well-written description does real framing work —
+it is read by the model as the first line of context, not just displayed in a list.</p>
+
+<h2>Deleting a persona</h2>
+
+<p>Delete removes the global <code>.md</code> file — it asks for confirmation once (inline, not a
+modal) and is otherwise unconditional: there is no "in use by a running Session" guard on this action,
+so double-check the "project overrides" list and any Sessions you know reference this persona by name
+before confirming. A persona referenced by <code>agentType</code> on an existing Session that no
+longer resolves simply falls back through the same chain described above — the Session keeps running,
+just under the fallback model instead of a deleted persona's pinned one.</p></section>
+<section id="skills"><h1>Skills — what auto-fires, what you type, and where it lives</h1>
+
+<p class="lede">The Skills tab is a list+detail editor over the same two folders the
+<code>claude</code> CLI already reads on every launch: your Skills and your Slash Commands. It does
+not invent a parallel system — it edits <code>SKILL.md</code> and command <code>.md</code> files
+directly, at whichever scope you're pointed at, and lets you browse a catalog of skills and plugins
+you don't have installed yet.</p>
+
+<h2>What you're actually looking at</h2>
+
+<p>Open the tab and you get one panel split into a filterable sidebar and a Monaco-backed markdown
+editor — the same "list+detail" shape as Hooks and MCP Servers. The sidebar groups everything into
+two sections, <strong>Skills</strong> and <strong>Slash Commands</strong>, sorted skills-first. A
+<strong>Library</strong> view switcher next to the scope picker swaps the whole panel for a
+searchable catalog instead of your installed items.</p>
+
+<table class="manual-table">
+  <thead><tr><th>Scope</th><th>Skills live at</th><th>Commands live at</th></tr></thead>
+  <tbody>
+    <tr><td><strong>user</strong></td><td><code>~/.claude/skills/</code></td><td><code>~/.claude/commands/</code></td></tr>
+    <tr><td><strong>project</strong></td><td><code>&lt;cwd&gt;/.claude/skills/</code></td><td><code>&lt;cwd&gt;/.claude/commands/</code></td></tr>
+  </tbody>
+</table>
+
+<p>A skill is discovered by walking each scope's <code>skills/</code> root: either a direct subdir
+containing a <code>SKILL.md</code>, or one level deeper under a namespace directory (e.g.
+<code>~/.claude/skills/user/&lt;name&gt;/SKILL.md</code>) — the same walk a plugin's installed skills
+use. A command is simpler: every <code>.md</code> file directly under <code>commands/</code> is one
+command, named after the file.</p>
+
+<figure class="manual-figure" data-figure="skills-installed-view">
+  <div class="manual-figure__frame" data-capture="Skills tab, Installed view, User scope, a skill selected in the sidebar with its SKILL.md open in the editor and the enable toggle visible"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Skills and Slash Commands, listed separately —
+    only Skills get the enable toggle and the remove button.
+    <span class="callout" data-arrow="up">2</span> Scope switcher — <code>user</code> vs
+    <code>project</code>. Defaults to whichever matches the nav face you came from, but you can
+    override it.
+    <span class="callout" data-arrow="right">3</span> Provenance badge — confirms exactly which
+    scope and kind you're editing before you touch Save.
+  </figcaption>
+</figure>
+
+<h2>The mistake almost everyone makes: treating a Skill like a Slash Command</h2>
+
+<p>They sit in the same list, they're both markdown files, and it's easy to assume they work the
+same way. They don't:</p>
+
+<table class="manual-table">
+  <thead><tr><th></th><th>Skill</th><th>Slash Command</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>How it runs</td>
+      <td>Auto-invoked by the model, based on matching its own <code>description</code>
+      frontmatter against what you're doing. You don't type anything to trigger it.</td>
+      <td>Only runs when you explicitly type <code>/name</code>. Never fires on its own.</td>
+    </tr>
+    <tr>
+      <td>Can you turn it off?</td>
+      <td>Yes — the Toggle in the Skills tab. It writes
+      <code>disable-model-invocation: true</code> into the skill's own frontmatter, the actual flag
+      the CLI reads to stop auto-invoking it. Nothing is deleted; toggling back on removes the key.</td>
+      <td>No toggle exists for commands — there's nothing to auto-invoke, so there's nothing to
+      disable. Delete the file if you don't want it.</td>
+    </tr>
+    <tr>
+      <td>Can you remove it from the tab?</td>
+      <td>Yes — the <code>✕</code> button moves the skill's whole directory to the trash
+      (recoverable) and re-listing it means reinstalling from the Library.</td>
+      <td>Not from this tab — commands are single files; edit or delete them directly.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note">If a skill keeps firing when you don't want it to, you want the
+<strong>Toggle</strong>, not the <code>✕</code>. Disabling is instant and reversible; removing
+trashes the folder and makes you reinstall it. Confusing the two is how people end up
+re-downloading a skill they only meant to quiet down for a week.</p>
+
+<h2>The second mistake: forgetting which scope you're in</h2>
+
+<p>The scope switcher isn't cosmetic. Disabling or editing a skill at <strong>user</strong> scope
+changes it for every project on the machine; doing the same at <strong>project</strong> scope only
+affects the repo the active tab is pointed at. The tab defaults its scope from which nav face you
+arrived from — but it only re-applies that default on an actual face transition, and never once
+you've manually changed it — so it's worth glancing at the scope pill before you toggle anything,
+especially since Skills lives in the Home section of the left nav rather than under a specific
+project.</p>
+
+<h2>The Library: finding skills and plugins worth installing</h2>
+
+<p>Switch to <strong>Library</strong> and the same panel becomes a searchable catalog instead of
+your installed set. It has two halves reached from the same view switcher:</p>
+
+<ul>
+  <li><strong>Skills</strong> — mostly official skills from <code>anthropics/skills</code>
+  (PDF, DOCX, XLSX, PPTX, Webapp Testing, Frontend Design, Skill Creator, and more), each with a
+  copy-pasteable <code>git clone --sparse</code> one-liner that drops it straight into
+  <code>~/.claude/skills/</code>. A handful of entries (the Playwright testing/visual/accessibility/
+  API/debug skills) are marked <strong>local</strong> — bundled already, nothing to install.</li>
+  <li><strong>Plugins</strong> — a much bigger catalog, and this is where this repo's own dev
+  skillset lives: <strong>session-manager-dev</strong>. Unlike catalog Skills, Plugins get a real
+  in-app <strong>Install</strong> button that runs <code>claude plugin install &lt;slug&gt;</code> in
+  a hidden terminal (streamed into the panel) rather than handing you a command to paste.</li>
+</ul>
+
+<p>That distinction matters in practice: if you go looking for <code>/develop</code>,
+<code>/builder</code>, <code>/explain-to-me</code>, <code>/find-opportunity</code>, or
+<code>/local-project-health</code> in the Skills catalog, you won't find them individually — they
+ship together as the <strong>session-manager-dev</strong> plugin (installed from its own bundled
+marketplace, no GitHub round-trip required), and only appear as individual Skills in the Installed
+view <em>after</em> you install that one plugin.</p>
+
+<h2>The workflow that pays off</h2>
+
+<ol class="manual-steps">
+  <li>Before hunting for a skill by name, check the <strong>Plugins</strong> half of the Library
+  first — most useful skillsets (including this project's own) ship as a plugin, not a standalone
+  skill.</li>
+  <li>Install once, then switch back to <strong>Installed</strong> at the matching scope to confirm
+  it landed — new skills show up with their <code>description</code> frontmatter right in the
+  sidebar, so you can tell at a glance what will auto-fire and when.</li>
+  <li>If a skill is noisy but you might want it later, <strong>toggle it off</strong> rather than
+  removing it — it's a one-line frontmatter edit, not a filesystem operation.</li>
+  <li>If you're genuinely done with it, <strong>remove</strong> it — the folder goes to the trash,
+  so a change of mind a week later is still recoverable, but your Installed list stops lying to you
+  about what's actually active.</li>
+  <li>Edit a <code>SKILL.md</code> directly in the tab when you want to narrow its
+  <code>description</code> so it stops firing on the wrong prompts — that's usually a better fix
+  than disabling it outright.</li>
+</ol>
+
+<p class="manual-note">The Skills tab never talks to a server and never fabricates what's
+installed — everything it shows is a live read of the same files <code>claude</code> loads on its
+next launch. If a skill isn't behaving the way the tab says it should, the tab is telling you the
+truth about the file; the mismatch is almost always scope.</p>
+</section>
+<section id="home-and-project-brief"><h1>Home &amp; Project Brief — the cockpit's dashboard</h1>
+
+<p class="lede">Home is not a landing page you pass through on the way to work — it is the one
+screen that answers "what does this machine need from me right now?" across every project you've
+ever opened. Project Brief is its sibling on the other side of a Terminal tab: a synthesized,
+editable document about the one project you're currently in. Neither one runs anything by itself;
+both exist to keep you from having to click through five tabs to find out what's true.</p>
+
+<h2>1. What Home actually shows, top to bottom</h2>
+
+<p>Home is assembled from existing zustand stores — nothing on this screen is a second copy of
+data another tab already owns. Read top to bottom, it is a fixed stack of six sections:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Section</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Hero</strong></td><td>"This machine · N projects", a live "<em>X</em> of
+    <em>Y</em> slots busy" line from the session-slot pool, and a "<em>N</em> things need you"
+    jump-link that scrolls straight to Needs you.</td></tr>
+    <tr><td><strong>Grid</strong></td><td>Three cards side by side: the 5-hour/weekly billing
+    meters, known Projects, and pending scheduler jobs (Queued).</td></tr>
+    <tr><td><strong>Needs you</strong></td><td>Real signals only — a <code>proposed</code> Session
+    awaiting Approve/Discard, a chat run stopped on <code>needs-input</code>, or a scheduler job
+    the queue itself flagged <code>failed</code>/<code>needs_review</code>.</td></tr>
+    <tr><td><strong>Active sessions</strong></td><td>The machine session-slot pool's current
+    holders, joined against running scheduler jobs and chat runs for context.</td></tr>
+    <tr><td><strong>Recent sessions</strong></td><td>The five most-recently-touched transcripts
+    under <code>~/.claude/projects/</code> — the same source History reads.</td></tr>
+    <tr><td><strong>Agents</strong></td><td>A read-only reference card listing each of the five
+    Session tags and the exact <code>initialPromptTemplate</code> text it seeds into a session —
+    not a picker, just "what does this tag actually do".</td></tr>
+  </tbody>
+</table>
+
+<figure class="manual-figure" data-figure="home-overview">
+  <div class="manual-figure__frame" data-capture="Home tab, full scroll, with at least one Needs-you row and one Active session"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> Hero — slots busy + needs-you jump link.
+    <span class="callout" data-arrow="left">2</span> Billing / Projects / Queued grid.
+    <span class="callout" data-arrow="down">3</span> Needs you — click a row to expand its real actions.
+  </figcaption>
+</figure>
+
+<h2>2. Needs you is a triage inbox, not a notification feed</h2>
+
+<p>Every row in this section corresponds to something that already gates on a human somewhere else
+in the app — Home just surfaces it in one place instead of making you go find it. Click a row to
+expand it inline:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Row kind</th><th>Source</th><th>Actions</th></tr></thead>
+  <tbody>
+    <tr><td>Proposed Session</td><td>A Session sitting in <code>status: 'proposed'</code> — asked for,
+    not yet started.</td><td><strong>Approve &amp; start</strong> (sends the opening prompt) or
+    <strong>Discard</strong>.</td></tr>
+    <tr><td>Session asking a question</td><td>A chat run's most recent ticket is
+    <code>needs-input</code> — the composer's stop-signal protocol fired mid-run.</td>
+    <td><strong>Open session</strong> jumps to that Session's Terminal view.</td></tr>
+    <tr><td>Scheduler job failed / needs review</td><td>The queue's own status verdict on a
+    PRD run.</td><td><strong>Retry now</strong> resets the job to pending, or <strong>View in
+    Scheduler</strong>.</td></tr>
+  </tbody>
+</table>
+
+<p class="manual-note">A job in <code>needs_review</code> is a question, not a failure — treat it
+the same as a chat run asking you something, not as broken work. (See the Scheduler chapter for
+how the root-cause report behind it gets written.)</p>
+
+<h2>3. The mistake people make: treating the slot slider as per-project</h2>
+
+<p>The "Max slots" control on Active sessions looks like it belongs to whichever project you're
+looking at. It doesn't. It is one number for the whole machine — the same pool the Scheduler and
+every Chat-view Session draw <code>claude -p</code> processes from. Defaults to 5, dragged anywhere
+from 0 (pauses new launches without touching what's already running) to 10. An environment override
+(<code>SM_SESSION_SLOTS</code>) disables the slider entirely and shows why on hover.</p>
+
+<p>Drop it to 1–2 while you're actively driving a Terminal session yourself and don't want a
+scheduler burst competing with you for tokens; push it back up before you queue a batch of PRDs and
+walk away. There is no per-project equivalent — if two projects are both hammering the pool, the
+lever that fixes it lives on this one screen regardless of which project's tab is active.</p>
+
+<p>Active sessions also explains itself when the queue is running narrower than the pool: a
+<code>memory gate</code>, <code>slots-exhausted</code>, <code>held</code> (behind
+<code>dependsOn</code>), or <code>paused</code> reason string appears next to the slot count,
+sourced straight from the scheduler's own last tick — it stays silent when the queue is simply
+idle, so an empty queue never reads as a blocked one.</p>
+
+<h2>4. New Session from Home is a project picker, not a form</h2>
+
+<p>The <strong>New epic</strong> button in the Hero doesn't open the New Session card directly — it
+opens a drawer listing your known projects (the same rows the Projects card renders) as a radio
+list. Confirming activates that project's tab if it's already open, or opens a dormant one, and
+hands you into its Sessions workspace to actually start the Session. This exists because "New Session" is
+scoped to one project's Terminal tab; Home's version is the cross-project entry point into that
+flow, not a second way to create one.</p>
+
+<ol class="manual-steps">
+  <li>Click <strong>New epic</strong> in the Hero.</li>
+  <li>Pick the project from the radio list — this is real known-cwd data, not a text field.</li>
+  <li>Confirm. The matching Terminal tab activates (or opens) and the Sessions workspace opens on
+  top of it.</li>
+  <li>From there, proceed exactly as described in Getting Started: pick an Agent, pick a Mission,
+  type your goal, submit.</li>
+</ol>
+
+<h2>5. Project Brief: a document that maintains itself, cheaply</h2>
+
+<p>Switch to a project's <strong>Project Home</strong> surface and you're looking at something
+different from Home: one project's own synthesized brief, not a cross-project dashboard. Above the
+document sits a thin live strip that changes underneath the static content:</p>
+
+<ul>
+  <li><strong>What is in flight</strong> — cards for the project's current Sessions, computed live
+  from the Session queue every render. The card copy explicitly says "this block is never
+  hand-written" for a reason: it can't drift out of sync with what's actually running.</li>
+  <li><strong>Waiting on you</strong> — open questions the last run couldn't resolve on its own,
+  each with an <strong>Answer in Session →</strong> button that jumps straight to that Session's Terminal
+  view. Hidden entirely when there are none.</li>
+</ul>
+
+<p>Below that strip is the generated document itself, rendered in the same sandboxed iframe the
+Project Pages feature uses, with one button above it: <strong>Generate My Project Home</strong>.</p>
+
+<figure class="manual-figure" data-figure="project-brief-overview">
+  <div class="manual-figure__frame" data-capture="Project Home tab for an active project, showing the in-flight strip and generated document"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> What is in flight — live, never hand-written.
+    <span class="callout" data-arrow="left">2</span> Generate My Project Home.
+    <span class="callout" data-arrow="down">3</span> Provenance line — generated timestamp or
+    "shipped default".
+  </figcaption>
+</figure>
+
+<h2>6. What "Generate" actually does, and why it's cost-gated</h2>
+
+<p>Pressing Generate fires exactly one <code>claude -p</code> pass, pinned to
+<code>sonnet</code>, with a 3-minute hard timeout — the same spawn pattern the Memory Clusters
+feature uses (stdin closed, cost-gated so it only runs on your explicit click, never on a timer).
+It acquires a slot from the same machine-wide session-slot pool described above before it launches,
+so a Generate click competes with your scheduler queue and your other chat runs for the same 5 (or
+however many you've set) slots — if the pool is exhausted, the request simply fails with "no
+session slot free — try again shortly" rather than queuing invisibly.</p>
+
+<p>What goes into the prompt is deliberately narrow and real: your project's <code>CLAUDE.md</code>
+text, every active and archived Session's tag + goal text (archived ones capped at the 200 most
+recent), the last 50 lines of <code>git log --oneline</code>, and a depth-2 listing of
+<code>src/</code>. The synthesizer is instructed to treat all of that purely as data to analyze,
+never as instructions to follow — it returns one JSON object and nothing else, which is then
+persisted to <code>&lt;project&gt;/session-manager-operations/project-brief/brief.json</code>.</p>
+
+<h2>7. The brief is a file you're meant to hand-edit</h2>
+
+<p>This is the detail most people miss: the brief is not a cache you regenerate and discard — it's
+a real, versioned document with a maintain loop built in. Certain blocks are "pinnable". Hand-edit
+one (zero LLM cost, no session slot involved) and it is automatically pinned, which means the next
+Generate pass feeds your edited text back in as an input instead of silently overwriting it with a
+fresh synthesis. Un-pin a block explicitly if you want the next refresh to regenerate it from
+scratch.</p>
+
+<p class="manual-note">Practical rule: generate once when a project is unfamiliar to skim its shape,
+then treat the brief the way you'd treat a README you maintain by hand — edit the parts that are
+wrong or stale, regenerate the parts you haven't touched, and don't re-run Generate reflexively
+just because time has passed. The provenance line under the title tells you exactly how stale the
+generated portion is.</p>
+
+<h2>8. The workflow that pays off</h2>
+
+<ol class="manual-steps">
+  <li>Open Home first, every session. Check Needs you before you check anything else — it's the
+  one place a proposed Session, a stalled chat, and a failed job all surface together.</li>
+  <li>Glance at the slot count and the billing meters before deciding whether to queue more work or
+  start something interactively yourself — they share the same budget.</li>
+  <li>Use the New Session drawer to jump into a project rather than opening a second tab for a second
+  conversation in it; a second tab on the same cwd never activates a new project, it just re-focuses
+  the one you already have.</li>
+  <li>The first time you land in an unfamiliar project's Project Home, press Generate once to get
+  oriented, then switch to hand-editing the brief as your understanding of the project firms up —
+  don't keep paying for full re-synthesis of blocks you already know are right.</li>
+</ol>
+</section>
+<section id="hooks"><h1>Hooks — edit the CLI's own shell-outs, safely</h1>
+
+<p class="lede">Hooks are shell commands (or HTTP calls, prompts, sub-agents, MCP tool calls) that
+the <code>claude</code> CLI fires on its own lifecycle events — before a tool runs, after the model
+stops, when a session starts. The Hooks tab is a structured editor over the exact <code>hooks</code>
+key in <code>settings.json</code> the CLI already reads; it doesn't add a parallel hook system, and
+it doesn't change what the CLI does with what you write there.</p>
+
+<h2>What you're actually editing</h2>
+
+<p>Like Settings, Hooks operates at the three file-level scopes the CLI itself resolves in order —
+user (<code>~/.claude/settings.json</code>), project (<code>&lt;cwd&gt;/.claude/settings.json</code>),
+and local (<code>&lt;cwd&gt;/.claude/settings.local.json</code>). The tab defaults to whichever scope
+matches where you are (Home face → user, Project face → project) but you can switch freely with the
+scope switcher. Two views sit on top of the same underlying file:</p>
+
+<table class="manual-table">
+  <thead><tr><th>View</th><th>What it shows</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Effective</strong></td>
+      <td>The merged result across all three scopes for the <code>hooks</code> key, with an
+      override control per node. This is what actually fires — read it before assuming a hook you
+      wrote at project scope is the one that runs, if a local override shadows it.</td>
+    </tr>
+    <tr>
+      <td><strong>Events</strong></td>
+      <td>A per-event editor for the currently selected scope's file. Pick an event on the left,
+      add matcher groups and hook rules on the right, save.</td>
+    </tr>
+    <tr>
+      <td><strong>Library</strong> <span class="manual-note" style="display:inline;border:none;background:none;padding:0">(Home face only)</span></td>
+      <td>A static reference catalog — no cwd or scope input, identical everywhere. Not an editor.</td>
+    </tr>
+  </tbody>
+</table>
+
+<figure class="manual-figure" data-figure="hooks-events-view">
+  <div class="manual-figure__frame" data-capture="Hooks tab, Events view, PreToolUse selected with one hook group configured"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Event sidebar — one row per lifecycle event,
+    with a live count of configured hooks and a hover tooltip explaining when it fires.
+    <span class="callout" data-arrow="right">2</span> Matcher + hook-rule editor for the selected event.
+    <span class="callout" data-arrow="down">3</span> <strong>test fire</strong> — run the command
+    against a fake payload before you trust it in production.
+  </figcaption>
+</figure>
+
+<h2>The event list</h2>
+
+<p>The sidebar lists the current documented event set (verified against
+<a href="https://code.claude.com/docs/en/hooks" target="_blank" rel="noreferrer">code.claude.com/docs/en/hooks</a>):
+lifecycle events (<code>UserPromptSubmit</code>, <code>UserPromptExpansion</code>,
+<code>PreToolUse</code>, <code>PostToolUse</code>, <code>PostToolUseFailure</code>,
+<code>PostToolBatch</code>, <code>Stop</code>, <code>StopFailure</code>, <code>SessionStart</code>,
+<code>SessionEnd</code>, <code>Setup</code>, <code>PreCompact</code>, <code>PostCompact</code>,
+<code>InstructionsLoaded</code>, <code>Notification</code>), permission events
+(<code>PermissionRequest</code>, <code>PermissionDenied</code>), subagent/team events
+(<code>SubagentStart</code>, <code>SubagentStop</code>, <code>TeammateIdle</code>), task events
+(<code>TaskCreated</code>, <code>TaskCompleted</code>), state-change events (<code>ConfigChange</code>,
+<code>CwdChanged</code>, <code>FileChanged</code>), worktree events (<code>WorktreeCreate</code>,
+<code>WorktreeRemove</code>), and elicitation events (<code>Elicitation</code>,
+<code>ElicitationResult</code>).</p>
+
+<p class="manual-note">Older tool-specific event names from the 2025 era (<code>PreBash</code>,
+<code>PreEdit</code>, and similar) are no longer read by the CLI. If your <code>settings.json</code>
+still has hooks registered under one of those, the tab shows a single warning chip counting them —
+it does not silently keep rendering a dead UI for them. Edit <code>settings.json</code> directly to
+remove or rename them; the fix is on you, not the tab.</p>
+
+<h2>Hook rule shape</h2>
+
+<p>Each event holds an array of matcher groups, and each group holds an array of hook rules. A rule
+has a <code>type</code> — <code>command</code>, <code>http</code>, <code>prompt</code>,
+<code>agent</code>, or <code>mcp_tool</code> — and the field that goes with it
+(<code>command</code>, <code>url</code>, <code>prompt</code>, <code>agent</code>, or
+<code>mcpTool</code>), plus an optional <code>timeout</code> in milliseconds. Two fields are recent
+additions the editor already understands: <code>args</code> (an argv array for the no-shell exec
+form of a <code>command</code> rule) and <code>terminalSequence</code> (a terminal escape sequence,
+e.g. a bell, emitted alongside a notification).</p>
+
+<h2>The common mistake: assuming a hook works because it's saved</h2>
+
+<p>Saving a hook to <code>settings.json</code> only proves the JSON is well-formed — it proves
+nothing about whether the command runs, whether its matcher actually matches the tool you think it
+does, or whether it exits cleanly. The failure mode that bites people: a hook with a typo'd path or
+a matcher that never matches sits there silently, doing nothing, until the day you needed it to
+block something and it didn't.</p>
+
+<p>The fix is the <strong>test fire</strong> button next to every <code>command</code>-type rule.
+It sends the rule's resolved command a fake JSON payload on stdin and shows you the real exit code,
+stdout, and stderr — before you ever let the live CLI invoke it for real.</p>
+
+<h3>What test fire actually does</h3>
+
+<ol class="manual-steps">
+  <li>Pick a payload. The modal pre-fills a plausible fake event body per event type (for example
+  <code>PreToolUse</code> defaults to <code>{ tool_name: "Bash", tool_input: { command: "ls" } }</code>) —
+  edit it freely; it's just JSON in a textarea.</li>
+  <li>The tab evaluates your matcher against the payload's <code>tool_name</code> client-side first,
+  so you see whether the rule would even fire before spending a real process launch on it.</li>
+  <li>Press <strong>run</strong>. Session Manager shows a confirmation dialog naming the exact
+  command before executing anything — nothing fires without that click.</li>
+  <li>The command runs for real, with your fake payload piped to its stdin, capped at a 30-second
+  timeout (5 s default) and a 1 MiB buffer per stream. You get back exit code, duration, stdout,
+  and stderr.</li>
+</ol>
+
+<div class="manual-incident">
+  <h3>Why this asks you to confirm every time</h3>
+  <p>Test fire spawns your command with <code>shell: true</code> — deliberately, because a hook's
+  <code>command</code> field in Claude Code is itself a shell string, so the test has to run it the
+  same way the CLI would. That makes it the single riskiest IPC call in the app after the Watchers
+  tab's own shell spawn. Session Manager narrows the blast radius three ways: the main window must
+  be focused, you get a native OS confirmation dialog naming the command before it runs, and the
+  process is hard-killed with <code>SIGKILL</code> on a timer if it wedges — <code>spawn</code>'s
+  built-in timeout only sends <code>SIGTERM</code>, which a stuck shell can ignore.</p>
+  <p><strong>Rule:</strong> never paste a hook command you didn't write yourself into test fire
+  without reading it first. The confirmation dialog exists to make you look, not to be reflexively
+  clicked through.</p>
+</div>
+
+<h2>Workflow: authoring a hook that actually holds</h2>
+
+<ol class="manual-steps">
+  <li>Pick the event. Hover it in the sidebar first — every documented event has a one-line
+  "when this fires" tooltip plus its payload shape, so you're not guessing at field names.</li>
+  <li>Write the matcher. Leave it empty to match every call, or scope it to a tool name/regex — an
+  empty matcher on <code>PreToolUse</code> means your command runs before <em>every</em> tool call,
+  which is rarely what you want.</li>
+  <li>Write the command, then <strong>test fire it</strong> against the default payload before
+  saving anything that could block a real session.</li>
+  <li>Check the <strong>Effective</strong> view for that event afterward. If you're editing at
+  project scope but a local-scope override already exists for the same event, the effective merge —
+  not your unsaved draft — is what the CLI will actually run.</li>
+  <li>Save. Nothing fires until you do; drafts are just draft JSON in the editor.</li>
+</ol>
+
+<p class="manual-note">The Effective view is also where cross-scope conflicts hide. A hook that
+"isn't firing" is more often shadowed by a local override than actually broken — check there before
+you start debugging the command itself.</p>
+</section>
+<section id="tag-library"><h1>Tag Library — the mission that ships with every Session</h1>
+
+<p class="lede">Every Session carries exactly one tag — <code>feature</code>, <code>bug</code>,
+<code>discussion</code>, or one of three scripted-only tags. The tag is not a label you glance at in
+a queue row. Its <code>initialPromptTemplate</code> is the first framing line the agent reads,
+before your own goal text, and its <code>developEagerness</code> silently decides how hard
+<code>/develop</code> pushes toward writing PRDs inside that Session. Tag Library is where you go to
+see — and, for one specific relationship, edit — what each tag actually does.</p>
+
+<h2>What you're looking at</h2>
+
+<p>Tag Library follows the same list+detail shape as Skills and Agent Library: a left rail of tags,
+a detail pane for whichever one is selected. Click a tag and the detail pane shows four things,
+straight from source — nothing here is summarized or paraphrased on the way to the screen:</p>
+
+<ul>
+  <li>the tag's <strong>description</strong> (<code>lib/tagLibrary.ts</code>'s <code>TAG_LIBRARY</code>)</li>
+  <li>its <strong><code>/develop</code> eagerness</strong> — <code>expected-default</code> or
+  <code>available-not-assumed</code></li>
+  <li>which mechanism actually <strong>develops via</strong> — most tags route through
+  <code>/develop</code>, three don't</li>
+  <li>the exact <strong>opening framing</strong> text — <code>agentTagDefs.ts</code>'s
+  <code>initialPromptTemplate</code>, quoted verbatim, under the heading "opening framing — sent
+  before the human's goal"</li>
+</ul>
+
+<p>The six tags, and what each one really does:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Tag</th><th><code>/develop</code> eagerness</th><th>Develops via</th><th>Where it's created</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>feature</code></td>
+      <td><code>expected-default</code></td>
+      <td><code>/develop</code></td>
+      <td>New Session card</td>
+    </tr>
+    <tr>
+      <td><code>bug</code></td>
+      <td><code>expected-default</code></td>
+      <td><code>/develop</code></td>
+      <td>New Session card</td>
+    </tr>
+    <tr>
+      <td><code>discussion</code></td>
+      <td><code>available-not-assumed</code></td>
+      <td><code>/develop</code></td>
+      <td>New Session card</td>
+    </tr>
+    <tr>
+      <td><code>build</code></td>
+      <td><code>expected-default</code></td>
+      <td><code>/builder</code> (not <code>/develop</code>)</td>
+      <td>Scripted only (EpicQueue's 'build' Session)</td>
+    </tr>
+    <tr>
+      <td><code>project-home-builder</code></td>
+      <td><code>expected-default</code></td>
+      <td>project-home-builder agent protocol (falls back to <code>/develop</code> only as a
+      one-time bootstrap)</td>
+      <td>Project Home's "Generate Now" / "Regenerate" buttons</td>
+    </tr>
+    <tr>
+      <td><code>bilko-host-publisher</code></td>
+      <td><code>expected-default</code></td>
+      <td>bilko-host-publisher agent protocol (not <code>/develop</code>)</td>
+      <td>Scripted only</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note">Only three of the six show up as pills in the New Session card —
+<code>feature</code>, <code>bug</code>, <code>discussion</code>. The other three are a closed set
+too, but they're wired to a specific scripted flow (a release build, a Project Pages generation,
+a bilko.run publish) rather than a human picking a mission for an open-ended Session. Tag Library
+lists all six regardless, because all six ground a real session the same way.</p>
+
+<figure class="manual-figure" data-figure="tag-library-detail">
+  <div class="manual-figure__frame" data-capture="Tag Library tab, discussion tag selected, detail pane showing eagerness/develops-via/opening-framing"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> The tag rail — six tags, agent count per tag.
+    <span class="callout" data-arrow="up">2</span> <code>/develop</code> eagerness and develops-via,
+    read straight from code.
+    <span class="callout" data-arrow="right">3</span> The opening framing text — exactly what the
+    agent reads first.
+  </figcaption>
+</figure>
+
+<h2>What's actually editable here — and what isn't</h2>
+
+<p>It's easy to assume "Library" means the whole page is a CRUD editor, the way Agent Library and
+Skills are. It isn't, and the distinction matters:</p>
+
+<ul>
+  <li><strong>The agent↔tag relationship is editable, right here.</strong> Each Agent Library
+  persona carries its own <code>tags</code> frontmatter field. The "agents carrying this tag" row
+  in the detail pane lets you assign or remove a persona from a tag with one click — it writes
+  through the same <code>savePersona</code> call Agent Library's own tag-assignment chips use, so
+  there's exactly one source of truth for that relationship no matter which page you edit it from.</li>
+  <li><strong>The tag taxonomy itself is not editable from the UI.</strong> The six tags, their
+  descriptions, and their <code>initialPromptTemplate</code> text are a closed TypeScript union
+  (<code>EpicTag</code> in <code>lib/tagLibrary.ts</code>) threaded through
+  <code>composeEpicIntake</code>, <code>ticketDisplayStatus</code>, and the Scheduler's group
+  ordering. Changing what a tag says, or adding a seventh tag, is a source edit to
+  <code>lib/tagLibrary.ts</code> and <code>lib/agentTagDefs.ts</code>, not a form on this page.</li>
+</ul>
+
+<p>In practice this means: if you want a specific agent to always pick up <code>bug</code> Sessions,
+do it here. If you want <code>discussion</code> itself to phrase its framing differently, that's a
+code change to <code>agentTagDefs.ts</code>'s <code>initialPromptTemplate</code> for that tag — Tag
+Library will show you the result the moment it lands, but it won't let you type it in.</p>
+
+<h2>The mistake: treating the tag as decoration</h2>
+
+<p>The tag's <code>initialPromptTemplate</code> is not a description shown somewhere in a sidebar —
+it is composed directly into the Session's opening prompt, before the human's own goal text.
+<code>lib/epicIntake.ts</code>'s <code>composeEpicIntake</code> builds every Session's first message in
+a fixed order — Actor, then any Context Injections, then Input, then <strong>Mission</strong> (the
+tag's <code>initialPromptTemplate</code>), then the human's own goal, then references. Every single
+Session tagged <code>discussion</code>, for example, opens with:</p>
+
+<pre><code>You are in an open-ended discussion. The goal is a decision or shared understanding,
+not a code change — do not start editing files unless the human explicitly asks you to
+after the discussion lands somewhere.</code></pre>
+
+<p>That's not cosmetic. It's the sentence standing between "the agent explores the codebase and
+tells you what it thinks" and "the agent starts refactoring files because the goal text sounded
+actionable." A vague or missing framing line does the same damage a vague PRD does in the
+Scheduler — it pushes the interpretation burden onto every future Session that inherits the tag,
+instead of settling it once in the template.</p>
+
+<p>The second half of the same mistake is ignoring <code>developEagerness</code>. It isn't just
+informational text in the detail pane — the <code>session-manager-dev:develop</code> skill reads it
+to decide how hard to push toward PRD decomposition inside that Session.
+<code>feature</code>/<code>bug</code> (and <code>build</code>/<code>project-home-builder</code>/
+<code>bilko-host-publisher</code>) treat decomposition as the expected next step;
+<code>discussion</code> keeps <code>/develop</code> available but never assumed until whether-to-
+build is actually settled. Picking <code>feature</code> for what's really an open-ended discussion
+gets you an agent that's eager to start writing PRDs before you've decided anything is worth
+building.</p>
+
+<h2>The workflow that pays off</h2>
+
+<p>Because <code>composeEpicIntake</code> pulls the Mission section fresh from
+<code>agentTagDefs.ts</code> every time a Session is created, a template edit is retroactive in effect
+for every <em>future</em> Session without touching a single Session record — you author the tag once and
+every Session with that mission inherits it from that point on. That makes tightening a tag's template
+one of the highest-leverage edits in the whole app: fix a template's ambiguity once, and you've
+fixed the framing for every discussion/bug/feature Session you'll ever open with it, not just the one
+in front of you.</p>
+
+<ol class="manual-steps">
+  <li>Open Tag Library and read the tag's <strong>opening framing</strong> block exactly as an
+  agent would — as the first thing it's told, with no context yet about your actual goal.</li>
+  <li>If it's vague enough that two different agents could read it two different ways, that's the
+  bug. Tighten <code>initialPromptTemplate</code> in <code>agentTagDefs.ts</code> — state the one
+  behavior you always want for that mission (reproduce before fixing, no file edits until a decision
+  lands, treat the goal as the full objective) rather than a generic description of the tag's name.</li>
+  <li>Check <code>developEagerness</code> against what you actually want that mission to do by
+  default. If a tag's Sessions keep spinning up premature PRDs, or conversely never seem to reach
+  <code>/develop</code> when they should, this field — not the goal text you type per-Session — is the
+  lever.</li>
+  <li>Use the agent↔tag assignment in the detail pane to make sure the personas you actually run
+  under a given mission are the ones associated with it — it's the one relationship this page will
+  let you change without leaving it.</li>
+</ol>
+
+<p class="manual-note">The taxonomy stays deliberately small and closed. Before reaching for a
+seventh tag, check whether what you actually want is a different <em>Agent</em> (the "who") rather
+than a new <em>Mission</em> (the "what") — Agent Library is the other half of this axis, and it's
+usually the cheaper edit.</p></section>
+<section id="history-analytics"><h1>History — where your Claude time and money went</h1>
+
+<p class="lede">History is an analytics dashboard, full stop. It answers "how many tokens, how
+much money, which project, which model, which tool" over a date range. It does not list your past
+Claude sessions, and it cannot reopen one — that used to be true, and the app was deliberately
+cut in half to stop it being true.</p>
+
+<h2>The mistake almost everyone makes once</h2>
+
+<p>The instinct is to open History looking for a session you had last week — "what did I ask Claude
+to do in that project on Tuesday?" — expecting a searchable log with a resume button. History does
+not do that, and it used to: a session-browsing "Log" view with a per-row <strong>resume</strong>
+button lived inside this tab until it was surgically split out into its own component and left
+unrendered, pending a future relocation onto the Projects or Terminal surface where session
+browsing actually belongs. The History tab you see today renders only the analytics dashboard —
+the browse/resume UI was ruled out of its charter, not merely hidden behind a toggle.</p>
+
+<p class="manual-note">If you're hunting for an old conversation to resume, this is the wrong tab.
+Nothing currently in the app exposes that browse-and-resume flow — it's parked, not shipped.</p>
+
+<h2>What it's actually a browser over</h2>
+
+<p>History reads from a durable rollup store built and maintained on disk — it never re-scans your
+raw transcript files to render. That's what lets the dashboard open instantly no matter how many
+sessions you've accumulated. Every row it aggregates carries: prompt count, input/output/cache
+tokens, tool-call count, session count, error count, active minutes, and an estimated dollar cost
+per model, bucketed per project per day.</p>
+
+<p>Cost is an <em>estimate</em>, not a billed figure — computed from a per-million-token pricing
+table keyed by model family (Opus, Sonnet, Haiku), matched against the raw model id by a
+case-insensitive substring check. A model id that doesn't match any known family still gets priced
+(falling back to the Sonnet rate) but is flagged internally as an estimate rather than an exact
+figure, since cache-read tokens are billed far below a fresh input token and the fallback can't know
+the real family's ratio.</p>
+
+<h2>Seven measures, one dial</h2>
+
+<p>Every panel in the dashboard reads off the same measure — you change it once, in the control bar,
+and every chart re-renders against it:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Measure</th><th>What it counts</th></tr></thead>
+  <tbody>
+    <tr><td><strong>In tokens</strong></td><td>Input + cache-read + cache-creation tokens — everything submitted to the model.</td></tr>
+    <tr><td><strong>Out tokens</strong></td><td>Output tokens only.</td></tr>
+    <tr><td><strong>Total tokens</strong></td><td>In + Out.</td></tr>
+    <tr><td><strong>Prompts</strong></td><td>Number of prompts sent.</td></tr>
+    <tr><td><strong>Sessions</strong></td><td>Number of distinct sessions.</td></tr>
+    <tr><td><strong>Time</strong></td><td>Active minutes.</td></tr>
+    <tr><td><strong>Spend</strong></td><td>Estimated dollar cost. The default measure on first open.</td></tr>
+  </tbody>
+</table>
+
+<p>Range is a separate dial next to it: 30, 60, 90 days, or "All time". Both choices persist to
+local storage, so History reopens the way you left it.</p>
+
+<h2>Two faces, one dashboard</h2>
+
+<p>History is one of the surfaces that respects the app's Home/Project split. Which face you're on
+changes what "project" means on screen:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Face</th><th>Scope</th><th>Project facet</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Home</strong></td>
+      <td>Every project the app has ever recorded activity for.</td>
+      <td>A full chip row — toggle individual projects, isolate one, or show all.</td>
+    </tr>
+    <tr>
+      <td><strong>Project</strong></td>
+      <td>Force-scoped to the active tab's cwd. No override, no escape hatch.</td>
+      <td>Not shown — there's only one project to facet against, so the chip row doesn't render.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Switching from Project back to Home always resets the filter to "show all" — there's no
+manual-touch state to carry over, since the Project face never offered a filter to touch in the
+first place.</p>
+
+<h2>Reading the panels top to bottom</h2>
+
+<ol class="manual-steps">
+  <li><strong>Headline</strong> — the current measure's total for the range, with a delta against
+  the equivalent prior period and a small trend series.</li>
+  <li><strong>Budget strip</strong> — month-to-date spend against a cap you set (defaults to $50,
+  persisted locally), projected out to end-of-month from the days elapsed so far. This one is
+  deliberately unfaceted — a budget is a real-money figure for the whole account, not scoped to
+  whatever projects you're currently filtering.</li>
+  <li><strong>Project facet</strong> (Home face only) — chip row to toggle/isolate projects before
+  the rest of the panels compute.</li>
+  <li><strong>Stacked trend</strong> — the measure over time, stacked by project. Click a project's
+  band to drill into it.</li>
+  <li><strong>Ranking</strong> — every project in range, sorted by the current measure, with its
+  share of the total and a first-half-vs-second-half trend arrow.</li>
+  <li><strong>Project drill-in</strong> — appears once you select a project from the trend or the
+  ranking table. Breaks that one project's totals down by model (sorted by cost) and by tool call
+  count.</li>
+  <li><strong>Model mix, Concentration, Cache, Rhythm</strong> — four smaller cards: spend/tokens
+  by model family, how much of total spend the top 3 projects account for, your prompt-cache hit
+  rate, and which day of the week you actually work on.</li>
+</ol>
+
+<h2>The workflow that pays off: catching a runaway project before the bill does</h2>
+
+<p>The dashboard exists to answer one operator question fast: <em>is something quietly burning
+tokens I didn't budget for?</em> The path that actually catches it:</p>
+
+<ol class="manual-steps">
+  <li>Switch to the Home face and set the measure to <strong>Spend</strong>.</li>
+  <li>Check the <strong>Budget strip</strong> first — if the projected month-end figure is already
+  over your cap, something changed recently.</li>
+  <li>Look at <strong>Concentration</strong>. If the top-3 share is unusually high, one or two
+  projects are doing the damage, not a broad increase across everything.</li>
+  <li>Open the <strong>Ranking</strong> table and click into the top row's <strong>drill-in</strong>.
+  The by-model breakdown will usually tell the story on its own — a Session accidentally pinned to
+  Opus instead of Sonnet shows up here as a cost-per-token outlier long before it shows up on an
+  invoice.</li>
+  <li>If the cache-hit percentage in the <strong>Cache</strong> card is low for that project, that's
+  often the actual lever — a session re-sending large context on every turn instead of hitting the
+  prompt cache costs real money at input-token rates.</li>
+  <li>Fix it at the source: change the offending Agent persona's <code>model</code> field, or split
+  an overgrown Session into smaller ones. History only tells you where the money went — it has no
+  control to throttle or gate spend itself.</li>
+</ol>
+
+<figure class="manual-figure" data-figure="history-dashboard">
+  <div class="manual-figure__frame" data-capture="History tab, Home face, Spend measure, 30d range, at least two projects with a visible Ranking table and Budget strip"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> Measure / range control bar.
+    <span class="callout" data-arrow="left">2</span> Budget strip — month-to-date vs. your cap.
+    <span class="callout" data-arrow="right">3</span> Ranking table — click a row to drill in.
+  </figcaption>
+</figure>
+
+<h2>When a project silently goes missing from the totals</h2>
+
+<p>The underlying store keys every day's data by the encoded <code>~/.claude/projects/&lt;dir&gt;</code>
+transcript folder name — a transcript-store identity, not a project identity, since the CLI mints a
+folder for every path it was ever launched from, including throwaway <code>/tmp</code> directories
+and test fixtures. History resolves each folder back to a real working directory and merges folders
+that resolve to the same project (their token counts, tool breakdowns, and per-model figures all
+combine into one row) before anything renders. A folder whose cwd can't be resolved at all is
+excluded from every chart's project axis — but never silently: its totals are summed and shown in a
+dedicated exclusion note beneath the headline ("Excluded: N transcript folders with no resolvable
+working directory · … sessions · … prompts · $…"), so an unrecognized dollar amount is always stated
+rather than dropped. If you ever see that note, it means History deliberately declined to guess
+which project the folder belonged to — it will never fold unrecognized activity into a project you
+didn't actually run it from.</p>
+
+<h2>Exporting the raw numbers</h2>
+
+<p>The <strong>Export CSV</strong> button in the control bar writes exactly what's on screen — the
+currently filtered range, faceted to whichever projects are shown — as a per-day CSV with per-model
+token and cost breakdowns, named after the range's start and end date. Useful for feeding a
+spreadsheet or an expense report; there is no other export path out of History.</p></section>
+<section id="memory-clusters"><h1>Memory Clusters — what an agent has actually been remembering</h1>
+
+<p class="lede">Memory Clusters is a read-mostly report over one project's saved memory notes — it
+groups them into named themes so you can see, at a glance, what Claude has decided is worth
+remembering about your codebase. It replaced the old Knowledge Graph tab. It is not live, it is
+not this conversation's context, and it costs a real <code>claude -p</code> call every time you ask
+it to regroup.</p>
+
+<h2>Where the memories actually live</h2>
+
+<p>The Memory tab (Configure nav) has two scopes — Workspace and Subagent — plus, inside
+Workspace, three views: <strong>Editor</strong>, <strong>Natural</strong>, and
+<strong>Clusters</strong>. All three read the same on-disk store:
+<code>~/.claude/projects/&lt;encodedCwd&gt;/memory/*.md</code> — Claude's own native auto-memory
+location for that project, not something Session Manager invented. Editor is a plain list+detail
+CRUD over those files; Clusters is a report generated <em>from</em> them. Nothing you do in
+Clusters writes back to a memory file — it only reads and summarizes.</p>
+
+<p>Each memory is a markdown file with optional frontmatter (<code>type</code>,
+<code>description</code>) and a body that may contain <code>[[wikilink]]</code>-style references to
+other memory slugs. Claude writes these during ordinary sessions when you ask it to remember
+something; you can also create one by hand from the Editor view's <strong>+ New memory</strong>
+button.</p>
+
+<h2>The one thing people get wrong</h2>
+
+<p>Memory Clusters does <strong>not</strong> update as a session runs, and it is <strong>not</strong>
+a view into the current conversation. Two separate confusions come from that one fact:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Expectation</th><th>Reality</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>"It'll update live while my agent works."</td>
+      <td>It's cache-only until you press <strong>Aggregate</strong>/<strong>Refresh</strong>.
+      Opening the Clusters view (or switching workspaces) only re-reads the last cached result —
+      it never spends a token on its own.</td>
+    </tr>
+    <tr>
+      <td>"This shows what we've been talking about in this Session."</td>
+      <td>It shows the persisted memory <em>files</em> for the project — durable notes an agent
+      chose to write down — not the transcript of any one session. A long conversation that
+      produced zero <code>memory</code> writes shows up as nothing here.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>What actually happens when you press Refresh</h2>
+
+<p>The button is the cost gate, by design. Pressing it sends every memory file for the active
+workspace — slug, type, description, body — into a single <code>claude -p</code> call pinned to
+the <code>sonnet</code> model, with a system prompt that explicitly tells the model to treat memory
+bodies as inert data to analyze, never as instructions to follow (a memory file is user-writable
+text; without that framing, a maliciously or accidentally instruction-shaped memory body could
+otherwise hijack the clustering pass). The model returns 2–8 named clusters, a one-line summary
+per cluster, member slugs, any <code>[[wikilink]]</code>-derived links between them, and a list of
+orphans — memories that fit no cluster.</p>
+
+<ol class="manual-steps">
+  <li>You open the <strong>Clusters</strong> view. Session Manager reads the cached result only —
+  no spend.</li>
+  <li>You press <strong>Aggregate</strong> (first run) or <strong>Refresh</strong> (subsequent
+  runs). This is the only action that fires the LLM pass.</li>
+  <li>Every workspace memory file is read and sent as data, wrapped in an explicit
+  do-not-follow-instructions framing.</li>
+  <li>The result is parsed defensively — any cluster member, link endpoint, or orphan that isn't
+  a real memory slug on disk is dropped, so the report can never reference a memory that doesn't
+  exist.</li>
+  <li>The result is cached to <code>~/.claude/session-manager/memory-clusters/&lt;workspace&gt;.json</code>
+  and rendered as cluster cards plus an "Unclustered" strip for orphans.</li>
+  <li>Clicking any slug — in a cluster or in Unclustered — jumps you to that memory in the Editor
+  view.</li>
+</ol>
+
+<figure class="manual-figure" data-figure="memory-clusters-view">
+  <div class="manual-figure__frame" data-capture="Memory tab, Workspace scope, Clusters view, after a refresh with at least two clusters and one orphan"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> "generated &lt;time&gt; ago" — the cache
+    timestamp, not a live status.
+    <span class="callout" data-arrow="right">2</span> Aggregate / Refresh — the only button that
+    spends a <code>claude -p</code> call.
+    <span class="callout" data-arrow="down">3</span> A cluster card: name, one-line summary,
+    member slugs, and any wikilink-derived links between them.
+  </figcaption>
+</figure>
+
+<h2>If the tab looks empty</h2>
+
+<p>An empty Clusters view almost always means one of two things, in order of likelihood:</p>
+
+<ul>
+  <li><strong>You haven't pressed Aggregate yet.</strong> A fresh workspace with no cached result
+  shows "not yet aggregated" and an empty state — this is expected, not a bug.</li>
+  <li><strong>This project genuinely has no memory files yet.</strong> If Claude hasn't been asked
+  to remember anything for this cwd, <code>~/.claude/projects/&lt;encodedCwd&gt;/memory/</code> is
+  empty or doesn't exist, and there is nothing to cluster. Check the Editor view's entry count in
+  the toolbar — that's the ground truth for how many memory files actually exist.</li>
+</ul>
+
+<div class="manual-incident">
+  <h3>A slow prior workspace can't clobber a fast current one</h3>
+  <p>Switching workspaces (i.e. switching the active project tab) while a Refresh is still
+  in-flight used to risk the old workspace's slower response landing after the new workspace's
+  faster one, showing the wrong project's clusters. Each load request is tagged with a request id,
+  and a response is only applied if its id still matches the latest request — a stale response is
+  silently discarded rather than painted over the current workspace.</p>
+</div>
+
+<h2>The workflow that pays off</h2>
+
+<p>Treat Clusters as a periodic audit, not a live dashboard: refresh it every so often — after a
+long Session, or before starting a new one on a project you haven't touched in a while — and read
+what an agent decided was worth writing down. It's a fast way to catch two things: memories that
+drifted into duplicating something already in a CLAUDE.md (a candidate for
+<code>/memory-sanitation</code>), and orphaned notes that never got tied into anything, which
+often means they were written once and never referenced again.</p>
+
+<p class="manual-note">Clusters is read-only reporting layered on top of the Editor view's real
+CRUD. If a cluster's grouping looks wrong, the fix is editing or deleting the underlying memory
+file in Editor, then pressing Refresh again — not fighting the clustering prompt.</p>
+</section>
+<section id="usage"><h1>Usage — reading the 5-hour window before it reads you</h1>
+
+<p class="lede">Every <code>claude</code> invocation this app makes — your interactive Terminal, a Chat
+run, a Scheduler job — draws against the same rolling billing windows Anthropic tracks for your
+account. Session Manager surfaces those windows in three places and gives you one lever to react
+to them: the machine-wide session slot pool. This chapter is about noticing the ceiling before you
+hit it, not after.</p>
+
+<h2>Where usage is shown</h2>
+
+<table class="manual-table">
+  <thead><tr><th>Surface</th><th>What it shows</th><th>Where to find it</th></tr></thead>
+  <tbody>
+    <tr><td>Home — usage meters</td><td>Session (5-hour), Weekly (all models / Opus / Sonnet /
+    OAuth apps), and extra pay-as-you-go usage if enabled — each with a percentage, a progress
+    bar, and a reset countdown.</td><td>Home tab, billing card</td></tr>
+    <tr><td>Almanac footer — 5h pill</td><td>A single number: <code>N% of 5h window used</code>.
+    Click it to jump to Home.</td><td>Bottom status strip, every tab</td></tr>
+    <tr><td>Almanac footer — scheduler-paused pill</td><td>Appears only while the Scheduler is
+    paused; states the reason (<code>rate_limit</code>, <code>auth</code>, <code>network</code>,
+    …). Click it to jump to Scheduler.</td><td>Bottom status strip, conditional</td></tr>
+    <tr><td>Home — session slot control</td><td>The machine-wide concurrency pool: how many
+    <code>claude -p</code> processes may run at once, and how many are busy right now.</td>
+    <td>Home tab, Active sessions card</td></tr>
+  </tbody>
+</table>
+
+<figure class="manual-figure" data-figure="home-usage-meters">
+  <div class="manual-figure__frame" data-capture="Home tab, billing card, Session meter above the Weekly rows"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Session — the 5-hour rolling window,
+    rendered larger than the rest.
+    <span class="callout" data-arrow="up">2</span> Weekly rows — all models, Opus, Sonnet, OAuth
+    apps, each independent.
+    <span class="callout" data-arrow="right">3</span> Reset countdown — relative time plus the
+    absolute wall-clock time in Pacific.
+  </figcaption>
+</figure>
+
+<h2>What the numbers mean</h2>
+
+<p>Every meter is a <code>{ utilization, resets_at }</code> pair read from the same endpoint the
+CLI's own <code>/usage</code> command hits. Utilization is a percentage that can exceed 100 — the
+UI keeps the bar clamped at full width but still prints the real number and marks the row
+<strong>over limit</strong> once it crosses 100.</p>
+
+<table class="manual-table">
+  <thead><tr><th>Threshold</th><th>Color</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>&lt; 70%</td><td>sage (calm)</td><td>Plenty of headroom.</td></tr>
+    <tr><td>70–89%</td><td>honey (caution)</td><td>Getting close — a good moment to check what's
+    queued.</td></tr>
+    <tr><td>≥ 90%</td><td>accent (alert)</td><td>About to be rate-limited, or already over.</td></tr>
+  </tbody>
+</table>
+
+<p>Reset times are shown two ways: a relative countdown (<code>2h 14m</code>, or
+<code>4d 3h</code> once it's more than a day out) and an absolute wall-clock time in Pacific
+(<code>3:00 PM PT</code>, or <code>Tue 3:00 PM PT</code> for a multi-day reset) — so you don't have
+to do timezone math to know when a paused Scheduler will pick back up.</p>
+
+<h2>Where the numbers come from</h2>
+
+<p>The main process polls <code>GET https://api.anthropic.com/api/oauth/usage</code> — the same
+endpoint the CLI's own <code>/usage</code> slash command reads — authenticated with the OAuth
+bearer token from <code>~/.claude/.credentials.json</code> (written by <code>claude login</code>;
+no separate API key needed). One renderer-side poller ticks every 60 seconds and every tab reads
+from the same cached result, rather than each surface hitting the endpoint on its own timer. A
+successful fetch is cached for 30 seconds so a burst of reads doesn't re-hit the network; a
+transient failure backs off to 5s then 30s, and an auth failure backs off to 30s.</p>
+
+<p>If your account authenticates through an enterprise gateway — Bedrock, Vertex, a raw API key, a
+custom <code>ANTHROPIC_BASE_URL</code>, or an <code>apiKeyHelper</code> script — this meter simply
+doesn't exist for you, and Session Manager detects that rather than treating a 404 as a real
+outage: the Scheduler does not pause waiting on a signal that will never arrive.</p>
+
+<h2>The session slot pool</h2>
+
+<p>Every <code>claude -p</code> process this app launches — a Scheduler job or a headless Chat
+run — first has to acquire a slot from one machine-wide pool. It exists because Scheduler and Chat
+used to enforce their own private caps (3 and 2) that could add up past what the machine could
+actually hold; the 2026-06-10 OOM was exactly that. Now there's one number, and one place to change
+it.</p>
+
+<table class="manual-table">
+  <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Default</td><td>5 concurrent <code>claude -p</code> processes</td></tr>
+    <tr><td>Adjustable range</td><td>0–10, from the slider on Home's Active sessions card</td></tr>
+    <tr><td>0</td><td>Pauses new launches without touching processes already running</td></tr>
+    <tr><td><code>SM_SESSION_SLOTS</code></td><td>Env var override for scripted/CI use — pins the
+    pool size and disables the slider (clamped to the same 0–10 range)</td></tr>
+  </tbody>
+</table>
+
+<p>The slot pool and the 5-hour billing window are two different ceilings and it's worth keeping
+them straight: the slot pool caps how many processes run <em>at once</em> on this machine; the
+billing window caps how much you can send <em>in a rolling five hours</em>, machine-independent.
+Turning the slot pool down does not buy you more billing headroom — it only slows how fast you
+spend the headroom you have.</p>
+
+<h2>The common mistake</h2>
+
+<p>The failure mode isn't that the app hides rate-limiting — it's that nothing forces you to look.
+The Scheduler auto-pauses cleanly on a rate limit and auto-resumes at the next window reset, which
+is exactly the point: you're not supposed to have to babysit it. But that same quiet handling means
+a queue can sit paused for hours with nothing on screen demanding attention unless you're on the
+Scheduler tab or you happen to glance at the footer. The scheduler-paused pill only appears in the
+footer while paused, and it's easy to miss if you're heads-down in a Terminal tab that isn't the
+active one.</p>
+
+<h2>The workflow that pays off</h2>
+
+<ol class="manual-steps">
+  <li>Treat the footer's 5h pill as a peripheral gauge, not something you check on a timer — it's
+  visible from every tab, so glancing at it costs nothing.</li>
+  <li>When it crosses into honey (70%+), open Home and look at which Weekly row is also climbing —
+  a Session window resets in hours, but a Weekly window doesn't.</li>
+  <li>If the scheduler-paused pill appears, click straight through to Scheduler rather than
+  wondering why nothing's moving — the reason is stated on the pill itself.</li>
+  <li>Size the session slot pool to your plan, not to your machine's core count. A higher plan
+  tier with more 5-hour headroom benefits from more slots running in parallel; a lower tier just
+  burns through the window faster for no extra throughput once jobs start queuing behind the
+  rate limit anyway.</li>
+  <li>Leave <code>SM_SESSION_SLOTS</code> for scripted/CI contexts only — setting it also disables
+  the Home slider, which is easy to forget you did.</li>
+</ol>
+
+<p class="manual-note">The 5-hour window is the same meter across Terminal, Chat, and every
+Scheduler job — there's no per-surface budget. Watching it in one place covers all three.</p>
+</section>
+<section id="voice"><h1>Voice Input — dictate into any session, offline</h1>
+
+<p class="lede">The mic button turns your microphone into a keyboard for the active Terminal or
+Chat view. Speech never leaves the machine: recognition runs in a Web Worker, in-process, and the
+model downloads once and is cached. It is not a convenience wrapper around a cloud API — it is a
+real local speech pipeline, with its own state machine, its own auto-submit timer, and its own
+failure modes worth understanding before you rely on it mid-session.</p>
+
+<h2>1. What's actually running</h2>
+
+<p>The app's own mic-button tooltip calls this "local Whisper" — that name is legacy. Read the
+worker source (<code>whisperWorker.ts</code>) and the real model is
+<strong>Moonshine Base</strong> (<code>onnx-community/moonshine-base-ONNX</code>), loaded through
+Transformers.js and run on the CPU via <code>onnxruntime-web</code> (<code>dtype: 'fp32'</code>,
+<code>device: 'wasm'</code>). Moonshine was chosen over Whisper deliberately: Whisper zero-pads
+every input to a fixed 30-second window before encoding, so even a two-word command pays a fixed
+latency floor; Moonshine's encoder cost scales with the actual audio length, so a two-second
+utterance transcribes in roughly 150&nbsp;ms once the model is warm.</p>
+
+<p>Speech detection is a second, separate model: <strong>Silero VAD v5</strong> via
+<code>@ricky0123/vad-web</code>, running on every ~32&nbsp;ms audio frame through an
+<code>AudioWorklet</code>. VAD decides when you started and stopped talking; Moonshine only ever
+sees the speech segment VAD hands it — no fixed-length chunking, no silence sent to the model.
+Both the VAD's ONNX weights and the WASM runtime are self-hosted under the app's own
+<code>/vad/</code> assets rather than fetched from a CDN, because a CDN fetch breaks under the
+packaged app's <code>file://</code> origin.</p>
+
+<table class="manual-table">
+  <thead><tr><th>Layer</th><th>What it is</th><th>Runs where</th></tr></thead>
+  <tbody>
+    <tr><td>Endpointing</td><td>Silero VAD v5, <code>@ricky0123/vad-web</code></td><td>AudioWorklet, per 32ms frame</td></tr>
+    <tr><td>Transcription</td><td>Moonshine Base (<code>onnx-community/moonshine-base-ONNX</code>), via <code>@huggingface/transformers</code> + <code>onnxruntime-web</code></td><td>Shared Web Worker (<code>whisperWorker.ts</code>)</td></tr>
+    <tr><td>Language</td><td>English only — the worker's own source comment flags non-English audio as hallucinated English</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<p class="manual-note">First activation downloads the model (tens of MB) and shows a percentage in
+the mic button's tooltip and the Voice modal's progress bar. After that it's cached and loads from
+disk — expect the first click of a session to take longer than every click after it.</p>
+
+<h2>2. Turning it on</h2>
+
+<ol class="manual-steps">
+  <li>Click the mic icon wherever it appears (Terminal toolbar, Chat composer) — or run
+  <strong>Voice — toggle mic</strong> from the command palette (Cmd/Ctrl-K).</li>
+  <li>The very first click on a fresh install opens the first-run mic-check wizard instead of
+  recording — it walks permission → device selection → a 5-second test recording → playback →
+  a real transcription check, so you find out your mic works before you're mid-task depending on
+  it. "Skip &amp; record now" closes the wizard and starts recording immediately.</li>
+  <li>Grant the OS microphone permission when prompted. A denial parks the button in a
+  permission-denied state — the tooltip tells you to fix it in OS settings, not in the app.</li>
+  <li>Speak. Once VAD confirms real speech (not a keyboard click or a chair creak), the mic ring
+  goes solid and a live "Listening…" line shows in the Voice modal.</li>
+</ol>
+
+<p>You can also set a global or in-window hotkey (default <code>Cmd+Option+V</code> on macOS,
+<code>Ctrl+Shift+Space</code> on Linux/Windows — both deliberately chosen as combinations that
+ship unbound in stock GNOME/KDE/macOS) with two modes: <strong>Hold to talk</strong>
+(push-to-talk — release the key to stop) or <strong>Tap on/off</strong> (press once to start,
+again to stop). Configure both from the Voice / Microphone modal.</p>
+
+<figure class="manual-figure" data-figure="voice-modal">
+  <div class="manual-figure__frame" data-capture="Voice / Microphone modal, open, mid-recording with the level meter active"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Live activity line — shows the committed
+    transcript or "Listening…" while VAD has an open speech segment.
+    <span class="callout" data-arrow="up">2</span> Auto-submit countdown bar — the thin strip
+    under the activity line.
+    <span class="callout" data-arrow="down">3</span> Hotkey mode toggle — Hold to talk vs. Tap
+    on/off, plus the mic device picker.
+  </figcaption>
+</figure>
+
+<h2>3. The mistake almost everyone makes: talking over the auto-submit timer</h2>
+
+<p>By default, every time VAD commits a final transcript, Session Manager writes the text into
+the active PTY (or the Chat composer, in Chat view) and arms an <strong>8-second</strong> countdown
+(<code>submitDelayMs</code>, adjustable between 500&nbsp;ms and 13&nbsp;s). When it expires, the
+app sends Enter for you — no second confirmation. That's the whole point: dictate a sentence,
+stop talking, and it submits itself a few seconds later without you touching the keyboard.</p>
+
+<p>The mistake is assuming that countdown is dumb. It isn't — it's actively watching you. Every
+VAD frame's speech probability is checked against the countdown in real time
+(<code>SUBMIT_PRECEDENCE_PROB = 0.3</code>, well below VAD's own 0.5 segment-commit threshold), and
+an RMS amplitude fallback (<code>SUBMIT_PRECEDENCE_RMS = 0.04</code>) covers the case where the VAD
+frame pump stalls. The instant either trips, the countdown is cancelled and the mic stays open — so
+saying "wait, actually—" mid-countdown correctly holds your Enter key hostage rather than firing it
+under your correction. What actually bites people is the opposite case: dictating a full thought,
+going quiet to think about the <em>next</em> sentence, and having Enter fire on the first one before
+they resume talking. The countdown bar under the mic button (a thin strip that turns amber in the
+last 500&nbsp;ms) is the tell — watch it, or click it to cancel outright.</p>
+
+<p>Two other timers run alongside the submit countdown and are easy to conflate with it:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Timer</th><th>Fires after</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Auto-submit</td>
+      <td>8&nbsp;s (default) of silence <em>after a transcript typed</em></td>
+      <td>Sends Enter, then keeps the mic open — this is <em>continuous listening</em>, not
+      one-shot. The session doesn't close after a turn.</td>
+    </tr>
+    <tr>
+      <td>Idle auto-stop</td>
+      <td>40&nbsp;s of silence with no speech at all</td>
+      <td>Closes the mic outright — the real "you walked away" backstop.</td>
+    </tr>
+    <tr>
+      <td>Model-load watchdog</td>
+      <td>90&nbsp;s with no download/warmup progress</td>
+      <td>Flips the button to an error state you can click to retry, instead of hanging forever
+      on a stalled fetch.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note">Auto-submit doesn't end your dictation session — only the idle-stop timer or
+an explicit stop (button click, hotkey, or voice command) does. Say your first sentence, pause,
+think, say your second: both land as separate submitted turns without you touching the mic
+control between them.</p>
+
+<h2>4. Turn continuous dictation off, or don't submit at all</h2>
+
+<p>Two dials worth knowing about beyond the button and the hotkey:</p>
+
+<ul>
+  <li><strong>Cancel a single countdown</strong> — click the thin progress bar, or run
+  <strong>Voice — cancel auto-submit</strong> from the command palette. The typed text stays in the
+  PTY; you press Enter yourself when ready.</li>
+  <li><strong>Turn auto-submit off entirely</strong> — the store's <code>autoSubmit</code> flag
+  (default <code>true</code>) makes dictation type-only: text lands, no Enter is ever sent, no
+  countdown ever arms. Use this if you dictate multi-line prompts you want to review before
+  sending.</li>
+</ul>
+
+<h2>5. Where transcripts go, per view</h2>
+
+<p>Voice input targets whichever tab is active when you start recording, and the destination
+depends on that tab's kind:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Active view</th><th>Final transcript goes to</th></tr></thead>
+  <tbody>
+    <tr><td>Terminal (live PTY)</td><td>Written straight into the PTY via <code>pty.write</code>, exactly like typed keystrokes — including voice commands.</td></tr>
+    <tr><td>Chat / dormant tab</td><td>Buffered as the tab's pending voice text and handed to the Chat composer's own <code>send()</code> path when the auto-submit countdown fires — there's no PTY to write into on a headless <code>claude -p</code> tab.</td></tr>
+  </tbody>
+</table>
+
+<p>A handful of spoken phrases are matched as <strong>voice commands</strong> before they're treated
+as literal text (Terminal view only — dormant/Chat tabs always treat a transcript as literal, since
+terminal control sequences have no meaning in a headless run). A recognized command sends its
+control sequence directly and skips the submit countdown outright, since the command <em>is</em>
+the submission.</p>
+
+<h2>6. What "offline" actually means here</h2>
+
+<p>Nothing about a spoken phrase leaves your machine at any point in this pipeline — VAD, encoder,
+and decoder all run in-process in a renderer Web Worker. The privacy corollary is enforced, not
+just promised: whenever <code>isRecording</code> is true (or an external, non-terminal capture like
+the Document Experience's own dictation is active), a fixed red banner —
+<strong>"Recording — speech is being captured locally"</strong> — is pinned to the very top of the
+window, above every dialog, toast, and menu in the app's z-order. There's no code path that starts
+a recording without that banner in front of you.</p>
+
+<figure class="manual-figure" data-figure="voice-recording-banner">
+  <div class="manual-figure__frame" data-capture="app window with the top-of-window red recording banner visible during an active mic session"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> The privacy banner — always the topmost layer
+    in the app while recording, on every platform, with no way to dismiss it short of stopping the
+    mic.
+  </figcaption>
+</figure>
+
+<h2>7. If the mic button won't cooperate</h2>
+
+<table class="manual-table">
+  <thead><tr><th>Button state / tooltip</th><th>Meaning</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Grey, spinning, "loading… N percent"</td><td>Model still downloading or warming up.</td><td>Wait. If it sits past ~90s with no percent movement, it self-flips to an error you can click to retry.</td></tr>
+    <tr><td>Amber, "permission denied"</td><td>OS denied microphone access.</td><td>Fix it in OS privacy settings, then click the button again — this isn't an app-level toggle.</td></tr>
+    <tr><td>Red, "model error" / "load timed out"</td><td>Download or warmup failed, or the 90s watchdog tripped.</td><td>Click the button — clicking an error/timeout state retries the load instead of trying to record.</td></tr>
+    <tr><td>Grey, disabled, "not supported"</td><td>The runtime lacks <code>Worker</code>, <code>getUserMedia</code>, or <code>AudioWorkletNode</code>.</td><td>Not fixable in-app — this build/environment can't run the pipeline at all.</td></tr>
+  </tbody>
+</table>
+
+<p class="manual-note">The workflow that actually pays off: leave auto-submit on, trust the
+countdown bar as your only feedback loop, and use "Hold to talk" if you'd rather a released key be
+the unambiguous stop signal than a silence timer. Once that's second nature, voice stops being a
+novelty input and becomes a genuinely faster way to drive a Terminal or Chat session than typing.</p>
+</section>
+<section id="plans-and-tasks"><h1>Plans &amp; Tasks — reading what the agent already told you</h1>
+
+<p class="lede">Session Manager does not run a second task manager next to Claude Code. Every
+checklist and every plan you see in the app is read straight out of the same transcript JSONL the
+CLI already writes to <code>~/.claude/projects/&lt;encoded-cwd&gt;/&lt;sessionUuid&gt;.jsonl</code>.
+There is no separate place to "add a task" — if it isn't in the transcript, it doesn't exist here
+either.</p>
+
+<h2>Where this data actually comes from</h2>
+
+<p>Two Claude Code tool calls carry the whole feature. <code>src/main/lib/classifyTranscriptLine.cjs</code>
+watches every <code>tool_use</code> block in the tail and reclassifies exactly two of them:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Tool call the CLI made</th><th>Transcript event kind</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>TodoWrite</code></td>
+      <td><code>todo_write</code></td>
+      <td>The agent replaced its whole to-do list. Session Manager stores the <em>latest</em> list only —
+      each new <code>TodoWrite</code> call overwrites the previous one, it doesn't append.</td>
+    </tr>
+    <tr>
+      <td><code>ExitPlanMode</code> / <code>EnterPlanMode</code></td>
+      <td><code>plan</code></td>
+      <td>The agent proposed or revised a plan while in plan mode. The plan text itself comes from the
+      tool call's <code>plan</code> input field.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Both events are folded into <code>state/live.ts</code>'s per-tab <code>LiveTab</code> object as the
+transcript streams in — <code>todos: TodoItem[]</code> (the current list, each item a
+<code>content</code>/<code>status</code>/<code>activeForm</code> triple, status one of
+<code>pending</code> / <code>in_progress</code> / <code>completed</code>) and
+<code>plans: PlanEntry[]</code> (a ring buffer of up to 50 revisions, newest first, each an
+<code>{ at, content }</code> pair). This is why Plans &amp; Tasks tracking is read-only in the app:
+you're looking at a live mirror of what the agent already committed to, not a UI you edit.</p>
+
+<h2>Where you actually see it: the footer to-do chip</h2>
+
+<p>The one place tasks surface today is the Almanac footer at the bottom of the window — a small
+<code>✓ N</code> / <code>● N</code> / <code>○ N</code> chip (completed / in-progress / pending)
+that only appears once the active session's session has called <code>TodoWrite</code> at least
+once. Click it to expand the full checklist in a popover: completed items are struck through,
+the in-progress item shows its <code>activeForm</code> text with a pulsing dot, everything else
+sits dim and unchecked.</p>
+
+<p class="manual-note">This chip replaced an earlier, dedicated "Tasks" tab in the left nav. There
+is no standalone Tasks screen any more — the footer chip is scoped to whichever tab is active, so
+switching tabs switches whose checklist you're looking at.</p>
+
+<figure class="manual-figure" data-figure="footer-todo-chip">
+  <div class="manual-figure__frame" data-capture="Almanac footer, todo chip expanded, mixed completed/in-progress/pending items"></div>
+  <figcaption>
+    <span class="callout" data-arrow="left">1</span> Counts at a glance — done / active / waiting.
+    <span class="callout" data-arrow="up">2</span> Click to expand; click outside to close.
+    <span class="callout" data-arrow="right">3</span> The in-progress row shows the agent's own
+    <code>activeForm</code> wording, not the static task text.
+  </figcaption>
+</figure>
+
+<h2>Plans and tasks inside a Session's Discussion feed</h2>
+
+<p>Every <code>todo_write</code> and <code>plan</code> event is also a turn in the Session's chat
+transcript, rendered as a compact tool-family chip — the same chip style as any other tool call
+(labelled <strong>TodoWrite</strong> or <strong>Plan</strong>). This is governed by the same
+five-level verbosity dial that controls the rest of the Discussion feed
+(<code>lib/chatVerbosity.ts</code>): tool-family events, todo updates and plan revisions included,
+only render at dial levels <strong>1 · raw</strong> and <strong>2 · detail</strong>. Turn the dial
+up to <strong>3 · standard</strong> or quieter and they disappear from the feed entirely — you're
+left with the interactive back-and-forth, not the bookkeeping.</p>
+
+<p>That's a deliberate trade, not a bug: if you want to audit exactly when the plan changed or the
+checklist got rewritten, drop to <em>detail</em>. If you're skimming a long-running Session for what
+the agent said and asked, stay at <em>standard</em> or above and let the chips stay hidden.</p>
+
+<h2>The common mistake</h2>
+
+<p>Treating the to-do chip as a place to track work <em>you</em> assign. It isn't — it's a readout
+of what the agent itself decided to track via <code>TodoWrite</code>. If a Session never
+calls <code>TodoWrite</code>, the chip never appears, no matter how much work is actually
+happening; conversely, an agent that keeps its own list current gives you the chip for free. You
+don't drive this surface, the agent does — the lever you actually have is asking the agent (in
+your prompt) to track its steps, not editing a checklist in the app.</p>
+
+<p>The second mistake is expecting a dedicated Plans browser. The codebase does contain a plan
+history viewer (a revision list with diff-against-previous), but as of this edition it isn't wired
+into any navigation tab — nothing in the app links to it. Plan revisions are still captured and
+still visible as chips in the Discussion feed at <em>raw</em>/<em>detail</em>, they're just not
+browsable as a standalone timeline yet.</p>
+
+<h2>The workflow that pays off</h2>
+
+<ol class="manual-steps">
+  <li>When you kick off a Session with real multi-step scope, ask for a to-do list explicitly in the
+  opening prompt (or trust that Claude Code's own habits will produce one on nontrivial work) —
+  that's what makes the footer chip populate in the first place.</li>
+  <li>Glance at the chip's counts, not the popover, for the common case: <code>✓3 ●1 ○2</code> tells
+  you the agent is mid-flight on one item with two queued, without opening anything.</li>
+  <li>Open the popover only when you need the actual wording — e.g. deciding whether the
+  in-progress item matches what you expected the agent to be doing right now.</li>
+  <li>If you need the audit trail (what changed, when, in what order), switch the Session's Discussion
+  feed to <em>detail</em> or <em>raw</em> rather than hunting for a separate log — the
+  <code>TodoWrite</code>/<code>Plan</code> chips are already there, in order, with the rest of the
+  session's activity around them for context.</li>
+  <li>Don't fight the read-only nature of it. If the agent's plan is wrong, say so in your next
+  message — that's a new <code>ExitPlanMode</code>/<code>TodoWrite</code> call, and the chip and
+  the feed both pick it up automatically.</li>
+</ol>
+
+<p class="manual-note">One session, one checklist. Because <code>todos</code> is overwritten (not
+appended) on every <code>TodoWrite</code> call, the chip always shows the agent's <em>current</em>
+plan for that Session — there's nothing to reconcile between the app's view and the agent's actual
+state, because they're the same read.</p></section>
+<section id="simple-mode"><h1>Simple Mode — the chrome-free single-terminal cockpit</h1>
+
+<p class="lede">Everything else in this manual is about the full app: tabs, Sessions, the Scheduler,
+two dozen config surfaces. Simple Mode throws all of that away on purpose. It boots one terminal
+running <code>claude --dangerously-skip-permissions</code> in the directory you launched from, and
+nothing else.</p>
+
+<h2>1. What it actually is</h2>
+
+<p>Add <code>--simple</code> to the launch command:</p>
+
+<pre><code>npx claude-code-session-manager@latest --simple</code></pre>
+
+<p><code>bin/cli.cjs</code> doesn't do anything special with the flag — it forwards
+<code>process.argv.slice(2)</code> straight through to the spawned Electron binary, the same way
+every other CLI argument reaches the app. The main process reads it back on an IPC handler,
+<code>app:launch-mode</code>:</p>
+
+<pre><code>ipcMain.handle('app:launch-mode', () => ({
+  simple: process.argv.includes('--simple'),
+  cwd: process.cwd(),
+}));</code></pre>
+
+<p><code>cwd</code> is whatever directory your shell was sitting in when you ran the command —
+<code>cli.cjs</code> never changes it, so it's inherited straight through to Electron. The
+renderer calls this once on mount (<code>window.api.app.launchMode()</code>, wired in
+<code>src/preload/index.cjs</code>) and, if <code>simple</code> comes back true,
+<code>App.tsx</code> takes an early return before any of the normal boot path runs:</p>
+
+<pre><code>if (simpleMode === true) return &lt;SimpleShell /&gt;</code></pre>
+
+<p class="manual-note"><strong>There is no ambiguity about scope here.</strong> The flag is
+read once, at boot, from <code>process.argv</code>. There is no in-app toggle that flips a running
+window into Simple Mode or back — you choose it on the command line, or you don't.</p>
+
+<h2>2. What's missing, and why that's the point</h2>
+
+<p><code>SimpleShell.tsx</code> renders exactly four things: the privacy recording banner, a thin
+one-line status strip showing the launch directory, one full-window <code>Terminal</code>, and the
+toast layer. No left nav, no tab bar, no New Session card, no Scheduler, no Settings — none of the
+surfaces this manual otherwise spends most of its pages on.</p>
+
+<table class="manual-table">
+  <thead><tr><th>Present</th><th>Absent</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>One live terminal running <code>claude --dangerously-skip-permissions</code></td>
+      <td>Left nav, tab bar, all Configure/Observability tabs</td>
+    </tr>
+    <tr>
+      <td><code>RecordingStatus</code> — the privacy banner still mounts here</td>
+      <td>Sessions, Scheduler, PRDs, queue, history</td>
+    </tr>
+    <tr>
+      <td><code>Toast</code> — errors still surface</td>
+      <td>Any persisted multi-tab state from a previous normal-mode session</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note"><strong>The common mistake:</strong> launching with <code>--simple</code>
+and then going looking for the Scheduler tab, or expecting a New Session button to queue a PRD. None
+of it is there. Simple Mode isn't a smaller version of the full app's UI with some panels
+collapsed — it's a different component tree entirely (<code>SimpleShell</code>, not the normal
+<code>App.tsx</code> layout), and it was built to have nothing to click except the terminal.</p>
+
+<figure class="manual-figure" data-figure="simple-mode-cockpit">
+  <div class="manual-figure__frame" data-capture="app launched with --simple, single terminal filling the window"></div>
+  <figcaption>
+    <span class="callout" data-arrow="up">1</span> The one-line status strip — "simple mode" plus
+    the launch directory, nothing else.
+    <span class="callout" data-arrow="left">2</span> The terminal fills the rest of the window.
+    <span class="callout" data-arrow="down">3</span> No left nav, no tab bar, no Almanac footer.
+  </figcaption>
+</figure>
+
+<h2>3. How the session gets started</h2>
+
+<p>Simple Mode doesn't reuse a saved preset selection or wait for you to press anything — it spawns
+one session immediately, from the same preset the full app calls <code>sm-dangerous</code>:</p>
+
+<ol class="manual-steps">
+  <li><code>App.tsx</code> takes <code>DEFAULT_PRESETS[0]</code> — the
+  <code>claude --dangerously-skip-permissions --session-id &lt;id&gt;</code> preset — regardless of
+  which mode you're in.</li>
+  <li>When <code>launchMode()</code> resolves with <code>simple: true</code>, it calls a
+  live-spawn path (<code>spawnLiveTabInCwd</code>) that creates one tab in <code>status: 'spawning'</code>
+  rooted at the launch <code>cwd</code>, and skips straight to running the command — there's no
+  dormant tab waiting for you to click into it.</li>
+  <li>Persisted-tab hydration (<code>hydrateSessions()</code>) — the step that restores your normal
+  app's tabs from a previous run — is skipped entirely in this path. Simple Mode never shows you
+  yesterday's tabs; it starts one fresh session every time.</li>
+</ol>
+
+<p>Practically: every <code>--simple</code> launch is a brand-new <code>claude</code> session in
+whatever directory you ran the command from, with permission prompts already skipped. There's no
+picker, no resume, no session history to browse — if you want a specific project or a resumed
+session, <code>cd</code> there first, or don't use <code>--simple</code>.</p>
+
+<h2>4. When to reach for it vs. the full app</h2>
+
+<table class="manual-table">
+  <thead><tr><th>Situation</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>You want the observability/config cockpit — Sessions, Scheduler running PRDs overnight,
+      Settings, Permissions, Agent Library, and so on</td>
+      <td>The full app: <code>npx claude-code-session-manager@latest</code></td>
+    </tr>
+    <tr>
+      <td>You just want <code>claude --dangerously-skip-permissions</code> in the current directory,
+      as fast as possible, with none of the app's other surfaces in the way</td>
+      <td><code>--simple</code></td>
+    </tr>
+    <tr>
+      <td>You're demoing or screen-sharing the terminal and don't want the rest of the UI in frame</td>
+      <td><code>--simple</code></td>
+    </tr>
+    <tr>
+      <td>You need to queue work to run unattended (Scheduler, PRDs) or track more than one Session in
+      the same project</td>
+      <td>The full app — Simple Mode has no queue and no second session</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="manual-note">Simple Mode still honors the same privacy invariant as the full app —
+<code>RecordingStatus</code> is mounted unconditionally, so if voice recording is active the banner
+shows here too. That's the one piece of chrome that's never optional, in either mode.</p>
+
+<h2>5. What it isn't</h2>
+
+<p>Simple Mode is not a lighter-weight settings profile, not a "safe mode" for troubleshooting the
+full app, and not a separate installation — it's the same npm package, the same Electron binary,
+booting a different renderer component tree based on one command-line flag. Nothing about your
+<code>~/.claude/</code> config, skills, or MCP servers changes between the two modes; the CLI
+session itself behaves identically either way. The only thing Simple Mode strips out is Session
+Manager's own UI around it.</p>
+</section>
+<hr style="border:0;border-top:1px solid #2a2a2a;margin:48px 0 24px"/>
+<p style="color:#666;font-size:.85em">© Bilko.run · Your copy of The Session Manager Field Manual. Updates for this
+edition are free — re-download the latest at bilko.run/manual.</p>
+</div></body></html>

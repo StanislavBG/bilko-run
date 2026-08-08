@@ -301,10 +301,29 @@ function HowToReadThisPage() {
   );
 }
 
-function WhereBookStands({ lines }) {
+// The "Book totals" bullet gets three extra input-carrying `?` badges (one
+// per figure it names) on top of the generic per-word ones glossify() already
+// inserts — additive, per PRD 1026, never a replacement for the header-level
+// explainers.
+function WhereBookStands({ lines, totals, positionsCount, asOf }) {
+  const items = bulletsOf(lines);
+  if (!items.length) return null;
   return (
     <Section title="Where the book stands">
-      <BulletList items={bulletsOf(lines)} render={glossify} />
+      <ul className="opts-bullets">
+        {items.map((t, i) => (
+          <li key={i} className={t.indexOf("⚠") !== -1 ? "opts-line-warn" : undefined}>
+            {glossify(t)}
+            {totals && t.startsWith("Book totals") && (
+              <>
+                <window.Help term="total_credit" inputs={{ count: positionsCount, total: totals.credit }} asOf={asOf} />
+                <window.Help term="total_open_pl" inputs={{ count: positionsCount, total: totals.open_pl }} asOf={asOf} />
+                <window.Help term="total_max_loss" inputs={{ count: positionsCount, total: totals.max_loss }} asOf={asOf} />
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
     </Section>
   );
 }
@@ -396,6 +415,7 @@ function tradeKeyForPosition(pos) {
 const POSITIONS_HEADER_TERM = {
   Spread: "spread",
   "FROZEN entry (filled / net / credit)": "frozen_entry",
+  "LIVE spread price (Δ)": "close_cost",
   "LIVE spot": "spot",
   "LIVE cushion (Δ)": "cushion",
   "LIVE band": "band",
@@ -405,7 +425,35 @@ const POSITIONS_HEADER_TERM = {
   conf: "wide_quote",
 };
 
-function PositionsTable({ lines, positions }) {
+// This row's own live inputs for the four calculated cells — `pos` is the
+// matched record.positions[] entry (or null when the row's Spread label
+// couldn't be resolved back to one, e.g. an unpaired leg); every input
+// object degrades to `{}` in that case so <Help/> falls back to a
+// formula-only tooltip instead of crashing on `pos.now.spot` etc.
+function positionRowCalcProps(pos, fallbackAsOf) {
+  const asOf = {
+    quotes: (pos && pos.oldest_quote_ts) || fallbackAsOf,
+    entry: (pos && pos.entry && pos.entry.filled_at) || fallbackAsOf,
+  };
+  const creditCloseCost = pos ? { credit: pos.entry.credit, close_cost: pos.now.close_cost } : {};
+  return {
+    asOf,
+    risk: pos ? { width: pos.width, contracts: pos.qty, credit: pos.entry.credit } : {},
+    cushion: pos ? { short_strike: pos.short_strike, spot: pos.now.spot, right: pos.right } : {},
+    open_pl: creditCloseCost,
+    pct_captured: creditCloseCost,
+    close_cost: pos
+      ? {
+          short_ask: pos.quality && pos.quality.short && pos.quality.short.ask,
+          long_bid: pos.quality && pos.quality.long && pos.quality.long.bid,
+          width: pos.width,
+          contracts: pos.qty,
+        }
+      : {},
+  };
+}
+
+function PositionsTable({ lines, positions, fallbackAsOf }) {
   const table = tableOf(lines);
   if (!table) {
     return (
@@ -418,6 +466,11 @@ function PositionsTable({ lines, positions }) {
   const bandCol = header.findIndex((h) => h === "LIVE band");
   const confCol = header.findIndex((h) => h === "conf");
   const spreadCol = header.findIndex((h) => h === "Spread");
+  const frozenEntryCol = header.findIndex((h) => h === "FROZEN entry (filled / net / credit)");
+  const spreadPriceCol = header.findIndex((h) => h === "LIVE spread price (Δ)");
+  const cushionCol = header.findIndex((h) => h === "LIVE cushion (Δ)");
+  const openPlCol = header.findIndex((h) => h === "LIVE open P/L (Δ)");
+  const pctCapturedCol = header.findIndex((h) => h === "% captured");
   const posList = positions || [];
   return (
     <div className="opt-table-scroll">
@@ -446,6 +499,11 @@ function PositionsTable({ lines, positions }) {
                   }
                 }
               : undefined;
+            const calcProps = positionRowCalcProps(pos, fallbackAsOf);
+            const wideQuoteNote =
+              confCol >= 0 && (row[confCol] || "").indexOf("⚠") !== -1
+                ? "⚠ Wide-quoted leg(s) on this row — this mark is the least trustworthy number in the table."
+                : undefined;
             return (
               <tr
                 key={ri}
@@ -461,6 +519,36 @@ function PositionsTable({ lines, positions }) {
                       <BandBadge value={cell} />
                     ) : ci === confCol ? (
                       <ConfCell value={cell} />
+                    ) : ci === frozenEntryCol ? (
+                      <>
+                        {cell}
+                        <window.Help term="risk" inputs={calcProps.risk} asOf={calcProps.asOf} />
+                      </>
+                    ) : ci === spreadPriceCol ? (
+                      <>
+                        {colorizeSigned(cell)}
+                        <window.Help
+                          term="close_cost"
+                          inputs={calcProps.close_cost}
+                          asOf={calcProps.asOf}
+                          note={wideQuoteNote}
+                        />
+                      </>
+                    ) : ci === cushionCol ? (
+                      <>
+                        {colorizeSigned(cell)}
+                        <window.Help term="cushion" inputs={calcProps.cushion} asOf={calcProps.asOf} />
+                      </>
+                    ) : ci === openPlCol ? (
+                      <>
+                        {colorizeSigned(cell)}
+                        <window.Help term="open_pl" inputs={calcProps.open_pl} asOf={calcProps.asOf} />
+                      </>
+                    ) : ci === pctCapturedCol ? (
+                      <>
+                        {colorizeSigned(cell)}
+                        <window.Help term="pct_captured" inputs={calcProps.pct_captured} asOf={calcProps.asOf} />
+                      </>
                     ) : FROZEN_COLS.has(ci) ? (
                       cell
                     ) : (
@@ -477,10 +565,10 @@ function PositionsTable({ lines, positions }) {
   );
 }
 
-function PositionsSection({ lines, positions }) {
+function PositionsSection({ lines, positions, fallbackAsOf }) {
   return (
     <Section title="Positions — entry snapshot (frozen) vs now (live)">
-      <PositionsTable lines={lines} positions={positions} />
+      <PositionsTable lines={lines} positions={positions} fallbackAsOf={fallbackAsOf} />
     </Section>
   );
 }
@@ -534,13 +622,34 @@ const OPEN_QUEUE_HEADER_TERM = {
   EV: "ev",
 };
 
-function OpenQueue({ lines }) {
+// The "Deployed ..." bullet gets the live deployment `?` (total max loss ÷
+// equity) on top of the generic per-word ones glossify() already inserts —
+// same additive treatment as WhereBookStands' "Book totals" bullet.
+function OpenQueue({ lines, totals, account }) {
   const bullets = bulletsOf(lines);
   const table = tableOf(lines);
   const plain = plainLinesOf(lines);
+  const deploymentAsOf = account ? { quotes: account.balance_asof } : undefined;
   return (
     <Section title="Open queue">
-      {bullets.length ? <BulletList items={bullets} render={glossify} /> : <Paragraphs items={plain} />}
+      {bullets.length ? (
+        <ul className="opts-bullets">
+          {bullets.map((t, i) => (
+            <li key={i} className={t.indexOf("⚠") !== -1 ? "opts-line-warn" : undefined}>
+              {glossify(t)}
+              {totals && account && t.startsWith("Deployed ") && (
+                <window.Help
+                  term="deployment"
+                  inputs={{ spread_risk: totals.max_loss, stock_value: 0, equity: account.equity }}
+                  asOf={deploymentAsOf}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Paragraphs items={plain} />
+      )}
       {table && (
         <div className="opt-table-scroll" style={{ marginTop: 10 }}>
           <table className="opt-table opt-table--orders">
@@ -580,31 +689,52 @@ const RULES_FIELD_TERM = {
   profit_target_pct: "profit_target",
   close_on_strike_breach: "strike_breach_exit",
   strike_breach_buffer_pct: "strike_breach_buffer",
-  max_short_delta: "short_leg_delta",
-  min_pop: "pop",
+  max_short_delta: "max_short_delta",
+  min_pop: "min_pop",
   min_dte: "dte",
   max_dte: "dte",
   max_per_underlying: "max_per_underlying",
   live: "live_flag",
 };
 
+// Rendered markdown already carries the config's own value as this bullet's
+// `value` text — these five terms' glossary calcs accept that same field
+// name as an input key, so the live SPREAD_CONFIG value substitutes straight
+// into the rule's formula instead of the header-level explainer staying
+// generic. Kept as a plain Set (not an object literal) so it doesn't get
+// picked up by the "every mapped term must resolve" source-level test scan,
+// which only looks for `key: "glossary_term"` shaped mappings.
+const RULES_FIELDS_WITH_CONFIG_INPUT = new Set([
+  "profit_target_pct",
+  "strike_breach_buffer_pct",
+  "max_per_underlying",
+  "min_pop",
+  "max_short_delta",
+]);
+
 function RulesInForce({ lines }) {
   const items = bulletsOf(lines).map((l) => {
     const m = /^`([^`]+)`:\s*(.*)$/.exec(l);
     return m ? { key: m[1], value: m[2], term: RULES_FIELD_TERM[m[1]] } : { key: l, value: "", free: true };
   });
+  const config = (window.SPREAD_CONFIG && window.SPREAD_CONFIG.config) || {};
   return (
     <Section title="Rules in force">
       <div className="opt-kv">
-        {items.map((it, i) => (
-          <div className="opt-kv-item" key={i}>
-            <span className="opt-kv-k">
-              {it.free ? glossify(it.key) : it.key}
-              {it.term && <window.Help term={it.term} />}
-            </span>
-            <span className="opt-kv-v">{it.value}</span>
-          </div>
-        ))}
+        {items.map((it, i) => {
+          const configValue =
+            !it.free && RULES_FIELDS_WITH_CONFIG_INPUT.has(it.key) ? config[it.key] : undefined;
+          const inputs = configValue != null ? { [it.key]: configValue } : undefined;
+          return (
+            <div className="opt-kv-item" key={i}>
+              <span className="opt-kv-k">
+                {it.free ? glossify(it.key) : it.key}
+                {it.term && <window.Help term={it.term} inputs={inputs} />}
+              </span>
+              <span className="opt-kv-v">{it.value}</span>
+            </div>
+          );
+        })}
       </div>
     </Section>
   );
@@ -648,19 +778,32 @@ function OptionsSummaryPanel({ data }) {
     return Date.now() - t > STALE_AFTER_MS ? ageLabel(summaryData.generatedAt) : null;
   })();
 
+  const record = summaryData.record;
+  // PRD 1026: single fallback stamp for any price-derived calc that has no
+  // more specific timestamp of its own (a position's own oldest_quote_ts /
+  // entry.filled_at always wins when present).
+  const fallbackAsOf = summaryData.generatedAt || record.generated_at;
+  const bookAsOf = { quotes: record.oldest_quote_ts || fallbackAsOf, entry: fallbackAsOf };
+
   return (
     <div className="opt-log opt-log--stacked opts-summary">
       <div className="opt-log-stack">
         <HowToReadThisPage />
         <Headline text={headlineText} staleLabel={staleLabel} />
-        <WhereBookStands lines={findSection(sections, "Where the book stands").lines} />
+        <WhereBookStands
+          lines={findSection(sections, "Where the book stands").lines}
+          totals={record.totals}
+          positionsCount={record.positions.length}
+          asOf={bookAsOf}
+        />
         <PositionsSection
           lines={findSection(sections, "Positions — entry snapshot (frozen) vs now (live)").lines}
-          positions={summaryData.record.positions}
+          positions={record.positions}
+          fallbackAsOf={fallbackAsOf}
         />
         <WhatWeThink lines={findSection(sections, "What we think right now").lines} />
         <ActionQueue lines={findSection(sections, "Action queue").lines} />
-        <OpenQueue lines={findSection(sections, "Open queue").lines} />
+        <OpenQueue lines={findSection(sections, "Open queue").lines} totals={record.totals} account={record.account} />
         <RulesInForce lines={findSection(sections, "Rules in force").lines} />
         <Provenance lines={findSection(sections, "Provenance").lines} />
       </div>

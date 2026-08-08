@@ -172,6 +172,11 @@
           { key: "today", label: "Today's date", unit: "", text: true },
         ],
         result: (v) => {
+          // Both inputs are plain YYYY-MM-DD calendar-date strings (not
+          // instants), so a bare `new Date(...)` parses each consistently
+          // as UTC midnight — unlike SpreadFormat.dteFromExpiry, whose `now`
+          // param expects a real instant and re-derives the local calendar
+          // day from it, which would double-convert a date-only string.
           const exp = new Date(v.expiry);
           const today = new Date(v.today);
           if (Number.isNaN(exp.getTime()) || Number.isNaN(today.getTime())) return null;
@@ -231,6 +236,16 @@
       short: "How much an option's price moves for a $1 move in the stock.",
       long: "Also used as a rough odds estimate — a 0.20 delta option behaves like it has roughly a 20% chance of finishing in the money.",
       example: "A 0.30-delta call gains about $0.30 in value for every $1 the stock rises.",
+      calc: {
+        expr: "net delta × 100 × contracts = position delta",
+        inputs: [
+          { key: "net_greek", label: "Net delta (per share)", unit: "" },
+          { key: "contracts", label: "Contracts", unit: "" },
+        ],
+        result: (v) => v.net_greek * 100 * v.contracts,
+        unit: "",
+        source: "dashboard/panels/options-trade-log.jsx:123",
+      },
     },
     short_leg_delta: {
       label: "Short-leg delta",
@@ -243,24 +258,64 @@
       short: "How fast delta itself changes as the stock moves.",
       long: "High gamma means the trade's sensitivity to the stock can shift quickly — risk can change fast, especially close to expiry.",
       example: "A gamma of 0.05 means a $1 stock move shifts delta by about 0.05 — e.g. from 0.20 to 0.25.",
+      calc: {
+        expr: "net gamma × 100 × contracts = position gamma",
+        inputs: [
+          { key: "net_greek", label: "Net gamma (per share)", unit: "" },
+          { key: "contracts", label: "Contracts", unit: "" },
+        ],
+        result: (v) => v.net_greek * 100 * v.contracts,
+        unit: "",
+        source: "dashboard/panels/options-trade-log.jsx:124",
+      },
     },
     theta: {
       label: "Theta",
       short: "How much value this position gains (or loses) each day just from time passing.",
       long: "Credit spreads are usually sold to profit from theta — time decay works in our favor as long as the stock stays away from the short strike.",
       example: "A position with theta of +$8 gains about $8 in value overnight from time decay alone, stock price unchanged.",
+      calc: {
+        expr: "net theta × 100 × contracts = position theta",
+        inputs: [
+          { key: "net_greek", label: "Net theta (per share)", unit: "" },
+          { key: "contracts", label: "Contracts", unit: "" },
+        ],
+        result: (v) => v.net_greek * 100 * v.contracts,
+        unit: "$",
+        source: "dashboard/panels/options-trade-log.jsx:125",
+      },
     },
     vega: {
       label: "Vega",
       short: "How much this position's value changes when the market's expected volatility changes.",
       long: "A jump in expected volatility (e.g. before earnings) can move this position even if the stock price hasn't moved at all.",
       example: "A vega of −$12 means the position loses about $12 in value for every 1-point rise in implied volatility.",
+      calc: {
+        expr: "net vega × 100 × contracts = position vega",
+        inputs: [
+          { key: "net_greek", label: "Net vega (per share)", unit: "" },
+          { key: "contracts", label: "Contracts", unit: "" },
+        ],
+        result: (v) => v.net_greek * 100 * v.contracts,
+        unit: "$",
+        source: "dashboard/panels/options-trade-log.jsx:126",
+      },
     },
     rho: {
       label: "Rho",
       short: "How much this position's value changes when interest rates change.",
       long: "Usually the smallest factor for short-dated option trades, but included for completeness.",
       example: "A rho of $2 means the position's value moves about $2 for a full 1% (100bp) move in interest rates — rarely material over a 2-week hold.",
+      calc: {
+        expr: "net rho × 100 × contracts = position rho",
+        inputs: [
+          { key: "net_greek", label: "Net rho (per share)", unit: "" },
+          { key: "contracts", label: "Contracts", unit: "" },
+        ],
+        result: (v) => v.net_greek * 100 * v.contracts,
+        unit: "$",
+        source: "dashboard/panels/options-trade-log.jsx:127",
+      },
     },
     iv: {
       label: "IV",
@@ -343,7 +398,7 @@
         expr: "credit × (1 − profit_target_pct)",
         inputs: [
           { key: "credit", label: "Credit received", unit: "$", priced: true, clock: "entry" },
-          { key: "profit_target_pct", label: "Profit-target %", unit: "%" },
+          { key: "profit_target_pct", token: "profit_target_pct", label: "Profit-target %", unit: "%" },
         ],
         result: (v) => v.credit * (1 - v.profit_target_pct),
         unit: "$",
@@ -399,8 +454,18 @@
     realized_pl: {
       label: "Realized P/L",
       short: "The actual profit or loss once a position is closed.",
-      long: "Unlike open P/L, this number is final — it's what actually hit the account.",
+      long: "Unlike open P/L, this number is final — it's what actually hit the account. Distinct from open P/L, which is still a paper mark that moves with the quote.",
       example: "We collected $360 credit and paid $90 to close it — realized P/L is +$270, and it doesn't change again after that.",
+      calc: {
+        expr: "credit received − exit cost",
+        inputs: [
+          { key: "credit_received", label: "Credit received", unit: "$", priced: true, clock: "entry" },
+          { key: "exit_cost", label: "Exit cost", unit: "$", priced: true, clock: "entry" },
+        ],
+        result: (v) => v.credit_received - v.exit_cost,
+        unit: "$",
+        source: "src/social_signals_trader/spread_trader.py:1462",
+      },
     },
     decay: {
       label: "Decay",
@@ -645,6 +710,37 @@
       short: "The most open spreads allowed on a single stock at the same time.",
       long: "Keeps the book from concentrating too much risk in one name, even if that name keeps generating attractive-looking setups.",
       example: "With max_per_underlying set to 2, a third attractive setup on the same ticker is skipped even though the book-wide max_positions cap has room.",
+      calc: {
+        expr: "at most max_per_underlying open spreads allowed on one underlying at a time",
+        inputs: [{ key: "max_per_underlying", token: "max_per_underlying", label: "Max per underlying", unit: "" }],
+        result: (v) => v.max_per_underlying,
+        unit: "",
+        source: "src/social_signals_trader/spread_trader.py:170",
+      },
+    },
+    min_pop: {
+      label: "Min PoP requirement",
+      short: "The lowest win-probability estimate a candidate needs to even be considered.",
+      long: "A floor on PoP (see PoP / win probability) — candidates estimated below this are never scored, no matter how much credit they'd pay.",
+      calc: {
+        expr: "candidate pop must be >= min pop to enter",
+        inputs: [{ key: "min_pop", label: "Min PoP", unit: "%" }],
+        result: (v) => v.min_pop,
+        unit: "%",
+        source: "src/social_signals_trader/spread_trader.py:69",
+      },
+    },
+    max_short_delta: {
+      label: "Max short-leg delta",
+      short: "The most aggressive (highest-delta) short strike the strategy will sell.",
+      long: "A ceiling on short-leg delta (see Short-leg delta) — candidates whose short strike prices in more risk than this are skipped.",
+      calc: {
+        expr: "|candidate short delta| must be <= max short delta to enter",
+        inputs: [{ key: "max_short_delta", label: "Max short delta", unit: "" }],
+        result: (v) => v.max_short_delta,
+        unit: "",
+        source: "src/social_signals_trader/spread_trader.py:61",
+      },
     },
     margin_buffer_pct: {
       label: "Margin buffer",
@@ -672,6 +768,16 @@
       short: "How much room past the strike the stock gets before the strike-breach exit actually fires.",
       long: "A small buffer avoids getting stopped out by a brief, noisy tick through the strike that reverses a moment later.",
       example: "With a 1% buffer on a $255 short put, the stock has to trade below about $252.45 before the strike-breach exit fires — not the instant it dips under $255.",
+      calc: {
+        expr: "short strike × strike breach buffer pct = buffer distance from the strike",
+        inputs: [
+          { key: "short_strike", label: "Short strike", unit: "$" },
+          { key: "strike_breach_buffer_pct", label: "Breach buffer %", unit: "%" },
+        ],
+        result: (v) => v.short_strike * v.strike_breach_buffer_pct,
+        unit: "$",
+        source: "src/social_signals_trader/spread_trader.py:1385",
+      },
     },
     live_flag: {
       label: "Live",
@@ -720,6 +826,51 @@
       short: "The price we told the broker we're willing to accept — the order won't fill worse than this.",
       long: "For a credit spread this is a minimum credit to receive; the order sits unfilled until the market offers at least that much.",
       example: "A limit of $1.20 credit means the order only fills at $1.20/contract or a better (higher) credit — never worse.",
+    },
+    total_credit: {
+      label: "Total credit received (open book)",
+      short: "The sum of credit collected across every open spread right now.",
+      long: "Adds each open position's own credit received into one book-wide figure.",
+      calc: {
+        expr: "sum of credit received across count open spreads",
+        inputs: [
+          { key: "count", label: "Open spreads", unit: "" },
+          { key: "total", label: "Total credit received", unit: "$", priced: true, clock: "entry" },
+        ],
+        result: (v) => v.total,
+        unit: "$",
+        source: "src/social_signals_trader/options_summary.py:223",
+      },
+    },
+    total_open_pl: {
+      label: "Total open P/L (open book)",
+      short: "The combined paper profit or loss across every open spread right now.",
+      long: "Adds each open position's own open P/L into one book-wide figure — it moves with live quotes.",
+      calc: {
+        expr: "sum of open P/L across count open spreads",
+        inputs: [
+          { key: "count", label: "Open spreads", unit: "" },
+          { key: "total", label: "Total open P/L", unit: "$", priced: true, clock: "quotes" },
+        ],
+        result: (v) => v.total,
+        unit: "$",
+        source: "src/social_signals_trader/options_summary.py:266",
+      },
+    },
+    total_max_loss: {
+      label: "Total max loss (open book)",
+      short: "The combined worst-case loss across every open spread right now.",
+      long: "Adds each open position's own max loss — capped and known per position — into one book-wide figure.",
+      calc: {
+        expr: "sum of max loss across count open spreads",
+        inputs: [
+          { key: "count", label: "Open spreads", unit: "" },
+          { key: "total", label: "Total max loss", unit: "$", priced: true, clock: "entry" },
+        ],
+        result: (v) => v.total,
+        unit: "$",
+        source: "src/social_signals_trader/options_summary.py:250",
+      },
     },
     tif: {
       label: "TIF",
@@ -842,13 +993,14 @@
 
   function renderCalcBlock(calc, props) {
     const inputs = props.inputs || {};
-    const allPresent = calc.inputs.every((spec) => inputPresent(spec, inputs[spec.key]));
+    const presentSpecs = calc.inputs.filter((spec) => inputPresent(spec, inputs[spec.key]));
+    const allPresent = presentSpecs.length === calc.inputs.length;
     const elements = [
       React.createElement("span", { className: "help-tip-calc-title", key: "title" }, "How we got this"),
       React.createElement("span", { className: "help-tip-calc-expr", key: "expr" }, calc.expr),
     ];
 
-    if (!allPresent) {
+    if (!presentSpecs.length) {
       elements.push(
         React.createElement(
           "span",
@@ -859,6 +1011,38 @@
           "span",
           { className: "help-tip-calc-unavailable", key: "unavailable" },
           "live inputs not available on this view"
+        )
+      );
+      return React.createElement("span", { className: "help-tip-calc" }, elements);
+    }
+
+    // At least one input is present but not all (e.g. a config-only value
+    // shown outside the context of one specific position) — substitute what
+    // we have, leave the rest as the formula's own words, and stop short of
+    // a result rather than pretending we can compute one.
+    if (!allPresent) {
+      presentSpecs.forEach((spec, i) => {
+        elements.push(
+          React.createElement(
+            "span",
+            { className: "help-tip-calc-input", key: `input-${i}` },
+            `${spec.label}: ${formatInputValue(spec, inputs[spec.key])}`
+          )
+        );
+      });
+      elements.push(
+        React.createElement(
+          "span",
+          { className: "help-tip-calc-sub", key: "sub" },
+          substituteExpr(calc.expr, presentSpecs, inputs)
+        )
+      );
+      const missing = calc.inputs.filter((spec) => presentSpecs.indexOf(spec) === -1);
+      elements.push(
+        React.createElement(
+          "span",
+          { className: "help-tip-calc-unavailable", key: "unavailable" },
+          `still needs ${missing.map((s) => s.label).join(", ")} to finish this calc`
         )
       );
       return React.createElement("span", { className: "help-tip-calc" }, elements);
@@ -985,6 +1169,9 @@
             "span",
             { className: "help-tip", role: "tooltip" },
             React.createElement("span", { className: "help-tip-label" }, entry.label),
+            props && props.note
+              ? React.createElement("span", { className: "help-tip-note" }, props.note)
+              : null,
             React.createElement("span", { className: "help-tip-short" }, entry.short),
             React.createElement("span", { className: "help-tip-long" }, entry.long),
             entry.example

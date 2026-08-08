@@ -98,8 +98,11 @@ function classifyOrder(record) {
 }
 
 // Both legs side by side, each with its own greeks. Rendered for entry and,
-// once the spread is flattened, again for exit.
-function LegDetail({ title, legs, predatesSnapshots }) {
+// once the spread is flattened, again for exit. `contracts` (the position's
+// own contract count) drives the per-leg "net greek × 100 × contracts ="
+// scaling shown by each greek cell's <Help/> — undefined degrades to a
+// formula-only tooltip rather than a wrong number.
+function LegDetail({ title, legs, predatesSnapshots, contracts }) {
   if (legs === undefined || legs === null) {
     return (
       <div className="opt-legs-empty">
@@ -131,6 +134,8 @@ function LegDetail({ title, legs, predatesSnapshots }) {
         <tbody>
           {rows.map((l) => {
             const k = l.greeks || {};
+            const asOf = { quotes: l.quote_ts };
+            const greekProps = (net_greek) => ({ inputs: { net_greek, contracts }, asOf });
             return (
               <tr key={l.symbol}>
                 <td className="al mono-dim">{l.symbol}</td>
@@ -139,11 +144,11 @@ function LegDetail({ title, legs, predatesSnapshots }) {
                 <td>{money(l.mid)}</td>
                 <td>{money(l.last)}</td>
                 <td>{pctv(l.iv)}</td>
-                <td>{g4(k.delta)}</td>
-                <td>{g4(k.gamma)}</td>
-                <td className="neg-tint">{g4(k.theta)}</td>
-                <td>{g4(k.vega)}</td>
-                <td>{g4(k.rho)}</td>
+                <td>{g4(k.delta)}<Help term="delta" {...greekProps(k.delta)} /></td>
+                <td>{g4(k.gamma)}<Help term="gamma" {...greekProps(k.gamma)} /></td>
+                <td className="neg-tint">{g4(k.theta)}<Help term="theta" {...greekProps(k.theta)} /></td>
+                <td>{g4(k.vega)}<Help term="vega" {...greekProps(k.vega)} /></td>
+                <td>{g4(k.rho)}<Help term="rho" {...greekProps(k.rho)} /></td>
                 <td className="mono-dim">{(l.volume || 0).toLocaleString()}</td>
                 <td className="mono-dim">{(l.open_interest || 0).toLocaleString()}</td>
                 <td className="mono-dim">{l.quote_ts ? String(l.quote_ts).replace("T", " ") : "—"}</td>
@@ -266,8 +271,8 @@ function TradeDetail({ ev, facts }) {
           </div>
         ))}
       </div>
-      <LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} />
-      {isClose && <LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} />}
+      <LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} contracts={ev.contracts} />
+      {isClose && <LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} contracts={ev.contracts} />}
     </div>
   );
 }

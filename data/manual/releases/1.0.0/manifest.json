@@ -32,6 +32,13 @@
       "file": "field-manual-1.0.0.html",
       "mime": "text/html",
       "bytes": 19481
+    },
+    {
+      "id": "pdf",
+      "label": "PDF edition",
+      "file": "field-manual-1.0.0.pdf",
+      "mime": "application/pdf",
+      "bytes": 128193
     }
   ]
 }

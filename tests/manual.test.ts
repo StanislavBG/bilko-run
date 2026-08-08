@@ -6,13 +6,40 @@
  *   2. a download token minted for one asset must never open another.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import Fastify from 'fastify';
 import {
   compareManualVersions, latestManualVersion, isValidManualVersion,
   isValidManualSlug, tocFromManifest, MANUAL_PRODUCT_KEY, MANUAL_PRICE_TYPE,
   type ManualManifest,
 } from '../shared/manual-catalog.js';
 import { entryForPriceType } from '../shared/product-catalog.js';
+
+// The route-level tests below exercise the real entitled path end-to-end, so
+// the only seams stubbed are the purchase lookup and Clerk token
+// verification — everything else (disk reads, token signing, streaming) runs
+// for real against the shipped v1.0.0 release bundle.
+const hasPurchased = vi.fn(async (_email: string, _productKey: string) => false);
+vi.mock('../server/services/stripe.js', () => ({
+  hasPurchased: (email: string, productKey: string) => hasPurchased(email, productKey),
+}));
+
+let currentAuthEmail: string | null = null;
+vi.mock('../server/clerk.js', () => ({
+  EMAIL_RE: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  verifyClerkToken: async (authHeader: string | undefined) => {
+    if (!authHeader?.startsWith('Bearer ')) return null;
+    return currentAuthEmail;
+  },
+  requireAuth: async (req: any, reply: any) => {
+    const email = currentAuthEmail;
+    if (!email) {
+      reply.code(401).send({ error: 'sign_in_required' });
+      return null;
+    }
+    return email;
+  },
+}));
 
 const MANIFEST: ManualManifest = {
   version: '1.0.0',
@@ -149,5 +176,133 @@ describe('release bundle on disk', () => {
     const m = latestManifest()!;
     expect(resolveReleaseFile(m.version, '../../../../etc/passwd')).toBeNull();
     expect(resolveReleaseFile('../..', 'manifest.json')).toBeNull();
+  });
+});
+
+describe('entitled path (route-level)', () => {
+  const BUYER = 'buyer@entitled-test.com';
+
+  async function buildApp() {
+    process.env.MANUAL_DOWNLOAD_SECRET = 'test-secret-for-manual-downloads';
+    const { registerManualRoutes } = await import('../server/routes/manual.js');
+    const app = Fastify({ logger: false });
+    registerManualRoutes(app);
+    await app.ready();
+    return app;
+  }
+
+  function authAs(email: string | null) {
+    currentAuthEmail = email;
+  }
+
+  beforeEach(() => {
+    hasPurchased.mockReset();
+    authAs(null);
+  });
+
+  afterEach(async () => {
+    authAs(null);
+  });
+
+  it('walks status → paid chapter → download-token → streamed bytes for an entitled buyer', async () => {
+    hasPurchased.mockImplementation(async (email, productKey) => email === BUYER && productKey === MANUAL_PRODUCT_KEY);
+    authAs(BUYER);
+    const app = await buildApp();
+
+    // 1. status reports entitled + a toc
+    const status = await app.inject({ method: 'GET', url: '/api/manual/status', headers: { authorization: 'Bearer test-token' } });
+    expect(status.statusCode).toBe(200);
+    const statusBody = status.json();
+    expect(statusBody.entitled).toBe(true);
+    expect(statusBody.toc).toBeTruthy();
+    expect(Array.isArray(statusBody.toc.chapters)).toBe(true);
+    expect(statusBody.toc.chapters.length).toBeGreaterThan(0);
+
+    const paidSlug = statusBody.toc.chapters.find((c: { free: boolean }) => !c.free)?.slug;
+    expect(paidSlug).toBeTruthy();
+
+    // 2. paid chapter body is readable, not just its metadata
+    const chapter = await app.inject({
+      method: 'GET',
+      url: `/api/manual/chapter/${paidSlug}`,
+      headers: { authorization: 'Bearer test-token' },
+    });
+    expect(chapter.statusCode).toBe(200);
+    const chapterBody = chapter.json();
+    expect(typeof chapterBody.html).toBe('string');
+    expect(chapterBody.html.length).toBeGreaterThan(0);
+
+    // 3. mint a download token for the PDF asset
+    const assetId = statusBody.toc.assets.find((a: { id: string }) => a.id === 'pdf')?.id;
+    expect(assetId).toBe('pdf');
+    const mint = await app.inject({
+      method: 'POST',
+      url: '/api/manual/download-token',
+      headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },
+      payload: { assetId },
+    });
+    expect(mint.statusCode).toBe(200);
+    const mintBody = mint.json();
+    expect(typeof mintBody.url).toBe('string');
+    expect(mintBody.bytes).toBeGreaterThan(0);
+
+    // 4. the minted URL streams the full declared byte count with the right headers
+    const download = await app.inject({ method: 'GET', url: mintBody.url });
+    expect(download.statusCode).toBe(200);
+    expect(download.headers['content-disposition']).toContain('attachment');
+    expect(download.headers['cache-control']).toBe('private, no-store');
+    expect(download.rawPayload.length).toBe(mintBody.bytes);
+
+    await app.close();
+  });
+
+  it('mints a token that unlocks only the asset it names, even for an entitled buyer', async () => {
+    hasPurchased.mockImplementation(async (email, productKey) => email === BUYER && productKey === MANUAL_PRODUCT_KEY);
+    authAs(BUYER);
+    const app = await buildApp();
+
+    const status = await app.inject({ method: 'GET', url: '/api/manual/status', headers: { authorization: 'Bearer test-token' } });
+    const { toc } = status.json();
+    const assetIds: string[] = toc.assets.map((a: { id: string }) => a.id);
+    expect(assetIds).toContain('offline-html');
+    expect(assetIds).toContain('pdf');
+
+    const mint = await app.inject({
+      method: 'POST',
+      url: '/api/manual/download-token',
+      headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },
+      payload: { assetId: 'pdf' },
+    });
+    const { url } = mint.json();
+
+    // Swap the token's target asset in the URL — the token was signed for
+    // 'pdf' only, so redirecting it at 'offline-html' must be refused rather
+    // than acting as a general-purpose bearer credential for the release.
+    const swapped = url.replace(`/api/manual/download/1.0.0/pdf`, `/api/manual/download/1.0.0/offline-html`);
+    expect(swapped).not.toBe(url);
+
+    const res = await app.inject({ method: 'GET', url: swapped });
+    expect(res.statusCode).toBe(403);
+
+    await app.close();
+  });
+
+  it('never entitles a non-purchasing user', async () => {
+    hasPurchased.mockResolvedValue(false);
+    authAs('nobody@example.com');
+    const app = await buildApp();
+
+    const status = await app.inject({ method: 'GET', url: '/api/manual/status', headers: { authorization: 'Bearer test-token' } });
+    expect(status.json().entitled).toBe(false);
+
+    const mint = await app.inject({
+      method: 'POST',
+      url: '/api/manual/download-token',
+      headers: { authorization: 'Bearer test-token', 'content-type': 'application/json' },
+      payload: { assetId: 'pdf' },
+    });
+    expect(mint.statusCode).toBe(402);
+
+    await app.close();
   });
 });

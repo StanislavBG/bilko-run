@@ -64,6 +64,8 @@ the team is one person, but the principle stands).
 1. Turso CLI: `turso db tokens create bilko --expiration 90d`. Capture token.
 2. Render env update + redeploy.
 3. Verify: `curl https://bilko.run/api/analytics/event -X POST` returns 200 (proves DB writable).
+4. Revoke old token: `turso db tokens revoke <id>`.
+5. Mark rotated.
 
 ### `MANUAL_DOWNLOAD_SECRET`
 
@@ -78,8 +80,6 @@ random value and roll it like any HMAC secret.
 3. Render redeploys. Rolling this secret invalidates any download link minted in the last 5
    minutes (`DOWNLOAD_TOKEN_TTL_MS`) — negligible blast radius, no coordination needed.
 4. Verify: sign in as an entitled buyer at `/manual`, download an asset, confirm it completes.
-5. Mark rotated.
-4. Revoke old token: `turso db tokens revoke <id>`.
 5. Mark rotated.
 
 ## After every rotation

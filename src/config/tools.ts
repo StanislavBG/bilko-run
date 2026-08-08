@@ -170,17 +170,22 @@ export const TOOLS: readonly ToolDefinition[] = [
       buttonShadow: 'shadow-warm-900/30',
     },
   },
-  // Marketing/purchase page for the Session Manager desktop cockpit. The app
-  // itself is a separately-built static-path sibling at /projects/session-manager/
-  // (see standalone-projects.json) — this react-route entry is just the landing
-  // page + Stripe checkout at /products/session-manager. Same slug is
-  // intentional: projectsRegistry.ts dedupes PROJECTS by slug so the two merge
-  // into a single hub card, with this react-route entry's href winning.
+  // Marketing page for the Session Manager desktop cockpit. The app itself is a
+  // separately-built static-path sibling at /projects/session-manager/ (see
+  // standalone-projects.json) — this react-route entry is just the landing page
+  // at /products/session-manager. Same slug is intentional: projectsRegistry.ts
+  // dedupes PROJECTS by slug so the two merge into a single hub card, with this
+  // react-route entry's href winning.
+  //
+  // Open-core: the APP is free (npx claude-code-session-manager@latest). The
+  // Stripe checkout on this page sells The Field Manual ($19.99, read at
+  // /manual) — never the software. Keep that split explicit in any copy here;
+  // a card that reads like the app costs money is the failure mode.
   {
     slug: 'session-manager',
     name: 'Session Manager',
-    tagline: 'One cockpit for every Claude Code session',
-    description: 'A local desktop cockpit for the Claude Code CLI — scheduler, subagent hive, full session history, live usage, voice, an embedded browser, and a self-hosted web remote.',
+    tagline: 'One cockpit for every Claude Code session — free',
+    description: 'A free local desktop cockpit for the Claude Code CLI — scheduler, subagent hive, full session history, live usage, voice, an embedded browser, and a self-hosted web remote. The paid Field Manual that teaches it is sold separately.',
     features: ['Scheduler', 'Subagents · Hive', 'History', 'Usage', 'Voice', 'Browser', 'Web Remote'],
     category: 'devtools',
     status: 'live',

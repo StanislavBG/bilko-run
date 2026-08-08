@@ -135,6 +135,13 @@ export default function ManualPage() {
               <p className="text-sm text-neutral-400">
                 Every chapter, every screenshot, and every future revision. Buy once — updates are free forever.
               </p>
+              {/* The open-core split, restated on the surface where money changes
+                  hands: nobody should reach checkout thinking they're buying the app. */}
+              <p className="mt-2 text-xs text-neutral-500">
+                The app itself is free —{' '}
+                <code className="rounded bg-neutral-900 px-1.5 py-0.5">npx claude-code-session-manager@latest</code>.
+                This is the guide that teaches it.
+              </p>
             </div>
             {isSignedIn ? (
               <button

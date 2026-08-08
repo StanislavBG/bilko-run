@@ -52,7 +52,7 @@ export const PACKAGES: readonly Package[] = [
     slug: 'session-manager',
     name: 'Session Manager',
     npmName: 'claude-code-session-manager',
-    description: 'Electron desktop cockpit for Claude Code CLI — terminal + 17 config tabs.',
+    description: 'Electron desktop cockpit for Claude Code CLI — terminal + 25+ config tabs. Free; the paid Field Manual is sold separately.',
     install: 'npm install -g claude-code-session-manager',
     github: 'https://github.com/StanislavBG/session-manager',
     npm: 'https://www.npmjs.com/package/claude-code-session-manager',

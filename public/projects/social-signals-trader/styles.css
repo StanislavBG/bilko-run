@@ -1199,9 +1199,26 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .help-tip-label { font-weight: 600; color: var(--text); }
 .help-tip-short { color: var(--text); }
 .help-tip-long { color: var(--text-2); }
+.help-tip-example { color: var(--text-2); font-style: italic; }
+
+/* Worked-calculation block (PRD 1024) — appended after the long definition
+   when a term carries a `calc` and the call site supplied live `inputs`. */
+.help-tip-calc {
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--line-2);
+}
+.help-tip-calc-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.help-tip-calc-expr { color: var(--text-2); font-family: var(--mono); font-size: 11px; }
+.help-tip-calc-input { color: var(--text-2); font-family: var(--mono); font-size: 11px; }
+.help-tip-calc-sub { color: var(--text); font-family: var(--mono); font-size: 11px; }
+.help-tip-calc-result { color: var(--text); font-family: var(--mono); font-size: 12px; }
+.help-tip-calc-names { color: var(--text-2); font-family: var(--mono); font-size: 11px; }
+.help-tip-calc-unavailable { color: var(--text-2); font-style: italic; font-size: 11px; }
+.help-tip-calc-asof { color: var(--text-2); font-size: 10px; }
+.help-tip-calc-asof--stale { color: var(--text); font-weight: 600; }
 
 /* Narrow screens: centered popover can overflow the viewport edge — pin it
    to the right of the button instead of centering, and clamp its width. */
 @media (max-width: 480px) {
-  .help-tip { left: auto; right: -8px; transform: none; max-width: calc(100vw - 32px); }
+  .help-tip { left: auto; right: -8px; transform: none; max-width: calc(100vw - 32px); max-height: calc(100vh - 96px); overflow-y: auto; }
 }

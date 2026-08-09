@@ -17,6 +17,19 @@ import { resolve } from 'path';
 
 const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf-8');
 
+/**
+ * Source with block comments stripped and whitespace flattened.
+ *
+ * Both matter for copy assertions: a sentence that Prettier wrapped across two
+ * JSX lines is still one sentence on screen, and a comment EXPLAINING why some
+ * retired feature was deleted must not itself trip the "don't advertise it"
+ * check.
+ */
+const readProse = (p: string) =>
+  read(p)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ');
+
 const MARKETING_PAGE = 'src/pages/SessionManagerPage.tsx';
 const MANUAL_PAGE = 'src/pages/ManualPage.tsx';
 const TOOLS_REGISTRY = 'src/config/tools.ts';
@@ -26,10 +39,26 @@ describe('open-core positioning: the app is free, the manual is the product', ()
   it('the marketing page states the app is free and shows the install command', () => {
     const src = read(MARKETING_PAGE);
     expect(src).toContain('npx claude-code-session-manager@latest');
-    // The line that makes the split unambiguous.
-    expect(src).toMatch(/The tool is free\. The knowledge of how to run it isn't\./);
+    // The line that makes the split unambiguous. The claim being guarded is
+    // "app free / manual paid" — NOT one fixed sentence, so the wording is free
+    // to soften (it read as smug once and was rewritten) as long as both halves
+    // still appear: the app is free, and the manual is the companion guide.
+    const prose = readProse(MARKETING_PAGE);
+    expect(prose).toMatch(/The app is free, and stays free\./);
+    expect(prose).toMatch(/Field Manual is the strategy guide/);
     // And the promise that the app is never crippled to sell the book.
     expect(src).toMatch(/never gated to sell the book/i);
+  });
+
+  it('does not advertise surfaces the app no longer ships', () => {
+    // The feature pills drifted into listing Browser and Web Remote (both
+    // retired from the desktop app) plus a "Subagents · Hive" screen that
+    // never existed — a visitor could click a pill and read about something
+    // they'd never find after installing.
+    const prose = readProse(MARKETING_PAGE);
+    for (const retired of ['Web Remote', 'Subagents', 'Hive', 'embedded browser']) {
+      expect(prose, `marketing page still advertises "${retired}"`).not.toContain(retired);
+    }
   });
 
   it('binds checkout to the signed-in identity, never a free-text email field', () => {

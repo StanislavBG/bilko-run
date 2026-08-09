@@ -325,6 +325,26 @@ const MIGRATIONS = [
     created_at   INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_publish_overrides_slug ON publish_overrides (slug, created_at DESC)`,
+  // User-submitted feedback from a sibling app's in-page widget. Public write,
+  // authed read — see server/routes/project-feedback.ts. `description` is
+  // untrusted user text stored raw; escape it wherever it is rendered.
+  `CREATE TABLE IF NOT EXISTS project_feedback (
+    id                    TEXT PRIMARY KEY,
+    slug                  TEXT NOT NULL,
+    target_kind           TEXT NOT NULL,
+    target_id             TEXT NOT NULL,
+    target_label          TEXT,
+    route                 TEXT,
+    type                  TEXT NOT NULL,
+    title                 TEXT NOT NULL,
+    description           TEXT NOT NULL,
+    image_mime            TEXT,
+    image_data            TEXT,
+    client_json           TEXT,
+    snapshot_generated_at TEXT,
+    created_at            INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_project_feedback_slug_created ON project_feedback (slug, created_at)`,
   `CREATE TABLE IF NOT EXISTS usage_daily (
     user_email   TEXT NOT NULL,
     app_slug     TEXT NOT NULL,

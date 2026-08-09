@@ -19,6 +19,7 @@ import { registerSecretsRoutes } from './routes/admin-secrets.js';
 import { registerGameRoutes } from './routes/games.js';
 import { registerAcademyRoutes } from './routes/academy.js';
 import { registerProjectDataRoutes } from './routes/project-data.js';
+import { registerProjectFeedbackRoutes } from './routes/project-feedback.js';
 import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
@@ -83,6 +84,7 @@ registerSecretsRoutes(app);
 registerGameRoutes(app);
 registerAcademyRoutes(app);
 registerProjectDataRoutes(app);
+registerProjectFeedbackRoutes(app);
 registerSmRelayRoutes(app);
 registerManualRoutes(app);
 

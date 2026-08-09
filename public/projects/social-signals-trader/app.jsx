@@ -23,15 +23,18 @@ const ACCENT_MAP = {
 };
 
 function getInitialPage() {
-  // Ticker Details is deep-linkable per ticker as #options/AAPL, so match on the
+  // Options Log is deep-linkable per ticker as #options/AAPL, so match on the
   // segment before the slash — the page itself reads the ticker off the hash.
   const h = (location.hash || "").replace("#", "").split("/")[0];
   if (["dashboard","trades","watchlist","signals","optimization","options","trade"].includes(h)) return h;
-  // ?ticker=AAPL with no hash is still a Ticker Details link — honour it rather
-  // than silently dropping the visitor on the dashboard.
+  // ?ticker=AAPL with no hash is still an Options Log link — honour it rather
+  // than silently dropping the visitor elsewhere.
   if (new URLSearchParams(location.search || "").get("ticker")) return "options";
-  // Paused tabs (strategies, macro, reddit, reports, methodology) fall back to dashboard.
-  return "dashboard";
+  // Landing surface: the Options Log. The credit-spread book IS the fund's
+  // live activity right now, so a visitor with no hash lands on it; the
+  // account-vs-SPY review page stays one click away at #dashboard.
+  // Paused tabs (strategies, macro, reddit, reports, methodology) land here too.
+  return "options";
 }
 
 function App() {
@@ -62,9 +65,10 @@ function App() {
   // up → Current positions → Trade log → long-horizon Watchlist. All other
   // tabs (Trades/Strategies/Macro/Reddit/Signals/Optimization/Reports) are
   // retired; their component files remain on disk but are no longer mounted.
-  // Ticker Details (#options) is the one surface that is NOT part of the
+  // Options Log (#options) is the one surface that is NOT part of the
   // single-page dashboard — it's a full-width options worksheet, so it replaces
-  // the dashboard body rather than sitting inside it.
+  // the dashboard body rather than sitting inside it. It is also the landing
+  // page (see getInitialPage).
   if (page === "options" && window.TickerDetailsPage) {
     return (
       <>

@@ -37,6 +37,15 @@ function Chip({ tone = "neutral", children, title }) {
   );
 }
 
+// Two cards side by side, each half the page. auto-fit rather than a hard
+// `1fr 1fr` so a row with only one live card (or a narrow window) collapses to
+// full width instead of leaving a dead column.
+function Row2({ children }) {
+  const kids = React.Children.toArray(children).filter(Boolean);
+  if (!kids.length) return null;
+  return <div className="opts-row2">{kids}</div>;
+}
+
 // `term` is optional: most Stats here are raw counts with no glossary
 // concept behind them. When present with no matching `calc` (e.g. "iv" —
 // definition/example only), <Help/> renders the definition and never
@@ -147,8 +156,8 @@ function StrategyPolicy() {
   const sc = window.SPREAD_CONFIG;
   if (!sc || !sc.config) {
     return (
-      <section className="card" style={{ padding: 14, marginTop: 8, borderColor: "var(--neg)" }}>
-        <p style={{ color: "var(--neg)", fontSize: 13, margin: 0 }}>
+      <section className="card opts-strategy-card" style={{ borderColor: "var(--neg)" }}>
+        <p style={{ color: "var(--neg)", fontSize: 12, margin: 0 }}>
           Strategy config unavailable — dashboard/data-spread-config.js is missing or failed to
           load. Not showing stand-in numbers here on purpose.
         </p>
@@ -167,34 +176,37 @@ function StrategyPolicy() {
     max_per_underlying: { max_per_underlying: c.max_per_underlying },
   };
   const field = (label, value, gloss, term) => (
-    <div style={{ display: "grid", gap: 2 }}>
-      <span style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+    <div style={{ display: "grid", gap: 1 }}>
+      <span style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
         {label}
         {term && <window.Help term={term} inputs={FIELD_TERM_CONFIG_INPUT[term]} />}
       </span>
-      <span style={{ fontFamily: "var(--mono)", fontSize: 13 }}>{value}</span>
-      <span style={{ fontSize: 11, color: "var(--text-3)" }}>{gloss}</span>
+      <span style={{ fontFamily: "var(--mono)", fontSize: 12 }}>{value}</span>
+      <span style={{ fontSize: 10, color: "var(--text-3)", lineHeight: 1.35 }}>{gloss}</span>
     </div>
   );
-  const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginTop: 8 };
-  const h4 = { fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-3)", marginTop: 14, marginBottom: 0 };
+  // Compact: this card is an explainer, not a live reading — it sits at the
+  // bottom of the page under "Strategy & rules", so it gets narrower columns
+  // and smaller type than the live cards above it.
+  const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "8px 12px", marginTop: 6 };
+  const h4 = { fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-3)", marginTop: 10, marginBottom: 0 };
 
   return (
-    <section className="card" style={{ padding: 14, marginTop: 8 }}>
+    <section className="card opts-strategy-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-        <h3 style={{ margin: 0, fontSize: 14 }}>CREDIT_SPREAD — fund policy</h3>
-        <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--mono)" }}>
+        <h3 style={{ margin: 0, fontSize: 13 }}>CREDIT_SPREAD — fund policy</h3>
+        <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--mono)" }}>
           config as of {String(sc.generatedAt || "unknown").replace("T", " ")}
         </span>
       </div>
-      <p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 6, maxWidth: 760 }}>
+      <p style={{ fontSize: 11, color: "var(--text-2)", marginTop: 4, maxWidth: 760 }}>
         These are the live, actually-traded rules — loaded from data/spread_config.json with any
-        SST_SPREAD_* env overrides applied. The ticker worksheet below is an exploratory scan with
+        SST_SPREAD_* env overrides applied. The ticker worksheet above is an exploratory scan with
         its own, looser filters; it is not this policy.
       </p>
 
       <h4 style={h4}>Universe</h4>
-      <p style={{ fontSize: 12, fontFamily: "var(--mono)", margin: "4px 0 0" }} title="The only tickers the sleeve scans and trades.">
+      <p style={{ fontSize: 11, fontFamily: "var(--mono)", margin: "3px 0 0", color: "var(--text-2)" }} title="The only tickers the sleeve scans and trades.">
         {(c.tickers || []).join(", ")}
       </p>
 
@@ -218,7 +230,7 @@ function StrategyPolicy() {
       </div>
 
       <h4 style={h4}>Exit policy</h4>
-      <p style={{ fontSize: 12, fontFamily: "var(--mono)", margin: "4px 0 0" }}>
+      <p style={{ fontSize: 11, fontFamily: "var(--mono)", margin: "3px 0 0", color: "var(--text-2)" }}>
         profit target {pct(c.profit_target_pct)} — closes once {pct(c.profit_target_pct)} of the
         entry credit is captured
       </p>
@@ -365,80 +377,113 @@ function TickerDetailsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const summary = (window.optionsSummaryParts && window.optionsSummaryParts()) || {};
+  const tradeLog = (window.optionsTradeLogParts && window.optionsTradeLogParts(window.SPREAD_LOG)) || {};
+
+  // Reading order, top to bottom: what happened today → what we hold → when it
+  // rolls off and where the book stands → what we make of it → what to do →
+  // what's queued → the full history. Everything explanatory (how a credit
+  // spread works, the fund policy, the rules, provenance) is compacted into
+  // one "Strategy & rules" block at the very bottom: it's reference material,
+  // read once, not a live reading.
   return (
-    <main className="shell" id="ticker-details">
-      <header style={{ marginTop: 8 }}>
-        <h2 style={{ margin: 0 }}>Ticker Details</h2>
-        <p style={{ color: "var(--text-2)", fontSize: 13, marginTop: 6, maxWidth: 760 }}>
+    <main className="shell opts-page" id="ticker-details">
+      <header className="opts-page-head">
+        <h2 style={{ margin: 0, fontSize: 20 }}>Options Log</h2>
+        <span className="opts-page-sub">every open credit spread, what it's worth now, and what we did</span>
+      </header>
+
+      {summary.empty || (
+        <>
+          {summary.headline}
+          <div id="options-summary">{summary.positions}</div>
+          <Row2>
+            {tradeLog.expiryLadder}
+            {summary.whereBookStands}
+          </Row2>
+          <Row2>
+            {summary.whatWeThink}
+            {summary.actionQueue}
+          </Row2>
+          <Row2>
+            {summary.openQueue}
+            {tradeLog.openOrders}
+          </Row2>
+        </>
+      )}
+
+      <div id="options-trade-log">
+        {tradeLog.empty || tradeLog.tradeLog}
+        {tradeLog.foot}
+      </div>
+
+      <section className="opts-worksheet">
+        <h3 className="opts-section-title">Ticker worksheet</h3>
+        <p className="opts-page-sub">
           Give it one ticker; it returns everything the options market will tell
           us about that name, scored for premium selling. Spreads are included so a
           $300 stock costs a few hundred dollars of risk instead of $30k of cash.
         </p>
-      </header>
 
-      <StrategyPolicy />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value.toUpperCase())}
+            onKeyDown={(e) => { if (e.key === "Enter") lookup(); }}
+            placeholder="Ticker, e.g. AAPL"
+            style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 6, padding: "7px 12px", color: "var(--text)", fontFamily: "var(--mono)", fontSize: 13, width: 160 }}
+          />
+          <button
+            onClick={() => lookup()}
+            disabled={busy || !input.trim()}
+            style={{ padding: "7px 16px", background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--line)", borderRadius: 6, cursor: busy ? "wait" : "pointer", fontSize: 12, fontWeight: 600, opacity: busy || !input.trim() ? 0.6 : 1 }}
+          >
+            {busy ? "Loading…" : "Get options"}
+          </button>
+        </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value.toUpperCase())}
-          onKeyDown={(e) => { if (e.key === "Enter") lookup(); }}
-          placeholder="Ticker, e.g. AAPL"
-          style={{ background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 6, padding: "7px 12px", color: "var(--text)", fontFamily: "var(--mono)", fontSize: 13, width: 160 }}
-        />
-        <button
-          onClick={() => lookup()}
-          disabled={busy || !input.trim()}
-          style={{ padding: "7px 16px", background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--line)", borderRadius: 6, cursor: busy ? "wait" : "pointer", fontSize: 12, fontWeight: 600, opacity: busy || !input.trim() ? 0.6 : 1 }}
-        >
-          {busy ? "Loading…" : "Get options"}
-        </button>
-      </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+          <Chip tone="neutral" title="The free Alpaca tier. OPRA requires a signed agreement + Algo Trader Plus.">feed: {feed}</Chip>
+          {Object.keys(params).length > 0 && (
+            <>
+              <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy below.">scan: ≤ {params.max_dte}d to expiry</Chip>
+              <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy below.">scan: risk ceiling {usd(params.max_collateral)}/position</Chip>
+              <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy below.">scan: min credit {usd2(params.min_credit)}</Chip>
+            </>
+          )}
+          {asOf && <Chip tone="neutral">as of {String(asOf).replace("T", " ")}</Chip>}
+        </div>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-        <Chip tone="neutral" title="The free Alpaca tier. OPRA requires a signed agreement + Algo Trader Plus.">feed: {feed}</Chip>
-        {Object.keys(params).length > 0 && (
-          <>
-            <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy above.">scan: ≤ {params.max_dte}d to expiry</Chip>
-            <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy above.">scan: risk ceiling {usd(params.max_collateral)}/position</Chip>
-            <Chip tone="neutral" title="Exploratory scan filter — this worksheet, not the fund policy above.">scan: min credit {usd2(params.min_credit)}</Chip>
-          </>
+        {note && (
+          <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 10, maxWidth: 760 }}>{note}</p>
         )}
-        {asOf && <Chip tone="neutral">as of {String(asOf).replace("T", " ")}</Chip>}
-      </div>
 
-      {note && (
-        <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 10, maxWidth: 760 }}>{note}</p>
-      )}
+        {row ? (
+          <TickerCard row={row} params={params} asOf={asOf} />
+        ) : busy ? (
+          <p style={{ color: "var(--text-3)", marginTop: 14 }}>Loading…</p>
+        ) : (
+          <p style={{ color: "var(--text-3)", marginTop: 14 }}>
+            Enter a ticker above to pull its chain.
+          </p>
+        )}
+      </section>
 
-      {window.OptionsSummaryPanel && (
-        <div id="options-summary" style={{ marginTop: 12 }}>
-          <window.OptionsSummaryPanel />
-        </div>
-      )}
-
-      {window.OptionsTradeLog && (
-        <div id="options-trade-log" style={{ marginTop: 12 }}>
-          <window.OptionsTradeLog log={window.SPREAD_LOG} />
-        </div>
-      )}
-
-      {row ? (
-        <TickerCard row={row} params={params} asOf={asOf} />
-      ) : busy ? (
-        <p style={{ color: "var(--text-3)", marginTop: 20 }}>Loading…</p>
-      ) : (
-        <p style={{ color: "var(--text-3)", marginTop: 20 }}>
-          Enter a ticker above to pull its chain.
+      <section className="opts-strategy">
+        <h3 className="opts-section-title">Strategy &amp; rules</h3>
+        {summary.howto}
+        <StrategyPolicy />
+        <Row2>
+          {summary.rulesInForce}
+          {summary.provenance}
+        </Row2>
+        <p style={{ color: "var(--text-3)", fontSize: 11, marginTop: 12, maxWidth: 760 }}>
+          Win probability is approximated as 1 − |Δ|, the standard dealer heuristic —
+          it is not a guarantee, and it ignores the fat left tail a short put carries.
+          Quotes come from Alpaca's free indicative feed, a derivative of OPRA rather
+          than the consolidated book; treat the credit column as indicative, not fillable.
         </p>
-      )}
-
-      <p style={{ color: "var(--text-3)", fontSize: 11, marginTop: 20, maxWidth: 760 }}>
-        Win probability is approximated as 1 − |Δ|, the standard dealer heuristic —
-        it is not a guarantee, and it ignores the fat left tail a short put carries.
-        Quotes come from Alpaca's free indicative feed, a derivative of OPRA rather
-        than the consolidated book; treat the credit column as indicative, not fillable.
-      </p>
+      </section>
     </main>
   );
 }

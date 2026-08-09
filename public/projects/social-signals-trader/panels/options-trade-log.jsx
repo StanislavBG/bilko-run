@@ -639,18 +639,25 @@ function TradeLogTable({ trades }) {
   );
 }
 
-function OptionsTradeLog({ log }) {
+// Same parts-not-a-fixed-stack shape as window.optionsSummaryParts: the
+// Options Log page interleaves the Expiry ladder with the summary cards
+// (ladder half-width near the top, Trade Log full width lower down), so each
+// card is handed back on its own. OptionsTradeLog below is these parts in the
+// default stacked order — one definition of each table either way.
+function optionsTradeLogParts(log) {
   const data = log || window.SPREAD_LOG;
   if (!data || !data.events || !data.events.length) {
-    return (
-      <section className="card opt-log">
-        <h3 className="opt-log-title">Options trade log</h3>
-        <p className="opt-log-empty">
-          No spread activity yet. Generate with{" "}
-          <code>python -m social_signals_trader.spread_trader --export-log</code>.
-        </p>
-      </section>
-    );
+    return {
+      empty: (
+        <section className="card opt-log">
+          <h3 className="opt-log-title">Options trade log</h3>
+          <p className="opt-log-empty">
+            No spread activity yet. Generate with{" "}
+            <code>python -m social_signals_trader.spread_trader --export-log</code>.
+          </p>
+        </section>
+      ),
+    };
   }
 
   const openOrders = [];
@@ -661,17 +668,12 @@ function OptionsTradeLog({ log }) {
   });
   const openPositions = computeOpenPositions(trades);
 
-  return (
-    // Trade Log leads at full width: it is the denser table and the one that
-    // records what actually happened. Open Orders sits below it — intent, not
-    // history. Side by side, both were squeezed into half a column and the
-    // numeric columns wrapped.
-    <div className="opt-log opt-log--stacked">
-      <div className="opt-log-stack">
-        <ExpiryLadder positions={openPositions} />
-        <TradeLogTable trades={trades} />
-        <OpenOrdersTable orders={openOrders} />
-      </div>
+  return {
+    empty: null,
+    expiryLadder: <ExpiryLadder positions={openPositions} />,
+    tradeLog: <TradeLogTable trades={trades} />,
+    openOrders: <OpenOrdersTable orders={openOrders} />,
+    foot: (
       <p className="opt-log-foot">
         Greeks and prices are frozen at the moment of the order — entry legs from
         just before submission, exit legs from the close. Δ delta · Γ gamma ·
@@ -679,11 +681,31 @@ function OptionsTradeLog({ log }) {
         Orders shows a target credit, grey, not money received — a row only
         moves to the Trade Log once Alpaca reports it filled completely.
       </p>
+    ),
+  };
+}
+
+function OptionsTradeLog({ log }) {
+  const parts = optionsTradeLogParts(log);
+  if (parts.empty) return parts.empty;
+  return (
+    // Trade Log leads at full width: it is the denser table and the one that
+    // records what actually happened. Open Orders sits below it — intent, not
+    // history. Side by side, both were squeezed into half a column and the
+    // numeric columns wrapped.
+    <div className="opt-log opt-log--stacked">
+      <div className="opt-log-stack">
+        {parts.expiryLadder}
+        {parts.tradeLog}
+        {parts.openOrders}
+      </div>
+      {parts.foot}
     </div>
   );
 }
 
 window.OptionsTradeLog = OptionsTradeLog;
+window.optionsTradeLogParts = optionsTradeLogParts;
 window.OptionsTradeLogInternals = {
   tradeKey, resolveTrade, classifyOrder, tradeFacts, legDirection, fillState,
   creditReceived, LegDetail, TradeDetail,

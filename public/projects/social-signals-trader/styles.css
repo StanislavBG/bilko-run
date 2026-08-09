@@ -1068,6 +1068,41 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
    everything else is a stacked .opt-panel card, same primitives as the
    trade log above so dark/light/density/accent all keep working for free. */
 .opts-summary { display: grid; gap: 14px; }
+
+/* ---- Options Log page layout (#options) ----
+   The page is a vertical rhythm of full-width rows and half-width pairs.
+   auto-fit + minmax means a pair collapses to one column on narrow screens,
+   and a row left with a single card fills the width rather than stranding
+   half the page. */
+/* minmax(0, 1fr) rather than the default `auto` track: the Positions table's
+   max-content width is far wider than the viewport, and an auto track sizes to
+   it — which pushed the whole page (header, headline, every card) out to
+   ~1476px on a 760px screen. The tables already scroll inside
+   .opt-table-scroll; the page itself must not. */
+.opts-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.opts-page > * { min-width: 0; }
+.opts-page-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.opts-page-sub { font-size: 12px; color: var(--text-2); margin: 0; max-width: 70ch; }
+.opts-row2 {
+  display: grid; gap: 14px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+}
+/* Half-width cards hold the same tables as the full-width ones — let them
+   scroll rather than force the page wider than the viewport. */
+.opts-row2 > * { min-width: 0; }
+.opts-section-title {
+  margin: 0 0 6px; font-size: 13px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text-3);
+}
+.opts-worksheet { border-top: 1px solid var(--line); padding-top: 16px; }
+/* Reference material, not a live reading — one compact block at the bottom. */
+.opts-strategy { border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 12px; }
+.opts-strategy .opts-howto { margin: 0; }
+.opts-strategy-card { padding: 12px 14px; }
+
+@media (max-width: 820px) {
+  .opts-row2 { grid-template-columns: 1fr; }
+}
 .opts-howto {
   margin: 0 0 10px; padding: 10px 14px; border-radius: 8px;
   border: 1px dashed var(--line); background: transparent;

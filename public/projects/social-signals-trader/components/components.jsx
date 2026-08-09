@@ -74,14 +74,24 @@ function Header({ handle, bmcUrl, setPage }) {
     const el = document.getElementById("nav-toggle");
     if (el) el.checked = false;
   };
-  // Ticker Details is a real route, not an in-page anchor — it renders its own
-  // surface instead of a section of the dashboard.
-  const routes = [["options", "Ticker Details"]];
+  // Real routes, not in-page anchors — each renders its own surface instead of
+  // a section of the dashboard. Options Log is the landing page, so Dashboard
+  // needs a link of its own to get back to the account-vs-SPY review.
+  const routes = [["options", "Options Log"], ["dashboard", "Dashboard"]];
+  // The section anchors above only exist on the dashboard surface. From any
+  // other route the element isn't in the DOM yet, so switch to the dashboard
+  // first and scroll once it has painted — previously this called
+  // setPage("positions"), an unknown page that silently fell back.
   const jumpTo = (id) => {
     closeNav();
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (setPage) setPage(id);
+    if (el) return el.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!setPage) return;
+    setPage("dashboard");
+    requestAnimationFrame(() => {
+      const painted = document.getElementById(id);
+      if (painted) painted.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
   const goto = (page) => {
     closeNav();

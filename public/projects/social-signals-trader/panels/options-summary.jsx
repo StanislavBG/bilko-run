@@ -773,16 +773,21 @@ function EmptyState() {
   );
 }
 
-function OptionsSummaryPanel({ data }) {
+// One card per section, handed back individually so the page that owns the
+// layout (dashboard/pages/ticker-details.jsx) can place them itself — the
+// "Today" headline first, Positions next, then half-width pairs. Returning
+// elements rather than exporting each component keeps the parsing/asOf
+// plumbing in one place: OptionsSummaryPanel below is these same parts in the
+// default stacked order, so there is exactly one definition of every card.
+//
+// `empty` is the only key set when there's no record yet — callers render it
+// instead of the layout.
+function optionsSummaryParts(data) {
   const summaryData = data || window.OPTIONS_SUMMARY;
-  const summaryText = summaryData && summaryData.summary;
-  // Hooks must run unconditionally, so this memo sits ahead of the
-  // empty-state guard below even though its result is unused in that case.
-  const sections = useMemo(() => parseSections(summaryText), [summaryText]);
   if (!summaryData || !summaryData.record || !summaryData.summary) {
-    return <EmptyState />;
+    return { empty: <EmptyState /> };
   }
-
+  const sections = parseSections(summaryData.summary);
   const headlineText = (sections[0].lines.find((l) => l.trim()) || "").trim();
   const staleLabel = isStaleAsOf(summaryData.generatedAt) ? ageLabel(summaryData.generatedAt) : null;
 
@@ -793,27 +798,54 @@ function OptionsSummaryPanel({ data }) {
   const fallbackAsOf = summaryData.generatedAt || record.generated_at;
   const bookAsOf = { quotes: record.oldest_quote_ts || fallbackAsOf, entry: fallbackAsOf };
 
+  return {
+    empty: null,
+    howto: <HowToReadThisPage />,
+    headline: <Headline text={headlineText} staleLabel={staleLabel} />,
+    whereBookStands: (
+      <WhereBookStands
+        lines={findSection(sections, "Where the book stands").lines}
+        totals={record.totals}
+        positionsCount={record.positions.length}
+        asOf={bookAsOf}
+      />
+    ),
+    positions: (
+      <PositionsSection
+        lines={findSection(sections, "Positions — entry snapshot (frozen) vs now (live)").lines}
+        positions={record.positions}
+        fallbackAsOf={fallbackAsOf}
+      />
+    ),
+    whatWeThink: <WhatWeThink lines={findSection(sections, "What we think right now").lines} />,
+    actionQueue: <ActionQueue lines={findSection(sections, "Action queue").lines} />,
+    openQueue: (
+      <OpenQueue lines={findSection(sections, "Open queue").lines} totals={record.totals} account={record.account} />
+    ),
+    rulesInForce: <RulesInForce lines={findSection(sections, "Rules in force").lines} />,
+    provenance: <Provenance lines={findSection(sections, "Provenance").lines} />,
+  };
+}
+
+function OptionsSummaryPanel({ data }) {
+  const summaryText = data ? data.summary : window.OPTIONS_SUMMARY && window.OPTIONS_SUMMARY.summary;
+  // Hooks must run unconditionally, so this memo sits ahead of the
+  // empty-state guard below even though its result is unused in that case.
+  const parts = useMemo(() => optionsSummaryParts(data), [data, summaryText]);
+  if (parts.empty) return parts.empty;
+
   return (
     <div className="opt-log opt-log--stacked opts-summary">
       <div className="opt-log-stack">
-        <HowToReadThisPage />
-        <Headline text={headlineText} staleLabel={staleLabel} />
-        <WhereBookStands
-          lines={findSection(sections, "Where the book stands").lines}
-          totals={record.totals}
-          positionsCount={record.positions.length}
-          asOf={bookAsOf}
-        />
-        <PositionsSection
-          lines={findSection(sections, "Positions — entry snapshot (frozen) vs now (live)").lines}
-          positions={record.positions}
-          fallbackAsOf={fallbackAsOf}
-        />
-        <WhatWeThink lines={findSection(sections, "What we think right now").lines} />
-        <ActionQueue lines={findSection(sections, "Action queue").lines} />
-        <OpenQueue lines={findSection(sections, "Open queue").lines} totals={record.totals} account={record.account} />
-        <RulesInForce lines={findSection(sections, "Rules in force").lines} />
-        <Provenance lines={findSection(sections, "Provenance").lines} />
+        {parts.howto}
+        {parts.headline}
+        {parts.whereBookStands}
+        {parts.positions}
+        {parts.whatWeThink}
+        {parts.actionQueue}
+        {parts.openQueue}
+        {parts.rulesInForce}
+        {parts.provenance}
       </div>
     </div>
   );
@@ -829,3 +861,5 @@ window.OptionsSummaryInternals = {
 };
 
 window.OptionsSummaryPanel = OptionsSummaryPanel;
+// Per-card access for the page that owns the Options Log layout.
+window.optionsSummaryParts = optionsSummaryParts;

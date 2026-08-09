@@ -18,7 +18,7 @@ function tradeKeyFromUrl() {
   return fromHash ? decodeURIComponent(fromHash) : "";
 }
 
-// Called right after `location.hash = "options"` — the Ticker Details page
+// Called right after `location.hash = "options"` — the Options Log page
 // mounts asynchronously (React re-render off the hashchange event), so this
 // retries a few times rather than assuming the element exists on the next tick.
 function scrollToTradeLog(attempts) {
@@ -414,8 +414,39 @@ function timelineSteps(ev, facts) {
   return steps.filter((s) => s.ts).sort((a, b) => new Date(a.ts) - new Date(b.ts));
 }
 
+// One reasoning row matches this trade when its position key — ticker +
+// short_strike + long_strike + expiry, written by
+// src/social_signals_trader/position_reasoning.py — equals this trade's own
+// key. Same-ticker/different-expiry rows never collide because expiry is
+// part of the key. "failed" rows carry no ticker and never match anything.
+function _reasoningRowMatches(row, ticker, shortStrike, longStrike, expiry) {
+  if (!row || row.kind !== "position_reasoning" || row.status === "failed") return false;
+  if (String(row.ticker || "").toUpperCase() !== String(ticker || "").toUpperCase()) return false;
+  const close = (a, b) => a != null && b != null && Math.abs(Number(a) - Number(b)) < 0.005;
+  return close(row.short_strike, shortStrike) && close(row.long_strike, longStrike) && row.expiry === expiry;
+}
+
+// The full reasoning journal for this trade, oldest first — every 2h
+// book-review entry logged against this exact position, regardless of
+// whether it's still open (a closed position still keeps its history).
+function reasoningEntriesFor(ev, facts) {
+  const ticker = ev.ticker;
+  const shortStrike = facts.shortParsed ? facts.shortParsed.strike : null;
+  const longStrike = facts.longParsed ? facts.longParsed.strike : null;
+  const expiry = expiryOf(ev, facts);
+  if (!ticker || shortStrike == null || longStrike == null || !expiry) return [];
+  const rows = window.AGENT_REPORTS || [];
+  return rows
+    .filter((r) => _reasoningRowMatches(r, ticker, shortStrike, longStrike, expiry))
+    .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+}
+
 function WhatActuallyHappened({ ev, facts }) {
   const steps = timelineSteps(ev, facts);
+  const reasoningEntries = reasoningEntriesFor(ev, facts);
+  // Reused as-is from the Methodology page's D5 panel — this page never
+  // re-implements how a report row renders, it only supplies the rows.
+  const DecisionNarrativeLine = window.DecisionNarrativeLine;
   return (
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">What actually happened</h2>
@@ -436,6 +467,13 @@ function WhatActuallyHappened({ ev, facts }) {
       )}
       {facts.isClose && ev.reason && (
         <p className="optd-reason">Why: {reasonPhrase(ev.reason)}</p>
+      )}
+      {reasoningEntries.length > 0 && DecisionNarrativeLine && (
+        <div className="optd-reasoning-journal" style={{ marginTop: 12, borderTop: "1px solid var(--line)" }}>
+          {reasoningEntries.map((r, i) => (
+            <DecisionNarrativeLine key={r.ts || i} report={r} />
+          ))}
+        </div>
       )}
     </section>
   );

@@ -15,6 +15,18 @@ function _verbFor(report) {
     const item = r.item || "";
     return { label: item ? `Roadmap ${item}` : "Roadmap", tone: "accent" };
   }
+  // position_reasoning[_book] rows come from the 2h book-review cron
+  // (position_reasoning.py) — a per-position or book-level rationale, never
+  // a mechanical order event, so it gets its own badge rather than falling
+  // through to the generic "Tick" label.
+  if (r.kind === "position_reasoning_book") {
+    return { label: "Book note", tone: "accent" };
+  }
+  if (r.kind === "position_reasoning") {
+    if (r.status === "failed") return { label: "Review failed", tone: "neg" };
+    if (r.status === "closed") return { label: "Closed", tone: "muted" };
+    return { label: r.early_close_flag ? "Rotation flag" : "Holding", tone: r.early_close_flag ? "warn" : "info" };
+  }
   if (Array.isArray(r.errors) && r.errors.length > 0) {
     return { label: `Errored ${r.errors.length}`, tone: "neg" };
   }

@@ -487,10 +487,13 @@ function tradeCalcProps(ev, facts) {
   };
 }
 
-// Each row is [label, value, glossaryTerm, secondaryTechnicalLabel?] — the
-// label is the plain-English wording, the glossary term drives the <Help/>
-// tooltip, and the optional secondary label surfaces the trader shorthand
-// underneath so a reader who already knows it isn't retaught nothing.
+// Each row is [label, value, glossaryTerm, secondaryTechnicalLabel?, wide?] —
+// the label is the plain-English wording, the glossary term drives the
+// <Help/> tooltip, the optional secondary label surfaces the trader
+// shorthand underneath so a reader who already knows it isn't retaught
+// nothing, and `wide` (true for the handful of long-value fields like the
+// order id and ISO timestamps) spans the tile across two grid columns
+// instead of stretching every tile in the row to the longest value.
 // `calc` (keyed by term) supplies that term's live `inputs`/`asOf` — absent
 // for terms with no matching calc, which degrades <Help/> to definition-only.
 function KvGroup({ title, items, calc }) {
@@ -499,11 +502,11 @@ function KvGroup({ title, items, calc }) {
   return (
     <div className="optd-kv-group">
       <div className="optd-kv-group-title">{title}</div>
-      <div className="opt-kv">
-        {rows.map(([label, v, term, secondary]) => {
+      <div className="opt-kv optd-tiles">
+        {rows.map(([label, v, term, secondary, wide]) => {
           const props = (calc && term && calc[term]) || {};
           return (
-            <div className="opt-kv-item" key={label}>
+            <div className={`optd-tile${wide ? " optd-tile--wide" : ""}`} key={label}>
               <span className="opt-kv-k">
                 {label}
                 {term && <Help term={term} inputs={props.inputs} asOf={props.asOf} />}
@@ -561,12 +564,12 @@ function TheNumbers({ ev, facts }) {
           return [
             ["Fill state", classification.label, "fill_state"],
             ["Reason", ev.reason, "reason"],
-            ["Order id", ev.client_order_id, "order_id"],
+            ["Order id", ev.client_order_id, "order_id", null, true],
             ["Broker order status", resp.status, "broker_order_status"],
             ["Broker limit price", resp.limit_price != null ? money(num(resp.limit_price)) : null, "broker_limit_price"],
             ["Time in force", resp.time_in_force, "time_in_force"],
-            ["Submitted at", tsPretty(resp.submitted_at), "submitted_at"],
-            ["Filled at", tsPretty(resp.filled_at), "filled_at"],
+            ["Submitted at", tsPretty(resp.submitted_at), "submitted_at", null, true],
+            ["Filled at", tsPretty(resp.filled_at), "filled_at", null, true],
           ];
         })()}
       />
@@ -581,14 +584,18 @@ function Greeks({ ev, facts }) {
   return (
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">The greeks</h2>
-      <p className="optd-explainer">
+      <p className="optd-explainer optd-explainer--wide">
         These are the risk sensitivities for each leg — tap the <strong>?</strong> on a column
         header below for what a delta, gamma, theta, vega, or rho actually means.
       </p>
       <p className="optd-note">These were frozen at the moment of the order — not live prices.</p>
-      <internals.LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} contracts={ev.contracts} />
+      <div className="optd-legtable-wrap">
+        <internals.LegDetail title="Legs at entry" legs={ev.entry_legs} predatesSnapshots={!("entry_legs" in ev)} contracts={ev.contracts} />
+      </div>
       {facts.isClose && (
-        <internals.LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} contracts={ev.contracts} />
+        <div className="optd-legtable-wrap">
+          <internals.LegDetail title="Legs at exit" legs={ev.exit_legs} predatesSnapshots={!("exit_legs" in ev)} contracts={ev.contracts} />
+        </div>
       )}
     </section>
   );

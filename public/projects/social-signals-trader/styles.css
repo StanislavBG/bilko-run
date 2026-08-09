@@ -1177,11 +1177,41 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .optd-timeline-ts { font-size: 10px; }
 .optd-reason { font-size: 12px; color: var(--text-2); margin-top: 10px; }
 
-.optd-kv-group { margin-bottom: 14px; }
+.optd-kv-group { margin-bottom: 10px; }
 .optd-kv-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); margin-bottom: 6px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+
+/* Dense scorecard for "The numbers" (PRD 1031) — one bordered tile per
+   metric on a CSS grid. `auto-fill` (not `auto-fit`) keeps unfilled tracks
+   empty rather than stretching a short trailing row's few tiles across the
+   whole card width, which is what produced the sparse-row look this
+   replaces. Scoped to `.optd-tiles` so it never touches the plain `.opt-kv`
+   rows still used by Options Summary / the trade log. */
+.optd-tiles { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 6px; margin-bottom: 4px; }
+.optd-tile {
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  min-height: 42px; min-width: 0;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 5px 8px;
+}
+/* Long-value fields (order id, ISO timestamps) span two tracks and wrap
+   instead of ellipsis-truncating, rather than widening every tile to match. */
+.optd-tile--wide { grid-column: span 2; }
+.optd-tile--wide .opt-kv-v { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+
+/* Greeks LEGS AT ENTRY/EXIT table (PRD 1031) — options-trade-log.jsx's shared
+   internals.LegDetail sets `display:block` on the <table> itself for its own
+   horizontal-scroll needs, which also breaks the table's own `width:100%`
+   (the anonymous table box it generates shrinks to content instead of
+   filling the block box). Scoped to the detail page's own wrapper: restore
+   real table layout so `width:100%` distributes the freed space across
+   columns, and move the scroll affordance to the wrapper div instead. */
+.optd-legtable-wrap { overflow-x: auto; }
+.optd-legtable-wrap .opt-table--legs { display: table; width: 100%; overflow: visible; }
+.optd-explainer--wide { max-width: none; }
 
 @media (max-width: 640px) {
   .optd-stat-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+  .optd-tiles { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 }
 
 /* ============== Glossary <Help/> tooltip (PRD 1018) ==============

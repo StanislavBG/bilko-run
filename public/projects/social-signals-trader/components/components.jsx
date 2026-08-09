@@ -97,38 +97,33 @@ function Header({ handle, bmcUrl, setPage }) {
     closeNav();
     if (setPage) setPage(page);
   };
+  // Routes lead: the Options Log is the landing surface, so it's the first tab
+  // and Dashboard the second. The dashboard's own in-page section jumps follow
+  // them. Built once and rendered by both navs so desktop and mobile can never
+  // drift out of order.
+  const navLinks = [
+    ...routes.map(([id, label]) => ({ id, label, onClick: () => goto(id) })),
+    ...sections.map(([id, label]) => ({ id, label, onClick: () => jumpTo(id) })),
+  ];
+  const renderNavLinks = () =>
+    navLinks.map(({ id, label, onClick }) => (
+      <a key={id} href={`#${id}`} onClick={(e) => { e.preventDefault(); onClick(); }}>{label}</a>
+    ));
   return (
     <header className="header">
-      <div className="brand" style={{ cursor: "pointer" }} onClick={() => setPage && setPage("dashboard")}>
+      {/* The brand mark is a home link, and home is the Options Log. */}
+      <div className="brand" style={{ cursor: "pointer" }} onClick={() => setPage && setPage("options")}>
         <div className="brand-mark">P</div>
         <div className="brand-name">{handle.split(".")[0]}<span>.{handle.split(".")[1]}</span></div>
       </div>
-      {/* Desktop nav (≥821px) — in-page section jumps, not router tabs */}
-      <nav className="nav">
-        {sections.map(([id, l]) => (
-          <a key={id} href={`#${id}`}
-             onClick={(e) => { e.preventDefault(); jumpTo(id); }}>{l}</a>
-        ))}
-        {routes.map(([id, l]) => (
-          <a key={id} href={`#${id}`}
-             onClick={(e) => { e.preventDefault(); goto(id); }}>{l}</a>
-        ))}
-      </nav>
+      {/* Desktop nav (≥821px) — routes first, then in-page section jumps */}
+      <nav className="nav">{renderNavLinks()}</nav>
       {/* Mobile hamburger — CSS-only via :checked sibling selector */}
       <input type="checkbox" id="nav-toggle" className="nav-toggle-input" aria-hidden="true" />
       <label htmlFor="nav-toggle" className="nav-toggle-btn" aria-label="Toggle navigation">
         <span aria-hidden="true">☰</span>
       </label>
-      <nav className="nav-mobile">
-        {sections.map(([id, l]) => (
-          <a key={id} href={`#${id}`}
-             onClick={(e) => { e.preventDefault(); jumpTo(id); }}>{l}</a>
-        ))}
-        {routes.map(([id, l]) => (
-          <a key={id} href={`#${id}`}
-             onClick={(e) => { e.preventDefault(); goto(id); }}>{l}</a>
-        ))}
-      </nav>
+      <nav className="nav-mobile">{renderNavLinks()}</nav>
       <a className="bmc-btn" href={bmcUrl} target="_blank" rel="noreferrer">
         <span className="coffee">☕</span> Buy me a coffee
       </a>

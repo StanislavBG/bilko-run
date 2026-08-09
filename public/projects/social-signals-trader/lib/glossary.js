@@ -766,8 +766,8 @@
     hold_to_expiry: {
       label: "Hold to expiry",
       short: "Whether this strategy lets trades run all the way to expiration instead of closing them early.",
-      long: "When true, the profit-target and strike-breach exits are not used — the trade is only closed at expiry (or on assignment).",
-      example: "With hold_to_expiry true, a trade sitting at 90% of max profit two weeks before expiry is still left open rather than closed early to lock in the win.",
+      long: "When true, the profit-target exit is not used and the trade is only closed at expiry (or on assignment) or on a strike breach. Default is false as of the 2026-08-08 directive: winners are bought back once profit_target_pct of max profit is captured, so capital rotates into fresh positions instead of sitting through the highest-gamma stretch for the last slice of credit.",
+      example: "With hold_to_expiry false and profit_target_pct at 50%, a trade that has captured 50% of its entry credit is closed immediately rather than held for the rest of the credit.",
     },
     strike_breach_buffer: {
       label: "Strike-breach buffer",
@@ -883,6 +883,18 @@
       short: "Short for 'time in force' — how long this order stays active before it's automatically cancelled.",
       long: "A common value is DAY, meaning the order cancels itself at the end of the trading session if it hasn't filled.",
       example: "A DAY order placed at 3:55 PM PT that hasn't filled by the 4:00 PM PT close is cancelled automatically.",
+    },
+    trade_status_filter: {
+      label: "Status filter",
+      short: "Shows only Trade Log rows in the selected lifecycle state — Open, Closed, or Expired.",
+      long: "Open = still held (an OPEN row with no matching CLOSE, expiry still ahead). Closed = a round trip we exited ourselves — a CLOSE row exists. Expired = fully filled at entry but the contract's own expiry date has already passed with no CLOSE ever logged, so it rolled off worthless rather than being actively closed.",
+      example: "7 spreads still held show under Open; a spread we bought back on Tuesday shows under Closed even though its OPEN row is still in the table.",
+    },
+    trade_log_group_by: {
+      label: "Group by",
+      short: "Clusters Trade Log rows into labeled sections instead of one flat list.",
+      long: "Status groups by Open/Closed/Expired, Ticker groups by underlying symbol, Expiry groups by the contract's expiration date (rows with no resolvable expiry land in a trailing Unknown expiry group). Each group header shows its row count and summed realized P&L.",
+      example: "Grouping by Ticker turns a 40-row flat log into one section per symbol, each with its own trade count and realized P&L subtotal.",
     },
   };
 

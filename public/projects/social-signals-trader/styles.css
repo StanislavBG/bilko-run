@@ -1026,6 +1026,41 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-panel-title { margin: 0; font-size: 14px; letter-spacing: .01em; }
 .opt-panel-stats { display: flex; gap: 16px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
 .opt-panel-stats em { font-style: normal; color: var(--text); }
+
+/* Trade Log filter + group-by row — sits between the panel head and the
+   table so both controls read as "views onto the same table", not a
+   secondary toolbar. */
+.opt-filter-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin: 10px 0 12px;
+}
+.opt-filter-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.opt-filter-btn {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .01em;
+  padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text-2); cursor: pointer;
+}
+.opt-filter-btn:hover { background: var(--surface); color: var(--text); }
+.opt-filter-btn--active {
+  background: color-mix(in oklch, var(--accent) 18%, transparent);
+  color: var(--accent); border-color: var(--accent);
+}
+.opt-filter-count { color: var(--muted); }
+.opt-filter-btn--active .opt-filter-count { color: inherit; opacity: .8; }
+.opt-group-select { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.opt-group-select select {
+  font-family: var(--mono); font-size: 11px; padding: 3px 6px;
+  border-radius: 6px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text);
+}
+
+/* Group header row inside the Trade Log table — one real <td> per column
+   (no colSpan, see options-trade-log.jsx), so only the label column carries
+   visible content and the rest sit blank in the same row. */
+.opt-group-row td { background: var(--surface-2); border-top: 1px solid var(--line); padding: 6px; }
+.opt-group-label { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
+.opt-group-count { color: var(--muted); }
+
 .opt-table-scroll { overflow-x: auto; margin-top: 0; }
 .opt-table--orders th, .opt-table--orders td { white-space: nowrap; }
 

@@ -370,6 +370,32 @@ function computeOpenPositions(trades) {
   return remaining.map(({ ev, classification }) => ({ ev, facts: tradeFacts(ev, classification) }));
 }
 
+// The set of `ev` objects (by reference — trades/computeOpenPositions share
+// the same underlying event objects, never clones) still open per
+// computeOpenPositions' FIFO matching. O(n) over trades, computed once per
+// render and reused by tradeStatus for every row rather than re-run per row.
+function computeOpenPositionKeys(trades) {
+  return new Set(computeOpenPositions(trades).map(({ ev }) => ev));
+}
+
+// A Trade Log row's lifecycle bucket — "open" | "closed" | "expired" — reusing
+// computeOpenPositions rather than a second open/closed derivation. A CLOSE
+// row is always closed. An OPEN row still present in `openPositionKeys` is
+// open, unless the contract's own expiry has already passed with no CLOSE
+// ever logged — that's a worthless-expiry roll-off, not a live position. An
+// OPEN row no longer in `openPositionKeys` was matched by a CLOSE event
+// elsewhere in the log, so the round trip counts as closed. Never throws: a
+// record missing `legs`/`expiry`/`realized_pnl` just resolves no expiry and
+// falls through to "open" or "closed".
+function tradeStatus(ev, facts, openPositionKeys) {
+  if (!ev) return "closed";
+  if (ev.event === "close") return "closed";
+  if (!openPositionKeys || !openPositionKeys.has(ev)) return "closed";
+  const expiry = facts ? resolveExpiry(ev, facts) : null;
+  const dte = expiry ? dteFromExpiry(expiry) : null;
+  return dte != null && dte < 0 ? "expired" : "open";
+}
+
 function ExpiryLadder({ positions }) {
   if (!positions.length) return null;
   const groups = new Map();
@@ -597,43 +623,169 @@ function OpenOrdersTable({ orders }) {
   );
 }
 
-function TradeLogTable({ trades }) {
-  const realized = trades
+const TRADE_STATUS_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "open", label: "Open" },
+  { key: "closed", label: "Closed" },
+  { key: "expired", label: "Expired" },
+];
+
+const TRADE_STATUS_LABEL = { open: "Open", closed: "Closed", expired: "Expired" };
+
+const TRADE_LOG_GROUP_BYS = [
+  { key: "none", label: "None" },
+  { key: "status", label: "Status" },
+  { key: "ticker", label: "Ticker" },
+  { key: "expiry", label: "Expiry" },
+];
+
+// Group label for a single enriched trade under a given grouping mode.
+// Expiry falls back to a trailing "Unknown expiry" bucket rather than
+// dropping the row when the contract's expiry can't be resolved at all.
+function groupLabelFor(groupBy, t) {
+  if (groupBy === "status") return TRADE_STATUS_LABEL[t.status] || "Unknown status";
+  if (groupBy === "ticker") return t.ev.ticker || "Unknown ticker";
+  if (groupBy === "expiry") {
+    const expiry = resolveExpiry(t.ev, t.facts);
+    if (!expiry) return "Unknown expiry";
+    return formatExpiryDate(expiry) || expiry;
+  }
+  return null;
+}
+
+function realizedOf(trades) {
+  return trades
     .filter((t) => t.ev.event === "close")
     .reduce((n, t) => n + (t.ev.realized_pnl || 0), 0);
+}
+
+function GroupHeaderRow({ label, count, realized }) {
+  // No colSpan — one <td> per real column (see the 8 headers below) so this
+  // stays a plain, structurally valid row rather than the inline-detail
+  // colSpan pattern this panel deliberately removed (PRD 1013).
+  return (
+    <tr className="opt-group-row">
+      <td className="al opt-group-label">
+        {label} <span className="opt-group-count">{count}</span> · realized{" "}
+        <span className={realized >= 0 ? "up" : "down"}>{money(realized)}</span>
+      </td>
+      <td /><td /><td /><td /><td /><td /><td />
+    </tr>
+  );
+}
+
+function TradeLogTable({ trades }) {
+  const { useState } = React;
+  const [filter, setFilter] = useState("all");
+  const [groupBy, setGroupBy] = useState("none");
+
+  // O(n) over trades: one facts + status derivation per row, computed once
+  // per render and reused by the counts, the filter, and the grouping below.
+  const openPositionKeys = computeOpenPositionKeys(trades);
+  const enriched = trades.map((t) => {
+    const facts = tradeFacts(t.ev, t.classification);
+    return { ...t, facts, status: tradeStatus(t.ev, facts, openPositionKeys) };
+  });
+
+  const counts = { all: enriched.length, open: 0, closed: 0, expired: 0 };
+  enriched.forEach((t) => { counts[t.status] = (counts[t.status] || 0) + 1; });
+
+  const visible = filter === "all" ? enriched : enriched.filter((t) => t.status === filter);
+  const realizedVisible = realizedOf(visible);
+
+  let groups = null;
+  if (groupBy !== "none") {
+    const order = [];
+    const byLabel = new Map();
+    visible.forEach((t) => {
+      const label = groupLabelFor(groupBy, t);
+      if (!byLabel.has(label)) { byLabel.set(label, []); order.push(label); }
+      byLabel.get(label).push(t);
+    });
+    groups = order.map((label) => ({ label, rows: byLabel.get(label) }));
+    if (groupBy === "expiry") {
+      groups.sort((a, b) => {
+        if (a.label === "Unknown expiry") return 1;
+        if (b.label === "Unknown expiry") return -1;
+        return a.label.localeCompare(b.label);
+      });
+    }
+  }
+
   return (
     <section className="card opt-panel">
       <div className="opt-panel-head">
         <h3 className="opt-panel-title">Trade Log</h3>
         <div className="opt-panel-stats">
-          <span><em>{trades.length}</em> trades</span>
-          <span>realized <em className={realized >= 0 ? "up" : "down"}>{money(realized)}</em></span>
+          <span><em>{visible.length}</em> trades <span className="mono-dim">of {enriched.length}</span></span>
+          <span>realized <em className={realizedVisible >= 0 ? "up" : "down"}>{money(realizedVisible)}</em></span>
         </div>
       </div>
-      {!trades.length ? (
+      {!enriched.length ? (
         <p className="opt-log-empty">No filled trades yet.</p>
       ) : (
-        <div className="opt-table-scroll">
-          <table className="opt-table opt-table--orders">
-            <thead>
-              <tr>
-                <th className="al">Event<window.Help term="trade_event" /></th>
-                <th className="al">Ticker</th>
-                <th className="al">Structure<window.Help term="spread" /></th>
-                <th>Expires<window.Help term="expiry" /></th>
-                <th>Contracts<window.Help term="contracts" /></th>
-                <th>Credit received<window.Help term="credit_received" /></th>
-                <th>Filled<window.Help term="filled_at" /></th>
-                <th>Realized P&amp;L<window.Help term="realized_pl" /></th>
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((t) => (
-                <TradeLogRow key={(t.ev.client_order_id || "") + t.index} ev={t.ev} classification={t.classification} index={t.index} />
+        <>
+          <div className="opt-filter-row">
+            <div className="opt-filter-group" role="group" aria-label="Filter by status">
+              {TRADE_STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  className={`opt-filter-btn${filter === f.key ? " opt-filter-btn--active" : ""}`}
+                  onClick={() => setFilter(f.key)}
+                >
+                  {f.label} <span className="opt-filter-count">{counts[f.key] || 0}</span>
+                </button>
               ))}
-            </tbody>
-          </table>
-        </div>
+              <Help term="trade_status_filter" />
+            </div>
+            <div className="opt-group-select">
+              <label htmlFor="opt-trade-log-group-by">Group by:</label>
+              <select
+                id="opt-trade-log-group-by"
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value)}
+              >
+                {TRADE_LOG_GROUP_BYS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+              </select>
+              <Help term="trade_log_group_by" />
+            </div>
+          </div>
+          {!visible.length ? (
+            <p className="opt-log-empty">No {filter} trades.</p>
+          ) : (
+            <div className="opt-table-scroll">
+              <table className="opt-table opt-table--orders">
+                <thead>
+                  <tr>
+                    <th className="al">Event<window.Help term="trade_event" /></th>
+                    <th className="al">Ticker</th>
+                    <th className="al">Structure<window.Help term="spread" /></th>
+                    <th>Expires<window.Help term="expiry" /></th>
+                    <th>Contracts<window.Help term="contracts" /></th>
+                    <th>Credit received<window.Help term="credit_received" /></th>
+                    <th>Filled<window.Help term="filled_at" /></th>
+                    <th>Realized P&amp;L<window.Help term="realized_pl" /></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups
+                    ? groups.map((g) => (
+                        <React.Fragment key={g.label}>
+                          <GroupHeaderRow label={g.label} count={g.rows.length} realized={realizedOf(g.rows)} />
+                          {g.rows.map((t) => (
+                            <TradeLogRow key={(t.ev.client_order_id || "") + t.index} ev={t.ev} classification={t.classification} index={t.index} />
+                          ))}
+                        </React.Fragment>
+                      ))
+                    : visible.map((t) => (
+                        <TradeLogRow key={(t.ev.client_order_id || "") + t.index} ev={t.ev} classification={t.classification} index={t.index} />
+                      ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </section>
   );
@@ -708,5 +860,5 @@ window.OptionsTradeLog = OptionsTradeLog;
 window.optionsTradeLogParts = optionsTradeLogParts;
 window.OptionsTradeLogInternals = {
   tradeKey, resolveTrade, classifyOrder, tradeFacts, legDirection, fillState,
-  creditReceived, LegDetail, TradeDetail,
+  creditReceived, LegDetail, TradeDetail, tradeStatus, computeOpenPositionKeys,
 };

@@ -1065,6 +1065,12 @@
       long: "The \u{1F4AC} button in a card's header files feedback about that card (how it reads, what's missing, a number that looks wrong). That's a note about the site, so it is deliberately kept off the trade pages and pooled here, where every reply is public.",
       example: "\"The cushion column wraps on mobile\" filed against the Positions card on Aug 9 shows up in this block, tagged Positions — not under any single spread.",
     },
+    position_feedback_indicator: {
+      label: "Feedback on this position",
+      short: "This row already has at least one question or comment filed against it.",
+      long: "Click it to jump to where the discussion and any reply live — the matching trade's own page (its “Questions & feedback on this trade” section) when this position has one, or wherever this row's feedback surfaces otherwise. A count with an exclamation mark means at least one thread is still awaiting a reply.",
+      example: "\"2!\" on the BABA 143/144 row means two threads are filed against this spread and at least one hasn't been answered yet.",
+    },
   };
 
   function normalizeTerm(term) {

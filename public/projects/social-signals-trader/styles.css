@@ -1467,6 +1467,21 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   width: 20px; height: 20px; min-height: 20px; padding: 0; border-radius: 50%;
 }
 
+/* Positions-row indicator: an existing feedback thread is findable without
+   opening the modal. Quieter than .feedback-btn (it's a status, not a call to
+   action) but still a real button when it links to a trade page. */
+.opts-fb-indicator {
+  display: inline-flex; align-items: center; margin-left: 4px;
+  min-height: 22px; padding: 2px 7px; border-radius: 999px; gap: 3px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2);
+  font-size: 11px; font-weight: 600; line-height: 1; font-family: var(--sans);
+  cursor: pointer;
+}
+.opts-fb-indicator--unlinked { cursor: default; }
+.opts-fb-indicator:hover, .opts-fb-indicator:focus-visible { color: var(--text); }
+.opts-fb-indicator--open { border-color: var(--warn); color: var(--warn); }
+.opts-fb-indicator--open:hover, .opts-fb-indicator--open:focus-visible { color: var(--warn); }
+
 /* Modal stacks above the glossary's .help-tip portal (z-index 200) so an
    open tooltip can never overlap the dialog. */
 .fb-backdrop {

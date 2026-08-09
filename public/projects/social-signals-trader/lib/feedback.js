@@ -303,6 +303,12 @@
 
     var canSubmit = title.trim().length > 0 && description.trim().length > 0 && status !== "pending";
 
+    // A position-scoped submission answers on that position's trade page, not
+    // in place on #options where it was filed — say so explicitly, otherwise
+    // a visitor sees the same row and reasonably assumes their feedback
+    // vanished (this is the exact confusion that prompted this indicator).
+    var answerHint = target.kind === "position" ? " We'll answer on this trade's page." : "";
+
     function onSubmit(e) {
       e.preventDefault();
       if (!canSubmit) return;
@@ -317,10 +323,10 @@
       submit(payload).then(function (result) {
         if (result && result.ok) {
           setStatus("success");
-          setMessage("Thanks — feedback sent.");
+          setMessage("Thanks — feedback sent." + answerHint);
         } else {
           setStatus("queued");
-          setMessage("Saved — we'll send it next time you're online");
+          setMessage("Saved — we'll send it next time you're online." + answerHint);
         }
         setTimeout(function () {
           closeRef.current();

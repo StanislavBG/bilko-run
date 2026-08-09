@@ -485,6 +485,70 @@ function positionFeedbackTarget(pos) {
   return symbol ? { id: symbol, label: symbol } : null;
 }
 
+// After setting the hash to a trade's detail page, that page mounts
+// asynchronously (React re-render off the hashchange event) — so this retries
+// a few times rather than assuming #trade-feedback exists on the next tick.
+// Mirrors option-trade-detail.jsx's scrollToTradeLog for the reverse trip.
+const TRADE_FEEDBACK_SCROLL_BEHAVIOR = "auto";
+function scrollToTradeFeedback(attempts) {
+  const el = document.getElementById("trade-feedback");
+  if (el) {
+    el.scrollIntoView({ behavior: TRADE_FEEDBACK_SCROLL_BEHAVIOR, block: "start" });
+    return;
+  }
+  if (attempts > 0) window.setTimeout(() => scrollToTradeFeedback(attempts - 1), 30);
+}
+
+// A Positions row whose position already has feedback filed against it (via
+// positionFeedbackTarget's id — the same id TradeFeedbackThreads matches on)
+// gets a small counter next to the 💬 button, so a visitor who filed feedback
+// from this row can find out where the answer lives instead of assuming it
+// vanished. Links to the matching trade's #trade/<key> page when one exists;
+// a position without a matching trade-log entry has nowhere to link to yet,
+// so the count renders unlinked with a tooltip instead of a dead link.
+function PositionFeedbackIndicator({ feedbackTarget, tradeKeyValue }) {
+  const internals = window.FeedbackThreadsInternals;
+  if (!internals || !feedbackTarget) return null;
+  const payload = internals.feedbackPayload();
+  const threads = internals.selectThreads(payload.threads, [{ kind: "position", id: feedbackTarget.id }]);
+  if (!threads.length) return null;
+  const open = threads.filter((t) => !t.answered).length;
+  const count = `${threads.length}${open > 0 ? "!" : ""}`;
+  const label = `${threads.length} thread${threads.length === 1 ? "" : "s"}${open > 0 ? `, ${open} awaiting reply` : ""}`;
+  const cls = `opts-fb-indicator${open > 0 ? " opts-fb-indicator--open" : ""}`;
+  const help = window.Help && <window.Help term="position_feedback_indicator" />;
+  if (tradeKeyValue) {
+    return (
+      <>
+        <button
+          type="button"
+          className={cls}
+          title={`${label} — view on this trade's page`}
+          onClick={(e) => {
+            e.stopPropagation();
+            location.hash = "trade/" + encodeURIComponent(tradeKeyValue);
+            scrollToTradeFeedback(10);
+          }}
+        >
+          {"\u{1F4AC}"} {count}
+        </button>
+        {help}
+      </>
+    );
+  }
+  return (
+    <>
+      <span
+        className={`${cls} opts-fb-indicator--unlinked`}
+        title={`${label} — no trade page yet for this position`}
+      >
+        {"\u{1F4AC}"} {count}
+      </span>
+      {help}
+    </>
+  );
+}
+
 // One column per cell key in `positions_display[i].cells` (written by
 // `positions_display_rows()` in options_summary_render.py — the single place
 // that formats these numbers into strings). `frozen` marks the columns the
@@ -641,6 +705,7 @@ function PositionsRow({ pos, display, fallbackAsOf }) {
         {window.FeedbackButton && feedbackTarget && (
           <window.FeedbackButton target={{ kind: "position", ...feedbackTarget }} />
         )}
+        <PositionFeedbackIndicator feedbackTarget={feedbackTarget} tradeKeyValue={key} />
       </td>
     </tr>
   );

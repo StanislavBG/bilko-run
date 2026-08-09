@@ -392,14 +392,6 @@ function WhereBookStands({ lines, totals, positionsCount, asOf }) {
 
 // The frozen entry columns get a visual break from the live/now columns via a
 // left border on the first live column — same table, two eras.
-// The frozen block is every column before the first "LIVE …" one, derived from
-// the header rather than hardcoded so inserting a frozen column (e.g. Contracts)
-// can't silently move the seam onto the wrong cell.
-function frozenColCount(header) {
-  const firstLive = (header || []).findIndex((h) => String(h).startsWith("LIVE "));
-  return firstLive === -1 ? (header || []).length : firstLive;
-}
-
 function makeColClass(frozenCount) {
   return function colClass(i, extra) {
     if (i < frozenCount) return `al ${extra || ""} opts-col-frozen`.trim();
@@ -416,36 +408,6 @@ function BandBadge({ value }) {
 function ConfCell({ value }) {
   if ((value || "").indexOf("⚠") !== -1) return <span className="opts-line-warn">{value}</span>;
   return <span className="mono-dim">{value}</span>;
-}
-
-// --- row -> record.positions[] identity match --------------------------
-// The "Spread" cell is rendered by options_summary_render.py as
-// `f"{underlying} {right} {short_strike}/{long_strike} {expiry}"` — parse it
-// back into typed fields rather than string-comparing against the record's
-// own formatting (float repr can drift, e.g. "255" vs "255.0").
-const SPREAD_LABEL_RE = /^(\S+)\s+(call|put)\s+([\d.]+)\/([\d.]+)\s+(\d\d\d\d-\d\d-\d\d)$/i;
-
-function parseSpreadLabel(label) {
-  const m = SPREAD_LABEL_RE.exec((label || "").trim());
-  if (!m) return null;
-  return {
-    underlying: m[1],
-    right: m[2].toLowerCase(),
-    shortStrike: Number(m[3]),
-    longStrike: Number(m[4]),
-    expiry: m[5],
-  };
-}
-
-function positionMatchesLabel(pos, parsed) {
-  if (!pos || !parsed) return false;
-  return (
-    pos.underlying === parsed.underlying &&
-    String(pos.right).toLowerCase() === parsed.right &&
-    Number(pos.short_strike) === parsed.shortStrike &&
-    Number(pos.long_strike) === parsed.longStrike &&
-    pos.expiry === parsed.expiry
-  );
 }
 
 // A row only becomes a link when its `entry.tag` (== client_order_id) both
@@ -523,21 +485,39 @@ function positionFeedbackTarget(pos) {
   return symbol ? { id: symbol, label: symbol } : null;
 }
 
-// Header text comes verbatim from options_summary_render.py's markdown table
-// (out of scope to change) — mapped to the shared glossary term it explains.
-const POSITIONS_HEADER_TERM = {
-  Spread: "spread",
-  Contracts: "contracts",
-  "FROZEN entry (filled / net / credit)": "frozen_entry",
-  "LIVE spread price (Δ)": "close_cost",
-  "LIVE spot": "spot",
-  "LIVE cushion (Δ)": "cushion",
-  "LIVE band": "band",
-  "LIVE open P/L (Δ)": "open_pl",
-  "% captured": "pct_captured",
-  "short Δ (Δ)": "short_leg_delta",
-  conf: "wide_quote",
-};
+// One column per cell key in `positions_display[i].cells` (written by
+// `positions_display_rows()` in options_summary_render.py — the single place
+// that formats these numbers into strings). `frozen` marks the columns the
+// entry-snapshot styling (`opts-col-frozen`) applies to; `term` is the shared
+// glossary key for the header tooltip.
+const POSITIONS_COLUMNS = [
+  { key: "spread", header: "Spread", term: "spread", frozen: true },
+  { key: "contracts", header: "Contracts", term: "contracts", frozen: true },
+  { key: "frozen_entry", header: "FROZEN entry (filled / net / credit)", term: "frozen_entry", frozen: true },
+  { key: "spread_price", header: "LIVE spread price (Δ)", term: "close_cost" },
+  { key: "spot", header: "LIVE spot", term: "spot" },
+  { key: "cushion", header: "LIVE cushion (Δ)", term: "cushion" },
+  { key: "band", header: "LIVE band", term: "band" },
+  { key: "open_pl", header: "LIVE open P/L (Δ)", term: "open_pl" },
+  { key: "pct_captured", header: "% captured", term: "pct_captured" },
+  { key: "short_delta", header: "short Δ (Δ)", term: "short_leg_delta" },
+  { key: "conf", header: "conf", term: "wide_quote" },
+];
+
+// A position row can't be rendered at all without these — they build both
+// its display key (matching it to `positions_display`) and its #trade/<key>
+// link. Checked in this order so the error names the FIRST field missing.
+const POSITIONS_REQUIRED_FIELDS = [
+  "short_symbol", "underlying", "right", "short_strike", "long_strike", "expiry", "qty",
+];
+
+function missingPositionField(pos) {
+  if (!pos) return "position";
+  for (const field of POSITIONS_REQUIRED_FIELDS) {
+    if (pos[field] == null) return field;
+  }
+  return null;
+}
 
 // This row's own live inputs for the four calculated cells — `pos` is the
 // matched record.positions[] entry (or null when the row's Spread label
@@ -567,133 +547,140 @@ function positionRowCalcProps(pos, fallbackAsOf) {
   };
 }
 
-function PositionsTable({ lines, positions, fallbackAsOf }) {
-  const table = tableOf(lines);
-  if (!table) {
+const colClass = makeColClass(POSITIONS_COLUMNS.filter((c) => c.frozen).length);
+
+// One typed record.positions[] row -> one <tr>. `display` is this position's
+// entry from `positions_display` (the export's pre-formatted cell strings,
+// keyed by short_symbol) — when it's missing, the row can't be rendered and
+// this returns an explicit error row instead of a blank/silent one.
+function PositionsRow({ pos, display, fallbackAsOf }) {
+  const missingField = missingPositionField(pos) || (!display && "positions_display entry");
+  if (missingField) {
+    const label = pos && pos.short_symbol ? ` (${pos.short_symbol})` : "";
     return (
-      <p className="opt-log-empty">
-        {plainLinesOf(lines)[0] || "No open options positions."}
-      </p>
+      <tr className="opts-row-error">
+        <td colSpan={POSITIONS_COLUMNS.length + 1} className="opts-line-warn">
+          ⚠ Could not render this position{label} — missing `{missingField}`.
+        </td>
+      </tr>
     );
   }
-  const { header, body } = table;
-  const frozenCount = frozenColCount(header);
-  const colClass = makeColClass(frozenCount);
-  const bandCol = header.findIndex((h) => h === "LIVE band");
-  const confCol = header.findIndex((h) => h === "conf");
-  const spreadCol = header.findIndex((h) => h === "Spread");
-  const frozenEntryCol = header.findIndex((h) => h === "FROZEN entry (filled / net / credit)");
-  const spreadPriceCol = header.findIndex((h) => h === "LIVE spread price (Δ)");
-  const cushionCol = header.findIndex((h) => h === "LIVE cushion (Δ)");
-  const openPlCol = header.findIndex((h) => h === "LIVE open P/L (Δ)");
-  const pctCapturedCol = header.findIndex((h) => h === "% captured");
+  const cells = display.cells;
+  const key = tradeKeyForPosition(pos);
+  const feedbackTarget = positionFeedbackTarget(pos);
+  const openDetail = key != null ? () => { location.hash = "trade/" + encodeURIComponent(key); } : null;
+  const onKeyDown = openDetail
+    ? (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openDetail();
+        }
+      }
+    : undefined;
+  const calcProps = positionRowCalcProps(pos, fallbackAsOf);
+  const wideQuoteNote =
+    (cells.conf || "").indexOf("⚠") !== -1
+      ? "⚠ Wide-quoted leg(s) on this row — this mark is the least trustworthy number in the table."
+      : undefined;
+  return (
+    <tr
+      className={openDetail ? "opt-row" : undefined}
+      onClick={openDetail || undefined}
+      tabIndex={openDetail ? 0 : undefined}
+      role={openDetail ? "link" : undefined}
+      onKeyDown={onKeyDown}
+    >
+      {POSITIONS_COLUMNS.map(({ key: ck, frozen }, ci) => (
+        <td key={ck} className={colClass(ci, "mono-dim")}>
+          {ck === "band" ? (
+            <BandBadge value={cells.band} />
+          ) : ck === "conf" ? (
+            <ConfCell value={cells.conf} />
+          ) : ck === "frozen_entry" ? (
+            <>
+              {cells.frozen_entry}
+              <window.Help term="risk" inputs={calcProps.risk} asOf={calcProps.asOf} />
+            </>
+          ) : ck === "spread_price" ? (
+            <>
+              {colorizeSigned(cells.spread_price)}
+              <window.Help
+                term="close_cost"
+                inputs={calcProps.close_cost}
+                asOf={calcProps.asOf}
+                note={wideQuoteNote}
+              />
+            </>
+          ) : ck === "cushion" ? (
+            <>
+              {colorizeSigned(cells.cushion)}
+              <window.Help term="cushion" inputs={calcProps.cushion} asOf={calcProps.asOf} />
+            </>
+          ) : ck === "open_pl" ? (
+            <>
+              {colorizeSigned(cells.open_pl)}
+              <window.Help term="open_pl" inputs={calcProps.open_pl} asOf={calcProps.asOf} />
+            </>
+          ) : ck === "pct_captured" ? (
+            <>
+              {colorizeSigned(cells.pct_captured)}
+              <window.Help term="pct_captured" inputs={calcProps.pct_captured} asOf={calcProps.asOf} />
+            </>
+          ) : frozen ? (
+            cells[ck]
+          ) : (
+            colorizeSigned(cells[ck])
+          )}
+        </td>
+      ))}
+      <td className="opts-col-feedback">
+        {window.FeedbackButton && feedbackTarget && (
+          <window.FeedbackButton target={{ kind: "position", ...feedbackTarget }} />
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function PositionsTable({ positions, positionsDisplay, fallbackAsOf }) {
   const posList = positions || [];
+  if (!posList.length) {
+    return <p className="opt-log-empty">No open options positions.</p>;
+  }
+  const displayBySymbol = new Map((positionsDisplay || []).map((d) => [d.short_symbol, d]));
   return (
     <div className="opt-table-scroll">
       <table className="opt-table opt-table--orders opts-positions-table">
         <thead>
           <tr>
-            {header.map((h, i) => (
-              <th key={i} className={colClass(i)}>
-                {h}
-                {POSITIONS_HEADER_TERM[h] && <window.Help term={POSITIONS_HEADER_TERM[h]} />}
+            {POSITIONS_COLUMNS.map(({ key, header, term }, ci) => (
+              <th key={key} className={colClass(ci)}>
+                {header}
+                {term && <window.Help term={term} />}
               </th>
             ))}
             <th className="sr-only">Feedback</th>
           </tr>
         </thead>
         <tbody>
-          {body.map((row, ri) => {
-            const parsedLabel = spreadCol >= 0 ? parseSpreadLabel(row[spreadCol]) : null;
-            const pos = parsedLabel ? posList.find((p) => positionMatchesLabel(p, parsedLabel)) : null;
-            const key = pos ? tradeKeyForPosition(pos) : null;
-            const feedbackTarget = positionFeedbackTarget(
-              pos || (spreadCol >= 0 ? { raw: row[spreadCol] } : null)
-            );
-            const openDetail = key != null ? () => { location.hash = "trade/" + encodeURIComponent(key); } : null;
-            const onKeyDown = openDetail
-              ? (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openDetail();
-                  }
-                }
-              : undefined;
-            const calcProps = positionRowCalcProps(pos, fallbackAsOf);
-            const wideQuoteNote =
-              confCol >= 0 && (row[confCol] || "").indexOf("⚠") !== -1
-                ? "⚠ Wide-quoted leg(s) on this row — this mark is the least trustworthy number in the table."
-                : undefined;
-            return (
-              <tr
-                key={ri}
-                className={openDetail ? "opt-row" : undefined}
-                onClick={openDetail || undefined}
-                tabIndex={openDetail ? 0 : undefined}
-                role={openDetail ? "link" : undefined}
-                onKeyDown={onKeyDown}
-              >
-                {row.map((cell, ci) => (
-                  <td key={ci} className={colClass(ci, "mono-dim")}>
-                    {ci === bandCol ? (
-                      <BandBadge value={cell} />
-                    ) : ci === confCol ? (
-                      <ConfCell value={cell} />
-                    ) : ci === frozenEntryCol ? (
-                      <>
-                        {cell}
-                        <window.Help term="risk" inputs={calcProps.risk} asOf={calcProps.asOf} />
-                      </>
-                    ) : ci === spreadPriceCol ? (
-                      <>
-                        {colorizeSigned(cell)}
-                        <window.Help
-                          term="close_cost"
-                          inputs={calcProps.close_cost}
-                          asOf={calcProps.asOf}
-                          note={wideQuoteNote}
-                        />
-                      </>
-                    ) : ci === cushionCol ? (
-                      <>
-                        {colorizeSigned(cell)}
-                        <window.Help term="cushion" inputs={calcProps.cushion} asOf={calcProps.asOf} />
-                      </>
-                    ) : ci === openPlCol ? (
-                      <>
-                        {colorizeSigned(cell)}
-                        <window.Help term="open_pl" inputs={calcProps.open_pl} asOf={calcProps.asOf} />
-                      </>
-                    ) : ci === pctCapturedCol ? (
-                      <>
-                        {colorizeSigned(cell)}
-                        <window.Help term="pct_captured" inputs={calcProps.pct_captured} asOf={calcProps.asOf} />
-                      </>
-                    ) : ci < frozenCount ? (
-                      cell
-                    ) : (
-                      colorizeSigned(cell)
-                    )}
-                  </td>
-                ))}
-                <td className="opts-col-feedback">
-                  {window.FeedbackButton && feedbackTarget && (
-                    <window.FeedbackButton target={{ kind: "position", ...feedbackTarget }} />
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+          {posList.map((pos, ri) => (
+            <PositionsRow
+              key={(pos && pos.short_symbol) || ri}
+              pos={pos}
+              display={pos && pos.short_symbol ? displayBySymbol.get(pos.short_symbol) : null}
+              fallbackAsOf={fallbackAsOf}
+            />
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
 
-function PositionsSection({ lines, positions, fallbackAsOf }) {
+function PositionsSection({ positions, positionsDisplay, fallbackAsOf }) {
   return (
     <Section title="Positions — entry snapshot (frozen) vs now (live)">
-      <PositionsTable lines={lines} positions={positions} fallbackAsOf={fallbackAsOf} />
+      <PositionsTable positions={positions} positionsDisplay={positionsDisplay} fallbackAsOf={fallbackAsOf} />
     </Section>
   );
 }
@@ -1074,8 +1061,8 @@ function optionsSummaryParts(data) {
     ),
     positions: (
       <PositionsSection
-        lines={findSection(sections, "Positions — entry snapshot (frozen) vs now (live)").lines}
         positions={record.positions}
+        positionsDisplay={summaryData.positions_display}
         fallbackAsOf={fallbackAsOf}
       />
     ),
@@ -1127,7 +1114,7 @@ function OptionsSummaryPanel({ data }) {
 // price) using the same row<->position identity rules this panel uses —
 // rather than a third, drift-prone matcher.
 window.OptionsSummaryInternals = {
-  parseSpreadLabel, positionMatchesLabel, eventMatchesPosition, tradeKeyForPosition,
+  eventMatchesPosition, tradeKeyForPosition,
   ageLabel, isStaleAsOf, STALE_AFTER_MS, REFRESH_INTERVAL_HOURS, REFRESH_INTERVAL_MINUTES,
   componentId: panelComponentId, positionFeedbackTarget,
 };

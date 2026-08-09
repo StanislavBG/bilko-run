@@ -714,6 +714,22 @@
       long: "Below this, commissions and slippage eat too much of the potential profit for the trade to be worth putting on.",
       example: "With min_credit set to $0.20, a candidate that only offers $0.12/contract is rejected before it's ever scored.",
     },
+    min_credit_breakeven_multiple: {
+      label: "Min breakeven multiple",
+      short: "The binding credit gate — credit must beat the spread's own breakeven credit by this margin.",
+      long: "A flat dollar floor (min_credit) accepts any width/PoP combination, which let spreads through that needed far more than $5 to break even. This scales the floor with the spread's own odds: credit_per_contract must be at least this multiple of (1 − pop) × width × 100, the breakeven credit. 0 = off, leaving only the absolute min_credit floor.",
+      calc: {
+        expr: "min_credit_breakeven_multiple × (1 − pop) × width × 100",
+        inputs: [
+          { key: "min_credit_breakeven_multiple", label: "Min breakeven multiple", unit: "" },
+          { key: "pop", label: "PoP (win probability)", unit: "%" },
+          { key: "width", label: "Spread width", unit: "$" },
+        ],
+        result: (v) => v.min_credit_breakeven_multiple * (1 - v.pop) * v.width * 100,
+        unit: "$",
+        source: "src/social_signals_trader/spread_trader.py:117,402",
+      },
+    },
     ann_yield: {
       label: "Annualized yield floor",
       short: "The minimum credit-per-day-of-risk, scaled up to a yearly rate, required to enter.",
@@ -801,6 +817,48 @@
         result: (v) => (v.equity ? v.maintenance_margin / v.equity : null),
         unit: "%",
         source: "src/social_signals_trader/spread_trader.py:523",
+      },
+    },
+    max_expiry_concentration_pct: {
+      label: "Max expiry concentration",
+      short: "The most of total book risk any single expiry date is allowed to hold.",
+      long: "Existing open positions plus everything already chosen this batch count against this cap for whichever expiry they land on. Guards against a single gap-through event on one date — e.g. an earnings surprise landing on a Friday where a third of the book expires — costing far more than any one underlying could on its own. 0 = off.",
+      calc: {
+        expr: "risk on one expiry ÷ total book risk, compared against max_expiry_concentration_pct",
+        inputs: [
+          { key: "expiry_risk", label: "Risk on this expiry", unit: "$", priced: true, clock: "quotes" },
+          { key: "total_book_risk", label: "Total book risk", unit: "$", priced: true, clock: "quotes" },
+        ],
+        result: (v) => (v.total_book_risk ? v.expiry_risk / v.total_book_risk : null),
+        unit: "%",
+        source: "src/social_signals_trader/spread_trader.py:178,688",
+      },
+    },
+    target_invested_pct: {
+      label: "Target deployment",
+      short: "The share of account equity the sleeve tries to keep deployed as collateral.",
+      long: "Premium selling earns nothing on idle cash, so this is the deployment the sleeve fills toward — subject to the beta gate floor while beta is unmeasured, and it's a target, not the max_total_risk_equity_multiple backstop above it (see Max total risk).",
+      calc: {
+        expr: "equity × target_invested_pct",
+        inputs: [
+          { key: "equity", label: "Equity", unit: "$", priced: true, clock: "quotes" },
+          { key: "target_invested_pct", label: "Target deployment", unit: "" },
+        ],
+        result: (v) => v.equity * v.target_invested_pct,
+        unit: "$",
+        source: "src/social_signals_trader/spread_trader.py:191,545",
+      },
+    },
+    beta_gate_floor_pct: {
+      label: "Beta gate floor",
+      short: "The deployment ceiling used while realized-vs-delta-implied beta is unmeasured.",
+      long: "target_invested_pct is not applied directly — it's capped by the measured beta until the realized-vs-delta-implied breach rate has an adequate sample (beta_min_sample closed positions). This is that cap while unmeasured, or while a measured beta shows no edge (>= 1.0): deliberately well below target_invested_pct so the book can't scale on an assumption that hasn't been checked against real outcomes.",
+      calc: {
+        expr: "deployment capped at beta_gate_floor_pct until beta is measured with an adequate sample",
+        inputs: [{ key: "beta_gate_floor_pct", label: "Beta gate floor", unit: "" }],
+        result: (v) => v.beta_gate_floor_pct,
+        unit: "%",
+        source: "src/social_signals_trader/spread_trader.py:206; src/social_signals_trader/beta.py:379",
       },
     },
     hold_to_expiry: {

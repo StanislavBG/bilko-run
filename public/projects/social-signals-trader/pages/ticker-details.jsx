@@ -302,7 +302,8 @@ function StrategyPolicy() {
         {field("Win probability", popBand, "also a band: below the floor is rejected as too risky, but above the ceiling is rejected as too safe too — a very high PoP means a small credit that a fixed round-trip cost swallows", "pop")}
         {field("DTE window", `${dash(c.min_dte)}–${dash(c.max_dte)}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte")}
         {field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone", "risk")}
-        {field("Min credit", usd2(c.min_credit), "below this, fees dominate the trade", "min_credit")}
+        {field("Min credit", usd2(c.min_credit), "an ADDITIONAL absolute floor a candidate must ALSO clear — below this, fees dominate the trade regardless of how favorable the breakeven ratio looks", "min_credit")}
+        {field("Min breakeven multiple", c.min_credit_breakeven_multiple > 0 ? `≥ ${c.min_credit_breakeven_multiple}× breakeven` : "off", c.min_credit_breakeven_multiple > 0 ? "the binding credit gate — credit must be at least this multiple of (1 − pop) × width × 100, the spread's own breakeven credit, i.e. a margin over what it needed just to break even" : "not used — leaving only the absolute Min credit floor", "min_credit_breakeven_multiple")}
         {field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev")}
         {field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? `minimum annualized yield required — ann_yield is credit/collateral annualised over the ${dash(c.min_dte)}–${dash(c.max_dte)}d hold, so this isn't a typo: 10.0 renders as 1000%/yr` : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")}
       </div>
@@ -310,9 +311,12 @@ function StrategyPolicy() {
       <h4 style={h4}>Book limits<PolicyFeedback section="Book limits" /></h4>
       <div style={grid}>
         {field("Max positions", dash(c.max_positions), "open spreads across the whole book at once", "max_positions")}
-        {field("Max total risk", `${dash(c.max_total_risk_equity_multiple)}× equity`, "capital-at-risk ceiling across every open spread, scaled to live equity", "max_total_risk")}
+        {field("Max total risk", `${dash(c.max_total_risk_equity_multiple)}× equity`, "a BACKSTOP above the target_invested_pct budget below — that budget is what actually binds day to day; this only catches equity being misread or growing unexpectedly", "max_total_risk")}
         {field("Max per underlying", dash(c.max_per_underlying), "at most this many open spreads per name at a time", "max_per_underlying")}
         {field("Margin buffer", pct(c.margin_buffer_pct), "new entries are refused once maintenance margin would exceed equity minus this buffer", "margin_buffer_pct")}
+        {field("Max expiry concentration", c.max_expiry_concentration_pct > 0 ? pct(c.max_expiry_concentration_pct) : "off", c.max_expiry_concentration_pct > 0 ? "no single expiry date may hold more than this share of total book risk — existing positions plus everything already chosen this batch" : "not used — no cap on how much risk sits on one expiry", "max_expiry_concentration_pct")}
+        {field("Target deployment", pct(c.target_invested_pct), `the deployment target the sleeve fills toward — new entries pause once deployed capital is within ${pct(c.deploy_band_pct)} of this target`, "target_invested_pct")}
+        {field("Beta gate floor", pct(c.beta_gate_floor_pct), "the deployment ceiling while the realized-vs-delta-implied beta is unmeasured (or shows no edge) — floors target deployment down from target_invested_pct until beta is actually measured against outcomes", "beta_gate_floor_pct")}
       </div>
 
       <h4 style={h4}>Legs — who sells, who buys, and why<PolicyFeedback section="Legs" /></h4>

@@ -576,6 +576,12 @@ function tradeFeedbackTarget(ev, facts, index) {
 function TradeLogRow({ ev, classification, index }) {
   const facts = tradeFacts(ev, classification);
   const { isClose, received, pnl, maxGain } = facts;
+  // A close event never sets `ev.credit` (it carries `entry_credit` /
+  // `exit_cost` instead — see spread_trader.py's `manage()`), so
+  // creditReceived(ev) is always null/0 for a close row. Read the cost to
+  // close straight off `ev.exit_cost`, the field the row is actually
+  // labelled after.
+  const exitCost = isClose ? num(ev.exit_cost) : null;
   const resp = ev.response || {};
   const openDetail = () => { location.hash = "trade/" + encodeURIComponent(tradeKey(ev, index)); };
   const onKeyDown = (e) => {
@@ -601,7 +607,7 @@ function TradeLogRow({ ev, classification, index }) {
         {isClose ? (
           <>
             <div className="mono-dim opt-cell-sublabel">Cost to close</div>
-            <span className={received > 0 ? "up" : "down"}>{money(received)}</span>
+            <span className={exitCost > 0 ? "down" : "up"}>{money(exitCost)}</span>
             <Help term="exit_cost" inputs={{ exit_cost: ev.exit_cost }} asOf={asOf} />
           </>
         ) : (

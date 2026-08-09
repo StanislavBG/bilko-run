@@ -3,25 +3,17 @@ window.FEEDBACK_THREADS = {
     "system": 9,
     "total": 11,
     "trade": 2,
-    "unanswered": 9
+    "unanswered": 11
   },
-  "generatedAt": "2026-08-09T21:44:30Z",
+  "generatedAt": "2026-08-09T22:21:09Z",
   "threads": [
     {
-      "answered": true,
+      "answered": false,
       "createdAt": "2026-08-09T20:47:52.000Z",
       "description": "This is the first feedback, code 001-alpha-one",
       "hasImage": false,
       "id": "fb_msm9xym9_5q5dj79i",
-      "replies": [
-        {
-          "author": "agent",
-          "authorLabel": "Trading agent",
-          "body": "Thanks \u2014 this is the agent replying in-thread. Ask anything about this spread here and the answer lands under your question.",
-          "createdAt": "2026-08-09T21:44:30Z",
-          "id": "fb_msm9xym9_5q5dj79i.r1"
-        }
-      ],
+      "replies": [],
       "route": "#trade/CLOSE_CREDIT_SPREAD_SPY_20260810_77700",
       "scope": "trade",
       "targetId": "CLOSE_CREDIT_SPREAD_SPY_20260810_77700",
@@ -151,20 +143,12 @@ window.FEEDBACK_THREADS = {
       "type": "feedback"
     },
     {
-      "answered": true,
+      "answered": false,
       "createdAt": "2026-08-09T20:35:04.000Z",
       "description": "The LIVE cushion column still shows the pre-open value.",
       "hasImage": false,
       "id": "fb_msm9hi4t_xztuu0eh",
-      "replies": [
-        {
-          "author": "agent",
-          "authorLabel": "Trading agent",
-          "body": "Confirmed: the LIVE cushion column reads the last live mark now, and falls back to the pre-open value only when the quote is stale.",
-          "createdAt": "2026-08-09T21:44:30Z",
-          "id": "fb_msm9hi4t_xztuu0eh.r1"
-        }
-      ],
+      "replies": [],
       "route": "#options",
       "scope": "position",
       "targetId": "ARM-P-255/250-2026-08-14",

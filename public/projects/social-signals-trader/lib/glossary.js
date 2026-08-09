@@ -1109,13 +1109,74 @@
     return React.createElement("span", { className: "help-tip-calc" }, elements);
   }
 
+  //: Gap between the `?` button and the popover, and the minimum breathing room
+  //: kept between the popover and the viewport edge before it flips.
+  const TIP_GAP = 6;
+  const TIP_MARGIN = 8;
+
+  // Viewport coordinates for a popover anchored under `btn`, flipped above /
+  // pulled leftward when it would otherwise run past the viewport edge. Pure
+  // maths on two rects so it can be reasoned about (and tested) without a DOM.
+  function tipPosition(btnRect, tipSize, viewport) {
+    let left = btnRect.left;
+    if (left + tipSize.width > viewport.width - TIP_MARGIN) {
+      left = Math.max(TIP_MARGIN, viewport.width - TIP_MARGIN - tipSize.width);
+    }
+    let top = btnRect.bottom + TIP_GAP;
+    // Flip above the trigger only when that actually gives more room — on a
+    // very short viewport, staying below and clamping beats flipping into an
+    // even smaller gap.
+    const roomBelow = viewport.height - btnRect.bottom - TIP_GAP;
+    const roomAbove = btnRect.top - TIP_GAP;
+    if (tipSize.height > roomBelow && roomAbove > roomBelow) {
+      top = Math.max(TIP_MARGIN, btnRect.top - TIP_GAP - tipSize.height);
+    }
+    return { top: top, left: left };
+  }
+
   function Help(props) {
     const term = props && props.term;
     const entry = get(term);
     const [open, setOpen] = React.useState(false);
+    // null until measured — the popover renders off-screen for one frame so it
+    // can be measured, then snaps to its final spot; never flashes mid-page.
+    const [pos, setPos] = React.useState(null);
     const btnRef = React.useRef(null);
+    const tipRef = React.useRef(null);
     const closeRef = React.useRef(null);
     closeRef.current = () => setOpen(false);
+
+    // Measure after paint and re-measure on scroll/resize. The popover lives in
+    // a portal on <body>, so nothing anchors it to the button except this — but
+    // that's exactly why it can escape a table's `overflow-x: auto` instead of
+    // widening it into a scrollbar the user has to chase (PRD 1034).
+    React.useLayoutEffect(() => {
+      if (!open) {
+        setPos(null);
+        return undefined;
+      }
+      const place = () => {
+        const btn = btnRef.current;
+        const tip = tipRef.current;
+        if (!btn || !tip) return;
+        setPos(
+          tipPosition(btn.getBoundingClientRect(), {
+            width: tip.offsetWidth,
+            height: tip.offsetHeight,
+          }, { width: window.innerWidth, height: window.innerHeight })
+        );
+      };
+      place();
+      // Capture phase so a scroll inside ANY ancestor (the table's own
+      // horizontal scroller included), not just the window, keeps the popover
+      // glued to its button.
+      window.addEventListener("scroll", place, true);
+      window.addEventListener("resize", place);
+      return () => {
+        window.removeEventListener("scroll", place, true);
+        window.removeEventListener("resize", place);
+      };
+    }, [open]);
 
     if (!entry) return null;
 
@@ -1171,19 +1232,32 @@
         "?"
       ),
       open
-        ? React.createElement(
-            "span",
-            { className: "help-tip", role: "tooltip" },
-            React.createElement("span", { className: "help-tip-label" }, entry.label),
-            props && props.note
-              ? React.createElement("span", { className: "help-tip-note" }, props.note)
-              : null,
-            React.createElement("span", { className: "help-tip-short" }, entry.short),
-            React.createElement("span", { className: "help-tip-long" }, entry.long),
-            entry.example
-              ? React.createElement("span", { className: "help-tip-example" }, entry.example)
-              : null,
-            entry.calc ? renderCalcBlock(entry.calc, props || {}) : null
+        ? ReactDOM.createPortal(
+            React.createElement(
+              "span",
+              {
+                className: "help-tip",
+                role: "tooltip",
+                ref: tipRef,
+                // Clicks inside the popover must not reach whatever is under
+                // the portal's DOM position (e.g. a clickable table row).
+                onClick: (e) => e.stopPropagation(),
+                style: pos
+                  ? { top: pos.top + "px", left: pos.left + "px" }
+                  : { top: "0px", left: "0px", visibility: "hidden" },
+              },
+              React.createElement("span", { className: "help-tip-label" }, entry.label),
+              props && props.note
+                ? React.createElement("span", { className: "help-tip-note" }, props.note)
+                : null,
+              React.createElement("span", { className: "help-tip-short" }, entry.short),
+              React.createElement("span", { className: "help-tip-long" }, entry.long),
+              entry.example
+                ? React.createElement("span", { className: "help-tip-example" }, entry.example)
+                : null,
+              entry.calc ? renderCalcBlock(entry.calc, props || {}) : null
+            ),
+            document.body
           )
         : null
     );

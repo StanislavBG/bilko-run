@@ -1273,13 +1273,21 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 }
 .help-btn:hover, .help-btn:focus-visible { color: var(--text); border-color: var(--line-2); }
 .help-tip {
-  /* Anchored to the trigger's left edge (not centered) so the popover always
-     grows rightward from the button — a centered popover half its own width
-     past a button sitting near a card's left edge gets silently clipped by
-     that card's `overflow: hidden` (found via PRD 1028 visual capture: the
-     Open-queue "Deployed" bullet's first-column button). */
-  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+  /* Rendered into a portal on <body> and positioned in VIEWPORT coordinates by
+     glossary.js (inline top/left, measured from the `?` button and flipped at
+     the edges). Fixed, not absolute: inside `.opt-table-scroll` an absolute
+     popover counted toward the table's scroll width, so opening the last
+     column's tip spawned a horizontal scrollbar and hid the card off to the
+     right — the user had to scroll to read it. On top of the page, never
+     inside the box (PRD 1034).
+     Anchored to the trigger's LEFT edge (not centered) so it grows rightward,
+     which is also what keeps a first-column button's popover from being cut
+     off (PRD 1028: the Open-queue "Deployed" bullet). */
+  position: fixed; z-index: 200; top: 0; left: 0;
   width: max-content; max-width: min(260px, calc(100vw - 24px));
+  /* A tall calc popover scrolls itself rather than running off the viewport —
+     the JS flips it above the button first, this is the last resort. */
+  max-height: calc(100vh - 24px); overflow-y: auto;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
   padding: 8px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   display: flex; flex-direction: column; gap: 4px;
@@ -1312,17 +1320,14 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .help-tip-calc-asof { color: var(--text-2); font-size: 10px; }
 .help-tip-calc-asof--stale { color: var(--text); font-weight: 600; }
 
-/* The taller calc-block popover (PRD 1024) routinely exceeds the height of
-   a short `.card` (e.g. a 2-line "Open queue" section), and `.card`'s own
-   `overflow: hidden` — there for rounded corners around tables/dividers —
-   then silently clips the bottom of the tip. `.help-tip` only exists in the
-   DOM while its popover is open, so relaxing clipping on its ancestor card
-   only while one is actually open is safe: every other state (no open
-   tooltip) keeps the card's normal clipping unchanged. */
-.card:has(.help-tip) { overflow: visible; }
+/* No `.card:has(.help-tip) { overflow: visible }` escape hatch any more (it was
+   PRD 1024's answer to a short card clipping a tall calc popover): the popover
+   is portalled onto <body>, so no card, table scroller, or other
+   `overflow: hidden` ancestor is in its way to begin with.
 
-/* Narrow screens: centered popover can overflow the viewport edge — pin it
-   to the right of the button instead of centering, and clamp its width. */
+   Narrow screens: only the width clamp is left here. Edge handling is the
+   positioner's job now — pinning `right` in CSS would fight the inline `left`
+   the JS computes. */
 @media (max-width: 480px) {
-  .help-tip { left: auto; right: -8px; transform: none; max-width: calc(100vw - 32px); max-height: calc(100vh - 96px); overflow-y: auto; }
+  .help-tip { max-width: calc(100vw - 32px); }
 }

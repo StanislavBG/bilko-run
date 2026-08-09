@@ -27,6 +27,14 @@
  * `<catalyst>_entry_lead` / `<catalyst>_exit_lag` and lifts them into a
  * `catalyst_overrides` dict for `backtest_replay.run()`.
  *
+ * PRD 75: per-cell metrics (sharpe / win_rate / max_drawdown / n_trades /
+ * equity_curve) now come from a real `backtest_replay.run()` invocation
+ * per cell — the legacy deterministic mock is gated behind the trader-side
+ * `SST_OPTIMIZATION_MOCK=1` env var and only used by the endpoint shape
+ * tests. The wire shape is unchanged: cells with no underlying panel
+ * history get null metrics + a `note` field the dashboard renders as
+ * "no data" without changing the column layout.
+ *
  * Complexity: every call is O(1) in client work; server-side sweep is
  * O(|grid|) (capped at 200 cells).
  */

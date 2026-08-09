@@ -16,6 +16,19 @@
 const { g4, money, pctv, num, parseOccSymbol, plainEnglishLeg, spreadStructure, breakeven, dteFromExpiry } = window.SpreadFormat;
 const Help = window.Help;
 
+// One feedback button per hand-rolled card head below (Expiry ladder / Trade
+// Log / Open Orders never go through options-summary.jsx's <Section>, so
+// each wires window.FeedbackButton itself). The id is derived by the same
+// componentId() kebab-casing options-summary.jsx's <Section> uses — reused
+// via window.OptionsSummaryInternals rather than re-implemented here — so
+// "Trade Log" always yields "trade-log" no matter which panel renders it.
+function CardFeedbackButton({ label }) {
+  if (!window.FeedbackButton) return null;
+  const internals = window.OptionsSummaryInternals;
+  const id = internals ? internals.componentId(label) : label;
+  return <window.FeedbackButton target={{ kind: "component", id, label }} />;
+}
+
 // Prefer the broker's own leg intent (authoritative); fall back to
 // short=sold / long=bought inference keyed on open vs close event.
 function legDirection(record, symbol, isClose) {
@@ -414,7 +427,10 @@ function ExpiryLadder({ positions }) {
   return (
     <section className="card opt-panel opt-ladder">
       <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Expiry ladder</h3>
+        <h3 className="opt-panel-title">
+          Expiry ladder
+          <CardFeedbackButton label="Expiry ladder" />
+        </h3>
         <div className="opt-panel-stats">
           <span><em>{positions.length}</em> open positions</span>
         </div>
@@ -537,6 +553,18 @@ function OpenOrderRow({ ev, classification, index }) {
 }
 
 // One order Alpaca reports 100% filled — the only rows that count as trades.
+// The trade's own feedback target — the id is the SAME key the #trade/<key>
+// detail route resolves back via resolveTrade(), so a row's feedback always
+// joins to the trade the visitor was actually looking at.
+function tradeFeedbackTarget(ev, facts, index) {
+  const structureName = facts.structure ? facts.structure.name : "credit spread";
+  return {
+    kind: "trade",
+    id: tradeKey(ev, index),
+    label: `${ev.ticker || "this ticker"} ${structureName}`,
+  };
+}
+
 function TradeLogRow({ ev, classification, index }) {
   const facts = tradeFacts(ev, classification);
   const { isClose, received, pnl, maxGain } = facts;
@@ -576,6 +604,11 @@ function TradeLogRow({ ev, classification, index }) {
           <Help term="realized_pl" inputs={{ credit_received: maxGain, exit_cost: ev.exit_cost }} asOf={asOf} />
         )}
       </td>
+      <td className="opts-col-feedback">
+        {window.FeedbackButton && (
+          <window.FeedbackButton target={tradeFeedbackTarget(ev, facts, index)} />
+        )}
+      </td>
     </tr>
   );
 }
@@ -587,7 +620,10 @@ function OpenOrdersTable({ orders }) {
   return (
     <section className="card opt-panel">
       <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Open Orders</h3>
+        <h3 className="opt-panel-title">
+          Open Orders
+          <CardFeedbackButton label="Open Orders" />
+        </h3>
         <div className="opt-panel-stats">
           <span><em>{orders.length}</em> orders</span>
           <span>target <em className="mono-dim">{money(atRiskCredit)}</em> if filled</span>
@@ -660,16 +696,16 @@ function realizedOf(trades) {
 }
 
 function GroupHeaderRow({ label, count, realized }) {
-  // No colSpan — one <td> per real column (see the 8 headers below) so this
-  // stays a plain, structurally valid row rather than the inline-detail
-  // colSpan pattern this panel deliberately removed (PRD 1013).
+  // One real <td> per column below (see the 8 headers) rather than a
+  // spanning cell — this panel deliberately removed that inline-detail-row
+  // pattern (PRD 1013) and must not reintroduce it.
   return (
     <tr className="opt-group-row">
       <td className="al opt-group-label">
         {label} <span className="opt-group-count">{count}</span> · realized{" "}
         <span className={realized >= 0 ? "up" : "down"}>{money(realized)}</span>
       </td>
-      <td /><td /><td /><td /><td /><td /><td />
+      <td /><td /><td /><td /><td /><td /><td /><td />
     </tr>
   );
 }
@@ -715,7 +751,10 @@ function TradeLogTable({ trades }) {
   return (
     <section className="card opt-panel">
       <div className="opt-panel-head">
-        <h3 className="opt-panel-title">Trade Log</h3>
+        <h3 className="opt-panel-title">
+          Trade Log
+          <CardFeedbackButton label="Trade Log" />
+        </h3>
         <div className="opt-panel-stats">
           <span><em>{visible.length}</em> trades <span className="mono-dim">of {enriched.length}</span></span>
           <span>realized <em className={realizedVisible >= 0 ? "up" : "down"}>{money(realizedVisible)}</em></span>
@@ -766,6 +805,7 @@ function TradeLogTable({ trades }) {
                     <th>Credit received<window.Help term="credit_received" /></th>
                     <th>Filled<window.Help term="filled_at" /></th>
                     <th>Realized P&amp;L<window.Help term="realized_pl" /></th>
+                    <th className="sr-only">Feedback</th>
                   </tr>
                 </thead>
                 <tbody>

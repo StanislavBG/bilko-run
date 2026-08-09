@@ -75,6 +75,12 @@
         source: "src/social_signals_trader/options_summary.py:223",
       },
     },
+    debit_paid: {
+      label: "Debit paid",
+      short: "Cash paid out to open or close a position — the mirror of credit received.",
+      long: "Sign convention: credit received is money in (positive to us at entry); debit paid is money out. Buying to open the long leg and buying to close the short leg are both debits.",
+      example: "Buying to open the $250 put for $0.45 costs a $45 debit per contract (0.45 × 100); buying to close a short leg works the same way — price × 100 × contracts, paid out instead of received.",
+    },
     credit_if_filled: {
       label: "Credit if filled",
       short: "The cash we'd be paid up front if this order fills at its limit price.",
@@ -209,6 +215,24 @@
       short: "The option we bought as part of this spread.",
       long: "It exists to cap our downside — it's what makes the max loss a known, limited number instead of unlimited.",
       example: "In a $255/$250 bull put spread, the $250 put we bought is the long leg — it caps the loss at $5 wide minus the credit collected.",
+    },
+    sell_to_open: {
+      label: "Sell to open",
+      short: "The order type that opens a new short position — selling an option we don't already own.",
+      long: "This is what generates the credit: we take on the obligation (assignment risk) in exchange for cash paid to us up front. It's the first leg of every spread this sleeve trades.",
+      example: "Selling to open the $255 put collects that put's premium now and creates the obligation to buy the stock at $255 if it's assigned.",
+    },
+    buy_to_open: {
+      label: "Buy to open",
+      short: "The order type that opens a new long position — buying an option we don't already own.",
+      long: "This is the loss-cap leg: it costs a debit, but that debit buys the right to trade the stock at the strike, capping how bad the short leg can go. Always opened in the same order as its short leg, never on its own.",
+      example: "Buying to open the $250 put alongside selling the $255 put turns an otherwise unlimited-risk short put into a defined-risk spread.",
+    },
+    buy_to_close: {
+      label: "Buy to close",
+      short: "The order type that closes an existing short position — buying back the option we sold.",
+      long: "Costs a debit. Used both to lock in a win (profit target) and to cap a loss (strike breach or max-loss stop) — the trigger differs but the order is the same.",
+      example: "Buying to close a short put we sold for $1.20 at $0.60 locks in $0.60 of the credit as realized profit; buying it back at $2.40 instead locks in a loss.",
     },
     strike: {
       label: "Strike",
@@ -409,6 +433,22 @@
         result: (v) => v.credit * (1 - v.profit_target_pct),
         unit: "$",
         source: "src/social_signals_trader/options_summary.py:275",
+      },
+    },
+    max_loss_pct: {
+      label: "Max-loss stop",
+      short: "A rule that closes a losing trade once its open loss equals a set fraction of the credit we collected.",
+      long: "Expressed as a fraction of the CREDIT RECEIVED, not of the trade's max risk — a defined-risk spread can never lose more than its own max risk, so that denominator would never fire. Default 100%: close once the cost to buy the spread back equals the full credit we were paid at entry. A mark known to be arithmetically impossible (see wide_quote / mark-suspect clamp) never triggers this — it keys off the clamped cost-to-close, same as the profit target.",
+      example: "With max_loss_pct at 100% and $30 collected in credit, the trade is closed once buying it back would cost $60 (the loss equals the credit received). For a spread whose width caps the buy-back cost below that threshold, the strike breach — not this rule — remains the only loss exit.",
+      calc: {
+        expr: "credit × (1 + max_loss_pct)",
+        inputs: [
+          { key: "credit", label: "Credit received", unit: "$", priced: true, clock: "entry" },
+          { key: "max_loss_pct", token: "max_loss_pct", label: "Max-loss %", unit: "%" },
+        ],
+        result: (v) => v.credit * (1 + v.max_loss_pct),
+        unit: "$",
+        source: "src/social_signals_trader/options_summary.py:279",
       },
     },
     strike_breach_exit: {

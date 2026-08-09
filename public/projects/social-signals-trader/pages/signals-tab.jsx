@@ -359,8 +359,7 @@
     return (
       <main className="shell" data-testid="signals-page">
         <div className="card">
-          <div className="card-head">
-            <h3>Signals · sentiment & mentions time series</h3>
+          <window.CardHead title="Signals · sentiment & mentions time series">
             <div className="tf" role="radiogroup" aria-label="Time range">
               {Object.keys(RANGE_DAYS).map((k) => (
                 <button key={k}
@@ -371,7 +370,7 @@
                 </button>
               ))}
             </div>
-          </div>
+          </window.CardHead>
           <div className="card-body">
             {/* Controls row */}
             <div style={{ display: "grid", gap: 12, gridTemplateColumns: isMobile ? "1fr" : "1.5fr 1fr auto", alignItems: "start", marginBottom: 16 }}>
@@ -490,12 +489,11 @@
 
         {/* Themes */}
         <div className="card" style={{ marginTop: 12 }}>
-          <div className="card-head">
-            <h3>Themes · click to drill down</h3>
+          <window.CardHead title="Themes · click to drill down">
             <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>
               {themes.length} themes
             </span>
-          </div>
+          </window.CardHead>
           <div className="card-body">
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))" }}>
               {themes.map((th) => (

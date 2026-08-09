@@ -36,6 +36,10 @@
        pages/option-trade-detail.jsx and panels/options-trade-log.jsx's
        shared LegDetail (PRD 1020); PRD 1019 wires it into options-summary.jsx. -->
   <script src="lib/glossary.js"></script>
+  <!-- Shared feedback primitive — <FeedbackButton target={{kind,id,label}}/> +
+       FeedbackClient submit/outbox transport (PRD 1040). Every panel that
+       wants a feedback affordance reuses this instead of inventing one. -->
+  <script src="lib/feedback.js"></script>
   <script src="fixtures/signals_history.example.js"></script>
   <script src="fixtures/optimization_history.example.js"></script>
   <script type="text/babel" src="pages/signals-tab.jsx"></script>

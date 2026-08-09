@@ -118,7 +118,7 @@ function TradesPage() {
       <div className="grid grid-12" style={{ marginBottom: 12 }}>
         <div className="col-6 col-md-12">
           <div className="card">
-            <div className="card-head"><h3>Monthly P&L · 12 months</h3></div>
+            <window.CardHead title="Monthly P&L · 12 months" />
             <div className="card-body">
               <VBarChart rows={monthly} valueKey="pnl" labelKey="month" height={160} />
             </div>
@@ -126,7 +126,7 @@ function TradesPage() {
         </div>
         <div className="col-6 col-md-12">
           <div className="card">
-            <div className="card-head"><h3>P&L distribution · per trade</h3></div>
+            <window.CardHead title="P&L distribution · per trade" />
             <div className="card-body">
               <VBarChart rows={dist} valueKey="count" labelKey="bin" height={160} signed={false} />
             </div>
@@ -135,7 +135,7 @@ function TradesPage() {
 
         <div className="col-6 col-md-12">
           <div className="card">
-            <div className="card-head"><h3>P&L by source subreddit</h3></div>
+            <window.CardHead title="P&L by source subreddit" />
             <div className="card-body">
               <HBarChart rows={sourcePerf} valueKey="pnl" labelKey="source"
                 fmt={(v, r) => `${v >= 0 ? "+" : "−"}$${Math.abs(v).toLocaleString()}`} />
@@ -157,7 +157,7 @@ function TradesPage() {
 
         <div className="col-6 col-md-12">
           <div className="card">
-            <div className="card-head"><h3>Hold-period performance</h3></div>
+            <window.CardHead title="Hold-period performance" />
             <div className="card-body">
               <HBarChart rows={holds} valueKey="avgPnl" labelKey="label"
                 fmt={(v) => `${v >= 0 ? "+" : "−"}$${Math.abs(v)}`} />
@@ -180,7 +180,7 @@ function TradesPage() {
 
         <div className="col-12">
           <div className="card">
-            <div className="card-head"><h3>Top 10 tickers by P&L</h3></div>
+            <window.CardHead title="Top 10 tickers by P&L" />
             <div className="card-body">
               <table className="trades">
                 <thead>
@@ -220,8 +220,7 @@ function TradesPage() {
 
       {/* FULL TRADE LOG */}
       <div className="card">
-        <div className="card-head">
-          <h3>Full trade log · {filtered.length} of {trades.length}</h3>
+        <window.CardHead title={`Full trade log · ${filtered.length} of ${trades.length}`} feedbackId="full-trade-log">
           <div className="row" style={{ gap: 10 }}>
             <input
               placeholder="search ticker / source / note"
@@ -234,7 +233,7 @@ function TradesPage() {
               ))}
             </div>
           </div>
-        </div>
+        </window.CardHead>
         <div className="card-body tight" style={{ maxHeight: 600, overflowY: "auto" }}>
           <table className="trades">
             <thead>
@@ -292,7 +291,7 @@ function RedditPage() {
 
       {/* THEME ROW */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-head"><h3>Active themes · last 24h</h3></div>
+        <window.CardHead title="Active themes · last 24h" />
         <div className="card-body tight">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", borderTop: "1px solid var(--line)" }}>
             {(themes || []).map((t, i) => (
@@ -315,10 +314,9 @@ function RedditPage() {
 
       {/* TICKER FLOW */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-head">
-          <h3>Ticker mention flow · 30 days</h3>
+        <window.CardHead title="Ticker mention flow · 30 days">
           <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>volume only · sentiment in panel below</span>
-        </div>
+        </window.CardHead>
         <div className="card-body tight">
           {(flow || []).length === 0 && (
             <div className="dim" style={{ padding: "12px 14px", fontFamily: "var(--mono)", fontSize: 11 }}>No ticker-flow data yet — burrow's ticker_mention_flow has no captures for the active watchlist.</div>
@@ -347,7 +345,7 @@ function RedditPage() {
       <div className="grid grid-12" style={{ marginBottom: 12 }}>
         <div className="col-4 col-md-12">
           <div className="card">
-            <div className="card-head"><h3>10 subreddits · click to drill</h3></div>
+            <window.CardHead title="10 subreddits · click to drill" />
             <div className="card-body tight">
               {subs.map((s) => (
                 <div key={s.name} onClick={() => setOpenSub(s.name)}
@@ -369,10 +367,9 @@ function RedditPage() {
 
         <div className="col-8 col-md-12">
           <div className="card" style={{ marginBottom: 12 }}>
-            <div className="card-head">
-              <h3>r/{sub.name} · drill-down</h3>
+            <window.CardHead title={`r/${sub.name} · drill-down`}>
               <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>{fmtSubs(sub.subs)} subs</span>
-            </div>
+            </window.CardHead>
             <div className="card-body">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0, marginBottom: 14, border: "1px solid var(--line)", borderRadius: 4 }}>
                 {[
@@ -419,7 +416,7 @@ function RedditPage() {
           </div>
 
           <div className="card">
-            <div className="card-head"><h3>Top posts in r/{sub.name}</h3></div>
+            <window.CardHead title={`Top posts in r/${sub.name}`} />
             <div className="card-body tight">
               {(sub.topPosts || []).length === 0 && (
                 <div className="dim" style={{ padding: "12px 14px", fontFamily: "var(--mono)", fontSize: 11 }}>No top posts captured yet.</div>
@@ -446,7 +443,7 @@ function RedditPage() {
 
       {/* HOT POSTS GLOBAL */}
       <div className="card">
-        <div className="card-head"><h3>Hot posts feed · all 10 subs</h3></div>
+        <window.CardHead title="Hot posts feed · all 10 subs" />
         <div className="card-body tight">
           {(posts || []).length === 0 && (
             <div className="dim" style={{ padding: "12px 14px", fontFamily: "var(--mono)", fontSize: 11 }}>No hot posts captured yet.</div>
@@ -489,12 +486,11 @@ function SleeveActivation({ rows }) {
 
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div className="card-head">
-        <h3>Sleeve activation matrix</h3>
+      <window.CardHead title="Sleeve activation matrix">
         <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>
           {activeCount} active / {dormantCount} dormant · {list.length} registered
         </span>
-      </div>
+      </window.CardHead>
       <div className="card-body tight">
         <div style={{ marginBottom: 8 }}>
           <button
@@ -559,12 +555,11 @@ function UniverseCoverage({ data }) {
 
   return (
     <div className="card" style={{ marginTop: 12 }}>
-      <div className="card-head">
-        <h3>S&P 500 universe coverage</h3>
+      <window.CardHead title="S&P 500 universe coverage">
         <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>
           last scan {freshness}
         </span>
-      </div>
+      </window.CardHead>
       <div className="card-body" style={{ padding: "12px 16px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
           {[
@@ -656,10 +651,9 @@ function WatchlistPage() {
       <PageHeader title="Watchlist" subtitle="Signals the engine is tracking but hasn't acted on · conviction, trigger conditions, and signals it rejected" />
 
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-head">
-          <h3>Active signals · {list.length} tracked</h3>
+        <window.CardHead title={`Active signals · ${list.length} tracked`} feedbackId="active-signals">
           <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>conviction floor 0.65 to enter</span>
-        </div>
+        </window.CardHead>
         <div className="card-body tight">
           {list.map((w) => {
             const max = Math.max(...w.series);
@@ -709,10 +703,9 @@ function WatchlistPage() {
       </div>
 
       <div className="card">
-        <div className="card-head">
-          <h3>Signals the engine rejected · with retroactive outcome</h3>
+        <window.CardHead title="Signals the engine rejected · with retroactive outcome">
           <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>nothing curated</span>
-        </div>
+        </window.CardHead>
         <div className="card-body tight">
           <table className="trades">
             <thead>
@@ -801,7 +794,7 @@ function MethodologyPage() {
 
       {/* PIPELINE */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-head"><h3>Pipeline</h3></div>
+        <window.CardHead title="Pipeline" />
         <div className="card-body">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0, border: "1px solid var(--line)", borderRadius: 4 }}>
             {[
@@ -822,7 +815,7 @@ function MethodologyPage() {
 
       {/* RULES */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-head"><h3>Trading rules · 8 commitments</h3></div>
+        <window.CardHead title="Trading rules · 8 commitments" />
         <div className="card-body">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
             {rules.map((r) => (
@@ -840,10 +833,9 @@ function MethodologyPage() {
 
       {/* DECISION NARRATIVE STREAM — D5 */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-head">
-          <h3>Decision narrative · the agent did X because Y</h3>
+        <window.CardHead title="Decision narrative · the agent did X because Y">
           <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>last 25 ticks · prose-mode read from agent_reports.jsonl</span>
-        </div>
+        </window.CardHead>
         <div className="card-body tight">
           {window.DecisionNarrativeStream ? <window.DecisionNarrativeStream /> : null}
         </div>
@@ -854,10 +846,9 @@ function MethodologyPage() {
 
       {/* RULE BREAKS */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="card-head">
-          <h3>Recent rule firings · live audit log</h3>
+        <window.CardHead title="Recent rule firings · live audit log">
           <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>3 events YTD · each rule worked as designed</span>
-        </div>
+        </window.CardHead>
         <div className="card-body tight">
           <table className="trades">
             <thead>
@@ -904,7 +895,7 @@ function MethodologyPage() {
 
       {/* FAQ */}
       <div className="card">
-        <div className="card-head"><h3>FAQ</h3></div>
+        <window.CardHead title="FAQ" />
         <div className="card-body tight">
           {faq.map((f, i) => (
             <div key={i} style={{ padding: "14px 16px", borderBottom: i < faq.length - 1 ? "1px solid var(--line)" : "none" }}>

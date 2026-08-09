@@ -175,6 +175,9 @@ function StrategyPolicy() {
   const FIELD_TERM_CONFIG_INPUT = {
     max_per_underlying: { max_per_underlying: c.max_per_underlying },
   };
+  // `dash` renders a config field as-is, or an em-dash when the field is
+  // absent from window.SPREAD_CONFIG — never `undefined`/`NaN` on screen.
+  const dash = (v, fmt) => (v == null ? "—" : fmt ? fmt(v) : v);
   const field = (label, value, gloss, term) => (
     <div style={{ display: "grid", gap: 1 }}>
       <span style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
@@ -190,6 +193,36 @@ function StrategyPolicy() {
   // and smaller type than the live cards above it.
   const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "8px 12px", marginTop: 6 };
   const h4 = { fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-3)", marginTop: 10, marginBottom: 0 };
+
+  // The three buy-to-close triggers a SELL leg can hit, shared verbatim by
+  // both SELL PUT and SELL CALL so the wording never drifts between legs —
+  // only the leg noun ("short put" / "short call") differs.
+  const buyToCloseTriggers = (legNoun) => (
+    <ul className="opts-strategy-leg-triggers">
+      <li>
+        <b>Profit target</b> (<span style={{ fontFamily: "var(--mono)" }}>profit_target_pct = {pct(c.profit_target_pct)}</span>
+        <window.Help term="profit_target" />) — buy to close once {pct(c.profit_target_pct)} of the entry
+        credit is captured. Frees the collateral sooner instead of sitting through the last, highest-gamma
+        slice of credit.
+      </li>
+      <li>
+        <b>Strike breach</b> (<span style={{ fontFamily: "var(--mono)" }}>
+          close_on_strike_breach = {String(dash(c.close_on_strike_breach))}, strike_breach_buffer_pct = {pct(c.strike_breach_buffer_pct)}
+        </span>
+        <window.Help term="strike_breach_exit" /> <window.Help term="strike_breach_buffer" />) — buy to close
+        if the stock trades past the {legNoun}'s strike by more than the buffer. Caps the loss instead of
+        waiting for expiry.
+      </li>
+      <li>
+        <b>Max-loss stop</b> (<span style={{ fontFamily: "var(--mono)" }}>max_loss_pct = {dash(c.max_loss_pct, pct)}</span>
+        <window.Help term="max_loss_pct" />) — buy to close once the cost to close equals {dash(c.max_loss_pct, pct)} of
+        the credit collected. A second, independent loss cap alongside the strike breach.
+      </li>
+    </ul>
+  );
+
+  const legStyle = { marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" };
+  const legTitle = { fontSize: 11, fontWeight: 700, letterSpacing: ".02em", margin: 0 };
 
   return (
     <section className="card opts-strategy-card">
@@ -212,9 +245,9 @@ function StrategyPolicy() {
 
       <h4 style={h4}>Entry gates</h4>
       <div style={grid}>
-        {field("Short-leg delta", `|Δ| ≤ ${c.max_short_delta}`, "the short strike's delta ceiling — roughly its odds of finishing ITM", "short_leg_delta")}
+        {field("Short-leg delta", `|Δ| ≤ ${dash(c.max_short_delta)}`, "the short strike's delta ceiling — roughly its odds of finishing ITM", "short_leg_delta")}
         {field("Win probability", pct(c.min_pop), "minimum probability of profit required to enter", "pop")}
-        {field("DTE window", `${c.min_dte}–${c.max_dte}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte")}
+        {field("DTE window", `${dash(c.min_dte)}–${dash(c.max_dte)}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte")}
         {field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone", "risk")}
         {field("Min credit", usd2(c.min_credit), "below this, fees dominate the trade", "min_credit")}
         {field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev")}
@@ -223,17 +256,78 @@ function StrategyPolicy() {
 
       <h4 style={h4}>Book limits</h4>
       <div style={grid}>
-        {field("Max positions", c.max_positions, "open spreads across the whole book at once", "max_positions")}
-        {field("Max total risk", `${c.max_total_risk_equity_multiple}× equity`, "capital-at-risk ceiling across every open spread, scaled to live equity", "max_total_risk")}
-        {field("Max per underlying", c.max_per_underlying, "at most this many open spreads per name at a time", "max_per_underlying")}
+        {field("Max positions", dash(c.max_positions), "open spreads across the whole book at once", "max_positions")}
+        {field("Max total risk", `${dash(c.max_total_risk_equity_multiple)}× equity`, "capital-at-risk ceiling across every open spread, scaled to live equity", "max_total_risk")}
+        {field("Max per underlying", dash(c.max_per_underlying), "at most this many open spreads per name at a time", "max_per_underlying")}
         {field("Margin buffer", pct(c.margin_buffer_pct), "new entries are refused once maintenance margin would exceed equity minus this buffer", "margin_buffer_pct")}
       </div>
 
-      <h4 style={h4}>Exit policy</h4>
-      <p style={{ fontSize: 11, fontFamily: "var(--mono)", margin: "3px 0 0", color: "var(--text-2)" }}>
-        profit target {pct(c.profit_target_pct)} — closes once {pct(c.profit_target_pct)} of the
-        entry credit is captured
+      <h4 style={h4}>Legs — who sells, who buys, and why</h4>
+      <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
+        Every position is a vertical spread: one leg <b>sold to open</b><window.Help term="sell_to_open" /> for{" "}
+        <b>credit received</b><window.Help term="credit_received" /> (money in), one leg{" "}
+        <b>bought to open</b><window.Help term="buy_to_open" /> for a <b>debit paid</b>
+        <window.Help term="debit_paid" /> (money out) that caps the loss. A short put spread pairs SELL PUT +
+        BUY PUT; a short call spread pairs SELL CALL + BUY CALL — this sleeve never trades a naked leg.
       </p>
+
+      <div style={legStyle}>
+        <h5 style={legTitle}>SELL PUT (short leg — the credit)<window.Help term="short_leg" /></h5>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
+          <b>Opens:</b> SELL TO OPEN a put at or below the short-leg delta ceiling (
+          <span style={{ fontFamily: "var(--mono)" }}>|Δ| ≤ {dash(c.max_short_delta)}</span>) with win
+          probability at least <span style={{ fontFamily: "var(--mono)" }}>{pct(c.min_pop)}</span> and{" "}
+          <span style={{ fontFamily: "var(--mono)" }}>{dash(c.min_dte)}–{dash(c.max_dte)}d</span> to expiry —
+          the same Entry gates above, applied to this leg specifically. This is the credit-collecting leg: the
+          bet is the stock stays above this strike.
+        </p>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "6px 0 0" }}><b>Closes — buy to close</b><window.Help term="buy_to_close" />:</p>
+        {buyToCloseTriggers("short put")}
+      </div>
+
+      <div style={legStyle}>
+        <h5 style={legTitle}>BUY PUT (long leg — the loss cap)<window.Help term="long_leg" /></h5>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
+          <b>Opens:</b> BUY TO OPEN a lower-strike put in the same order as its SELL PUT, sized to the Risk
+          per position band above (<span style={{ fontFamily: "var(--mono)" }}>{usd(c.min_notional)}–{usd(c.max_notional)}</span>).
+          This leg is never opened on its own — it exists purely to convert the short put's uncapped risk into
+          a defined max loss (width minus credit received).
+        </p>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "6px 0 0" }}>
+          <b>Closes:</b> BUY TO CLOSE the SELL PUT is what actually locks in profit or loss on this pair — the
+          long put is sold to close (or expires worthless) alongside it, same order, same moment. It is never
+          traded independently of its short leg.
+        </p>
+      </div>
+
+      <div style={legStyle}>
+        <h5 style={legTitle}>SELL CALL (short leg — the credit)<window.Help term="short_leg" /></h5>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
+          <b>Opens:</b> SELL TO OPEN a call at or below the short-leg delta ceiling (
+          <span style={{ fontFamily: "var(--mono)" }}>|Δ| ≤ {dash(c.max_short_delta)}</span>) with win
+          probability at least <span style={{ fontFamily: "var(--mono)" }}>{pct(c.min_pop)}</span> and{" "}
+          <span style={{ fontFamily: "var(--mono)" }}>{dash(c.min_dte)}–{dash(c.max_dte)}d</span> to expiry —
+          the same Entry gates above, applied to this leg specifically. This is the credit-collecting leg: the
+          bet is the stock stays below this strike.
+        </p>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "6px 0 0" }}><b>Closes — buy to close</b><window.Help term="buy_to_close" />:</p>
+        {buyToCloseTriggers("short call")}
+      </div>
+
+      <div style={legStyle}>
+        <h5 style={legTitle}>BUY CALL (long leg — the loss cap)<window.Help term="long_leg" /></h5>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
+          <b>Opens:</b> BUY TO OPEN a higher-strike call in the same order as its SELL CALL, sized to the Risk
+          per position band above (<span style={{ fontFamily: "var(--mono)" }}>{usd(c.min_notional)}–{usd(c.max_notional)}</span>).
+          This leg is never opened on its own — it exists purely to convert the short call's uncapped risk
+          into a defined max loss (width minus credit received).
+        </p>
+        <p style={{ fontSize: 11, color: "var(--text-2)", margin: "6px 0 0" }}>
+          <b>Closes:</b> BUY TO CLOSE the SELL CALL is what actually locks in profit or loss on this pair —
+          the long call is sold to close (or expires worthless) alongside it, same order, same moment. It is
+          never traded independently of its short leg.
+        </p>
+      </div>
     </section>
   );
 }

@@ -146,6 +146,47 @@ function DemoBadge({ title = "no live data — producer not yet wired" }) {
 }
 window.DemoBadge = DemoBadge;
 
+// ============== Feedback-button plumbing shared by every card head ==========
+// Derives a stable, human-readable feedback target id from a card's visible
+// title ("What we think right now" -> "what-we-think-right-now") so no call
+// site ever hand-types one — the ONE kebab-casing rule, site-wide. Originally
+// lived in options-summary.jsx (PRD 1041); moved here so every card shell —
+// not just the Options Log's <Section> — can share exactly one definition.
+// Re-exported via window.OptionsSummaryInternals.componentId for callers that
+// already depend on that surface.
+function componentId(title) {
+  return String(title)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+window.componentId = componentId;
+
+// The shared `.card > .card-head > h3` shell, now with a `?` Help-style
+// FeedbackButton wired in for free. `feedbackId` is opt-in — when omitted
+// it's derived from `title` via componentId(), same rule Section already
+// uses on the Options Log. Titles that interpolate live values (row counts,
+// filters) MUST pass an explicit feedbackId so the id stays stable as the
+// data changes. `children` renders after the title, in the same slot the
+// raw `<div className="card-head">` markup used for filter rows / meta text
+// — the wrapper never changes the `.card-head` class or its flex layout.
+function CardHead({ title, feedbackId, children }) {
+  const resolvedFeedbackId = feedbackId || componentId(title);
+  return (
+    <div className="card-head">
+      <h3>
+        {title}
+        {window.FeedbackButton && (
+          <window.FeedbackButton target={{ kind: "component", id: resolvedFeedbackId, label: title }} />
+        )}
+      </h3>
+      {children}
+    </div>
+  );
+}
+window.CardHead = CardHead;
+
 // ============== Hero P&L (legacy 5-col, kept as a tweak option) ==============
 function HeroLegacy({ perf, equity }) {
   const equityVals = equity.map((e) => e.equity);
@@ -376,14 +417,13 @@ function EquityChart({ equity, timeframe, setTimeframe }) {
 
   return (
     <div className="card">
-      <div className="card-head">
-        <h3>Equity Curve · vs SPY</h3>
+      <window.CardHead title="Equity Curve · vs SPY">
         <div className="tf">
           {["7D","30D","90D","ALL"].map((t) => (
             <button key={t} className={timeframe === t ? "active" : ""} onClick={() => setTimeframe(t)}>{t}</button>
           ))}
         </div>
-      </div>
+      </window.CardHead>
       <div className="chart-wrap">
         <div className="chart-legend">
           <span><i className="dot" style={{ background: "var(--pos)" }} /> Account equity</span>
@@ -635,14 +675,13 @@ function TradesTable({ trades, bmcUrl }) {
   const { money } = window.SpreadFormat;
   return (
     <div className="card">
-      <div className="card-head">
-        <h3>Live Trade Log · {filtered.length} of {trades.length} shown</h3>
+      <window.CardHead title={`Live Trade Log · ${filtered.length} of ${trades.length} shown`} feedbackId="live-trade-log">
         <div className="tf">
           {["ALL", "OPEN", "CLOSED", "WINS", "LOSSES"].map((f) => (
             <button key={f} className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>{f}</button>
           ))}
         </div>
-      </div>
+      </window.CardHead>
       <div className="card-body tight" style={{ maxHeight: 480, overflowY: "auto" }}>
         <table className="trades">
           <thead>
@@ -856,10 +895,9 @@ function Watchlist({ detail, passed }) {
   return (
     <div id="watchlist" style={{ display: "grid", gap: 12 }}>
       <div className="card">
-        <div className="card-head">
-          <h3>Watchlist · {list.length} tracked</h3>
+        <window.CardHead title={`Watchlist · ${list.length} tracked`} feedbackId="watchlist">
           <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>conviction floor 0.65 to enter</span>
-        </div>
+        </window.CardHead>
         <div className="card-body tight">
           {list.length === 0 ? (
             <div className="dim" style={{ padding: "12px 4px", fontSize: 12 }}>No signals tracked right now.</div>
@@ -915,10 +953,9 @@ function Watchlist({ detail, passed }) {
 
       {rejected.length > 0 ? (
         <div className="card">
-          <div className="card-head">
-            <h3>Signals the engine rejected · with retroactive outcome</h3>
+          <window.CardHead title="Signals the engine rejected · with retroactive outcome" feedbackId="watchlist-rejected-signals">
             <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>{rejected.length} passed</span>
-          </div>
+          </window.CardHead>
           <div className="card-body tight">
             <table className="trades">
               <thead>
@@ -1101,12 +1138,11 @@ function CurrentPositions({ positions }) {
 
   return (
     <div className="card" id="positions">
-      <div className="card-head">
-        <h3>Current Positions · {rowCount} open</h3>
+      <window.CardHead title={`Current Positions · ${rowCount} open`} feedbackId="current-positions">
         <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>
           MV ${totalMv.toLocaleString("en-US", { maximumFractionDigits: 0 })} · <span className={totalPl >= 0 ? "up" : "down"}>{fmt$(totalPl)}</span> unrealized
         </span>
-      </div>
+      </window.CardHead>
       <div className="card-body tight" style={{ maxHeight: 640, overflowY: "auto" }}>
         {rowCount === 0 ? (
           <div className="dim" style={{ padding: "12px 4px", fontSize: 12 }}>No open positions.</div>

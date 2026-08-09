@@ -345,7 +345,7 @@
     return (
       <div data-testid="variants-subtab">
         <div className="card">
-          <div className="card-head"><h3>Variants · side-by-side evaluation</h3></div>
+          <window.CardHead title="Variants · side-by-side evaluation" />
           <div className="card-body">
             <div style={{
               display: "grid", gap: 12,
@@ -699,14 +699,13 @@
         {subtab === "sweep" && <>
         {/* ===== Sweep card ===== */}
         <div className="card">
-          <div className="card-head">
-            <h3>Optimization · sleeve parameter sweep</h3>
+          <window.CardHead title="Optimization · sleeve parameter sweep">
             {promotedAt && (
               <span className="mono" style={{ fontSize: 10, color: "var(--pos)" }}>
                 promoted {promotedAt}
               </span>
             )}
-          </div>
+          </window.CardHead>
           <div className="card-body">
             <div style={{
               display: "grid", gap: 12,
@@ -853,15 +852,14 @@
 
         {/* ===== A/B card ===== */}
         <div className="card" style={{ marginTop: 12 }}>
-          <div className="card-head">
-            <h3>A/B · sleeve vs sleeve (winning-cell equity)</h3>
+          <window.CardHead title="A/B · sleeve vs sleeve (winning-cell equity)">
             <button onClick={runAB} disabled={abBusy}
                     data-testid="opt-ab-run"
                     className="bmc-btn"
                     style={{ minHeight: 32, padding: "6px 12px" }}>
               {abBusy ? "Running…" : "Run A/B"}
             </button>
-          </div>
+          </window.CardHead>
           <div className="card-body">
             <div style={{
               display: "grid", gap: 12,

@@ -49,6 +49,16 @@ function BackToTradeLog() {
   );
 }
 
+// Same target shape/id as the row this page was opened from (options-trade-log.jsx's
+// tradeKey), so a visitor's feedback from the row and from the detail page join to
+// the same trade regardless of which surface they used.
+function TradeDetailFeedbackButton({ ev, facts, tradeKeyValue }) {
+  if (!window.FeedbackButton || !tradeKeyValue) return null;
+  const structureName = facts.structure ? facts.structure.name : "credit spread";
+  const target = { kind: "trade", id: tradeKeyValue, label: `${ev.ticker || "this ticker"} ${structureName}` };
+  return <window.FeedbackButton target={target} />;
+}
+
 const BADGE_CLASS = { filled: "fill-filled", terminal: "terminal", partial: "fill-partial", unfilled: "fill-unfilled" };
 
 // --- plain-English helpers -------------------------------------------------
@@ -675,8 +685,14 @@ function OptionTradeDetailPage() {
 
   return (
     <main className="shell" id="trade-detail">
-      <div style={{ marginTop: 12, position: "sticky", top: 0, zIndex: 1, paddingBottom: 8 }}>
+      <div
+        style={{
+          marginTop: 12, position: "sticky", top: 0, zIndex: 1, paddingBottom: 8,
+          display: "flex", alignItems: "center", gap: 8,
+        }}
+      >
         <BackToTradeLog />
+        <TradeDetailFeedbackButton ev={ev} facts={facts} tradeKeyValue={key} />
       </div>
       <section className="card opt-panel" style={{ marginTop: 8 }}>
         <div className="opt-panel-head">

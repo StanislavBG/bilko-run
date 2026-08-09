@@ -186,6 +186,12 @@
         source: "src/social_signals_trader/options_summary_render.py:195",
       },
     },
+    last_updated: {
+      label: "Last updated",
+      short: "When the job that wrote this card last ran.",
+      long: "The read-through of the book — what we think and what needs action — is re-derived wholesale every 2 hours by the options-status-refresh cron (scripts/options-status-refresh-summary.sh, `0 */2 * * *`), never live in your browser. This stamp is that job's own generated_at, shown in Pacific time with its age; it turns amber once the card is older than two refresh cycles (4h), which means the cron missed a run.",
+      example: "A stamp reading '1:00 PM PDT, Aug 8 · ~2h old' means the cron last ran at 1:00 PM Pacific and the next run is due at 3:00 PM — the prices quoted in the bullets are from 1:00 PM, not from right now.",
+    },
     expiry: {
       label: "Expiry",
       short: "The date this option contract stops existing.",
@@ -1185,4 +1191,9 @@
 
   window.Glossary = TERMS;
   window.Help = Help;
+  // The one PT-clock formatter, shared with panels that stamp a card with
+  // "when did the job that produced this last run" (options-summary.jsx's
+  // SectionStamp) — so a section stamp and a `?` tooltip's "as of" line can
+  // never disagree on how a timestamp reads.
+  window.AsOfTime = { format: formatAsOfTime, relativeAge: relativeAge };
 })();

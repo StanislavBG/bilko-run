@@ -531,7 +531,8 @@ function TickerDetailsPage() {
   }, []);
 
   const summary = (window.optionsSummaryParts && window.optionsSummaryParts()) || {};
-  const tradeLog = (window.optionsTradeLogParts && window.optionsTradeLogParts(window.SPREAD_LOG)) || {};
+  const tradeLog = (window.optionsTradeLogParts &&
+    window.optionsTradeLogParts(window.SPREAD_LOG, summary.positionsCount)) || {};
 
   // Reading order, top to bottom: what happened today → what we hold → the
   // full history of what we did → when positions roll off and where the book

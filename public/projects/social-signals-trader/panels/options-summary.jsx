@@ -633,7 +633,11 @@ function PositionsRow({ pos, display, fallbackAsOf }) {
           )}
         </td>
       ))}
-      <td className="opts-col-feedback">
+      <td
+        className="opts-col-feedback"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         {window.FeedbackButton && feedbackTarget && (
           <window.FeedbackButton target={{ kind: "position", ...feedbackTarget }} />
         )}
@@ -1049,6 +1053,11 @@ function optionsSummaryParts(data) {
 
   return {
     empty: null,
+    // Handed to optionsTradeLogParts() so the Trade Log's FIFO-derived Open
+    // count can be reconciled against Alpaca's own record.positions[] —
+    // two independent sources that can (and did — PRD 1059) drift when the
+    // trade log is missing a close event.
+    positionsCount: record.positions.length,
     howto: <HowToReadThisPage />,
     headline: <Headline text={headlineText} staleLabel={staleLabel} />,
     whereBookStands: (

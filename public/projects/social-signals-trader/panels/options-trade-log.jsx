@@ -628,7 +628,11 @@ function TradeLogRow({ ev, classification, index }) {
           <Help term="realized_pl" inputs={{ credit_received: maxGain, exit_cost: ev.exit_cost }} asOf={asOf} />
         )}
       </td>
-      <td className="opts-col-feedback">
+      <td
+        className="opts-col-feedback"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         {window.FeedbackButton && (
           <window.FeedbackButton target={tradeFeedbackTarget(ev, facts, index)} />
         )}
@@ -734,7 +738,7 @@ function GroupHeaderRow({ label, count, realized }) {
   );
 }
 
-function TradeLogTable({ trades }) {
+function TradeLogTable({ trades, expectedOpenCount }) {
   const { useState } = React;
   const [filter, setFilter] = useState("all");
   const [groupBy, setGroupBy] = useState("none");
@@ -757,6 +761,14 @@ function TradeLogTable({ trades }) {
 
   const counts = { all: enriched.length, open: 0, closed: 0, expired: 0 };
   enriched.forEach((t) => { counts[t.status] = (counts[t.status] || 0) + 1; });
+
+  // The Trade Log's Open count is derived by FIFO-pairing this log's own
+  // open/close events; Positions comes straight from Alpaca. Two independent
+  // sources that CAN drift (PRD 1059: a dropped close event once made this
+  // read 15 while Alpaca held 14) — surface the mismatch rather than let the
+  // two panels silently disagree.
+  const reconciliationMismatch =
+    typeof expectedOpenCount === "number" && expectedOpenCount !== counts.open;
 
   const visible = filter === "all" ? enriched : enriched.filter((t) => t.status === filter);
   const realizedVisible = realizedOf(visible);
@@ -792,6 +804,13 @@ function TradeLogTable({ trades }) {
           <span>realized <em className={realizedVisible >= 0 ? "up" : "down"}>{money(realizedVisible)}</em></span>
         </div>
       </div>
+      {reconciliationMismatch && (
+        <p className="opt-log-note opt-reconcile-warn">
+          Reconciliation note: this table's Open count ({counts.open}) doesn't match the{" "}
+          Positions table's row count ({expectedOpenCount}) — one likely has an event the other
+          doesn't. Trust Positions (sourced from Alpaca); flag this for review.
+        </p>
+      )}
       {!enriched.length ? (
         <p className="opt-log-empty">No filled trades yet.</p>
       ) : (
@@ -868,7 +887,7 @@ function TradeLogTable({ trades }) {
 // (ladder half-width near the top, Trade Log full width lower down), so each
 // card is handed back on its own. OptionsTradeLog below is these parts in the
 // default stacked order — one definition of each table either way.
-function optionsTradeLogParts(log) {
+function optionsTradeLogParts(log, expectedOpenCount) {
   const data = log || window.SPREAD_LOG;
   if (!data || !data.events || !data.events.length) {
     return {
@@ -895,7 +914,7 @@ function optionsTradeLogParts(log) {
   return {
     empty: null,
     expiryLadder: <ExpiryLadder positions={openPositions} />,
-    tradeLog: <TradeLogTable trades={trades} />,
+    tradeLog: <TradeLogTable trades={trades} expectedOpenCount={expectedOpenCount} />,
     openOrders: <OpenOrdersTable orders={openOrders} />,
     foot: (
       <p className="opt-log-foot">

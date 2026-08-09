@@ -1186,6 +1186,41 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opts-action--watch { border-left-color: var(--warn); background: color-mix(in oklch, var(--warn) 10%, transparent); }
 .opts-action--safe { border-left-color: var(--pos); background: var(--pos-bg); }
 .opts-action--neutral { border-left-color: var(--line); }
+/* Suppressed (🚫 exit blocked by a mark-suspect clamp) must never compete
+   visually with an armed row — desaturated and struck-through, no red alarm
+   colour, so it reads as blocked rather than actionable. */
+.opts-action--suppressed {
+  border-left-color: var(--line-2); background: var(--surface-2); color: var(--muted);
+  opacity: .72; text-decoration: line-through; text-decoration-color: var(--line-2);
+}
+.opts-action--info { border-left-color: var(--line-2); }
+.opts-action--clickable { cursor: pointer; }
+.opts-action--clickable:hover { background: color-mix(in oklch, var(--text) 6%, transparent); }
+.opts-action--clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Armed / Watching / Can't-trust groups (PRD: dollar-ranked, grouped action
+   queue) — one labelled box per non-empty group, in emitted order. */
+.opts-action-group + .opts-action-group { margin-top: 12px; }
+.opts-action-group-label {
+  margin: 0 0 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 4px;
+}
+
+/* Counts chip in the card head, next to the SectionStamp. */
+.opts-action-counts-chip {
+  display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  font-size: 11px; font-family: var(--mono); color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px 10px;
+}
+
+/* Deep-link highlight for the target What-we-think row — transient pulse,
+   no router, no persistent state. */
+.opts-wwt-row--highlight { animation: opts-wwt-highlight-pulse 2s ease-out; outline: 2px solid var(--warn); }
+@keyframes opts-wwt-highlight-pulse {
+  0% { background: color-mix(in oklch, var(--warn) 55%, transparent); }
+  100% { background: transparent; }
+}
 
 /* Cushion bands — same colour language (BREACHED/DANGER/WATCH/SAFE) used for
    severity everywhere else in the dashboard: neg for breached/danger, warn
@@ -1390,13 +1425,31 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 /* ============== Feedback button + modal (PRD 1040) ==============
    Sibling of the `?` Help button — same chip treatment, same reasoning for
    being a real keyboard-reachable <button>, not an icon font or emoji. */
-.feedback { position: relative; display: inline-flex; vertical-align: middle; margin-left: 4px; }
+.feedback { position: relative; display: inline-flex; vertical-align: middle; margin-left: 6px; }
+/* A labelled pill, NOT a 15px ghost chip like `?`. The help button is an
+   optional aside a reader reaches for; this is a call to action we actively
+   want noticed, so it carries the accent colour and the word "Feedback".
+   Deliberately louder than .help-btn — they are not peers. */
 .feedback-btn {
-  width: 15px; height: 15px; border-radius: 50%; padding: 0;
-  border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2);
+  min-height: 22px; border-radius: 999px; padding: 2px 9px 2px 7px; gap: 4px;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+  font-size: 11px; font-weight: 600; line-height: 1; font-family: var(--sans);
+  letter-spacing: 0.01em;
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.feedback-btn:hover, .feedback-btn:focus-visible { color: var(--text); border-color: var(--line-2); }
+.feedback-btn:hover, .feedback-btn:focus-visible {
+  background: var(--accent); color: var(--bg);
+}
+.feedback-btn-label { white-space: nowrap; }
+
+/* Inside a dense table cell there is no room for the word — the pill collapses
+   to a circular icon chip, same accent treatment so it still reads as the same
+   control. The row's own hover already tells the user the row is interactive. */
+.opts-col-feedback .feedback-btn-label { display: none; }
+.opts-col-feedback .feedback-btn {
+  width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%;
+}
 
 /* Modal stacks above the glossary's .help-tip portal (z-index 200) so an
    open tooltip can never overlap the dialog. */

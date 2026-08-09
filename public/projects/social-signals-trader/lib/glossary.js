@@ -936,6 +936,65 @@
       long: "Status groups by Open/Closed/Expired, Ticker groups by underlying symbol, Expiry groups by the contract's expiration date (rows with no resolvable expiry land in a trailing Unknown expiry group). Each group header shows its row count and summed realized P&L.",
       example: "Grouping by Ticker turns a 40-row flat log into one section per symbol, each with its own trade count and realized P&L subtotal.",
     },
+    armed: {
+      label: "Armed",
+      short: "A position whose percent-of-credit threshold (profit target or max loss) has been reached and is eligible to close right now.",
+      long: "Armed rows are the ones the executor will actually act on next tick — everything else in the Action queue is context, not an instruction. A row that would otherwise be Armed moves to Can't trust instead the moment its mark-suspect clamp makes the close price untrustworthy.",
+      calc: {
+        expr: "pct_captured ≤ −max_loss_pct  OR  pct_captured ≥ profit_target_pct",
+        inputs: [
+          { key: "pct_captured", label: "% captured", unit: "%", priced: true, clock: "quotes" },
+          { key: "max_loss_pct", label: "Max-loss %", unit: "%" },
+          { key: "profit_target_pct", label: "Profit-target %", unit: "%" },
+        ],
+        result: (v) => (v.pct_captured <= -v.max_loss_pct || v.pct_captured >= v.profit_target_pct ? 1 : 0),
+        unit: "",
+        source: "src/social_signals_trader/options_summary_render.py:546",
+      },
+    },
+    suppressed_exit: {
+      label: "Suppressed exit",
+      short: "An exit that would otherwise fire (profit target or max loss reached) but is held back because the close price can't be trusted.",
+      long: "This happens when the position's mark-suspect clamp is active — the quoted close cost is arithmetically impossible, so acting on it could realize a false profit or loss. The row stays visible under Can't trust rather than disappearing, so nothing gets silently skipped.",
+      example: "A put credit spread quoted to close at $612 against a $600 structural max value is clamped: the max-loss trigger would otherwise fire, but the close is suppressed until a trustworthy quote arrives.",
+    },
+    mark_suspect: {
+      label: "Mark suspect",
+      short: "A flag on a position whose quoted close cost is above the spread's own structural maximum value — arithmetically impossible for a defined-risk spread.",
+      long: "A credit spread can never cost more to close than its own width × 100 × contracts (the structural max value) — if the quoted mid crosses that, the quote itself is broken (a stale or crossed wide-leg book), not the position. Any exit driven by that mark is suppressed rather than acted on.",
+      calc: {
+        expr: "raw close cost > width × 100 × contracts",
+        inputs: [
+          { key: "raw_close_cost", label: "Raw close cost", unit: "$", priced: true, clock: "quotes" },
+          { key: "width", label: "Spread width", unit: "$" },
+          { key: "contracts", label: "Contracts", unit: "" },
+        ],
+        result: (v) => (v.raw_close_cost > v.width * 100 * v.contracts ? 1 : 0),
+        unit: "",
+        source: "src/social_signals_trader/options_summary.py:266",
+      },
+    },
+    at_stake: {
+      label: "Total at stake",
+      short: "The sum of open P/L across every Armed row — the dollar amount that changes if the executor's next tick fires each eligible close.",
+      long: "Rows in Watching or Can't trust aren't counted here — this is specifically what today's armed exits are worth, not the book's total exposure.",
+      calc: {
+        expr: "sum of |open P/L| across armed rows",
+        inputs: [
+          { key: "count", label: "Armed rows", unit: "" },
+          { key: "total", label: "Total at stake", unit: "$", priced: true, clock: "quotes" },
+        ],
+        result: (v) => v.total,
+        unit: "$",
+        source: "src/social_signals_trader/options_summary_render.py:597",
+      },
+    },
+    unpriceable: {
+      label: "Unpriceable",
+      short: "A position whose leg quotes are wide enough that the numbers shown for it are indicative only, not trustworthy.",
+      long: "Same underlying signal as the wide-quote flag on a single row, rolled up to a book-wide count in the Can't trust group — every unpriceable position is also wide-quoted, but this line exists so the count is visible without opening each row.",
+      example: "3 positions flagged unpriceable because a short or long leg's bid-ask spread is over the 25% wide-quote threshold — their P/L and cushion figures are directional only until a tighter quote arrives.",
+    },
   };
 
   function normalizeTerm(term) {

@@ -318,7 +318,7 @@ function panelComponentId(title) {
 // `feedbackId` is opt-in too — when omitted it's derived from `title` via
 // panelComponentId() so every card built on Section gets a feedback button
 // with no per-call-site change.
-function Section({ title, titleTerm, feedbackId, updatedAt, children }) {
+function Section({ title, titleTerm, feedbackId, updatedAt, extraHead, children }) {
   const resolvedFeedbackId = feedbackId || panelComponentId(title);
   return (
     <section className="card opt-panel">
@@ -331,6 +331,7 @@ function Section({ title, titleTerm, feedbackId, updatedAt, children }) {
           )}
         </h3>
         {updatedAt && <SectionStamp iso={updatedAt} />}
+        {extraHead}
       </div>
       {children}
     </section>
@@ -697,12 +698,48 @@ function PositionsSection({ lines, positions, fallbackAsOf }) {
   );
 }
 
+// options_summary_render.py's `_anchor_id()` trails both "What we think"
+// bullets and Action queue rows with `<!-- id:pos-... -->` (link 2) so a
+// queue row can deep-link to its rationale bullet (link 3) — strip it from
+// the visible text everywhere it's parsed out, never render the raw comment.
+const ANCHOR_COMMENT_RE = /\s*<!--\s*id:([\w.-]+)\s*-->\s*$/;
+function stripAnchorComment(text) {
+  const m = ANCHOR_COMMENT_RE.exec(text);
+  return m ? { text: text.slice(0, m.index), anchorId: m[1] } : { text, anchorId: null };
+}
+
+const ACTION_QUEUE_HIGHLIGHT_CLASS = "opts-wwt-row--highlight";
+
+// scrollIntoView + a transient CSS class is the whole deep-link mechanism —
+// no router, no new state library, per the PRD's implementation notes.
+function scrollToWhatWeThinkRow(anchorId) {
+  const el = document.getElementById(anchorId);
+  if (!el) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add(ACTION_QUEUE_HIGHLIGHT_CLASS);
+  window.setTimeout(() => el.classList.remove(ACTION_QUEUE_HIGHLIGHT_CLASS), 2000);
+  return true;
+}
+
 function WhatWeThink({ lines, updatedAt }) {
   const items = bulletsOf(lines);
   return (
     <Section title="What we think right now" updatedAt={updatedAt}>
       {items.length ? (
-        <BulletList items={items} render={renderInlineMd} className="opts-bullets opts-what-we-think" />
+        <ul className="opts-bullets opts-what-we-think">
+          {items.map((raw, i) => {
+            const { text, anchorId } = stripAnchorComment(raw);
+            return (
+              <li
+                key={i}
+                id={anchorId || undefined}
+                className={text.indexOf("⚠") !== -1 ? "opts-line-warn" : undefined}
+              >
+                {renderInlineMd(text)}
+              </li>
+            );
+          })}
+        </ul>
       ) : (
         <p className="opt-log-empty">{plainLinesOf(lines)[0] || "No open options positions — nothing to assess."}</p>
       )}
@@ -710,25 +747,126 @@ function WhatWeThink({ lines, updatedAt }) {
   );
 }
 
-const ACTION_SEVERITY = { "🔴": "breached", "🟠": "danger", "⚠": "watch", "✅": "safe" };
+const ACTION_SEVERITY = {
+  "🔴": "breached",
+  "🟠": "danger",
+  "⚠": "watch",
+  "✅": "safe",
+  "🚫": "suppressed",
+  "🔵": "info",
+};
 
-function ActionQueue({ lines, updatedAt }) {
-  const items = bulletsOf(lines);
+const ACTION_COUNTS_RE = /^(\d+) armed · (\d+) watching · (\d+) blocked · (.+) total at stake$/;
+
+// The counts line (`options_summary_render.py::_action_queue`) is plain
+// prose, not a bullet — pulled out separately from the grouped rows below so
+// it can move into the card head instead of the body.
+function parseActionCounts(lines) {
+  for (const line of lines) {
+    const m = ACTION_COUNTS_RE.exec(line.trim());
+    if (m) return { armed: m[1], watching: m[2], blocked: m[3], totalAtStake: m[4] };
+  }
+  return null;
+}
+
+// Buckets the queue's `**Armed**` / `**Watching**` / `**Can't trust**`
+// sub-headings, preserving emission order and skipping empty groups. A
+// pre-link-2 payload with no sub-headings falls every row into one
+// ungrouped (label: null) bucket instead of throwing.
+function parseActionGroups(lines) {
+  const groups = [];
+  let current = null;
+  for (const line of lines) {
+    const headingMatch = /^\*\*(.+)\*\*$/.exec(line.trim());
+    if (headingMatch) {
+      current = { label: headingMatch[1], items: [] };
+      groups.push(current);
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      if (!current) {
+        current = { label: null, items: [] };
+        groups.push(current);
+      }
+      current.items.push(line.slice(2));
+    }
+  }
+  return groups.filter((g) => g.items.length > 0);
+}
+
+// Only the two groups with a dedicated glossary term get a label-level Help;
+// "Watching" leans on the per-row band/credit glossify() terms already
+// present in its own row text.
+const ACTION_GROUP_TERM = { Armed: "armed", "Can't trust": "mark_suspect" };
+
+const EMPTY_ANCHOR_SET = new Set();
+
+function ActionQueueCounts({ counts }) {
+  if (!counts) return null;
   return (
-    <Section title="Action queue" updatedAt={updatedAt}>
-      {!items.length || items[0] === "Nothing needs attention right now." ? (
-        <p className="opt-log-empty">Nothing needs attention right now.</p>
+    <span className="opts-action-counts-chip">
+      <span>{counts.armed} armed</span>
+      <span>· {counts.watching} watching</span>
+      <span>· {counts.blocked} blocked</span>
+      <span>· {counts.totalAtStake} total at stake</span>
+      <window.Help term="at_stake" />
+    </span>
+  );
+}
+
+function ActionQueueRow({ text, anchors }) {
+  const { text: visible, anchorId } = stripAnchorComment(text);
+  const sev = ACTION_SEVERITY[visible.slice(0, 2).trim()] || ACTION_SEVERITY[visible[0]] || "neutral";
+  const clickable = Boolean(anchorId && anchors.has(anchorId));
+  const rowTerm =
+    visible.slice(0, 2).trim() === "🚫" ? "suppressed_exit" : visible.indexOf("unpriceable") !== -1 ? "unpriceable" : null;
+  const activate = clickable ? () => scrollToWhatWeThinkRow(anchorId) : undefined;
+  const onKeyDown = clickable
+    ? (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          activate();
+        }
+      }
+    : undefined;
+  return (
+    <li
+      className={`opts-action opts-action--${sev}${clickable ? " opts-action--clickable" : ""}`}
+      onClick={activate}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={onKeyDown}
+    >
+      {renderInlineMdGlossy(visible)}
+      {rowTerm && <window.Help term={rowTerm} />}
+    </li>
+  );
+}
+
+function ActionQueue({ lines, updatedAt, anchors }) {
+  const counts = parseActionCounts(lines);
+  const groups = parseActionGroups(lines);
+  const anchorSet = anchors || EMPTY_ANCHOR_SET;
+  return (
+    <Section title="Action queue" updatedAt={updatedAt} extraHead={<ActionQueueCounts counts={counts} />}>
+      {groups.length ? (
+        groups.map((g, gi) => (
+          <div className="opts-action-group" key={gi}>
+            {g.label && (
+              <h4 className="opts-action-group-label">
+                {g.label}
+                {ACTION_GROUP_TERM[g.label] && <window.Help term={ACTION_GROUP_TERM[g.label]} />}
+              </h4>
+            )}
+            <ul className="opts-bullets opts-action-queue">
+              {g.items.map((t, i) => (
+                <ActionQueueRow key={i} text={t} anchors={anchorSet} />
+              ))}
+            </ul>
+          </div>
+        ))
       ) : (
-        <ul className="opts-bullets opts-action-queue">
-          {items.map((t, i) => {
-            const sev = ACTION_SEVERITY[t.slice(0, 2).trim()] || ACTION_SEVERITY[t[0]] || "neutral";
-            return (
-              <li key={i} className={`opts-action opts-action--${sev}`}>
-                {renderInlineMdGlossy(t)}
-              </li>
-            );
-          })}
-        </ul>
+        <p className="opt-log-empty">Nothing needs attention right now.</p>
       )}
     </Section>
   );
@@ -910,6 +1048,17 @@ function optionsSummaryParts(data) {
   const fallbackAsOf = summaryData.generatedAt || record.generated_at;
   const bookAsOf = { quotes: record.oldest_quote_ts || fallbackAsOf, entry: fallbackAsOf };
 
+  // Action queue rows deep-link to their What-we-think rationale row by the
+  // same `pos-...` anchor id both sections carry — derived once here, from
+  // the one bullet parse, so the two sections can never disagree on which
+  // anchors actually exist.
+  const whatWeThinkLines = findSection(sections, "What we think right now").lines;
+  const whatWeThinkAnchors = new Set(
+    bulletsOf(whatWeThinkLines)
+      .map((b) => stripAnchorComment(b).anchorId)
+      .filter(Boolean)
+  );
+
   return {
     empty: null,
     howto: <HowToReadThisPage />,
@@ -932,8 +1081,14 @@ function optionsSummaryParts(data) {
     // Both cards are prose the 2h refresh cron re-derives wholesale, so each
     // carries that job's run time — `fallbackAsOf` is exactly the summary's
     // own generated_at (see above), not a per-position quote clock.
-    whatWeThink: <WhatWeThink lines={findSection(sections, "What we think right now").lines} updatedAt={fallbackAsOf} />,
-    actionQueue: <ActionQueue lines={findSection(sections, "Action queue").lines} updatedAt={fallbackAsOf} />,
+    whatWeThink: <WhatWeThink lines={whatWeThinkLines} updatedAt={fallbackAsOf} />,
+    actionQueue: (
+      <ActionQueue
+        lines={findSection(sections, "Action queue").lines}
+        updatedAt={fallbackAsOf}
+        anchors={whatWeThinkAnchors}
+      />
+    ),
     openQueue: (
       <OpenQueue lines={findSection(sections, "Open queue").lines} totals={record.totals} account={record.account} />
     ),

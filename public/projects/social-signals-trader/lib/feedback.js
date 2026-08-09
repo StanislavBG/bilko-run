@@ -164,17 +164,22 @@
   // FeedbackButton + modal
   // ---------------------------------------------------------------------
 
+  // A 10px hairline glyph shipped first and was effectively invisible — the
+  // first real visitor found the button only because they were looking for it.
+  // Now 14px, heavier stroke, and paired with a "Feedback" word everywhere the
+  // layout has room for one (CSS hides the word inside dense table cells, where
+  // the chip stands alone).
   function FeedbackIcon() {
     return React.createElement(
       "svg",
       {
         viewBox: "0 0 12 12",
-        width: 10,
-        height: 10,
+        width: 14,
+        height: 14,
         "aria-hidden": "true",
         stroke: "currentColor",
         fill: "none",
-        strokeWidth: 1,
+        strokeWidth: 1.5,
       },
       React.createElement("path", {
         d: "M1.5 2.5h9v5.5h-4l-2 2v-2h-3z",
@@ -486,7 +491,8 @@
             setOpen(true);
           },
         },
-        FeedbackIcon()
+        FeedbackIcon(),
+        React.createElement("span", { className: "feedback-btn-label" }, "Feedback")
       ),
       open
         ? ReactDOM.createPortal(

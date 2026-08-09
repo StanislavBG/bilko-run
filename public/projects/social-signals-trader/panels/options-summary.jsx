@@ -369,13 +369,21 @@ function WhereBookStands({ lines, totals, positionsCount, asOf }) {
   );
 }
 
-// Frozen entry columns (0-1) get a visual break from the live/now columns
-// (2-8) via a left border on the first live column — same table, two eras.
-const FROZEN_COLS = new Set([0, 1]);
+// The frozen entry columns get a visual break from the live/now columns via a
+// left border on the first live column — same table, two eras.
+// The frozen block is every column before the first "LIVE …" one, derived from
+// the header rather than hardcoded so inserting a frozen column (e.g. Contracts)
+// can't silently move the seam onto the wrong cell.
+function frozenColCount(header) {
+  const firstLive = (header || []).findIndex((h) => String(h).startsWith("LIVE "));
+  return firstLive === -1 ? (header || []).length : firstLive;
+}
 
-function colClass(i, extra) {
-  if (FROZEN_COLS.has(i)) return `al ${extra || ""} opts-col-frozen`.trim();
-  return i === 2 ? "opts-col-live-first" : undefined;
+function makeColClass(frozenCount) {
+  return function colClass(i, extra) {
+    if (i < frozenCount) return `al ${extra || ""} opts-col-frozen`.trim();
+    return i === frozenCount ? "opts-col-live-first" : undefined;
+  };
 }
 
 function BandBadge({ value }) {
@@ -455,6 +463,7 @@ function tradeKeyForPosition(pos) {
 // (out of scope to change) — mapped to the shared glossary term it explains.
 const POSITIONS_HEADER_TERM = {
   Spread: "spread",
+  Contracts: "contracts",
   "FROZEN entry (filled / net / credit)": "frozen_entry",
   "LIVE spread price (Δ)": "close_cost",
   "LIVE spot": "spot",
@@ -504,6 +513,8 @@ function PositionsTable({ lines, positions, fallbackAsOf }) {
     );
   }
   const { header, body } = table;
+  const frozenCount = frozenColCount(header);
+  const colClass = makeColClass(frozenCount);
   const bandCol = header.findIndex((h) => h === "LIVE band");
   const confCol = header.findIndex((h) => h === "conf");
   const spreadCol = header.findIndex((h) => h === "Spread");
@@ -590,7 +601,7 @@ function PositionsTable({ lines, positions, fallbackAsOf }) {
                         {colorizeSigned(cell)}
                         <window.Help term="pct_captured" inputs={calcProps.pct_captured} asOf={calcProps.asOf} />
                       </>
-                    ) : FROZEN_COLS.has(ci) ? (
+                    ) : ci < frozenCount ? (
                       cell
                     ) : (
                       colorizeSigned(cell)

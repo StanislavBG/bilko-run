@@ -113,8 +113,19 @@ function Header({ handle, bmcUrl, setPage }) {
     <header className="header">
       {/* The brand mark is a home link, and home is the Options Log. */}
       <div className="brand" style={{ cursor: "pointer" }} onClick={() => setPage && setPage("options")}>
-        <div className="brand-mark">P</div>
-        <div className="brand-name">{handle.split(".")[0]}<span>.{handle.split(".")[1]}</span></div>
+        <div className="brand-mark">{handle ? handle[0] : "P"}</div>
+        <div className="brand-name">
+          {(() => {
+            const dot = handle.lastIndexOf(".");
+            if (dot === -1) return handle;
+            return (
+              <>
+                {handle.slice(0, dot)}
+                <span>{handle.slice(dot)}</span>
+              </>
+            );
+          })()}
+        </div>
       </div>
       {/* Desktop nav (≥821px) — routes first, then in-page section jumps */}
       <nav className="nav">{renderNavLinks()}</nav>

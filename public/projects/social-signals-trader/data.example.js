@@ -2,7 +2,7 @@
 // All numbers are illustrative.
 
 window.SITE = {
-  handle: "publictrades.dev",
+  handle: "Bilko Bibitkov",
   tagline: "Autonomous trading bots reading 10 subreddits. Live results, in public.",
   startedISO: "2025-01-06",
   bmcUrl: "https://bilko.run/coffee",

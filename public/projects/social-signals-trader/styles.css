@@ -989,6 +989,7 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-kv-item { display: grid; gap: 1px; min-width: 0; }
 .opt-kv-k { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .opt-kv-sub { font-size: 9px; color: var(--muted); }
+.opt-cell-sublabel { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
 .opt-kv-v { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 
 .opt-legblock { margin-top: 10px; }
@@ -1451,6 +1452,15 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%;
 }
 
+/* Same collapse for a feedback button that sits mid-sentence inside a policy
+   bullet (the three buy-to-close triggers): a full pill mid-line breaks the
+   paragraph's rhythm, so the exit rules get the icon chip while every policy
+   SECTION HEADING keeps the labelled pill. */
+.policy-feedback-compact .feedback-btn-label { display: none; }
+.policy-feedback-compact .feedback-btn {
+  width: 20px; height: 20px; min-height: 20px; padding: 0; border-radius: 50%;
+}
+
 /* Modal stacks above the glossary's .help-tip portal (z-index 200) so an
    open tooltip can never overlap the dialog. */
 .fb-backdrop {
@@ -1482,3 +1492,40 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .fb-thumb img { max-width: 120px; max-height: 80px; border-radius: var(--r); border: 1px solid var(--line); }
 .fb-msg { color: var(--text-2); font-size: 12px; }
 .fb-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+/* ===== Feedback forum (panels/feedback-threads.jsx) =======================
+   The read side of the feedback primitive above: one card per thread, replies
+   nested under the message they answer. Design tokens only — no literal
+   colours — so light/dark both work with the rest of the site. */
+.fbt-panel { margin-top: 12px; }
+.fbt-lede { margin-bottom: 10px; }
+.fbt-count { font-size: 11px; color: var(--text-2); }
+.fbt-count--open { color: var(--warn); font-weight: 600; }
+.fbt-empty { font-size: 12px; color: var(--text-2); margin: 6px 0 0; max-width: 70ch; }
+.fbt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.fbt-thread {
+  border: 1px solid var(--line); border-left: 3px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); padding: 10px 12px;
+}
+.fbt-thread--open { border-left-color: var(--warn); }
+.fbt-thread--answered { border-left-color: var(--accent); }
+.fbt-thread-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fbt-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.fbt-when { font-size: 11px; color: var(--text-2); }
+.fbt-status { font-size: 11px; margin-left: auto; }
+.fbt-status--open { color: var(--warn); }
+.fbt-status--answered { color: var(--text-2); }
+.fbt-badge {
+  font-size: 10px; letter-spacing: .04em; border-radius: 999px; padding: 2px 8px;
+  border: 1px solid var(--line); color: var(--text-2);
+}
+.fbt-badge--bad { color: var(--neg); border-color: color-mix(in oklch, var(--neg) 40%, transparent); }
+.fbt-badge--warn { color: var(--warn); border-color: color-mix(in oklch, var(--warn) 40%, transparent); }
+.fbt-target { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
+.fbt-body { font-size: 12px; color: var(--text-2); margin: 6px 0 0; max-width: 80ch; white-space: pre-wrap; }
+.fbt-replies { list-style: none; margin: 8px 0 0; padding: 0 0 0 12px; border-left: 1px solid var(--line); }
+.fbt-reply + .fbt-reply { margin-top: 8px; }
+.fbt-reply-head { display: flex; align-items: baseline; gap: 8px; }
+.fbt-author { font-size: 11px; font-weight: 600; color: var(--accent); }
+.fbt-thread-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.fbt-hint { font-size: 11px; color: var(--text-2); }

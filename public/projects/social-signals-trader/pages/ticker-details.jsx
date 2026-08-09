@@ -146,6 +146,27 @@ function LadderTable({ rows, kind }) {
   );
 }
 
+// One feedback target per policy SECTION, not one for the whole card. A
+// reader who disagrees with the max-loss stop and a reader who disagrees with
+// the traded universe are giving feedback on two different rules; a single
+// card-level button would file both into the same thread and lose which
+// sub-strategy was meant. Ids are namespaced `policy-<section>` — so
+// "universe" here can never collide with a same-named card elsewhere on the
+// site — and go through the shared window.componentId kebab-caser rather than
+// hand-typed strings (same rule <CardHead>/<Section> use).
+function PolicyFeedback({ section, compact }) {
+  if (!window.FeedbackButton) return null;
+  const slug = window.componentId ? window.componentId(section) : String(section).toLowerCase();
+  const btn = (
+    <window.FeedbackButton target={{ kind: "component", id: `policy-${slug}`, label: `Policy — ${section}` }} />
+  );
+  // `compact` drops the "Feedback" word (icon only) for the buttons that sit
+  // inside a bullet's running text, where a full pill would break the line.
+  // Section headings keep the labelled pill (PRD 1044 — the affordance must
+  // be legible, not a ghost icon).
+  return compact ? <span className="policy-feedback-compact">{btn}</span> : btn;
+}
+
 // Fund policy — the CREDIT_SPREAD sleeve's live, actually-traded config,
 // exported by spread_trader.export_config() as window.SPREAD_CONFIG. This is
 // deliberately a separate surface from the ticker worksheet below: the
@@ -178,6 +199,17 @@ function StrategyPolicy() {
   // `dash` renders a config field as-is, or an em-dash when the field is
   // absent from window.SPREAD_CONFIG — never `undefined`/`NaN` on screen.
   const dash = (v, fmt) => (v == null ? "—" : fmt ? fmt(v) : v);
+  // The entry gate is a BAND, not a one-sided ceiling — `_passes_pop_band()`
+  // rejects both below min_pop/above max_short_delta ("too risky") AND above
+  // max_pop/below min_short_delta ("too safe"). If either band edge is
+  // missing from the live config, fall back to the single-sided reading
+  // rather than rendering "— ≤ |Δ| ≤ 0.2".
+  const deltaBand = c.min_short_delta == null
+    ? `|Δ| ≤ ${dash(c.max_short_delta)}`
+    : `${dash(c.min_short_delta)} ≤ |Δ| ≤ ${dash(c.max_short_delta)}`;
+  const popBand = c.max_pop == null
+    ? `≥ ${pct(c.min_pop)}`
+    : `${pct(c.min_pop)}–${pct(c.max_pop)}`;
   const field = (label, value, gloss, term) => (
     <div style={{ display: "grid", gap: 1 }}>
       <span style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
@@ -198,27 +230,45 @@ function StrategyPolicy() {
   // both SELL PUT and SELL CALL so the wording never drifts between legs —
   // only the leg noun ("short put" / "short call") differs.
   const buyToCloseTriggers = (legNoun) => (
-    <ul className="opts-strategy-leg-triggers">
-      <li>
-        <b>Profit target</b> (<span style={{ fontFamily: "var(--mono)" }}>profit_target_pct = {pct(c.profit_target_pct)}</span>
-        <window.Help term="profit_target" />) — buy to close once {pct(c.profit_target_pct)} of the entry
-        credit is captured. Frees the collateral sooner instead of sitting through the last, highest-gamma
-        slice of credit.
-      </li>
-      <li>
-        <b>Strike breach</b> (<span style={{ fontFamily: "var(--mono)" }}>
-          close_on_strike_breach = {String(dash(c.close_on_strike_breach))}, strike_breach_buffer_pct = {pct(c.strike_breach_buffer_pct)}
-        </span>
-        <window.Help term="strike_breach_exit" /> <window.Help term="strike_breach_buffer" />) — buy to close
-        if the stock trades past the {legNoun}'s strike by more than the buffer. Caps the loss instead of
-        waiting for expiry.
-      </li>
-      <li>
-        <b>Max-loss stop</b> (<span style={{ fontFamily: "var(--mono)" }}>max_loss_pct = {dash(c.max_loss_pct, pct)}</span>
-        <window.Help term="max_loss_pct" />) — buy to close once the cost to close equals {dash(c.max_loss_pct, pct)} of
-        the credit collected. A second, independent loss cap alongside the strike breach.
-      </li>
-    </ul>
+    <React.Fragment>
+      <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
+        Precedence, not a menu — the first of these three that fires is the one that closes the
+        spread; the other two never get evaluated.
+      </p>
+      <ul className="opts-strategy-leg-triggers">
+        <li>
+          <b>Strike breach</b> (<span style={{ fontFamily: "var(--mono)" }}>
+            close_on_strike_breach = {String(dash(c.close_on_strike_breach))}, strike_breach_buffer_pct = {pct(c.strike_breach_buffer_pct)}
+          </span>
+          <window.Help term="strike_breach_exit" /> <window.Help term="strike_breach_buffer" />) — buy to close
+          if the stock trades past the {legNoun}'s strike by more than the buffer. Caps the loss instead of
+          waiting for expiry. Checked first, and stays active even when the mark is suspect, because it keys
+          on spot vs strike, never on the mark.
+          <PolicyFeedback section="Exit — strike breach" compact />
+        </li>
+        <li>
+          <b>Max-loss stop</b> (<span style={{ fontFamily: "var(--mono)" }}>max_loss_pct = {dash(c.max_loss_pct, pct)}</span>
+          <window.Help term="max_loss_pct" />) — buy to close once the cost to close equals {dash(c.max_loss_pct, pct)} of
+          the credit collected. Checked second, only if the strike hasn't breached.
+          <PolicyFeedback section="Exit — max-loss stop" compact />
+        </li>
+        <li>
+          <b>Profit target</b> (<span style={{ fontFamily: "var(--mono)" }}>profit_target_pct = {pct(c.profit_target_pct)}</span>
+          <window.Help term="profit_target" />) — buy to close once {pct(c.profit_target_pct)} of the entry
+          credit is captured. Frees the collateral sooner instead of sitting through the last, highest-gamma
+          slice of credit. Checked last, only if neither exit above fired, and only when{" "}
+          <span style={{ fontFamily: "var(--mono)" }}>hold_to_expiry = {String(dash(c.hold_to_expiry))}</span> is false.
+          <PolicyFeedback section="Exit — profit target" compact />
+        </li>
+      </ul>
+      <p style={{ fontSize: 11, color: "var(--text-2)", margin: "6px 0 0", maxWidth: 760 }}>
+        <b>Suppressors:</b> a <window.Help term="mark_suspect" />suspect mark disables both mark-driven
+        exits — max-loss stop and profit target — while the strike breach stays active, since the breach
+        keys on spot vs strike, not the mark. A non-positive entry credit disables the same two
+        percent-of-credit exits (there is no credit to take a percent of), leaving only the strike breach.
+        <PolicyFeedback section="Exit — suppressors" compact />
+      </p>
+    </React.Fragment>
   );
 
   const legStyle = { marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" };
@@ -227,7 +277,10 @@ function StrategyPolicy() {
   return (
     <section className="card opts-strategy-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-        <h3 style={{ margin: 0, fontSize: 13 }}>CREDIT_SPREAD — fund policy</h3>
+        <h3 style={{ margin: 0, fontSize: 13 }}>
+          CREDIT_SPREAD — fund policy
+          <PolicyFeedback section="Overall" />
+        </h3>
         <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--mono)" }}>
           config as of {String(sc.generatedAt || "unknown").replace("T", " ")}
         </span>
@@ -238,23 +291,23 @@ function StrategyPolicy() {
         its own, looser filters; it is not this policy.
       </p>
 
-      <h4 style={h4}>Universe</h4>
+      <h4 style={h4}>Universe<PolicyFeedback section="Universe" /></h4>
       <p style={{ fontSize: 11, fontFamily: "var(--mono)", margin: "3px 0 0", color: "var(--text-2)" }} title="The only tickers the sleeve scans and trades.">
         {(c.tickers || []).join(", ")}
       </p>
 
-      <h4 style={h4}>Entry gates</h4>
+      <h4 style={h4}>Entry gates<PolicyFeedback section="Entry gates" /></h4>
       <div style={grid}>
-        {field("Short-leg delta", `|Δ| ≤ ${dash(c.max_short_delta)}`, "the short strike's delta ceiling — roughly its odds of finishing ITM", "short_leg_delta")}
-        {field("Win probability", pct(c.min_pop), "minimum probability of profit required to enter", "pop")}
+        {field("Short-leg delta", deltaBand, "a BAND, not just a ceiling — too far ITM (above the ceiling) is too risky, but too far OTM (below the floor) is too safe: the credit no longer covers the round-trip cost", "short_leg_delta")}
+        {field("Win probability", popBand, "also a band: below the floor is rejected as too risky, but above the ceiling is rejected as too safe too — a very high PoP means a small credit that a fixed round-trip cost swallows", "pop")}
         {field("DTE window", `${dash(c.min_dte)}–${dash(c.max_dte)}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte")}
         {field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone", "risk")}
         {field("Min credit", usd2(c.min_credit), "below this, fees dominate the trade", "min_credit")}
         {field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev")}
-        {field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? "minimum annualized yield required" : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")}
+        {field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? `minimum annualized yield required — ann_yield is credit/collateral annualised over the ${dash(c.min_dte)}–${dash(c.max_dte)}d hold, so this isn't a typo: 10.0 renders as 1000%/yr` : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")}
       </div>
 
-      <h4 style={h4}>Book limits</h4>
+      <h4 style={h4}>Book limits<PolicyFeedback section="Book limits" /></h4>
       <div style={grid}>
         {field("Max positions", dash(c.max_positions), "open spreads across the whole book at once", "max_positions")}
         {field("Max total risk", `${dash(c.max_total_risk_equity_multiple)}× equity`, "capital-at-risk ceiling across every open spread, scaled to live equity", "max_total_risk")}
@@ -262,7 +315,7 @@ function StrategyPolicy() {
         {field("Margin buffer", pct(c.margin_buffer_pct), "new entries are refused once maintenance margin would exceed equity minus this buffer", "margin_buffer_pct")}
       </div>
 
-      <h4 style={h4}>Legs — who sells, who buys, and why</h4>
+      <h4 style={h4}>Legs — who sells, who buys, and why<PolicyFeedback section="Legs" /></h4>
       <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
         Every position is a vertical spread: one leg <b>sold to open</b><window.Help term="sell_to_open" /> for{" "}
         <b>credit received</b><window.Help term="credit_received" /> (money in), one leg{" "}
@@ -272,11 +325,12 @@ function StrategyPolicy() {
       </p>
 
       <div style={legStyle}>
-        <h5 style={legTitle}>SELL PUT (short leg — the credit)<window.Help term="short_leg" /></h5>
+        <h5 style={legTitle}>SELL PUT (short leg — the credit)<window.Help term="short_leg" /><PolicyFeedback section="SELL PUT" /></h5>
         <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
-          <b>Opens:</b> SELL TO OPEN a put at or below the short-leg delta ceiling (
-          <span style={{ fontFamily: "var(--mono)" }}>|Δ| ≤ {dash(c.max_short_delta)}</span>) with win
-          probability at least <span style={{ fontFamily: "var(--mono)" }}>{pct(c.min_pop)}</span> and{" "}
+          <b>Opens:</b> SELL TO OPEN a put with delta inside the band (
+          <span style={{ fontFamily: "var(--mono)" }}>{deltaBand}</span>) and win
+          probability inside the band <span style={{ fontFamily: "var(--mono)" }}>{popBand}</span> — too far
+          ITM is rejected as too risky, too far OTM is rejected as too safe — with{" "}
           <span style={{ fontFamily: "var(--mono)" }}>{dash(c.min_dte)}–{dash(c.max_dte)}d</span> to expiry —
           the same Entry gates above, applied to this leg specifically. This is the credit-collecting leg: the
           bet is the stock stays above this strike.
@@ -286,7 +340,7 @@ function StrategyPolicy() {
       </div>
 
       <div style={legStyle}>
-        <h5 style={legTitle}>BUY PUT (long leg — the loss cap)<window.Help term="long_leg" /></h5>
+        <h5 style={legTitle}>BUY PUT (long leg — the loss cap)<window.Help term="long_leg" /><PolicyFeedback section="BUY PUT" /></h5>
         <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
           <b>Opens:</b> BUY TO OPEN a lower-strike put in the same order as its SELL PUT, sized to the Risk
           per position band above (<span style={{ fontFamily: "var(--mono)" }}>{usd(c.min_notional)}–{usd(c.max_notional)}</span>).
@@ -301,11 +355,12 @@ function StrategyPolicy() {
       </div>
 
       <div style={legStyle}>
-        <h5 style={legTitle}>SELL CALL (short leg — the credit)<window.Help term="short_leg" /></h5>
+        <h5 style={legTitle}>SELL CALL (short leg — the credit)<window.Help term="short_leg" /><PolicyFeedback section="SELL CALL" /></h5>
         <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
-          <b>Opens:</b> SELL TO OPEN a call at or below the short-leg delta ceiling (
-          <span style={{ fontFamily: "var(--mono)" }}>|Δ| ≤ {dash(c.max_short_delta)}</span>) with win
-          probability at least <span style={{ fontFamily: "var(--mono)" }}>{pct(c.min_pop)}</span> and{" "}
+          <b>Opens:</b> SELL TO OPEN a call with delta inside the band (
+          <span style={{ fontFamily: "var(--mono)" }}>{deltaBand}</span>) and win
+          probability inside the band <span style={{ fontFamily: "var(--mono)" }}>{popBand}</span> — too far
+          ITM is rejected as too risky, too far OTM is rejected as too safe — with{" "}
           <span style={{ fontFamily: "var(--mono)" }}>{dash(c.min_dte)}–{dash(c.max_dte)}d</span> to expiry —
           the same Entry gates above, applied to this leg specifically. This is the credit-collecting leg: the
           bet is the stock stays below this strike.
@@ -315,7 +370,7 @@ function StrategyPolicy() {
       </div>
 
       <div style={legStyle}>
-        <h5 style={legTitle}>BUY CALL (long leg — the loss cap)<window.Help term="long_leg" /></h5>
+        <h5 style={legTitle}>BUY CALL (long leg — the loss cap)<window.Help term="long_leg" /><PolicyFeedback section="BUY CALL" /></h5>
         <p style={{ fontSize: 11, color: "var(--text-2)", margin: "3px 0 0", maxWidth: 760 }}>
           <b>Opens:</b> BUY TO OPEN a higher-strike call in the same order as its SELL CALL, sized to the Risk
           per position band above (<span style={{ fontFamily: "var(--mono)" }}>{usd(c.min_notional)}–{usd(c.max_notional)}</span>).
@@ -474,12 +529,13 @@ function TickerDetailsPage() {
   const summary = (window.optionsSummaryParts && window.optionsSummaryParts()) || {};
   const tradeLog = (window.optionsTradeLogParts && window.optionsTradeLogParts(window.SPREAD_LOG)) || {};
 
-  // Reading order, top to bottom: what happened today → what we hold → when it
-  // rolls off and where the book stands → what we make of it → what to do →
-  // what's queued → the full history. Everything explanatory (how a credit
-  // spread works, the fund policy, the rules, provenance) is compacted into
-  // one "Strategy & rules" block at the very bottom: it's reference material,
-  // read once, not a live reading.
+  // Reading order, top to bottom: what happened today → what we hold → the
+  // full history of what we did → when positions roll off and where the book
+  // stands → what we make of it → what to do → what's queued → the ticker
+  // worksheet. Everything explanatory (how a credit spread works, the fund
+  // policy, the rules, provenance) is compacted into one "Strategy & rules"
+  // block at the very bottom: it's reference material, read once, not a live
+  // reading.
   return (
     <main className="shell opts-page" id="ticker-details">
       <header className="opts-page-head">
@@ -491,6 +547,15 @@ function TickerDetailsPage() {
         <>
           {summary.headline}
           <div id="options-summary">{summary.positions}</div>
+        </>
+      )}
+
+      <div id="options-trade-log">
+        {tradeLog.empty || tradeLog.tradeLog}
+      </div>
+
+      {summary.empty || (
+        <>
           <Row2>
             {tradeLog.expiryLadder}
             {summary.whereBookStands}
@@ -506,10 +571,7 @@ function TickerDetailsPage() {
         </>
       )}
 
-      <div id="options-trade-log">
-        {tradeLog.empty || tradeLog.tradeLog}
-        {tradeLog.foot}
-      </div>
+      {tradeLog.foot}
 
       <section className="opts-worksheet">
         <h3 className="opts-section-title">Ticker worksheet</h3>
@@ -578,6 +640,12 @@ function TickerDetailsPage() {
           than the consolidated book; treat the credit column as indicative, not fillable.
         </p>
       </section>
+
+      {/* System feedback — everything filed against a CARD or the page rather
+          than against one trade. Last block on the page by design: it's a
+          conversation about the site, not a reading of the book. Trade- and
+          position-scoped threads render on that trade's own detail page. */}
+      {window.SystemFeedbackPanel && <window.SystemFeedbackPanel />}
     </main>
   );
 }

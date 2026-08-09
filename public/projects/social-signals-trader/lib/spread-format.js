@@ -59,9 +59,11 @@
   }
 
   // Breakeven = short strike + credit/share for a call spread,
-  // short strike - credit/share for a put spread.
+  // short strike - credit/share for a put spread. A spread that filled at a
+  // net DEBIT (credit <= 0) has no breakeven — it cannot win at any price —
+  // so this returns null rather than a number that looks like a real target.
   function breakeven(shortParsed, credit, contracts) {
-    if (!shortParsed || credit == null || !contracts) return null;
+    if (!shortParsed || credit == null || credit <= 0 || !contracts) return null;
     const creditPerShare = credit / contracts / 100;
     return shortParsed.right === "CALL" ? shortParsed.strike + creditPerShare : shortParsed.strike - creditPerShare;
   }

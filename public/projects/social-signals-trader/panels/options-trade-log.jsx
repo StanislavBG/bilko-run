@@ -59,13 +59,16 @@ function fillState(record) {
   return { state: "PARTIAL", filled, total };
 }
 
+// `record.credit` is the same signed figure options_summary.py computes
+// (`credit = -net_per_contract * qty * 100`) — trust it directly rather than
+// re-deriving from the broker's raw filled_avg_price, which is debit-positive
+// and would need the same negation repeated (and, until this fix, wasn't).
 function creditReceived(record) {
-  const resp = record.response || {};
   const fs = fillState(record);
   if (!fs || fs.filled <= 0) return 0;
-  const avgPrice = num(resp.filled_avg_price);
-  if (avgPrice == null) return null; // filled but broker hasn't reported an avg price yet — unknown, not zero
-  return avgPrice * 100 * fs.filled;
+  const credit = num(record.credit);
+  if (credit != null) return credit;
+  return null; // filled but no credit reported yet — unknown, not zero
 }
 
 // --- Open Orders vs Trade Log classification ----------------------------
@@ -218,10 +221,15 @@ function tradeFacts(ev, classification) {
   // of "what did we collect" (headlineSentence, OpenOrdersTable's atRiskCredit).
   const maxGain = ev.credit ?? ev.entry_credit;
   const maxLoss = ev.risk;
+  // A "credit" spread that filled at a net DEBIT (BABA 143/144, 2026-08-07) has
+  // no max gain — the best case at expiry is $0, not the negative "credit"
+  // number. Every reader of `maxGain` must brand it as a debit paid, not print
+  // the negative figure as though it were an upside.
+  const isNetDebit = maxGain != null && maxGain < 0;
   const be = breakeven(shortParsed, maxGain, ev.contracts);
   const riskReward = maxLoss != null && maxGain ? maxLoss / maxGain : null;
   const pnl = isClose ? ev.realized_pnl : null;
-  return { isClose, shortParsed, longParsed, structure, fs, received, maxGain, maxLoss, be, riskReward, pnl, classification };
+  return { isClose, shortParsed, longParsed, structure, fs, received, maxGain, isNetDebit, maxLoss, be, riskReward, pnl, classification };
 }
 
 // Legacy detail view: structure blurb, decoded legs, key/value detail grid,
@@ -230,7 +238,7 @@ function tradeFacts(ev, classification) {
 // (see openDetail() below). Kept exported for back-compat rather than deleted
 // outright — out of scope for this PRD to remove.
 function TradeDetail({ ev, facts }) {
-  const { isClose, structure, fs, received, maxGain, maxLoss, be, riskReward, pnl, classification } = facts;
+  const { isClose, structure, fs, received, maxGain, isNetDebit, maxLoss, be, riskReward, pnl, classification } = facts;
   return (
     <div className="opt-trade-body">
       {structure && structure.gloss && (
@@ -251,9 +259,9 @@ function TradeDetail({ ev, facts }) {
       </div>
       <div className="opt-kv">
         {[
-          ["Max gain (credit)", money(maxGain)],
+          [isNetDebit ? "Net debit paid" : "Max gain (credit)", money(isNetDebit ? Math.abs(maxGain) : maxGain)],
           ["Max loss (risk)", money(maxLoss)],
-          ["Breakeven", be != null ? money(be) : null],
+          ["Breakeven", be != null ? money(be) : (isNetDebit ? "no breakeven — net debit" : null)],
           ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null],
           ["Credit if filled", money(ev.credit ?? ev.entry_credit)],
           ["Credit received", classification.bucket === "trade" ? money(received) : null],
@@ -539,7 +547,7 @@ function OpenOrderRow({ ev, classification, index }) {
         <Help term="max_loss" inputs={{ width: ev.width, contracts: calcContracts, credit: orderCredit }} asOf={asOf} />
       </td>
       <td>
-        {facts.be != null ? money(facts.be) : "—"}
+        {facts.be != null ? money(facts.be) : (facts.isNetDebit ? "no breakeven — net debit" : "—")}
         <Help
           term="breakeven"
           inputs={{ short_strike: shortStrike, credit: orderCredit, contracts: calcContracts, right }}
@@ -589,13 +597,23 @@ function TradeLogRow({ ev, classification, index }) {
       <td className="al"><StructureCell facts={facts} ev={ev} /></td>
       <td><ExpiresCell ev={ev} facts={facts} outcome={isClose ? closeDateLabel(ev) : null} /></td>
       <td>{ev.contracts}</td>
-      <td className="up">
-        {money(received)}
-        <Help
-          term="credit_received"
-          inputs={{ net_per_contract: num(resp.filled_avg_price), contracts: facts.fs && facts.fs.filled }}
-          asOf={asOf}
-        />
+      <td>
+        {isClose ? (
+          <>
+            <div className="mono-dim opt-cell-sublabel">Cost to close</div>
+            <span className={received > 0 ? "up" : "down"}>{money(received)}</span>
+            <Help term="exit_cost" inputs={{ exit_cost: ev.exit_cost }} asOf={asOf} />
+          </>
+        ) : (
+          <>
+            <span className={received >= 0 ? "up" : "down"}>{money(received)}</span>
+            <Help
+              term="credit_received"
+              inputs={{ net_per_contract: num(resp.filled_avg_price), contracts: facts.fs && facts.fs.filled }}
+              asOf={asOf}
+            />
+          </>
+        )}
       </td>
       <td>{resp.filled_at ? String(resp.filled_at).replace("T", " ").slice(0, 19) : "—"}</td>
       <td>
@@ -718,10 +736,18 @@ function TradeLogTable({ trades }) {
   // O(n) over trades: one facts + status derivation per row, computed once
   // per render and reused by the counts, the filter, and the grouping below.
   const openPositionKeys = computeOpenPositionKeys(trades);
-  const enriched = trades.map((t) => {
-    const facts = tradeFacts(t.ev, t.classification);
-    return { ...t, facts, status: tradeStatus(t.ev, facts, openPositionKeys) };
-  });
+  const enriched = trades
+    .map((t) => {
+      const facts = tradeFacts(t.ev, t.classification);
+      return { ...t, facts, status: tradeStatus(t.ev, facts, openPositionKeys) };
+    })
+    // Newest first: descending event timestamp, ties broken by descending
+    // index so the order is stable and deterministic regardless of the
+    // incoming SPREAD_LOG.events append order.
+    .sort((a, b) => {
+      const tsDiff = new Date(b.ev.ts).getTime() - new Date(a.ev.ts).getTime();
+      return tsDiff !== 0 ? tsDiff : b.index - a.index;
+    });
 
   const counts = { all: enriched.length, open: 0, closed: 0, expired: 0 };
   enriched.forEach((t) => { counts[t.status] = (counts[t.status] || 0) + 1; });

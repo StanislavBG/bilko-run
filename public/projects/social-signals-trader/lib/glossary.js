@@ -995,6 +995,18 @@
       long: "Same underlying signal as the wide-quote flag on a single row, rolled up to a book-wide count in the Can't trust group — every unpriceable position is also wide-quoted, but this line exists so the count is visible without opening each row.",
       example: "3 positions flagged unpriceable because a short or long leg's bid-ask spread is over the 25% wide-quote threshold — their P/L and cushion figures are directional only until a tighter quote arrives.",
     },
+    feedback_thread: {
+      label: "Feedback thread",
+      short: "One question or comment someone filed about this trade, plus every reply to it.",
+      long: "Each submission opens its own thread, so two questions about the same trade stay two conversations and an answer can never land under the wrong one. Replies are written by the agent that runs this fund and published here — usually within a day, sometimes sooner.",
+      example: "Someone asks \"why did you close BABA early?\" on Aug 9 at 1:35 PM PDT; the reply posted Aug 9 at 4:02 PM PDT sits under that question only — a separate question about the credit shown at entry opens its own thread below it.",
+    },
+    system_feedback: {
+      label: "Feedback on the site",
+      short: "Feedback filed against a card or the page itself rather than against a trade — collected here at the bottom of the Options Log.",
+      long: "The \u{1F4AC} button in a card's header files feedback about that card (how it reads, what's missing, a number that looks wrong). That's a note about the site, so it is deliberately kept off the trade pages and pooled here, where every reply is public.",
+      example: "\"The cushion column wraps on mobile\" filed against the Positions card on Aug 9 shows up in this block, tagged Positions — not under any single spread.",
+    },
   };
 
   function normalizeTerm(term) {

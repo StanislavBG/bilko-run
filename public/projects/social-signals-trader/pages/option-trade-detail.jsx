@@ -59,6 +59,23 @@ function TradeDetailFeedbackButton({ ev, facts, tradeKeyValue }) {
   return <window.FeedbackButton target={target} />;
 }
 
+// Which feedback targets this page owns: the trade key itself, plus — while
+// the trade is still open — the id the Options Log's Positions table files
+// position feedback under. Both are REUSED from their one definition
+// (tradeKey via the URL, positionFeedbackTarget from OptionsSummaryInternals),
+// never re-derived here, so a question asked from the positions table and one
+// asked from this page land in the same discussion.
+function feedbackTargets(tradeKeyValue, pos) {
+  const targets = [];
+  if (tradeKeyValue) targets.push({ kind: "trade", id: tradeKeyValue });
+  const summaryInternals = window.OptionsSummaryInternals;
+  const posTarget = pos && summaryInternals && summaryInternals.positionFeedbackTarget
+    ? summaryInternals.positionFeedbackTarget(pos)
+    : null;
+  if (posTarget) targets.push({ kind: "position", id: posTarget.id });
+  return targets;
+}
+
 const BADGE_CLASS = { filled: "fill-filled", terminal: "terminal", partial: "fill-partial", unfilled: "fill-unfilled" };
 
 // --- plain-English helpers -------------------------------------------------
@@ -158,6 +175,7 @@ function outcomeBanner(ev, facts) {
 }
 
 function breakevenCaption(facts) {
+  if (facts.isNetDebit) return "This spread filled at a net debit — it cannot win at any price, so there is no breakeven.";
   if (facts.be == null || !facts.shortParsed) return "Not enough data to compute a breakeven.";
   const dir = profitDirection(facts.shortParsed) === "below" ? "above" : "below";
   return `Breakeven ${money(facts.be)} — ${dir} this price we start losing money.`;
@@ -355,20 +373,37 @@ function PayoffStrip({ facts, ev, livePrice }) {
   );
 }
 
+// A "credit" spread that filled as a net DEBIT has no max gain — the best
+// case at expiry is $0. This swaps the max-gain stat's label/value/caption
+// for a net-debit framing instead of printing a negative "max gain".
+function maxGainStat(facts) {
+  if (!facts.isNetDebit) {
+    return {
+      label: "Most we can make", value: money(facts.maxGain), sub: "Max gain", tone: "up",
+      caption: "The most we can make — the full credit, if the trade finishes on the safe side.",
+    };
+  }
+  return {
+    label: "Net debit paid", value: money(Math.abs(facts.maxGain)), sub: "Net debit", tone: "down",
+    caption: "This spread filled as a net DEBIT, not a credit — best case at expiry is $0; this is what we already paid.",
+  };
+}
+
 function WhatHadToHappen({ ev, facts, livePrice }) {
   const calc = tradeCalcProps(ev, facts);
+  const mg = maxGainStat(facts);
   return (
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">What had to happen for this to win</h2>
       <div className="optd-stat-grid">
         <div className="optd-stat">
           <div className="optd-stat-label">
-            Most we can make
+            {mg.label}
             <Help term="max_gain" inputs={calc.max_gain.inputs} asOf={calc.max_gain.asOf} />
           </div>
-          <div className="optd-stat-value up">{money(facts.maxGain)}</div>
-          <div className="optd-stat-sub">Max gain</div>
-          <div className="optd-stat-caption">The most we can make — the full credit, if the trade finishes on the safe side.</div>
+          <div className={`optd-stat-value ${mg.tone}`}>{mg.value}</div>
+          <div className="optd-stat-sub">{mg.sub}</div>
+          <div className="optd-stat-caption">{mg.caption}</div>
         </div>
         <div className="optd-stat">
           <div className="optd-stat-label">
@@ -384,7 +419,7 @@ function WhatHadToHappen({ ev, facts, livePrice }) {
             Break-even price
             <Help term="breakeven" inputs={calc.breakeven.inputs} asOf={calc.breakeven.asOf} />
           </div>
-          <div className="optd-stat-value">{facts.be != null ? money(facts.be) : "—"}</div>
+          <div className="optd-stat-value">{facts.be != null ? money(facts.be) : (facts.isNetDebit ? "no breakeven — net debit" : "—")}</div>
           <div className="optd-stat-sub">Breakeven</div>
           <div className="optd-stat-caption">{breakevenCaption(facts)}</div>
         </div>
@@ -570,8 +605,11 @@ function KvGroup({ title, items, calc }) {
 }
 
 function TheNumbers({ ev, facts }) {
-  const { isClose, received, maxGain, maxLoss, be, riskReward, pnl, classification } = facts;
+  const { isClose, received, maxGain, isNetDebit, maxLoss, be, riskReward, pnl, classification } = facts;
   const calc = tradeCalcProps(ev, facts);
+  const maxGainLabel = isNetDebit ? "Net debit paid" : "Most we can make";
+  const maxGainSecondary = isNetDebit ? "Net debit" : "Max gain (credit)";
+  const maxGainValue = money(isNetDebit ? Math.abs(maxGain) : maxGain);
   return (
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">The numbers</h2>
@@ -579,12 +617,14 @@ function TheNumbers({ ev, facts }) {
         title="Money"
         calc={calc}
         items={[
-          ["Most we can make", money(maxGain), "max_gain", "Max gain (credit)"],
+          [maxGainLabel, maxGainValue, "max_gain", maxGainSecondary],
           ["Most we can lose", money(maxLoss), "max_loss", "Max loss (risk)"],
-          ["Break-even price", be != null ? money(be) : null, "breakeven", "Breakeven"],
+          ["Break-even price", be != null ? money(be) : (isNetDebit ? "no breakeven — net debit" : null), "breakeven", "Breakeven"],
           ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null, "risk_reward"],
           ["Credit if filled", money(ev.credit ?? ev.entry_credit), "credit_if_filled"],
-          ["Credit received", classification.bucket === "trade" ? money(received) : null, "credit_received"],
+          // A CLOSE event's own `received` is what it cost to close, not a
+          // credit — that's the "Exit cost" row below, not this one.
+          ["Credit received", classification.bucket === "trade" && !isClose ? money(received) : null, "credit_received"],
           ["Realized P&L", isClose ? money(pnl) : null, "realized_pl"],
           ["EV at entry", money(ev.ev), "ev"],
           ["Chance this wins", pctv(ev.pop), "pop", "Win prob (POP)"],
@@ -715,6 +755,9 @@ function OptionTradeDetailPage() {
       <WhatActuallyHappened ev={ev} facts={facts} />
       <TheNumbers ev={ev} facts={facts} />
       <Greeks ev={ev} facts={facts} />
+      {window.TradeFeedbackThreads && (
+        <window.TradeFeedbackThreads targets={feedbackTargets(key, pos)} />
+      )}
     </main>
   );
 }

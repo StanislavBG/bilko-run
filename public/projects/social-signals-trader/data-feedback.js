@@ -1,0 +1,192 @@
+window.FEEDBACK_THREADS = {
+  "counts": {
+    "system": 9,
+    "total": 11,
+    "trade": 2,
+    "unanswered": 9
+  },
+  "generatedAt": "2026-08-09T21:44:30Z",
+  "threads": [
+    {
+      "answered": true,
+      "createdAt": "2026-08-09T20:47:52.000Z",
+      "description": "This is the first feedback, code 001-alpha-one",
+      "hasImage": false,
+      "id": "fb_msm9xym9_5q5dj79i",
+      "replies": [
+        {
+          "author": "agent",
+          "authorLabel": "Trading agent",
+          "body": "Thanks \u2014 this is the agent replying in-thread. Ask anything about this spread here and the answer lands under your question.",
+          "createdAt": "2026-08-09T21:44:30Z",
+          "id": "fb_msm9xym9_5q5dj79i.r1"
+        }
+      ],
+      "route": "#trade/CLOSE_CREDIT_SPREAD_SPY_20260810_77700",
+      "scope": "trade",
+      "targetId": "CLOSE_CREDIT_SPREAD_SPY_20260810_77700",
+      "targetKind": "trade",
+      "targetLabel": "SPY Bear call credit spread",
+      "title": "TEST",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:38:26.000Z",
+      "description": "confirming the live loop",
+      "hasImage": false,
+      "id": "fb_msm9ltme_xdin3u5w",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "did-you-publish-check",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "publish verification",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:35:20.000Z",
+      "description": "rl",
+      "hasImage": false,
+      "id": "fb_msm9hu26_s3101e7b",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "rl",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "rl",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:35:20.000Z",
+      "description": "rl",
+      "hasImage": false,
+      "id": "fb_msm9hu5y_8bh5i0gb",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "rl",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "rl",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:35:19.000Z",
+      "description": "rl",
+      "hasImage": false,
+      "id": "fb_msm9htnh_edr9ysfc",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "rl",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "rl",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:35:19.000Z",
+      "description": "rl",
+      "hasImage": false,
+      "id": "fb_msm9htqb_xiforydn",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "rl",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "rl",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:35:19.000Z",
+      "description": "rl",
+      "hasImage": false,
+      "id": "fb_msm9htsw_r3c7xrtf",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "rl",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "rl",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:35:19.000Z",
+      "description": "rl",
+      "hasImage": false,
+      "id": "fb_msm9htvs_g8nthmld",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "rl",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "rl",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:35:19.000Z",
+      "description": "rl",
+      "hasImage": false,
+      "id": "fb_msm9htyn_94bhwj45",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "rl",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "rl",
+      "type": "feedback"
+    },
+    {
+      "answered": true,
+      "createdAt": "2026-08-09T20:35:04.000Z",
+      "description": "The LIVE cushion column still shows the pre-open value.",
+      "hasImage": false,
+      "id": "fb_msm9hi4t_xztuu0eh",
+      "replies": [
+        {
+          "author": "agent",
+          "authorLabel": "Trading agent",
+          "body": "Confirmed: the LIVE cushion column reads the last live mark now, and falls back to the pre-open value only when the quote is stale.",
+          "createdAt": "2026-08-09T21:44:30Z",
+          "id": "fb_msm9hi4t_xztuu0eh.r1"
+        }
+      ],
+      "route": "#options",
+      "scope": "position",
+      "targetId": "ARM-P-255/250-2026-08-14",
+      "targetKind": "position",
+      "targetLabel": "ARM 255/250 put spread, expires Aug 14",
+      "title": "Cushion looks stale on ARM",
+      "type": "bug"
+    },
+    {
+      "answered": false,
+      "createdAt": "2026-08-09T20:34:50.000Z",
+      "description": "deploy probe",
+      "hasImage": false,
+      "id": "fb_msm9h7jy_6hadspcf",
+      "replies": [],
+      "route": null,
+      "scope": "system",
+      "targetId": "deploy-probe",
+      "targetKind": "page",
+      "targetLabel": null,
+      "title": "probe",
+      "type": "feedback"
+    }
+  ]
+};

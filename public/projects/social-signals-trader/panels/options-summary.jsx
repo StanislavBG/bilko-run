@@ -715,7 +715,8 @@ const ACTION_QUEUE_HIGHLIGHT_CLASS = "opts-wwt-row--highlight";
 function scrollToWhatWeThinkRow(anchorId) {
   const el = document.getElementById(anchorId);
   if (!el) return false;
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  const SMOOTH_SCROLL = "smooth";
+  el.scrollIntoView({ behavior: SMOOTH_SCROLL, block: "center" });
   el.classList.add(ACTION_QUEUE_HIGHLIGHT_CLASS);
   window.setTimeout(() => el.classList.remove(ACTION_QUEUE_HIGHLIGHT_CLASS), 2000);
   return true;

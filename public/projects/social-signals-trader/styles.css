@@ -1591,6 +1591,77 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .fbt-thread-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .fbt-hint { font-size: 11px; color: var(--text-2); }
 
+/* Long message bodies clamp to a few lines behind a "Show more" toggle, so
+   one rambling post can't push a whole thread list past the fold. */
+.fbt-body-wrap--clamped .fbt-body {
+  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fbt-linklike {
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  color: var(--accent); font-size: 11px; font-family: var(--sans);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.fbt-linklike:hover, .fbt-linklike:focus-visible { color: var(--text); }
+.fbt-clamp-toggle { margin-top: 4px; display: inline-block; }
+
+/* Filter chips — open / answered / archived / all. A zero-count chip stays
+   visible (disabled) rather than reflowing the control set as data changes. */
+.fbt-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.fbt-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2);
+  border-radius: 999px; padding: 3px 10px; font-size: 12px; font-family: var(--sans);
+  cursor: pointer;
+}
+.fbt-chip:hover:not(:disabled), .fbt-chip:focus-visible { color: var(--text); }
+.fbt-chip--on { border-color: var(--accent); color: var(--text); background: var(--surface); }
+.fbt-chip:disabled { cursor: default; opacity: .5; }
+.fbt-chip-count { font-size: 10px; color: var(--text-2); }
+.fbt-chip--on .fbt-chip-count { color: var(--text); }
+.fbt-empty--filtered { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+/* Per-thread collapse — the header row IS the toggle button, so the whole
+   badge/title/time/status/count line stays visible collapsed or expanded. */
+.fbt-thread-toggle {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  font-family: var(--sans); text-align: left; color: inherit;
+}
+.fbt-thread-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fbt-caret { font-size: 10px; color: var(--text-2); width: 1em; flex: none; }
+.fbt-thread-body { margin-top: 6px; }
+
+/* Owner-mode moderation controls (PRD 1071) — Archive/Unarchive/Delete,
+   rendered only when a valid owner token is present. Sits beside the thread
+   toggle rather than inside it (a <button> cannot nest another <button>). */
+.fbt-mod { flex: none; }
+.fbt-mod-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fbt-mod-btn {
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2);
+  border-radius: var(--r); padding: 3px 8px; font-size: 11px; font-family: var(--sans);
+  cursor: pointer;
+}
+.fbt-mod-btn:hover:not(:disabled), .fbt-mod-btn:focus-visible { color: var(--text); }
+.fbt-mod-btn:disabled { cursor: default; opacity: .5; }
+.fbt-mod-btn--danger { color: var(--neg); border-color: color-mix(in oklch, var(--neg) 40%, transparent); }
+.fbt-mod-confirm { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); }
+.fbt-mod-note, .fbt-mod-error {
+  font-size: 11px; color: var(--text-2); margin: 4px 0 0; max-width: 60ch;
+}
+.fbt-mod-error { color: var(--neg); }
+.fbt-mod-note code { font-family: var(--mono, monospace); font-size: 10px; }
+
+/* Archived drawer — a single disclosure below the active list, collapsed by
+   default so retired topics never crowd the threads still in play. */
+.fbt-archive-drawer { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.fbt-archive-summary {
+  cursor: pointer; font-size: 12px; color: var(--text-2); font-weight: 600;
+  list-style: revert;
+}
+.fbt-archive-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fbt-list--archived { margin-top: 8px; }
+
 /* --- Proposed trades (panels/proposed-trades.jsx) -------------------------
    The human-in-the-loop card. Deliberately louder than a live table: a
    proposal is the one thing on the page a reader can still change, so it gets

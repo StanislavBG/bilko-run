@@ -29,6 +29,169 @@ const TYPE_TONE = { bug: "bad", feature: "warn", feedback: "neutral" };
 const TYPE_LABEL = { bug: "BUG", feature: "IDEA", feedback: "FEEDBACK" };
 const STATUS_LABEL = { open: "awaiting reply", answered: "answered", archived: "archived" };
 
+// --- per-browser view state (filter + collapse) -----------------------------
+// Client-side only — never touches the stored feedback itself, just what a
+// given reader has chosen to look at. Same localStorage try/catch discipline
+// as readOutbox/writeOutbox in lib/feedback.js (Safari private mode etc. must
+// degrade to in-memory, never throw into render).
+
+const VIEW_KEY = "sst.feedback.view";
+const VIEW_COLLAPSE_CAP = 200;
+const FILTER_KEYS = ["open", "answered", "archived", "all"];
+const FILTER_LABEL = { open: "Open", answered: "Answered", archived: "Archived", all: "All" };
+
+function statusOf(thread) {
+  return thread.status || (thread.answered ? "answered" : "open");
+}
+
+function defaultCollapsed(status) {
+  return status !== "open";
+}
+
+function readViewState() {
+  try {
+    const raw = window.localStorage.getItem(VIEW_KEY);
+    const obj = raw ? JSON.parse(raw) : null;
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return { filters: {}, collapse: {} };
+    const filters = obj.filters && typeof obj.filters === "object" && !Array.isArray(obj.filters) ? obj.filters : {};
+    const collapse = obj.collapse && typeof obj.collapse === "object" && !Array.isArray(obj.collapse) ? obj.collapse : {};
+    return { filters, collapse };
+  } catch (e) {
+    return { filters: {}, collapse: {} };
+  }
+}
+
+function writeViewState(state) {
+  try {
+    window.localStorage.setItem(VIEW_KEY, JSON.stringify(state));
+  } catch (e) {
+    // Safari private mode / storage disabled — the reader's choices just
+    // don't survive a reload this session; nothing to surface to them.
+  }
+}
+
+// Drops entries for thread ids that no longer exist anywhere in the feed, then
+// caps what's left to the most-recently-touched VIEW_COLLAPSE_CAP entries so
+// the object can't grow forever across a long-lived browser profile.
+function pruneCollapse(collapse, liveIds) {
+  const idSet = new Set(liveIds || []);
+  let keys = Object.keys(collapse).filter((id) => idSet.has(id));
+  if (keys.length > VIEW_COLLAPSE_CAP) keys = keys.slice(keys.length - VIEW_COLLAPSE_CAP);
+  const next = {};
+  keys.forEach((id) => { next[id] = collapse[id]; });
+  return next;
+}
+
+// --- owner mode (PRD 1071) ---------------------------------------------
+// The token itself lives in localStorage under FeedbackClient.OWNER_KEY,
+// captured/stripped from the URL by lib/feedback.js before this module ever
+// renders. This file only tracks whether a token is CURRENTLY present, plus
+// a page-wide "the moderate route 404s" flag, as small pub/sub state so a
+// 401/403 (owner token invalid) or 404 (route not deployed) discovered by
+// one thread's moderate click drops every panel out of owner mode / into
+// the disabled-with-note state together, not just the thread that was
+// clicked.
+
+function hasOwnerToken() {
+  return !!(window.FeedbackClient && window.FeedbackClient.getOwnerToken && window.FeedbackClient.getOwnerToken());
+}
+
+let ownerModeFlag = hasOwnerToken();
+const ownerModeListeners = new Set();
+function setOwnerMode(next) {
+  if (!next && window.FeedbackClient && window.FeedbackClient.clearOwnerToken) {
+    window.FeedbackClient.clearOwnerToken();
+  }
+  if (ownerModeFlag === next) return;
+  ownerModeFlag = next;
+  ownerModeListeners.forEach((fn) => fn(next));
+}
+function useOwnerMode() {
+  const [value, setValue] = React.useState(ownerModeFlag);
+  React.useEffect(() => {
+    ownerModeListeners.add(setValue);
+    return () => ownerModeListeners.delete(setValue);
+  }, []);
+  return value;
+}
+
+let routeNotDeployedFlag = false;
+const routeNotDeployedListeners = new Set();
+function setRouteNotDeployed(next) {
+  if (routeNotDeployedFlag === next) return;
+  routeNotDeployedFlag = next;
+  routeNotDeployedListeners.forEach((fn) => fn(next));
+}
+function useRouteNotDeployed() {
+  const [value, setValue] = React.useState(routeNotDeployedFlag);
+  React.useEffect(() => {
+    routeNotDeployedListeners.add(setValue);
+    return () => routeNotDeployedListeners.delete(setValue);
+  }, []);
+  return value;
+}
+
+// One thread's Archive / Unarchive / Delete controls. Rendered only in
+// owner mode, only when the thread has an id. `moderationState` is this
+// thread's slice of ThreadList's override map ({status, pending, error,
+// hidden} or undefined pre-interaction).
+function ModerationControls({ thread, routeNotDeployed, moderationState, onModerate }) {
+  const [confirmingDelete, setConfirmingDelete] = React.useState(false);
+  if (!thread.id) return null;
+  const status = statusOf(thread);
+  const pending = !!(moderationState && moderationState.pending);
+  const disabled = pending || routeNotDeployed;
+  const error = moderationState && moderationState.error;
+
+  function run(action) {
+    setConfirmingDelete(false);
+    onModerate(action);
+  }
+
+  return (
+    <div className="fbt-mod" onClick={(e) => e.stopPropagation()}>
+      <div className="fbt-mod-actions">
+        {status === "archived" ? (
+          <button type="button" className="fbt-mod-btn" disabled={disabled} onClick={() => run("unarchive")}>
+            Unarchive
+          </button>
+        ) : (
+          <button type="button" className="fbt-mod-btn" disabled={disabled} onClick={() => run("archive")}>
+            Archive
+          </button>
+        )}
+        {!confirmingDelete ? (
+          <button
+            type="button"
+            className="fbt-mod-btn fbt-mod-btn--danger"
+            disabled={disabled}
+            onClick={() => setConfirmingDelete(true)}
+          >
+            Delete
+          </button>
+        ) : (
+          <span className="fbt-mod-confirm">
+            Delete this thread?
+            <button type="button" className="fbt-mod-btn fbt-mod-btn--danger" disabled={disabled} onClick={() => run("delete")}>
+              Confirm
+            </button>
+            <button type="button" className="fbt-mod-btn" onClick={() => setConfirmingDelete(false)}>
+              Cancel
+            </button>
+          </span>
+        )}
+      </div>
+      {routeNotDeployed && (
+        <p className="fbt-mod-note">
+          moderation route not deployed on bilko.run yet — use{" "}
+          <code>{`feedback_cli archive --id ${thread.id}`}</code> locally
+        </p>
+      )}
+      {!routeNotDeployed && error && <p className="fbt-mod-error">{error}</p>}
+    </div>
+  );
+}
+
 function feedbackPayload() {
   const p = window.FEEDBACK_THREADS;
   if (!p || !Array.isArray(p.threads)) return { generatedAt: null, threads: [], counts: {} };
@@ -78,6 +241,31 @@ function proposalThreads(threads, proposalId) {
 // One entry of a thread's `messages[]` — the visitor's opening post and every
 // follow-up/reply all render through this SAME component, attributed by
 // `role` (schema 2, feedback_threads.py `_public_message`/`_user_message`).
+// A long body (a pasted stack trace, a rambling question) shouldn't push a
+// whole thread's card past the fold — clamp it to a few lines and let the
+// reader opt into the rest.
+const CLAMP_THRESHOLD = 400;
+
+function ClampedBody({ text }) {
+  const [expanded, setExpanded] = React.useState(false);
+  if (!text) return null;
+  const long = text.length > CLAMP_THRESHOLD;
+  return (
+    <div className={`fbt-body-wrap${long && !expanded ? " fbt-body-wrap--clamped" : ""}`}>
+      <p className="fbt-body">{text}</p>
+      {long && (
+        <button
+          type="button"
+          className="fbt-linklike fbt-clamp-toggle"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ThreadMessage({ message }) {
   const role = message.role === "agent" ? "agent" : "user";
   const authorLabel = message.authorLabel || message.author || "Visitor";
@@ -87,7 +275,7 @@ function ThreadMessage({ message }) {
         <span className="fbt-author">{authorLabel}</span>
         <span className="fbt-when" title={message.createdAt || ""}>{whenLabel(message.createdAt)}</span>
       </div>
-      {message.body && <p className="fbt-body">{message.body}</p>}
+      <ClampedBody text={message.body} />
     </div>
   );
 }
@@ -115,40 +303,244 @@ function threadMessages(thread) {
 // re-opens the SAME feedback form scoped to the SAME target — so a visitor's
 // follow-up comes back attached to this trade/component, not to the page at
 // large.
-function FeedbackThread({ thread }) {
+// Collapsed: header row only (badge / title / time / status pill / message
+// count) behind one toggle button. Expanded: the full conversation. The
+// header is itself the toggle so keyboard/screen-reader users get one
+// obvious control per thread (`aria-expanded`, real `<button>`).
+function FeedbackThread({ thread, collapsed, onToggleCollapse, ownerMode, routeNotDeployed, moderationState, onModerate }) {
   const tone = TYPE_TONE[thread.type] || "neutral";
-  const status = thread.status || (thread.answered ? "answered" : "open");
+  const status = statusOf(thread);
   const statusLabel = STATUS_LABEL[status] || STATUS_LABEL.open;
   const messages = threadMessages(thread);
+  const title = thread.title || "(no title)";
   return (
     <article className={`fbt-thread fbt-thread--${status}`}>
       <header className="fbt-thread-head">
-        <span className={`fbt-badge fbt-badge--${tone}`}>{TYPE_LABEL[thread.type] || "FEEDBACK"}</span>
-        <h4 className="fbt-title">{thread.title || "(no title)"}</h4>
-        <span className="fbt-when" title={thread.createdAt || ""}>{whenLabel(thread.createdAt)}</span>
-        <span className={`fbt-status fbt-status--${status}`}>{statusLabel}</span>
-      </header>
-      {thread.targetLabel && <p className="fbt-target">about: {thread.targetLabel}</p>}
-      <p className="fbt-msg-count">{messages.length} message{messages.length === 1 ? "" : "s"}</p>
-      <div className="fbt-messages">
-        {messages.map((m) => <ThreadMessage key={m.id} message={m} />)}
-      </div>
-      {window.FeedbackButton && thread.targetKind && thread.targetId && (
-        <div className="fbt-thread-foot">
-          <window.FeedbackButton
-            target={{ kind: thread.targetKind, id: thread.targetId, label: thread.targetLabel || thread.title }}
-            parentId={thread.id}
+        <button
+          type="button"
+          className="fbt-thread-toggle"
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "Expand" : "Collapse"} thread: ${title}`}
+          onClick={onToggleCollapse}
+        >
+          <span className="fbt-caret" aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
+          <span className={`fbt-badge fbt-badge--${tone}`}>{TYPE_LABEL[thread.type] || "FEEDBACK"}</span>
+          <span className="fbt-title">{title}</span>
+          <span className="fbt-when" title={thread.createdAt || ""}>{whenLabel(thread.createdAt)}</span>
+          <span className={`fbt-status fbt-status--${status}`}>{statusLabel}</span>
+          <span className="fbt-msg-count">{messages.length} message{messages.length === 1 ? "" : "s"}</span>
+        </button>
+        {ownerMode && (
+          <ModerationControls
+            thread={thread}
+            routeNotDeployed={routeNotDeployed}
+            moderationState={moderationState}
+            onModerate={onModerate}
           />
-          <span className="fbt-hint">reply in this thread</span>
+        )}
+      </header>
+      {!collapsed && (
+        <div className="fbt-thread-body">
+          {thread.targetLabel && <p className="fbt-target">about: {thread.targetLabel}</p>}
+          <div className="fbt-messages">
+            {messages.map((m) => <ThreadMessage key={m.id} message={m} />)}
+          </div>
+          {window.FeedbackButton && thread.targetKind && thread.targetId && (
+            <div className="fbt-thread-foot">
+              <window.FeedbackButton
+                target={{ kind: thread.targetKind, id: thread.targetId, label: thread.targetLabel || thread.title }}
+                parentId={thread.id}
+              />
+              <span className="fbt-hint">reply in this thread</span>
+            </div>
+          )}
         </div>
       )}
     </article>
   );
 }
 
-function ThreadList({ threads, emptyText }) {
+// Chips for open / answered / archived / all — a zero-count chip stays
+// visible but disabled so the control set never reflows as data changes.
+function ThreadFilters({ counts, value, onChange }) {
+  return (
+    <div className="fbt-filters" role="group" aria-label="Filter threads by status">
+      {FILTER_KEYS.map((key) => {
+        const count = counts[key] || 0;
+        const active = value === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            className={`fbt-chip${active ? " fbt-chip--on" : ""}`}
+            aria-pressed={active}
+            disabled={count === 0}
+            onClick={() => onChange(key)}
+          >
+            {FILTER_LABEL[key]} <span className="fbt-chip-count">{count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// The single shared filtering + collapse implementation. All three entry
+// points (TradeFeedbackThreads, SystemFeedbackPanel, ProposalDiscussion) pass
+// their own already-selected thread subset through here — this is the only
+// place that reads/writes `sst.feedback.view`.
+//
+// panelKey scopes the persisted filter choice per surface (a trade page and
+// the system panel shouldn't fight over one shared filter). allThreadIds is
+// the FULL feed's thread ids (not just this subset) so collapse-state pruning
+// can tell "archived on another page" apart from "genuinely gone".
+function ThreadList({ threads: rawThreads, emptyText, panelKey, allThreadIds }) {
+  const [view, setView] = React.useState(readViewState);
+  const archiveRef = React.useRef(null);
+  const key = panelKey || "_default";
+  const storedFilter = view.filters[key];
+  const ownerMode = useOwnerMode();
+  const routeNotDeployed = useRouteNotDeployed();
+  // id -> {status, pending, error, hidden} — a local, optimistic overlay on
+  // top of the static FEEDBACK_THREADS payload. `hidden` (delete) removes a
+  // thread from every list below without a reload; a failed call reverts
+  // both `status` and `hidden` and leaves `error` for ModerationControls.
+  const [overrides, setOverrides] = React.useState({});
+
+  React.useEffect(() => {
+    if (storedFilter === "archived" && archiveRef.current) archiveRef.current.open = true;
+  }, [storedFilter]);
+
+  function performModerate(thread, action) {
+    const id = thread.id;
+    const prevStatus = statusOf(thread);
+    const isDelete = action === "delete";
+    const optimisticStatus =
+      action === "archive"
+        ? "archived"
+        : action === "unarchive" || action === "restore"
+        ? (thread.answered ? "answered" : "open")
+        : prevStatus;
+    setOverrides((prev) => ({
+      ...prev,
+      [id]: { status: optimisticStatus, pending: true, error: null, hidden: isDelete },
+    }));
+    window.FeedbackClient.moderate(id, action).then((result) => {
+      if (result && result.ok) {
+        setOverrides((prev) => ({
+          ...prev,
+          [id]: { status: optimisticStatus, pending: false, error: null, hidden: isDelete },
+        }));
+        return;
+      }
+      const status = result ? result.status : 0;
+      if (status === 401 || status === 403) setOwnerMode(false);
+      if (status === 404) setRouteNotDeployed(true);
+      const message =
+        status === 404
+          ? `moderation route not deployed on bilko.run yet — use \`feedback_cli archive --id ${id}\` locally`
+          : status === 401 || status === 403
+          ? "Not authorized — owner mode disabled."
+          : `Failed (HTTP ${status || "network error"}).`;
+      setOverrides((prev) => ({
+        ...prev,
+        [id]: { status: prevStatus, pending: false, error: message, hidden: false },
+      }));
+    });
+  }
+
+  const threads = rawThreads
+    .filter((t) => !(overrides[t.id] && overrides[t.id].hidden))
+    .map((t) => (overrides[t.id] ? { ...t, status: overrides[t.id].status } : t));
+
   if (!threads.length) return <p className="fbt-empty">{emptyText}</p>;
-  return <div className="fbt-list">{threads.map((t) => <FeedbackThread key={t.id} thread={t} />)}</div>;
+
+  const archived = threads.filter((t) => statusOf(t) === "archived");
+  const active = threads.filter((t) => statusOf(t) !== "archived");
+  const counts = {
+    open: threads.filter((t) => statusOf(t) === "open").length,
+    answered: threads.filter((t) => statusOf(t) === "answered").length,
+    archived: archived.length,
+    all: threads.length,
+  };
+
+  const filter = FILTER_KEYS.includes(storedFilter)
+    ? storedFilter
+    : (counts.open > 0 ? "open" : "all");
+
+  function setFilter(next) {
+    const nextView = { ...view, filters: { ...view.filters, [key]: next } };
+    setView(nextView);
+    writeViewState(nextView);
+  }
+
+  function toggleCollapse(id, status) {
+    const wasCollapsed = view.collapse[id] != null ? view.collapse[id] : defaultCollapsed(status);
+    // Delete-then-set so a re-toggled id moves to the end of insertion order —
+    // pruneCollapse drops from the front, so this keeps the cap an LRU over
+    // recently-touched threads rather than first-ever-touched ones.
+    const rest = { ...view.collapse };
+    delete rest[id];
+    const collapse = pruneCollapse(
+      { ...rest, [id]: !wasCollapsed },
+      allThreadIds && allThreadIds.length ? allThreadIds : threads.map((t) => t.id)
+    );
+    const nextView = { ...view, collapse };
+    setView(nextView);
+    writeViewState(nextView);
+  }
+
+  function isCollapsed(t) {
+    const status = statusOf(t);
+    return view.collapse[t.id] != null ? view.collapse[t.id] : defaultCollapsed(status);
+  }
+
+  function renderThread(t) {
+    return (
+      <FeedbackThread
+        key={t.id}
+        thread={t}
+        collapsed={isCollapsed(t)}
+        onToggleCollapse={() => toggleCollapse(t.id, statusOf(t))}
+        ownerMode={ownerMode}
+        routeNotDeployed={routeNotDeployed}
+        moderationState={overrides[t.id]}
+        onModerate={(action) => performModerate(t, action)}
+      />
+    );
+  }
+
+  const visible = filter === "archived" ? [] : filter === "all" ? active : active.filter((t) => statusOf(t) === filter);
+  const showFilteredEmpty = filter !== "archived" && !visible.length;
+  const showArchivedRedirect = filter === "archived" && archived.length > 0;
+
+  return (
+    <div className="fbt-list-wrap">
+      <ThreadFilters counts={counts} value={filter} onChange={setFilter} />
+      {showFilteredEmpty && (
+        <p className="fbt-empty fbt-empty--filtered">
+          {`No ${(FILTER_LABEL[filter] || "matching").toLowerCase()} topics.`}{" "}
+          <button type="button" className="fbt-linklike" onClick={() => setFilter("all")}>
+            Show all
+          </button>
+        </p>
+      )}
+      {showArchivedRedirect && (
+        <p className="fbt-empty fbt-empty--filtered">Archived topics are in the drawer below.</p>
+      )}
+      {!showFilteredEmpty && !showArchivedRedirect && visible.length > 0 && (
+        <div className="fbt-list">{visible.map(renderThread)}</div>
+      )}
+      {archived.length > 0 && (
+        <details className="fbt-archive-drawer" ref={archiveRef}>
+          <summary className="fbt-archive-summary">
+            {archived.length} archived topic{archived.length === 1 ? "" : "s"}
+          </summary>
+          <div className="fbt-list fbt-list--archived">{archived.map(renderThread)}</div>
+        </details>
+      )}
+    </div>
+  );
 }
 
 // --- entry points ----------------------------------------------------------
@@ -159,6 +551,7 @@ function TradeFeedbackThreads({ targets }) {
   const payload = feedbackPayload();
   const threads = selectThreads(payload.threads, targets);
   const open = threads.filter((t) => !t.answered).length;
+  const panelKey = `trade:${(targets || []).map((t) => `${t.kind}:${t.id}`).join(",")}`;
   return (
     <section className="card opt-panel fbt-panel" id="trade-feedback">
       <div className="opt-panel-head">
@@ -173,6 +566,8 @@ function TradeFeedbackThreads({ targets }) {
       </div>
       <ThreadList
         threads={threads}
+        panelKey={panelKey}
+        allThreadIds={payload.threads.map((t) => t.id)}
         emptyText={"No one has asked about this trade yet. Use the \u{1F4AC} button at the top of the page to ask — answers appear here."}
       />
     </section>
@@ -203,6 +598,8 @@ function SystemFeedbackPanel() {
       </p>
       <ThreadList
         threads={threads}
+        panelKey="system"
+        allThreadIds={payload.threads.map((t) => t.id)}
         emptyText={"No site feedback yet. Every card has a \u{1F4AC} button; whatever you send lands here with our answer."}
       />
     </section>
@@ -226,7 +623,12 @@ function ProposalDiscussion({ proposalId, label }) {
         {open > 0 && <span className="fbt-count fbt-count--open">{open} awaiting reply</span>}
       </h5>
       {threads.length ? (
-        <ThreadList threads={threads} emptyText="" />
+        <ThreadList
+          threads={threads}
+          panelKey={`proposal:${proposalId || ""}`}
+          allThreadIds={payload.threads.map((t) => t.id)}
+          emptyText=""
+        />
       ) : (
         <p className="fbt-empty">
           No comments on this proposal yet.{" "}
@@ -249,4 +651,7 @@ window.ProposalDiscussion = ProposalDiscussion;
 window.FeedbackThreadsInternals = {
   selectThreads, systemThreads, proposalThreads, whenLabel, feedbackPayload,
   ThreadMessage, threadMessages,
+  statusOf, defaultCollapsed, readViewState, writeViewState, pruneCollapse,
+  VIEW_KEY, VIEW_COLLAPSE_CAP, FILTER_KEYS,
+  ModerationControls, useOwnerMode, useRouteNotDeployed, setOwnerMode, setRouteNotDeployed,
 };

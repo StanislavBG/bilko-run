@@ -20,6 +20,14 @@
   var OUTBOX_KEY = "sst.feedback.outbox";
   var OUTBOX_CAP = 20;
 
+  // Owner-mode moderation (PRD 1071). The owner token is a real bearer
+  // credential — see docs/feedback-api-contract.md's moderate route. It is
+  // captured once from a `#options?owner=<token>` URL param, stored ONLY in
+  // localStorage, stripped from the address bar immediately, never sent on
+  // any request other than moderate(), and dropped on 401/403.
+  var OWNER_KEY = "sst.feedback.owner";
+  var MODERATE_ACTIONS = ["archive", "unarchive", "delete", "restore"];
+
   var MAX_EDGE = 1600;
   var JPEG_QUALITY = 0.8;
   var MAX_DATAURL_BYTES = 2000000;
@@ -105,6 +113,94 @@
       });
   }
 
+  // ---------------------------------------------------------------------
+  // Owner mode — token capture/storage + the moderate() transport
+  // ---------------------------------------------------------------------
+
+  function readOwnerToken() {
+    try {
+      var t = window.localStorage.getItem(OWNER_KEY);
+      return typeof t === "string" && t ? t : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeOwnerToken(token) {
+    try {
+      if (token) {
+        window.localStorage.setItem(OWNER_KEY, token);
+      } else {
+        window.localStorage.removeItem(OWNER_KEY);
+      }
+    } catch (e) {
+      // Safari private mode / storage disabled — owner mode just can't
+      // persist this session; nothing to surface to the visitor.
+    }
+  }
+
+  function clearOwnerToken() {
+    writeOwnerToken(null);
+  }
+
+  // Reads `owner=<token>` off the CURRENT hash's query string (e.g.
+  // `#options?owner=abc`, not a `?owner=` on the page URL itself — the
+  // dashboard is a hash-routed SPA), stores it, then rewrites history so the
+  // token never sits in the address bar or browser history past this call.
+  function captureOwnerFromUrl() {
+    try {
+      var hash = window.location.hash || "";
+      var qIdx = hash.indexOf("?");
+      if (qIdx === -1) return;
+      var params = new URLSearchParams(hash.slice(qIdx + 1));
+      var token = params.get("owner");
+      if (!token) return;
+      writeOwnerToken(token);
+      params.delete("owner");
+      var rest = params.toString();
+      var newHash = hash.slice(0, qIdx) + (rest ? "?" + rest : "");
+      var newUrl = window.location.pathname + window.location.search + newHash;
+      window.history.replaceState(null, "", newUrl);
+    } catch (e) {
+      // Malformed hash / no History API — owner mode just doesn't arm this
+      // load; never let capture throw into page bootstrap.
+    }
+  }
+
+  function moderate(id, action, opts) {
+    opts = opts || {};
+    if (typeof id !== "string" || !id) {
+      return Promise.resolve({ ok: false, status: 0 });
+    }
+    if (MODERATE_ACTIONS.indexOf(action) === -1) {
+      return Promise.resolve({ ok: false, status: 0 });
+    }
+    var token = readOwnerToken();
+    if (!token) {
+      return Promise.resolve({ ok: false, status: 401 });
+    }
+    var body = { action: action };
+    if (typeof opts.reason === "string" && opts.reason) body.reason = opts.reason;
+    return fetch(ENDPOINT + "/" + encodeURIComponent(id) + "/moderate", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "omit",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) {
+        var status = r ? r.status : 0;
+        if (status === 401 || status === 403) clearOwnerToken();
+        return { ok: !!(r && r.ok), status: status };
+      })
+      .catch(function () {
+        return { ok: false, status: 0 };
+      });
+  }
+
   function buildPayload(opts) {
     opts = opts || {};
     var target = opts.target || {};
@@ -153,14 +249,23 @@
   var FeedbackClient = {
     ENDPOINT: ENDPOINT,
     OUTBOX_KEY: OUTBOX_KEY,
+    OWNER_KEY: OWNER_KEY,
+    MODERATE_ACTIONS: MODERATE_ACTIONS,
     buildPayload: buildPayload,
     submit: submit,
     flushOutbox: flushOutbox,
+    moderate: moderate,
+    getOwnerToken: readOwnerToken,
+    clearOwnerToken: clearOwnerToken,
   };
 
   // Drain anything left over from a prior offline session as soon as the
   // page has this module loaded.
   flushOutbox();
+  // Capture + strip a `?owner=<token>` URL param before any panel below this
+  // script tag renders, so the token is never visible on screen or in
+  // history for longer than this one synchronous call.
+  captureOwnerFromUrl();
 
   // ---------------------------------------------------------------------
   // FeedbackButton + modal

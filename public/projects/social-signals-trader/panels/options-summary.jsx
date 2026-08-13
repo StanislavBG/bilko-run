@@ -593,11 +593,17 @@ function positionRowCalcProps(pos, fallbackAsOf) {
     quotes: (pos && pos.oldest_quote_ts) || fallbackAsOf,
     entry: (pos && pos.entry && pos.entry.filled_at) || fallbackAsOf,
   };
-  const creditCloseCost = pos ? { credit: pos.entry.credit, close_cost: pos.now.close_cost } : {};
+  // `entry`/`now` are guaranteed on a current snapshot but NOT on the legacy
+  // one the fallback above now renders, and an unguarded deref here would take
+  // the whole panel down with it — the exact failure mode the per-row error
+  // was protecting against.
+  const entry = (pos && pos.entry) || {};
+  const now = (pos && pos.now) || {};
+  const creditCloseCost = pos ? { credit: entry.credit, close_cost: now.close_cost } : {};
   return {
     asOf,
-    risk: pos ? { width: pos.width, contracts: pos.qty, credit: pos.entry.credit } : {},
-    cushion: pos ? { short_strike: pos.short_strike, spot: pos.now.spot, right: pos.right } : {},
+    risk: pos ? { width: pos.width, contracts: pos.qty, credit: entry.credit } : {},
+    cushion: pos ? { short_strike: pos.short_strike, spot: now.spot, right: pos.right } : {},
     open_pl: creditCloseCost,
     pct_captured: creditCloseCost,
     close_cost: pos
@@ -613,12 +619,56 @@ function positionRowCalcProps(pos, fallbackAsOf) {
 
 const colClass = makeColClass(POSITIONS_COLUMNS.filter((c) => c.frozen).length);
 
+// LEGACY-SNAPSHOT FALLBACK. `positions_display` is the single source of cell
+// text (positions_display_rows() in options_summary_render.py) and stays that
+// way — but a snapshot written before that field existed (schema_version 1,
+// still served as the host's cold-start bundle) has `positions[]` and no
+// display rows, which rendered as one "Could not render this position" line
+// per open spread: a table of errors describing a book that is perfectly
+// well described by the data sitting next to it.
+//
+// This rebuilds the same cell keys from the raw position when — and only
+// when — the display entry is absent. Deltas need the PRIOR snapshot, which a
+// legacy record does not carry, so those read an em dash rather than a
+// fabricated zero. Never used when `positions_display` is present.
+function legacyDisplayCells(pos) {
+  const money = (n) =>
+    n === null || n === undefined || Number.isNaN(Number(n))
+      ? "—"
+      : `$${Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const pct = (n, digits) =>
+    n === null || n === undefined || Number.isNaN(Number(n))
+      ? "—"
+      : `${(Number(n) * 100).toFixed(digits === undefined ? 2 : digits)}%`;
+  const num = (n, digits) =>
+    n === null || n === undefined || Number.isNaN(Number(n)) ? "—" : Number(n).toFixed(digits);
+
+  const entry = pos.entry || {};
+  const now = pos.now || {};
+  const greeks = pos.greeks || {};
+  const filled = entry.filled_at ? String(entry.filled_at).slice(0, 10) : "—";
+  return {
+    spread: `${pos.underlying} ${pos.right} ${pos.short_strike}/${pos.long_strike} ${pos.expiry}`,
+    contracts: pos.qty === null || pos.qty === undefined ? "—" : String(pos.qty),
+    frozen_entry: `${filled} / ${num(entry.net_per_contract, 2)} / ${money(entry.credit)}`,
+    spread_price: `${money(now.close_cost)} (—)`,
+    spot: now.spot === null || now.spot === undefined ? "—" : `$${Number(now.spot).toFixed(2)}`,
+    cushion: `${pct(now.cushion_pct)} (—)`,
+    band: now.band || "—",
+    open_pl: `${money(now.open_pl)} (—)`,
+    pct_captured: now.pct_captured === null || now.pct_captured === undefined ? "—" : pct(now.pct_captured, 0),
+    short_delta: `${num(greeks.short_leg_delta, 3)} (—)`,
+    conf: "⚠ legacy",
+  };
+}
+
 // One typed record.positions[] row -> one <tr>. `display` is this position's
 // entry from `positions_display` (the export's pre-formatted cell strings,
-// keyed by short_symbol) — when it's missing, the row can't be rendered and
-// this returns an explicit error row instead of a blank/silent one.
+// keyed by short_symbol). When it's missing the row falls back to
+// legacyDisplayCells(); only a position missing an IDENTITY field (which no
+// fallback can invent) still renders an explicit error row.
 function PositionsRow({ pos, display, fallbackAsOf }) {
-  const missingField = missingPositionField(pos) || (!display && "positions_display entry");
+  const missingField = missingPositionField(pos);
   if (missingField) {
     const label = pos && pos.short_symbol ? ` (${pos.short_symbol})` : "";
     return (
@@ -629,7 +679,7 @@ function PositionsRow({ pos, display, fallbackAsOf }) {
       </tr>
     );
   }
-  const cells = display.cells;
+  const cells = display ? display.cells : legacyDisplayCells(pos);
   const key = tradeKeyForPosition(pos);
   const feedbackTarget = positionFeedbackTarget(pos);
   const openDetail = key != null ? () => { location.hash = "trade/" + encodeURIComponent(key); } : null;

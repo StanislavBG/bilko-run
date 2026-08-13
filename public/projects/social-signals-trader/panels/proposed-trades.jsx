@@ -371,6 +371,13 @@ function EmptyState({ funnel }) {
     ],
     ["Proposed", funnel.passed],
   ];
+  // EV > 0 is exactly "credit > breakeven credit", i.e. ratio > 1.00. Showing
+  // the best ratio on the board turns "0 proposed" from a shrug into a
+  // measurement: 0.81 means the market paid 81% of fair value at its most
+  // generous, and no gate tuning short of accepting negative expectancy
+  // changes that.
+  const best = funnel.best_credit_ratio;
+  const need = funnel.credit_ratio_required;
   return (
     <div className="prop-empty">
       <p className="opt-log-empty">
@@ -385,6 +392,15 @@ function EmptyState({ funnel }) {
           </li>
         ))}
       </ul>
+      {best !== null && best !== undefined && (
+        <p className={`prop-funnel-verdict${best < 1 ? " prop-funnel-verdict--short" : ""}`}>
+          Best credit on the board: <b>{Number(best).toFixed(2)}×</b> fair value
+          {need ? <> · policy needs <b>{Number(need).toFixed(2)}×</b></> : null}.
+          {best < 1
+            ? " Below 1.00× the market is paying less than the trade is worth — every candidate has negative expected value, so nothing can pass without knowingly trading at a loss."
+            : " At or above 1.00× the market is paying fair value or better."}
+        </p>
+      )}
       {funnel.chain_errors > 0 && (
         <p className="prop-funnel-note">
           ⚠ {funnel.chain_errors} name{funnel.chain_errors === 1 ? "" : "s"} could not be priced at

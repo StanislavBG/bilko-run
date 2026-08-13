@@ -1882,3 +1882,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-unfillable { font-size: 10px; color: var(--neg); font-weight: 600; }
 .opt-money-note { font-size: 10px; color: var(--muted); }
 .opt-dead-exit { font-size: 12px; color: var(--warn); margin: 10px 0 0; max-width: 95ch; }
+
+.prop-funnel-verdict { font-size: 12px; color: var(--text-2); margin: 10px 0 0; max-width: 95ch; }
+.prop-funnel-verdict--short { color: var(--warn); }

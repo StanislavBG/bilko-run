@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
+import { flushEgress, topEgress } from '../egress.js';
 
 type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
 
@@ -146,5 +147,26 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     });
 
     return { rows, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
+  });
+
+  // Where the bandwidth actually goes. Separate from the per-app rollup above
+  // because egress is keyed by route pattern, not by app slug — a single route
+  // can serve many slugs, and the expensive ones (inline image payloads,
+  // unpaginated lists) are route-shaped problems, not app-shaped ones.
+  app.get('/api/admin/egress', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+
+    const q = req.query as { days?: string; limit?: string };
+    const days = Math.min(Math.max(parseInt(q.days || '7', 10) || 7, 1), 90);
+    const limit = Math.min(Math.max(parseInt(q.limit || '25', 10) || 25, 1), 200);
+
+    // Flush the in-process buffer first, or the last minute of traffic — often
+    // the exact minute someone is investigating — is invisible.
+    await safeQuery(() => flushEgress(), undefined);
+    const rows = await safeQuery(() => topEgress(days, limit), []);
+    const totalBytes = rows.reduce((n, r) => n + r.bytes, 0);
+
+    return { rows, totalBytes, days, generatedAt: Math.floor(Date.now() / 1000) };
   });
 }

@@ -19,11 +19,13 @@ import { registerSecretsRoutes } from './routes/admin-secrets.js';
 import { registerGameRoutes } from './routes/games.js';
 import { registerAcademyRoutes } from './routes/academy.js';
 import { registerProjectDataRoutes } from './routes/project-data.js';
+import { registerProjectEventsRoutes } from './routes/project-events.js';
 import { registerProjectFeedbackRoutes } from './routes/project-feedback.js';
 import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
+import { registerEgressMeter } from './egress.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -68,6 +70,10 @@ await app.register(cors, {
 
 // Security headers (CSP + HSTS + COOP + Permissions-Policy)
 registerSecurityHeaders(app);
+
+// Per-route egress accounting. Registered before the routes so its onSend hook
+// sees every /api/* response.
+registerEgressMeter(app);
 
 // Register API routes
 registerToolRoutes(app);
@@ -135,6 +141,11 @@ if (isProd) {
       // (e.g. `/products/page-roast`) are unaffected.
       redirect: true,
     });
+
+    // Registered AFTER staticPlugin — its GET handler falls back to
+    // reply.sendFile() (a staticPlugin decorator) for a slug with no synced
+    // events yet, so it needs that decorator to already exist.
+    registerProjectEventsRoutes(app);
 
     // Route-specific OG meta tags for social sharing (crawlers don't run JS)
     const indexHtml = readFileSync(resolve(distPath, 'index.html'), 'utf-8');

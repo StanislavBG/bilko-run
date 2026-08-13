@@ -182,7 +182,7 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     const slug = (req.params as { slug: string }).slug;
     if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
 
-    const q = req.query as { since?: string; limit?: string; moderatedSince?: string };
+    const q = req.query as { since?: string; limit?: string; moderatedSince?: string; images?: string };
     const limit = Math.min(Math.max(parseInt(q.limit || '500', 10) || 500, 1), 1000);
     // `since` is the exclusive cursor from the previous page's nextSince.
     const sinceSec = q.since ? Math.floor(new Date(q.since).getTime() / 1000) : 0;
@@ -214,6 +214,13 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
           slug, sinceSec, modSince, limit,
         );
 
+    // Screenshots are stored as inline base64 and can run to 2 MB each, so a
+    // full page can be three orders of magnitude larger than the same page
+    // without them. That is pure waste on a moderation-replay pull, where the
+    // caller already has every blob on disk and only wants the changed flags.
+    // `images=none` returns the metadata (mime, bytes) and drops the payload.
+    const withImages = q.images !== 'none';
+
     const items = rows.map((r) => ({
       id: r.id,
       receivedAt: new Date(r.created_at * 1000).toISOString(),
@@ -222,7 +229,13 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
       type: r.type,
       title: r.title,
       description: r.description,
-      image: r.image_data ? { dataUrl: r.image_data, mime: r.image_mime, bytes: r.image_data.length } : null,
+      image: r.image_data
+        ? {
+            dataUrl: withImages ? r.image_data : null,
+            mime: r.image_mime,
+            bytes: r.image_data.length,
+          }
+        : null,
       client: r.client_json ? JSON.parse(r.client_json) : null,
       snapshotGeneratedAt: r.snapshot_generated_at,
       parentId: r.parent_id,

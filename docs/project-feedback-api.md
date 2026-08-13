@@ -40,7 +40,14 @@ validated against an existing row. A dangling value is the reading client's prob
 ## `GET /api/projects/:slug/feedback` — `Authorization: Bearer $PROJECT_SNAPSHOT_TOKEN`
 
 Query: `since` (ISO, exclusive `created_at` cursor), `moderatedSince` (ISO, exclusive
-`moderation_at` cursor), `limit` (1–1000, default 500).
+`moderation_at` cursor), `limit` (1–1000, default 500), `images` (`none` to omit
+image payloads).
+
+**Use `images=none` on moderation-replay pulls.** Screenshots are stored inline as
+base64 and run to 2 MB each, so a page of them is three orders of magnitude larger
+than the same page without. On a replay pull the caller already has every blob on
+disk and only wants the changed flags. `images=none` keeps `image.mime` and
+`image.bytes` and nulls `image.dataUrl`.
 
 Each item carries `id`, `receivedAt`, `target`, `route`, `type`, `title`,
 `description`, `image`, `client`, `snapshotGeneratedAt`, plus:
@@ -67,6 +74,7 @@ entirely of re-admitted old rows.
 ```
 
 → `200 {"id", "action", "moderatedAt"}` · `400` bad action/reason · `401` bad token ·
+
 `404` unknown id (or id belonging to another slug) · `429` rate-limited.
 
 `delete` is a **hide, not a purge**: the row and its id are kept and only the flag
@@ -75,3 +83,13 @@ sibling's next pull (its store dedupes on ids already seen on disk) and resurrec
 itself on the published page. `archive` → `moderation.action = "archived"`, `delete`
 → `"deleted"`, `unarchive`/`restore` → `moderation = null`. Moderation is
 slug-scoped, so a token can't reach another project's rows.
+
+## Measuring what this costs
+
+`GET /api/admin/egress?days=7&limit=25` (admin) reports response bytes per route
+pattern, sourced from the `onSend` meter in `server/egress.ts` and the
+`api_egress_daily` table. Read `bytesPerRequest`, not just `bytes`: a route can top
+the list on volume (cheap and expected) or on payload size (usually a bug — an
+unpaginated list, or blobs inlined into JSON). This endpoint exists because the
+feedback GET is the one route on the host that can legitimately return hundreds of
+megabytes, and until now nothing on the host measured response size at all.

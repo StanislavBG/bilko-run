@@ -180,7 +180,35 @@ describe('moderatedSince cursor', () => {
   });
 });
 
-interface Item { title: string; parentId: string | null; moderation: { action: string; reason: string | null } | null }
+describe('images=none', () => {
+  const dataUrl = `data:image/png;base64,${'A'.repeat(20_000)}`;
+
+  it('drops the payload but keeps the metadata, shrinking the response', async () => {
+    await submit({ image: { dataUrl, mime: 'image/png' } });
+
+    const full = await pull();
+    const lean = await pull('?images=none');
+
+    expect(pullItems(full)[0].image.dataUrl).toContain('data:image/png');
+    expect(pullItems(lean)[0].image.dataUrl).toBeNull();
+    // Metadata survives, so the caller still knows a blob exists and how big.
+    expect(pullItems(lean)[0].image.bytes).toBe(dataUrl.length);
+    expect(pullItems(lean)[0].image.mime).toBe('image/png');
+    expect(lean.payload.length).toBeLessThan(full.payload.length / 10);
+  });
+
+  it('items with no image are unaffected', async () => {
+    await submit({});
+    expect(pullItems(await pull('?images=none'))[0].image).toBeNull();
+  });
+});
+
+interface Item {
+  title: string;
+  parentId: string | null;
+  image: { dataUrl: string | null; mime: string | null; bytes: number } | null;
+  moderation: { action: string; reason: string | null } | null;
+}
 function pullItems(res: { json: () => unknown }): Item[] {
   return (res.json() as { items: Item[] }).items;
 }

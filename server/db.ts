@@ -349,6 +349,18 @@ const MIGRATIONS = [
     moderation_reason     TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_project_feedback_slug_created ON project_feedback (slug, created_at)`,
+  // Per-route API response bytes, bucketed by day. Keyed on the route PATTERN
+  // (`/api/projects/:slug/feedback`), not the resolved URL, so cardinality is
+  // bounded by the number of routes. See server/egress.ts.
+  `CREATE TABLE IF NOT EXISTS api_egress_daily (
+    date     TEXT NOT NULL,
+    method   TEXT NOT NULL,
+    route    TEXT NOT NULL,
+    requests INTEGER NOT NULL DEFAULT 0,
+    bytes    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (date, method, route)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_api_egress_daily_date ON api_egress_daily (date)`,
   `CREATE TABLE IF NOT EXISTS usage_daily (
     user_email   TEXT NOT NULL,
     app_slug     TEXT NOT NULL,

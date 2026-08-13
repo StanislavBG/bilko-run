@@ -1827,3 +1827,9 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opts-unpaired-title { font-size: 12px; color: var(--warn); margin: 0 0 6px; }
 .opts-unpaired-table { width: 100%; font-size: 12px; }
 .opts-unpaired-note { font-size: 11px; color: var(--muted); margin: 6px 0 0; max-width: 90ch; }
+
+/* Open Orders: an order that cannot fill, and an exit that never did. */
+.opt-panel-sub { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+.opt-unfillable { font-size: 10px; color: var(--neg); font-weight: 600; }
+.opt-money-note { font-size: 10px; color: var(--muted); }
+.opt-dead-exit { font-size: 12px; color: var(--warn); margin: 10px 0 0; max-width: 95ch; }

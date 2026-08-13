@@ -532,15 +532,38 @@ function OpenOrderRow({ ev, classification, index }) {
           outcome={classification.kind === "terminal" && classification.label.startsWith("EXPIRED") ? "Expired" : null}
         />
       </td>
+      <td>
+        <span className={`opt-badge opt-badge--${facts.isClose ? "warn" : "neutral"}`}>
+          {facts.isClose ? "EXIT" : "ENTRY"}
+        </span>
+      </td>
       <td>{ev.contracts}</td>
-      <td>{resp.limit_price != null ? money(num(resp.limit_price)) : "—"}</td>
+      <td>
+        {resp.limit_price != null ? money(num(resp.limit_price)) : "—"}
+        {/* A buy-to-close resting at $0 cannot fill at any price: nobody sells
+            you a spread back for nothing. Saying so on the row is the whole
+            reason this order sat until it expired. */}
+        {facts.isClose && num(resp.limit_price) === 0 && (
+          <span className="opt-unfillable" title="A close order priced at $0 cannot fill — it will rest until it expires.">
+            {" "}⚠ unfillable
+          </span>
+        )}
+      </td>
       <td className="mono-dim">
-        {money(orderCredit)}
-        <Help
-          term="credit_if_filled"
-          inputs={{ limit_price: num(resp.limit_price), contracts: calcContracts }}
-          asOf={asOf}
-        />
+        {facts.isClose ? (
+          <span title="This is an EXIT order — filling it PAYS a debit, it does not collect a credit. The figure shown is the credit collected when the position was OPENED.">
+            {money(orderCredit)} <span className="opt-money-note">(entry credit)</span>
+          </span>
+        ) : (
+          <>
+            {money(orderCredit)}
+            <Help
+              term="credit_if_filled"
+              inputs={{ limit_price: num(resp.limit_price), contracts: calcContracts }}
+              asOf={asOf}
+            />
+          </>
+        )}
       </td>
       <td>
         {money(facts.maxLoss)}
@@ -641,6 +664,24 @@ function TradeLogRow({ ev, classification, index }) {
   );
 }
 
+// An EXIT order that died unfilled is not a footnote: the position it was
+// meant to close is still open (or ran to expiry unmanaged). That consequence
+// is invisible from a status badge alone.
+function DeadExitWarning({ orders }) {
+  const dead = (orders || []).filter(
+    (o) => o.classification.kind === "terminal" && o.ev && o.ev.event === "close"
+  );
+  if (!dead.length) return null;
+  return (
+    <p className="opt-dead-exit">
+      ⚠ {dead.length} exit order{dead.length === 1 ? "" : "s"} died without filling
+      ({dead.map((o) => o.ev.ticker).join(", ")}) — whatever {dead.length === 1 ? "it was" : "they were"}{" "}
+      meant to close was NOT closed by {dead.length === 1 ? "it" : "them"}. Check the position
+      against the broker before treating any exit as done.
+    </p>
+  );
+}
+
 function OpenOrdersTable({ orders }) {
   const atRiskCredit = orders
     .filter((o) => o.classification.kind !== "terminal")
@@ -651,6 +692,9 @@ function OpenOrdersTable({ orders }) {
         <h3 className="opt-panel-title">
           Open Orders
           <CardFeedbackButton label="Open Orders" />
+          <span className="opt-panel-sub">
+            submitted but never filled — resting, partial, or dead (expired / cancelled / rejected)
+          </span>
         </h3>
         <div className="opt-panel-stats">
           <span><em>{orders.length}</em> orders</span>
@@ -665,10 +709,11 @@ function OpenOrdersTable({ orders }) {
             <thead>
               <tr>
                 <th className="al">Status</th><th className="al">Ticker</th><th className="al">Structure</th>
-                <th>Expires</th>
+                <th>Contract expiry</th>
+                <th>Opens/closes</th>
                 <th>Contracts</th>
                 <th>Limit<window.Help term="limit_price" /></th>
-                <th>Credit if filled<window.Help term="credit_if_filled" /></th>
+                <th>Credit<window.Help term="credit_if_filled" /></th>
                 <th>Max loss<window.Help term="max_loss" /></th>
                 <th>Breakeven<window.Help term="breakeven" /></th>
                 <th>Submitted</th>
@@ -681,6 +726,7 @@ function OpenOrdersTable({ orders }) {
               ))}
             </tbody>
           </table>
+          <DeadExitWarning orders={orders} />
         </div>
       )}
     </section>

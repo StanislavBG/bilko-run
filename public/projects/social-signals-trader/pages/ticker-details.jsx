@@ -571,6 +571,18 @@ function TickerDetailsPage() {
       <header className="opts-page-head">
         <h2 style={{ margin: 0, fontSize: 20 }}>Options Log</h2>
         <span className="opts-page-sub">every open credit spread, what it's worth now, and what we did</span>
+        {/* States the three-voice loop up front — first thing a new reader
+            hits, not buried in the "Strategy & rules" block at the bottom —
+            so every Analyst/Trader/User byline below already makes sense.
+            Cadence comes from summary.cadenceLabel (the Analyst's own
+            published schedule), never a literal, so it can't drift from the
+            cron. */}
+        <p className="opts-page-loop">
+          Three voices write this page: the <b>Analyst</b> reads the book and posts its opinion
+          {" "}({summary.cadenceLabel || "on schedule"}, weekdays); you, the <b>User</b>, comment in
+          public on any card or proposal; the <b>Trader</b> wakes on its own 15-minute tick and
+          decides from the Analyst's latest read, your comments, and the fund's frozen rules.
+        </p>
       </header>
 
       {summary.empty || (

@@ -19,6 +19,13 @@
   --info:      oklch(0.78 0.12 235);
   --accent:    oklch(0.82 0.16 75);
 
+  /* Role bylines (PRD: the Options Log is written by three voices) — chosen
+     to sit clear of the SAFE/WATCH/BREACH band hues (145/75/25) and of
+     --info (235) so a role chip never reads as a risk state. */
+  --role-analyst: oklch(0.80 0.15 300);
+  --role-trader:  oklch(0.78 0.12 210);
+  --role-user:    oklch(0.78 0.12 165);
+
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 
@@ -45,6 +52,13 @@
   --pos-bg:    oklch(0.92 0.10 145 / 0.55);
   --neg:       oklch(0.55 0.22 25);
   --neg-bg:    oklch(0.94 0.10 25 / 0.55);
+
+  /* Darker/more saturated than the dark-theme values so each role chip stays
+     legible (and passes contrast) on a white --surface instead of inverting
+     straight through. */
+  --role-analyst: oklch(0.48 0.17 300);
+  --role-trader:  oklch(0.45 0.13 210);
+  --role-user:    oklch(0.44 0.12 165);
 }
 
 * { box-sizing: border-box; }
@@ -1151,6 +1165,9 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opts-page > * { min-width: 0; }
 .opts-page-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .opts-page-sub { font-size: 12px; color: var(--text-2); margin: 0; max-width: 70ch; }
+/* Own line under the h2/sub-line pair — flex-basis: 100% forces the wrap
+   inside .opts-page-head's flex-wrap row instead of crowding the title. */
+.opts-page-loop { flex-basis: 100%; font-size: 12px; color: var(--text-3); margin: 2px 0 0; max-width: 78ch; line-height: 1.5; }
 .opts-row2 {
   display: grid; gap: 14px; align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
@@ -1191,6 +1208,38 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   color: var(--warn); background: color-mix(in oklch, var(--warn) 16%, transparent);
   border: 1px solid color-mix(in oklch, var(--warn) 40%, transparent);
   border-radius: 6px; padding: 4px 10px;
+}
+
+/* Role byline — which of the three voices (Analyst/Trader/User) wrote this
+   card. Wrapped together with its SectionStamp (when the card has one) in
+   .opts-provenance so the pair reads as one provenance statement
+   ("Analyst · Last updated ...") instead of two competing head items; on an
+   Analyst-less/live card .opts-provenance just holds the bare chip. */
+.opts-provenance {
+  display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%;
+}
+.opts-provenance:empty { display: none; }
+.opts-provenance-sep { color: var(--muted); }
+.opts-role-byline {
+  display: inline-flex; align-items: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; line-height: 1.6;
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+}
+.opts-role-byline--analyst {
+  color: var(--role-analyst);
+  background: color-mix(in oklch, var(--role-analyst) 16%, transparent);
+  border: 1px solid color-mix(in oklch, var(--role-analyst) 40%, transparent);
+}
+.opts-role-byline--trader {
+  color: var(--role-trader);
+  background: color-mix(in oklch, var(--role-trader) 16%, transparent);
+  border: 1px solid color-mix(in oklch, var(--role-trader) 40%, transparent);
+}
+.opts-role-byline--user {
+  color: var(--role-user);
+  background: color-mix(in oklch, var(--role-user) 16%, transparent);
+  border: 1px solid color-mix(in oklch, var(--role-user) 40%, transparent);
 }
 
 /* Cron-run stamp in a card head ("Last updated 1:00 PM PDT, Aug 8 · ~2h old

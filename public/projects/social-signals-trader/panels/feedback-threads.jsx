@@ -25,6 +25,17 @@
 
 const FeedbackThreadsHelp = window.Help;
 
+// Every block on this file is written by the User — public feedback, not the
+// Analyst's opinion or the Trader's decision. Shared byline reused from
+// options-summary.jsx via window.OptionsSummaryInternals rather than a
+// second implementation.
+function userByline() {
+  const internals = window.OptionsSummaryInternals;
+  const RB = internals && internals.RoleByline;
+  const role = internals && internals.ROLE && internals.ROLE.USER;
+  return RB ? <RB role={role} /> : null;
+}
+
 const TYPE_TONE = { bug: "bad", feature: "warn", feedback: "neutral" };
 const TYPE_LABEL = { bug: "BUG", feature: "IDEA", feedback: "FEEDBACK" };
 const STATUS_LABEL = { open: "awaiting reply", answered: "answered", archived: "archived" };
@@ -571,6 +582,7 @@ function TradeFeedbackThreads({ targets }) {
           Questions &amp; feedback on this trade
           {FeedbackThreadsHelp && <FeedbackThreadsHelp term="feedback_thread" />}
         </h3>
+        <span className="opts-provenance">{userByline()}</span>
         <div className="opt-panel-stats">
           <span className="fbt-count">{threads.length} thread{threads.length === 1 ? "" : "s"}</span>
           {open > 0 && <span className="fbt-count fbt-count--open">{open} awaiting reply</span>}
@@ -599,6 +611,7 @@ function SystemFeedbackPanel() {
           Feedback on the site
           {FeedbackThreadsHelp && <FeedbackThreadsHelp term="system_feedback" />}
         </h3>
+        <span className="opts-provenance">{userByline()}</span>
         <div className="opt-panel-stats">
           <span className="fbt-count">{threads.length} thread{threads.length === 1 ? "" : "s"}</span>
           {open > 0 && <span className="fbt-count fbt-count--open">{open} awaiting reply</span>}
@@ -629,6 +642,7 @@ function ProposalDiscussion({ proposalId, label }) {
     <div className="prop-discussion" id={`discussion-${proposalId || ""}`}>
       <h5 className="prop-block-title">
         Discussion
+        {userByline()}
         <span className="fbt-count">
           {threads.length} comment{threads.length === 1 ? "" : "s"}
         </span>

@@ -22,6 +22,17 @@
 
 const PROPOSAL_ID_PREFIX = "proposal-";
 
+// Every card on this panel is written by the Trader (trader-tick /
+// spread_trader, plus the frozen rules) — the shared byline reused from
+// options-summary.jsx via window.OptionsSummaryInternals rather than a
+// second implementation.
+function traderByline() {
+  const internals = window.OptionsSummaryInternals;
+  const RB = internals && internals.RoleByline;
+  const role = internals && internals.ROLE && internals.ROLE.TRADER;
+  return RB ? <RB role={role} /> : null;
+}
+
 function proposalPlan() {
   const p = window.SPREAD_PLAN;
   if (!p || typeof p !== "object") return { generatedAt: null, deployment: {}, intent: [] };
@@ -235,6 +246,7 @@ function ProposalCard({ item, equity }) {
     <article className="prop-card" id={`proposal-${item.id || ""}`}>
       <header className="prop-card-head">
         <h4 className="prop-card-title">{item.label || item.ticker}</h4>
+        <span className="opts-provenance">{traderByline()}</span>
         <div className="prop-card-head-right">
           <span className="prop-badge">PROPOSED · not yet placed</span>
           {window.FeedbackButton && <window.FeedbackButton target={target} />}
@@ -474,6 +486,7 @@ function ProposedTrades() {
             />
           )}
         </h3>
+        <span className="opts-provenance">{traderByline()}</span>
         <div className="opt-panel-stats">
           <span className="fbt-count">
             {items.length} proposal{items.length === 1 ? "" : "s"}

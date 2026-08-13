@@ -29,6 +29,17 @@ function CardFeedbackButton({ label }) {
   return <window.FeedbackButton target={{ kind: "component", id, label }} />;
 }
 
+// Every card on this panel is written by the Trader (trader-tick /
+// spread_trader, plus the frozen rules) — the shared byline reused from
+// options-summary.jsx via window.OptionsSummaryInternals rather than a
+// second implementation.
+function TraderByline() {
+  const internals = window.OptionsSummaryInternals;
+  const RB = internals && internals.RoleByline;
+  const role = internals && internals.ROLE && internals.ROLE.TRADER;
+  return RB ? <RB role={role} /> : null;
+}
+
 // Prefer the broker's own leg intent (authoritative); fall back to
 // short=sold / long=bought inference keyed on open vs close event.
 function legDirection(record, symbol, isClose) {
@@ -439,6 +450,7 @@ function ExpiryLadder({ positions }) {
           Expiry ladder
           <CardFeedbackButton label="Expiry ladder" />
         </h3>
+        <span className="opts-provenance"><TraderByline /></span>
         <div className="opt-panel-stats">
           <span><em>{positions.length}</em> open positions</span>
         </div>
@@ -696,6 +708,7 @@ function OpenOrdersTable({ orders }) {
             submitted but never filled — resting, partial, or dead (expired / cancelled / rejected)
           </span>
         </h3>
+        <span className="opts-provenance"><TraderByline /></span>
         <div className="opt-panel-stats">
           <span><em>{orders.length}</em> orders</span>
           <span>target <em className="mono-dim">{money(atRiskCredit)}</em> if filled</span>
@@ -960,6 +973,7 @@ function TradeLogTable({ trades, expectedOpenCount, totalEvents, capped, publish
           Trade Log
           <CardFeedbackButton label="Trade Log" />
         </h3>
+        <span className="opts-provenance"><TraderByline /></span>
         <div className="opt-panel-stats">
           <span><em>{visible.length}</em> trades <span className="mono-dim">of {enriched.length}</span></span>
           {!!visible.length && (

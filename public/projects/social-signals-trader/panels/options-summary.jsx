@@ -31,6 +31,31 @@ const BAND_LABEL_CLASS = {
   BREACHED: "opts-band opts-band--breached",
 };
 
+// PRD: the Options Log is written by three voices — the Analyst (the 5x/day
+// options-summary cron forming an opinion), the Trader (trader-tick /
+// spread_trader + the frozen rules deciding), and the User (public feedback
+// threads). Every card head carries a byline naming which one wrote it, so a
+// reader can tell an opinion refreshed hours ago from a broker fact refreshed
+// minutes ago. Kept as a plain label map (not derived) so ROLE.ANALYST etc.
+// are the single spelling used at every call site.
+const ROLE = { ANALYST: "Analyst", TRADER: "Trader", USER: "User" };
+
+// Presentation only — never touches a feedback target id. Re-exported via
+// window.OptionsSummaryInternals.RoleByline so options-trade-log.jsx,
+// proposed-trades.jsx and feedback-threads.jsx render the identical chip
+// instead of three near-copies. The glossary term matches the role label
+// lowercased ("Analyst" -> "analyst"), so every byline resolves to its own
+// definition of what that voice does and on what cadence.
+function RoleByline({ role }) {
+  if (!role) return null;
+  return (
+    <span className={`opts-role-byline opts-role-byline--${role.toLowerCase()}`}>
+      {role}
+      <window.Help term={role.toLowerCase()} />
+    </span>
+  );
+}
+
 function ageLabel(iso) {
   if (!iso) return null;
   const t = new Date(iso).getTime();
@@ -343,7 +368,7 @@ function panelComponentId(title) {
 // hardcoded interval. `feedbackId` is opt-in too — when omitted it's
 // derived from `title` via panelComponentId() so every card built on
 // Section gets a feedback button with no per-call-site change.
-function Section({ title, titleTerm, feedbackId, updatedAt, schedule, extraHead, children }) {
+function Section({ title, titleTerm, feedbackId, updatedAt, schedule, role, extraHead, children }) {
   const resolvedFeedbackId = feedbackId || panelComponentId(title);
   return (
     <section className="card opt-panel">
@@ -355,7 +380,13 @@ function Section({ title, titleTerm, feedbackId, updatedAt, schedule, extraHead,
             <window.FeedbackButton target={{ kind: "component", id: resolvedFeedbackId, label: title }} />
           )}
         </h3>
-        {updatedAt && <SectionStamp iso={updatedAt} schedule={schedule} />}
+        {(role || updatedAt) && (
+          <span className="opts-provenance">
+            <RoleByline role={role} />
+            {role && updatedAt && <span className="opts-provenance-sep">·</span>}
+            {updatedAt && <SectionStamp iso={updatedAt} schedule={schedule} />}
+          </span>
+        )}
         {extraHead}
       </div>
       {children}
@@ -413,17 +444,32 @@ function Headline({ text, staleLabel, cadenceLabel, account }) {
 
 // 3-4 plain-English sentences on what a credit spread even is, shown once at
 // the top of the panel so every jargon term below has a home to point back
-// to — the per-term <Help/> buttons handle the specifics.
-function HowToReadThisPage() {
+// to — the per-term <Help/> buttons handle the specifics. A second paragraph
+// states the three-voice loop the rest of the page assumes a reader already
+// knows: who writes each card, on what cadence, and who acts on it. Renders
+// `cadenceLabel` from the Analyst's own published schedule rather than a
+// literal, so this copy can't drift from the cron the way the old hardcoded
+// "every 2h" text did (PRD 1080/1081).
+function HowToReadThisPage({ cadenceLabel }) {
   return (
-    <p className="opt-log-empty opts-howto">
-      We sell credit spreads: a defined-risk options trade where the broker pays us cash (the
-      credit) up front, in exchange for us taking on the risk that the stock crosses a price we
-      picked (the strike). We keep that cash if the stock stays on the safe side of the strike
-      through expiration; we owe money if it doesn't. Every number below traces back to that one
-      idea — how much cash we collected, how much room the stock has before we're at risk, and
-      whether that room is shrinking.
-    </p>
+    <>
+      <p className="opt-log-empty opts-howto">
+        We sell credit spreads: a defined-risk options trade where the broker pays us cash (the
+        credit) up front, in exchange for us taking on the risk that the stock crosses a price we
+        picked (the strike). We keep that cash if the stock stays on the safe side of the strike
+        through expiration; we owe money if it doesn't. Every number below traces back to that one
+        idea — how much cash we collected, how much room the stock has before we're at risk, and
+        whether that room is shrinking.
+      </p>
+      <p className="opt-log-empty opts-howto">
+        Every card is written by one of three voices, named on its byline: the{" "}
+        <b>Analyst</b> reads the book and writes what it thinks ({cadenceLabel || FALLBACK_CADENCE_LABEL},
+        weekdays); the <b>User</b> — that's you — comments in public on a proposal or a card; the{" "}
+        <b>Trader</b> wakes on its own 15-minute tick and decides from the Analyst's latest read, your
+        comments, and the fund's frozen rules. Tap a byline's <code>?</code> for what each voice actually
+        does.
+      </p>
+    </>
   );
 }
 
@@ -435,7 +481,7 @@ function WhereBookStands({ lines, totals, positionsCount, asOf }) {
   const items = bulletsOf(lines);
   if (!items.length) return null;
   return (
-    <Section title="Where the book stands">
+    <Section title="Where the book stands" role={ROLE.ANALYST}>
       <ul className="opts-bullets">
         {items.map((t, i) => (
           <li key={i} className={t.indexOf("⚠") !== -1 ? "opts-line-warn" : undefined}>
@@ -918,6 +964,7 @@ function PositionsSection({ positions, positionsDisplay, fallbackAsOf, unpairedL
       title="Positions — entry snapshot (frozen) vs now (live)"
       updatedAt={fallbackAsOf}
       schedule={schedule}
+      role={ROLE.ANALYST}
     >
       <PositionsTable
         positions={positions}
@@ -956,7 +1003,7 @@ function scrollToWhatWeThinkRow(anchorId) {
 function WhatWeThink({ lines, updatedAt, schedule }) {
   const items = bulletsOf(lines);
   return (
-    <Section title="What we think right now" updatedAt={updatedAt} schedule={schedule}>
+    <Section title="What we think right now" updatedAt={updatedAt} schedule={schedule} role={ROLE.ANALYST}>
       {items.length ? (
         <ul className="opts-bullets opts-what-we-think">
           {items.map((raw, i) => {
@@ -1084,6 +1131,7 @@ function ActionQueue({ lines, updatedAt, anchors, schedule }) {
       title="Action queue"
       updatedAt={updatedAt}
       schedule={schedule}
+      role={ROLE.ANALYST}
       extraHead={<ActionQueueCounts counts={counts} />}
     >
       {groups.length ? (
@@ -1124,6 +1172,15 @@ const OPEN_QUEUE_HEADER_TERM = {
 // The "Deployed ..." bullet gets the live deployment `?` (total max loss ÷
 // equity) on top of the generic per-word ones glossify() already inserts —
 // same additive treatment as WhereBookStands' "Book totals" bullet.
+//
+// Cron-output-only, deliberately not on the page: the live Options Log
+// (dashboard/pages/ticker-details.jsx) never mounts this — its deployment
+// and margin-breach line moved into the full-width Proposed trades panel
+// when that panel absorbed the "human in the loop" spot directly under
+// Positions. Kept defined (and still returned by optionsSummaryParts'
+// caller-facing sibling, OptionsSummaryPanel below) only so the standalone
+// panel and its tests keep exercising the same markdown->JSX parse the cron
+// output goes through — not because anything renders it live.
 function OpenQueue({ lines, totals, account }) {
   const bullets = bulletsOf(lines);
   const table = tableOf(lines);
@@ -1218,7 +1275,7 @@ function RulesInForce({ lines }) {
   });
   const config = (window.SPREAD_CONFIG && window.SPREAD_CONFIG.config) || {};
   return (
-    <Section title="Rules in force">
+    <Section title="Rules in force" role={ROLE.TRADER}>
       <div className="opt-kv">
         {items.map((it, i) => {
           const configValue =
@@ -1241,7 +1298,7 @@ function RulesInForce({ lines }) {
 
 function Provenance({ lines }) {
   return (
-    <Section title="Provenance" titleTerm="provenance">
+    <Section title="Provenance" titleTerm="provenance" role={ROLE.ANALYST}>
       <BulletList items={bulletsOf(lines)} className="opts-bullets mono-dim" />
     </Section>
   );
@@ -1308,7 +1365,11 @@ function optionsSummaryParts(data) {
     // two independent sources that can (and did — PRD 1059) drift when the
     // trade log is missing a close event.
     positionsCount: record.positions.length,
-    howto: <HowToReadThisPage />,
+    // Exposed so the page head (ticker-details.jsx) can state the Analyst's
+    // real cadence in its sub-header without re-deriving or hardcoding it —
+    // HowToReadThisPage isn't the only reader of this value.
+    cadenceLabel,
+    howto: <HowToReadThisPage cadenceLabel={cadenceLabel} />,
     headline: (
       <Headline text={headlineText} staleLabel={staleLabel} cadenceLabel={cadenceLabel} account={record.account} />
     ),
@@ -1341,9 +1402,10 @@ function optionsSummaryParts(data) {
         schedule={schedule}
       />
     ),
-    openQueue: (
-      <OpenQueue lines={findSection(sections, "Open queue").lines} totals={record.totals} account={record.account} />
-    ),
+    // No `openQueue` key: the live page (ticker-details.jsx) never mounted
+    // one, and Proposed trades is what a reader sees for "what's about to
+    // happen" now. OpenQueue the component stays defined above for the
+    // standalone-panel test coverage only — see its own comment.
     rulesInForce: <RulesInForce lines={findSection(sections, "Rules in force").lines} />,
     provenance: <Provenance lines={findSection(sections, "Provenance").lines} />,
   };
@@ -1365,7 +1427,6 @@ function OptionsSummaryPanel({ data }) {
         {parts.positions}
         {parts.whatWeThink}
         {parts.actionQueue}
-        {parts.openQueue}
         {parts.rulesInForce}
         {parts.provenance}
       </div>
@@ -1381,6 +1442,7 @@ window.OptionsSummaryInternals = {
   eventMatchesPosition, tradeKeyForPosition,
   ageLabel, isStaleAsOf, FALLBACK_STALE_AFTER_MS, FALLBACK_CADENCE_LABEL, FALLBACK_REFRESH_INTERVAL_MINUTES,
   componentId: panelComponentId, positionFeedbackTarget,
+  RoleByline, ROLE,
 };
 
 window.OptionsSummaryPanel = OptionsSummaryPanel;

@@ -919,6 +919,24 @@
       long: "Includes when the underlying record was generated, how old the option quotes are, and what the previous snapshot looked like — the receipts behind every number above.",
       example: "A record generated at 9:35 AM PT with quotes stamped 9:34 AM PT has a provenance block showing ~1 minute of quote age.",
     },
+    analyst: {
+      label: "Analyst",
+      short: "The voice that reads the book and writes an opinion on a schedule.",
+      long: "Runs the options-status-refresh-summary cron on its own published schedule (pre-open plus four more times through the weekday session) and re-derives Positions, Where the book stands, What we think right now, Action queue, and Provenance wholesale each time. It never places an order.",
+      example: "A card stamped \"ANALYST · updated 2:00 PM PDT · every 2h\" is the Analyst's most recent read, not a live number.",
+    },
+    trader: {
+      label: "Trader",
+      short: "The voice that decides and acts, on its own 15-minute tick.",
+      long: "trader-tick.sh wakes every 15 minutes and decides from three inputs: the Analyst's latest read, any User comments filed since its last tick, and the frozen fund rules in force at the time — never re-reading rules live. Proposed trades, the Trade Log, Expiry ladder, Open Orders, and Rules in force are all Trader-authored or Trader-executed.",
+      example: "A comment left on a proposal at 2:07 PM PDT is read by the Trader at its next tick, at or after 2:15 PM PDT.",
+    },
+    user: {
+      label: "User",
+      short: "The voice that comments in public on a proposal or a card.",
+      long: "Anyone reading the page can leave feedback on a Proposed trade or any other card; that comment is the instruction the Trader reads on its next tick — the User never places an order directly.",
+      example: "A comment on a proposal's discussion thread is the User's only lever over what the Trader does next.",
+    },
     positions_count: {
       label: "Positions",
       short: "How many open spreads share this expiration date.",

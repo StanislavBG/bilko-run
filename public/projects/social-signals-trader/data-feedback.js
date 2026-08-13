@@ -1,17 +1,20 @@
 window.FEEDBACK_THREADS = {
   "counts": {
+    "active": 1,
     "answered": 1,
+    "archived": 0,
     "proposal": 0,
     "system": 0,
     "total": 1,
     "trade": 1,
     "unanswered": 0
   },
-  "generatedAt": "2026-08-13T18:50:51Z",
+  "generatedAt": "2026-08-13T19:07:18Z",
   "schema": 2,
   "threads": [
     {
       "answered": true,
+      "archivedAt": null,
       "createdAt": "2026-08-09T23:17:11.000Z",
       "description": "Which value is true? And why it is a loss at all?",
       "hasImage": false,

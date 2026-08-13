@@ -365,6 +365,12 @@
       example: "%K = 8 means the close is near the bottom of the two-week range (oversold, the fund's put-spread condition is %K < 30); %K = 95 means it is near the top (overbought, the call-spread condition is %K > 70). It is checked together with RSI — both must agree before a side is allowed.",
       long: "Fast %K = (close - lowest low) / (highest high - lowest low) x 100 over the last 14 daily bars. A flat range reads 50 (neutral) rather than dividing by zero.",
     },
+    collateral: {
+      label: "Collateral",
+      short: "The cash the broker locks up while the trade is open. We get it back when it closes.",
+      example: "A 4-contract $5-wide spread reserves 4 x $5 x 100 = $2,000. The $420 credit we were paid counts toward it, so the NEW cash tied up is $1,580 — which is also the most the trade can lose. The deposit is released when the spread closes or expires.",
+      long: "Also called buying-power reduction. For a credit spread the broker holds the full strike width, because that is the worst the position can be worth against us. It is not a cost and not a loss — it is capital that cannot be used for anything else until the trade is done, which is why the sleeve caps how much of the account can be deployed as collateral at once.",
+    },
     proposed_trade: {
       label: "Proposed trade",
       short: "A trade the fund intends to open and has not opened. No money is committed yet.",
@@ -1079,14 +1085,14 @@
     },
     feedback_thread: {
       label: "Feedback thread",
-      short: "One question or comment someone filed about this trade, plus every reply to it.",
-      long: "Each submission opens its own thread, so two questions about the same trade stay two conversations and an answer can never land under the wrong one. Replies are written by the agent that runs this fund and published here — usually within a day, sometimes sooner.",
-      example: "Someone asks \"why did you close BABA early?\" on Aug 9 at 1:35 PM PDT; the reply posted Aug 9 at 4:02 PM PDT sits under that question only — a separate question about the credit shown at entry opens its own thread below it.",
+      short: "One conversation about this trade — every message from the visitor and every reply from the fund, in order, each labelled with who said it.",
+      long: "Each submission opens its own thread, so two questions about the same trade stay two conversations and an answer can never land under the wrong one. A thread is a back-and-forth: “Visitor” messages are what was asked or followed up with, “Trading agent” messages are the fund's replies — both render in the order they happened. The status pill reads awaiting reply until the fund answers, then answered; a stale thread the fund has retired is marked archived but stays visible here.",
+      example: "Visitor asks “why did you close BABA early?” on Aug 9 at 1:35 PM PDT; Trading agent replies Aug 9 at 4:02 PM PDT in the same thread, so the card reads “2 messages” — a separate question about the credit shown at entry opens its own thread below it.",
     },
     system_feedback: {
       label: "Feedback on the site",
       short: "Feedback filed against a card or the page itself rather than against a trade — collected here at the bottom of the Options Log.",
-      long: "The \u{1F4AC} button in a card's header files feedback about that card (how it reads, what's missing, a number that looks wrong). That's a note about the site, so it is deliberately kept off the trade pages and pooled here, where every reply is public.",
+      long: "The \u{1F4AC} button in a card's header files feedback about that card (how it reads, what's missing, a number that looks wrong). That's a note about the site, so it is deliberately kept off the trade pages and pooled here. Each item is the same visitor/agent conversation as a trade thread — public, attributed, and ordered by time — with a pill showing awaiting reply, answered, or archived.",
       example: "\"The cushion column wraps on mobile\" filed against the Positions card on Aug 9 shows up in this block, tagged Positions — not under any single spread.",
     },
     position_feedback_indicator: {

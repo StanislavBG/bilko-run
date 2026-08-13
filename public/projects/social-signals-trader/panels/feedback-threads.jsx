@@ -27,6 +27,7 @@ const FeedbackThreadsHelp = window.Help;
 
 const TYPE_TONE = { bug: "bad", feature: "warn", feedback: "neutral" };
 const TYPE_LABEL = { bug: "BUG", feature: "IDEA", feedback: "FEEDBACK" };
+const STATUS_LABEL = { open: "awaiting reply", answered: "answered", archived: "archived" };
 
 function feedbackPayload() {
   const p = window.FEEDBACK_THREADS;
@@ -74,41 +75,64 @@ function proposalThreads(threads, proposalId) {
 
 // --- rendering -------------------------------------------------------------
 
-function ThreadReply({ reply }) {
+// One entry of a thread's `messages[]` — the visitor's opening post and every
+// follow-up/reply all render through this SAME component, attributed by
+// `role` (schema 2, feedback_threads.py `_public_message`/`_user_message`).
+function ThreadMessage({ message }) {
+  const role = message.role === "agent" ? "agent" : "user";
+  const authorLabel = message.authorLabel || message.author || "Visitor";
   return (
-    <li className="fbt-reply">
-      <div className="fbt-reply-head">
-        <span className="fbt-author">{reply.authorLabel || reply.author}</span>
-        <span className="fbt-when" title={reply.createdAt || ""}>{whenLabel(reply.createdAt)}</span>
+    <div className={`fbt-msg fbt-msg--${role}`}>
+      <div className="fbt-msg-head">
+        <span className="fbt-author">{authorLabel}</span>
+        <span className="fbt-when" title={message.createdAt || ""}>{whenLabel(message.createdAt)}</span>
       </div>
-      <p className="fbt-body">{reply.body}</p>
-    </li>
+      {message.body && <p className="fbt-body">{message.body}</p>}
+    </div>
   );
 }
 
-// One thread = the original message, then its replies, then a Reply control
-// that re-opens the SAME feedback form scoped to the SAME target — so a
-// visitor's follow-up comes back attached to this trade/component, not to the
-// page at large.
+// `messages[]` is the schema-2 shape (feedback_threads.py `build()`). A
+// pre-v2 cached payload (stale `data-feedback.js`, or a browser holding an
+// old file) only has `description` + `replies[]` — synthesize the same
+// opener-then-replies shape from those so ThreadMessage is the ONLY render
+// path for a thread's conversation, live or fallback.
+function threadMessages(thread) {
+  if (Array.isArray(thread.messages)) return thread.messages;
+  const opener = {
+    id: thread.id,
+    role: "user",
+    author: "visitor",
+    authorLabel: "Visitor",
+    body: thread.description || "",
+    createdAt: thread.createdAt,
+  };
+  const replies = (thread.replies || []).map((r) => ({ ...r, role: "agent" }));
+  return [opener, ...replies];
+}
+
+// One thread = every message in time order, then a Reply control that
+// re-opens the SAME feedback form scoped to the SAME target — so a visitor's
+// follow-up comes back attached to this trade/component, not to the page at
+// large.
 function FeedbackThread({ thread }) {
   const tone = TYPE_TONE[thread.type] || "neutral";
+  const status = thread.status || (thread.answered ? "answered" : "open");
+  const statusLabel = STATUS_LABEL[status] || STATUS_LABEL.open;
+  const messages = threadMessages(thread);
   return (
-    <article className={`fbt-thread fbt-thread--${thread.answered ? "answered" : "open"}`}>
+    <article className={`fbt-thread fbt-thread--${status}`}>
       <header className="fbt-thread-head">
         <span className={`fbt-badge fbt-badge--${tone}`}>{TYPE_LABEL[thread.type] || "FEEDBACK"}</span>
         <h4 className="fbt-title">{thread.title || "(no title)"}</h4>
         <span className="fbt-when" title={thread.createdAt || ""}>{whenLabel(thread.createdAt)}</span>
-        <span className={`fbt-status fbt-status--${thread.answered ? "answered" : "open"}`}>
-          {thread.answered ? "answered" : "awaiting reply"}
-        </span>
+        <span className={`fbt-status fbt-status--${status}`}>{statusLabel}</span>
       </header>
       {thread.targetLabel && <p className="fbt-target">about: {thread.targetLabel}</p>}
-      <p className="fbt-body">{thread.description}</p>
-      {thread.replies.length > 0 && (
-        <ul className="fbt-replies">
-          {thread.replies.map((r) => <ThreadReply key={r.id} reply={r} />)}
-        </ul>
-      )}
+      <p className="fbt-msg-count">{messages.length} message{messages.length === 1 ? "" : "s"}</p>
+      <div className="fbt-messages">
+        {messages.map((m) => <ThreadMessage key={m.id} message={m} />)}
+      </div>
       {window.FeedbackButton && thread.targetKind && thread.targetId && (
         <div className="fbt-thread-foot">
           <window.FeedbackButton
@@ -224,4 +248,5 @@ window.SystemFeedbackPanel = SystemFeedbackPanel;
 window.ProposalDiscussion = ProposalDiscussion;
 window.FeedbackThreadsInternals = {
   selectThreads, systemThreads, proposalThreads, whenLabel, feedbackPayload,
+  ThreadMessage, threadMessages,
 };

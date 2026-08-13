@@ -703,6 +703,45 @@ const TRADE_LOG_GROUP_BYS = [
   { key: "expiry", label: "Expiry" },
 ];
 
+// Persist the Trade Log's view (page/pageSize/filter/groupBy) across the
+// #trade/<key> detail page round trip. sessionStorage over the location hash
+// because the hash is already load-bearing for routing (#options,
+// #options/<TICKER>, #trade/<key>) — piggybacking view state onto it would
+// mean parsing it back out of every other hash consumer. Namespaced key,
+// try/catch because sessionStorage throws in some privacy modes.
+const TRADE_LOG_VIEW_KEY = "sst.tradeLog.view";
+const TRADE_LOG_PAGE_SIZES = [20, 50, 100, "all"];
+
+function readStoredTradeLogView() {
+  try {
+    const raw = sessionStorage.getItem(TRADE_LOG_VIEW_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    // Validate on read: a stale/corrupt/out-of-range persisted value must
+    // clamp to something safe rather than render a blank table.
+    const filter = TRADE_STATUS_FILTERS.some((f) => f.key === parsed.filter) ? parsed.filter : "all";
+    const groupBy = TRADE_LOG_GROUP_BYS.some((g) => g.key === parsed.groupBy) ? parsed.groupBy : "none";
+    const pageSize = TRADE_LOG_PAGE_SIZES.includes(parsed.pageSize) ? parsed.pageSize : 20;
+    const page = Number.isInteger(parsed.page) && parsed.page > 0 ? parsed.page : 1;
+    return { filter, groupBy, pageSize, page };
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeStoredTradeLogView(view) {
+  try {
+    sessionStorage.setItem(TRADE_LOG_VIEW_KEY, JSON.stringify(view));
+  } catch (err) {
+    // sessionStorage unavailable (privacy mode) — view just won't persist.
+  }
+}
+
+function initialTradeLogView() {
+  return readStoredTradeLogView() || { filter: "all", groupBy: "none", page: 1, pageSize: 20 };
+}
+
 // Group label for a single enriched trade under a given grouping mode.
 // Expiry falls back to a trailing "Unknown expiry" bucket rather than
 // dropping the row when the contract's expiry can't be resolved at all.
@@ -723,14 +762,15 @@ function realizedOf(trades) {
     .reduce((n, t) => n + (t.ev.realized_pnl || 0), 0);
 }
 
-function GroupHeaderRow({ label, count, realized }) {
+function GroupHeaderRow({ label, count, realized, continuation }) {
   // One real <td> per column below (see the 8 headers) rather than a
   // spanning cell — this panel deliberately removed that inline-detail-row
   // pattern (PRD 1013) and must not reintroduce it.
   return (
-    <tr className="opt-group-row">
+    <tr className={`opt-group-row${continuation ? " opt-group-row--cont" : ""}`}>
       <td className="al opt-group-label">
-        {label} <span className="opt-group-count">{count}</span> · realized{" "}
+        {label}
+        {continuation ? " (cont.)" : ""} <span className="opt-group-count">{count}</span> · realized{" "}
         <span className={realized >= 0 ? "up" : "down"}>{money(realized)}</span>
       </td>
       <td /><td /><td /><td /><td /><td /><td /><td />
@@ -738,12 +778,12 @@ function GroupHeaderRow({ label, count, realized }) {
   );
 }
 
-function TradeLogTable({ trades, expectedOpenCount }) {
-  const { useState } = React;
-  const [filter, setFilter] = useState("all");
-  const [groupBy, setGroupBy] = useState("none");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+function TradeLogTable({ trades, expectedOpenCount, totalEvents, capped, publishedEvents }) {
+  const { useState, useEffect } = React;
+  const [filter, setFilter] = useState(() => initialTradeLogView().filter);
+  const [groupBy, setGroupBy] = useState(() => initialTradeLogView().groupBy);
+  const [page, setPage] = useState(() => initialTradeLogView().page);
+  const [pageSize, setPageSize] = useState(() => initialTradeLogView().pageSize);
 
   // O(n) over trades: one facts + status derivation per row, computed once
   // per render and reused by the counts, the filter, and the grouping below.
@@ -775,18 +815,16 @@ function TradeLogTable({ trades, expectedOpenCount }) {
   const visible = filter === "all" ? enriched : enriched.filter((t) => t.status === filter);
   const realizedVisible = realizedOf(visible);
 
-  // Clamp on the derived page count rather than setState-in-render: a filter
-  // change or the live-snapshot overlay replacing window.SPREAD_LOG after
-  // first render can both shrink `visible` out from under a stale `page`.
-  const pageCount = pageSize === "all" ? 1 : Math.max(1, Math.ceil(visible.length / pageSize));
-  const effectivePage = Math.min(page, pageCount);
-  const pageRows = pageSize === "all" ? visible : visible.slice((effectivePage - 1) * pageSize, effectivePage * pageSize);
-  const rangeStart = visible.length === 0 ? 0 : (effectivePage - 1) * (pageSize === "all" ? visible.length : pageSize) + 1;
-  const rangeEnd = visible.length === 0 ? 0 : rangeStart + pageRows.length - 1;
-
+  // Grouped mode pages over the FLAT filtered list (exactly `pageSize` rows
+  // per page regardless of how many groups they span), not group-by-group —
+  // build the groups (for whole-group counts) plus a flat, group-ordered row
+  // list (for slicing) up front so headers can repeat correctly across a
+  // page boundary.
   let groups = null;
+  let groupStats = null; // label -> { count, realized } over the WHOLE filtered set, not just this page
+  let flatGroupedRows = null; // [{ label, t }] in group order
+  let groupStartIndex = null; // label -> that group's first index in flatGroupedRows
   if (groupBy !== "none") {
-    // grouped pagination: see PRD trade-log-pagination-grouping-and-nav-state
     const order = [];
     const byLabel = new Map();
     visible.forEach((t) => {
@@ -802,7 +840,72 @@ function TradeLogTable({ trades, expectedOpenCount }) {
         return a.label.localeCompare(b.label);
       });
     }
+    groupStats = new Map();
+    flatGroupedRows = [];
+    groupStartIndex = new Map();
+    groups.forEach((g) => {
+      groupStats.set(g.label, { count: g.rows.length, realized: realizedOf(g.rows) });
+      groupStartIndex.set(g.label, flatGroupedRows.length);
+      g.rows.forEach((t) => flatGroupedRows.push({ label: g.label, t }));
+    });
   }
+
+  // Clamp on the derived page count rather than setState-in-render: a filter
+  // change or the live-snapshot overlay replacing window.SPREAD_LOG after
+  // first render can both shrink the row list out from under a stale `page`
+  // (also covers a stale/out-of-range page restored from sessionStorage).
+  const totalRows = groups ? flatGroupedRows.length : visible.length;
+  const pageCount = pageSize === "all" ? 1 : Math.max(1, Math.ceil(totalRows / pageSize));
+  const effectivePage = Math.min(page, pageCount);
+  const sliceStart = pageSize === "all" ? 0 : (effectivePage - 1) * pageSize;
+  const pageRows = pageSize === "all" ? visible : visible.slice(sliceStart, sliceStart + pageSize);
+  const pageFlatGroupedRows = groups
+    ? (pageSize === "all" ? flatGroupedRows : flatGroupedRows.slice(sliceStart, sliceStart + pageSize))
+    : null;
+  const pageRowCount = groups ? pageFlatGroupedRows.length : pageRows.length;
+  const rangeStart = totalRows === 0 ? 0 : sliceStart + 1;
+  const rangeEnd = totalRows === 0 ? 0 : rangeStart + pageRowCount - 1;
+
+  // Walk this page's flat slice, emitting a GroupHeaderRow every time the
+  // label changes — including at the top of the page, so a group whose rows
+  // straddle a page boundary gets a repeated, whole-group-count header
+  // marked as a continuation rather than orphaned rows under no header.
+  let groupedBodyRows = null;
+  if (groups) {
+    groupedBodyRows = [];
+    let lastLabel = null;
+    pageFlatGroupedRows.forEach((item, i) => {
+      const globalIndex = sliceStart + i;
+      if (item.label !== lastLabel) {
+        const stats = groupStats.get(item.label);
+        const continuation = globalIndex !== groupStartIndex.get(item.label);
+        groupedBodyRows.push(
+          <GroupHeaderRow
+            key={`grp-${item.label}-${globalIndex}`}
+            label={item.label}
+            count={stats.count}
+            realized={stats.realized}
+            continuation={continuation}
+          />
+        );
+        lastLabel = item.label;
+      }
+      groupedBodyRows.push(
+        <TradeLogRow
+          key={(item.t.ev.client_order_id || "") + item.t.index}
+          ev={item.t.ev}
+          classification={item.t.classification}
+          index={item.t.index}
+        />
+      );
+    });
+  }
+
+  // Persist the view (not raw `page`, so a page clamped down this render is
+  // what survives the #trade/<key> round trip) after every change.
+  useEffect(() => {
+    writeStoredTradeLogView({ filter, groupBy, page: effectivePage, pageSize });
+  }, [filter, groupBy, effectivePage, pageSize]);
 
   return (
     <section className="card opt-panel">
@@ -824,6 +927,13 @@ function TradeLogTable({ trades, expectedOpenCount }) {
           Reconciliation note: this table's Open count ({counts.open}) doesn't match the{" "}
           Positions table's row count ({expectedOpenCount}) — one likely has an event the other
           doesn't. Trust Positions (sourced from Alpaca); flag this for review.
+        </p>
+      )}
+      {capped && (
+        <p className="opt-log-note opt-log-capped">
+          Publishing note: only the newest {publishedEvents} of {totalEvents} trade log events
+          are published to this dashboard — older activity exists in the internal record but
+          cannot be shown here.
         </p>
       )}
       {!enriched.length ? (
@@ -859,46 +969,39 @@ function TradeLogTable({ trades, expectedOpenCount }) {
           {!visible.length ? (
             <p className="opt-log-empty">No {filter} trades.</p>
           ) : (
-            <div className="opt-table-scroll">
-              <table className="opt-table opt-table--orders">
-                <thead>
-                  <tr>
-                    <th className="al">Event<window.Help term="trade_event" /></th>
-                    <th className="al">Ticker</th>
-                    <th className="al">Structure<window.Help term="spread" /></th>
-                    <th>Expires<window.Help term="expiry" /></th>
-                    <th>Contracts<window.Help term="contracts" /></th>
-                    <th>Credit received<window.Help term="credit_received" /></th>
-                    <th>Filled<window.Help term="filled_at" /></th>
-                    <th>Realized P&amp;L<window.Help term="realized_pl" /></th>
-                    <th className="sr-only">Feedback</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groups
-                    ? groups.map((g) => (
-                        <React.Fragment key={g.label}>
-                          <GroupHeaderRow label={g.label} count={g.rows.length} realized={realizedOf(g.rows)} />
-                          {g.rows.map((t) => (
-                            <TradeLogRow key={(t.ev.client_order_id || "") + t.index} ev={t.ev} classification={t.classification} index={t.index} />
-                          ))}
-                        </React.Fragment>
-                      ))
-                    : pageRows.map((t) => (
-                        <TradeLogRow key={(t.ev.client_order_id || "") + t.index} ev={t.ev} classification={t.classification} index={t.index} />
-                      ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {!groups && (
-            <TradeLogPagination
-              page={effectivePage}
-              pageCount={pageCount}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
-            />
+            <>
+              <div className="opt-table-scroll">
+                <table className="opt-table opt-table--orders">
+                  <thead>
+                    <tr>
+                      <th className="al">Event<window.Help term="trade_event" /></th>
+                      <th className="al">Ticker</th>
+                      <th className="al">Structure<window.Help term="spread" /></th>
+                      <th>Expires<window.Help term="expiry" /></th>
+                      <th>Contracts<window.Help term="contracts" /></th>
+                      <th>Credit received<window.Help term="credit_received" /></th>
+                      <th>Filled<window.Help term="filled_at" /></th>
+                      <th>Realized P&amp;L<window.Help term="realized_pl" /></th>
+                      <th className="sr-only">Feedback</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groups
+                      ? groupedBodyRows
+                      : pageRows.map((t) => (
+                          <TradeLogRow key={(t.ev.client_order_id || "") + t.index} ev={t.ev} classification={t.classification} index={t.index} />
+                        ))}
+                  </tbody>
+                </table>
+              </div>
+              <TradeLogPagination
+                page={effectivePage}
+                pageCount={pageCount}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+              />
+            </>
           )}
         </>
       )}
@@ -981,7 +1084,15 @@ function optionsTradeLogParts(log, expectedOpenCount) {
   return {
     empty: null,
     expiryLadder: <ExpiryLadder positions={openPositions} />,
-    tradeLog: <TradeLogTable trades={trades} expectedOpenCount={expectedOpenCount} />,
+    tradeLog: (
+      <TradeLogTable
+        trades={trades}
+        expectedOpenCount={expectedOpenCount}
+        totalEvents={typeof data.totalEvents === "number" ? data.totalEvents : data.events.length}
+        capped={!!data.capped}
+        publishedEvents={data.events.length}
+      />
+    ),
     openOrders: <OpenOrdersTable orders={openOrders} />,
     foot: (
       <p className="opt-log-foot">

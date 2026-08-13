@@ -77,18 +77,6 @@ function MissingCard({ item }) {
   );
 }
 
-function ProposalStat({ label, value, term }) {
-  return (
-    <div className="prop-stat">
-      <span className="prop-stat-label">
-        {label}
-        {term && window.Help && <window.Help term={term} />}
-      </span>
-      <span className="prop-stat-value">{value}</span>
-    </div>
-  );
-}
-
 function ProposalChecks({ checks }) {
   if (!Array.isArray(checks) || !checks.length) return null;
   return (
@@ -159,7 +147,88 @@ function ProposalRules({ rules }) {
   );
 }
 
-function ProposalCard({ item }) {
+// The broker reserves the FULL strike width, not the width net of the credit.
+// `risk` is what we can lose; this is what is locked up until the trade closes
+// — the two differ by exactly the credit, and sizing runs off this number, so
+// showing only `risk` understates the capital a proposal consumes. The share
+// of equity is appended when the plan carries it, because "$2,000" means
+// nothing without "of what".
+function collateralLabel(item, equity) {
+  if (item.collateral === null || item.collateral === undefined) return "—";
+  const base = propMoney(item.collateral);
+  const eq = Number(equity);
+  if (!eq || Number.isNaN(eq)) return base;
+  return `${base} · ${propPct(item.collateral / eq, 1)} of equity`;
+}
+
+// The SCORECARD — the right-hand column of every proposal card.
+//
+// The KPIs used to sit as a thin strip under the narrative while the right
+// half of the card was empty. They are the numbers a reviewer decides on, so
+// they get their own column: money first (paid / at risk / locked up), then
+// the odds, then the contract facts, then the verdict from the entry gates.
+// One tile per fact, aligned, so three proposals can be compared by eye
+// straight down the column.
+function ScoreRow({ label, value, term, tone, big }) {
+  return (
+    <div className={`prop-score-row${big ? " prop-score-row--big" : ""}`}>
+      <span className="prop-score-label">
+        {label}
+        {term && window.Help && <window.Help term={term} />}
+      </span>
+      <span className={`prop-score-value${tone ? ` prop-score-value--${tone}` : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+// A proposal only reaches this panel by clearing every gate, so the badge
+// normally reads "8 of 8". It is computed, not assumed: a hand-edited plan or
+// a future soft gate must show the real count rather than a green lie.
+function gateTally(checks) {
+  const list = Array.isArray(checks) ? checks : [];
+  return { passed: list.filter((c) => c && c.pass).length, total: list.length };
+}
+
+function momentumChip(item) {
+  if (item.rsi === null || item.rsi === undefined) return null;
+  const isPut = String(item.right || "").toLowerCase() === "put";
+  return `${isPut ? "Oversold" : "Overbought"} · RSI ${item.rsi} · %K ${item.stoch_k}`;
+}
+
+function ProposalScorecard({ item, equity }) {
+  const tally = gateTally(item.checks);
+  const clean = tally.total > 0 && tally.passed === tally.total;
+  const chip = momentumChip(item);
+  const pop = Number(item.pop);
+  return (
+    <aside className="prop-scorecard">
+      <div className="prop-score-head">
+        <span className="prop-score-title">Scorecard</span>
+        <span className={`prop-score-gates prop-score-gates--${clean ? "pass" : "fail"}`}>
+          {clean ? "✓" : "✕"} {tally.passed} of {tally.total} gates
+        </span>
+      </div>
+
+      <ScoreRow label="We get paid" value={propMoney(item.credit)} term="credit_received" tone="pos" big />
+      <ScoreRow label="Most we can lose" value={propMoney(item.risk)} term="risk" tone="neg" big />
+      <ScoreRow label="Cash tied up (collateral)" value={collateralLabel(item, equity)} term="collateral" />
+      <ScoreRow label="Expected value" value={propMoney(item.ev)} term="ev" tone={Number(item.ev) > 0 ? "pos" : "neg"} />
+
+      <ScoreRow label="Chance we're right" value={propPct(item.pop)} term="pop" />
+      {Number.isFinite(pop) && (
+        <div className="prop-meter" title={`${(pop * 100).toFixed(1)}% probability of profit`}>
+          <span className="prop-meter-fill" style={{ width: `${Math.max(0, Math.min(100, pop * 100))}%` }} />
+        </div>
+      )}
+
+      <ScoreRow label="Contracts" value={item.contracts} term="contracts" />
+      <ScoreRow label="Expires" value={`${item.expiry} (${item.dte}d)`} term="dte" />
+      {chip && <div className="prop-score-chip">{chip}</div>}
+    </aside>
+  );
+}
+
+function ProposalCard({ item, equity }) {
   const explain = item.explain;
   const target = proposalFeedbackTarget(item);
   return (
@@ -172,29 +241,27 @@ function ProposalCard({ item }) {
         </div>
       </header>
 
-      {explain ? (
-        <>
-          <p className="prop-headline">{explain.headline}</p>
-          <ul className="prop-bullets">
-            {(explain.bullets || []).map((b, i) => (
-              <li key={i}>{b}</li>
-            ))}
-          </ul>
-          <p className="prop-structure">
-            <b>What we actually place:</b> {explain.structure}
-          </p>
-        </>
-      ) : (
-        <MissingCard item={item} />
-      )}
-
-      <div className="prop-stats">
-        <ProposalStat label="We get paid" value={propMoney(item.credit)} term="credit_received" />
-        <ProposalStat label="Most we can lose" value={propMoney(item.risk)} term="risk" />
-        <ProposalStat label="Chance we're right" value={propPct(item.pop)} term="pop" />
-        <ProposalStat label="Expected value" value={propMoney(item.ev)} term="ev" />
-        <ProposalStat label="Contracts" value={item.contracts} term="contracts" />
-        <ProposalStat label="Expires" value={`${item.expiry} (${item.dte}d)`} term="dte" />
+      {/* Narrative left, scorecard right — the right half of the card used to
+          be dead space while the numbers were crammed into a strip below. */}
+      <div className="prop-card-body">
+        <div className="prop-narrative">
+          {explain ? (
+            <>
+              <p className="prop-headline">{explain.headline}</p>
+              <ul className="prop-bullets">
+                {(explain.bullets || []).map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+              <p className="prop-structure">
+                <b>What we actually place:</b> {explain.structure}
+              </p>
+            </>
+          ) : (
+            <MissingCard item={item} />
+          )}
+        </div>
+        <ProposalScorecard item={item} equity={equity} />
       </div>
 
       <ProposalChecks checks={item.checks} />
@@ -210,15 +277,22 @@ function ProposalCard({ item }) {
 // The deployment gap used to live in the "Open queue" card. It moves here with
 // the proposals it explains: how much room the book has is the reason there
 // are (or aren't) proposals on screen at all.
-function DeploymentLine({ deployment }) {
+function DeploymentLine({ deployment, totalCollateral }) {
   const d = deployment || {};
-  if (d.deployed === undefined && d.headroom === undefined) return null;
+  if (d.deployed === undefined && d.headroom === undefined && !totalCollateral) return null;
   return (
     <div className="prop-deployment">
       <span>
         Deployed {propMoney(d.deployed)} of target {propMoney(d.target)} (
         {propPct(d.deployed_pct)} of equity) — headroom {propMoney(d.headroom)}
       </span>
+      {totalCollateral > 0 && (
+        <span>
+          These proposals would together tie up {propMoney(totalCollateral)} of collateral
+          {d.equity ? ` (${propPct(totalCollateral / d.equity, 1)} of equity)` : ""} — that cash is
+          reserved by the broker until each trade closes, and it is returned in full when they do.
+        </span>
+      )}
       {d.margin_breach && (
         <span className="prop-margin-breach">
           🔴 MARGIN BREACH — maintenance margin {propMoney(d.maintenance_margin)} exceeds cap{" "}
@@ -280,9 +354,85 @@ function EmptyState({ funnel }) {
   );
 }
 
+// One proposal at a time, with a pager. Reviewing is a per-trade decision —
+// stacking seven full cards buries the later ones and makes "how many are
+// there, and which am I on?" unanswerable without scrolling. The dot rail is
+// the position indicator: ‹ o o ● o o ›, one dot per proposal, the filled one
+// is the open card. A dot for a proposal carrying an unanswered comment gets a
+// ring, so an unread objection is visible from any card, not only from its own.
+function unansweredCountFor(item) {
+  const internals = window.FeedbackThreadsInternals;
+  const payload = window.FEEDBACK_THREADS;
+  if (!internals || !internals.proposalThreads || !payload || !Array.isArray(payload.threads)) {
+    return 0;
+  }
+  const threads = internals.proposalThreads(payload.threads, PROPOSAL_ID_PREFIX + (item.id || ""));
+  return threads.filter((t) => !t.answered).length;
+}
+
+function ProposalPager({ items, index, onGo }) {
+  if (items.length < 2) return null;
+  const wrap = (i) => (i + items.length) % items.length;
+  return (
+    <nav className="prop-pager" aria-label="Proposed trade navigation">
+      <button
+        className="prop-pager-arrow"
+        onClick={() => onGo(wrap(index - 1))}
+        aria-label="Previous proposal"
+        title="Previous proposal (←)"
+      >
+        ‹
+      </button>
+      <div className="prop-dots">
+        {items.map((it, i) => {
+          const open = unansweredCountFor(it);
+          const label = `${it.ticker || "proposal"} — ${i + 1} of ${items.length}` +
+            (open ? ` (${open} unanswered comment${open === 1 ? "" : "s"})` : "");
+          return (
+            <button
+              key={it.id || i}
+              className={
+                `prop-dot${i === index ? " prop-dot--on" : ""}${open ? " prop-dot--flagged" : ""}`
+              }
+              onClick={() => onGo(i)}
+              aria-label={label}
+              aria-current={i === index ? "true" : undefined}
+              title={label}
+            />
+          );
+        })}
+      </div>
+      <button
+        className="prop-pager-arrow"
+        onClick={() => onGo(wrap(index + 1))}
+        aria-label="Next proposal"
+        title="Next proposal (→)"
+      >
+        ›
+      </button>
+      <span className="prop-pager-count">
+        {index + 1} of {items.length}
+        {items[index] && items[index].ticker ? ` · ${items[index].ticker}` : ""}
+      </span>
+    </nav>
+  );
+}
+
 function ProposedTrades() {
   const plan = proposalPlan();
   const items = plan.intent;
+  const [index, setIndex] = React.useState(0);
+  // A regenerated plan can be shorter than the one that was on screen; clamp
+  // rather than render a blank card off the end of the list.
+  const safeIndex = items.length ? Math.min(index, items.length - 1) : 0;
+  const active = items[safeIndex];
+
+  const onKeyDown = (e) => {
+    if (items.length < 2) return;
+    if (e.key === "ArrowLeft") { setIndex((safeIndex - 1 + items.length) % items.length); e.preventDefault(); }
+    if (e.key === "ArrowRight") { setIndex((safeIndex + 1) % items.length); e.preventDefault(); }
+  };
+
   return (
     <section className="card opt-panel prop-panel" id="proposed-trades">
       <div className="opt-panel-head">
@@ -314,10 +464,21 @@ function ProposedTrades() {
         with it, and it is read before anything fills.
       </p>
 
-      <DeploymentLine deployment={plan.deployment} />
+      <DeploymentLine
+        deployment={plan.deployment}
+        totalCollateral={items.reduce((sum, it) => sum + (Number(it.collateral) || 0), 0)}
+      />
 
       {items.length ? (
-        items.map((item, i) => <ProposalCard key={item.id || i} item={item} />)
+        <div className="prop-deck" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
+          <ProposalPager items={items} index={safeIndex} onGo={setIndex} />
+          <ProposalCard
+            key={active.id || safeIndex}
+            item={active}
+            equity={plan.deployment && plan.deployment.equity}
+          />
+          <ProposalPager items={items} index={safeIndex} onGo={setIndex} />
+        </div>
       ) : (
         <EmptyState funnel={plan.funnel} />
       )}
@@ -328,6 +489,10 @@ function ProposedTrades() {
 window.ProposedTrades = ProposedTrades;
 window.ProposedTradesInternals = {
   PROPOSAL_ID_PREFIX,
+  gateTally,
+  unansweredCountFor,
+  momentumChip,
+  collateralLabel,
   proposalPlan,
   proposalFeedbackTarget,
   propMoney,

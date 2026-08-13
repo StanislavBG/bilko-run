@@ -353,6 +353,24 @@
       long: "Short for 'implied volatility'. Higher IV means option premiums are richer — good for sellers of credit spreads, but it also signals the market expects a bigger move.",
       example: "An IV of 45% implies the market expects this stock could move roughly ±45% over the next year, annualized.",
     },
+    rsi: {
+      label: "RSI (14)",
+      short: "How hard a stock has been bought or sold lately, on a 0-100 scale.",
+      example: "Below 35 means it has been sold off hard (oversold) — that is when the fund is allowed to sell PUT spreads. Above 65 means it has been bought hard (overbought) — that is when it is allowed to sell CALL spreads. RSI 28 on a name we sell puts on means we are betting the fall has gone far enough.",
+      long: "Relative Strength Index, Wilder's 14-day version computed on daily closes. It compares the size of recent up moves to recent down moves; 50 is neutral. It is a stretch gauge, not a prediction — a stock can stay oversold for weeks.",
+    },
+    stochastic: {
+      label: "Stochastic %K (14)",
+      short: "Where today's close sits inside the last 14 days' high-low range.",
+      example: "%K = 8 means the close is near the bottom of the two-week range (oversold, the fund's put-spread condition is %K < 30); %K = 95 means it is near the top (overbought, the call-spread condition is %K > 70). It is checked together with RSI — both must agree before a side is allowed.",
+      long: "Fast %K = (close - lowest low) / (highest high - lowest low) x 100 over the last 14 daily bars. A flat range reads 50 (neutral) rather than dividing by zero.",
+    },
+    proposed_trade: {
+      label: "Proposed trade",
+      short: "A trade the fund intends to open and has not opened. No money is committed yet.",
+      example: "A proposal reading 'NVDA 150/145 put spread, expires Aug 21' means the fund wants to sell that spread on the next tick and has not yet. Nothing is at risk while it sits here, and a comment on it — 'the strike is too close' — is read before anything fills.",
+      long: "Proposals are produced by the pre-bell plan (spread_trader --preopen) after a candidate clears every entry gate. They sit here so a human can read the reasoning and object before the next tick tries to fill them. Comment on one with its \u{1F4AC} button — that thread is read before anything is placed. A proposal that fills moves to the Trade Log; one that doesn't simply disappears at the next plan.",
+    },
     pop: {
       label: "PoP / win probability",
       short: "Our best estimate of the odds this trade ends up profitable.",
@@ -993,6 +1011,12 @@
       short: "Clusters Trade Log rows into labeled sections instead of one flat list.",
       long: "Status groups by Open/Closed/Expired, Ticker groups by underlying symbol, Expiry groups by the contract's expiration date (rows with no resolvable expiry land in a trailing Unknown expiry group). Each group header shows its row count and summed realized P&L.",
       example: "Grouping by Ticker turns a 40-row flat log into one section per symbol, each with its own trade count and realized P&L subtotal.",
+    },
+    trade_log_pagination: {
+      label: "Pagination",
+      short: "Pages the Trade Log's already-sorted, already-filtered rows client-side, 20 per page by default.",
+      long: "The status filter and Group by selection apply before pagination, so a page always shows a slice of the same set the panel-head stats and filter counts describe — never a different total. First/Prev/Next/Last move between pages; the page-size selector offers 20/50/100/All. Changing the filter, the grouping, or the page size resets you to page 1.",
+      example: "128 filtered trades at 20/page shows 'Page 1 of 7'; switching Rows per page to All shows all 128 rows on 'Page 1 of 1'.",
     },
     armed: {
       label: "Armed",

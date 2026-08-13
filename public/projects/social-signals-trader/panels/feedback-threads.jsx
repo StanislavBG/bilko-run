@@ -62,6 +62,16 @@ function systemThreads(threads) {
   return threads.filter((t) => t.scope === "system");
 }
 
+// Threads on ONE proposed trade. Filed as component/`proposal-<id>` (the
+// submit contract has no `proposal` kind), given scope "proposal" by
+// feedback_threads.py so they never leak into the site-feedback pool above.
+function proposalThreads(threads, proposalId) {
+  if (!proposalId) return [];
+  return threads.filter(
+    (t) => t.targetKind === "component" && String(t.targetId) === String(proposalId)
+  );
+}
+
 // --- rendering -------------------------------------------------------------
 
 function ThreadReply({ reply }) {
@@ -103,6 +113,7 @@ function FeedbackThread({ thread }) {
         <div className="fbt-thread-foot">
           <window.FeedbackButton
             target={{ kind: thread.targetKind, id: thread.targetId, label: thread.targetLabel || thread.title }}
+            parentId={thread.id}
           />
           <span className="fbt-hint">reply in this thread</span>
         </div>
@@ -174,6 +185,43 @@ function SystemFeedbackPanel() {
   );
 }
 
+// The discussion under ONE proposed trade, rendered inline on that proposal's
+// card in Proposed Trades — not a separate panel, because the comment IS the
+// instruction for that specific proposal and has to sit against it.
+function ProposalDiscussion({ proposalId, label }) {
+  const payload = feedbackPayload();
+  const threads = proposalThreads(payload.threads, proposalId);
+  const open = threads.filter((t) => !t.answered).length;
+  return (
+    <div className="prop-discussion" id={`discussion-${proposalId || ""}`}>
+      <h5 className="prop-block-title">
+        Discussion
+        <span className="fbt-count">
+          {threads.length} comment{threads.length === 1 ? "" : "s"}
+        </span>
+        {open > 0 && <span className="fbt-count fbt-count--open">{open} awaiting reply</span>}
+      </h5>
+      {threads.length ? (
+        <ThreadList threads={threads} emptyText="" />
+      ) : (
+        <p className="fbt-empty">
+          No comments on this proposal yet.{" "}
+          {window.FeedbackButton ? "Use the \u{1F4AC} button above to say what should happen to it — hold it, resize it, or let it run." : ""}
+        </p>
+      )}
+      {window.FeedbackButton && (
+        <div className="fbt-thread-foot">
+          <window.FeedbackButton target={{ kind: "component", id: proposalId, label: label || "Proposed trade" }} />
+          <span className="fbt-hint">comment on this proposal</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 window.TradeFeedbackThreads = TradeFeedbackThreads;
 window.SystemFeedbackPanel = SystemFeedbackPanel;
-window.FeedbackThreadsInternals = { selectThreads, systemThreads, whenLabel, feedbackPayload };
+window.ProposalDiscussion = ProposalDiscussion;
+window.FeedbackThreadsInternals = {
+  selectThreads, systemThreads, proposalThreads, whenLabel, feedbackPayload,
+};

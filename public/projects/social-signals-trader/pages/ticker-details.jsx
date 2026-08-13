@@ -296,6 +296,31 @@ function StrategyPolicy() {
         {(c.tickers || []).join(", ")}
       </p>
 
+      {/* The only gate about the STOCK rather than the option — and the one
+          that decides which side we are allowed to sell at all, so it gets its
+          own section (and its own feedback thread) above the option gates. */}
+      <h4 style={h4}>Direction — momentum<PolicyFeedback section="Entry — momentum" /></h4>
+      <div style={grid}>
+        {field(
+          "PUT spreads (bullish)",
+          c.require_momentum === false ? "off" : `RSI < ${dash(c.put_max_rsi)}, stoch %K < ${dash(c.put_max_stoch)}`,
+          "we only sell put spreads into an OVERSOLD name — the fall has to have gone far enough that a bounce is the likelier next move; RSI(14) Wilder and fast %K(14) on daily bars",
+          "rsi",
+        )}
+        {field(
+          "CALL spreads (bearish)",
+          c.require_momentum === false ? "off" : `RSI > ${dash(c.call_min_rsi)}, stoch %K > ${dash(c.call_min_stoch)}`,
+          "we only sell call spreads into an OVERBOUGHT name — the run has to be stretched enough that a pause is the likelier next move",
+          "stochastic",
+        )}
+        {field(
+          "Unmeasurable momentum",
+          c.require_momentum === false ? "n/a — gate off" : "reject",
+          "a name whose RSI/%K cannot be computed (no bars, short history) is REJECTED, not waved through — a spread whose direction was never checked is exactly what this gate exists to stop",
+          "rsi",
+        )}
+      </div>
+
       <h4 style={h4}>Entry gates<PolicyFeedback section="Entry gates" /></h4>
       <div style={grid}>
         {field("Short-leg delta", deltaBand, "a BAND, not just a ceiling — too far ITM (above the ceiling) is too risky, but too far OTM (below the floor) is too safe: the credit no longer covers the round-trip cost", "short_leg_delta")}
@@ -555,6 +580,13 @@ function TickerDetailsPage() {
         </>
       )}
 
+      {/* Human in the loop. Promoted out of the old half-width "Open queue"
+          card to full width directly under Positions: what we are ABOUT to do
+          outranks the history of what we already did, because it is the only
+          thing a reader can still change. Its deployment/margin line came with
+          it, which is why Open queue no longer renders on this page. */}
+      {window.ProposedTrades && <window.ProposedTrades />}
+
       <div id="options-trade-log">
         {tradeLog.empty || tradeLog.tradeLog}
       </div>
@@ -570,7 +602,6 @@ function TickerDetailsPage() {
             {summary.actionQueue}
           </Row2>
           <Row2>
-            {summary.openQueue}
             {tradeLog.openOrders}
           </Row2>
         </>

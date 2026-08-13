@@ -742,6 +742,8 @@ function TradeLogTable({ trades, expectedOpenCount }) {
   const { useState } = React;
   const [filter, setFilter] = useState("all");
   const [groupBy, setGroupBy] = useState("none");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   // O(n) over trades: one facts + status derivation per row, computed once
   // per render and reused by the counts, the filter, and the grouping below.
@@ -773,8 +775,18 @@ function TradeLogTable({ trades, expectedOpenCount }) {
   const visible = filter === "all" ? enriched : enriched.filter((t) => t.status === filter);
   const realizedVisible = realizedOf(visible);
 
+  // Clamp on the derived page count rather than setState-in-render: a filter
+  // change or the live-snapshot overlay replacing window.SPREAD_LOG after
+  // first render can both shrink `visible` out from under a stale `page`.
+  const pageCount = pageSize === "all" ? 1 : Math.max(1, Math.ceil(visible.length / pageSize));
+  const effectivePage = Math.min(page, pageCount);
+  const pageRows = pageSize === "all" ? visible : visible.slice((effectivePage - 1) * pageSize, effectivePage * pageSize);
+  const rangeStart = visible.length === 0 ? 0 : (effectivePage - 1) * (pageSize === "all" ? visible.length : pageSize) + 1;
+  const rangeEnd = visible.length === 0 ? 0 : rangeStart + pageRows.length - 1;
+
   let groups = null;
   if (groupBy !== "none") {
+    // grouped pagination: see PRD trade-log-pagination-grouping-and-nav-state
     const order = [];
     const byLabel = new Map();
     visible.forEach((t) => {
@@ -801,6 +813,9 @@ function TradeLogTable({ trades, expectedOpenCount }) {
         </h3>
         <div className="opt-panel-stats">
           <span><em>{visible.length}</em> trades <span className="mono-dim">of {enriched.length}</span></span>
+          {!!visible.length && (
+            <span className="mono-dim">Showing {rangeStart}–{rangeEnd} of {visible.length}</span>
+          )}
           <span>realized <em className={realizedVisible >= 0 ? "up" : "down"}>{money(realizedVisible)}</em></span>
         </div>
       </div>
@@ -822,7 +837,7 @@ function TradeLogTable({ trades, expectedOpenCount }) {
                   key={f.key}
                   type="button"
                   className={`opt-filter-btn${filter === f.key ? " opt-filter-btn--active" : ""}`}
-                  onClick={() => setFilter(f.key)}
+                  onClick={() => { setFilter(f.key); setPage(1); }}
                 >
                   {f.label} <span className="opt-filter-count">{counts[f.key] || 0}</span>
                 </button>
@@ -834,7 +849,7 @@ function TradeLogTable({ trades, expectedOpenCount }) {
               <select
                 id="opt-trade-log-group-by"
                 value={groupBy}
-                onChange={(e) => setGroupBy(e.target.value)}
+                onChange={(e) => { setGroupBy(e.target.value); setPage(1); }}
               >
                 {TRADE_LOG_GROUP_BYS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
               </select>
@@ -869,16 +884,68 @@ function TradeLogTable({ trades, expectedOpenCount }) {
                           ))}
                         </React.Fragment>
                       ))
-                    : visible.map((t) => (
+                    : pageRows.map((t) => (
                         <TradeLogRow key={(t.ev.client_order_id || "") + t.index} ev={t.ev} classification={t.classification} index={t.index} />
                       ))}
                 </tbody>
               </table>
             </div>
           )}
+          {!groups && (
+            <TradeLogPagination
+              page={effectivePage}
+              pageCount={pageCount}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            />
+          )}
         </>
       )}
     </section>
+  );
+}
+
+// Below the table wrapper so it reads as "controls for the table above it";
+// disabled (not hidden) at the ends so keyboard users always land on a real
+// control, and rendered even when everything fits on one page (PRD AC).
+function TradeLogPagination({ page, pageCount, pageSize, onPageChange, onPageSizeChange }) {
+  const atFirst = page <= 1;
+  const atLast = page >= pageCount;
+  return (
+    <nav className="opt-pagination" aria-label="Trade Log pagination">
+      <div className="opt-pagination-controls">
+        <button type="button" className="opt-pagination-btn" onClick={() => onPageChange(1)} disabled={atFirst}>
+          First
+        </button>
+        <button type="button" className="opt-pagination-btn" onClick={() => onPageChange(page - 1)} disabled={atFirst}>
+          Prev
+        </button>
+        <span className="opt-pagination-readout" aria-live="polite">
+          Page {page} of {pageCount}
+        </span>
+        <button type="button" className="opt-pagination-btn" onClick={() => onPageChange(page + 1)} disabled={atLast}>
+          Next
+        </button>
+        <button type="button" className="opt-pagination-btn" onClick={() => onPageChange(pageCount)} disabled={atLast}>
+          Last
+        </button>
+      </div>
+      <div className="opt-pagination-size">
+        <label htmlFor="opt-trade-log-page-size">Rows per page:</label>
+        <select
+          id="opt-trade-log-page-size"
+          value={pageSize}
+          onChange={(e) => onPageSizeChange(e.target.value === "all" ? "all" : Number(e.target.value))}
+        >
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+          <option value="all">All</option>
+        </select>
+        <Help term="trade_log_pagination" />
+      </div>
+    </nav>
   );
 }
 

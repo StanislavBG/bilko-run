@@ -412,7 +412,10 @@ function WhatHadToHappen({ ev, facts, livePrice }) {
           </div>
           <div className="optd-stat-value down">{money(facts.maxLoss)}</div>
           <div className="optd-stat-sub">Max loss</div>
-          <div className="optd-stat-caption">The most we can lose if the stock moves fully against us.</div>
+          <div className="optd-stat-caption">
+            The maximum possible loss if the spread finishes fully in the money at expiry — worst
+            case, not what it is showing right now.
+          </div>
         </div>
         <div className="optd-stat">
           <div className="optd-stat-label">
@@ -604,12 +607,29 @@ function KvGroup({ title, items, calc }) {
   );
 }
 
-function TheNumbers({ ev, facts }) {
+// Current-position calc for the "Current open P&L" row — same shape as
+// options-summary.jsx's positionRowCalcProps so the detail page's <Help/>
+// tooltip explains the number with the exact inputs that produced it,
+// instead of re-deriving a second formula for the same field.
+function openPlCalcProps(pos) {
+  if (!pos || !pos.entry || !pos.now) return {};
+  return {
+    inputs: { credit: pos.entry.credit, close_cost: pos.now.close_cost },
+    asOf: { entry: pos.entry.filled_at, quotes: pos.oldest_quote_ts },
+  };
+}
+
+function TheNumbers({ ev, facts, pos }) {
   const { isClose, received, maxGain, isNetDebit, maxLoss, be, riskReward, pnl, classification } = facts;
-  const calc = tradeCalcProps(ev, facts);
+  const calc = { ...tradeCalcProps(ev, facts), open_pl: openPlCalcProps(pos) };
   const maxGainLabel = isNetDebit ? "Net debit paid" : "Most we can make";
   const maxGainSecondary = isNetDebit ? "Net debit" : "Max gain (credit)";
   const maxGainValue = money(isNetDebit ? Math.abs(maxGain) : maxGain);
+  // Only meaningful while the trade is still open and matched to a live
+  // position — a closed trade already has "Realized P&L" below, and the two
+  // must never both render for the same trade (one is a live mark, the other
+  // is final).
+  const openPl = !isClose && pos && pos.now ? pos.now.open_pl : null;
   return (
     <section className="card opt-panel optd-section">
       <h2 className="optd-h2">The numbers</h2>
@@ -618,7 +638,12 @@ function TheNumbers({ ev, facts }) {
         calc={calc}
         items={[
           [maxGainLabel, maxGainValue, "max_gain", maxGainSecondary],
-          ["Most we can lose", money(maxLoss), "max_loss", "Max loss (risk)"],
+          // "Most we can lose" is the worst case if the spread finishes fully
+          // in the money at expiry — NOT what it's showing right now. Kept
+          // apart from "Current open P&L" below (a live mark that moves
+          // every quote) so the two are never mistaken for each other.
+          ["Most we can lose", money(maxLoss), "max_loss", "Max loss (risk, worst case at expiry)"],
+          ["Current open P&L", openPl != null ? money(openPl) : null, "open_pl", "Live mark, not worst case"],
           ["Break-even price", be != null ? money(be) : (isNetDebit ? "no breakeven — net debit" : null), "breakeven", "Breakeven"],
           ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null, "risk_reward"],
           ["Credit if filled", money(ev.credit ?? ev.entry_credit), "credit_if_filled"],
@@ -753,7 +778,7 @@ function OptionTradeDetailPage() {
       <WhatWeDid ev={ev} facts={facts} />
       <WhatHadToHappen ev={ev} facts={facts} livePrice={livePrice} />
       <WhatActuallyHappened ev={ev} facts={facts} />
-      <TheNumbers ev={ev} facts={facts} />
+      <TheNumbers ev={ev} facts={facts} pos={pos} />
       <Greeks ev={ev} facts={facts} />
       {window.TradeFeedbackThreads && (
         <window.TradeFeedbackThreads targets={feedbackTargets(key, pos)} />

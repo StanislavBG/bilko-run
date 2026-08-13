@@ -1068,6 +1068,28 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-group-label { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
 .opt-group-count { color: var(--muted); }
 
+/* Trade Log pagination bar — sits below .opt-table-scroll, same visual
+   register as .opt-filter-row above the table. */
+.opt-pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin: 12px 0 0;
+}
+.opt-pagination-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.opt-pagination-btn {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .01em;
+  padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text-2); cursor: pointer;
+}
+.opt-pagination-btn:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+.opt-pagination-btn:disabled { opacity: .45; cursor: not-allowed; }
+.opt-pagination-readout { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.opt-pagination-size { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.opt-pagination-size select {
+  font-family: var(--mono); font-size: 11px; padding: 3px 6px;
+  border-radius: 6px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text);
+}
+
 .opt-table-scroll { overflow-x: auto; margin-top: 0; }
 .opt-table--orders th, .opt-table--orders td { white-space: nowrap; }
 
@@ -1550,3 +1572,71 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .fbt-author { font-size: 11px; font-weight: 600; color: var(--accent); }
 .fbt-thread-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .fbt-hint { font-size: 11px; color: var(--text-2); }
+
+/* --- Proposed trades (panels/proposed-trades.jsx) -------------------------
+   The human-in-the-loop card. Deliberately louder than a live table: a
+   proposal is the one thing on the page a reader can still change, so it gets
+   an accent left-edge and full-width cards rather than a compact row. */
+.prop-panel { border-left: 3px solid color-mix(in oklch, var(--accent) 55%, transparent); }
+.prop-lede { max-width: 90ch; margin: 6px 0 10px; }
+.prop-deployment {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; color: var(--text-2); margin-bottom: 12px;
+}
+.prop-margin-breach { color: var(--neg); font-weight: 600; }
+.prop-card {
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: var(--r); background: var(--surface-2);
+  padding: 12px 14px; margin-top: 12px;
+}
+.prop-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.prop-card-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.prop-card-head-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.prop-badge {
+  font-size: 10px; letter-spacing: .04em; border-radius: 999px; padding: 2px 8px;
+  border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent); color: var(--accent);
+}
+.prop-headline { font-size: 14px; font-weight: 600; color: var(--text); margin: 10px 0 6px; max-width: 80ch; }
+.prop-bullets { margin: 0; padding-left: 18px; }
+.prop-bullets li { font-size: 13px; color: var(--text-2); margin: 4px 0; max-width: 85ch; line-height: 1.5; }
+.prop-structure { font-size: 12px; color: var(--text-2); margin: 8px 0 0; max-width: 85ch; }
+.prop-error { font-size: 12px; color: var(--neg); margin: 8px 0 0; }
+.prop-stats { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; }
+.prop-stat { display: flex; flex-direction: column; gap: 2px; }
+.prop-stat-label { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.prop-stat-value { font-size: 14px; font-weight: 600; font-family: var(--mono); color: var(--text); }
+.prop-block { margin-top: 14px; }
+.prop-block-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 6px;
+}
+.prop-toggle {
+  background: none; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--text-2); font-size: 10px; padding: 1px 8px; cursor: pointer;
+}
+.prop-checks { width: 100%; font-size: 12px; }
+.prop-checks .prop-mono { font-family: var(--mono); }
+.prop-checks .prop-why { color: var(--text-2); }
+.prop-check-fail { color: var(--neg); }
+.prop-tick { display: inline-block; width: 14px; font-weight: 700; }
+.prop-tick--pass { color: var(--accent); }
+.prop-tick--fail { color: var(--neg); }
+.prop-rules { list-style: none; margin: 0; padding: 0; }
+.prop-rules li {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--line);
+}
+.prop-rule-plain { color: var(--text-2); max-width: 70ch; }
+.prop-rule-field { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+.prop-rules-note { font-size: 11px; color: var(--muted); margin: 6px 0 0; }
+.prop-discussion { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+.prop-empty { margin-top: 4px; }
+.prop-funnel { list-style: none; margin: 8px 0 0; padding: 0; max-width: 560px; }
+.prop-funnel li {
+  display: flex; justify-content: space-between; gap: 12px;
+  font-size: 12px; color: var(--text-2); padding: 4px 0; border-bottom: 1px solid var(--line);
+}
+.prop-funnel li b { font-family: var(--mono); color: var(--text); }
+.prop-funnel-note { font-size: 11px; color: var(--warn); margin: 8px 0 0; }

@@ -117,6 +117,7 @@
       tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
     } catch (e) {}
     var type = VALID_TYPES.indexOf(opts.type) !== -1 ? opts.type : "feedback";
+    var parentId = typeof opts.parentId === "string" && opts.parentId ? opts.parentId : null;
     return {
       schema: 1,
       slug: SLUG,
@@ -126,6 +127,7 @@
       title: opts.title || "",
       description: opts.description || "",
       image: opts.image || null,
+      parentId: parentId,
       client: {
         ua: (window.navigator && window.navigator.userAgent) || "",
         viewport: viewport,
@@ -319,6 +321,7 @@
         title: title.trim(),
         description: description.trim(),
         image: image,
+        parentId: props.parentId,
       });
       submit(payload).then(function (result) {
         if (result && result.ok) {
@@ -502,7 +505,7 @@
       ),
       open
         ? ReactDOM.createPortal(
-            React.createElement(FeedbackModal, { target: target, onClose: close }),
+            React.createElement(FeedbackModal, { target: target, parentId: props.parentId, onClose: close }),
             document.body
           )
         : null

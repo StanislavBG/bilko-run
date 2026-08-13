@@ -1,5 +1,5 @@
 window.SPREAD_PLAN = {
-  "generatedAt": "2026-08-13T20:10:23+00:00",
+  "generatedAt": "2026-08-13T23:05:04+00:00",
   "strategy": "CREDIT_SPREAD",
   "deployment": {
     "equity": 105900.93,
@@ -38,13 +38,16 @@ window.SPREAD_PLAN = {
   "funnel": {
     "tickers": 33,
     "chain_errors": 0,
-    "priced": 38,
-    "selected": 0,
-    "rejected_ev_or_credit": 0,
+    "priced": 39,
+    "selected": 1,
+    "rejected_non_positive_credit": 0,
+    "rejected_ev_or_credit": 1,
     "rejected_pop_band": 0,
     "rejected_momentum": 0,
     "passed": 0,
-    "momentum_gate": true
+    "momentum_gate": true,
+    "best_credit_ratio": 1.065,
+    "credit_ratio_required": 1.25
   },
   "intent": []
 };

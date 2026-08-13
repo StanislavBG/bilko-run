@@ -1,5 +1,5 @@
 window.SPREAD_CONFIG = {
-  "generatedAt": "2026-08-13T21:45:42+00:00",
+  "generatedAt": "2026-08-13T22:59:35+00:00",
   "strategy": "CREDIT_SPREAD",
   "config": {
     "tickers": [
@@ -55,6 +55,7 @@ window.SPREAD_CONFIG = {
     "min_ann_yield": 10.0,
     "min_credit": 5.0,
     "min_credit_breakeven_multiple": 1.25,
+    "min_net_credit": 1.0,
     "entry_fill_fraction": 0.5,
     "max_quote_spread_pct": 0.06,
     "max_positions": 30,

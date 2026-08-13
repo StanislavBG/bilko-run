@@ -34,6 +34,12 @@ export async function mcpRun(sql: string, args: unknown[] = []): Promise<void> {
   await getHostDb().execute({ sql, args: args as any[] });
 }
 
+export async function mcpAll<T = Record<string, unknown>>(sql: string, args: unknown[] = []): Promise<T[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await getHostDb().execute({ sql, args: args as any[] });
+  return result.rows as unknown as T[];
+}
+
 export async function ensureGateTables(): Promise<void> {
   const db = getHostDb();
   await db.execute({

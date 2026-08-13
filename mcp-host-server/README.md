@@ -18,6 +18,7 @@ Per the [host contract](../docs/host-contract.md), each app lives in its own rep
 | `unregister_project` | yes | Retire an app (optionally also delete `public/projects/<slug>/`). |
 | `publish_static_project` | yes (copies bytes + commit + push) | After every `vite build` in your app repo. |
 | `status` | no | Verify a publish landed; see uncommitted state. |
+| `usage_report` | no | Per-project egress (bytes out + requests) over a trailing window. Reads `api_egress_daily` straight through this MCP's Turso client — no Clerk JWT, works from cron/headless. These are capacity-signal numbers measured at the origin, not Render billing figures, and under-report by up to the flush interval (60s) on every process restart. |
 
 All mutating tools default to `autoCommit: true` — they push to `origin`, so Render auto-deploys. Pass `autoCommit: false` to stage-only.
 

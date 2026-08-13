@@ -29,6 +29,11 @@ export async function mcpRun(sql, args = []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await getHostDb().execute({ sql, args: args });
 }
+export async function mcpAll(sql, args = []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await getHostDb().execute({ sql, args: args });
+    return result.rows;
+}
 export async function ensureGateTables() {
     const db = getHostDb();
     await db.execute({

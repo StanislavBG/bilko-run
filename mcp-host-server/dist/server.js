@@ -15,6 +15,7 @@
  *   - unregister_project         → removes an entry by slug
  *   - publish_static_project     → copies built dist/ into host's public/projects/<slug>/
  *   - status                     → host git status (uncommitted files, last 5 commits)
+ *   - usage_report               → per-project egress (bytes/requests), no Clerk JWT needed
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -32,7 +33,7 @@ import { readFile, writeFile, rm, mkdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getHostDb, mcpRun, ensureGateTables } from './db.js';
+import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables } from './db.js';
 import { runGates, gateSummary } from './gates/index.js';
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
@@ -374,6 +375,73 @@ server.registerTool('status', {
             'last 5 commits:',
             log,
         ].join('\n'));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 7) usage_report ────────────────────────────────────────────────────────
+//
+// Query shape mirrors server/egress.ts's topEgress() (host repo, not this
+// package — mcp-host-server has its own tsconfig/rootDir and no fastify
+// dependency, so it reads the same table directly instead of importing
+// across packages). If that SQL changes, update this too.
+const STATIC_ROUTE_PREFIX = 'static:';
+function dayKey(ms) {
+    return new Date(ms).toISOString().slice(0, 10);
+}
+server.registerTool('usage_report', {
+    title: 'Per-project egress/usage report',
+    description: 'Reads api_egress_daily directly through this MCP\'s own Turso client — no Clerk JWT, no browser, safe for cron/headless callers. Returns per-project static-asset egress (bytes out + request count, sorted by bytes descending, with bytesPerRequest) over a trailing window (default 7 days), plus the raw /api/* route rows reported separately (those are route *patterns*, not resolved to a project slug). ' +
+        'IMPORTANT: these are capacity-signal numbers measured at the origin server, NOT Render billing figures — Render bills at the edge/CDN layer, which can differ. They also under-report by up to the in-process flush interval (60s) on every process restart, because the egress buffer is in-memory until flushed. ' +
+        'static:_host and static:_other are surfaced explicitly rather than filtered out: _host currently absorbs top-level static dirs that belong to real projects but aren\'t served under /projects/<slug>/ (e.g. OutdoorHours\' large hourly-data tree at top-level /outdoor-hours/, plus /apps/ and /session-manager-operations/) — so _host is not purely host chrome today. _other is traffic to an unrecognised /projects/<x>/ slug. Also reports the earliest date present in the table so a caller can tell "no traffic in this window" apart from "metering only started on <date>".',
+    inputSchema: {
+        days: z.number().int().positive().default(7).describe('Trailing window size in days. Default 7.'),
+    },
+}, async ({ days }) => {
+    try {
+        const earliestRow = await mcpGet(`SELECT MIN(date) AS earliest FROM api_egress_daily`);
+        const earliestDate = earliestRow?.earliest ?? null;
+        if (!earliestDate) {
+            return ok(JSON.stringify({
+                empty: true,
+                explanation: 'api_egress_daily has no rows in this database. Either this is a fresh/local dev DB that has never seen traffic, or the egress meter has not flushed yet (60s interval). This is not an error.',
+                window: { requestedDays: days },
+                static: [],
+                api: [],
+            }, null, 2));
+        }
+        const since = dayKey(Date.now() - days * 86_400_000);
+        const through = dayKey(Date.now());
+        const staticRows = await mcpAll(`SELECT SUBSTR(route, ${STATIC_ROUTE_PREFIX.length + 1}) AS slug,
+                SUM(requests) AS requests, SUM(bytes) AS bytes
+           FROM api_egress_daily
+          WHERE date >= ? AND route LIKE 'static:%'
+          GROUP BY slug
+          ORDER BY bytes DESC`, [since]);
+        const apiRows = await mcpAll(`SELECT method, route, SUM(requests) AS requests, SUM(bytes) AS bytes
+           FROM api_egress_daily
+          WHERE date >= ? AND route NOT LIKE 'static:%'
+          GROUP BY method, route
+          ORDER BY bytes DESC`, [since]);
+        const withRate = (r) => ({
+            ...r,
+            bytesPerRequest: r.requests ? Math.round(r.bytes / r.requests) : 0,
+        });
+        const out = {
+            empty: false,
+            window: { requestedDays: days, sinceDate: since, throughDate: through },
+            earliestDateInTable: earliestDate,
+            static: staticRows.map(withRate),
+            api: apiRows.map(withRate),
+            notes: [
+                'Capacity signal, not Render billing — measured at the origin, not the CDN edge.',
+                'Under-reports by up to the flush interval (60s) on every process restart.',
+                'static:_host absorbs some top-level static dirs that belong to real projects (e.g. outdoor-hours\' data tree, /apps/, /session-manager-operations/) — treat _host as inflated until that attribution gap is fixed in a follow-up.',
+                '`api` rows are route PATTERNS (e.g. "/api/projects/:slug/feedback"), not resolved per-project — they are not folded into the per-slug `static` numbers.',
+            ],
+        };
+        return ok(JSON.stringify(out, null, 2));
     }
     catch (e) {
         return err(e.message);

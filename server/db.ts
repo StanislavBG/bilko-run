@@ -361,6 +361,21 @@ const MIGRATIONS = [
     PRIMARY KEY (date, method, route)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_api_egress_daily_date ON api_egress_daily (date)`,
+  // Per-asset static egress, bucketed by exact URL — the per-file sibling of
+  // api_egress_daily's static:<slug> rollup. Bounded to at most 51 rows per
+  // (date, slug): top 50 paths by bytes, plus one folded-in '_rest' row for
+  // everything past the top 50. Pruned back to that bound on every flush —
+  // see egress.ts's pruneAssetOverflow(). Answers "which FILE burned the
+  // bytes", not just "which project".
+  `CREATE TABLE IF NOT EXISTS static_asset_daily (
+    date     TEXT NOT NULL,
+    slug     TEXT NOT NULL,
+    path     TEXT NOT NULL,
+    requests INTEGER NOT NULL DEFAULT 0,
+    bytes    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (date, slug, path)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_static_asset_daily_date_slug ON static_asset_daily (date, slug)`,
   `CREATE TABLE IF NOT EXISTS usage_daily (
     user_email   TEXT NOT NULL,
     app_slug     TEXT NOT NULL,

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
-import { flushEgress, topEgress, dayKey } from '../egress.js';
+import { flushEgress, topEgress, topStaticAssets, dayKey } from '../egress.js';
 
 type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
 
@@ -174,7 +174,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const email = await requireAdmin(req, reply);
     if (!email) return;
 
-    const q = req.query as { days?: string; limit?: string };
+    const q = req.query as { days?: string; limit?: string; slug?: string };
     const days = Math.min(Math.max(parseInt(q.days || '7', 10) || 7, 1), 90);
     const limit = Math.min(Math.max(parseInt(q.limit || '25', 10) || 25, 1), 200);
 
@@ -183,7 +183,12 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     await safeQuery(() => flushEgress(), undefined);
     const rows = await safeQuery(() => topEgress(days, limit), []);
     const totalBytes = rows.reduce((n, r) => n + r.bytes, 0);
+    // Per-file attribution for static traffic — "which FILE under a project
+    // burned the bytes", not just "which project". Bounded by construction
+    // (see static_asset_daily's comment in db.ts); `slug` narrows to one
+    // project, otherwise it's the global top-N across all projects.
+    const assets = await safeQuery(() => topStaticAssets(days, limit, q.slug || undefined), []);
 
-    return { rows, totalBytes, days, generatedAt: Math.floor(Date.now() / 1000) };
+    return { rows, totalBytes, assets, days, generatedAt: Math.floor(Date.now() / 1000) };
   });
 }

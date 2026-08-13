@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import staticPlugin from '@fastify/static';
+import { Readable } from 'stream';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { initDb, dbRun, dbGet, dbAll } from '../server/db.js';
-import { registerEgressMeter, setStaticKnownSlugs, flushEgress, topEgress } from '../server/egress.js';
+import { registerEgressMeter, setStaticKnownSlugs, flushEgress, topEgress, topStaticAssets } from '../server/egress.js';
 
 const app = Fastify({ logger: false });
 // flush:false — no background timer in tests; we flush explicitly.
@@ -14,6 +15,12 @@ registerEgressMeter(app, { flush: false });
 app.get('/api/tiny', async () => ({ ok: true }));
 app.get('/api/fat/:id', async () => ({ blob: 'x'.repeat(50_000) }));
 app.get('/not-api', async () => ({ ok: true }));
+// Simulates manual.ts's reply.send(createReadStream(...)) — a payload shape
+// sizeOf() can't measure, and Content-Length is never set up front for it.
+const STREAM_BODY = 'y'.repeat(75_000);
+app.get('/api/stream/:id', async (_req, reply) => {
+  return reply.send(Readable.from([STREAM_BODY]));
+});
 
 beforeAll(async () => {
   await initDb();
@@ -77,6 +84,38 @@ describe('egress meter', () => {
     expect(row!.requests).toBe(2);
   });
 
+  it('records real byte counts for a streamed response instead of 0', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/stream/one' });
+    expect(res.statusCode).toBe(200);
+    await flushEgress();
+
+    const row = await dbGet<{ requests: number; bytes: number }>(
+      'SELECT requests, bytes FROM api_egress_daily WHERE route = ? AND date = ?',
+      '/api/stream/:id', today,
+    );
+    expect(row!.requests).toBe(1);
+    expect(row!.bytes).toBe(Buffer.byteLength(STREAM_BODY));
+  });
+
+  it('buckets an unmatched /api/* 404 under a single bounded key, not per-URL', async () => {
+    const first = await app.inject({ method: 'GET', url: '/api/does-not-exist-1' });
+    const second = await app.inject({ method: 'GET', url: '/api/does-not-exist-2' });
+    expect(first.statusCode).toBe(404);
+    expect(second.statusCode).toBe(404);
+    await flushEgress();
+
+    const row = await dbGet<{ requests: number }>(
+      "SELECT requests FROM api_egress_daily WHERE route = 'api:_notfound' AND date = ?",
+      today,
+    );
+    expect(row!.requests).toBe(2);
+
+    const perUrlRows = await dbAll(
+      "SELECT route FROM api_egress_daily WHERE route LIKE '%does-not-exist%'",
+    );
+    expect(perUrlRows.length).toBe(0);
+  });
+
   it('measures UTF-8 bytes, not characters', async () => {
     const local = Fastify({ logger: false });
     registerEgressMeter(local, { flush: false });
@@ -112,6 +151,7 @@ describe('static egress meter', () => {
 
   beforeEach(async () => {
     await dbRun('DELETE FROM api_egress_daily');
+    await dbRun('DELETE FROM static_asset_daily');
   });
 
   it('records real transferred bytes for a known project slug, matching content-length', async () => {
@@ -203,5 +243,31 @@ describe('static egress meter', () => {
 
     const rows = await dbAll<{ route: string }>("SELECT route FROM api_egress_daily WHERE route LIKE 'static:%'");
     expect(rows.some((r) => r.route.includes('api'))).toBe(false);
+  });
+
+  it('keeps per-asset rows bounded when many distinct URLs are requested', async () => {
+    const dir = join(fixtureRoot, 'projects', 'demo-app', 'many');
+    mkdirSync(dir, { recursive: true });
+    const N = 60;
+    for (let i = 0; i < N; i++) writeFileSync(join(dir, `f${i}.bin`), Buffer.alloc(10, 1));
+    // One clearly heavier file that must survive pruning into the top set.
+    writeFileSync(join(dir, 'heavy.bin'), Buffer.alloc(5_000, 2));
+
+    for (let i = 0; i < N; i++) {
+      await staticApp.inject({ method: 'GET', url: `/projects/demo-app/many/f${i}.bin` });
+    }
+    await staticApp.inject({ method: 'GET', url: '/projects/demo-app/many/heavy.bin' });
+    await flushEgress();
+
+    const rows = await dbAll<{ path: string; bytes: number }>(
+      'SELECT path, bytes FROM static_asset_daily WHERE date = ? AND slug = ?', today, 'demo-app',
+    );
+    // Bounded: top 50 by bytes + one folded `_rest` row — never one row per URL.
+    expect(rows.length).toBeLessThanOrEqual(51);
+    expect(rows.some((r) => r.path === '/projects/demo-app/many/heavy.bin')).toBe(true);
+    expect(rows.some((r) => r.path === '_rest')).toBe(true);
+
+    const top = await topStaticAssets(1, 50, 'demo-app');
+    expect(top[0].path).toBe('/projects/demo-app/many/heavy.bin');
   });
 });

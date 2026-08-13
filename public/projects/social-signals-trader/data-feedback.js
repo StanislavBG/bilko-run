@@ -9,7 +9,7 @@ window.FEEDBACK_THREADS = {
     "trade": 2,
     "unanswered": 0
   },
-  "generatedAt": "2026-08-13T22:45:02Z",
+  "generatedAt": "2026-08-13T23:01:29Z",
   "schema": 2,
   "threads": [
     {

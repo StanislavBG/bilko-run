@@ -768,8 +768,8 @@ const TRADE_LOG_GROUP_BYS = [
 // #options/<TICKER>, #trade/<key>) — piggybacking view state onto it would
 // mean parsing it back out of every other hash consumer. Namespaced key,
 // try/catch because sessionStorage throws in some privacy modes.
-const TRADE_LOG_VIEW_KEY = "sst.tradeLog.view";
-const TRADE_LOG_PAGE_SIZES = [20, 50, 100, "all"];
+const TRADE_LOG_VIEW_KEY = "sst.tradeLog.view.v2";
+const TRADE_LOG_PAGE_SIZES = [10, 20, 50, 100, "all"];
 
 function readStoredTradeLogView() {
   try {
@@ -781,7 +781,7 @@ function readStoredTradeLogView() {
     // clamp to something safe rather than render a blank table.
     const filter = TRADE_STATUS_FILTERS.some((f) => f.key === parsed.filter) ? parsed.filter : "all";
     const groupBy = TRADE_LOG_GROUP_BYS.some((g) => g.key === parsed.groupBy) ? parsed.groupBy : "none";
-    const pageSize = TRADE_LOG_PAGE_SIZES.includes(parsed.pageSize) ? parsed.pageSize : 20;
+    const pageSize = TRADE_LOG_PAGE_SIZES.includes(parsed.pageSize) ? parsed.pageSize : 10;
     const page = Number.isInteger(parsed.page) && parsed.page > 0 ? parsed.page : 1;
     return { filter, groupBy, pageSize, page };
   } catch (err) {
@@ -798,7 +798,7 @@ function writeStoredTradeLogView(view) {
 }
 
 function initialTradeLogView() {
-  return readStoredTradeLogView() || { filter: "all", groupBy: "none", page: 1, pageSize: 20 };
+  return readStoredTradeLogView() || { filter: "all", groupBy: "none", page: 1, pageSize: 10 };
 }
 
 // Group label for a single enriched trade under a given grouping mode.
@@ -1101,6 +1101,7 @@ function TradeLogPagination({ page, pageCount, pageSize, onPageChange, onPageSiz
           value={pageSize}
           onChange={(e) => onPageSizeChange(e.target.value === "all" ? "all" : Number(e.target.value))}
         >
+          <option value={10}>10</option>
           <option value={20}>20</option>
           <option value={50}>50</option>
           <option value={100}>100</option>

@@ -1044,9 +1044,9 @@
     },
     trade_log_pagination: {
       label: "Pagination",
-      short: "Pages the Trade Log's already-sorted, already-filtered rows client-side, 20 per page by default.",
-      long: "The status filter and Group by selection apply before pagination, so a page always shows a slice of the same set the panel-head stats and filter counts describe — never a different total. First/Prev/Next/Last move between pages; the page-size selector offers 20/50/100/All. Changing the filter, the grouping, or the page size resets you to page 1.",
-      example: "128 filtered trades at 20/page shows 'Page 1 of 7'; switching Rows per page to All shows all 128 rows on 'Page 1 of 1'.",
+      short: "Pages the Trade Log's already-sorted, already-filtered rows client-side, 10 per page by default.",
+      long: "The status filter and Group by selection apply before pagination, so a page always shows a slice of the same set the panel-head stats and filter counts describe — never a different total. First/Prev/Next/Last move between pages; the page-size selector offers 10/20/50/100/All. Changing the filter, the grouping, or the page size resets you to page 1.",
+      example: "26 filtered trades at 10/page shows 'Page 1 of 3'; switching Rows per page to All shows all 26 rows on 'Page 1 of 1'.",
     },
     armed: {
       label: "Armed",

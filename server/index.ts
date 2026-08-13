@@ -235,13 +235,25 @@ if (isProd) {
     }
 
     // SPA fallback — inject route-specific OG tags for social crawlers
+    //
+    // MUST `return reply.send(...)`, not a bare `reply.send(...)`. This handler
+    // is async, and Fastify's wrapThenable resolves an async handler's promise
+    // as soon as the function body finishes — but `reply.sent` only flips true
+    // once the raw HTTP response has actually finished writing (writableEnded),
+    // which happens after our async onSend hooks (CSP nonce injection, egress
+    // metering) resolve. A bare `reply.send()` call lets the handler's promise
+    // resolve while `reply.sent` is still false, so Fastify thinks nothing was
+    // sent and calls `reply.send(undefined)` again — racing the in-flight
+    // write and throwing an uncaught ERR_HTTP_HEADERS_SENT that kills the
+    // process. `return reply.send(...)` makes the async function await Reply's
+    // own thenable (which resolves only once the response truly ends), so
+    // wrapThenable never double-sends.
     app.setNotFoundHandler(async (req, reply) => {
       if (req.url.startsWith('/api')) {
-        reply.status(404).send({ error: 'Not found' });
-        return;
+        return reply.status(404).send({ error: 'Not found' });
       }
       const path = req.url.split('?')[0];
-      reply.type('text/html').send(serveWithOg(path));
+      return reply.type('text/html').send(serveWithOg(path));
     });
   }
 }

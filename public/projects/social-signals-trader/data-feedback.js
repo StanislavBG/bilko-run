@@ -1,20 +1,70 @@
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 2,
-    "answered": 2,
+    "active": 3,
+    "answered": 3,
     "archived": 0,
-    "proposal": 0,
+    "proposal": 1,
     "system": 0,
-    "total": 2,
+    "total": 3,
     "trade": 2,
     "unanswered": 0
   },
-  "generatedAt": "2026-08-13T23:01:29Z",
+  "generatedAt": "2026-08-13T23:16:58Z",
   "schema": 2,
   "threads": [
     {
       "answered": true,
       "archivedAt": null,
+      "contractKey": "BABA-C-143-144-2026-08-14",
+      "createdAt": "2026-08-13T18:05:00.000Z",
+      "description": "Before this fills \u2014 why is 143/144 the right width here, not tighter?",
+      "hasImage": false,
+      "id": "fb_forumcont_baba01",
+      "lastActivityAt": "2026-08-13T23:16:58Z",
+      "messages": [
+        {
+          "author": "visitor",
+          "authorLabel": "Visitor",
+          "body": "Before this fills \u2014 why is 143/144 the right width here, not tighter?",
+          "createdAt": "2026-08-13T18:05:00.000Z",
+          "hasImage": false,
+          "id": "fb_forumcont_baba01",
+          "role": "user",
+          "title": "[B] Why 143/144 and not a tighter spread?"
+        },
+        {
+          "author": "agent",
+          "authorLabel": "Trading agent",
+          "body": "The 1-point width keeps max loss and collateral small for the credit collected \u2014 going tighter (e.g. 143/143.5) would shrink the credit faster than it shrinks the risk at this IV, so the reward-to-risk gets worse, not better.",
+          "createdAt": "2026-08-13T23:16:58Z",
+          "hasImage": false,
+          "id": "fb_forumcont_baba01.r1",
+          "role": "agent"
+        }
+      ],
+      "replies": [
+        {
+          "author": "agent",
+          "authorLabel": "Trading agent",
+          "body": "The 1-point width keeps max loss and collateral small for the credit collected \u2014 going tighter (e.g. 143/143.5) would shrink the credit faster than it shrinks the risk at this IV, so the reward-to-risk gets worse, not better.",
+          "createdAt": "2026-08-13T23:16:58Z",
+          "id": "fb_forumcont_baba01.r1"
+        }
+      ],
+      "route": "#options",
+      "scope": "proposal",
+      "stage": "proposal",
+      "status": "answered",
+      "targetId": "proposal-BABA-call-143-144-2026-08-14",
+      "targetKind": "component",
+      "targetLabel": "BABA 143/144 call spread proposal",
+      "title": "[B] Why 143/144 and not a tighter spread?",
+      "type": "feedback"
+    },
+    {
+      "answered": true,
+      "archivedAt": null,
+      "contractKey": "BABA-C-143-144-2026-08-14",
       "createdAt": "2026-08-09T23:17:11.000Z",
       "description": "Which value is true? And why it is a loss at all?",
       "hasImage": false,
@@ -84,6 +134,7 @@ window.FEEDBACK_THREADS = {
       ],
       "route": "#options",
       "scope": "position",
+      "stage": "position",
       "status": "answered",
       "targetId": "BABA-C-143/144-2026-08-14",
       "targetKind": "position",
@@ -94,6 +145,7 @@ window.FEEDBACK_THREADS = {
     {
       "answered": true,
       "archivedAt": null,
+      "contractKey": "INTC-P-88-87-2026-08-12",
       "createdAt": "2026-08-09T23:42:16.000Z",
       "description": "how come we sell a put spread but pay debit? this should never happen!",
       "hasImage": false,
@@ -131,6 +183,7 @@ window.FEEDBACK_THREADS = {
       ],
       "route": "#trade/CREDIT_SPREAD_INTC_20260812_8800",
       "scope": "trade",
+      "stage": "trade",
       "status": "answered",
       "targetId": "CREDIT_SPREAD_INTC_20260812_8800",
       "targetKind": "trade",

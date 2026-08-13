@@ -620,9 +620,10 @@ function PositionFeedbackIndicator({ feedbackTarget, tradeKeyValue }) {
   const internals = window.FeedbackThreadsInternals;
   if (!internals || !feedbackTarget) return null;
   const payload = internals.feedbackPayload();
-  const threads = internals.selectThreads(payload.threads, [{ kind: "position", id: feedbackTarget.id }]);
+  const selectForContract = internals.selectThreadsForContract || internals.selectThreads;
+  const threads = selectForContract(payload.threads, [{ kind: "position", id: feedbackTarget.id }]);
   if (!threads.length) return null;
-  const open = threads.filter((t) => !t.answered).length;
+  const open = internals.unansweredActiveCount ? internals.unansweredActiveCount(threads) : threads.filter((t) => !t.answered).length;
   const count = `${threads.length}${open > 0 ? "!" : ""}`;
   const label = `${threads.length} thread${threads.length === 1 ? "" : "s"}${open > 0 ? `, ${open} awaiting reply` : ""}`;
   const cls = `opts-fb-indicator${open > 0 ? " opts-fb-indicator--open" : ""}`;

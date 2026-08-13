@@ -259,6 +259,48 @@ function proposalThreads(threads, proposalId) {
   );
 }
 
+// --- contract continuity (PRD 1088, on top of PRD 1087's contractKey) ------
+//
+// One spread carries three (kind,id) identities over its life — proposed,
+// open position, trade log — each already resolved to the SAME `contractKey`
+// by feedback_threads.py. This is the single selector all three surfaces
+// (ProposalDiscussion, TradeFeedbackThreads, PositionFeedbackIndicator) call
+// through so a question asked at one stage surfaces at every later stage
+// too, rather than three surfaces each re-implementing the merge.
+//
+// Strictly additive over `selectThreads`: it always includes the legacy
+// (kind,id) match, then unions in every other thread sharing a contractKey
+// found on that match. A pre-1087 cached payload (no `contractKey` on any
+// thread) degrades to exactly `selectThreads`'s behavior — no blank panel,
+// no crash. `threads` (feedbackPayload().threads / feedback_threads.build's
+// output) already arrives sorted by lastActivityAt descending, so filtering
+// it in one pass — rather than concatenating the legacy and by-contract
+// subsets — keeps the merged set in that same single time order (one
+// interleaved conversation, not legacy-then-contract-matches) and dedupes
+// on thread id for free.
+function selectThreadsForContract(threads, targets) {
+  const legacy = selectThreads(threads, targets);
+  const keys = new Set(legacy.map((t) => t.contractKey).filter(Boolean));
+  if (!keys.size) return legacy;
+  const legacyIds = new Set(legacy.map((t) => t.id));
+  return threads.filter((t) => legacyIds.has(t.id) || (t.contractKey && keys.has(t.contractKey)));
+}
+
+// Header "N awaiting reply" must exclude archived threads — an archived
+// thread is neither answered nor something a reader should chase a reply
+// on, and `counts.unanswered` (PRD 1068) already excludes it. Shared here so
+// the three header counts below can't drift back into recounting archived
+// threads as open.
+function unansweredActiveCount(threads) {
+  return threads.filter((t) => !t.answered && statusOf(t) !== "archived").length;
+}
+
+const STAGE_LABEL = {
+  proposal: "asked while proposed",
+  position: "asked while open",
+  trade: "asked on the trade log",
+};
+
 // --- rendering -------------------------------------------------------------
 
 // One entry of a thread's `messages[]` — the visitor's opening post and every
@@ -336,6 +378,7 @@ function FeedbackThread({ thread, collapsed, onToggleCollapse, ownerMode, routeN
   const statusLabel = STATUS_LABEL[status] || STATUS_LABEL.open;
   const messages = threadMessages(thread);
   const title = thread.title || "(no title)";
+  const stageLabel = STAGE_LABEL[thread.stage];
   return (
     <article className={`fbt-thread fbt-thread--${status}`}>
       <header className="fbt-thread-head">
@@ -348,6 +391,7 @@ function FeedbackThread({ thread, collapsed, onToggleCollapse, ownerMode, routeN
         >
           <span className="fbt-caret" aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
           <span className={`fbt-badge fbt-badge--${tone}`}>{TYPE_LABEL[thread.type] || "FEEDBACK"}</span>
+          {stageLabel && <span className={`fbt-stage fbt-stage--${thread.stage}`}>{stageLabel}</span>}
           <span className="fbt-title">{title}</span>
           <span className="fbt-when" title={thread.createdAt || ""}>{whenLabel(thread.createdAt)}</span>
           <span className={`fbt-status fbt-status--${status}`}>{statusLabel}</span>
@@ -572,8 +616,8 @@ function ThreadList({ threads: rawThreads, emptyText, panelKey, allThreadIds }) 
 // when the trade is still open, the matching position id.
 function TradeFeedbackThreads({ targets }) {
   const payload = feedbackPayload();
-  const threads = selectThreads(payload.threads, targets);
-  const open = threads.filter((t) => !t.answered).length;
+  const threads = selectThreadsForContract(payload.threads, targets);
+  const open = unansweredActiveCount(threads);
   const panelKey = `trade:${(targets || []).map((t) => `${t.kind}:${t.id}`).join(",")}`;
   return (
     <section className="card opt-panel fbt-panel" id="trade-feedback">
@@ -603,7 +647,7 @@ function TradeFeedbackThreads({ targets }) {
 function SystemFeedbackPanel() {
   const payload = feedbackPayload();
   const threads = systemThreads(payload.threads);
-  const open = threads.filter((t) => !t.answered).length;
+  const open = unansweredActiveCount(threads);
   return (
     <section className="card opt-panel fbt-panel" id="system-feedback">
       <div className="opt-panel-head">
@@ -636,8 +680,10 @@ function SystemFeedbackPanel() {
 // instruction for that specific proposal and has to sit against it.
 function ProposalDiscussion({ proposalId, label }) {
   const payload = feedbackPayload();
-  const threads = proposalThreads(payload.threads, proposalId);
-  const open = threads.filter((t) => !t.answered).length;
+  const threads = proposalId
+    ? selectThreadsForContract(payload.threads, [{ kind: "component", id: proposalId }])
+    : [];
+  const open = unansweredActiveCount(threads);
   return (
     <div className="prop-discussion" id={`discussion-${proposalId || ""}`}>
       <h5 className="prop-block-title">
@@ -675,7 +721,8 @@ window.TradeFeedbackThreads = TradeFeedbackThreads;
 window.SystemFeedbackPanel = SystemFeedbackPanel;
 window.ProposalDiscussion = ProposalDiscussion;
 window.FeedbackThreadsInternals = {
-  selectThreads, systemThreads, proposalThreads, whenLabel, feedbackPayload,
+  selectThreads, selectThreadsForContract, unansweredActiveCount,
+  systemThreads, proposalThreads, whenLabel, feedbackPayload,
   ThreadMessage, threadMessages,
   statusOf, defaultCollapsed, readViewState, writeViewState, pruneCollapse,
   VIEW_KEY, VIEW_COLLAPSE_CAP, FILTER_KEYS,

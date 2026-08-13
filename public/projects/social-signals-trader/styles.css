@@ -1619,6 +1619,13 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 }
 .fbt-badge--bad { color: var(--neg); border-color: color-mix(in oklch, var(--neg) 40%, transparent); }
 .fbt-badge--warn { color: var(--warn); border-color: color-mix(in oklch, var(--warn) 40%, transparent); }
+/* Stage chip (PRD 1088) — which point in the spread's life this thread was
+   asked at (proposed / open / trade log), so a merged contract conversation
+   still reads as a timeline rather than one undifferentiated pile. */
+.fbt-stage {
+  font-size: 10px; letter-spacing: .02em; border-radius: 999px; padding: 2px 8px;
+  border: 1px solid var(--line); color: var(--text-2); background: var(--surface);
+}
 .fbt-target { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
 .fbt-body { font-size: 12px; color: var(--text-2); margin: 6px 0 0; max-width: 80ch; white-space: pre-wrap; }
 .fbt-msg-count { font-size: 11px; color: var(--text-2); margin: 6px 0 0; }

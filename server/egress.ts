@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { readdirSync } from 'fs';
+import { join } from 'path';
 import { dbRun, dbAll } from './db.js';
 
 // Per-route egress accounting.
@@ -28,7 +30,7 @@ interface Bucket { requests: number; bytes: number }
 const pending = new Map<string, Bucket>();
 let timer: NodeJS.Timeout | null = null;
 
-function dayKey(ms: number): string {
+export function dayKey(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
@@ -72,6 +74,57 @@ function sizeOf(payload: unknown): number {
   return 0; // streams — unknowable here without consuming them
 }
 
+// Static asset egress, bucketed by /projects/<slug>/ — a second metering path
+// alongside the /api/* one above, because static traffic is where the bill
+// actually goes. PNGs are already compressed and transfer byte-for-byte, while
+// JSON/JS gets brotli'd ~3-24x by Render's edge, so on-disk size is a bad
+// proxy: a 2.58 MB sprite transfers 2.58 MB, while outdoor-hours' 2.01 MB
+// hourly JSON transfers ~87 KB on the wire. Only actual transferred bytes
+// tell you who is burning bandwidth (see the game-academy sprite incident
+// this meter was built to stop repeating).
+//
+// @fastify/static serves a stream, so sizeOf(payload) above is useless for
+// these responses (it returns 0 for anything that isn't a string/Buffer). Use
+// an onResponse hook instead, which fires after the reply is fully written and
+// can read the Content-Length header Fastify/Node set for the actual
+// response — correct for normal 200s, empty (0) for 304s, and the range
+// length for 206 partial-content responses.
+const STATIC_ROUTE_PREFIX = 'static:';
+let knownSlugs: Set<string> | null = null;
+
+// Called once at boot with the built dist root, so unrecognised /projects/<x>/
+// paths bucket into `static:_other` instead of minting a fresh key per guess —
+// keeps cardinality bounded to the actual set of published apps.
+export function setStaticKnownSlugs(distRoot: string): void {
+  try {
+    knownSlugs = new Set(
+      readdirSync(join(distRoot, 'projects'), { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name),
+    );
+  } catch {
+    knownSlugs = new Set();
+  }
+}
+
+function slugForPath(path: string): string {
+  const PREFIX = '/projects/';
+  if (!path.startsWith(PREFIX)) return '_host';
+  const slug = path.slice(PREFIX.length).split('/')[0];
+  if (!slug) return '_host';
+  if (knownSlugs) return knownSlugs.has(slug) ? slug : '_other';
+  // No known-slug set registered (e.g. tests) — fall back to a shape check so
+  // an adversarial path still can't mint arbitrary keys.
+  return /^[a-z0-9-]+$/i.test(slug) ? slug : '_other';
+}
+
+function contentLengthOf(reply: { getHeader(name: string): unknown }): number {
+  const h = reply.getHeader('content-length');
+  if (typeof h === 'number') return h;
+  if (typeof h === 'string') return parseInt(h, 10) || 0;
+  return 0;
+}
+
 export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolean } = {}): void {
   app.addHook('onSend', async (req, reply, payload) => {
     try {
@@ -82,6 +135,21 @@ export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolea
       }
     } catch { /* metering must never break a response */ }
     return payload;
+  });
+
+  app.addHook('onResponse', async (req, reply) => {
+    try {
+      // /api/* is fully accounted for by the onSend hook above (route pattern,
+      // payload-measured). Don't double-count it here under a static bucket.
+      const path = req.url.split('?')[0];
+      if (path.startsWith('/api/')) return;
+      const slug = slugForPath(path);
+      const route = `${STATIC_ROUTE_PREFIX}${slug}`;
+      // HEAD has no body — Content-Length still describes the full resource,
+      // so counting it here would overstate actual transferred bytes.
+      const bytes = req.method === 'HEAD' ? 0 : contentLengthOf(reply);
+      recordEgress(dayKey(Date.now()), req.method, route, bytes);
+    } catch { /* metering must never break a response */ }
   });
 
   if (opts.flush !== false && !timer) {

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
-import { flushEgress, topEgress } from '../egress.js';
+import { flushEgress, topEgress, dayKey } from '../egress.js';
 
 type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
 
@@ -16,6 +16,7 @@ interface Row {
     bundleGz: number | null;
   };
   traffic24h: number;
+  bytesOut24h: number;
   errors24h: number;
   warnLogs24h: number;
   errorLogs24h: number;
@@ -43,8 +44,13 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const since = Math.floor(Date.now() / 1000) - 86_400;
     // page_views.created_at_ms is in milliseconds; other tables use seconds
     const sinceMsEpoch = since * 1000;
+    // api_egress_daily is bucketed by calendar day, not a rolling window, so
+    // "today + yesterday" is the closest available approximation of a
+    // trailing 24h — flush first or the current minute's traffic is invisible.
+    await safeQuery(() => flushEgress(), undefined);
+    const egressSinceDate = dayKey(Date.now() - 86_400_000);
 
-    const [manifests, traffic, errors, warns, synthSummary, latestErrors, alerts] = await Promise.all([
+    const [manifests, traffic, bytesOut, errors, warns, synthSummary, latestErrors, alerts] = await Promise.all([
       safeQuery(() => dbAll<{
         slug: string; app_version: string; git_sha: string;
         host_kit_version: string; built_at: string; bundle_size_gz: number;
@@ -59,6 +65,15 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
          WHERE created_at_ms > ? AND path LIKE '/projects/%'
          GROUP BY 1`,
         sinceMsEpoch,
+      ), []),
+
+      // Static-asset egress by slug — route is stored as `static:<slug>`.
+      safeQuery(() => dbAll<{ slug: string; bytes: number }>(
+        `SELECT SUBSTR(route, 8) AS slug, SUM(bytes) AS bytes
+           FROM api_egress_daily
+          WHERE date >= ? AND route LIKE 'static:%'
+          GROUP BY 1`,
+        egressSinceDate,
       ), []),
 
       safeQuery(() => dbAll<{ app: string; n: number }>(
@@ -104,6 +119,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const latestKit = process.env.BILKO_LATEST_HOST_KIT ?? null;
 
     const trafficMap = new Map(traffic.map(t => [t.slug, t.n]));
+    const bytesOutMap = new Map(bytesOut.map(b => [b.slug, b.bytes]));
     const errorsMap  = new Map(errors.map(e => [e.app, e.n]));
     const warnsByApp = new Map<string, { warn: number; error: number }>();
     for (const w of warns) {
@@ -128,6 +144,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
           bundleGz: m.bundle_size_gz,
         },
         traffic24h:   trafficMap.get(slug) ?? 0,
+        bytesOut24h:  bytesOutMap.get(slug) ?? 0,
         errors24h:    errorsMap.get(slug)  ?? 0,
         warnLogs24h:  warnsByApp.get(slug)?.warn  ?? 0,
         errorLogs24h: warnsByApp.get(slug)?.error ?? 0,

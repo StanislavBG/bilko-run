@@ -17,6 +17,7 @@ interface Row {
     bundleGz: number | null;
   };
   traffic24h: number;
+  bytesOut24h: number;
   errors24h: number;
   warnLogs24h: number;
   errorLogs24h: number;
@@ -59,7 +60,7 @@ const SORT_COLS: { key: SortKey; label: string }[] = [
 ];
 
 function rowHasData(row: Row): boolean {
-  return row.synthetic.latestOk !== null || row.errors24h > 0 || row.traffic24h > 0;
+  return row.synthetic.latestOk !== null || row.errors24h > 0 || row.traffic24h > 0 || row.bytesOut24h > 0;
 }
 
 function statusPill(row: Row): { color: string; label: string } {
@@ -74,6 +75,15 @@ function statusPill(row: Row): { color: string; label: string } {
 function fmtBytes(bytes: number | null): string {
   if (bytes === null) return '—';
   return `${Math.round(bytes / 1024)} KB`;
+}
+
+// Static egress ranges from a few KB (a doc analyzer) to hundreds of MB (an
+// unoptimized sprite sheet) — a fixed KB unit makes the big ones unreadable.
+function fmtBytesOut(bytes: number, hasData: boolean): string {
+  if (!hasData && bytes === 0) return '—';
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
 }
 
 function fmtMs(ms: number | null): string {
@@ -231,6 +241,7 @@ export function ObservabilityPage() {
                   ))}
                   <th className="text-left px-4 py-3">Version / SHA</th>
                   <th className="text-right px-4 py-3">Traffic</th>
+                  <th className="text-right px-4 py-3">Bytes out</th>
                   <th className="text-right px-4 py-3">Warn logs</th>
                   <th className="text-right px-4 py-3">Synth%</th>
                   <th className="text-right px-4 py-3">p95</th>
@@ -304,6 +315,10 @@ export function ObservabilityPage() {
                       {/* Traffic */}
                       <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">
                         {fmtCount(row.traffic24h, hasData)}
+                      </td>
+                      {/* Bytes out (static egress, 24h-ish) */}
+                      <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">
+                        {fmtBytesOut(row.bytesOut24h, hasData)}
                       </td>
                       {/* Warn logs */}
                       <td className="px-4 py-3 text-right font-mono text-xs">

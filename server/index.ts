@@ -25,7 +25,7 @@ import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
-import { registerEgressMeter } from './egress.js';
+import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -128,6 +128,9 @@ if (isProd) {
   const distPath = candidates.find(p => existsSync(p)) ?? candidates[0];
   console.log(`[Static] dist at: ${distPath} (exists: ${existsSync(distPath)}, tried: ${candidates.join(', ')})`);
   if (existsSync(distPath)) {
+    // Bounds static egress cardinality to the published apps in this dist —
+    // see server/egress.ts setStaticKnownSlugs().
+    setStaticKnownSlugs(distPath);
     await app.register(staticPlugin, {
       root: distPath,
       prefix: '/',

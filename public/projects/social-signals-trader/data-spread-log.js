@@ -1,5 +1,5 @@
 window.SPREAD_LOG = {
-  "generatedAt": "2026-08-13T20:59:35+00:00",
+  "generatedAt": "2026-08-13T21:45:42+00:00",
   "strategy": "CREDIT_SPREAD",
   "totalEvents": 26,
   "capped": false,
@@ -1903,7 +1903,7 @@ window.SPREAD_LOG = {
         "expired_at": null,
         "filled_at": "2026-08-07T13:30:00Z",
         "filled_avg_price": "0.33",
-        "reconciled_at": "2026-08-13T20:22:16+00:00"
+        "reconciled_at": "2026-08-13T21:44:56+00:00"
       },
       "scored_credit": 3136.0,
       "scored_credit_per_contract": 56.0,

@@ -59,19 +59,37 @@ function TradeDetailFeedbackButton({ ev, facts, tradeKeyValue }) {
   return <window.FeedbackButton target={target} />;
 }
 
-// Which feedback targets this page owns: the trade key itself, plus — while
-// the trade is still open — the id the Options Log's Positions table files
-// position feedback under. Both are REUSED from their one definition
-// (tradeKey via the URL, positionFeedbackTarget from OptionsSummaryInternals),
+// Which feedback targets this page owns: the trade key itself, plus the id
+// the Options Log's Positions table files position feedback under — reused
+// from its one definition (positionFeedbackTarget on OptionsSummaryInternals),
 // never re-derived here, so a question asked from the positions table and one
 // asked from this page land in the same discussion.
-function feedbackTargets(tradeKeyValue, pos) {
+//
+// While the trade is still open that id comes straight off the live position
+// row. Once it's closed there's no live row left to read it from, but the
+// SAME contract still has that identity — so it's rebuilt from the trade
+// record's own OCC symbols/expiry (`facts.shortParsed`/`longParsed`, already
+// parsed once by `tradeFacts` and never re-parsed here) through the exact
+// same `positionFeedbackTarget` builder. That's what lets a question asked
+// while the position was open keep showing here after the trade closes,
+// rather than going stranded the moment the live row disappears — the
+// contract-continuity merge (`FeedbackThreadsInternals.selectThreadsForContract`)
+// needs at least one of these legacy identities to seed the search from.
+function feedbackTargets(tradeKeyValue, pos, ev, facts) {
   const targets = [];
   if (tradeKeyValue) targets.push({ kind: "trade", id: tradeKeyValue });
   const summaryInternals = window.OptionsSummaryInternals;
-  const posTarget = pos && summaryInternals && summaryInternals.positionFeedbackTarget
-    ? summaryInternals.positionFeedbackTarget(pos)
-    : null;
+  const buildTarget = summaryInternals && summaryInternals.positionFeedbackTarget;
+  let posTarget = pos && buildTarget ? buildTarget(pos) : null;
+  if (!posTarget && buildTarget && ev && facts && facts.shortParsed && facts.longParsed) {
+    posTarget = buildTarget({
+      underlying: ev.ticker,
+      right: facts.shortParsed.right,
+      short_strike: facts.shortParsed.strike,
+      long_strike: facts.longParsed.strike,
+      expiry: facts.shortParsed.expiry,
+    });
+  }
   if (posTarget) targets.push({ kind: "position", id: posTarget.id });
   return targets;
 }
@@ -781,7 +799,7 @@ function OptionTradeDetailPage() {
       <TheNumbers ev={ev} facts={facts} pos={pos} />
       <Greeks ev={ev} facts={facts} />
       {window.TradeFeedbackThreads && (
-        <window.TradeFeedbackThreads targets={feedbackTargets(key, pos)} />
+        <window.TradeFeedbackThreads targets={feedbackTargets(key, pos, ev, facts)} />
       )}
     </main>
   );

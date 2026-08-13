@@ -732,6 +732,12 @@
       long: "This never updates — it's the historical snapshot, kept alongside the live/now columns so you can see how far the trade has moved since it opened.",
       example: "A trade filled at 10:02 AM PT for $1.20/contract keeps that fill time and price in frozen_entry forever, even after the market moves.",
     },
+    min_net_credit: {
+      label: "Min net credit",
+      short: "The unconditional floor — a spread that cannot net a real, positive credit is refused before it ever reaches the broker.",
+      long: "Checked against the exact price about to be submitted (the limit price), not just the earlier scan estimate, and enforced a second time at the final choke point right before the order is built. A missing/unmeasurable credit is refused the same as a non-positive one. A fill that somehow still comes in at or below this floor pages the operator and is logged as a rule break.",
+      example: "INTC 88/87 on 2026-08-12 scored a +$364 credit but reconciled at a filled credit of -$84 — this floor now refuses that candidate before submission instead of letting the broker fill it as a debit.",
+    },
     min_credit: {
       label: "Min credit",
       short: "The smallest credit we'll accept to bother opening a trade.",

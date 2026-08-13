@@ -2,5 +2,8 @@ User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /app/
+# Boat Shooter is unpublished for now — its 116 MB of sprites was the bulk of
+# our Render egress. Keep crawlers from re-requesting the path.
+Disallow: /projects/game-academy/
 
 Sitemap: https://bilko.run/sitemap.xml

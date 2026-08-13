@@ -1,15 +1,15 @@
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 1,
+    "active": 2,
     "answered": 1,
     "archived": 0,
     "proposal": 0,
     "system": 0,
-    "total": 1,
-    "trade": 1,
-    "unanswered": 0
+    "total": 2,
+    "trade": 2,
+    "unanswered": 1
   },
-  "generatedAt": "2026-08-13T20:12:02Z",
+  "generatedAt": "2026-08-13T22:00:02Z",
   "schema": 2,
   "threads": [
     {
@@ -73,6 +73,36 @@ window.FEEDBACK_THREADS = {
       "targetKind": "position",
       "targetLabel": "BABA 143/144 call spread, expires Aug 14",
       "title": "[B] Why are we showing 4k loss here? 7k on detail?",
+      "type": "feedback"
+    },
+    {
+      "answered": false,
+      "archivedAt": null,
+      "createdAt": "2026-08-09T23:42:16.000Z",
+      "description": "how come we sell a put spread but pay debit? this should never happen!",
+      "hasImage": false,
+      "id": "fb_msmg68hc_h8sokn3z",
+      "lastActivityAt": "2026-08-09T23:42:16.000Z",
+      "messages": [
+        {
+          "author": "visitor",
+          "authorLabel": "Visitor",
+          "body": "how come we sell a put spread but pay debit? this should never happen!",
+          "createdAt": "2026-08-09T23:42:16.000Z",
+          "hasImage": false,
+          "id": "fb_msmg68hc_h8sokn3z",
+          "role": "user",
+          "title": "Put spread fundamental problem"
+        }
+      ],
+      "replies": [],
+      "route": "#trade/CREDIT_SPREAD_INTC_20260812_8800",
+      "scope": "trade",
+      "status": "open",
+      "targetId": "CREDIT_SPREAD_INTC_20260812_8800",
+      "targetKind": "trade",
+      "targetLabel": "INTC Bull put credit spread",
+      "title": "Put spread fundamental problem",
       "type": "feedback"
     }
   ]

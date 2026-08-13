@@ -217,7 +217,7 @@ function CurrentPrice({ ev, facts, pos }) {
   const summary = window.OPTIONS_SUMMARY;
   const asOfIso = pos.oldest_quote_ts || (summary && summary.generatedAt);
   const ageStr = internals && asOfIso ? internals.ageLabel(asOfIso) : null;
-  const stale = !!(internals && asOfIso && internals.isStaleAsOf(asOfIso));
+  const stale = !!(internals && asOfIso && internals.isStaleAsOf(asOfIso, summary && summary.schedule));
   return (
     <span className="optd-price">
       {money(livePrice)}

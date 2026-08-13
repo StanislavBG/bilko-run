@@ -195,8 +195,8 @@
     last_updated: {
       label: "Last updated",
       short: "When the job that wrote this card last ran.",
-      long: "The read-through of the book — what we think and what needs action — is re-derived wholesale every 2 hours by the options-status-refresh cron (scripts/options-status-refresh-summary.sh, `0 */2 * * *`), never live in your browser. This stamp is that job's own generated_at, shown in Pacific time with its age; it turns amber once the card is older than two refresh cycles (4h), which means the cron missed a run.",
-      example: "A stamp reading '1:00 PM PDT, Aug 8 · ~2h old' means the cron last ran at 1:00 PM Pacific and the next run is due at 3:00 PM — the prices quoted in the bullets are from 1:00 PM, not from right now.",
+      long: "The read-through of the book — what we think, what needs action, and the Positions table — is re-derived wholesale by the Analyst cron (scripts/options-status-refresh-summary.sh), pre-open plus 4x through the session on weekdays only, never live in your browser. This stamp is that job's own generated_at, shown in Pacific time with its age; it turns amber once wall-clock has passed the job's own next scheduled run plus its grace period, which means a weekday run was missed — not merely that the last run happened a while ago (a Friday-evening or weekend view of Friday's last run is not flagged).",
+      example: "A stamp reading '12:55 PM PDT, Fri Aug 8 · ~2h old · pre-open + 4x through the session' means the cron last ran at 12:55 PM Pacific — the prices quoted in the bullets are from then, not from right now.",
     },
     expiry: {
       label: "Expiry",

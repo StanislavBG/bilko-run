@@ -12,12 +12,17 @@ const { useMemo } = React;
 // section order the render defines, same numbers, styled to match the rest
 // of the dashboard instead of read as raw markdown.
 
-// PRD 1009's actual cadence (scripts/install-crons.sh: `0 */2 * * *`) — the
-// render module's own STALE_AFTER assumes 30m pending that job, so staleness
-// here is computed independently, live, against wall-clock at render time.
-const REFRESH_INTERVAL_MINUTES = 120;
-const REFRESH_INTERVAL_HOURS = REFRESH_INTERVAL_MINUTES / 60;
-const STALE_AFTER_MS = REFRESH_INTERVAL_MINUTES * 2 * 60 * 1000;
+// PRD 1080 recut the Analyst's cadence to an uneven, weekday-only schedule
+// (options_status_refresh_summary.py: SCHEDULE) and started publishing it as
+// data — `summaryData.schedule` (nextRunAt / staleAfterMs / cadenceLabel) —
+// so this panel no longer transcribes the cron by hand. These fallback
+// values fire ONLY when a payload has no `schedule` key yet (an older cached
+// snapshot published before PRD 1080 shipped) — they reproduce that
+// payload's own prior assumption of a flat 2h cadence, stale past 2 missed
+// cycles.
+const FALLBACK_CADENCE_LABEL = "every 2h";
+const FALLBACK_REFRESH_INTERVAL_MINUTES = 120;
+const FALLBACK_STALE_AFTER_MS = FALLBACK_REFRESH_INTERVAL_MINUTES * 2 * 60 * 1000;
 
 const BAND_LABEL_CLASS = {
   SAFE: "opts-band opts-band--safe",
@@ -39,16 +44,27 @@ function ageLabel(iso) {
   return `${(h / 24).toFixed(1)}d ago`;
 }
 
-// Shared staleness test — a snapshot is stale once it's older than 2 refresh
-// cycles. Kept as one function (rather than each caller re-deriving
-// `Date.now() - t > STALE_AFTER_MS`) so this panel and any other reader of
+// Shared staleness test — schedule-driven: a snapshot is stale once
+// wall-clock has passed the job's own next scheduled run plus its grace
+// period (`schedule.nextRunAt` + `schedule.staleAfterMs`, both published by
+// the job itself), so a Friday-evening/weekend view of Friday's last run is
+// NOT stale just because it's "old", while a genuinely missed weekday run
+// IS. Falls back to the pre-PRD-1080 per-timestamp rule when `schedule` is
+// absent (an older cached payload). Kept as one function (rather than each
+// caller re-deriving the check) so this panel and any other reader of
 // window.OPTIONS_SUMMARY (dashboard/pages/option-trade-detail.jsx) can never
 // disagree on what "stale" means.
-function isStaleAsOf(iso) {
+function isStaleAsOf(iso, schedule) {
+  if (schedule && schedule.nextRunAt && typeof schedule.staleAfterMs === "number") {
+    const next = new Date(schedule.nextRunAt).getTime();
+    if (!Number.isNaN(next)) {
+      return Date.now() > next + schedule.staleAfterMs;
+    }
+  }
   if (!iso) return false;
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return false;
-  return Date.now() - t > STALE_AFTER_MS;
+  return Date.now() - t > FALLBACK_STALE_AFTER_MS;
 }
 
 // --- markdown-lite parsing -------------------------------------------------
@@ -272,17 +288,21 @@ function Paragraphs({ items }) {
 
 // --- section renderers -------------------------------------------------------
 
-// "Last updated <PT time> · <age> · refreshes every 2h" for a card whose
-// content is written by a cron rather than computed live in the browser.
-// The absolute time comes from window.AsOfTime (the same PT formatter the
-// `?` tooltips' as-of lines use) so the two can't drift apart; staleness
-// reuses isStaleAsOf, so a stamp and the headline's STALE banner always
-// agree. Renders nothing when there's no usable timestamp — an unstamped
-// card is better than a fabricated one.
-function SectionStamp({ iso }) {
+// "Last updated <PT time> · <age> · <cadence>" for a card whose content is
+// written by a cron rather than computed live in the browser. The absolute
+// time comes from window.AsOfTime (the same PT formatter the `?` tooltips'
+// as-of lines use) so the two can't drift apart; staleness reuses
+// isStaleAsOf against the SAME `schedule` the headline's STALE banner
+// checks, so a stamp and that banner always agree. The cadence clause comes
+// from `schedule.cadenceLabel` (falling back to FALLBACK_CADENCE_LABEL for
+// an older cached payload) rather than a hardcoded "every Nh", since the
+// real cadence is uneven and weekday-only. Renders nothing when there's no
+// usable timestamp — an unstamped card is better than a fabricated one.
+function SectionStamp({ iso, schedule }) {
   const t = window.AsOfTime ? window.AsOfTime.format(iso) : null;
   if (!t) return null;
-  const stale = isStaleAsOf(iso);
+  const stale = isStaleAsOf(iso, schedule);
+  const cadenceLabel = (schedule && schedule.cadenceLabel) || FALLBACK_CADENCE_LABEL;
   return (
     <span
       className={stale ? "opts-section-stamp opts-section-stamp--stale" : "opts-section-stamp"}
@@ -292,7 +312,7 @@ function SectionStamp({ iso }) {
           rather than mid-timestamp ("6:00 PM PDT, / Aug 8"). */}
       <span>{stale ? "⚠ " : ""}Last updated {t.text}</span>
       <span>· {window.AsOfTime.relativeAge(t.ms)}</span>
-      <span>· refreshes every {REFRESH_INTERVAL_HOURS}h</span>
+      <span>· {cadenceLabel}</span>
       <window.Help term="last_updated" />
     </span>
   );
@@ -313,12 +333,17 @@ function panelComponentId(title) {
 
 // Every section below is the same card/head/title shell around a different
 // body — one wrapper instead of seven copies of the same markup.
-// `updatedAt` is opt-in: only the cards whose content is regenerated by the
-// 2h refresh cron carry a stamp, so the stamp keeps meaning something.
-// `feedbackId` is opt-in too — when omitted it's derived from `title` via
-// panelComponentId() so every card built on Section gets a feedback button
-// with no per-call-site change.
-function Section({ title, titleTerm, feedbackId, updatedAt, extraHead, children }) {
+// `updatedAt` is opt-in: only the cards whose content is regenerated
+// wholesale by the Analyst cron carry a stamp, so the stamp keeps meaning
+// something (that's "What we think right now" / "Action queue", both prose
+// re-derived from the record, AND Positions — it renders straight off
+// record.positions[] / positions_display[], the same cron-authored record).
+// `schedule` (summaryData.schedule) rides along so SectionStamp can compute
+// staleness/cadence off the job's own published schedule instead of a
+// hardcoded interval. `feedbackId` is opt-in too — when omitted it's
+// derived from `title` via panelComponentId() so every card built on
+// Section gets a feedback button with no per-call-site change.
+function Section({ title, titleTerm, feedbackId, updatedAt, schedule, extraHead, children }) {
   const resolvedFeedbackId = feedbackId || panelComponentId(title);
   return (
     <section className="card opt-panel">
@@ -330,7 +355,7 @@ function Section({ title, titleTerm, feedbackId, updatedAt, extraHead, children 
             <window.FeedbackButton target={{ kind: "component", id: resolvedFeedbackId, label: title }} />
           )}
         </h3>
-        {updatedAt && <SectionStamp iso={updatedAt} />}
+        {updatedAt && <SectionStamp iso={updatedAt} schedule={schedule} />}
         {extraHead}
       </div>
       {children}
@@ -370,12 +395,16 @@ function AccountBalance({ account }) {
   );
 }
 
-function Headline({ text, staleLabel, account }) {
+function Headline({ text, staleLabel, cadenceLabel, account }) {
   return (
     <div className="opts-headline">
       <div className="opts-headline-main">
         <div className="opts-headline-text">{glossify(text)}</div>
-        {staleLabel && <div className="opts-stale-banner">⚠ STALE — refreshed {staleLabel}, expected every {REFRESH_INTERVAL_HOURS}h</div>}
+        {staleLabel && (
+          <div className="opts-stale-banner">
+            ⚠ STALE — refreshed {staleLabel}, expected {cadenceLabel || FALLBACK_CADENCE_LABEL}
+          </div>
+        )}
       </div>
       <AccountBalance account={account} />
     </div>
@@ -883,9 +912,13 @@ function PositionsTable({ positions, positionsDisplay, fallbackAsOf, unpairedLeg
   );
 }
 
-function PositionsSection({ positions, positionsDisplay, fallbackAsOf, unpairedLegs }) {
+function PositionsSection({ positions, positionsDisplay, fallbackAsOf, unpairedLegs, schedule }) {
   return (
-    <Section title="Positions — entry snapshot (frozen) vs now (live)">
+    <Section
+      title="Positions — entry snapshot (frozen) vs now (live)"
+      updatedAt={fallbackAsOf}
+      schedule={schedule}
+    >
       <PositionsTable
         positions={positions}
         positionsDisplay={positionsDisplay}
@@ -920,10 +953,10 @@ function scrollToWhatWeThinkRow(anchorId) {
   return true;
 }
 
-function WhatWeThink({ lines, updatedAt }) {
+function WhatWeThink({ lines, updatedAt, schedule }) {
   const items = bulletsOf(lines);
   return (
-    <Section title="What we think right now" updatedAt={updatedAt}>
+    <Section title="What we think right now" updatedAt={updatedAt} schedule={schedule}>
       {items.length ? (
         <ul className="opts-bullets opts-what-we-think">
           {items.map((raw, i) => {
@@ -1042,12 +1075,17 @@ function ActionQueueRow({ text, anchors }) {
   );
 }
 
-function ActionQueue({ lines, updatedAt, anchors }) {
+function ActionQueue({ lines, updatedAt, anchors, schedule }) {
   const counts = parseActionCounts(lines);
   const groups = parseActionGroups(lines);
   const anchorSet = anchors || EMPTY_ANCHOR_SET;
   return (
-    <Section title="Action queue" updatedAt={updatedAt} extraHead={<ActionQueueCounts counts={counts} />}>
+    <Section
+      title="Action queue"
+      updatedAt={updatedAt}
+      schedule={schedule}
+      extraHead={<ActionQueueCounts counts={counts} />}
+    >
       {groups.length ? (
         groups.map((g, gi) => (
           <div className="opts-action-group" key={gi}>
@@ -1216,7 +1254,7 @@ function EmptyState() {
       <HowToReadThisPage />
       <p className="opt-log-empty">
         No summary yet — the <code>options-status-refresh-summary</code> job hasn't run for the first
-        time. It's scheduled every {REFRESH_INTERVAL_HOURS}h.
+        time.
       </p>
     </section>
   );
@@ -1238,7 +1276,12 @@ function optionsSummaryParts(data) {
   }
   const sections = parseSections(summaryData.summary);
   const headlineText = (sections[0].lines.find((l) => l.trim()) || "").trim();
-  const staleLabel = isStaleAsOf(summaryData.generatedAt) ? ageLabel(summaryData.generatedAt) : null;
+  // Absent on an older cached payload published before PRD 1080 — every
+  // consumer below falls back to the pre-1080 flat-2h assumption via
+  // isStaleAsOf()/SectionStamp's own defaulting, never throws on the missing key.
+  const schedule = summaryData.schedule || null;
+  const staleLabel = isStaleAsOf(summaryData.generatedAt, schedule) ? ageLabel(summaryData.generatedAt) : null;
+  const cadenceLabel = (schedule && schedule.cadenceLabel) || FALLBACK_CADENCE_LABEL;
 
   const record = summaryData.record;
   // PRD 1026: single fallback stamp for any price-derived calc that has no
@@ -1266,7 +1309,9 @@ function optionsSummaryParts(data) {
     // trade log is missing a close event.
     positionsCount: record.positions.length,
     howto: <HowToReadThisPage />,
-    headline: <Headline text={headlineText} staleLabel={staleLabel} account={record.account} />,
+    headline: (
+      <Headline text={headlineText} staleLabel={staleLabel} cadenceLabel={cadenceLabel} account={record.account} />
+    ),
     whereBookStands: (
       <WhereBookStands
         lines={findSection(sections, "Where the book stands").lines}
@@ -1281,17 +1326,19 @@ function optionsSummaryParts(data) {
         positionsDisplay={summaryData.positions_display}
         fallbackAsOf={fallbackAsOf}
         unpairedLegs={record.unpaired_legs}
+        schedule={schedule}
       />
     ),
-    // Both cards are prose the 2h refresh cron re-derives wholesale, so each
+    // Both cards are prose the Analyst cron re-derives wholesale, so each
     // carries that job's run time — `fallbackAsOf` is exactly the summary's
     // own generated_at (see above), not a per-position quote clock.
-    whatWeThink: <WhatWeThink lines={whatWeThinkLines} updatedAt={fallbackAsOf} />,
+    whatWeThink: <WhatWeThink lines={whatWeThinkLines} updatedAt={fallbackAsOf} schedule={schedule} />,
     actionQueue: (
       <ActionQueue
         lines={findSection(sections, "Action queue").lines}
         updatedAt={fallbackAsOf}
         anchors={whatWeThinkAnchors}
+        schedule={schedule}
       />
     ),
     openQueue: (
@@ -1332,7 +1379,7 @@ function OptionsSummaryPanel({ data }) {
 // rather than a third, drift-prone matcher.
 window.OptionsSummaryInternals = {
   eventMatchesPosition, tradeKeyForPosition,
-  ageLabel, isStaleAsOf, STALE_AFTER_MS, REFRESH_INTERVAL_HOURS, REFRESH_INTERVAL_MINUTES,
+  ageLabel, isStaleAsOf, FALLBACK_STALE_AFTER_MS, FALLBACK_CADENCE_LABEL, FALLBACK_REFRESH_INTERVAL_MINUTES,
   componentId: panelComponentId, positionFeedbackTarget,
 };
 

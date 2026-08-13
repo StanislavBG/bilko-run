@@ -63,7 +63,7 @@ function StatusBar() {
 // ============== Header ==============
 // Single-page consolidation: the dashboard is the only surface, so the tab
 // nav was removed. Brand + the section anchors below are the whole header.
-function Header({ handle, bmcUrl, setPage }) {
+function Header({ handle, bmcUrl, setPage, showBmc = true }) {
   const sections = [
     ["catalysts", "Catalysts"],
     ["positions", "Positions"],
@@ -135,9 +135,11 @@ function Header({ handle, bmcUrl, setPage }) {
         <span aria-hidden="true">☰</span>
       </label>
       <nav className="nav-mobile">{renderNavLinks()}</nav>
-      <a className="bmc-btn" href={bmcUrl} target="_blank" rel="noreferrer">
-        <span className="coffee">☕</span> Buy me a coffee
-      </a>
+      {showBmc && (
+        <a className="bmc-btn" href={bmcUrl} target="_blank" rel="noreferrer">
+          <span className="coffee">☕</span> Buy me a coffee
+        </a>
+      )}
     </header>
   );
 }

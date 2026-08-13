@@ -143,10 +143,38 @@
     writeOwnerToken(null);
   }
 
+  // Strips an `owner=<token>` query param out of a hash string, returning the
+  // hash unchanged if there is none. Used BOTH by captureOwnerFromUrl (to
+  // build the URL it hands to history.replaceState) and — independently —
+  // by buildPayload's `route` field below: if a `history.replaceState` call
+  // ever throws (Safari's >100-calls/30s History API limit, a sandboxed
+  // iframe, a restricted embedding context) the token could otherwise sit in
+  // `window.location.hash` for the rest of the page session, and
+  // buildPayload() reads that hash verbatim into every ordinary, PUBLIC,
+  // unauthenticated feedback submission's `route` field. Sanitizing at BOTH
+  // the capture site and the read site means a failed URL scrub can never by
+  // itself leak the token into a public payload.
+  function stripOwnerParam(hash) {
+    var h = hash || "";
+    var qIdx = h.indexOf("?");
+    if (qIdx === -1) return h;
+    try {
+      var params = new URLSearchParams(h.slice(qIdx + 1));
+      if (!params.has("owner")) return h;
+      params.delete("owner");
+      var rest = params.toString();
+      return h.slice(0, qIdx) + (rest ? "?" + rest : "");
+    } catch (e) {
+      return h;
+    }
+  }
+
   // Reads `owner=<token>` off the CURRENT hash's query string (e.g.
   // `#options?owner=abc`, not a `?owner=` on the page URL itself — the
-  // dashboard is a hash-routed SPA), stores it, then rewrites history so the
-  // token never sits in the address bar or browser history past this call.
+  // dashboard is a hash-routed SPA), rewrites history so the token never
+  // sits in the address bar or browser history, THEN stores it — in that
+  // order, so a `history.replaceState` failure never leaves a token
+  // persisted whose URL couldn't be scrubbed.
   function captureOwnerFromUrl() {
     try {
       var hash = window.location.hash || "";
@@ -155,12 +183,13 @@
       var params = new URLSearchParams(hash.slice(qIdx + 1));
       var token = params.get("owner");
       if (!token) return;
-      writeOwnerToken(token);
-      params.delete("owner");
-      var rest = params.toString();
-      var newHash = hash.slice(0, qIdx) + (rest ? "?" + rest : "");
+      var newHash = stripOwnerParam(hash);
       var newUrl = window.location.pathname + window.location.search + newHash;
       window.history.replaceState(null, "", newUrl);
+      writeOwnerToken(token);
+      try {
+        window.dispatchEvent(new Event("sst:feedback-owner-changed"));
+      } catch (e2) {}
     } catch (e) {
       // Malformed hash / no History API — owner mode just doesn't arm this
       // load; never let capture throw into page bootstrap.
@@ -218,7 +247,7 @@
       schema: 1,
       slug: SLUG,
       target: { kind: target.kind, id: target.id, label: target.label },
-      route: (window.location && window.location.hash) || "#options",
+      route: stripOwnerParam((window.location && window.location.hash) || "#options"),
       type: type,
       title: opts.title || "",
       description: opts.description || "",
@@ -266,6 +295,10 @@
   // script tag renders, so the token is never visible on screen or in
   // history for longer than this one synchronous call.
   captureOwnerFromUrl();
+  // Also re-arm on an in-page SPA hash change (no full reload) — a visitor
+  // following a `#options?owner=<token>` link from elsewhere in the app
+  // shouldn't need a hard refresh for owner mode to take.
+  window.addEventListener("hashchange", captureOwnerFromUrl);
 
   // ---------------------------------------------------------------------
   // FeedbackButton + modal

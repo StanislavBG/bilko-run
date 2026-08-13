@@ -106,6 +106,14 @@ function setOwnerMode(next) {
   ownerModeFlag = next;
   ownerModeListeners.forEach((fn) => fn(next));
 }
+// lib/feedback.js re-captures `?owner=<token>` on a `hashchange` (an in-page
+// SPA link, not just a hard reload) and fires this event after storing it —
+// pick that up here so ownerModeFlag (computed once at module load) doesn't
+// go stale for the rest of the session.
+if (typeof window !== "undefined") {
+  window.addEventListener("sst:feedback-owner-changed", () => setOwnerMode(hasOwnerToken()));
+}
+
 function useOwnerMode() {
   const [value, setValue] = React.useState(ownerModeFlag);
   React.useEffect(() => {
@@ -144,6 +152,10 @@ function ModerationControls({ thread, routeNotDeployed, moderationState, onModer
   const error = moderationState && moderationState.error;
 
   function run(action) {
+    // `disabled` only takes effect once the optimistic setOverrides() render
+    // lands — guard the synchronous click too, so a fast double-click can't
+    // fire two overlapping moderate() calls for the same thread.
+    if (disabled) return;
     setConfirmingDelete(false);
     onModerate(action);
   }

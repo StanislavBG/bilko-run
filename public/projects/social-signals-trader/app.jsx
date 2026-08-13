@@ -73,7 +73,7 @@ function App() {
     return (
       <>
         <StatusBar />
-        <Header handle={SITE.handle} bmcUrl={SITE.bmcUrl} setPage={setPage} />
+        <Header handle={SITE.handle} bmcUrl={SITE.bmcUrl} setPage={setPage} showBmc={false} />
         <window.TickerDetailsPage />
       </>
     );
@@ -83,7 +83,7 @@ function App() {
     return (
       <>
         <StatusBar />
-        <Header handle={SITE.handle} bmcUrl={SITE.bmcUrl} setPage={setPage} />
+        <Header handle={SITE.handle} bmcUrl={SITE.bmcUrl} setPage={setPage} showBmc={false} />
         <window.OptionTradeDetailPage />
       </>
     );

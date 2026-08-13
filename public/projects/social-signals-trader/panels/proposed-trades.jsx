@@ -277,6 +277,34 @@ function ProposalCard({ item, equity }) {
 // The deployment gap used to live in the "Open queue" card. It moves here with
 // the proposals it explains: how much room the book has is the reason there
 // are (or aren't) proposals on screen at all.
+// "Deployed $4,823 of target $31,770" invites two wrong readings: that the
+// figures are cash (they are collateral committed — open spread max-loss plus
+// long equity market value), and that the target is the CONFIGURED
+// target_invested_pct (it is that percentage capped by the beta gate, which
+// floors deployment at 30% until beta is measured on >= 20 closed positions).
+// Neither is derivable from the numbers on screen, so the basis is stated.
+function deploymentBasis(d) {
+  const eq = Number(d.equity);
+  const gate = d.beta_gate || {};
+  const cap = Number(gate.cap);
+  const configured = Number(d.target_pct);
+  const gated = Number.isFinite(cap) && Number.isFinite(configured) && cap < configured;
+  const parts = [];
+  parts.push(
+    `Deployed = collateral committed (open spread max-loss + long equity), not cash` +
+    (Number.isFinite(eq) ? `; measured against equity ${propMoney(eq)}, not buying power` : "")
+  );
+  if (Number.isFinite(cap)) {
+    parts.push(
+      gated
+        ? `target = ${propPct(cap)} of equity — the beta-gate floor, held below the configured ${propPct(configured)}` +
+          (gate.reason ? ` (${gate.reason})` : "")
+        : `target = ${propPct(cap)} of equity`
+    );
+  }
+  return parts.join(" · ");
+}
+
 function DeploymentLine({ deployment, totalCollateral }) {
   const d = deployment || {};
   if (d.deployed === undefined && d.headroom === undefined && !totalCollateral) return null;
@@ -286,6 +314,7 @@ function DeploymentLine({ deployment, totalCollateral }) {
         Deployed {propMoney(d.deployed)} of target {propMoney(d.target)} (
         {propPct(d.deployed_pct)} of equity) — headroom {propMoney(d.headroom)}
       </span>
+      <span className="prop-deployment-note">{deploymentBasis(d)}</span>
       {totalCollateral > 0 && (
         <span>
           These proposals would together tie up {propMoney(totalCollateral)} of collateral

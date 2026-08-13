@@ -342,7 +342,11 @@ const MIGRATIONS = [
     image_data            TEXT,
     client_json           TEXT,
     snapshot_generated_at TEXT,
-    created_at            INTEGER NOT NULL
+    created_at            INTEGER NOT NULL,
+    parent_id             TEXT,
+    moderation_action     TEXT,
+    moderation_at         INTEGER,
+    moderation_reason     TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_project_feedback_slug_created ON project_feedback (slug, created_at)`,
   `CREATE TABLE IF NOT EXISTS usage_daily (
@@ -430,6 +434,20 @@ const MIGRATIONS = [
     payload    TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
+  // Per-project live EVENT STREAM (see server/routes/project-events.ts) — the
+  // append-only sibling of project_snapshots above. A sibling app's dashboard
+  // polls a Range-capable ndjson file for appended rows (byte-cursor polling,
+  // not a poll-whole-file refetch); this table is the durable, Render-redeploy
+  // -safe backing store the GET route serves that same byte-Range contract
+  // from, since the app's own filesystem is ephemeral and git-mirroring one
+  // file per event is the 30-min bot-commit loop this replaced.
+  `CREATE TABLE IF NOT EXISTS project_events (
+    slug       TEXT NOT NULL,
+    event_id   INTEGER NOT NULL,
+    line       TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (slug, event_id)
+  )`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [
@@ -499,6 +517,15 @@ export async function initDb(): Promise<void> {
     'CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email)',
     'CREATE INDEX IF NOT EXISTS idx_token_transactions_reason ON token_transactions(reason)',
     'CREATE INDEX IF NOT EXISTS idx_stripe_one_time_purchases_created ON stripe_one_time_purchases(created_at)',
+    // Threading + moderation for the per-project feedback forum (see
+    // server/routes/project-feedback.ts). parent_id is client-supplied and
+    // opaque to this server; moderation_* is owner-only state set by the
+    // authed moderate route.
+    'ALTER TABLE project_feedback ADD COLUMN parent_id TEXT',
+    'ALTER TABLE project_feedback ADD COLUMN moderation_action TEXT',
+    'ALTER TABLE project_feedback ADD COLUMN moderation_at INTEGER',
+    'ALTER TABLE project_feedback ADD COLUMN moderation_reason TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_project_feedback_moderated ON project_feedback (slug, moderation_at)',
   ]) {
     try { await client.execute(sql); } catch { /* column/index already exists */ }
   }

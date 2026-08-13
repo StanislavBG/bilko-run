@@ -10,8 +10,9 @@ import { dbAll, dbRun } from '../db.js';
 // bilko.run. This is the sibling of the snapshot route next door: same
 // slug-scoping, same shared-secret bearer for the authed side.
 //
-//   POST /api/projects/:slug/feedback   PUBLIC → store one submission
-//   GET  /api/projects/:slug/feedback   authed → drain it for local analysis
+//   POST /api/projects/:slug/feedback               PUBLIC → store one submission
+//   GET  /api/projects/:slug/feedback               authed → drain it for local analysis
+//   POST /api/projects/:slug/feedback/:id/moderate  authed → archive/delete a thread
 //
 // The POST is deliberately unauthenticated — anyone visiting the public page
 // may file feedback (a login is a later decision, not this one). That makes
@@ -25,6 +26,18 @@ import { dbAll, dbRun } from '../db.js';
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const KINDS = new Set(['component', 'position', 'trade', 'page']);
 const TYPES = new Set(['bug', 'feature', 'feedback']);
+
+// Moderation verbs. `delete` is a HIDE, never a purge: the sibling's puller
+// dedupes on ids it has already seen on disk, so dropping the row would make
+// the item re-arrive as brand-new feedback on the next pull and resurrect
+// itself on the published page. Same reasoning for `archive`.
+const MODERATION_ACTIONS: Record<string, string | null> = {
+  archive: 'archived',
+  unarchive: null,
+  delete: 'deleted',
+  restore: null,
+};
+const MAX_REASON = 500;
 
 const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 4_000;
@@ -56,6 +69,17 @@ function str(v: unknown, max: number): string | null {
   return s;
 }
 
+// Shared bearer check for the two authed routes. Returns an error tuple the
+// caller sends verbatim, or null when the request is authorised.
+function checkBearer(req: { headers: Record<string, unknown> }): { code: number; error: string } | null {
+  const expected = process.env.PROJECT_SNAPSHOT_TOKEN;
+  if (!expected) return { code: 503, error: 'feedback read disabled (no token configured)' };
+  const auth = String(req.headers['authorization'] || '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!token || token !== expected) return { code: 401, error: 'unauthorized' };
+  return null;
+}
+
 interface FeedbackRow {
   id: string;
   slug: string;
@@ -71,6 +95,10 @@ interface FeedbackRow {
   client_json: string | null;
   snapshot_generated_at: string | null;
   created_at: number;
+  parent_id: string | null;
+  moderation_action: string | null;
+  moderation_at: number | null;
+  moderation_reason: string | null;
 }
 
 export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
@@ -123,48 +151,68 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     const id = `fb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
     const now = Math.floor(Date.now() / 1000);
 
+    // Threading pointer. Deliberately opaque: this server assigns it no
+    // meaning, does not check that it resolves, and echoes it back unchanged
+    // on GET. A dangling value is the reading client's problem to render.
+    // The only thing enforced is a length bound, same as every other string.
+    const parentId = str(body.parentId, MAX_ID);
+
     await dbRun(
       `INSERT INTO project_feedback
         (id, slug, target_kind, target_id, target_label, route, type, title, description,
-         image_mime, image_data, client_json, snapshot_generated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         image_mime, image_data, client_json, snapshot_generated_at, created_at, parent_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id, slug, kind, targetId,
       str(target.label, MAX_LABEL), str(body.route, MAX_ROUTE),
       type, title, description,
       imageMime, imageData,
       body.client ? JSON.stringify(body.client).slice(0, 4_000) : null,
       typeof body.snapshotGeneratedAt === 'string' ? body.snapshotGeneratedAt : null,
-      now,
+      now, parentId,
     );
 
-    return reply.code(201).send({ id, receivedAt: new Date(now * 1000).toISOString() });
+    return reply.code(201).send({ id, parentId, receivedAt: new Date(now * 1000).toISOString() });
   });
 
   // ── authed read ──────────────────────────────────────────────────────────
   app.get('/api/projects/:slug/feedback', async (req, reply) => {
-    const expected = process.env.PROJECT_SNAPSHOT_TOKEN;
-    if (!expected) return reply.code(503).send({ error: 'feedback read disabled (no token configured)' });
-
-    const auth = String(req.headers['authorization'] || '');
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!token || token !== expected) return reply.code(401).send({ error: 'unauthorized' });
+    const bad = checkBearer(req as never);
+    if (bad) return reply.code(bad.code).send({ error: bad.error });
 
     const slug = (req.params as { slug: string }).slug;
     if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
 
-    const q = req.query as { since?: string; limit?: string };
+    const q = req.query as { since?: string; limit?: string; moderatedSince?: string };
     const limit = Math.min(Math.max(parseInt(q.limit || '500', 10) || 500, 1), 1000);
     // `since` is the exclusive cursor from the previous page's nextSince.
     const sinceSec = q.since ? Math.floor(new Date(q.since).getTime() / 1000) : 0;
     if (q.since && !Number.isFinite(sinceSec)) return reply.code(400).send({ error: 'since must be an ISO timestamp' });
 
-    const rows = await dbAll<FeedbackRow>(
-      `SELECT * FROM project_feedback
-        WHERE slug = ? AND created_at > ?
-        ORDER BY created_at ASC, id ASC
-        LIMIT ?`,
-      slug, sinceSec, limit,
-    );
+    // Moderation happens long after a row was created, so a purely
+    // created_at-based cursor would never re-surface a newly archived item and
+    // the caller's local mirror would silently disagree with the server.
+    // `moderatedSince` re-admits already-pulled rows whose moderation state
+    // changed after that instant; the caller replays it from nextModeratedSince.
+    const modSince = q.moderatedSince ? Math.floor(new Date(q.moderatedSince).getTime() / 1000) : null;
+    if (q.moderatedSince && !Number.isFinite(modSince)) {
+      return reply.code(400).send({ error: 'moderatedSince must be an ISO timestamp' });
+    }
+
+    const rows = modSince === null
+      ? await dbAll<FeedbackRow>(
+          `SELECT * FROM project_feedback
+            WHERE slug = ? AND created_at > ?
+            ORDER BY created_at ASC, id ASC
+            LIMIT ?`,
+          slug, sinceSec, limit,
+        )
+      : await dbAll<FeedbackRow>(
+          `SELECT * FROM project_feedback
+            WHERE slug = ? AND (created_at > ? OR moderation_at > ?)
+            ORDER BY created_at ASC, id ASC
+            LIMIT ?`,
+          slug, sinceSec, modSince, limit,
+        );
 
     const items = rows.map((r) => ({
       id: r.id,
@@ -177,9 +225,62 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
       image: r.image_data ? { dataUrl: r.image_data, mime: r.image_mime, bytes: r.image_data.length } : null,
       client: r.client_json ? JSON.parse(r.client_json) : null,
       snapshotGeneratedAt: r.snapshot_generated_at,
+      parentId: r.parent_id,
+      moderation: r.moderation_action
+        ? {
+            action: r.moderation_action,
+            at: r.moderation_at ? new Date(r.moderation_at * 1000).toISOString() : null,
+            reason: r.moderation_reason,
+          }
+        : null,
     }));
 
-    const nextSince = rows.length ? new Date(rows[rows.length - 1].created_at * 1000).toISOString() : (q.since || null);
-    return reply.send({ items, nextSince });
+    // Never let the cursor regress: a page made entirely of re-admitted
+    // moderated rows has a max created_at below the cursor we were handed.
+    const maxCreated = rows.reduce((m, r) => Math.max(m, r.created_at), sinceSec);
+    const nextSince = rows.length || q.since ? new Date(maxCreated * 1000).toISOString() : null;
+    const maxModerated = rows.reduce((m, r) => Math.max(m, r.moderation_at || 0), modSince ?? 0);
+    const nextModeratedSince = maxModerated > 0 ? new Date(maxModerated * 1000).toISOString() : null;
+    return reply.send({ items, nextSince, nextModeratedSince });
+  });
+
+  // ── authed moderation ────────────────────────────────────────────────────
+  // Owner-only, same bearer as the read side. Public page + destructive verb
+  // means this can never be open: an unauthenticated route would let any
+  // visitor erase anyone's feedback.
+  app.post('/api/projects/:slug/feedback/:id/moderate', async (req, reply) => {
+    const bad = checkBearer(req as never);
+    if (bad) return reply.code(bad.code).send({ error: bad.error });
+
+    const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+    if (rateLimited(ip)) return reply.code(429).send({ error: 'too many moderation calls, try again shortly' });
+
+    const { slug, id } = req.params as { slug: string; id: string };
+    if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
+
+    const body = req.body as Record<string, unknown> | undefined;
+    const action = typeof body?.action === 'string' ? body.action : '';
+    if (!(action in MODERATION_ACTIONS)) {
+      return reply.code(400).send({ error: `action must be one of ${Object.keys(MODERATION_ACTIONS).join(', ')}` });
+    }
+    const reason = body?.reason == null ? null : str(body.reason, MAX_REASON);
+    if (body?.reason != null && reason === null) {
+      return reply.code(400).send({ error: `reason must be a non-empty string (max ${MAX_REASON} chars)` });
+    }
+
+    const state = MODERATION_ACTIONS[action];
+    const at = Math.floor(Date.now() / 1000);
+
+    // Slug-scoped so one project's token can't moderate another's rows.
+    // The row is always kept — even for `delete`, which only flips the flag.
+    const res = await dbRun(
+      `UPDATE project_feedback
+          SET moderation_action = ?, moderation_at = ?, moderation_reason = ?
+        WHERE id = ? AND slug = ?`,
+      state, at, reason, id, slug,
+    );
+    if (!res.changes) return reply.code(404).send({ error: 'unknown feedback id' });
+
+    return reply.send({ id, action, moderatedAt: new Date(at * 1000).toISOString() });
   });
 }

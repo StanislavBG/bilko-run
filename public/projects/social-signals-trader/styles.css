@@ -1805,3 +1805,25 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 }
 
 .prop-deployment-note { font-size: 11px; color: var(--muted); max-width: 100ch; }
+
+/* Banner: prose left, account balance pinned right. The day's P&L is a
+   percentage of something; that something belongs on the same line. */
+.opts-headline { display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+.opts-headline-main { flex: 1 1 420px; min-width: 0; }
+.opts-headline-balance { margin-left: auto; text-align: right; }
+.opts-balance-main { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.opts-balance-label {
+  font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+}
+.opts-balance-value { font-size: 22px; font-weight: 700; font-family: var(--mono); color: var(--text); }
+.opts-balance-sub { font-size: 11px; color: var(--muted); margin-top: 3px; font-family: var(--mono); }
+@media (max-width: 720px) {
+  .opts-headline-balance { margin-left: 0; text-align: left; }
+  .opts-balance-main { align-items: flex-start; }
+}
+
+/* Unpaired option legs — real broker positions that are not spreads. */
+.opts-unpaired { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.opts-unpaired-title { font-size: 12px; color: var(--warn); margin: 0 0 6px; }
+.opts-unpaired-table { width: 100%; font-size: 12px; }
+.opts-unpaired-note { font-size: 11px; color: var(--muted); margin: 6px 0 0; max-width: 90ch; }

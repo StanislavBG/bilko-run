@@ -338,11 +338,46 @@ function Section({ title, titleTerm, feedbackId, updatedAt, extraHead, children 
   );
 }
 
-function Headline({ text, staleLabel }) {
+// The banner states the day's P&L but never said what it is a percentage OF.
+// Account equity is the denominator for every ratio on this page (deployment,
+// collateral share, day move), so it belongs on the banner itself rather than
+// three cards further down. Cash sits beside it because equity alone does not
+// say how much of it is still spendable.
+function AccountBalance({ account }) {
+  const a = account || {};
+  if (a.equity === null || a.equity === undefined) return null;
+  const money = (n) =>
+    n === null || n === undefined || Number.isNaN(Number(n))
+      ? "—"
+      : `$${Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  return (
+    <div className="opts-headline-balance">
+      <div className="opts-balance-main">
+        <span className="opts-balance-label">
+          Account balance
+          <window.Help term="equity" />
+        </span>
+        <span className="opts-balance-value">{money(a.equity)}</span>
+      </div>
+      <div className="opts-balance-sub">
+        cash {money(a.cash)}
+        {a.options_buying_power !== undefined && a.options_buying_power !== null
+          ? ` · options buying power ${money(a.options_buying_power)}`
+          : ""}
+        {a.balance_asof ? ` · as of ${a.balance_asof}` : ""}
+      </div>
+    </div>
+  );
+}
+
+function Headline({ text, staleLabel, account }) {
   return (
     <div className="opts-headline">
-      <div className="opts-headline-text">{glossify(text)}</div>
-      {staleLabel && <div className="opts-stale-banner">⚠ STALE — refreshed {staleLabel}, expected every {REFRESH_INTERVAL_HOURS}h</div>}
+      <div className="opts-headline-main">
+        <div className="opts-headline-text">{glossify(text)}</div>
+        {staleLabel && <div className="opts-stale-banner">⚠ STALE — refreshed {staleLabel}, expected every {REFRESH_INTERVAL_HOURS}h</div>}
+      </div>
+      <AccountBalance account={account} />
     </div>
   );
 }
@@ -761,10 +796,62 @@ function PositionsRow({ pos, display, fallbackAsOf }) {
   );
 }
 
-function PositionsTable({ positions, positionsDisplay, fallbackAsOf }) {
+// An option leg the broker holds that this page's spread pairing cannot pair
+// (a long with no matching short, e.g. after the short side was closed or
+// assigned). It is a REAL position with real P&L — Alpaca shows it — so
+// omitting it made "No open options positions" a lie whenever one existed.
+// Rendered as its own block rather than a spread row: it has no width, no
+// credit and no cushion, and inventing those columns would be worse than
+// stating plainly what it is.
+function UnpairedLegs({ legs }) {
+  const list = (legs || []).filter(Boolean);
+  if (!list.length) return null;
+  const reasonText = {
+    long_with_no_matching_short: "long leg with no matching short — the spread's other side is gone",
+    short_with_no_matching_long: "short leg with no matching long — UNCOVERED, no loss cap",
+  };
+  return (
+    <div className="opts-unpaired">
+      <h4 className="opts-unpaired-title">
+        ⚠ {list.length} unpaired option leg{list.length === 1 ? "" : "s"} — held at the broker, not part of any spread
+      </h4>
+      <table className="opt-table opts-unpaired-table">
+        <thead>
+          <tr>
+            <th className="al">Contract</th>
+            <th className="al">Qty</th>
+            <th className="al">Side</th>
+            <th className="al">Why it is not a spread</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((leg, i) => (
+            <tr key={leg.symbol || i}>
+              <td className="al mono-dim">{leg.symbol || "—"}</td>
+              <td className="al mono-dim">{leg.qty === null || leg.qty === undefined ? "—" : leg.qty}</td>
+              <td className="al mono-dim">{leg.side || "—"}</td>
+              <td className="al">{reasonText[leg.unpaired_reason] || leg.unpaired_reason || "unpaired"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="opts-unpaired-note">
+        These carry no credit, no width and no loss cap of their own, so the book totals above
+        exclude them. They still move with the underlying — check them against the broker.
+      </p>
+    </div>
+  );
+}
+
+function PositionsTable({ positions, positionsDisplay, fallbackAsOf, unpairedLegs }) {
   const posList = positions || [];
   if (!posList.length) {
-    return <p className="opt-log-empty">No open options positions.</p>;
+    return (
+      <>
+        <p className="opt-log-empty">No open credit spreads.</p>
+        <UnpairedLegs legs={unpairedLegs} />
+      </>
+    );
   }
   const displayBySymbol = new Map((positionsDisplay || []).map((d) => [d.short_symbol, d]));
   return (
@@ -796,10 +883,15 @@ function PositionsTable({ positions, positionsDisplay, fallbackAsOf }) {
   );
 }
 
-function PositionsSection({ positions, positionsDisplay, fallbackAsOf }) {
+function PositionsSection({ positions, positionsDisplay, fallbackAsOf, unpairedLegs }) {
   return (
     <Section title="Positions — entry snapshot (frozen) vs now (live)">
-      <PositionsTable positions={positions} positionsDisplay={positionsDisplay} fallbackAsOf={fallbackAsOf} />
+      <PositionsTable
+        positions={positions}
+        positionsDisplay={positionsDisplay}
+        fallbackAsOf={fallbackAsOf}
+        unpairedLegs={unpairedLegs}
+      />
     </Section>
   );
 }
@@ -1174,7 +1266,7 @@ function optionsSummaryParts(data) {
     // trade log is missing a close event.
     positionsCount: record.positions.length,
     howto: <HowToReadThisPage />,
-    headline: <Headline text={headlineText} staleLabel={staleLabel} />,
+    headline: <Headline text={headlineText} staleLabel={staleLabel} account={record.account} />,
     whereBookStands: (
       <WhereBookStands
         lines={findSection(sections, "Where the book stands").lines}
@@ -1188,6 +1280,7 @@ function optionsSummaryParts(data) {
         positions={record.positions}
         positionsDisplay={summaryData.positions_display}
         fallbackAsOf={fallbackAsOf}
+        unpairedLegs={record.unpaired_legs}
       />
     ),
     // Both cards are prose the 2h refresh cron re-derives wholesale, so each

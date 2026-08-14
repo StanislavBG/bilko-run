@@ -355,6 +355,18 @@ export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolea
   }
 }
 
+// Earliest date any egress row was ever written, or null if the table has
+// never been flushed into. Lets a caller distinguish "no traffic in this
+// window" (table has older rows, just none in range) from "metering has
+// never run" (table is genuinely empty) — see usage_report in
+// mcp-host-server/src/server.ts, which established this pattern first.
+export async function earliestEgressDate(): Promise<string | null> {
+  const row = await dbAll<{ earliest: string | null }>(
+    `SELECT MIN(date) AS earliest FROM api_egress_daily`,
+  );
+  return row[0]?.earliest ?? null;
+}
+
 export interface EgressRow { method: string; route: string; requests: number; bytes: number; bytesPerRequest: number }
 
 // Top routes by bytes over the trailing `days` window, biggest first.
@@ -371,6 +383,27 @@ export async function topEgress(days = 7, limit = 25): Promise<EgressRow[]> {
       ORDER BY bytes DESC
       LIMIT ?`,
     since, limit,
+  );
+  return rows.map((r) => ({ ...r, bytesPerRequest: r.requests ? Math.round(r.bytes / r.requests) : 0 }));
+}
+
+export interface SlugEgressRow { slug: string; requests: number; bytes: number; bytesPerRequest: number }
+
+// Static egress rolled up by project slug — driven entirely by
+// api_egress_daily's `static:<slug>` rows, never by app_manifests. A slug
+// with traffic and no published manifest still appears here, and `_host` /
+// `_other` (see slugForPath above) surface as their own rows rather than
+// being dropped, exactly like usage_report's `static` array.
+export async function topEgressBySlug(days = 7): Promise<SlugEgressRow[]> {
+  const since = dayKey(Date.now() - days * 86_400_000);
+  const rows = await dbAll<{ slug: string; requests: number; bytes: number }>(
+    `SELECT SUBSTR(route, ${STATIC_ROUTE_PREFIX.length + 1}) AS slug,
+            SUM(requests) AS requests, SUM(bytes) AS bytes
+       FROM api_egress_daily
+      WHERE date >= ? AND route LIKE 'static:%'
+      GROUP BY 1
+      ORDER BY bytes DESC`,
+    since,
   );
   return rows.map((r) => ({ ...r, bytesPerRequest: r.requests ? Math.round(r.bytes / r.requests) : 0 }));
 }

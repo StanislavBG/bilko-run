@@ -39,6 +39,8 @@ beforeEach(async () => {
   await dbRun('DELETE FROM app_logs');
   await dbRun('DELETE FROM synthetic_runs');
   await dbRun('DELETE FROM cost_alerts');
+  await dbRun('DELETE FROM api_egress_daily');
+  await dbRun('DELETE FROM static_asset_daily');
   delete process.env.BILKO_LATEST_HOST_KIT;
   // Reset to default: reject
   mockAdmin.mockImplementation(async (_req: any, reply: any) => {
@@ -251,5 +253,87 @@ describe('aggregator — host-kit drift', () => {
     const body = JSON.parse(res.body);
     const row = body.rows.find((r: any) => r.slug === 'drift-current');
     expect(row.hostKitDrift).toBe('current');
+  });
+});
+
+describe('GET /api/admin/egress — bandwidth visible without manifests', () => {
+  it('returns earliestDate=null and empty rows when the egress table has never been written to', async () => {
+    asAdmin();
+    const res = await get('/api/admin/egress');
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.earliestDate).toBeNull();
+    expect(body.bySlug).toEqual([]);
+    expect(body.rows).toEqual([]);
+  });
+
+  it('surfaces a static:<slug> egress row even when app_manifests is completely empty', async () => {
+    asAdmin();
+    const today = new Date().toISOString().slice(0, 10);
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', 'static:no-manifest-app', 4, 40000)`,
+      today,
+    );
+
+    const manifestRes = await get('/api/admin/observability');
+    const manifestBody = JSON.parse(manifestRes.body);
+    expect(manifestBody.rows).toEqual([]); // no manifest ⇒ no app row, unchanged behavior
+
+    const egressRes = await get('/api/admin/egress');
+    const egressBody = JSON.parse(egressRes.body);
+    expect(egressBody.earliestDate).toBe(today);
+    const row = egressBody.bySlug.find((r: any) => r.slug === 'no-manifest-app');
+    expect(row).toBeDefined();
+    expect(row.bytes).toBe(40000);
+    expect(row.requests).toBe(4);
+  });
+
+  it('keeps static:_host and static:_other as their own rows, not dropped', async () => {
+    asAdmin();
+    const today = new Date().toISOString().slice(0, 10);
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', 'static:_host', 2, 200)`,
+      today,
+    );
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', 'static:_other', 1, 100)`,
+      today,
+    );
+
+    const res = await get('/api/admin/egress');
+    const body = JSON.parse(res.body);
+    const slugs = body.bySlug.map((r: any) => r.slug);
+    expect(slugs).toContain('_host');
+    expect(slugs).toContain('_other');
+  });
+
+  it('returns route rows sorted by bytes descending with bytesPerRequest', async () => {
+    asAdmin();
+    const today = new Date().toISOString().slice(0, 10);
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', '/api/small', 10, 100)`,
+      today,
+    );
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', '/api/big', 2, 20000)`,
+      today,
+    );
+
+    const res = await get('/api/admin/egress');
+    const body = JSON.parse(res.body);
+    expect(body.rows[0].route).toBe('/api/big');
+    expect(body.rows[0].bytesPerRequest).toBe(10000);
+  });
+
+  it('returns a distinct "no traffic in window" signal when earliestDate predates the requested window', async () => {
+    asAdmin();
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES ('2020-01-01', 'GET', '/api/ancient', 1, 100)`,
+    );
+
+    const res = await get('/api/admin/egress?days=1');
+    const body = JSON.parse(res.body);
+    expect(body.earliestDate).toBe('2020-01-01');
+    expect(body.rows).toEqual([]); // nothing in the 1-day window, but metering clearly has run
   });
 });

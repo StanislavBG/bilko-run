@@ -6,7 +6,10 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { initDb, dbRun, dbGet, dbAll } from '../server/db.js';
-import { registerEgressMeter, setStaticKnownSlugs, flushEgress, topEgress, topStaticAssets } from '../server/egress.js';
+import {
+  registerEgressMeter, setStaticKnownSlugs, flushEgress, topEgress, topStaticAssets,
+  topEgressBySlug, earliestEgressDate,
+} from '../server/egress.js';
 
 const app = Fastify({ logger: false });
 // flush:false — no background timer in tests; we flush explicitly.
@@ -269,5 +272,55 @@ describe('static egress meter', () => {
 
     const top = await topStaticAssets(1, 50, 'demo-app');
     expect(top[0].path).toBe('/projects/demo-app/many/heavy.bin');
+  });
+});
+
+describe('earliestEgressDate', () => {
+  beforeEach(async () => {
+    await dbRun('DELETE FROM api_egress_daily');
+  });
+
+  it('returns null when the table has never been written to', async () => {
+    expect(await earliestEgressDate()).toBeNull();
+  });
+
+  it('returns the earliest date once rows exist, regardless of query window', async () => {
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', '/api/old', 1, 100)`,
+      '2020-01-01',
+    );
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', '/api/new', 1, 100)`,
+      today,
+    );
+    expect(await earliestEgressDate()).toBe('2020-01-01');
+  });
+});
+
+describe('topEgressBySlug', () => {
+  beforeEach(async () => {
+    await dbRun('DELETE FROM api_egress_daily');
+  });
+
+  it('rolls up static:<slug> rows by project without touching app_manifests', async () => {
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', 'static:demo-app', 3, 9000)`,
+      today,
+    );
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', 'static:_host', 5, 500)`,
+      today,
+    );
+    await dbRun(
+      `INSERT INTO api_egress_daily (date, method, route, requests, bytes) VALUES (?, 'GET', 'static:_other', 1, 100)`,
+      today,
+    );
+
+    const rows = await topEgressBySlug(1);
+    const slugs = rows.map((r) => r.slug);
+    // _host and _other are their own rows, not dropped or merged.
+    expect(slugs).toEqual(expect.arrayContaining(['demo-app', '_host', '_other']));
+    expect(rows[0].slug).toBe('demo-app');
+    expect(rows[0].bytesPerRequest).toBe(3000);
   });
 });

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 import { ADMIN_EMAILS } from '../../constants.js';
+import { BandwidthPanel } from './BandwidthPanel.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -356,7 +357,8 @@ export function ObservabilityPage() {
                     <td colSpan={11} className="text-center py-12 text-warm-400 text-sm">
                       No manifests published yet. Run{' '}
                       <code className="font-mono text-xs">emit-manifest.mjs</code> from a sibling
-                      app to populate this dashboard.
+                      app to populate this per-app table. Bandwidth data below is independent of
+                      manifests and may still show traffic.
                     </td>
                   </tr>
                 )}
@@ -369,6 +371,10 @@ export function ObservabilityPage() {
               Latest host-kit: <code className="font-mono">{data.latestKit}</code>
             </p>
           )}
+
+          <div className="pt-4 border-t border-warm-100">
+            <BandwidthPanel />
+          </div>
         </>
       )}
     </div>

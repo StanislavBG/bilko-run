@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
-import { flushEgress, topEgress, topStaticAssets, dayKey } from '../egress.js';
+import { flushEgress, topEgress, topEgressBySlug, topStaticAssets, earliestEgressDate, dayKey } from '../egress.js';
 
 type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
 
@@ -181,14 +181,23 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     // Flush the in-process buffer first, or the last minute of traffic — often
     // the exact minute someone is investigating — is invisible.
     await safeQuery(() => flushEgress(), undefined);
+
+    // Distinguishes "no traffic in this window" from "metering has never
+    // run" — same signal usage_report (mcp-host-server) already exposes.
+    const earliestDate = await safeQuery(() => earliestEgressDate(), null);
+
     const rows = await safeQuery(() => topEgress(days, limit), []);
     const totalBytes = rows.reduce((n, r) => n + r.bytes, 0);
+    // Per-project bandwidth, driven by api_egress_daily's static:<slug> rows
+    // directly — no join onto app_manifests, so a slug with traffic and no
+    // published manifest still shows up, and _host/_other stay their own rows.
+    const bySlug = await safeQuery(() => topEgressBySlug(days), []);
     // Per-file attribution for static traffic — "which FILE under a project
     // burned the bytes", not just "which project". Bounded by construction
     // (see static_asset_daily's comment in db.ts); `slug` narrows to one
     // project, otherwise it's the global top-N across all projects.
     const assets = await safeQuery(() => topStaticAssets(days, limit, q.slug || undefined), []);
 
-    return { rows, totalBytes, assets, days, generatedAt: Math.floor(Date.now() / 1000) };
+    return { rows, bySlug, totalBytes, assets, earliestDate, days, generatedAt: Math.floor(Date.now() / 1000) };
   });
 }

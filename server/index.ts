@@ -26,6 +26,7 @@ import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
+import { normalizeStaticMtimes, setStaticCacheHeaders } from './static-cache.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -154,9 +155,27 @@ if (isProd) {
     // Bounds static egress cardinality to the published apps in this dist —
     // see server/egress.ts setStaticKnownSlugs().
     setStaticKnownSlugs(distPath);
+
+    // Make every ETag content-addressed before anything is served. A deploy's
+    // git checkout rewrites all mtimes, and send's default ETag is
+    // `W/"<size>-<mtime>"`, so without this every deploy busted every
+    // visitor's cache for every unchanged file. See server/static-cache.ts.
+    const norm = normalizeStaticMtimes(distPath);
+    console.log(
+      `[Static] mtime normalization: ${norm.changed}/${norm.files} files rewritten ` +
+      `(${(norm.bytes / 1048576).toFixed(0)} MB hashed, ${norm.ms} ms)`,
+    );
+
     await app.register(staticPlugin, {
       root: distPath,
       prefix: '/',
+      // send must not emit its own Cache-Control: @fastify/static applies
+      // send's headers AFTER setHeaders, so send would win the collision and
+      // we'd be back to `public, max-age=0` on everything.
+      cacheControl: false,
+      // Per-file lifetimes — immutable for content-hashed bundles, revalidate
+      // for HTML, short shared TTL for unhashed project assets.
+      setHeaders: (res, path) => setStaticCacheHeaders(res, path),
       // 301 missing-trailing-slash → with-slash for directory indexes.
       // Without this, a request to `/projects/game-academy` looks for a
       // file (not a dir), 404s, and falls through to the SPA which then
@@ -276,6 +295,10 @@ if (isProd) {
         return reply.status(404).send({ error: 'Not found' });
       }
       const path = req.url.split('?')[0];
+      // Never cacheable: the onSend hook stamps a per-request CSP nonce into
+      // this HTML, so a shared or reused copy would carry a nonce that no
+      // longer matches the response's CSP header.
+      reply.header('cache-control', 'private, no-store');
       return reply.type('text/html').send(serveWithOg(path));
     });
   }

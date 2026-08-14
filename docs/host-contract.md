@@ -423,6 +423,25 @@ Open alerts are visible at `/admin/cost`. Ceilings can be tuned per-app via the 
 
 Scheduled cron: `91-platform-cost-monitor-daily.md` runs `pnpm cost-monitor` daily at 7am PT.
 
+## Static-asset caching
+
+Render bills origin egress, so the host caches everything it serves out of `dist/`. Apps get this for free — there is nothing to configure in a sibling repo — but the policy determines how fast a publish becomes visible, so know it before you publish.
+
+| File | `Cache-Control` | Effect |
+|---|---|---|
+| `*.html` (including `/projects/<slug>/index.html`) | `public, max-age=0, must-revalidate` | Revalidated on every view; a publish is visible immediately |
+| `assets/*-<hash>.<ext>` (Vite content-hashed) | `public, max-age=31536000, immutable` | Never re-fetched; the filename changes when the bytes do |
+| Images, fonts, audio, video | `public, max-age=86400` | One day |
+| Everything else — `app.jsx`, `styles.css`, generated `data-*.js` | `public, max-age=600` | Up to 10 minutes stale after a publish |
+| SPA fallback HTML (`setNotFoundHandler`) | `private, no-store` | Carries a per-request CSP nonce, so it can never be shared |
+
+Two consequences worth designing around:
+
+- **Unhashed assets can be up to 10 minutes stale.** If your app publishes on a cron and needs fresher data than that, serve the data from an API route (see `server/routes/project-data.ts`, `public, max-age=60`) rather than from a static file — that is what SocialSignalsTrader's snapshot endpoint does.
+- **Content-hash your bundles if you want immutable caching.** Emit them into an `assets/` directory with a Vite-style `-<hash>` suffix and they are cached for a year. A plain `app.js` gets the 10-minute tier.
+
+Implementation lives in `server/static-cache.ts`. It also rewrites every file's mtime at boot to a value derived from that file's content hash, because `@fastify/send` derives its ETag from `size + mtime` and a deploy's git checkout stamps every file with a fresh mtime. Without that normalization, every deploy would invalidate every visitor's cached copy of every unchanged file — and with published projects republishing on a 30-minute cron, that is ~48 full cache resets a day. Do not "fix" a stale asset by touching mtimes; change the bytes.
+
 ## Observability dashboard
 
 `/admin/observability` is the single ops view. It aggregates per-sibling:

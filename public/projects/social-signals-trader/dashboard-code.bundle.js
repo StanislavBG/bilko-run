@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-08-14T05:45:01Z",
+    "generatedAt": "2026-08-14T06:15:01Z",
     "open": 0,
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
@@ -23,7 +23,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T05:45:01Z",
+  "generatedAt": "2026-08-14T06:15:01Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -243,18 +243,45 @@ window.FEEDBACK_THREADS = {
   var FALLBACK_BUNDLE = "dashboard-data.bundle.js";
 
   // Only loaded when the live snapshot fetch fails — see module comment.
-  // Resolves once the bundle has run (or failed to load), never rejects.
+  // Resolves true/false once the bundle has run (or been rejected), never rejects.
+  //
+  // MUST VALIDATE BEFORE EXECUTING. dashboard-data.bundle.js is on
+  // publish-to-bilko.sh's rsync exclude list (generated data must never churn
+  // through git), so on bilko.run this URL does not resolve to a file — the
+  // host answers it with its SPA catch-all: HTTP **200**, `content-type:
+  // text/html`, a 2.4 KB "<!DOCTYPE html>" page. A bare <script src> therefore
+  // fires onload, not onerror, and injects an HTML document into the page as
+  // JavaScript — a silent hard failure that renders an empty dashboard.
+  // Probing the response first is what makes this path honest: anything that
+  // is not real JavaScript is refused, and the caller reports the data as
+  // unavailable instead of pretending a fallback ran.
+  function looksLikeHtml(contentType, body) {
+    if ((contentType || "").toLowerCase().indexOf("html") !== -1) return true;
+    return /^\s*(<!doctype|<html)/i.test(body || "");
+  }
   function loadFallbackBundle() {
-    return new Promise(function (resolve) {
-      var s = document.createElement("script");
-      s.src = FALLBACK_BUNDLE;
-      s.onload = function () {
-        resolve(true);
-      };
-      s.onerror = function () {
-        resolve(false);
-      };
-      document.head.appendChild(s);
+    // Default cache mode (not no-store) so the <script src> below is served
+    // from cache rather than fetched a second time.
+    return fetch(FALLBACK_BUNDLE).then(function (r) {
+      if (!r.ok) return false;
+      return r.text().then(function (body) {
+        if (looksLikeHtml(r.headers.get("content-type"), body)) return false;
+        return new Promise(function (resolve) {
+          // Inject by src, not inline text — the host sets a CSP nonce and
+          // an inline <script> would be blocked.
+          var s = document.createElement("script");
+          s.src = FALLBACK_BUNDLE;
+          s.onload = function () {
+            resolve(true);
+          };
+          s.onerror = function () {
+            resolve(false);
+          };
+          document.head.appendChild(s);
+        });
+      });
+    }).catch(function () {
+      return false;
     });
   }
   window.__loadLiveSnapshot = function () {
@@ -285,12 +312,16 @@ window.FEEDBACK_THREADS = {
       // only now that the live fetch has actually failed.
       var errMsg = String(e && e.message || e);
       return loadFallbackBundle().then(function (loaded) {
+        // `fallbackLoaded` is the honest signal: false means the page has
+        // NO data at all, not "we quietly fell back". Surfaced so a caller
+        // can render an explicit unavailable state rather than an empty book.
         window.__liveSnapshotMeta = {
           ok: false,
-          error: errMsg
+          error: errMsg,
+          fallbackLoaded: loaded
         };
         if (window.console) {
-          console.warn("[live-snapshot] using bundled data (" + errMsg + ")" + (loaded ? "" : " — fallback bundle also failed to load"));
+          console.warn(loaded ? "[live-snapshot] using bundled data (" + errMsg + ")" : "[live-snapshot] NO DATA — live fetch failed (" + errMsg + ") and no usable fallback bundle is published");
         }
         return window.__liveSnapshotMeta;
       });

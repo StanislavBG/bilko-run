@@ -9,28 +9,79 @@ const PERMISSIONS = [
   'magnetometer=()', 'microphone=(self)', 'payment=(self)', 'usb=()',
 ].join(', ');
 
+// Origins the site actually uses. Every one of these was added because a real
+// page load reported a violation against it — a policy that forbids something
+// the app genuinely loads doesn't harden anything, it just turns each page view
+// into a burst of report POSTs (a single `/` load was generating 26 of them).
+//
+// - fonts.googleapis.com / fonts.gstatic.com: the Google Fonts <link> in
+//   index.html (Instrument Serif, Inter, JetBrains Mono, Caveat) and the .woff2
+//   files it pulls. Roughly 20 of those 26 reports per load were fonts alone.
+// - clerk.bilko.run: Clerk's Frontend API is CNAME'd onto our own domain, so
+//   `https://*.clerk.com` never matches it — every Clerk XHR was a violation.
+const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com';
+const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com';
+const CLERK_FAPI_ORIGIN = 'https://clerk.bilko.run';
+
 function buildCsp(nonce: string): string {
-  return [
+  const directives = [
     `default-src 'self'`,
-    `script-src 'self' 'nonce-${nonce}' https://js.clerk.com https://js.stripe.com 'strict-dynamic'`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}' https://js.clerk.com https://js.stripe.com ${CLERK_FAPI_ORIGIN} 'strict-dynamic'`,
+    `style-src 'self' 'nonce-${nonce}' ${FONT_CSS_ORIGIN}`,
+    // React renders `style={{...}}` as inline style ATTRIBUTES, which a nonce
+    // can never cover (nonces apply to elements). Without this the app emits a
+    // handful of style-src reports on every render pass. style-src-attr is
+    // scoped to attributes only, so <style> elements stay nonce-gated.
+    `style-src-attr 'unsafe-inline'`,
     `img-src 'self' data: https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com`,
-    `font-src 'self' data:`,
-    `connect-src 'self' https://*.clerk.com https://api.stripe.com`,
+    `font-src 'self' data: ${FONT_FILE_ORIGIN}`,
+    `connect-src 'self' https://*.clerk.com ${CLERK_FAPI_ORIGIN} https://api.stripe.com`,
     `frame-src https://*.clerk.com https://js.stripe.com https://hooks.stripe.com`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self' https://*.stripe.com`,
     `frame-ancestors 'none'`,
     `report-uri /api/security/csp-report`,
-    `upgrade-insecure-requests`,
-  ].join('; ');
+  ];
+  // Browsers ignore upgrade-insecure-requests in a report-only policy and log a
+  // console error saying so — emit it only when the policy is enforced.
+  if (ENFORCE) directives.push(`upgrade-insecure-requests`);
+  return directives.join('; ');
 }
 
-// In-memory rate limiter for the CSP report endpoint (60 req/min/IP).
+// In-memory rate limiter for the CSP report endpoint (10 req/min/IP).
+//
+// Browsers fire one report per distinct violation per page load and we cannot
+// turn that off from the server — the only real lever is not violating the
+// policy. This limiter plus the fingerprint dedupe below exist so that if the
+// policy regresses again, the blast radius is a rejected POST rather than
+// thousands of DB writes. 10/min is ample: a correct policy reports ~0, and a
+// first-time-broken one only needs a handful of samples to be diagnosable.
 const _cspReportCounts = new Map<string, { count: number; windowStart: number }>();
-const CSP_RATE_LIMIT = 60;
+const CSP_RATE_LIMIT = 10;
 const CSP_RATE_WINDOW_MS = 60_000;
+
+// Fingerprint dedupe: one row per distinct (directive, blocked, document) per
+// hour, globally. A broken directive is one fact, not one fact per visitor.
+const CSP_DEDUPE_WINDOW_MS = 60 * 60_000;
+const CSP_DEDUPE_MAX_KEYS = 500;
+const _cspSeen = new Map<string, number>();
+
+function shouldPersistViolation(fingerprint: string): boolean {
+  const now = Date.now();
+  const last = _cspSeen.get(fingerprint);
+  if (last !== undefined && now - last < CSP_DEDUPE_WINDOW_MS) return false;
+  if (_cspSeen.size >= CSP_DEDUPE_MAX_KEYS) {
+    for (const [k, t] of _cspSeen) {
+      if (now - t >= CSP_DEDUPE_WINDOW_MS) _cspSeen.delete(k);
+    }
+    // Still full of live entries — a genuinely novel flood. Drop rather than
+    // grow the map without bound; the rate limiter is the outer guard.
+    if (_cspSeen.size >= CSP_DEDUPE_MAX_KEYS) return false;
+  }
+  _cspSeen.set(fingerprint, now);
+  return true;
+}
 
 function checkCspRate(ip: string): boolean {
   const now = Date.now();
@@ -68,7 +119,14 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
 
   // Inject the per-request nonce onto every <script> and <style> tag in HTML responses.
   // Also injects a <meta name="csp-nonce"> for host-kit runtime CSS (e.g. emotion).
-  // Handles string and Buffer payloads; streams (static files) are not rewritten here.
+  //
+  // Streams are buffered rather than skipped. @fastify/static serves the SPA
+  // shell (`GET /`) and every static-path project's index.html as a stream, so
+  // skipping streams meant the nonce was never actually injected in production
+  // — `curl https://bilko.run/ | grep nonce` came back empty, and with
+  // 'strict-dynamic' in script-src that made the app's own bundle a violation
+  // on every single page load. HTML documents are small; buffering them is
+  // cheap and it's the only way the nonce reaches the markup it's issued for.
   app.addHook('onSend', async (req, reply, payload) => {
     const ctype = String(reply.getHeader('content-type') ?? '');
     if (!ctype.startsWith('text/html')) return payload;
@@ -78,9 +136,22 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
       html = payload;
     } else if (Buffer.isBuffer(payload)) {
       html = payload.toString('utf-8');
+    } else if (payload && typeof (payload as any).pipe === 'function') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of payload as AsyncIterable<Buffer | string>) {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      }
+      html = Buffer.concat(chunks).toString('utf-8');
     } else {
-      return payload; // streams — nonce injection not applied
+      return payload;
     }
+    // Length changes once the nonce attributes are spliced in; a stale
+    // Content-Length from @fastify/static would truncate the response.
+    reply.removeHeader('content-length');
+    // The response now embeds a per-request nonce, so no shared cache may
+    // hand this body to a second visitor whose CSP header carries a different
+    // one. @fastify/static's own Cache-Control for HTML is set before this.
+    reply.header('cache-control', 'private, no-store');
     return html
       .replace(/<script(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`)
       .replace(/<style(?![^>]*\bnonce=)/gi, `<style nonce="${nonce}"`)
@@ -92,6 +163,12 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
     if (!checkCspRate(ip)) return reply.code(429).send();
     const body = req.body as any;
     const r = body?.['csp-report'] ?? body ?? {};
+    const fingerprint = [
+      String(r['violated-directive'] ?? ''),
+      String(r['blocked-uri'] ?? ''),
+      String(r['document-uri'] ?? ''),
+    ].join('|');
+    if (!shouldPersistViolation(fingerprint)) return reply.code(204).send();
     await dbRun(
       `INSERT INTO csp_violations (blocked_uri, violated_dir, document_uri, source_file, line_number, user_agent, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,

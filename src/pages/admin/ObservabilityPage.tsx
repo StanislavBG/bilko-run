@@ -46,12 +46,19 @@ const DRIFT_ORDER: Record<DriftStatus, number> = {
   current: 0, minor_behind: 1, major_behind: 2, unknown: 3,
 };
 
+// The 30s option is deliberately NOT the default. A single admin tab left open
+// all day at 30s is ~2,900 requests to /api/admin/observability — it was the
+// single busiest API route on the host, and nothing on this page changes that
+// fast (the underlying rollups are minute-granularity at best). 5m is the
+// default; 30s is there for when you're actively watching a deploy.
 const REFRESH_OPTIONS = [
   { label: '30s', ms: 30_000 },
   { label: '1m',  ms: 60_000 },
   { label: '5m',  ms: 300_000 },
   { label: 'Off', ms: 0 },
 ] as const;
+
+const DEFAULT_REFRESH_MS = 300_000;
 
 const SORT_COLS: { key: SortKey; label: string }[] = [
   { key: 'slug',         label: 'App' },
@@ -116,7 +123,7 @@ export function ObservabilityPage() {
   const [data, setData] = useState<ObservabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshMs, setRefreshMs] = useState(30_000);
+  const [refreshMs, setRefreshMs] = useState<number>(DEFAULT_REFRESH_MS);
   const [sortKey, setSortKey] = useState<SortKey>('slug');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -140,13 +147,33 @@ export function ObservabilityPage() {
     load().finally(() => setLoading(false));
   }, [isAdmin, load]);
 
+  // Poll only while the tab is actually being looked at. A background tab was
+  // still hitting the endpoint every 30s indefinitely, which is where the bulk
+  // of this route's traffic came from. On regaining focus we refresh once
+  // immediately so the view is never stale by up to a full interval.
   useEffect(() => {
     if (!isAdmin) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (refreshMs > 0) {
-      timerRef.current = setInterval(() => load(), refreshMs);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+
+    const stop = () => {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    };
+    const start = () => {
+      stop();
+      if (refreshMs > 0) timerRef.current = setInterval(() => load(), refreshMs);
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) { stop(); return; }
+      load();
+      start();
+    };
+
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      stop();
+    };
   }, [isAdmin, refreshMs, load]);
 
   useEffect(() => {

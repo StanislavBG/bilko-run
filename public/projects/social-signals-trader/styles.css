@@ -888,22 +888,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .uc-trade-pnl  { text-align: right; font-weight: 600; }
 .uc-trade-pct  { text-align: right; }
 
-/* Sentiment — two columns: signal-builder social vs. trader thesis. */
-.uc-sent-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.uc-sent-col-head {
-  font-family: var(--mono); font-size: 10px; color: var(--text-2);
-  margin-bottom: 5px;
-}
-.uc-sent-body { font-size: 12px; }
-.uc-sent-bar {
-  display: flex; height: 6px; border-radius: 3px; overflow: hidden;
-  background: var(--line); margin-bottom: 5px;
-}
-.uc-sent-bull { background: var(--pos); }
-.uc-sent-bear { background: var(--neg); }
-.uc-sent-meta { font-size: 11.5px; }
-.uc-sent-sub { font-size: 11px; margin-top: 2px; }
-
 /* Exit plan — deterministic policy chips + LLM narrative. */
 .uc-exit-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
 .uc-exit-chip {
@@ -971,7 +955,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   .uc-row .uc-subject,
   .uc-row .uc-row-trade { display: none; }
   .uc-detail { padding-left: 14px; }
-  .uc-sent-cols { grid-template-columns: 1fr; gap: 10px; }
 }
 
 /* ============== Options / credit-spread surfaces ==============
@@ -1778,6 +1761,26 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   font-size: 10px; letter-spacing: .04em; border-radius: 999px; padding: 2px 8px;
   border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent); color: var(--accent);
 }
+/* Approval chip — the gate's own verdict, never re-derived client-side. Three
+   tones only: pending is neutral (nothing has happened yet), approved/
+   declined pick up the same pos/neg vocabulary the scorecard already uses. */
+.prop-approval-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 10px; font-weight: 600; letter-spacing: .03em;
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+.prop-approval-chip--pending {
+  color: var(--muted); border: 1px solid color-mix(in oklch, var(--muted) 45%, transparent);
+}
+.prop-approval-chip--approved {
+  color: var(--pos); border: 1px solid color-mix(in oklch, var(--pos) 45%, transparent);
+  background: color-mix(in oklch, var(--pos) 12%, transparent);
+}
+.prop-approval-chip--declined {
+  color: var(--neg); border: 1px solid color-mix(in oklch, var(--neg) 45%, transparent);
+  background: color-mix(in oklch, var(--neg) 12%, transparent);
+}
+.prop-approval-summary { font-size: 12px; color: var(--text-2); display: inline-flex; align-items: center; gap: 2px; }
 .prop-headline { font-size: 14px; font-weight: 600; color: var(--text); margin: 10px 0 6px; max-width: 80ch; }
 .prop-bullets { margin: 0; padding-left: 18px; }
 .prop-bullets li { font-size: 13px; color: var(--text-2); margin: 4px 0; max-width: 85ch; line-height: 1.5; }
@@ -1893,6 +1896,12 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .prop-dot--on { width: 13px; height: 13px; background: var(--accent); border-color: var(--accent); }
 /* An unanswered comment on a proposal you are not looking at is still news. */
 .prop-dot--flagged { box-shadow: 0 0 0 2px color-mix(in oklch, var(--warn) 60%, transparent); }
+/* Approval state is a distinct channel from the flagged ring above (border
+   color vs box-shadow), so a dot can show both at once — declined-and-
+   unanswered is not the same as declined-and-read. Declared after --on so
+   the tone still shows through on the active (filled) dot. */
+.prop-dot--approved { border-color: var(--pos); }
+.prop-dot--declined { border-color: var(--neg); }
 .prop-pager-count {
   font-size: 11px; font-family: var(--mono); color: var(--muted); margin-left: auto;
 }

@@ -11,7 +11,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-08-14T01:30:01Z",
+    "generatedAt": "2026-08-14T02:00:01Z",
     "open": 1,
     "resolvedThisWeek": 0,
     "routedToPrd": 2,
@@ -21,7 +21,7 @@ window.FEEDBACK_THREADS = {
       "medium": 1
     }
   },
-  "generatedAt": "2026-08-14T01:30:01Z",
+  "generatedAt": "2026-08-14T02:00:01Z",
   "schema": 2,
   "threads": [
     {

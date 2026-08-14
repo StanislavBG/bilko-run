@@ -3,18 +3,18 @@
 window.FEEDBACK_THREADS = {
   "counts": {
     "active": 3,
-    "answered": 2,
+    "answered": 3,
     "archived": 0,
     "proposal": 1,
     "system": 0,
     "total": 3,
     "trade": 2,
-    "unanswered": 1
+    "unanswered": 0
   },
   "funnel": {
-    "breachingSla": 1,
-    "generatedAt": "2026-08-14T05:00:02Z",
-    "open": 1,
+    "breachingSla": 0,
+    "generatedAt": "2026-08-14T05:08:10Z",
+    "open": 0,
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
     "triagedBySeverity": {
@@ -23,9 +23,52 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T05:00:02Z",
+  "generatedAt": "2026-08-14T05:08:10Z",
   "schema": 2,
   "threads": [{
+    "answered": true,
+    "archivedAt": null,
+    "contractKey": "NFLX-P-75-74-2026-08-21",
+    "createdAt": "2026-08-13T23:36:06.000Z",
+    "description": "What made you go with PUT over CALL?",
+    "hasImage": false,
+    "id": "fb_mss5pq4b_crdgipdi",
+    "lastActivityAt": "2026-08-14T05:08:10Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "What made you go with PUT over CALL?",
+      "createdAt": "2026-08-13T23:36:06.000Z",
+      "hasImage": false,
+      "id": "fb_mss5pq4b_crdgipdi",
+      "role": "user",
+      "title": "This is looking sus"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Fair call-out \u2014 on this one the PUT side didn't actually clear our own gate. Our rule is to sell puts only when the stock is already beaten down (RSI under 35, stochastic under 30), and NFLX is sitting at RSI 61.82 with %K 98.13, which is the opposite \u2014 that's overbought territory, closer to a CALL setup. That's why the \"Momentum \u2014 oversold\" check is flagged as failed on the card, and why this proposal shouldn't go live as a put; the direction gate is doing its job by refusing it.",
+      "createdAt": "2026-08-14T05:08:10Z",
+      "hasImage": false,
+      "id": "fb_mss5pq4b_crdgipdi.r1",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Fair call-out \u2014 on this one the PUT side didn't actually clear our own gate. Our rule is to sell puts only when the stock is already beaten down (RSI under 35, stochastic under 30), and NFLX is sitting at RSI 61.82 with %K 98.13, which is the opposite \u2014 that's overbought territory, closer to a CALL setup. That's why the \"Momentum \u2014 oversold\" check is flagged as failed on the card, and why this proposal shouldn't go live as a put; the direction gate is doing its job by refusing it.",
+      "createdAt": "2026-08-14T05:08:10Z",
+      "id": "fb_mss5pq4b_crdgipdi.r1"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "answered",
+    "targetId": "proposal-NFLX-put-75-74-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "NFLX 75/74 put spread, expires 2026-08-21",
+    "title": "This is looking sus",
+    "type": "feedback"
+  }, {
     "answered": true,
     "archivedAt": null,
     "contractKey": "BABA-C-143-144-2026-08-14",
@@ -123,35 +166,6 @@ window.FEEDBACK_THREADS = {
     "targetKind": "position",
     "targetLabel": "BABA 143/144 call spread, expires Aug 14",
     "title": "[B] Why are we showing 4k loss here? 7k on detail?",
-    "type": "feedback"
-  }, {
-    "answered": false,
-    "archivedAt": null,
-    "contractKey": "NFLX-P-75-74-2026-08-21",
-    "createdAt": "2026-08-13T23:36:06.000Z",
-    "description": "What made you go with PUT over CALL?",
-    "hasImage": false,
-    "id": "fb_mss5pq4b_crdgipdi",
-    "lastActivityAt": "2026-08-13T23:36:06.000Z",
-    "messages": [{
-      "author": "visitor",
-      "authorLabel": "Visitor",
-      "body": "What made you go with PUT over CALL?",
-      "createdAt": "2026-08-13T23:36:06.000Z",
-      "hasImage": false,
-      "id": "fb_mss5pq4b_crdgipdi",
-      "role": "user",
-      "title": "This is looking sus"
-    }],
-    "replies": [],
-    "route": "#options",
-    "scope": "proposal",
-    "stage": "proposal",
-    "status": "open",
-    "targetId": "proposal-NFLX-put-75-74-2026-08-21",
-    "targetKind": "component",
-    "targetLabel": "NFLX 75/74 put spread, expires 2026-08-21",
-    "title": "This is looking sus",
     "type": "feedback"
   }, {
     "answered": true,

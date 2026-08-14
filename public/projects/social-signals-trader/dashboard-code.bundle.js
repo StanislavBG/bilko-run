@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-08-14T05:23:50Z",
+    "generatedAt": "2026-08-14T05:30:02Z",
     "open": 0,
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
@@ -23,7 +23,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T05:23:50Z",
+  "generatedAt": "2026-08-14T05:30:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -220,18 +220,43 @@ window.FEEDBACK_THREADS = {
  * This replaces the old publish path (the trader committed a regenerated data.js
  * into the Bilko site repo every ~30 min, rebuilding the whole site). Now the
  * trader POSTs its snapshot to `/api/projects/<slug>/snapshot` and this fetches
- * it at load. The committed data.js / data-extended.js still load first as a
- * cold-start FALLBACK — if this fetch fails (offline, static-dev, no snapshot
- * yet) the page renders the bundled baseline instead of breaking.
+ * it at load.
+ *
+ * dashboard-data.bundle.js (data.js / data-extended.js / spread-*.js /
+ * data-options-summary.js, concatenated by build-dashboard.mjs) is the
+ * cold-start FALLBACK, but as of PRD 1102 it is NOT script-tagged in
+ * index.html — the same payload lives in both the bundle and the snapshot
+ * response, so an unconditional <script src> would ship it twice on every
+ * load where the fetch succeeds (the common case). Instead this module
+ * fetches the live snapshot first and only lazily loads the bundle if that
+ * fetch fails (offline, static-dev, no snapshot yet), so a normal cold load
+ * downloads the data exactly once.
  *
  * app.jsx awaits window.__loadLiveSnapshot() before the first render, so the
- * overlay is in place before any component reads window.* . */
+ * overlay (or fallback) is in place before any component reads window.* . */
 (function () {
   var SLUG = "social-signals-trader";
   // Absolute path → resolves against the ORIGIN root (bilko.run), not the
   // /projects/<slug>/ page path. Same-origin in prod (no CORS); harmlessly
   // unreachable when the dashboard is served as static files in dev.
   var ENDPOINT = "/api/projects/" + SLUG + "/snapshot";
+  var FALLBACK_BUNDLE = "dashboard-data.bundle.js";
+
+  // Only loaded when the live snapshot fetch fails — see module comment.
+  // Resolves once the bundle has run (or failed to load), never rejects.
+  function loadFallbackBundle() {
+    return new Promise(function (resolve) {
+      var s = document.createElement("script");
+      s.src = FALLBACK_BUNDLE;
+      s.onload = function () {
+        resolve(true);
+      };
+      s.onerror = function () {
+        resolve(false);
+      };
+      document.head.appendChild(s);
+    });
+  }
   window.__loadLiveSnapshot = function () {
     return fetch(ENDPOINT, {
       cache: "no-store"
@@ -256,13 +281,19 @@ window.FEEDBACK_THREADS = {
       if (window.console) console.info("[live-snapshot] overlaid " + n + " globals from server");
       return window.__liveSnapshotMeta;
     }).catch(function (e) {
-      // Never reject — the app falls back to the bundled baseline data.js.
-      window.__liveSnapshotMeta = {
-        ok: false,
-        error: String(e && e.message || e)
-      };
-      if (window.console) console.warn("[live-snapshot] using bundled data (" + window.__liveSnapshotMeta.error + ")");
-      return window.__liveSnapshotMeta;
+      // Never reject — fall back to the bundled baseline, loaded lazily
+      // only now that the live fetch has actually failed.
+      var errMsg = String(e && e.message || e);
+      return loadFallbackBundle().then(function (loaded) {
+        window.__liveSnapshotMeta = {
+          ok: false,
+          error: errMsg
+        };
+        if (window.console) {
+          console.warn("[live-snapshot] using bundled data (" + errMsg + ")" + (loaded ? "" : " — fallback bundle also failed to load"));
+        }
+        return window.__liveSnapshotMeta;
+      });
     });
   };
 })();

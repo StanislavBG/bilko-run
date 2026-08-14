@@ -13,17 +13,17 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 1,
-    "generatedAt": "2026-08-14T04:15:02Z",
+    "generatedAt": "2026-08-14T04:45:01Z",
     "open": 1,
-    "resolvedThisWeek": 1,
+    "resolvedThisWeek": 2,
     "routedToPrd": 4,
     "triagedBySeverity": {
-      "high": 1,
+      "high": 0,
       "low": 1,
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T04:15:02Z",
+  "generatedAt": "2026-08-14T04:45:01Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -14116,7 +14116,16 @@ function EmptyState({
       className: "opt-log-empty"
     }, "No proposals right now. Either no candidate cleared the entry gates, or the book is already at its deployment target \u2014 the line above says which.");
   }
-  var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced], ["Cleared width / liquidity / expiry screen", funnel.selected], ["Dropped — expected value or credit too small", funnel.rejected_ev_or_credit], ["Dropped — win probability outside the band", funnel.rejected_pop_band], [funnel.momentum_gate ? "Dropped — wrong side for the stock's momentum" : "Momentum gate OFF this run", funnel.momentum_gate ? funnel.rejected_momentum : "—"], ["Proposed", funnel.passed]];
+  // The screen stage (options_chain.select_spreads) drops on win probability,
+  // expected value, DTE and the risk-per-position band all at once, and it is
+  // where most of the board dies — 49 priced down to 1 on 2026-08-13. Listing
+  // `priced` and then `selected` with nothing between them left 98% of the
+  // funnel unaccounted for on screen, which is the same "where did they all
+  // go?" this panel exists to answer. Derived here rather than added to the
+  // exported funnel so an already-published plan renders it too.
+  var num = v => typeof v === "number" ? v : null;
+  var screened = num(funnel.priced) !== null && num(funnel.selected) !== null ? funnel.priced - funnel.selected : null;
+  var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced], ["Dropped — negative expected value, too few days, or wrong size", screened], ["Cleared that screen", funnel.selected], ["Dropped — no positive net credit at all", funnel.rejected_non_positive_credit], ["Dropped — expected value or credit too small", funnel.rejected_ev_or_credit], ["Dropped — win probability outside the band", funnel.rejected_pop_band], [funnel.momentum_gate ? "Dropped — wrong side for the stock's momentum" : "Momentum gate OFF this run", funnel.momentum_gate ? funnel.rejected_momentum : "—"], ["Proposed", funnel.passed]].filter(([, v]) => v !== null && v !== undefined);
   // EV > 0 is exactly "credit > breakeven credit", i.e. ratio > 1.00. Showing
   // the best ratio on the board turns "0 proposed" from a shrug into a
   // measurement: 0.81 means the market paid 81% of fair value at its most
@@ -15708,6 +15717,26 @@ function PolicyFeedback({
 // worksheet's filters come from options_chain's exploratory scanner constants,
 // which are looser on purpose (one explores, one trades) — merging the two
 // into a single parameter list is the bug this component exists to avoid.
+// Whether the sleeve is actually allowed to send an order, stated at the top of
+// the page rather than inferred from an empty Trade Log. `live` is the real
+// switch: spread_trader.execute()/manage() pass `dry_run=not cfg.live`, so with
+// it false EVERY entry and exit is a dry run — the tick still runs, still
+// scores, still writes the log, and submits nothing. A page that shows
+// proposals, positions and exits without saying that reads as a live book.
+function ExecutionState() {
+  var sc = window.SPREAD_CONFIG;
+  if (!sc || !sc.config || sc.config.live == null) return null;
+  if (sc.config.live) {
+    return /*#__PURE__*/React.createElement("p", {
+      className: "opts-exec-state opts-exec-state--live"
+    }, /*#__PURE__*/React.createElement("b", null, "Execution: LIVE."), " The 15-minute tick submits real orders to the broker.");
+  }
+  return /*#__PURE__*/React.createElement("p", {
+    className: "opts-exec-state opts-exec-state--halted"
+  }, /*#__PURE__*/React.createElement("b", null, "Execution: HALTED \u2014 every order is a dry run."), " The tick still scans, scores and logs on schedule, but ", /*#__PURE__*/React.createElement("span", {
+    className: "mono"
+  }, "live = false"), ", so nothing below reaches the broker: no entry is opened and no exit is sent. Positions and P&L shown are the existing book, not new activity.");
+}
 function StrategyPolicy() {
   var sc = window.SPREAD_CONFIG;
   if (!sc || !sc.config) {
@@ -15915,7 +15944,7 @@ function StrategyPolicy() {
     section: "Entry gates"
   })), /*#__PURE__*/React.createElement("div", {
     style: grid
-  }, field("Short-leg delta", deltaBand, "a BAND, not just a ceiling — too far ITM (above the ceiling) is too risky, but too far OTM (below the floor) is too safe: the credit no longer covers the round-trip cost", "short_leg_delta"), field("Win probability", popBand, "also a band: below the floor is rejected as too risky, but above the ceiling is rejected as too safe too — a very high PoP means a small credit that a fixed round-trip cost swallows", "pop"), field("DTE window", `${dash(c.min_dte)}–${dash(c.max_dte)}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte"), field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone", "risk"), field("Min net credit", `> ${usd2(c.min_net_credit)}`, "the unconditional floor — a candidate whose net credit does not clear this is refused before submission, checked again against the exact price about to be sent to the broker, not just the earlier scan estimate; a fill that slips through anyway pages the operator", "min_net_credit"), field("Min credit", usd2(c.min_credit), "an ADDITIONAL absolute floor a candidate must ALSO clear — below this, fees dominate the trade regardless of how favorable the breakeven ratio looks", "min_credit"), field("Min breakeven multiple", c.min_credit_breakeven_multiple > 0 ? `≥ ${c.min_credit_breakeven_multiple}× breakeven` : "off", c.min_credit_breakeven_multiple > 0 ? "the binding credit gate — credit must be at least this multiple of (1 − pop) × width × 100, the spread's own breakeven credit, i.e. a margin over what it needed just to break even" : "not used — leaving only the absolute Min credit floor", "min_credit_breakeven_multiple"), field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev"), field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? `minimum annualized yield required — ann_yield is credit/collateral annualised over the ${dash(c.min_dte)}–${dash(c.max_dte)}d hold, so this isn't a typo: 10.0 renders as 1000%/yr` : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")), /*#__PURE__*/React.createElement("h4", {
+  }, field("Short-leg delta", deltaBand, "a BAND, not just a ceiling — too far ITM (above the ceiling) is too risky, but too far OTM (below the floor) is too safe: the credit no longer covers the round-trip cost", "short_leg_delta"), field("Win probability", popBand, "also a band: below the floor is rejected as too risky, but above the ceiling is rejected as too safe too — a very high PoP means a small credit that a fixed round-trip cost swallows", "pop"), field("DTE window", `${dash(c.min_dte)}–${dash(c.max_dte)}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte"), field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone", "risk"), field("Min net credit", `> ${usd2(c.min_net_credit)}`, "the unconditional floor — a candidate whose net credit does not clear this is refused before submission, checked again against the exact price about to be sent to the broker, not just the earlier scan estimate; a fill that slips through anyway pages the operator", "min_net_credit"), field("Min credit", usd2(c.min_credit), "an ADDITIONAL absolute floor a candidate must ALSO clear — below this, fees dominate the trade regardless of how favorable the breakeven ratio looks", "min_credit"), field("Min breakeven multiple", c.min_credit_breakeven_multiple > 0 ? `≥ ${c.min_credit_breakeven_multiple}× breakeven` : "off", c.min_credit_breakeven_multiple > 0 ? "the binding credit gate — credit must be at least this multiple of (1 − pop) × width × 100, the spread's own breakeven credit, i.e. a margin over what it needed just to break even" : "not used — leaving only the absolute Min credit floor", "min_credit_breakeven_multiple"), field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev"), field("Max quote width", c.max_quote_spread_pct > 0 ? pct(c.max_quote_spread_pct) : "off", c.max_quote_spread_pct > 0 ? "per leg, (ask − bid) ÷ mid — BOTH legs must be tighter than this or the spread is dropped before it is scored. The credit is computed off the mid, and on an illiquid contract that mid is not a tradeable price" : "not used — a spread can be scored off a mid no one will trade at"), field("Fill assumption", dash(c.entry_fill_fraction), c.entry_fill_fraction >= 1 ? "1.0 — every candidate is priced assuming we cross the bid/ask on BOTH legs. The most pessimistic setting: the credit on every card above is what we would get at the worst fill, not the mid" : `${c.entry_fill_fraction} — candidates are priced assuming we cross this fraction of the bid/ask on both legs (0 = both legs fill at the mid, 1 = both legs cross). Lower is a more optimistic credit than we are likely to receive`), field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? `minimum annualized yield required — ann_yield is credit/collateral annualised over the ${dash(c.min_dte)}–${dash(c.max_dte)}d hold, so this isn't a typo: 10.0 renders as 1000%/yr` : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")), /*#__PURE__*/React.createElement("h4", {
     style: h4
   }, "Book limits", /*#__PURE__*/React.createElement(PolicyFeedback, {
     section: "Book limits"
@@ -16278,7 +16307,7 @@ function TickerDetailsPage() {
     className: "opts-page-sub"
   }, "every open credit spread, what it's worth now, and what we did"), /*#__PURE__*/React.createElement("p", {
     className: "opts-page-loop"
-  }, "Three voices write this page: the ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and posts its opinion", " ", "(", summary.cadenceLabel || "on schedule", ", weekdays); you, the ", /*#__PURE__*/React.createElement("b", null, "User"), ", comment in public on any card or proposal; the ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and decides from the Analyst's latest read, your comments, and the fund's frozen rules.")), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
+  }, "Three voices write this page: the ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and posts its opinion", " ", "(", summary.cadenceLabel || "on schedule", ", weekdays); you, the ", /*#__PURE__*/React.createElement("b", null, "User"), ", comment in public on any card or proposal; the ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and applies the fund's frozen rules \u2014 arithmetic only. The Analyst's read and your comments are for the human reading this page; neither is an input to the Trader's decision."), /*#__PURE__*/React.createElement(ExecutionState, null)), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
     id: "options-summary"
   }, summary.positions)), window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null), /*#__PURE__*/React.createElement("div", {
     id: "options-trade-log"

@@ -1168,6 +1168,13 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 /* Own line under the h2/sub-line pair — flex-basis: 100% forces the wrap
    inside .opts-page-head's flex-wrap row instead of crowding the title. */
 .opts-page-loop { flex-basis: 100%; font-size: 12px; color: var(--muted); margin: 2px 0 0; max-width: 78ch; line-height: 1.5; }
+/* Execution state — whether anything on this page can reach the broker. Sits
+   directly under the three-voice line, full width, loud enough not to be read
+   as a footnote: a halted book that looks live is the single most misleading
+   thing this page could do. */
+.opts-exec-state { flex-basis: 100%; font-size: 12px; margin: 8px 0 0; max-width: 78ch; line-height: 1.5; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); }
+.opts-exec-state--halted { color: var(--text-2); background: color-mix(in srgb, var(--warn, #d99b28) 12%, transparent); border-color: color-mix(in srgb, var(--warn, #d99b28) 45%, var(--line)); }
+.opts-exec-state--live { color: var(--text-2); background: color-mix(in srgb, var(--pos) 10%, transparent); border-color: color-mix(in srgb, var(--pos) 40%, var(--line)); }
 .opts-row2 {
   display: grid; gap: 14px; align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));

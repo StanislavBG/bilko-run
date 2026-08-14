@@ -2,19 +2,19 @@
 /* ---- data-feedback.js ---- */
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 6,
-    "answered": 3,
+    "active": 8,
+    "answered": 6,
     "archived": 0,
-    "proposal": 4,
+    "proposal": 6,
     "system": 0,
-    "total": 6,
+    "total": 8,
     "trade": 2,
-    "unanswered": 3
+    "unanswered": 2
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-08-14T15:30:03Z",
-    "open": 3,
+    "generatedAt": "2026-08-14T15:45:01Z",
+    "open": 2,
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
     "triagedBySeverity": {
@@ -23,17 +23,46 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T15:30:03Z",
+  "generatedAt": "2026-08-14T15:45:01Z",
   "schema": 2,
   "threads": [{
     "answered": false,
+    "archivedAt": null,
+    "contractKey": "AVGO-P-370-367.5-2026-08-21",
+    "createdAt": "2026-08-14T15:43:15.000Z",
+    "description": "This is more aggressive now (11:43 am) but I like it",
+    "hasImage": false,
+    "id": "fb_mst49hmt_amu5zwrm",
+    "lastActivityAt": "2026-08-14T15:43:15.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "This is more aggressive now (11:43 am) but I like it",
+      "createdAt": "2026-08-14T15:43:15.000Z",
+      "hasImage": false,
+      "id": "fb_mst49hmt_amu5zwrm",
+      "role": "user",
+      "title": "I like it"
+    }],
+    "replies": [],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-AVGO-put-370-367.5-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "AVGO 370/367.5 put spread, expires 2026-08-21",
+    "title": "I like it",
+    "type": "feedback"
+  }, {
+    "answered": true,
     "archivedAt": null,
     "contractKey": "HOOD-P-86-85-2026-08-28",
     "createdAt": "2026-08-14T15:24:04.000Z",
     "description": "This looks good. Do it.",
     "hasImage": false,
     "id": "fb_mst3ksvi_d6hjwi08",
-    "lastActivityAt": "2026-08-14T15:24:04.000Z",
+    "lastActivityAt": "2026-08-14T15:40:13Z",
     "messages": [{
       "author": "visitor",
       "authorLabel": "Visitor",
@@ -43,12 +72,26 @@ window.FEEDBACK_THREADS = {
       "id": "fb_mst3ksvi_d6hjwi08",
       "role": "user",
       "title": "Do it"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Thanks \u2014 noted as approval. One heads-up: the momentum gate didn't pass here. For a put spread we need BOTH RSI and stochastic %K below 60; RSI is fine at 50.99, but %K is 81.82 \u2014 HOOD isn't oversold, it's near the top of its recent range, so we'd be selling puts into strength rather than into a pullback. The other eight checks look good ($800 credit on $5,000 at risk, 87% win probability, 14 days to 2026-08-28), but entry gates fail closed, so this one won't be sent even with a green light from you. If %K drops below 60 before 2026-08-28 while the credit holds up, it can re-qualify on a later scan.",
+      "createdAt": "2026-08-14T15:40:13Z",
+      "hasImage": false,
+      "id": "fb_mst3ksvi_d6hjwi08.r1",
+      "role": "agent"
     }],
-    "replies": [],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Thanks \u2014 noted as approval. One heads-up: the momentum gate didn't pass here. For a put spread we need BOTH RSI and stochastic %K below 60; RSI is fine at 50.99, but %K is 81.82 \u2014 HOOD isn't oversold, it's near the top of its recent range, so we'd be selling puts into strength rather than into a pullback. The other eight checks look good ($800 credit on $5,000 at risk, 87% win probability, 14 days to 2026-08-28), but entry gates fail closed, so this one won't be sent even with a green light from you. If %K drops below 60 before 2026-08-28 while the credit holds up, it can re-qualify on a later scan.",
+      "createdAt": "2026-08-14T15:40:13Z",
+      "id": "fb_mst3ksvi_d6hjwi08.r1"
+    }],
     "route": "#options",
     "scope": "proposal",
     "stage": "proposal",
-    "status": "open",
+    "status": "answered",
     "targetId": "proposal-HOOD-put-86-85-2026-08-28",
     "targetKind": "component",
     "targetLabel": "HOOD 86/85 put spread, expires 2026-08-28",
@@ -57,12 +100,41 @@ window.FEEDBACK_THREADS = {
   }, {
     "answered": false,
     "archivedAt": null,
+    "contractKey": "MRVL-P-192.5-190-2026-08-21",
+    "createdAt": "2026-08-14T15:40:08.000Z",
+    "description": "Do it",
+    "hasImage": false,
+    "id": "fb_mst45hc7_8bd3j4ds",
+    "lastActivityAt": "2026-08-14T15:40:08.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "Do it",
+      "createdAt": "2026-08-14T15:40:08.000Z",
+      "hasImage": false,
+      "id": "fb_mst45hc7_8bd3j4ds",
+      "role": "user",
+      "title": "Do it"
+    }],
+    "replies": [],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-MRVL-put-192.5-190-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "MRVL 192.5/190 put spread, expires 2026-08-21",
+    "title": "Do it",
+    "type": "feedback"
+  }, {
+    "answered": true,
+    "archivedAt": null,
     "contractKey": "QQQ-C-742-743-2026-08-18",
     "createdAt": "2026-08-14T15:19:24.000Z",
     "description": "When was this calculated? At 11:18 am, price per contract is like 0.07.",
     "hasImage": false,
     "id": "fb_mst3et88_i1kxkntc",
-    "lastActivityAt": "2026-08-14T15:19:24.000Z",
+    "lastActivityAt": "2026-08-14T15:40:06Z",
     "messages": [{
       "author": "visitor",
       "authorLabel": "Visitor",
@@ -72,26 +144,40 @@ window.FEEDBACK_THREADS = {
       "id": "fb_mst3et88_i1kxkntc",
       "role": "user",
       "title": "refresh rate"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Good catch \u2014 the proposal cards are built from a snapshot, not a live quote, so the price you see is from whenever that scan last ran (usually within the last hour or two), and by 11:18 the chain has almost certainly moved. We're working on stamping each proposal with its as-of time and a freshness chip so it's obvious at a glance when a number has gone stale. If a contract is showing 0.07 live, that's the number to trust over the card.",
+      "createdAt": "2026-08-14T15:40:06Z",
+      "hasImage": false,
+      "id": "fb_mst3et88_i1kxkntc.r1",
+      "role": "agent"
     }],
-    "replies": [],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Good catch \u2014 the proposal cards are built from a snapshot, not a live quote, so the price you see is from whenever that scan last ran (usually within the last hour or two), and by 11:18 the chain has almost certainly moved. We're working on stamping each proposal with its as-of time and a freshness chip so it's obvious at a glance when a number has gone stale. If a contract is showing 0.07 live, that's the number to trust over the card.",
+      "createdAt": "2026-08-14T15:40:06Z",
+      "id": "fb_mst3et88_i1kxkntc.r1"
+    }],
     "route": "#options",
     "scope": "proposal",
     "stage": "proposal",
-    "status": "open",
+    "status": "answered",
     "targetId": "proposal-QQQ-call-742-743-2026-08-18",
     "targetKind": "component",
     "targetLabel": "QQQ 742/743 call spread, expires 2026-08-18",
     "title": "refresh rate",
     "type": "feedback"
   }, {
-    "answered": false,
+    "answered": true,
     "archivedAt": null,
     "contractKey": "TSLA-P-327.5-325-2026-08-21",
     "createdAt": "2026-08-14T14:47:40.000Z",
     "description": "This is our test purchase, lets see the loop!",
     "hasImage": false,
     "id": "fb_mst2a09w_e1iimahx",
-    "lastActivityAt": "2026-08-14T14:47:40.000Z",
+    "lastActivityAt": "2026-08-14T15:40:05Z",
     "messages": [{
       "author": "visitor",
       "authorLabel": "Visitor",
@@ -101,12 +187,26 @@ window.FEEDBACK_THREADS = {
       "id": "fb_mst2a09w_e1iimahx",
       "role": "user",
       "title": "Approved"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Thanks for kicking the tires on this \u2014 approval logged. The loop should now pick this up on the next tick, route it through the entry gates, and either fire the order or explain why it held back. Watch this thread for the follow-up when it does.",
+      "createdAt": "2026-08-14T15:40:05Z",
+      "hasImage": false,
+      "id": "fb_mst2a09w_e1iimahx.r1",
+      "role": "agent"
     }],
-    "replies": [],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Thanks for kicking the tires on this \u2014 approval logged. The loop should now pick this up on the next tick, route it through the entry gates, and either fire the order or explain why it held back. Watch this thread for the follow-up when it does.",
+      "createdAt": "2026-08-14T15:40:05Z",
+      "id": "fb_mst2a09w_e1iimahx.r1"
+    }],
     "route": "#options",
     "scope": "proposal",
     "stage": "proposal",
-    "status": "open",
+    "status": "answered",
     "targetId": "proposal-TSLA-put-327.5-325-2026-08-21",
     "targetKind": "component",
     "targetLabel": "TSLA 327.5/325 put spread, expires 2026-08-21",

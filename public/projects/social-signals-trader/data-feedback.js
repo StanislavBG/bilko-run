@@ -11,17 +11,17 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 1,
-    "generatedAt": "2026-08-14T04:00:01Z",
+    "generatedAt": "2026-08-14T04:10:11Z",
     "open": 1,
-    "resolvedThisWeek": 0,
-    "routedToPrd": 3,
+    "resolvedThisWeek": 1,
+    "routedToPrd": 4,
     "triagedBySeverity": {
       "high": 1,
       "low": 1,
-      "medium": 1
+      "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T04:00:01Z",
+  "generatedAt": "2026-08-14T04:10:11Z",
   "schema": 2,
   "threads": [
     {
@@ -32,7 +32,7 @@ window.FEEDBACK_THREADS = {
       "description": "Which value is true? And why it is a loss at all?",
       "hasImage": false,
       "id": "fb_msmf9zlo_v0a1ebjz",
-      "lastActivityAt": "2026-08-14T03:48:06Z",
+      "lastActivityAt": "2026-08-14T04:04:42Z",
       "messages": [
         {
           "author": "visitor",
@@ -79,6 +79,15 @@ window.FEEDBACK_THREADS = {
           "hasImage": false,
           "id": "fb_msmf9zlo_v0a1ebjz.r4",
           "role": "agent"
+        },
+        {
+          "author": "agent",
+          "authorLabel": "Trading agent",
+          "body": "Both numbers were real, just answering different questions, and the page didn't say so. $4,704 (the headline) is what this trade actually closed for \u2014 we bought back the short leg early instead of letting the spread expire. $7,448 (in the stat grid below) is the theoretical worst case if we'd held to expiry with the stock above $144, which never happened. The detail page now labels that second number as a worst-case ceiling and explicitly names the real $4,704 result next to it, so it's clear which one is the actual outcome.",
+          "createdAt": "2026-08-14T04:04:42Z",
+          "hasImage": false,
+          "id": "fb_msmf9zlo_v0a1ebjz.r5",
+          "role": "agent"
         }
       ],
       "replies": [
@@ -109,6 +118,13 @@ window.FEEDBACK_THREADS = {
           "body": "Fixed: shipped in 1094-feedback-fb-msmf9zlo-v0a1ebjz-b-why-are-we-showing-4k-loss-h \u2014 feedback fb_msmf9zlo_v0a1ebjz: [B] Why are we showing 4k loss here? 7k on detail?. Thanks for flagging it.",
           "createdAt": "2026-08-14T03:48:06Z",
           "id": "fb_msmf9zlo_v0a1ebjz.r4"
+        },
+        {
+          "author": "agent",
+          "authorLabel": "Trading agent",
+          "body": "Both numbers were real, just answering different questions, and the page didn't say so. $4,704 (the headline) is what this trade actually closed for \u2014 we bought back the short leg early instead of letting the spread expire. $7,448 (in the stat grid below) is the theoretical worst case if we'd held to expiry with the stock above $144, which never happened. The detail page now labels that second number as a worst-case ceiling and explicitly names the real $4,704 result next to it, so it's clear which one is the actual outcome.",
+          "createdAt": "2026-08-14T04:04:42Z",
+          "id": "fb_msmf9zlo_v0a1ebjz.r5"
         }
       ],
       "route": "#options",

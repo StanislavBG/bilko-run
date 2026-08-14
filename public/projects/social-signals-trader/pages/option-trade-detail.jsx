@@ -161,9 +161,20 @@ function headlineSentence(ev, facts) {
   const creditVal = ev.credit ?? ev.entry_credit;
   const creditStr = creditVal != null ? money(creditVal) : null;
   const unfilled = classification.bucket !== "trade";
+  // A credit spread is SUBMITTED for a net credit, but the broker fill can
+  // still land as a net debit (bad/stale quote on one leg at execution —
+  // see docs/findings/2026-08-07-options-book-anomalies.md and the
+  // `build_spread_order` limit-price fix that now floors every new order at
+  // its scored credit). Saying "it pays us -$84" reads as a typo, not a
+  // fill outcome, so a net-debit fill gets its own honest sentence instead.
+  const isNetDebit = creditVal != null && creditVal < 0;
 
   let sentence = `On ${dateStr} we sold a ${name} on ${ticker}.`;
-  if (creditStr) {
+  if (isNetDebit) {
+    sentence += ` It was meant to collect a credit, but filled at a net debit of ${money(Math.abs(creditVal))} instead`;
+    if (conditionClause) sentence += `; even ${conditionClause}, the most this can do is return to $0`;
+    sentence += ".";
+  } else if (creditStr) {
     sentence += unfilled ? ` It would pay us ${creditStr} if it fills` : ` It pays us ${creditStr}`;
     if (conditionClause) sentence += ` ${conditionClause}`;
     sentence += ".";
@@ -395,10 +406,11 @@ function PayoffStrip({ facts, ev, livePrice }) {
 // case at expiry is $0. This swaps the max-gain stat's label/value/caption
 // for a net-debit framing instead of printing a negative "max gain".
 function maxGainStat(facts) {
+  const verb = facts.isClose ? "could have made" : "can make";
   if (!facts.isNetDebit) {
     return {
       label: "Most we can make", value: money(facts.maxGain), sub: "Max gain", tone: "up",
-      caption: "The most we can make — the full credit, if the trade finishes on the safe side.",
+      caption: `The most we ${verb} — the full credit, if the trade finished on the safe side.`,
     };
   }
   return {
@@ -407,12 +419,31 @@ function maxGainStat(facts) {
   };
 }
 
+// The max-loss caption is the crux of feedback fb_msmf9zlo_v0a1ebjz ("why is
+// this a loss at all, and which number is true — 4k or 7k?"): this stat is
+// the theoretical worst case at expiry, computed the same way whether the
+// trade is open or already closed, so a closed trade that actually lost less
+// (or won) than this figure reads as a second, conflicting loss number next
+// to the realized-P&L headline above. Spell out the distinction explicitly
+// and point at the real outcome instead of leaving the reader to guess which
+// figure is "true."
+function maxLossCaption(facts) {
+  if (!facts.isClose) {
+    return "The maximum possible loss if the spread finishes fully in the money at expiry — worst case, not what it is showing right now.";
+  }
+  if (facts.pnl == null) {
+    return "The maximum possible loss this trade could have taken if held to expiry — a worst-case ceiling, not what actually happened.";
+  }
+  const verb = facts.pnl >= 0 ? "won" : "lost";
+  return `The worst case if this had been held to expiry — not what actually happened. This trade closed and ${verb} ${money(Math.abs(facts.pnl))}; see Realized P&L below.`;
+}
+
 function WhatHadToHappen({ ev, facts, livePrice }) {
   const calc = tradeCalcProps(ev, facts);
   const mg = maxGainStat(facts);
   return (
     <section className="card opt-panel optd-section">
-      <h2 className="optd-h2">What had to happen for this to win</h2>
+      <h2 className="optd-h2">{facts.isClose ? "What was riding on this trade" : "What had to happen for this to win"}</h2>
       <div className="optd-stat-grid">
         <div className="optd-stat">
           <div className="optd-stat-label">
@@ -430,10 +461,7 @@ function WhatHadToHappen({ ev, facts, livePrice }) {
           </div>
           <div className="optd-stat-value down">{money(facts.maxLoss)}</div>
           <div className="optd-stat-sub">Max loss</div>
-          <div className="optd-stat-caption">
-            The maximum possible loss if the spread finishes fully in the money at expiry — worst
-            case, not what it is showing right now.
-          </div>
+          <div className="optd-stat-caption">{maxLossCaption(facts)}</div>
         </div>
         <div className="optd-stat">
           <div className="optd-stat-label">

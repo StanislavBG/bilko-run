@@ -21800,12 +21800,65 @@ function App() {
   }))));
 }
 
+// Shown instead of <App/> when the page has no data at all — the live snapshot
+// fetch failed AND no usable fallback bundle is published (see
+// lib/live-snapshot.js). Every panel reads window.* globals that simply are not
+// there, so App() throws on `SITE.handle` and React renders an empty <div>.
+//
+// A blank page reads as "the fund has nothing" — which is a lie. State the real
+// condition instead, and show NO numbers: nothing here is stale or estimated,
+// there is genuinely nothing to display until the data service answers.
+function DataUnavailable({
+  meta
+}) {
+  return /*#__PURE__*/React.createElement("main", {
+    className: "shell",
+    style: {
+      paddingTop: 64,
+      maxWidth: 640
+    }
+  }, /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: 22,
+      marginBottom: 12
+    }
+  }, "Live data unavailable"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      opacity: 0.85,
+      lineHeight: 1.6
+    }
+  }, "The dashboard could not load the fund's data from the server, and no offline copy is published. Nothing is shown rather than something stale \u2014 this page has no numbers to display until the data service responds."), /*#__PURE__*/React.createElement("p", {
+    style: {
+      opacity: 0.6,
+      fontFamily: "ui-monospace, monospace",
+      fontSize: 12,
+      marginTop: 16
+    }
+  }, meta && meta.error || "no snapshot"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => location.reload(),
+    style: {
+      marginTop: 20,
+      padding: "8px 16px",
+      cursor: "pointer"
+    }
+  }, "Retry"));
+}
+
 // Overlay live server data over the bundled baseline BEFORE the first render, so
-// every component reads fresh window.* values. __loadLiveSnapshot never rejects
-// (it falls back to the bundled data.js on any failure), so render always runs.
+// every component reads fresh window.* values. __loadLiveSnapshot never rejects,
+// so render always runs — but it CAN come back with nothing (see above).
 (async () => {
+  var meta = null;
   if (typeof window.__loadLiveSnapshot === "function") {
-    await window.__loadLiveSnapshot();
+    meta = await window.__loadLiveSnapshot();
   }
-  ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
+  // Gate on the data actually being present, not on meta alone: serving
+  // dashboard/ straight off disk loads the data via index.html's own <script>
+  // tags while the snapshot fetch still fails, and that case must render the
+  // real dashboard, not this notice.
+  var haveData = typeof window.SITE !== "undefined" && window.SITE !== null;
+  ReactDOM.createRoot(document.getElementById("root")).render(haveData ? /*#__PURE__*/React.createElement(App, null) : /*#__PURE__*/React.createElement(DataUnavailable, {
+    meta: meta
+  }));
 })();

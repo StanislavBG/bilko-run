@@ -13,12 +13,13 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-08-14T17:45:02Z",
+    "generatedAt": "2026-08-14T18:45:02Z",
     "open": 9,
     "proposals": {
       "approved": 0,
       "declined": 0,
-      "pending": 7
+      "pending": 7,
+      "stranded": 0
     },
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
@@ -28,7 +29,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T17:45:02Z",
+  "generatedAt": "2026-08-14T18:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -1248,6 +1249,12 @@ window.FEEDBACK_THREADS = {
       short: "A positive comment on this proposal approves it; anything else does not.",
       long: "There is no approve/decline button, by design — the comment thread under a proposal is the operator's audit trail. proposal_approval.py reads the proposal's own thread and classifies the latest visitor message: an unambiguous instruction to take the trade (“approved”, “ship it”, “take it”) approves it; an unambiguous instruction not to (“decline this”, “skip it”) declines it; everything else — including every question — stays pending. Fails closed: nothing is approved until a comment unambiguously says so.",
       example: "A comment reading 'approved' or 'ship it' approves the proposal; a comment reading 'is this a good idea?' leaves it pending even though it sounds positive."
+    },
+    proposal_approval_states: {
+      label: "Approval state",
+      short: "Where one proposal's approval sits right now, and what happens next.",
+      long: "Awaiting review: no comment has approved or declined this yet — nothing happens until one does. Approved: a comment approved it and the next scan (trader-tick, every ~15 minutes) will try to fill it the moment it offers a matching spread — no further action needed. Submitted: it already filled; the order reference shown is the client_order_id the fund actually submitted, so you can find it in the Trade Log. Approved — not matched: the approval is still live and unconsumed, but the scanner hasn't offered a spread it could match for a while (a different name, side, or nothing at all) — it will still fill automatically the instant a match appears; a new comment is only needed if the setup has genuinely changed. Approved — expired: the approval only carries through the trading day it was decided in, which has since ended — nothing will fill on it; comment again to re-approve. Declined: a comment declined it — nothing will ever be submitted for this proposal.",
+      example: "HOOD 86/85 approved at 3:24pm; by 3:57pm the scanner had only re-priced HOOD to 89/88 and 88/87, neither of which is this exact card, so the ORIGINAL approval shows 'Approved' on its own (now-stale) card while a separate 'Approved — not matched' card appears for the approval itself, since scope='underlying_right' still lets it fill on the next matching HOOD put spread."
     },
     pop: {
       label: "PoP / win probability",
@@ -10608,13 +10615,23 @@ function traderByline() {
 }
 function proposalPlan() {
   var p = window.SPREAD_PLAN;
-  if (!p || typeof p !== "object") return {
-    generatedAt: null,
-    deployment: {},
-    intent: []
-  };
+  if (!p || typeof p !== "object") {
+    return {
+      generatedAt: null,
+      approvalGeneratedAt: null,
+      deployment: {},
+      intent: []
+    };
+  }
   return {
     generatedAt: p.generatedAt || null,
+    // Stamped independently of `generatedAt` — the scan that produced these
+    // candidates runs on trader-tick's slower cadence, but the approval
+    // blocks are re-derived every 5 minutes by `feedback_cli approvals`
+    // (spread_trader.refresh_plan_approvals()), so this can be newer than
+    // the plan itself. Showing both, rather than only the older one, is
+    // what makes staleness explicit instead of implied.
+    approvalGeneratedAt: p.approvalGeneratedAt || null,
     deployment: p.deployment || {},
     funnel: p.funnel || null,
     intent: Array.isArray(p.intent) ? p.intent : []
@@ -10783,26 +10800,60 @@ function momentumChip(item) {
   return `${isPut ? "Oversold" : "Overbought"} · RSI ${item.rsi} · %K ${item.stoch_k}`;
 }
 
-// The approval gate (PRD 1112) writes `approval.{verdict, decidedAt, reason}`
-// straight onto each `SPREAD_PLAN.intent[]` entry — this reads ONLY that,
-// never the comment thread itself, so the chip can never disagree with the
-// gate that actually holds/releases the trade. An entry written before the
-// gate existed carries no `approval` key at all, which must render the same
-// as an explicit "pending" verdict, not blank and not a crash.
+// The five states an operator can find a proposal in — see
+// `spread_trader._approval_state()`, the single source of truth this only
+// renders. Ordered the way a proposal actually moves through them: nothing
+// said yet -> approved and waiting for the next tick -> either it fills
+// (submitted) or the scanner stops offering anything it can match
+// (stranded) -> or it never gets a chance (declined/expired).
+var APPROVAL_STATE_LABEL = {
+  not_reviewed: "Awaiting review",
+  awaiting_scan: "Approved",
+  submitted: "Submitted",
+  stranded: "Approved — not matched",
+  declined: "Declined",
+  expired: "Approved — expired"
+};
+var APPROVAL_STATE_WORD = {
+  not_reviewed: "awaiting review",
+  awaiting_scan: "approved, awaiting next scan",
+  submitted: "submitted",
+  stranded: "approved but not matched",
+  declined: "declined",
+  expired: "approved but expired"
+};
+
+// The approval gate (PRD 1112, state vocabulary extended by the PRD that
+// closed the 2026-08-14 HOOD incident) writes the FULL approval block —
+// `{verdict, state, decidedAt, reason, consumedBy, asOf, ...}` — straight
+// onto each `SPREAD_PLAN.intent[]` entry. This reads ONLY that, never the
+// comment thread itself, so the chip can never disagree with the gate that
+// actually holds/releases the trade. An entry written before `state`/
+// `asOf` existed (or with no `approval` key at all) still renders as
+// "not yet reviewed" / "declined" from `verdict` alone, not blank and not a
+// crash.
 function approvalStatus(item) {
   var approval = item && item.approval;
   var verdict = approval && (approval.verdict === "approved" || approval.verdict === "declined") ? approval.verdict : "pending";
+  var state = approval && approval.state || (verdict === "declined" ? "declined" : verdict === "approved" ? "awaiting_scan" : "not_reviewed");
   return {
     verdict,
+    state,
     decidedAt: approval && approval.decidedAt || null,
-    reason: approval && approval.reason || null
+    reason: approval && approval.reason || null,
+    consumedBy: approval && approval.consumedBy || null,
+    asOf: approval && approval.asOf || null
   };
 }
 
 // The one place the deck states whether a proposal has been approved —
 // there is no approve/decline BUTTON anywhere on this page, by design: the
 // comment thread is the operator's instruction and its audit trail, so this
-// chip only ever renders what proposal_approval.py already decided.
+// chip only ever renders what proposal_approval.py already decided. The
+// as-of time comes from `approval.asOf` — the moment THIS block was
+// derived, which (via `feedback_cli approvals` -> `refresh_plan_approvals()`)
+// can be newer than the plan itself, so a reader never has to guess whether
+// what they're looking at could already be stale.
 function ApprovalChip({
   item
 }) {
@@ -10810,13 +10861,24 @@ function ApprovalChip({
   var internals = window.OptionsSummaryInternals;
   var ageLabel = internals && internals.ageLabel;
   var when = status.decidedAt && ageLabel ? ageLabel(status.decidedAt) : null;
-  var label = status.verdict === "approved" ? `Approved${when ? " " + when : ""}` : status.verdict === "declined" ? `Declined${when ? " " + when : ""}` : "Awaiting approval";
-  var note = status.decidedAt ? `Decided ${whenPlanned(status.decidedAt)}${status.reason ? ` — ${status.reason}` : ""}.` : "No decision recorded yet — nothing here has been placed, and no comment has approved it.";
+  var label = (APPROVAL_STATE_LABEL[status.state] || "Awaiting review") + (when ? ` ${when}` : "");
+  var noteParts = [];
+  noteParts.push(status.decidedAt ? `Decided ${whenPlanned(status.decidedAt)}${status.reason ? ` — ${status.reason}` : ""}.` : "No decision recorded yet — nothing here has been placed, and no comment has approved it.");
+  if (status.state === "submitted" && status.consumedBy) {
+    noteParts.push(`Order reference: ${status.consumedBy}.`);
+  } else if (status.state === "stranded") {
+    noteParts.push("The scanner hasn't re-offered a matching spread since this was approved. It fills automatically " + "the moment it does — no new comment needed — but if the setup has changed, say so.");
+  } else if (status.state === "expired") {
+    noteParts.push("The approval only carried through the trading day it was decided in, which has since ended.");
+  }
+  if (status.asOf) {
+    noteParts.push(`Approval state as of ${whenPlanned(status.asOf)}.`);
+  }
   return /*#__PURE__*/React.createElement("span", {
-    className: `prop-approval-chip prop-approval-chip--${status.verdict}`
+    className: `prop-approval-chip prop-approval-chip--${status.state}`
   }, label, window.Help && /*#__PURE__*/React.createElement(window.Help, {
-    term: "proposal_approval",
-    note: note
+    term: "proposal_approval_states",
+    note: noteParts.join(" ")
   }));
 }
 function ProposalScorecard({
@@ -10880,14 +10942,23 @@ function ProposalScorecard({
     className: "prop-score-chip"
   }, chip));
 }
+
+// A "stranded" card (approval.state === "stranded", PRD closing the
+// 2026-08-14 HOOD incident) is synthesized server-side from the approvals
+// store alone, NOT from a scan candidate — there is no price, no gates, no
+// scorecard to show, only the approval itself and why nothing has happened
+// with it. Rendering the full scorecard/checks/rules for one would show
+// "0 of 0 gates ✕", which reads as a failing trade rather than an approval
+// waiting for the board to catch up.
 function ProposalCard({
   item,
   equity
 }) {
   var explain = item.explain;
   var target = proposalFeedbackTarget(item);
+  var stranded = !!item.stranded;
   return /*#__PURE__*/React.createElement("article", {
-    className: "prop-card",
+    className: `prop-card${stranded ? " prop-card--stranded" : ""}`,
     id: `proposal-${item.id || ""}`
   }, /*#__PURE__*/React.createElement("header", {
     className: "prop-card-head"
@@ -10901,7 +10972,7 @@ function ProposalCard({
     className: "prop-card-head-right"
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-badge"
-  }, "PROPOSED \xB7 not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+  }, stranded ? "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
     target: target
   }))), /*#__PURE__*/React.createElement("div", {
     className: "prop-card-body"
@@ -10917,12 +10988,12 @@ function ProposalCard({
     className: "prop-structure"
   }, /*#__PURE__*/React.createElement("b", null, "What we actually place:"), " ", explain.structure)) : /*#__PURE__*/React.createElement(MissingCard, {
     item: item
-  })), /*#__PURE__*/React.createElement(ProposalScorecard, {
+  })), !stranded && /*#__PURE__*/React.createElement(ProposalScorecard, {
     item: item,
     equity: equity
-  })), /*#__PURE__*/React.createElement(ProposalChecks, {
+  })), !stranded && /*#__PURE__*/React.createElement(ProposalChecks, {
     checks: item.checks
-  }), /*#__PURE__*/React.createElement(ProposalRules, {
+  }), !stranded && /*#__PURE__*/React.createElement(ProposalRules, {
     rules: item.rules
   }), window.ProposalDiscussion && /*#__PURE__*/React.createElement(window.ProposalDiscussion, {
     proposalId: target.id,
@@ -10952,11 +11023,32 @@ function deploymentBasis(d) {
   }
   return parts.join(" · ");
 }
+
+// One tally over the whole deck's approval states, so the line above the
+// cards can call out a stuck approval WITHOUT the reader opening every
+// card to find it (PRD closing the 2026-08-14 HOOD incident — that
+// approval sat unmentioned anywhere but its own card for 13+ minutes).
+function approvalTally(items) {
+  var tally = {
+    approved: 0,
+    submitted: 0,
+    stranded: 0,
+    declined: 0,
+    total: items.length
+  };
+  items.forEach(it => {
+    var state = approvalStatus(it).state;
+    if (state === "awaiting_scan" || state === "stranded") tally.approved += 1;
+    if (state === "stranded") tally.stranded += 1;
+    if (state === "submitted") tally.submitted += 1;
+    if (state === "declined") tally.declined += 1;
+  });
+  return tally;
+}
 function DeploymentLine({
   deployment,
   totalCollateral,
-  approvedCount,
-  totalCount
+  tally
 }) {
   var d = deployment || {};
   if (d.deployed === undefined && d.headroom === undefined && !totalCollateral) return null;
@@ -10964,11 +11056,13 @@ function DeploymentLine({
     className: "prop-deployment"
   }, /*#__PURE__*/React.createElement("span", null, "Deployed ", propMoney(d.deployed), " of target ", propMoney(d.target), " (", propPct(d.deployed_pct), " of equity) \u2014 headroom ", propMoney(d.headroom)), /*#__PURE__*/React.createElement("span", {
     className: "prop-deployment-note"
-  }, deploymentBasis(d)), totalCollateral > 0 && /*#__PURE__*/React.createElement("span", null, "These proposals would together tie up ", propMoney(totalCollateral), " of collateral", d.equity ? ` (${propPct(totalCollateral / d.equity, 1)} of equity)` : "", " \u2014 that cash is reserved by the broker until each trade closes, and it is returned in full when they do."), totalCount > 0 && /*#__PURE__*/React.createElement("span", {
+  }, deploymentBasis(d)), totalCollateral > 0 && /*#__PURE__*/React.createElement("span", null, "These proposals would together tie up ", propMoney(totalCollateral), " of collateral", d.equity ? ` (${propPct(totalCollateral / d.equity, 1)} of equity)` : "", " \u2014 that cash is reserved by the broker until each trade closes, and it is returned in full when they do."), tally && tally.total > 0 && /*#__PURE__*/React.createElement("span", {
     className: "prop-approval-summary"
-  }, approvedCount, " of ", totalCount, " approved", window.Help && /*#__PURE__*/React.createElement(window.Help, {
-    term: "proposal_approval"
-  })), d.margin_breach && /*#__PURE__*/React.createElement("span", {
+  }, tally.approved, " of ", tally.total, " approved", tally.submitted > 0 ? ` · ${tally.submitted} submitted` : "", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "proposal_approval_states"
+  })), tally && tally.stranded > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "prop-approval-stranded"
+  }, "\u26A0 ", tally.stranded, " approved but stuck \u2014 the scanner hasn\u2019t matched", " ", tally.stranded === 1 ? "it" : "them", " against anything it\u2019s currently offering.", " ", tally.stranded === 1 ? "It has" : "They have", " its own card below \u2014 look for the amber dot in the pager."), d.margin_breach && /*#__PURE__*/React.createElement("span", {
     className: "prop-margin-breach"
   }, "\uD83D\uDD34 MARGIN BREACH \u2014 maintenance margin ", propMoney(d.maintenance_margin), " exceeds cap", " ", propMoney(d.margin_cap), ". New entries are refused until it clears, so nothing below can fill."));
 }
@@ -10997,7 +11091,7 @@ function EmptyState({
   // "0 proposed" and "0 approved" read identically unless the split is
   // shown — a board that produced proposals but approved none of them
   // must be distinguishable from a board that produced none at all.
-  ["Approved", funnel.approval && funnel.approval.approved], ["Awaiting approval", funnel.approval && funnel.approval.pending], ["Declined", funnel.approval && funnel.approval.declined]].filter(([, v]) => v !== null && v !== undefined);
+  ["Approved", funnel.approval && funnel.approval.approved], ["Awaiting approval", funnel.approval && funnel.approval.pending], ["Declined", funnel.approval && funnel.approval.declined], ["Stuck — approved but not matched by the scanner", funnel.approval && funnel.approval.stranded]].filter(([, v]) => v !== null && v !== undefined);
   // EV > 0 is exactly "credit > breakeven credit", i.e. ratio > 1.00. Showing
   // the best ratio on the board turns "0 proposed" from a shrug into a
   // measurement: 0.81 means the market paid 81% of fair value at its most
@@ -11065,12 +11159,12 @@ function ProposalPager({
     className: "prop-dots"
   }, items.map((it, i) => {
     var open = unansweredCountFor(it);
-    var approval = approvalStatus(it).verdict;
-    var approvalWord = approval === "approved" ? "approved" : approval === "declined" ? "declined" : "awaiting approval";
-    var label = `${it.ticker || "proposal"} — ${i + 1} of ${items.length} (${approvalWord})` + (open ? ` (${open} unanswered comment${open === 1 ? "" : "s"})` : "");
+    var state = approvalStatus(it).state;
+    var stateWord = APPROVAL_STATE_WORD[state] || "awaiting review";
+    var label = `${it.ticker || "proposal"} — ${i + 1} of ${items.length} (${stateWord})` + (open ? ` (${open} unanswered comment${open === 1 ? "" : "s"})` : "");
     return /*#__PURE__*/React.createElement("button", {
       key: it.id || i,
-      className: `prop-dot${i === index ? " prop-dot--on" : ""}${open ? " prop-dot--flagged" : ""} prop-dot--${approval}`,
+      className: `prop-dot${i === index ? " prop-dot--on" : ""}${open ? " prop-dot--flagged" : ""} prop-dot--${state}`,
       onClick: () => onGo(i),
       "aria-label": label,
       "aria-current": i === index ? "true" : undefined,
@@ -11131,13 +11225,15 @@ function ProposedTrades() {
   }, items.length, " proposal", items.length === 1 ? "" : "s"), plan.generatedAt && /*#__PURE__*/React.createElement("span", {
     className: "fbt-count",
     title: plan.generatedAt
-  }, "planned ", whenPlanned(plan.generatedAt)))), /*#__PURE__*/React.createElement("p", {
+  }, "planned ", whenPlanned(plan.generatedAt)), plan.approvalGeneratedAt && /*#__PURE__*/React.createElement("span", {
+    className: "fbt-count",
+    title: plan.approvalGeneratedAt
+  }, "approvals as of ", whenPlanned(plan.approvalGeneratedAt)))), /*#__PURE__*/React.createElement("p", {
     className: "opts-page-sub prop-lede"
   }, "Nothing here has been placed. These are the trades the fund intends to open on the next tick, each explained from scratch, with the rules it had to clear. Disagree with one? Use its \uD83D\uDCAC button \u2014 the comment thread under a proposal is how you tell the fund what to do with it, and it is read before anything fills."), /*#__PURE__*/React.createElement(DeploymentLine, {
     deployment: plan.deployment,
     totalCollateral: items.reduce((sum, it) => sum + (Number(it.collateral) || 0), 0),
-    approvedCount: items.filter(it => approvalStatus(it).verdict === "approved").length,
-    totalCount: items.length
+    tally: approvalTally(items)
   }), items.length ? /*#__PURE__*/React.createElement("div", {
     className: "prop-deck",
     tabIndex: 0,
@@ -11167,6 +11263,9 @@ window.ProposedTradesInternals = {
   momentumChip,
   collateralLabel,
   approvalStatus,
+  approvalTally,
+  APPROVAL_STATE_LABEL,
+  APPROVAL_STATE_WORD,
   proposalPlan,
   proposalFeedbackTarget,
   propMoney,

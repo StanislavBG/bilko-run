@@ -570,7 +570,11 @@ function tradeCalcProps(ev, facts) {
   const longStrike = facts.longParsed ? facts.longParsed.strike : undefined;
   const right = facts.shortParsed ? facts.shortParsed.right : undefined;
   const credit = facts.maxGain;
-  const maxLossCalc = { inputs: { width: ev.width, contracts: ev.contracts, credit }, asOf: asOfEntry };
+  // `facts.width` already falls back to the strikes when `ev.width` is
+  // absent (close events never log it — see tradeFacts in
+  // options-trade-log.jsx) — reuse it rather than re-deriving it here, so
+  // the Help tooltip's inputs can never drift from the headline number.
+  const maxLossCalc = { inputs: { width: facts.width, contracts: ev.contracts, credit }, asOf: asOfEntry };
   return {
     max_gain: { inputs: { credit }, asOf: asOfEntry },
     max_loss: maxLossCalc,

@@ -231,7 +231,27 @@ function tradeFacts(ev, classification) {
   // same value, different field name, so this must match every other reader
   // of "what did we collect" (headlineSentence, OpenOrdersTable's atRiskCredit).
   const maxGain = ev.credit ?? ev.entry_credit;
-  const maxLoss = ev.risk;
+  // Close events never carry `risk` — that field is written once, on the
+  // `open` record, and a close row has no matching field at all (see
+  // `entry_credit`/`exit_cost`/`realized_pnl` on the close event in
+  // spread_trades.jsonl). Falling back to `ev.risk` alone rendered "Max
+  // loss" as a blank dash on every closed trade's detail page — a visitor
+  // who filed feedback while a spread was open, then came back after it
+  // closed, saw the number they asked about vanish rather than persist.
+  // Re-derive it the same way `_fill_reconciled_event` does for the open
+  // record (width * 100 * contracts - credit), using the strikes parsed
+  // straight off the leg symbols since `width` isn't logged on close events
+  // either.
+  const width =
+    ev.width ??
+    (shortParsed && longParsed && shortParsed.strike != null && longParsed.strike != null
+      ? Math.abs(shortParsed.strike - longParsed.strike)
+      : null);
+  const maxLoss =
+    ev.risk ??
+    (width != null && ev.contracts != null && maxGain != null
+      ? width * 100 * ev.contracts - maxGain
+      : null);
   // A "credit" spread that filled at a net DEBIT (BABA 143/144, 2026-08-07) has
   // no max gain — the best case at expiry is $0, not the negative "credit"
   // number. Every reader of `maxGain` must brand it as a debit paid, not print
@@ -240,7 +260,7 @@ function tradeFacts(ev, classification) {
   const be = breakeven(shortParsed, maxGain, ev.contracts);
   const riskReward = maxLoss != null && maxGain ? maxLoss / maxGain : null;
   const pnl = isClose ? ev.realized_pnl : null;
-  return { isClose, shortParsed, longParsed, structure, fs, received, maxGain, isNetDebit, maxLoss, be, riskReward, pnl, classification };
+  return { isClose, shortParsed, longParsed, structure, fs, received, maxGain, isNetDebit, maxLoss, width, be, riskReward, pnl, classification };
 }
 
 // Legacy detail view: structure blurb, decoded legs, key/value detail grid,

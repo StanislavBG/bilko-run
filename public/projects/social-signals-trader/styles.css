@@ -1608,6 +1608,19 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .fbt-count { font-size: 11px; color: var(--text-2); }
 .fbt-count--open { color: var(--warn); font-weight: 600; }
 .fbt-empty { font-size: 12px; color: var(--text-2); margin: 6px 0 0; max-width: 70ch; }
+
+/* The submit -> triage -> route -> reconcile -> resolved pipeline state, so
+   the loop is visible at a glance instead of reconstructed from a log tail —
+   same numbers brief.py's "Feedback:" lines render, computed once in Python
+   (feedback_threads.build_funnel()). */
+.fbt-funnel {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 2px 0 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--surface-2); font-size: 11px; color: var(--text-2);
+}
+.fbt-funnel-stat b { color: var(--text); font-family: var(--mono); }
+.fbt-funnel-stat--warn b { color: var(--warn); }
+.fbt-funnel-sub { color: var(--muted); }
 .fbt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .fbt-thread {
   border: 1px solid var(--line); border-left: 3px solid var(--line);

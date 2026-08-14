@@ -217,7 +217,7 @@ function ModerationControls({ thread, routeNotDeployed, moderationState, onModer
 
 function feedbackPayload() {
   const p = window.FEEDBACK_THREADS;
-  if (!p || !Array.isArray(p.threads)) return { generatedAt: null, threads: [], counts: {} };
+  if (!p || !Array.isArray(p.threads)) return { generatedAt: null, threads: [], counts: {}, funnel: null };
   return p;
 }
 
@@ -647,6 +647,42 @@ function TradeFeedbackThreads({ targets }) {
 
 // System feedback — component/page-scoped notes about the SITE. Lives at the
 // bottom of #options, deliberately away from any single trade.
+// The funnel this whole pipeline is: submit -> triage -> route (to a PRD) ->
+// reconcile -> resolved. `funnel` is computed ONCE, in Python
+// (`feedback_threads.build_funnel()`, sourced from feedback_queue.json +
+// triage.jsonl + routed.jsonl) and shipped as `window.FEEDBACK_THREADS.
+// funnel` — this component only renders those numbers, it never recomputes
+// them, so the CLI brief (`/project-status`) and this card always agree.
+function FeedbackFunnel({ funnel }) {
+  if (!funnel) return null;
+  const bySev = funnel.triagedBySeverity || {};
+  const triagedOpen = (bySev.low || 0) + (bySev.medium || 0) + (bySev.high || 0);
+  const breaching = funnel.breachingSla || 0;
+  return (
+    <div className="fbt-funnel" role="group" aria-label="Feedback handling funnel">
+      <span className="fbt-funnel-stat">
+        <b>{funnel.open || 0}</b> open
+      </span>
+      <span className={"fbt-funnel-stat" + (breaching > 0 ? " fbt-funnel-stat--warn" : "")}>
+        <b>{breaching}</b> breaching SLA
+      </span>
+      <span className={"fbt-funnel-stat" + ((bySev.high || 0) > 0 ? " fbt-funnel-stat--warn" : "")}>
+        <b>{triagedOpen}</b> triaged
+        <span className="fbt-funnel-sub">
+          {" "}
+          (low {bySev.low || 0} / medium {bySev.medium || 0} / high {bySev.high || 0})
+        </span>
+      </span>
+      <span className="fbt-funnel-stat">
+        <b>{funnel.routedToPrd || 0}</b> routed to a PRD
+      </span>
+      <span className="fbt-funnel-stat">
+        <b>{funnel.resolvedThisWeek || 0}</b> resolved this week
+      </span>
+    </div>
+  );
+}
+
 function SystemFeedbackPanel() {
   const payload = feedbackPayload();
   const threads = systemThreads(payload.threads);
@@ -668,6 +704,7 @@ function SystemFeedbackPanel() {
         Feedback filed against a card or the page itself — how the site reads, not what the fund
         traded. Trade-specific questions live on that trade&rsquo;s own page.
       </p>
+      <FeedbackFunnel funnel={payload.funnel} />
       <ThreadList
         threads={threads}
         panelKey="system"

@@ -440,6 +440,10 @@ Two consequences worth designing around:
 - **Unhashed assets can be up to 10 minutes stale.** If your app publishes on a cron and needs fresher data than that, serve the data from an API route (see `server/routes/project-data.ts`, `public, max-age=60`) rather than from a static file — that is what SocialSignalsTrader's snapshot endpoint does.
 - **Content-hash your bundles if you want immutable caching.** Emit them into an `assets/` directory with a Vite-style `-<hash>` suffix and they are cached for a year. A plain `app.js` gets the 10-minute tier.
 
+`server/static-cache.ts` also strips `Vary: Origin` and the `Access-Control-*` headers from same-origin requests for publicly cacheable assets. `@fastify/cors` runs with an allow-list, which makes it stamp `Vary: Origin` on everything, and most CDNs refuse to cache a response that varies on anything but `Accept-Encoding`. Cross-origin requests (which carry an `Origin` header) still get full CORS headers.
+
+**Note on the edge:** bilko.run's DNS is at Porkbun, pointing straight at Render. The `server: cloudflare` / `cf-cache-status: DYNAMIC` headers you'll see come from Render's own edge, not a Cloudflare zone we control — so `DYNAMIC` on a correctly-cached asset is not a bug in this repo. The caching above is browser-side and revalidation-side: repeat views serve from disk cache, and anything that does revalidate returns a 0-byte 304 instead of the full asset.
+
 Implementation lives in `server/static-cache.ts`. It also rewrites every file's mtime at boot to a value derived from that file's content hash, because `@fastify/send` derives its ETag from `size + mtime` and a deploy's git checkout stamps every file with a fresh mtime. Without that normalization, every deploy would invalidate every visitor's cached copy of every unchanged file — and with published projects republishing on a 30-minute cron, that is ~48 full cache resets a day. Do not "fix" a stale asset by touching mtimes; change the bytes.
 
 ## Observability dashboard

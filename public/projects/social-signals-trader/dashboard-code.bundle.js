@@ -13,12 +13,13 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 2,
-    "generatedAt": "2026-08-14T21:45:01Z",
+    "generatedAt": "2026-08-14T22:45:02Z",
     "open": 15,
     "proposals": {
       "approved": 1,
-      "declined": 1,
-      "pending": 7,
+      "conditional": 0,
+      "declined": 0,
+      "pending": 8,
       "stranded": 0
     },
     "resolvedThisWeek": 2,
@@ -29,7 +30,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T21:45:01Z",
+  "generatedAt": "2026-08-14T22:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -11423,7 +11424,10 @@ var APPROVAL_STATE_LABEL = {
   submitted: "Submitted",
   stranded: "Approved — not matched",
   declined: "Declined",
-  expired: "Approved — expired"
+  expired: "Approved — expired",
+  // No fixed amount — ApprovalChip() overrides this with the actual
+  // minCredit ("Waiting for $1,025") since the label depends on the card.
+  conditional: "Waiting for price"
 };
 var APPROVAL_STATE_WORD = {
   not_reviewed: "awaiting review",
@@ -11431,7 +11435,8 @@ var APPROVAL_STATE_WORD = {
   submitted: "submitted",
   stranded: "approved but not matched",
   declined: "declined",
-  expired: "approved but expired"
+  expired: "approved but expired",
+  conditional: "conditional on price"
 };
 
 // The approval gate (PRD 1112, state vocabulary extended by the PRD that
@@ -11445,7 +11450,7 @@ var APPROVAL_STATE_WORD = {
 // crash.
 function approvalStatus(item) {
   var approval = item && item.approval;
-  var verdict = approval && (approval.verdict === "approved" || approval.verdict === "declined") ? approval.verdict : "pending";
+  var verdict = approval && (approval.verdict === "approved" || approval.verdict === "declined" || approval.verdict === "conditional") ? approval.verdict : "pending";
   var state = approval && approval.state || (verdict === "declined" ? "declined" : verdict === "approved" ? "awaiting_scan" : "not_reviewed");
   return {
     verdict,
@@ -11453,7 +11458,9 @@ function approvalStatus(item) {
     decidedAt: approval && approval.decidedAt || null,
     reason: approval && approval.reason || null,
     consumedBy: approval && approval.consumedBy || null,
-    asOf: approval && approval.asOf || null
+    asOf: approval && approval.asOf || null,
+    minCredit: approval && approval.minCredit || null,
+    conditionalPhrase: approval && approval.conditionalPhrase || null
   };
 }
 
@@ -11472,7 +11479,10 @@ function ApprovalChip({
   var internals = window.OptionsSummaryInternals;
   var ageLabel = internals && internals.ageLabel;
   var when = status.decidedAt && ageLabel ? ageLabel(status.decidedAt) : null;
-  var label = (APPROVAL_STATE_LABEL[status.state] || "Awaiting review") + (when ? ` ${when}` : "");
+  var hasMinCredit = Number.isFinite(Number(status.minCredit));
+  var minCreditLabel = hasMinCredit ? propMoney(status.minCredit) : "the stated credit";
+  var baseLabel = status.state === "conditional" && hasMinCredit ? `Waiting for ${minCreditLabel}` : APPROVAL_STATE_LABEL[status.state] || "Awaiting review";
+  var label = baseLabel + (when ? ` ${when}` : "");
   var noteParts = [];
   noteParts.push(status.decidedAt ? `Decided ${whenPlanned(status.decidedAt)}${status.reason ? ` — ${status.reason}` : ""}.` : "No decision recorded yet — nothing here has been placed, and no comment has approved it.");
   if (status.state === "submitted" && status.consumedBy) {
@@ -11481,6 +11491,8 @@ function ApprovalChip({
     noteParts.push("The scanner hasn't re-offered a matching spread since this was approved. It fills automatically " + "the moment it does — no new comment needed — but if the setup has changed, say so.");
   } else if (status.state === "expired") {
     noteParts.push("The approval only carried through the trading day it was decided in, which has since ended.");
+  } else if (status.state === "conditional") {
+    noteParts.push(`This is a decided yes, held on price${status.conditionalPhrase ? ` ("${status.conditionalPhrase}")` : ""}` + `. It enters automatically the moment a scan re-prices this spread at or above ${minCreditLabel} — ` + "no new comment needed.");
   }
   if (status.asOf) {
     noteParts.push(`Approval state as of ${whenPlanned(status.asOf)}.`);
@@ -11568,6 +11580,7 @@ function ProposalCard({
   var explain = item.explain;
   var target = proposalFeedbackTarget(item);
   var stranded = !!item.stranded;
+  var strandedIsConditional = stranded && item.approval && item.approval.verdict === "conditional";
   return /*#__PURE__*/React.createElement("article", {
     className: `prop-card${stranded ? " prop-card--stranded" : ""}`,
     id: `proposal-${item.id || ""}`
@@ -11583,7 +11596,7 @@ function ProposalCard({
     className: "prop-card-head-right"
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-badge"
-  }, stranded ? "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+  }, stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
     target: target
   }))), /*#__PURE__*/React.createElement("div", {
     className: "prop-card-body"
@@ -11645,6 +11658,7 @@ function approvalTally(items) {
     submitted: 0,
     stranded: 0,
     declined: 0,
+    conditional: 0,
     total: items.length
   };
   items.forEach(it => {
@@ -11653,6 +11667,7 @@ function approvalTally(items) {
     if (state === "stranded") tally.stranded += 1;
     if (state === "submitted") tally.submitted += 1;
     if (state === "declined") tally.declined += 1;
+    if (state === "conditional") tally.conditional += 1;
   });
   return tally;
 }
@@ -11698,7 +11713,14 @@ function EmptyState({
   // exported funnel so an already-published plan renders it too.
   var num = v => typeof v === "number" ? v : null;
   var screened = num(funnel.priced) !== null && num(funnel.selected) !== null ? funnel.priced - funnel.selected : null;
-  var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced], ["Dropped — negative expected value, too few days, or wrong size", screened], ["Cleared that screen", funnel.selected], ["Dropped — no positive net credit at all", funnel.rejected_non_positive_credit], ["Dropped — expected value or credit too small", funnel.rejected_ev_or_credit], ["Dropped — win probability outside the band", funnel.rejected_pop_band], [funnel.momentum_gate ? "Dropped — wrong side for the stock's momentum" : "Momentum gate OFF this run", funnel.momentum_gate ? funnel.rejected_momentum : "—"], ["Proposed", funnel.passed],
+  var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced], ["Dropped — negative expected value, too few days, or wrong size", screened], ["Cleared that screen", funnel.selected], ["Dropped — no positive net credit at all", funnel.rejected_non_positive_credit], ["Dropped — expected value or credit too small", funnel.rejected_ev_or_credit], ["Dropped — win probability outside the band", funnel.rejected_pop_band], [funnel.momentum_gate ? "Dropped — wrong side for the stock's momentum" : "Momentum gate OFF this run", funnel.momentum_gate ? funnel.rejected_momentum : "—"], [funnel.trade_corroboration ? "Dropped — no matching trade print on the tape" : "Trade-corroboration gate OFF this run", funnel.trade_corroboration ? funnel.rejected_no_trade_corroboration : "—"],
+  // Suppression is checked LAST in scan() (see spread_trader.py), after
+  // every quality gate above — a suppressed candidate already cleared all
+  // of them. It is placed here, immediately before "Proposed", so the
+  // narrative reads as its own outcome distinct from both the rejections
+  // above and the count that actually got proposed: this many were
+  // deployable and simply already on the deck.
+  ["Already on the deck — awaiting your comment", funnel.rejected_pending_duplicate], ["Proposed", funnel.passed],
   // "0 proposed" and "0 approved" read identically unless the split is
   // shown — a board that produced proposals but approved none of them
   // must be distinguishable from a board that produced none at all.

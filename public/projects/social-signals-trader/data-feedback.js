@@ -1,17 +1,49 @@
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 2,
+    "active": 3,
     "answered": 2,
     "archived": 0,
-    "proposal": 0,
+    "proposal": 1,
     "system": 0,
-    "total": 2,
+    "total": 3,
     "trade": 2,
-    "unanswered": 0
+    "unanswered": 1
   },
-  "generatedAt": "2026-08-13T23:30:02Z",
+  "generatedAt": "2026-08-13T23:45:01Z",
   "schema": 2,
   "threads": [
+    {
+      "answered": false,
+      "archivedAt": null,
+      "contractKey": "NFLX-P-75-74-2026-08-21",
+      "createdAt": "2026-08-13T23:36:06.000Z",
+      "description": "What made you go with PUT over CALL?",
+      "hasImage": false,
+      "id": "fb_mss5pq4b_crdgipdi",
+      "lastActivityAt": "2026-08-13T23:36:06.000Z",
+      "messages": [
+        {
+          "author": "visitor",
+          "authorLabel": "Visitor",
+          "body": "What made you go with PUT over CALL?",
+          "createdAt": "2026-08-13T23:36:06.000Z",
+          "hasImage": false,
+          "id": "fb_mss5pq4b_crdgipdi",
+          "role": "user",
+          "title": "This is looking sus"
+        }
+      ],
+      "replies": [],
+      "route": "#options",
+      "scope": "proposal",
+      "stage": "proposal",
+      "status": "open",
+      "targetId": "proposal-NFLX-put-75-74-2026-08-21",
+      "targetKind": "component",
+      "targetLabel": "NFLX 75/74 put spread, expires 2026-08-21",
+      "title": "This is looking sus",
+      "type": "feedback"
+    },
     {
       "answered": true,
       "archivedAt": null,

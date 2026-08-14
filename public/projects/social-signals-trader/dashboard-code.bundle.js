@@ -2,36 +2,171 @@
 /* ---- data-feedback.js ---- */
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 8,
+    "active": 11,
     "answered": 6,
     "archived": 0,
-    "proposal": 6,
+    "proposal": 9,
     "system": 0,
-    "total": 8,
+    "total": 11,
     "trade": 2,
-    "unanswered": 2
+    "unanswered": 5
   },
   "funnel": {
-    "breachingSla": 0,
-    "generatedAt": "2026-08-14T18:45:02Z",
-    "open": 9,
+    "breachingSla": 2,
+    "generatedAt": "2026-08-14T19:45:02Z",
+    "open": 13,
     "proposals": {
-      "approved": 0,
+      "approved": 1,
       "declined": 0,
-      "pending": 7,
+      "pending": 8,
       "stranded": 0
     },
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
     "triagedBySeverity": {
       "high": 0,
-      "low": 6,
+      "low": 9,
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T18:45:02Z",
+  "generatedAt": "2026-08-14T19:45:02Z",
   "schema": 2,
   "threads": [{
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "QQQ-P-680-679-2026-09-18",
+    "createdAt": "2026-08-14T19:30:21.000Z",
+    "description": "3:29pm price is only $0.11. doesn't make much sense. if we close it, we have to pay maybe half.. And I wouldn't bet against spy for such long time.",
+    "hasImage": false,
+    "id": "fb_mstcdjkr_1jkyy7lm",
+    "lastActivityAt": "2026-08-14T19:30:21.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "3:29pm price is only $0.11. doesn't make much sense. if we close it, we have to pay maybe half.. And I wouldn't bet against spy for such long time.",
+      "createdAt": "2026-08-14T19:30:21.000Z",
+      "hasImage": false,
+      "id": "fb_mstcdjkr_1jkyy7lm",
+      "role": "user",
+      "title": "?"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:30 PM PDT against QQQ 680/679 put spread, expires 2026-09-18. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:35:02Z",
+      "hasImage": false,
+      "id": "fb_mstcdjkr_1jkyy7lm.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:30 PM PDT against QQQ 680/679 put spread, expires 2026-09-18. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:35:02Z",
+      "id": "fb_mstcdjkr_1jkyy7lm.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-QQQ-put-680-679-2026-09-18",
+    "targetKind": "component",
+    "targetLabel": "QQQ 680/679 put spread, expires 2026-09-18",
+    "title": "?",
+    "type": "feedback"
+  }, {
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "MU-P-820-810-2026-09-18",
+    "createdAt": "2026-08-14T19:15:02.000Z",
+    "description": "go for it",
+    "hasImage": false,
+    "id": "fb_mstbtu03_p3s7r5uy",
+    "lastActivityAt": "2026-08-14T19:15:02.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "go for it",
+      "createdAt": "2026-08-14T19:15:02.000Z",
+      "hasImage": false,
+      "id": "fb_mstbtu03_p3s7r5uy",
+      "role": "user",
+      "title": "Too good"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:15 PM PDT against MU 820/810 put spread, expires 2026-09-18. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:20:02Z",
+      "hasImage": false,
+      "id": "fb_mstbtu03_p3s7r5uy.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:15 PM PDT against MU 820/810 put spread, expires 2026-09-18. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:20:02Z",
+      "id": "fb_mstbtu03_p3s7r5uy.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-MU-put-820-810-2026-09-18",
+    "targetKind": "component",
+    "targetLabel": "MU 820/810 put spread, expires 2026-09-18",
+    "title": "Too good",
+    "type": "feedback"
+  }, {
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "QQQ-P-680-679-2026-09-18",
+    "createdAt": "2026-08-14T19:10:30.000Z",
+    "description": "If we can get this price...",
+    "hasImage": false,
+    "id": "fb_mstbo0kr_8ja170x3",
+    "lastActivityAt": "2026-08-14T19:10:30.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "If we can get this price...",
+      "createdAt": "2026-08-14T19:10:30.000Z",
+      "hasImage": false,
+      "id": "fb_mstbo0kr_8ja170x3",
+      "role": "user",
+      "title": "This is good"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:10 PM PDT against QQQ 680/679 put spread, expires 2026-09-18. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:15:02Z",
+      "hasImage": false,
+      "id": "fb_mstbo0kr_8ja170x3.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:10 PM PDT against QQQ 680/679 put spread, expires 2026-09-18. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:15:02Z",
+      "id": "fb_mstbo0kr_8ja170x3.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-QQQ-put-680-679-2026-09-18",
+    "targetKind": "component",
+    "targetLabel": "QQQ 680/679 put spread, expires 2026-09-18",
+    "title": "This is good",
+    "type": "feedback"
+  }, {
     "answered": true,
     "archivedAt": null,
     "contractKey": "HOOD-P-86-85-2026-08-28",
@@ -894,6 +1029,12 @@ window.FEEDBACK_THREADS = {
         unit: "$",
         source: "src/social_signals_trader/options_chain.py:655"
       }
+    },
+    open_orders_reconciliation: {
+      label: "Broker-verified open orders",
+      short: "How many resting orders Alpaca itself reports, independent of our own log.",
+      long: "The \"N orders\" count above is our own log's view — a bug in what publishes it could inflate that number without anyone noticing. This figure comes from asking Alpaca directly (`alpaca order list --status open`) on a cron, not from the browser, and not from our log. When the two disagree, the panel says so explicitly instead of quietly trusting the log.",
+      example: "Our log might show 143 rows classified as still-open while Alpaca's own order list reports only 3 genuinely resting orders — that mismatch is exactly what this figure exists to catch."
     },
     max_gain: {
       label: "Max gain",
@@ -6910,9 +7051,26 @@ function isFullyFilled(record) {
   return qty != null && qty > 0 && filled_qty === qty;
 }
 
-// Buckets every submitted order into "trade" (Trade Log) or "open" (Open
-// Orders), with a reader-safe label — never a bare broker status string like
-// "accepted", which reads as done to a non-trader.
+// Proof the order actually reached the broker — keyed on the BROKER's own
+// response fields (an order id and/or a submitted_at timestamp Alpaca hands
+// back), never on our own submit-time `status` string, same rule as the
+// filled-vs-not check above. A record whose `response` is only our own
+// pre-broker bookkeeping (e.g. approval-gate rejection: `{verdict,
+// contract_key}`, or a dry_run/error stub: `{error}`) has neither field and
+// fails this check. No legacy row in data/spread_trades.jsonl predates
+// broker-response capture (verified 2026-08-14: zero `status=="submitted"`
+// rows lack `response.id`), so there is no grandfather case to special-case.
+function hasBrokerEvidence(record) {
+  var resp = record.response;
+  if (!resp) return false;
+  return resp.id != null || resp.submitted_at != null;
+}
+
+// Buckets every submitted order into "trade" (Trade Log), "open" (Open
+// Orders), or "unpublished" (renders nowhere — pre-broker intent belongs on
+// the Proposed Trades deck, not here), with a reader-safe label — never a
+// bare broker status string like "accepted", which reads as done to a
+// non-trader.
 // `kind` doubles as the CSS-badge selector and the "still at risk of not
 // filling" test (`kind === "terminal"` — expired/cancelled/rejected/unknown
 // orders are resolved, not pending).
@@ -6922,6 +7080,18 @@ function classifyOrder(record) {
       bucket: "trade",
       label: "FILLED",
       kind: "filled"
+    };
+  }
+  // Precondition for the "open" bucket: broker evidence must exist before a
+  // record can render as a resting order. Without it, this is either a
+  // never-submitted candidate (dry_run/error stub) or a submit that was
+  // rejected before reaching the broker (approval-gate `verdict` response) —
+  // neither ever had money at risk, so neither belongs in Open Orders.
+  if (!hasBrokerEvidence(record)) {
+    return {
+      bucket: "unpublished",
+      label: "UNPUBLISHED",
+      kind: "unpublished"
     };
   }
   var resp = record.response || {};
@@ -7625,10 +7795,81 @@ function DeadExitWarning({
     className: "opt-dead-exit"
   }, "\u26A0 ", dead.length, " exit order", dead.length === 1 ? "" : "s", " died without filling (", dead.map(o => o.ev.ticker).join(", "), ") \u2014 whatever ", dead.length === 1 ? "it was" : "they were", " ", "meant to close was NOT closed by ", dead.length === 1 ? "it" : "them", ". Check the position against the broker before treating any exit as done.");
 }
-function OpenOrdersTable({
-  orders
+
+// A terminal row (expired/cancelled/rejected/unknown) has no chance of
+// filling any more, so it is never "still open" — this is the set the "N
+// orders" count and the broker reconciliation are both measured against
+// (Alpaca's own `order list --status open` doesn't distinguish entry vs exit
+// orders either, so this must include resting CLOSE orders too).
+function stillOpenOrders(orders) {
+  return orders.filter(o => o.classification.kind !== "terminal");
+}
+
+// A resting CLOSE order is still genuinely open (see stillOpenOrders above),
+// but it carries its ORIGINAL entry credit under `entry_credit` — that is
+// not a credit still up for grabs (filling it COSTS money, it doesn't
+// collect any), so it is additionally excluded from the credit total.
+function atRiskCreditOrders(orders) {
+  return stillOpenOrders(orders).filter(o => o.ev.event !== "close");
+}
+
+// The inline "broker N open, as of ..." badge that lives in the stats row —
+// see OpenOrdersReconciliationWarning below for the (separately placed)
+// mismatch/unavailable banner. Split in two because opt-panel-stats is a
+// flex row of inline stat chips; a block-level warning paragraph inside it
+// would break that layout, so the warning renders as a sibling of the head
+// instead (same placement pattern as DeadExitWarning).
+function reconciliationBrokerCount(reconciliation) {
+  return reconciliation && typeof reconciliation.openCount === "number" ? reconciliation.openCount : null;
+}
+
+// Sourced from `openOrdersReconciliation` (window.SPREAD_LOG's broker-verified
+// figure, written by `spread_trader._open_orders_reconciliation()` off
+// `alpaca order list --status open` — see PRD). Never fetched from the
+// browser: the dashboard has no credentialed Alpaca client by design, so this
+// number can only ever be as fresh as the cron that last ran `export_log()`.
+function OpenOrdersReconciliationBadge({
+  reconciliation
 }) {
-  var atRiskCredit = orders.filter(o => o.classification.kind !== "terminal").reduce((n, o) => n + (o.ev.credit ?? o.ev.entry_credit ?? 0), 0);
+  var brokerCount = reconciliationBrokerCount(reconciliation);
+  var unavailable = brokerCount === null;
+  var asOf = reconciliation && reconciliation.asOf && window.AsOfTime ? window.AsOfTime.format(reconciliation.asOf) : null;
+  return /*#__PURE__*/React.createElement("span", {
+    className: "opt-panel-recon"
+  }, "broker ", /*#__PURE__*/React.createElement("em", {
+    className: "mono-dim"
+  }, unavailable ? "unavailable" : `${brokerCount} open`), asOf && /*#__PURE__*/React.createElement("span", {
+    className: "mono-dim"
+  }, " as of ", asOf.text, " \xB7 ", window.AsOfTime.relativeAge(asOf.ms)), /*#__PURE__*/React.createElement(window.Help, {
+    term: "open_orders_reconciliation"
+  }));
+}
+function OpenOrdersReconciliationWarning({
+  reconciliation,
+  renderedCount
+}) {
+  var brokerCount = reconciliationBrokerCount(reconciliation);
+  var unavailable = brokerCount === null;
+  if (unavailable) {
+    return /*#__PURE__*/React.createElement("p", {
+      className: "opt-dead-exit",
+      role: "status"
+    }, "\u26A0 broker order count unavailable", reconciliation && reconciliation.error ? ` (${reconciliation.error})` : "", "\u2014 the ", renderedCount, " order", renderedCount === 1 ? "" : "s", " shown could not be verified against Alpaca.");
+  }
+  if (brokerCount !== renderedCount) {
+    return /*#__PURE__*/React.createElement("p", {
+      className: "opt-dead-exit",
+      role: "status"
+    }, "\u26A0 mismatch: dashboard shows ", renderedCount, " still-open order", renderedCount === 1 ? "" : "s", ", Alpaca reports ", brokerCount, " \u2014 the log and the broker disagree; verify directly with Alpaca before trusting either figure.");
+  }
+  return null;
+}
+function OpenOrdersTable({
+  orders,
+  reconciliation
+}) {
+  var stillOpen = stillOpenOrders(orders);
+  var atRiskCredit = atRiskCreditOrders(orders).reduce((n, o) => n + (o.ev.credit ?? 0), 0);
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel"
   }, /*#__PURE__*/React.createElement("div", {
@@ -7643,9 +7884,14 @@ function OpenOrdersTable({
     className: "opts-provenance"
   }, /*#__PURE__*/React.createElement(TraderByline, null)), /*#__PURE__*/React.createElement("div", {
     className: "opt-panel-stats"
-  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("em", null, orders.length), " orders"), /*#__PURE__*/React.createElement("span", null, "target ", /*#__PURE__*/React.createElement("em", {
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("em", null, stillOpen.length), " orders"), /*#__PURE__*/React.createElement("span", null, "target ", /*#__PURE__*/React.createElement("em", {
     className: "mono-dim"
-  }, money(atRiskCredit)), " if filled"))), !orders.length ? /*#__PURE__*/React.createElement("p", {
+  }, money(atRiskCredit)), " if filled"), /*#__PURE__*/React.createElement(OpenOrdersReconciliationBadge, {
+    reconciliation: reconciliation
+  }))), /*#__PURE__*/React.createElement(OpenOrdersReconciliationWarning, {
+    reconciliation: reconciliation,
+    renderedCount: stillOpen.length
+  }), !orders.length ? /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
   }, "No open orders.") : /*#__PURE__*/React.createElement("div", {
     className: "opt-table-scroll"
@@ -8132,6 +8378,10 @@ function optionsTradeLogParts(log, expectedOpenCount) {
   var trades = [];
   data.events.forEach((ev, index) => {
     var classification = classifyOrder(ev);
+    // "unpublished" (no broker evidence) renders in neither table — it never
+    // had money at risk, so it isn't a trade or a resting order. See
+    // classifyOrder()'s comment for why.
+    if (classification.bucket === "unpublished") return;
     (classification.bucket === "trade" ? trades : openOrders).push({
       ev,
       classification,
@@ -8152,7 +8402,8 @@ function optionsTradeLogParts(log, expectedOpenCount) {
       publishedEvents: data.events.length
     }),
     openOrders: /*#__PURE__*/React.createElement(OpenOrdersTable, {
-      orders: openOrders
+      orders: openOrders,
+      reconciliation: data.openOrdersReconciliation
     }),
     foot: /*#__PURE__*/React.createElement("p", {
       className: "opt-log-foot"
@@ -11946,15 +12197,110 @@ function reasoningEntriesFor(ev, facts) {
   var rows = window.AGENT_REPORTS || [];
   return rows.filter(r => _reasoningRowMatches(r, ticker, shortStrike, longStrike, expiry)).sort((a, b) => new Date(a.ts) - new Date(b.ts));
 }
+
+// Renders one row from the 2h book-review cron (position_reasoning.py) —
+// reasoningEntriesFor() only ever hands this kind="position_reasoning" rows,
+// so unlike the retired Methodology-page narrative stream this doesn't need
+// to know about roadmap/tick/order-event verbs, just the position states.
+function _reasoningVerb(report) {
+  var r = report || {};
+  if (r.status === "failed") return {
+    label: "Review failed",
+    tone: "var(--neg)"
+  };
+  if (r.status === "closed") return {
+    label: "Closed",
+    tone: "var(--muted)"
+  };
+  return {
+    label: r.early_close_flag ? "Rotation flag" : "Holding",
+    tone: r.early_close_flag ? "var(--warn)" : "var(--info)"
+  };
+}
+
+// $0.0004-style precision below a cent so a cheap LLM call doesn't just show
+// "$0.00"; ordinary cent-plus costs show two decimals like everywhere else.
+function _fmtReasoningCost(v) {
+  if (v == null) return null;
+  var n = Number(v);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
+}
+function DecisionNarrativeLine({
+  report
+}) {
+  var {
+    ts,
+    summary,
+    costUsd
+  } = report || {};
+  var verb = _reasoningVerb(report);
+  var hasSummary = typeof summary === "string" && summary.trim().length > 0;
+  var costLabel = _fmtReasoningCost(costUsd);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12,
+      padding: "10px 14px",
+      borderBottom: "1px solid var(--line)",
+      alignItems: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--mono)",
+      fontSize: 10.5,
+      color: "var(--muted)",
+      minWidth: 110,
+      paddingTop: 2,
+      whiteSpace: "nowrap"
+    }
+  }, tsPretty(ts)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--mono)",
+      fontSize: 10,
+      fontWeight: 600,
+      textTransform: "uppercase",
+      letterSpacing: "0.08em",
+      color: verb.tone,
+      background: "var(--surface-2)",
+      border: `1px solid ${verb.tone}`,
+      padding: "2px 8px",
+      borderRadius: 3,
+      minWidth: 92,
+      textAlign: "center",
+      whiteSpace: "nowrap",
+      marginTop: 1
+    }
+  }, verb.label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      fontFamily: "var(--mono)",
+      fontSize: 12,
+      color: "var(--text)",
+      lineHeight: 1.55
+    }
+  }, hasSummary ? /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--muted)"
+    }
+  }, "because "), summary) : /*#__PURE__*/React.createElement("span", {
+    className: "dim"
+  }, "(no narrative recorded)")), costLabel && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--mono)",
+      fontSize: 10,
+      color: "var(--warn)",
+      paddingTop: 3,
+      whiteSpace: "nowrap"
+    }
+  }, costLabel));
+}
 function WhatActuallyHappened({
   ev,
   facts
 }) {
   var steps = timelineSteps(ev, facts);
   var reasoningEntries = reasoningEntriesFor(ev, facts);
-  // Reused as-is from the Methodology page's D5 panel — this page never
-  // re-implements how a report row renders, it only supplies the rows.
-  var DecisionNarrativeLine = window.DecisionNarrativeLine;
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel optd-section"
   }, /*#__PURE__*/React.createElement("h2", {
@@ -11973,7 +12319,7 @@ function WhatActuallyHappened({
     className: "opt-log-empty"
   }, "No timeline events recorded for this order yet."), facts.isClose && ev.reason && /*#__PURE__*/React.createElement("p", {
     className: "optd-reason"
-  }, "Why: ", reasonPhrase(ev.reason)), reasoningEntries.length > 0 && DecisionNarrativeLine && /*#__PURE__*/React.createElement("div", {
+  }, "Why: ", reasonPhrase(ev.reason)), reasoningEntries.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "optd-reasoning-journal",
     style: {
       marginTop: 12,
@@ -13794,52 +14140,6 @@ function PositionBlock({
     className: `uc-pop-v mono ${(position.unrealizedPl || 0) >= 0 ? "up" : "down"}`
   }, fmtMoney(position.unrealizedPl), " (", fmtPct(position.unrealizedPlPct), ")")));
 }
-function ThesisBlock({
-  thesis,
-  tier,
-  tierKind
-}) {
-  if (!thesis) {
-    return /*#__PURE__*/React.createElement("div", {
-      className: "uc-pop-block"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "uc-pop-block-title"
-    }, "Thesis"), /*#__PURE__*/React.createElement("div", {
-      className: "uc-pop-empty"
-    }, "No social signal \u2014 calendar sweeper will fire as ", /*#__PURE__*/React.createElement("em", null, "tier ", tier), "."));
-  }
-  return /*#__PURE__*/React.createElement("div", {
-    className: "uc-pop-block"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "uc-pop-block-title"
-  }, "Thesis \xB7 ", thesis.state), /*#__PURE__*/React.createElement("div", {
-    className: "uc-pop-grid"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "uc-pop-k"
-  }, "Direction"), /*#__PURE__*/React.createElement("span", {
-    className: `uc-pop-v mono ${thesis.direction === "long" ? "up" : "down"}`
-  }, (thesis.direction || "").toUpperCase()), /*#__PURE__*/React.createElement("span", {
-    className: "uc-pop-k"
-  }, "Confidence"), /*#__PURE__*/React.createElement("span", {
-    className: "uc-pop-v mono"
-  }, (thesis.confidence * 100).toFixed(0), "%"), /*#__PURE__*/React.createElement("span", {
-    className: "uc-pop-k"
-  }, "Tier"), /*#__PURE__*/React.createElement("span", {
-    className: "uc-pop-v mono"
-  }, tier, " ", /*#__PURE__*/React.createElement("span", {
-    className: "dim"
-  }, "(", tierKind, ")")), /*#__PURE__*/React.createElement("span", {
-    className: "uc-pop-k"
-  }, "Source"), /*#__PURE__*/React.createElement("span", {
-    className: "uc-pop-v mono"
-  }, thesis.extractedBy || "—")), thesis.evidence && /*#__PURE__*/React.createElement("div", {
-    className: "uc-pop-evidence"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "uc-pop-block-title"
-  }, "Evidence"), /*#__PURE__*/React.createElement("div", {
-    className: "uc-pop-evidence-body"
-  }, thesis.evidence)));
-}
 
 // Exit plan — deterministic policy chips (always) + LLM narrative (when present).
 function ExitPlanBlock({
@@ -13873,7 +14173,7 @@ function ExitPlanBlock({
 
 // Inline detail panel — rendered directly beneath an expanded row (accordion),
 // no floating popover. Replaces PRD 76's hover popover per the user's request
-// to surface position / sentiment / exit-plan in place.
+// to surface position / exit-plan in place.
 function UcDetail({
   entry
 }) {
@@ -13884,10 +14184,6 @@ function UcDetail({
     className: "uc-pop-subject"
   }, entry.subject), /*#__PURE__*/React.createElement(PositionBlock, {
     position: entry.position
-  }), /*#__PURE__*/React.createElement(ThesisBlock, {
-    thesis: entry.thesis,
-    tier: entry.tier,
-    tierKind: entry.tierKind
   }), /*#__PURE__*/React.createElement(ExitPlanBlock, {
     exitPlan: entry.exitPlan,
     entry: entry

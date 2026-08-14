@@ -428,72 +428,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .realized-tip-table td.p { text-align: right; }
 .realized-tip-more { color: var(--muted); text-align: center; padding-top: 4px !important; font-style: italic; }
 
-/* ============ Subreddit list ============ */
-.sub-row {
-  display: grid;
-  grid-template-columns: 1.4fr 0.5fr 0.5fr 1.6fr;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--line);
-  font-family: var(--mono); font-size: 11.5px;
-}
-.sub-row:hover { background: var(--surface-2); cursor: pointer; }
-.sub-row:last-child { border-bottom: none; }
-.sub-row .name { color: var(--text); }
-.sub-row .name b { color: var(--text); font-weight: 600; }
-.sub-row .name small { color: var(--muted); display: block; font-size: 10px; }
-.sub-row .tickers { display: flex; gap: 4px; flex-wrap: wrap; }
-.sub-row .chip {
-  background: var(--surface-2); border: 1px solid var(--line);
-  padding: 1px 5px; border-radius: 3px;
-  font-size: 10px; color: var(--text-2);
-}
-
-/* ============ Themes ============ */
-.theme {
-  padding: 12px 14px; border-bottom: 1px solid var(--line);
-}
-.theme:last-child { border-bottom: none; }
-.theme-head {
-  display: flex; justify-content: space-between; align-items: baseline;
-  gap: 10px;
-}
-.theme-title { font-weight: 600; font-size: 13px; }
-.theme-heat {
-  font-family: var(--mono); font-size: 11px;
-  display: inline-flex; align-items: center; gap: 6px;
-}
-.heat-bar {
-  width: 60px; height: 4px; border-radius: 2px;
-  background: var(--surface-2);
-  position: relative; overflow: hidden;
-}
-.heat-bar > i {
-  display: block; height: 100%;
-  background: linear-gradient(90deg, var(--info), var(--accent));
-}
-.theme-blurb { font-size: 12.5px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
-.theme-meta { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
-.theme-meta .chip { font-family: var(--mono); font-size: 10px; color: var(--muted);
-  background: var(--surface-2); border: 1px solid var(--line);
-  padding: 1px 6px; border-radius: 3px; }
-
-/* ============ Trending tickers ============ */
-.trend-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto auto;
-  gap: 10px; align-items: center;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--line);
-  font-family: var(--mono); font-size: 12px;
-}
-.trend-row:last-child { border-bottom: none; }
-.trend-row:hover { background: var(--surface-2); }
-.trend-rank { color: var(--muted); width: 20px; font-size: 10px; }
-.trend-tk { font-weight: 600; min-width: 56px; }
-.trend-mentions { color: var(--text-2); }
-
 /* ============ Equity chart ============ */
 .chart-wrap { padding: 6px 14px 12px; }
 .chart-legend {
@@ -604,18 +538,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .wrap { flex-wrap: wrap; }
 .right { margin-left: auto; }
 
-/* methodology */
-.method-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-  font-size: 12.5px; color: var(--text-2); line-height: 1.55;
-}
-.method-grid h4 {
-  margin: 0 0 6px;
-  font-family: var(--mono); font-size: 10.5px;
-  text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--muted); font-weight: 600;
-}
-
 /* col spans */
 .col-3 { grid-column: span 3; }
 .col-4 { grid-column: span 4; }
@@ -704,7 +626,7 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   .cal-weekday { font-size: 9px; }
 
   /* Modals → bottom sheets */
-  .realized-tip, .trade-provenance-modal {
+  .realized-tip {
     position: fixed !important;
     left: 0 !important; right: 0 !important; bottom: 0 !important;
     top: auto !important; transform: none !important;
@@ -719,8 +641,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   .icon-btn { width: 44px; height: 44px; font-size: 14px; }
   .tf button { padding: 12px 14px; font-size: 12px; min-height: 44px; }
   .tabs button { padding: 12px 14px; min-height: 44px; }
-  .sub-row { padding: 12px 12px; min-height: 44px; }
-  .trend-row { padding: 12px 12px; min-height: 44px; }
 
   /* Use dynamic viewport height where height was hardcoded */
   .shell { min-height: auto; }
@@ -754,17 +674,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
    position: sticky descendants in some browsers (iOS Safari especially). */
 @media (max-width: 820px) {
   html, body { overflow-x: hidden; }
-}
-
-/* Event-card responsive grid — desktop: 1 col (stacked, full width);
-   tablet: 2 per row at 481–820; mobile: 1 per row below 480. */
-.event-card-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr;
-}
-@media (min-width: 481px) and (max-width: 820px) {
-  .event-card-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ============ PRD 76 — Upcoming Catalysts widget ============ */
@@ -929,15 +838,6 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .uc-pop-k { color: var(--muted); }
 .uc-pop-v { color: var(--text); }
 .uc-pop-empty { font-size: 12px; color: var(--text-2); font-style: italic; }
-.uc-pop-evidence { margin-top: 10px; }
-.uc-pop-evidence-body {
-  font-size: 12px; color: var(--text-2);
-  background: var(--surface-2);
-  padding: 6px 8px; border-radius: 4px;
-  white-space: pre-wrap;
-  line-height: 1.4;
-  max-height: 140px; overflow-y: auto;
-}
 .uc-pop-plan {
   font-family: var(--mono); font-size: 13px; font-weight: 600;
   color: var(--accent);
@@ -1030,6 +930,7 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-panel-title { margin: 0; font-size: 14px; letter-spacing: .01em; }
 .opt-panel-stats { display: flex; gap: 16px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
 .opt-panel-stats em { font-style: normal; color: var(--text); }
+.opt-panel-recon { white-space: nowrap; }
 
 /* Trade Log filter + group-by row — sits between the panel head and the
    table so both controls read as "views onto the same table", not a

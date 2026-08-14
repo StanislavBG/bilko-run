@@ -2,30 +2,117 @@
 /* ---- data-feedback.js ---- */
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 3,
+    "active": 6,
     "answered": 3,
     "archived": 0,
-    "proposal": 1,
+    "proposal": 4,
     "system": 0,
-    "total": 3,
+    "total": 6,
     "trade": 2,
-    "unanswered": 0
+    "unanswered": 3
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-08-14T14:45:01Z",
-    "open": 0,
+    "generatedAt": "2026-08-14T15:30:03Z",
+    "open": 3,
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
     "triagedBySeverity": {
       "high": 0,
-      "low": 1,
+      "low": 4,
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T14:45:01Z",
+  "generatedAt": "2026-08-14T15:30:03Z",
   "schema": 2,
   "threads": [{
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "HOOD-P-86-85-2026-08-28",
+    "createdAt": "2026-08-14T15:24:04.000Z",
+    "description": "This looks good. Do it.",
+    "hasImage": false,
+    "id": "fb_mst3ksvi_d6hjwi08",
+    "lastActivityAt": "2026-08-14T15:24:04.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "This looks good. Do it.",
+      "createdAt": "2026-08-14T15:24:04.000Z",
+      "hasImage": false,
+      "id": "fb_mst3ksvi_d6hjwi08",
+      "role": "user",
+      "title": "Do it"
+    }],
+    "replies": [],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-HOOD-put-86-85-2026-08-28",
+    "targetKind": "component",
+    "targetLabel": "HOOD 86/85 put spread, expires 2026-08-28",
+    "title": "Do it",
+    "type": "feedback"
+  }, {
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "QQQ-C-742-743-2026-08-18",
+    "createdAt": "2026-08-14T15:19:24.000Z",
+    "description": "When was this calculated? At 11:18 am, price per contract is like 0.07.",
+    "hasImage": false,
+    "id": "fb_mst3et88_i1kxkntc",
+    "lastActivityAt": "2026-08-14T15:19:24.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "When was this calculated? At 11:18 am, price per contract is like 0.07.",
+      "createdAt": "2026-08-14T15:19:24.000Z",
+      "hasImage": false,
+      "id": "fb_mst3et88_i1kxkntc",
+      "role": "user",
+      "title": "refresh rate"
+    }],
+    "replies": [],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-QQQ-call-742-743-2026-08-18",
+    "targetKind": "component",
+    "targetLabel": "QQQ 742/743 call spread, expires 2026-08-18",
+    "title": "refresh rate",
+    "type": "feedback"
+  }, {
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "TSLA-P-327.5-325-2026-08-21",
+    "createdAt": "2026-08-14T14:47:40.000Z",
+    "description": "This is our test purchase, lets see the loop!",
+    "hasImage": false,
+    "id": "fb_mst2a09w_e1iimahx",
+    "lastActivityAt": "2026-08-14T14:47:40.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "This is our test purchase, lets see the loop!",
+      "createdAt": "2026-08-14T14:47:40.000Z",
+      "hasImage": false,
+      "id": "fb_mst2a09w_e1iimahx",
+      "role": "user",
+      "title": "Approved"
+    }],
+    "replies": [],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-TSLA-put-327.5-325-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "TSLA 327.5/325 put spread, expires 2026-08-21",
+    "title": "Approved",
+    "type": "feedback"
+  }, {
     "answered": true,
     "archivedAt": null,
     "contractKey": "NFLX-P-75-74-2026-08-21",
@@ -2747,6 +2834,20 @@ window.FEEDBACK_THREADS = {
   var OUTBOX_KEY = "sst.feedback.outbox";
   var OUTBOX_CAP = 20;
 
+  // Pending echo (PRD feedback-store-pending-echo). A just-submitted comment
+  // is rendered from localStorage immediately, before the pull+publish round
+  // trip has a chance to put the real row into window.FEEDBACK_THREADS.
+  var PENDING_KEY = "sst.feedback.pending";
+  var PENDING_CAP = 40;
+  // An echo that never reconciles (submission lost, pull pipeline stuck)
+  // must not haunt the page forever.
+  var PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+  // Mirrors USER_AUTHOR / _AUTHOR_LABELS[USER_AUTHOR] in
+  // src/social_signals_trader/feedback_threads.py — hardcoded here so the
+  // echo slots into messages[] with no renderer-side special case.
+  var PENDING_AUTHOR = "visitor";
+  var PENDING_AUTHOR_LABEL = "Visitor";
+
   // Owner-mode moderation (PRD 1071). The owner token is a real bearer
   // credential — see docs/feedback-api-contract.md's moderate route. It is
   // captured once from a `#options?owner=<token>` URL param, stored ONLY in
@@ -2788,6 +2889,11 @@ window.FEEDBACK_THREADS = {
     while (arr.length > OUTBOX_CAP) arr.shift();
     writeOutbox(arr);
   }
+
+  // Returns the parsed server response — {ok, id, receivedAt} — per the POST
+  // contract (docs/feedback-api-contract.md: `{"id": "...", "receivedAt":
+  // "..."}` on 2xx). `id`/`receivedAt` are null when the body is missing or
+  // unparseable; `ok` keeps its prior bare-boolean meaning.
   function postPayload(payload) {
     return fetch(ENDPOINT, {
       method: "POST",
@@ -2798,9 +2904,27 @@ window.FEEDBACK_THREADS = {
       },
       body: JSON.stringify(payload)
     }).then(function (r) {
-      return !!(r && r.ok);
+      var ok = !!(r && r.ok);
+      if (!r) return {
+        ok: ok,
+        id: null,
+        receivedAt: null
+      };
+      return r.json().catch(function () {
+        return null;
+      }).then(function (body) {
+        return {
+          ok: ok,
+          id: body && typeof body.id === "string" ? body.id : null,
+          receivedAt: body && typeof body.receivedAt === "string" ? body.receivedAt : null
+        };
+      });
     }).catch(function () {
-      return false;
+      return {
+        ok: false,
+        id: null,
+        receivedAt: null
+      };
     });
   }
 
@@ -2816,8 +2940,12 @@ window.FEEDBACK_THREADS = {
     var chain = Promise.resolve();
     arr.forEach(function (item) {
       chain = chain.then(function () {
-        return postPayload(item).then(function (ok) {
-          if (!ok) toKeep.push(item);
+        return postPayload(item).then(function (result) {
+          if (!result.ok) {
+            toKeep.push(item);
+          } else {
+            recordPendingFromPayload(item, result.id);
+          }
         }).catch(function () {
           toKeep.push(item);
         });
@@ -2828,6 +2956,192 @@ window.FEEDBACK_THREADS = {
     }).catch(function () {}).then(function () {
       flushing = false;
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Pending echo — a just-submitted comment, rendered locally until the
+  // real row shows up in window.FEEDBACK_THREADS.
+  // ---------------------------------------------------------------------
+
+  function readPending() {
+    try {
+      var raw = window.localStorage.getItem(PENDING_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function writePending(arr) {
+    try {
+      window.localStorage.setItem(PENDING_KEY, JSON.stringify(arr));
+    } catch (e) {
+      // Safari private mode / storage disabled / quota — degrade to
+      // in-memory for this page load, same as writeOutbox.
+    }
+  }
+  function dispatchPendingChanged() {
+    try {
+      window.dispatchEvent(new Event("sst:feedback-pending-changed"));
+    } catch (e) {}
+  }
+  function scopeKeyFor(kind, id) {
+    return String(kind || "") + "|" + String(id || "");
+  }
+  function makeFallbackId() {
+    return "local-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+  }
+  function isExpired(entry) {
+    var recordedAt = Date.parse(entry && entry.recordedAt);
+    if (isNaN(recordedAt)) return true;
+    return Date.now() - recordedAt > PENDING_TTL_MS;
+  }
+
+  // Drops expired echoes on every read so a permanently-lost submission
+  // cannot haunt the page forever, even if reconcilePending() is never
+  // called against a matching payload.
+  function liveEntries() {
+    var all = readPending();
+    var live = all.filter(function (e) {
+      return !isExpired(e);
+    });
+    if (live.length !== all.length) writePending(live);
+    return live;
+  }
+
+  // Called on every successful POST — a fresh submit() or a flushOutbox()
+  // replay. `serverId` is the id the server assigned; falls back to a
+  // locally-minted id when the response body was missing/unparseable.
+  function recordPendingFromPayload(payload, serverId) {
+    var target = payload && payload.target || {};
+    var fallback = !serverId;
+    var entry = {
+      id: serverId || makeFallbackId(),
+      fallback: fallback,
+      scopeKey: scopeKeyFor(target.kind, target.id),
+      targetKind: target.kind || null,
+      targetId: target.id || null,
+      targetLabel: target.label || null,
+      parentId: payload && payload.parentId || null,
+      type: payload && payload.type || "feedback",
+      title: payload && payload.title || "",
+      body: payload && payload.description || "",
+      // hasImage reflects whether an image was submitted; the data URL
+      // itself is never persisted here (localStorage quota).
+      hasImage: !!(payload && payload.image),
+      createdAt: payload && payload.client && payload.client.submittedAt || null,
+      recordedAt: new Date().toISOString()
+    };
+    var arr = liveEntries();
+    arr.push(entry);
+    while (arr.length > PENDING_CAP) arr.shift();
+    writePending(arr);
+    dispatchPendingChanged();
+    return entry;
+  }
+  function toMessage(entry) {
+    return {
+      id: entry.id,
+      role: "user",
+      author: PENDING_AUTHOR,
+      authorLabel: PENDING_AUTHOR_LABEL,
+      title: entry.title,
+      body: entry.body,
+      createdAt: entry.createdAt,
+      hasImage: entry.hasImage,
+      parentId: entry.parentId,
+      pending: true
+    };
+  }
+
+  // One target's echoes, thread-message-shaped so the renderer can splice
+  // them into messages[] with no special case.
+  function pendingFor(target) {
+    var key = scopeKeyFor(target && target.kind, target && target.id);
+    return liveEntries().filter(function (e) {
+      return e.scopeKey === key;
+    }).map(toMessage);
+  }
+  function allPending() {
+    return liveEntries();
+  }
+
+  // Collects every id (thread id + every messages[].id) and, per target
+  // scope, every trimmed message body already present in the real payload.
+  function knownFromThreads(payload) {
+    var ids = {};
+    var bodiesByScope = {};
+    var threads = payload && payload.threads || [];
+    threads.forEach(function (thread) {
+      if (thread && thread.id) ids[thread.id] = true;
+      var key = scopeKeyFor(thread && thread.targetKind, thread && thread.targetId);
+      var messages = thread && thread.messages || [];
+      messages.forEach(function (msg) {
+        if (msg && msg.id) ids[msg.id] = true;
+        if (!bodiesByScope[key]) bodiesByScope[key] = [];
+        bodiesByScope[key].push(String(msg && msg.body || "").trim());
+      });
+    });
+    return {
+      ids: ids,
+      bodiesByScope: bodiesByScope
+    };
+  }
+
+  // Drops every pending echo now represented in `threadsPayload` (defaults
+  // to window.FEEDBACK_THREADS): by server id for a normal echo, or by an
+  // identical trimmed body on the same target for a fallback-id echo that
+  // never got a server id back.
+  function reconcilePending(threadsPayload) {
+    var payload = threadsPayload || window.FEEDBACK_THREADS;
+    var known = knownFromThreads(payload);
+    var before = readPending();
+    var after = before.filter(function (e) {
+      if (isExpired(e)) return false;
+      if (!e.fallback && known.ids[e.id]) return false;
+      if (e.fallback) {
+        var bodies = known.bodiesByScope[e.scopeKey] || [];
+        var body = String(e.body || "").trim();
+        if (bodies.indexOf(body) !== -1) return false;
+      }
+      return true;
+    });
+    if (after.length !== before.length) {
+      writePending(after);
+      dispatchPendingChanged();
+    }
+    return after;
+  }
+
+  // React hook (consumed by panels/feedback-threads.jsx and
+  // panels/proposed-trades.jsx — the ONE place both subscribe to
+  // sst:feedback-pending-changed, so neither reimplements the subscription).
+  // With a target it returns message-shaped echoes scoped to that target
+  // (pendingFor); without one it returns every live echo (allPending) so a
+  // caller can bucket them itself.
+  function usePendingFeedback(target) {
+    var kind = target && target.kind;
+    var id = target && target.id;
+    function snapshot() {
+      return kind && id ? pendingFor({
+        kind: kind,
+        id: id
+      }) : allPending();
+    }
+    var pair = React.useState(snapshot);
+    var pending = pair[0];
+    var setPending = pair[1];
+    React.useEffect(function () {
+      function onChange() {
+        setPending(snapshot());
+      }
+      onChange();
+      window.addEventListener("sst:feedback-pending-changed", onChange);
+      return function () {
+        window.removeEventListener("sst:feedback-pending-changed", onChange);
+      };
+    }, [kind, id]);
+    return pending;
   }
 
   // ---------------------------------------------------------------------
@@ -2995,14 +3309,17 @@ window.FEEDBACK_THREADS = {
     };
   }
   function submit(payload) {
-    return postPayload(payload).then(function (ok) {
-      if (ok) {
+    return postPayload(payload).then(function (result) {
+      if (result.ok) {
         flushOutbox();
+        recordPendingFromPayload(payload, result.id);
         return {
           ok: true,
           queued: false
         };
       }
+      // Not on the server yet — no echo. The echo is recorded when
+      // flushOutbox() later replays this same payload successfully.
       enqueue(payload);
       return {
         ok: false,
@@ -3014,13 +3331,20 @@ window.FEEDBACK_THREADS = {
     ENDPOINT: ENDPOINT,
     OUTBOX_KEY: OUTBOX_KEY,
     OWNER_KEY: OWNER_KEY,
+    PENDING_KEY: PENDING_KEY,
+    PENDING_TTL_MS: PENDING_TTL_MS,
     MODERATE_ACTIONS: MODERATE_ACTIONS,
     buildPayload: buildPayload,
     submit: submit,
     flushOutbox: flushOutbox,
     moderate: moderate,
     getOwnerToken: readOwnerToken,
-    clearOwnerToken: clearOwnerToken
+    clearOwnerToken: clearOwnerToken,
+    pendingFor: pendingFor,
+    allPending: allPending,
+    reconcilePending: reconcilePending,
+    messageFor: toMessage,
+    usePendingFeedback: usePendingFeedback
   };
 
   // Drain anything left over from a prior offline session as soon as the
@@ -13229,15 +13553,69 @@ function ModerationControls({
     className: "fbt-mod-error"
   }, error));
 }
+
+// Scope a pending target the same way feedback_threads.py's `_scope_for`
+// scopes a real one, so a synthetic thread sorts into the right surface
+// (system vs proposal) with no special case downstream.
+function scopeForPendingTarget(kind, id) {
+  if (kind === "component" && typeof id === "string" && id.indexOf("proposal-") === 0) return "proposal";
+  if (kind === "component" || kind === "page") return "system";
+  return undefined;
+}
+
+// Splices localStorage pending echoes (lib/feedback.js, PRD
+// feedback-pending-echo-store) into the real payload so a visitor's own
+// just-sent comment is on screen before the pull+publish round trip lands it
+// for real. A reply (parentId set) appends into its parent's messages[]; an
+// opener (no parentId) becomes a whole new thread at the top of the list.
+function mergePendingIntoThreads(threads, pendingEntries) {
+  if (!pendingEntries || !pendingEntries.length) return threads;
+  var byId = new Set(threads.map(t => t.id));
+  var openers = pendingEntries.filter(e => !e.parentId);
+  var repliesByParent = {};
+  pendingEntries.filter(e => e.parentId && byId.has(e.parentId)).forEach(e => {
+    if (!repliesByParent[e.parentId]) repliesByParent[e.parentId] = [];
+    repliesByParent[e.parentId].push(e);
+  });
+  var withReplies = threads.map(t => {
+    var mine = repliesByParent[t.id];
+    if (!mine) return t;
+    var extra = mine.map(e => window.FeedbackClient.messageFor(e));
+    return {
+      ...t,
+      messages: [...threadMessages(t), ...extra]
+    };
+  });
+  var synthetic = openers.map(e => ({
+    id: `pending:${e.id}`,
+    scope: scopeForPendingTarget(e.targetKind, e.targetId),
+    targetKind: e.targetKind,
+    targetId: e.targetId,
+    targetLabel: e.targetLabel,
+    title: e.title,
+    type: e.type,
+    createdAt: e.createdAt,
+    status: "open",
+    answered: false,
+    messages: [window.FeedbackClient.messageFor(e)],
+    pending: true
+  }));
+  return [...synthetic, ...withReplies];
+}
 function feedbackPayload() {
   var p = window.FEEDBACK_THREADS;
-  if (!p || !Array.isArray(p.threads)) return {
+  var base = !p || !Array.isArray(p.threads) ? {
     generatedAt: null,
     threads: [],
     counts: {},
     funnel: null
+  } : p;
+  var pending = window.FeedbackClient && window.FeedbackClient.allPending ? window.FeedbackClient.allPending() : [];
+  if (!pending.length) return base;
+  return {
+    ...base,
+    threads: mergePendingIntoThreads(base.threads, pending)
   };
-  return p;
 }
 
 // "2026-08-09T20:35:04Z" -> "Aug 9, 1:35 PM PDT". Display-only; the raw ISO
@@ -13343,13 +13721,23 @@ function ClampedBody({
     onClick: () => setExpanded(v => !v)
   }, expanded ? "Show less" : "Show more"));
 }
+
+// A just-submitted comment, echoed from lib/feedback.js's localStorage store
+// before the pull+publish round trip has put the real row on the server —
+// visible only to the person who sent it, not yet to anyone else.
+function PendingChip() {
+  return /*#__PURE__*/React.createElement("span", {
+    className: "fbt-pending-chip",
+    title: "Sent \u2014 visible to you now; everyone else sees it within a few minutes once it's published."
+  }, "Sending\u2026");
+}
 function ThreadMessage({
   message
 }) {
   var role = message.role === "agent" ? "agent" : "user";
   var authorLabel = message.authorLabel || message.author || "Visitor";
   return /*#__PURE__*/React.createElement("div", {
-    className: `fbt-msg fbt-msg--${role}`
+    className: `fbt-msg fbt-msg--${role}${message.pending ? " fbt-msg--pending" : ""}`
   }, /*#__PURE__*/React.createElement("div", {
     className: "fbt-msg-head"
   }, /*#__PURE__*/React.createElement("span", {
@@ -13357,7 +13745,7 @@ function ThreadMessage({
   }, authorLabel), /*#__PURE__*/React.createElement("span", {
     className: "fbt-when",
     title: message.createdAt || ""
-  }, whenLabel(message.createdAt))), /*#__PURE__*/React.createElement(ClampedBody, {
+  }, whenLabel(message.createdAt)), message.pending && /*#__PURE__*/React.createElement(PendingChip, null)), /*#__PURE__*/React.createElement(ClampedBody, {
     text: message.body
   }));
 }
@@ -13661,6 +14049,7 @@ function ThreadList({
 function TradeFeedbackThreads({
   targets
 }) {
+  window.FeedbackClient.usePendingFeedback();
   var payload = feedbackPayload();
   var threads = selectThreadsForContract(payload.threads, targets);
   var open = unansweredActiveCount(threads);
@@ -13724,6 +14113,7 @@ function FeedbackFunnel({
   }, /*#__PURE__*/React.createElement("b", null, funnel.resolvedThisWeek || 0), " resolved this week"));
 }
 function SystemFeedbackPanel() {
+  window.FeedbackClient.usePendingFeedback();
   var payload = feedbackPayload();
   var threads = systemThreads(payload.threads);
   var open = unansweredActiveCount(threads);
@@ -13770,6 +14160,7 @@ function ProposalDiscussion({
   proposalId,
   label
 }) {
+  window.FeedbackClient.usePendingFeedback();
   var payload = feedbackPayload();
   var threads = proposalId ? selectThreadsForContract(payload.threads, [{
     kind: "component",
@@ -13805,6 +14196,8 @@ window.FeedbackThreadsInternals = {
   proposalThreads,
   whenLabel,
   feedbackPayload,
+  mergePendingIntoThreads,
+  scopeForPendingTarget,
   ThreadMessage,
   threadMessages,
   statusOf,
@@ -14233,11 +14626,22 @@ function EmptyState({
 function unansweredCountFor(item) {
   var internals = window.FeedbackThreadsInternals;
   var payload = window.FEEDBACK_THREADS;
-  if (!internals || !internals.proposalThreads || !payload || !Array.isArray(payload.threads)) {
-    return 0;
+  var proposalId = PROPOSAL_ID_PREFIX + (item.id || "");
+  var count = 0;
+  if (internals && internals.proposalThreads && payload && Array.isArray(payload.threads)) {
+    var threads = internals.proposalThreads(payload.threads, proposalId);
+    count += threads.filter(t => !t.answered).length;
   }
-  var threads = internals.proposalThreads(payload.threads, PROPOSAL_ID_PREFIX + (item.id || ""));
-  return threads.filter(t => !t.answered).length;
+  // A pending echo (opener or reply) means the visitor just spoke last on
+  // this proposal and no one has answered it yet — same "awaiting reply"
+  // meaning as a confirmed unanswered thread, so it rings the same way.
+  if (window.FeedbackClient && window.FeedbackClient.pendingFor) {
+    count += window.FeedbackClient.pendingFor({
+      kind: "component",
+      id: proposalId
+    }).length;
+  }
+  return count;
 }
 function ProposalPager({
   items,
@@ -14277,6 +14681,9 @@ function ProposalPager({
   }, index + 1, " of ", items.length, items[index] && items[index].ticker ? ` · ${items[index].ticker}` : ""));
 }
 function ProposedTrades() {
+  // No target — just the subscription, so a pending echo anywhere on this
+  // deck (opened via the discussion panel below) re-renders the pager ring.
+  window.FeedbackClient.usePendingFeedback();
   var plan = proposalPlan();
   var items = plan.intent;
   var [index, setIndex] = React.useState(0);
@@ -21852,6 +22259,12 @@ function DataUnavailable({
   var meta = null;
   if (typeof window.__loadLiveSnapshot === "function") {
     meta = await window.__loadLiveSnapshot();
+  }
+  // Drop any pending echo the live snapshot just made real, before the first
+  // render reads window.FEEDBACK_THREADS — the only refresh point today, so
+  // this covers both "on mount" and "whenever the snapshot refreshes".
+  if (window.FeedbackClient && window.FeedbackClient.reconcilePending) {
+    window.FeedbackClient.reconcilePending(window.FEEDBACK_THREADS);
   }
   // Gate on the data actually being present, not on meta alone: serving
   // dashboard/ straight off disk loads the data via index.html's own <script>

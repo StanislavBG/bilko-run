@@ -26,7 +26,7 @@ import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
-import { normalizeStaticMtimes, setStaticCacheHeaders } from './static-cache.js';
+import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -72,6 +72,12 @@ await app.register(cors, {
 
 // Security headers (CSP + HSTS + COOP + Permissions-Policy)
 registerSecurityHeaders(app);
+
+// Registered after CORS so its onSend hook can drop the `Vary: Origin` that
+// @fastify/cors stamps on every response — Cloudflare won't edge-cache
+// anything that varies on a header other than Accept-Encoding, so without
+// this the static tree stays DYNAMIC no matter what Cache-Control says.
+registerStaticCorsTrim(app);
 
 // Origin-side response compression. Render bills origin egress, and
 // Cloudflare's edge compression only shrinks what the origin already paid to

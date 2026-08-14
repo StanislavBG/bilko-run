@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import staticPlugin from '@fastify/static';
+import cors from '@fastify/cors';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, statSync } from 'fs';
 import { tmpdir } from 'os';
@@ -8,6 +9,7 @@ import {
   staticCacheControl,
   setStaticCacheHeaders,
   normalizeStaticMtimes,
+  registerStaticCorsTrim,
 } from '../server/static-cache.js';
 
 function makeTree(): string {
@@ -27,6 +29,10 @@ function makeTree(): string {
 /** Mirrors the production registration in server/index.ts. */
 async function buildApp(root: string) {
   const app = Fastify({ logger: false });
+  // Same order as server/index.ts: cors (stamps Vary: Origin) → trim → static.
+  await app.register(cors, { origin: ['https://bilko.run'], credentials: true });
+  registerStaticCorsTrim(app);
+  app.get('/api/health', async () => ({ ok: true }));
   await app.register(staticPlugin, {
     root,
     prefix: '/',
@@ -180,5 +186,53 @@ describe('served responses', () => {
     const res = await app.inject({ method: 'GET', url: '/projects/demo/index.html' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('public, max-age=0, must-revalidate');
+  });
+});
+
+describe('Cloudflare-blocking CORS headers', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeAll(async () => {
+    const root = makeTree();
+    normalizeStaticMtimes(root);
+    app = await buildApp(root);
+  });
+
+  it('drops Vary: Origin from a same-origin static asset, so the edge can cache it', async () => {
+    const res = await app.inject({ method: 'GET', url: '/projects/demo/styles.css' });
+    expect(res.headers.vary ?? '').not.toMatch(/origin/i);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('preserves other Vary dimensions', async () => {
+    const app2 = Fastify({ logger: false });
+    await app2.register(cors, { origin: ['https://bilko.run'], credentials: true });
+    registerStaticCorsTrim(app2);
+    app2.get('/thing.css', async (_req, reply) => {
+      reply.header('cache-control', 'public, max-age=600');
+      reply.header('vary', 'Origin, Accept-Encoding');
+      return reply.type('text/css').send('.a{}');
+    });
+    await app2.ready();
+
+    const res = await app2.inject({ method: 'GET', url: '/thing.css' });
+    expect(res.headers.vary).toBe('Accept-Encoding');
+  });
+
+  it('leaves a genuine cross-origin request fully CORS-headed', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/projects/demo/styles.css',
+      headers: { origin: 'https://bilko.run' },
+    });
+    expect(res.headers['access-control-allow-origin']).toBe('https://bilko.run');
+    expect(res.headers.vary ?? '').toMatch(/origin/i);
+  });
+
+  it('leaves /api responses alone', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers.vary ?? '').toMatch(/origin/i);
   });
 });

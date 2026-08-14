@@ -175,3 +175,45 @@ export function normalizeStaticMtimes(root: string): NormalizeResult {
   result.ms = Date.now() - started;
   return result;
 }
+
+/**
+ * Strip CORS headers from cacheable static responses that no browser asked to
+ * share cross-origin.
+ *
+ * `@fastify/cors` is registered globally with an allow-list, which makes its
+ * origin option "dynamic" — so it stamps `Vary: Origin` on *every* response,
+ * static assets included. Cloudflare refuses to cache any response whose
+ * `Vary` names anything other than `Accept-Encoding`, so the entire dist tree
+ * stayed `cf-cache-status: DYNAMIC` even once it carried a real
+ * `Cache-Control` lifetime. Correct `Cache-Control` alone does not get the
+ * asset into the edge cache; this does.
+ *
+ * Only touches responses where CORS is provably irrelevant: no `Origin`
+ * request header (i.e. a same-origin navigation or subresource load), not an
+ * `/api` route, and already marked publicly cacheable. A genuine cross-origin
+ * request still carries its `Origin`, still gets full CORS headers, and still
+ * bypasses the edge cache — that path is unchanged.
+ */
+export function registerStaticCorsTrim(app: {
+  addHook(name: 'onSend', fn: (req: any, reply: any, payload: any) => Promise<any>): unknown;
+}): void {
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.headers.origin) return payload;
+    if ((req.url as string).split('?')[0].startsWith('/api')) return payload;
+    if (!String(reply.getHeader('cache-control') ?? '').startsWith('public')) return payload;
+
+    reply.removeHeader('access-control-allow-origin');
+    reply.removeHeader('access-control-allow-credentials');
+
+    // Keep every other Vary dimension — notably Accept-Encoding, which
+    // @fastify/compress adds and which Cloudflare does honour.
+    const kept = String(reply.getHeader('vary') ?? '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(v => v.length > 0 && v.toLowerCase() !== 'origin');
+    if (kept.length > 0) reply.header('vary', kept.join(', '));
+    else reply.removeHeader('vary');
+
+    return payload;
+  });
+}

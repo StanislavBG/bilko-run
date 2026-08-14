@@ -302,15 +302,17 @@ export async function topStaticAssets(days = 7, limit = 50, slug?: string): Prom
 
 export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolean } = {}): void {
   // Wrap the raw response early (before routing/handler run) so a streamed
-  // /api/* response — no Content-Length known up front — still gets counted
-  // by what actually goes out over the wire. Scoped to /api/* only: static
-  // responses already get a reliable Content-Length from @fastify/static.
+  // response — no Content-Length known up front — still gets counted by what
+  // actually goes out over the wire. Originally scoped to /api/* only, since
+  // static responses got a reliable Content-Length from @fastify/static. That
+  // stopped holding once origin compression (@fastify/compress) was added:
+  // for a streamed static file, the compressor doesn't know the compressed
+  // size up front, strips Content-Length, and switches to chunked encoding —
+  // so a static route now needs the same raw-socket fallback the /api/* path
+  // already had, or compressed static responses would record as 0 bytes.
   app.addHook('onRequest', async (req, reply) => {
     try {
-      const path = req.url.split('?')[0];
-      if (path.startsWith('/api/')) {
-        (req as unknown as { __egressBytes?: () => number }).__egressBytes = countWrittenBytes(reply);
-      }
+      (req as unknown as { __egressBytes?: () => number }).__egressBytes = countWrittenBytes(reply);
     } catch { /* metering must never break a response */ }
   });
 
@@ -332,9 +334,14 @@ export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolea
 
       const slug = slugForPath(path);
       const route = `${STATIC_ROUTE_PREFIX}${slug}`;
+      const staticCounted = (req as unknown as { __egressBytes?: () => number }).__egressBytes?.();
       // HEAD has no body — Content-Length still describes the full resource,
-      // so counting it here would overstate actual transferred bytes.
-      const bytes = req.method === 'HEAD' ? 0 : contentLengthOf(reply);
+      // so counting it here would overstate actual transferred bytes. For a
+      // GET, Content-Length is exact for uncompressed files served directly
+      // by @fastify/static; compressed responses lose that header (chunked
+      // encoding), so fall back to bytes actually written to the socket —
+      // same reasoning as the /api/* branch above.
+      const bytes = req.method === 'HEAD' ? 0 : (contentLengthOf(reply) || staticCounted || 0);
       recordEgress(date, req.method, route, bytes);
 
       // Per-file attribution, only for known projects (not _host/_other,

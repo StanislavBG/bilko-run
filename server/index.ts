@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import compress from '@fastify/compress';
 import staticPlugin from '@fastify/static';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -70,6 +71,28 @@ await app.register(cors, {
 
 // Security headers (CSP + HSTS + COOP + Permissions-Policy)
 registerSecurityHeaders(app);
+
+// Origin-side response compression. Render bills origin egress, and
+// Cloudflare's edge compression only shrinks what the origin already paid to
+// ship — without this, every JSON/HTML/JS/CSS response left Render at full
+// uncompressed size (measured: a ~93 KB-on-the-wire snapshot response was
+// costing ~733 KB of billed origin egress). Registered global (fastify-plugin
+// under the hood, so it isn't encapsulated) and BEFORE the @fastify/static
+// registration further down so static bundle responses flow through it too.
+// Also registered after `registerSecurityHeaders` so its onSend hook — which
+// injects the CSP nonce into HTML — runs first in the onSend chain and
+// operates on plain text, not compressed bytes.
+await app.register(compress, {
+  // 1 KB: below this, gzip/brotli framing overhead and CPU cost outweigh the
+  // bandwidth saved.
+  threshold: 1024,
+  encodings: ['br', 'gzip'],
+  // @fastify/compress's default compressible-types regex doesn't match
+  // `application/javascript` (only `text/*`, `*/json`, `*/xml`, `*/text`,
+  // `octet-stream`) — extend it so the static JS bundle actually compresses.
+  // PNG/JPEG/WebP/woff2/etc. still don't match, so they pass through untouched.
+  customTypes: /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)|javascript/u,
+});
 
 // Per-route egress accounting. Registered before the routes so its onSend hook
 // sees every /api/* response.

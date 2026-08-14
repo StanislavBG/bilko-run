@@ -367,7 +367,9 @@ function threadMessages(thread) {
 // One thread = every message in time order, then a Reply control that
 // re-opens the SAME feedback form scoped to the SAME target — so a visitor's
 // follow-up comes back attached to this trade/component, not to the page at
-// large.
+// large. It goes out with `parentId` set, which is what puts the form into
+// reply mode (body only, no title, no type chips — the topic already named
+// itself when it was opened; see FeedbackModal in lib/feedback.js).
 // Collapsed: header row only (badge / title / time / status pill / message
 // count) behind one toggle button. Expanded: the full conversation. The
 // header is itself the toggle so keyboard/screen-reader users get one
@@ -417,8 +419,9 @@ function FeedbackThread({ thread, collapsed, onToggleCollapse, ownerMode, routeN
               <window.FeedbackButton
                 target={{ kind: thread.targetKind, id: thread.targetId, label: thread.targetLabel || thread.title }}
                 parentId={thread.id}
+                parentType={thread.type}
               />
-              <span className="fbt-hint">reply in this thread</span>
+              <span className="fbt-hint">adds a message to this topic — no new title</span>
             </div>
           )}
         </div>
@@ -678,6 +681,13 @@ function SystemFeedbackPanel() {
 // The discussion under ONE proposed trade, rendered inline on that proposal's
 // card in Proposed Trades — not a separate panel, because the comment IS the
 // instruction for that specific proposal and has to sit against it.
+//
+// Read-plus-reply only: there is exactly ONE control for STARTING a topic on a
+// proposal, and it's the Feedback button in the card header (proposed-trades.
+// jsx). This panel used to carry a second one in its footer with the identical
+// target and no parentId — two buttons, same effect, so a reader had to guess
+// whether the lower one meant something different. Every button inside this
+// panel now sits in a thread and is a Reply.
 function ProposalDiscussion({ proposalId, label }) {
   const payload = feedbackPayload();
   const threads = proposalId
@@ -704,14 +714,8 @@ function ProposalDiscussion({ proposalId, label }) {
       ) : (
         <p className="fbt-empty">
           No comments on this proposal yet.{" "}
-          {window.FeedbackButton ? "Use the \u{1F4AC} button above to say what should happen to it — hold it, resize it, or let it run." : ""}
+          {window.FeedbackButton ? "Use the Feedback button at the top of this card to say what should happen to it — hold it, resize it, or let it run." : ""}
         </p>
-      )}
-      {window.FeedbackButton && (
-        <div className="fbt-thread-foot">
-          <window.FeedbackButton target={{ kind: "component", id: proposalId, label: label || "Proposed trade" }} />
-          <span className="fbt-hint">comment on this proposal</span>
-        </div>
       )}
     </div>
   );

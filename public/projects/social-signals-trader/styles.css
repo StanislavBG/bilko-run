@@ -1525,6 +1525,16 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 }
 .feedback-btn-label { white-space: nowrap; }
 
+/* A Reply is a continuation, not a new topic — the only control that STARTS a
+   conversation keeps the loud accent pill; the in-thread Reply reads a step
+   quieter so the two are told apart at a glance, not just by their word. */
+.feedback-btn--reply {
+  border-color: var(--line-2); color: var(--text-2);
+}
+.feedback-btn--reply:hover, .feedback-btn--reply:focus-visible {
+  background: var(--text-2); color: var(--bg);
+}
+
 /* Inside a dense table cell there is no room for the word — the pill collapses
    to a circular icon chip, same accent treatment so it still reads as the same
    control. The row's own hover already tells the user the row is interactive. */

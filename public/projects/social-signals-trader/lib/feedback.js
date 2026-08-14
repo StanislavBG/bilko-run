@@ -363,14 +363,37 @@
     });
   }
 
+  // A reply is not a second feedback item in the reader's mind — it's the next
+  // message in a conversation that already has a subject. Only the FIRST post
+  // against a target carries a title (it names the topic); everything after it
+  // is body-only. `parentId` is the whole distinction: set => reply mode.
+  //
+  // The wire contract (docs/feedback-api-contract.md) still requires a
+  // non-empty `title` on every submitted item, so reply mode SYNTHESIZES one
+  // from the parent's label instead of asking for it. Nothing renders it —
+  // feedback_threads.build() folds a child row into its parent's messages[]
+  // using `description` only.
+  var REPLY_TITLE_MAX = 120;
+
+  function replyTitleFor(label) {
+    var base = "Re: " + (label || "thread");
+    return base.length > REPLY_TITLE_MAX ? base.slice(0, REPLY_TITLE_MAX) : base;
+  }
+
   function FeedbackModal(props) {
     var target = props.target;
     var label = target.label;
+    var isReply = !!props.parentId;
     var closeRef = React.useRef(props.onClose);
     closeRef.current = props.onClose;
 
     var titleRef = React.useRef(null);
-    var [type, setType] = React.useState("feedback");
+    var bodyRef = React.useRef(null);
+    // A reply inherits its topic's type — the reader classified the
+    // conversation once, when they opened it.
+    var [type, setType] = React.useState(
+      isReply && VALID_TYPES.indexOf(props.parentType) !== -1 ? props.parentType : "feedback"
+    );
     var [title, setTitle] = React.useState("");
     var [description, setDescription] = React.useState("");
     var [image, setImage] = React.useState(null);
@@ -379,8 +402,9 @@
     var [message, setMessage] = React.useState("");
 
     React.useEffect(function () {
-      if (titleRef.current) titleRef.current.focus();
-    }, []);
+      var first = isReply ? bodyRef.current : titleRef.current;
+      if (first) first.focus();
+    }, [isReply]);
 
     React.useEffect(function () {
       function onKeyDown(e) {
@@ -441,7 +465,10 @@
       setImageError("");
     }
 
-    var canSubmit = title.trim().length > 0 && description.trim().length > 0 && status !== "pending";
+    var canSubmit =
+      (isReply || title.trim().length > 0) &&
+      description.trim().length > 0 &&
+      status !== "pending";
 
     // A position-scoped submission answers on that position's trade page, not
     // in place on #options where it was filed — say so explicitly, otherwise
@@ -456,7 +483,7 @@
       var payload = buildPayload({
         target: target,
         type: type,
-        title: title.trim(),
+        title: isReply ? replyTitleFor(label) : title.trim(),
         description: description.trim(),
         image: image,
         parentId: props.parentId,
@@ -464,7 +491,7 @@
       submit(payload).then(function (result) {
         if (result && result.ok) {
           setStatus("success");
-          setMessage("Thanks — feedback sent." + answerHint);
+          setMessage((isReply ? "Thanks — reply sent." : "Thanks — feedback sent.") + answerHint);
         } else {
           setStatus("queued");
           setMessage("Saved — we'll send it next time you're online." + answerHint);
@@ -490,7 +517,7 @@
           className: "fb-modal",
           role: "dialog",
           "aria-modal": "true",
-          "aria-label": "Leave feedback on " + label,
+          "aria-label": isReply ? "Reply in the thread " + label : "Leave feedback on " + label,
           onClick: function (e) {
             e.stopPropagation();
           },
@@ -499,7 +526,7 @@
         React.createElement(
           "div",
           { className: "fb-modal-head" },
-          "Leave feedback on ",
+          isReply ? "Reply in " : "Leave feedback on ",
           React.createElement("b", null, label)
         ),
         doneMsg
@@ -507,46 +534,53 @@
           : React.createElement(
               "form",
               { onSubmit: onSubmit },
-              React.createElement(
-                "div",
-                { className: "fb-chips", role: "radiogroup", "aria-label": "Feedback type" },
-                VALID_TYPES.map(function (t) {
-                  var chipLabel = t === "bug" ? "Bug" : t === "feature" ? "Feature" : "Feedback";
-                  return React.createElement(
-                    "button",
-                    {
-                      type: "button",
-                      key: t,
-                      className: "fb-chip" + (type === t ? " fb-chip--on" : ""),
-                      "aria-pressed": type === t,
-                      onClick: function () {
-                        setType(t);
+              // Type + Title name a NEW topic. A reply is another message in a
+              // topic that already has both, so it asks for the body alone.
+              isReply
+                ? null
+                : React.createElement(
+                    "div",
+                    { className: "fb-chips", role: "radiogroup", "aria-label": "Feedback type" },
+                    VALID_TYPES.map(function (t) {
+                      var chipLabel = t === "bug" ? "Bug" : t === "feature" ? "Feature" : "Feedback";
+                      return React.createElement(
+                        "button",
+                        {
+                          type: "button",
+                          key: t,
+                          className: "fb-chip" + (type === t ? " fb-chip--on" : ""),
+                          "aria-pressed": type === t,
+                          onClick: function () {
+                            setType(t);
+                          },
+                        },
+                        chipLabel
+                      );
+                    })
+                  ),
+              isReply
+                ? null
+                : React.createElement(
+                    "label",
+                    { className: "fb-field" },
+                    "Title",
+                    React.createElement("input", {
+                      type: "text",
+                      ref: titleRef,
+                      value: title,
+                      maxLength: 120,
+                      required: true,
+                      onChange: function (e) {
+                        setTitle(e.target.value);
                       },
-                    },
-                    chipLabel
-                  );
-                })
-              ),
+                    })
+                  ),
               React.createElement(
                 "label",
                 { className: "fb-field" },
-                "Title",
-                React.createElement("input", {
-                  type: "text",
-                  ref: titleRef,
-                  value: title,
-                  maxLength: 120,
-                  required: true,
-                  onChange: function (e) {
-                    setTitle(e.target.value);
-                  },
-                })
-              ),
-              React.createElement(
-                "label",
-                { className: "fb-field" },
-                "Description",
+                isReply ? "Your reply" : "Description",
                 React.createElement("textarea", {
+                  ref: bodyRef,
                   value: description,
                   maxLength: 4000,
                   required: true,
@@ -590,7 +624,7 @@
                 React.createElement(
                   "button",
                   { type: "submit", disabled: !canSubmit },
-                  status === "pending" ? "Sending…" : "Send feedback"
+                  status === "pending" ? "Sending…" : isReply ? "Send reply" : "Send feedback"
                 )
               )
             )
@@ -607,6 +641,7 @@
       !target.id ||
       !target.label ||
       VALID_KINDS.indexOf(target.kind) === -1;
+    var isReply = !!(props && props.parentId);
     var [open, setOpen] = React.useState(false);
     var btnRef = React.useRef(null);
 
@@ -630,8 +665,10 @@
         {
           type: "button",
           ref: btnRef,
-          className: "feedback-btn",
-          "aria-label": "Leave feedback on " + target.label,
+          className: "feedback-btn" + (isReply ? " feedback-btn--reply" : ""),
+          "aria-label": isReply
+            ? "Reply in the thread " + target.label
+            : "Leave feedback on " + target.label,
           "aria-expanded": open,
           onClick: function (e) {
             e.stopPropagation();
@@ -639,11 +676,16 @@
           },
         },
         FeedbackIcon(),
-        React.createElement("span", { className: "feedback-btn-label" }, "Feedback")
+        React.createElement("span", { className: "feedback-btn-label" }, isReply ? "Reply" : "Feedback")
       ),
       open
         ? ReactDOM.createPortal(
-            React.createElement(FeedbackModal, { target: target, parentId: props.parentId, onClose: close }),
+            React.createElement(FeedbackModal, {
+              target: target,
+              parentId: props.parentId,
+              parentType: props.parentType,
+              onClose: close,
+            }),
             document.body
           )
         : null

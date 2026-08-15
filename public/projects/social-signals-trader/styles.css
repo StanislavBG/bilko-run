@@ -1746,6 +1746,18 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   border: 1px solid color-mix(in oklch, var(--accent) 35%, transparent);
   border-radius: 999px; padding: 3px 8px; text-align: center;
 }
+/* Per-leg quote provenance — the bid/ask/last the scored credit was priced
+   from, and when it was taken. Lives inside the scorecard aside, so it
+   inherits its border/padding rather than opening a second card frame. */
+.prop-quote-block { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.prop-quote-leg {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 3px 0; font-size: 11px;
+}
+.prop-quote-leg-label { color: var(--muted); flex-shrink: 0; }
+.prop-quote-leg-figs { font-family: var(--mono); color: var(--text-2); text-align: right; }
+.prop-quote-leg--unavailable .prop-quote-leg-error { color: var(--neg); text-align: right; }
+.prop-quote-block .opts-section-stamp { display: block; margin-top: 6px; font-size: 10px; }
 .prop-block { margin-top: 14px; }
 .prop-block-title {
   display: flex; align-items: center; gap: 8px;

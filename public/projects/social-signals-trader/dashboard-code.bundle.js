@@ -12,15 +12,15 @@ window.FEEDBACK_THREADS = {
     "unanswered": 13
   },
   "funnel": {
-    "breachingSla": 8,
-    "generatedAt": "2026-08-14T23:45:02Z",
+    "breachingSla": 15,
+    "generatedAt": "2026-08-15T00:45:01Z",
     "open": 15,
     "proposals": {
-      "approved": 1,
+      "approved": 2,
       "conditional": 0,
       "declined": 1,
       "pending": 7,
-      "stranded": 0
+      "stranded": 1
     },
     "resolvedThisWeek": 2,
     "routedToPrd": 4,
@@ -30,7 +30,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-14T23:45:02Z",
+  "generatedAt": "2026-08-15T00:45:01Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -1757,6 +1757,12 @@ window.FEEDBACK_THREADS = {
       short: "Where one proposal's approval sits right now, and what happens next.",
       long: "Awaiting review: no comment has approved or declined this yet — nothing happens until one does. Approved: a comment approved it and the next scan (trader-tick, every ~15 minutes) will try to fill it the moment it offers a matching spread — no further action needed. Submitted: it already filled; the order reference shown is the client_order_id the fund actually submitted, so you can find it in the Trade Log. Approved — not matched: the approval is still live and unconsumed, but the scanner hasn't offered a spread it could match for a while (a different name, side, or nothing at all) — it will still fill automatically the instant a match appears; a new comment is only needed if the setup has genuinely changed. Approved — expired: the approval only carries through the trading day it was decided in, which has since ended — nothing will fill on it; comment again to re-approve. Declined: a comment declined it — nothing will ever be submitted for this proposal.",
       example: "HOOD 86/85 approved at 3:24pm; by 3:57pm the scanner had only re-priced HOOD to 89/88 and 88/87, neither of which is this exact card, so the ORIGINAL approval shows 'Approved' on its own (now-stale) card while a separate 'Approved — not matched' card appears for the approval itself, since scope='underlying_right' still lets it fill on the next matching HOOD put spread."
+    },
+    proposal_leg_quotes: {
+      label: "Leg quotes",
+      short: "The actual bid/ask/last on each leg the scored credit was priced from, and when they were taken.",
+      long: "Bid is the best price a buyer will pay right now, ask is the best price a seller will accept, and the mid is the halfway point between them — (bid + ask) ÷ 2. “NBBO mid credit” is the short leg's mid minus the long leg's mid, × 100 — the fair-value credit implied by the current market, before the pessimistic fill assumption that produces the credit shown elsewhere on this card. The as-of time is read from the quote itself, not from when the page loaded — a quote older than a few minutes is flagged stale rather than shown as if it were current. Frozen at the moment this proposal was scanned, same as everything else on the card: it will not silently re-price as you sit on this page.",
+      example: "Short leg bid $0.42 / ask $0.48 (mid $0.45), long leg bid $0.09 / ask $0.13 (mid $0.11) → NBBO mid credit = ($0.45 − $0.11) × 100 = $34 per contract."
     },
     pop: {
       label: "PoP / win probability",
@@ -9707,6 +9713,7 @@ function UnpairedLegs({
 }) {
   var list = (legs || []).filter(Boolean);
   if (!list.length) return null;
+  var money = window.SpreadFormat.money;
   var reasonText = {
     long_with_no_matching_short: "long leg with no matching short — the spread's other side is gone",
     short_with_no_matching_long: "short leg with no matching long — UNCOVERED, no loss cap"
@@ -9725,7 +9732,9 @@ function UnpairedLegs({
     className: "al"
   }, "Side"), /*#__PURE__*/React.createElement("th", {
     className: "al"
-  }, "Why it is not a spread"))), /*#__PURE__*/React.createElement("tbody", null, list.map((leg, i) => /*#__PURE__*/React.createElement("tr", {
+  }, "Why it is not a spread"), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "Spread's outcome"))), /*#__PURE__*/React.createElement("tbody", null, list.map((leg, i) => /*#__PURE__*/React.createElement("tr", {
     key: leg.symbol || i
   }, /*#__PURE__*/React.createElement("td", {
     className: "al mono-dim"
@@ -9735,9 +9744,15 @@ function UnpairedLegs({
     className: "al mono-dim"
   }, leg.side || "—"), /*#__PURE__*/React.createElement("td", {
     className: "al"
-  }, reasonText[leg.unpaired_reason] || leg.unpaired_reason || "unpaired"))))), /*#__PURE__*/React.createElement("p", {
+  }, reasonText[leg.unpaired_reason] || leg.unpaired_reason || "unpaired"), /*#__PURE__*/React.createElement("td", {
+    className: "al"
+  }, leg.closed_trade && leg.closed_trade.realized_pnl != null ? /*#__PURE__*/React.createElement("span", {
+    className: leg.closed_trade.realized_pnl >= 0 ? "up" : "down"
+  }, "Spread closed: ", money(leg.closed_trade.realized_pnl), " realized", /*#__PURE__*/React.createElement("span", {
+    className: "mono-dim"
+  }, " (", leg.closed_trade.reason || "closed", ")")) : "—"))))), /*#__PURE__*/React.createElement("p", {
     className: "opts-unpaired-note"
-  }, "These carry no credit, no width and no loss cap of their own, so the book totals above exclude them. They still move with the underlying \u2014 check them against the broker."));
+  }, "These carry no credit, no width and no loss cap of their own, so the book totals above exclude them. They still move with the underlying \u2014 check them against the broker. When the trade log shows the spread this leg belonged to as closed (e.g. the short was bought back and this leg left to expire worthless), the \"Spread's outcome\" column names the same realized P&L the ", /*#__PURE__*/React.createElement("code", null, "#trade/<key>"), " detail page shows \u2014 read from", /*#__PURE__*/React.createElement("code", null, " spread_trader.closed_trade_for_symbol()"), ", not recomputed here."));
 }
 function PositionsTable({
   positions,
@@ -10075,6 +10090,7 @@ var RULES_FIELD_TERM = {
   min_pop: "min_pop",
   min_dte: "dte",
   max_dte: "dte",
+  index_max_dte: "dte",
   max_per_underlying: "max_per_underlying",
   live: "live_flag"
 };
@@ -11504,6 +11520,70 @@ function ApprovalChip({
     note: noteParts.join(" ")
   }));
 }
+
+// How long a leg quote may sit before the card marks it stale rather than
+// showing it as current. Options quotes move fast intraday — feedback on a
+// QQQ proposal: "when was this calculated? at 11:18am price per contract is
+// like 0.07" — so this is far tighter than SectionStamp's 4h cron-content
+// threshold. One constant, easy to retune without touching the render logic.
+var QUOTE_STALE_AFTER_MS = 5 * 60 * 1000;
+function ProposalQuoteLeg({
+  leg,
+  label
+}) {
+  if (!leg || !leg.available) {
+    return /*#__PURE__*/React.createElement("div", {
+      className: "prop-quote-leg prop-quote-leg--unavailable"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "prop-quote-leg-label"
+    }, label), /*#__PURE__*/React.createElement("span", {
+      className: "prop-quote-leg-error"
+    }, leg && leg.error || `${label} leg quote unavailable`));
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "prop-quote-leg"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "prop-quote-leg-label"
+  }, label), /*#__PURE__*/React.createElement("span", {
+    className: "prop-quote-leg-figs"
+  }, "bid ", propMoney(leg.bid, 2), " \xB7 ask ", propMoney(leg.ask, 2), " \xB7 last", " ", leg.last ? propMoney(leg.last, 2) : "—", " \xB7 mid ", propMoney(leg.mid, 2)));
+}
+
+// The quote provenance block: what each leg actually showed and when, so a
+// reviewer can tell a stale quote from a live one instead of trusting a
+// single derived credit with no receipts (ORCL/QQQ/ARM feedback all asked
+// for exactly this). Rendered inside the scorecard column, next to the
+// numbers it justifies.
+function ProposalQuotes({
+  quotes
+}) {
+  if (!quotes) return null;
+  var t = window.AsOfTime ? window.AsOfTime.format(quotes.as_of) : null;
+  var stale = t ? Date.now() - t.ms > QUOTE_STALE_AFTER_MS : false;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "prop-quote-block"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "prop-score-head"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "prop-score-title"
+  }, "Leg quotes", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "proposal_leg_quotes"
+  }))), /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
+    leg: quotes.short,
+    label: "Short"
+  }), /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
+    leg: quotes.long,
+    label: "Long"
+  }), /*#__PURE__*/React.createElement(ScoreRow, {
+    label: "NBBO mid credit",
+    value: quotes.nbbo_mid_credit === null || quotes.nbbo_mid_credit === undefined ? "—" : propMoney(quotes.nbbo_mid_credit, 2)
+  }), t ? /*#__PURE__*/React.createElement("span", {
+    className: stale ? "opts-section-stamp opts-section-stamp--stale" : "opts-section-stamp",
+    title: quotes.as_of
+  }, /*#__PURE__*/React.createElement("span", null, stale ? "⚠ " : "", "Quoted ", t.text), /*#__PURE__*/React.createElement("span", null, "\xB7 ", window.AsOfTime.relativeAge(t.ms))) : /*#__PURE__*/React.createElement("span", {
+    className: "opts-section-stamp opts-section-stamp--stale"
+  }, "Quote time unavailable"));
+}
 function ProposalScorecard({
   item,
   equity
@@ -11563,7 +11643,9 @@ function ProposalScorecard({
     term: "dte"
   }), chip && /*#__PURE__*/React.createElement("div", {
     className: "prop-score-chip"
-  }, chip));
+  }, chip), /*#__PURE__*/React.createElement(ProposalQuotes, {
+    quotes: item.quotes
+  }));
 }
 
 // A "stranded" card (approval.state === "stranded", PRD closing the
@@ -12451,6 +12533,19 @@ function maxLossCaption(facts) {
   var verb = facts.pnl >= 0 ? "won" : "lost";
   return `The worst case if this had been held to expiry — not what actually happened. This trade closed and ${verb} ${money(Math.abs(facts.pnl))}; see Realized P&L below.`;
 }
+
+// The other half of feedback fb_msmf9zlo_v0a1ebjz ("why is it a loss at
+// all?") — maxLossCaption() above explains which NUMBER is true, but neither
+// stat says WHY a spread sold for a credit can still lose money. A credit
+// spread's short leg is the one exposed to the underlying; the long leg is
+// only insurance. When the underlying moves toward (or through) the short
+// strike, the short leg's own price rises faster than the long leg's does,
+// so buying the short back to close costs more than the credit collected —
+// the long leg caps how bad that gets, but doesn't prevent it.
+function realizedLossCaption(facts) {
+  if (!facts.isClose || facts.pnl == null || facts.pnl >= 0) return null;
+  return "This lost money because the short leg — the one collecting the premium — moved against us: " + "the underlying moved toward (or through) the short strike, so buying that leg back to close cost " + "more than the credit collected when it opened. The long leg is insurance that caps how bad this " + "gets; it doesn't prevent a loss.";
+}
 function WhatHadToHappen({
   ev,
   facts,
@@ -12952,7 +13047,9 @@ function TheNumbers({
       var resp = ev.response || {};
       return [["Fill state", classification.label, "fill_state"], ["Reason", ev.reason, "reason"], ["Order id", ev.client_order_id, "order_id", null, true], ["Broker order status", resp.status, "broker_order_status"], ["Broker limit price", resp.limit_price != null ? money(num(resp.limit_price)) : null, "broker_limit_price"], ["Time in force", resp.time_in_force, "time_in_force"], ["Submitted at", tsPretty(resp.submitted_at), "submitted_at", null, true], ["Filled at", tsPretty(resp.filled_at), "filled_at", null, true]];
     })()
-  }));
+  }), realizedLossCaption(facts) && /*#__PURE__*/React.createElement("p", {
+    className: "optd-explainer"
+  }, realizedLossCaption(facts)));
 }
 
 // --- Greeks -------------------------------------------------------------------

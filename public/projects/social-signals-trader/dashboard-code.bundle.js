@@ -1954,6 +1954,26 @@ window.FEEDBACK_THREADS = {
       long: "Bid is the best price a buyer will pay right now, ask is the best price a seller will accept, and the mid is the halfway point between them — (bid + ask) ÷ 2. “NBBO mid credit” is the short leg's mid minus the long leg's mid, × 100 — the fair-value credit implied by the current market, before the pessimistic fill assumption that produces the credit shown elsewhere on this card. The as-of time is read from the quote itself, not from when the page loaded — a quote older than a few minutes is flagged stale rather than shown as if it were current. Frozen at the moment this proposal was scanned, same as everything else on the card: it will not silently re-price as you sit on this page.",
       example: "Short leg bid $0.42 / ask $0.48 (mid $0.45), long leg bid $0.09 / ask $0.13 (mid $0.11) → NBBO mid credit = ($0.45 − $0.11) × 100 = $34 per contract."
     },
+    proposal_comparison: {
+      label: "Compared to reviewed proposals",
+      short: "How this proposal's numbers stack up against every proposal a human has actually reviewed — approved, declined, or conditional. Never pending, never a proposal nobody has commented on.",
+      long: "“Reviewed” means a visitor's comment produced a verdict via proposal_approval.py — approved, declined, or conditional. A proposal still awaiting a comment, or one that never got one, is excluded from the comparison entirely. Below a minimum of 10 reviewed proposals the section shows only how many exist — not a median: five data points is not a distribution, so no position-vs-median is computed until there's enough history. Once there is, each metric (credit, probability of profit, expected value, short delta, days to expiry, spread width) shows the median across everything reviewed and where this proposal sits versus that median, computed separately for what you've approved and for what you've declined — so “richer credit than what you approved” and “looks like what you've declined” can both be said without conflating the two groups. This never feeds back into any gate, threshold, sizing, or approval verdict — it is precedent for your own judgement only.",
+      calc: {
+        expr: "this credit − median credit of reviewed proposals",
+        inputs: [{
+          key: "this_credit",
+          label: "This proposal's credit",
+          unit: "$"
+        }, {
+          key: "median_credit",
+          label: "Median credit across reviewed (approved/declined/conditional) proposals",
+          unit: "$"
+        }],
+        result: v => v.this_credit - v.median_credit,
+        unit: "$",
+        source: "src/social_signals_trader/proposal_comparison.py:build_comparison"
+      }
+    },
     proposal_deck_freshness: {
       label: "Deck freshness",
       short: "How old this scan is, and how long this proposal has sat here without a fresh look.",
@@ -12014,6 +12034,144 @@ function ProposalRules({
   }, "Showing the three exit rules \u2014 the ones that decide when this trade ends. \u201CShow all\u201D adds the entry rules that let it in."));
 }
 
+// The comparison-vs-reviewed-precedent section (PRD: "how does this compare
+// to prior user reviewed only proposals"). Data: `item.comparison`, built by
+// `proposal_comparison.build_comparison()` inside `proposal_cards.
+// build_proposal()` — a STRUCTURED sibling of the existing plain-text
+// `item.precedent` block, scoped to proposals a human has actually decided
+// on (approved/declined/conditional), never a pending or never-commented-on
+// one. Advisory only, same contract as `precedent`: nothing here is read by
+// any gate/threshold/sizing/approval logic.
+var COMPARISON_METRIC_LABELS = {
+  credit: "Credit",
+  pop: "Chance we're right",
+  ev: "Expected value",
+  short_delta: "Short delta",
+  dte: "Days to expiry",
+  width: "Spread width"
+};
+function comparisonMetricValue(metric, value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
+  if (metric === "credit" || metric === "ev" || metric === "width") return propMoney(value);
+  if (metric === "pop") return propPct(value);
+  if (metric === "short_delta") return Number(value).toFixed(2);
+  if (metric === "dte") return `${value}d`;
+  return String(value);
+}
+var COMPARISON_POSITION_WORD = {
+  above: "above",
+  below: "below",
+  at: "at"
+};
+function ComparisonGroupCell({
+  group
+}) {
+  if (!group || !group.available) {
+    var reason = group && group.reason === "insufficient_history" ? `not enough reviewed history yet (${group.n} of the required minimum)` : "not available on this proposal";
+    return /*#__PURE__*/React.createElement("span", {
+      className: "prop-comparison-na"
+    }, reason);
+  }
+  return /*#__PURE__*/React.createElement("span", {
+    className: `prop-comparison-pos prop-comparison-pos--${group.position}`
+  }, COMPARISON_POSITION_WORD[group.position], " median", " ", /*#__PURE__*/React.createElement("span", {
+    className: "prop-mono"
+  }, comparisonMetricValue(group.metric, group.median)), " (n=", group.n, ")");
+}
+function ComparisonMetricRow({
+  metric,
+  card
+}) {
+  var block = card.comparison && card.comparison.metrics && card.comparison.metrics[metric] || {};
+  var overall = block.overall && {
+    ...block.overall,
+    metric
+  };
+  var approved = block.approved && {
+    ...block.approved,
+    metric
+  };
+  var declined = block.declined && {
+    ...block.declined,
+    metric
+  };
+  return /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    className: "al"
+  }, COMPARISON_METRIC_LABELS[metric] || metric), /*#__PURE__*/React.createElement("td", {
+    className: "al prop-mono"
+  }, comparisonMetricValue(metric, card[metric])), /*#__PURE__*/React.createElement("td", {
+    className: "al"
+  }, /*#__PURE__*/React.createElement(ComparisonGroupCell, {
+    group: overall
+  })), /*#__PURE__*/React.createElement("td", {
+    className: "al"
+  }, /*#__PURE__*/React.createElement(ComparisonGroupCell, {
+    group: approved
+  })), /*#__PURE__*/React.createElement("td", {
+    className: "al"
+  }, declined ? /*#__PURE__*/React.createElement(ComparisonGroupCell, {
+    group: declined
+  }) : /*#__PURE__*/React.createElement("span", {
+    className: "prop-comparison-na"
+  }, "no declined precedent")));
+}
+function comparisonFeedbackTarget(item) {
+  return {
+    kind: "component",
+    id: `${PROPOSAL_ID_PREFIX}${item.id || "unknown"}-comparison`,
+    label: `Proposed trade comparison — ${item.ticker || "?"}`
+  };
+}
+function ComparisonNearest({
+  nearest
+}) {
+  if (!nearest) return null;
+  var outcome = nearest.outcome || {};
+  var outcomeText = !outcome.filled ? "never filled" : !outcome.closed ? "still open" : `closed${typeof outcome.pnl === "number" ? `, realized P/L ${propMoney(outcome.pnl)}` : ""}${outcome.exitReason ? ` (${outcome.exitReason})` : ""}`;
+  return /*#__PURE__*/React.createElement("p", {
+    className: "prop-comparison-nearest"
+  }, "Nearest precedent: ", /*#__PURE__*/React.createElement("b", null, nearest.label || nearest.contractKey), " \u2014 ", nearest.verdict, ".", " ", nearest.visitorSaid ? /*#__PURE__*/React.createElement(React.Fragment, null, "You said: \u201C", nearest.visitorSaid, "\u201D. ") : null, "That trade ", outcomeText, ".");
+}
+function ProposalComparison({
+  item
+}) {
+  var comparison = item.comparison;
+  var target = comparisonFeedbackTarget(item);
+  if (!comparison) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "prop-block prop-comparison"
+  }, /*#__PURE__*/React.createElement("h5", {
+    className: "prop-block-title"
+  }, "Compared to reviewed proposals", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "proposal_comparison",
+    note: `As of ${comparison.asOf ? whenPlanned(comparison.asOf) : "unknown"}.`
+  }), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+    target: target
+  })), comparison.reviewedCount === 0 ? /*#__PURE__*/React.createElement("p", {
+    className: "prop-comparison-note"
+  }, "No prior reviewed proposals yet \u2014 nothing to compare this one against.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "prop-comparison-note"
+  }, comparison.reviewedCount, " reviewed proposal", comparison.reviewedCount === 1 ? "" : "s", " on file (", comparison.approvedCount, " approved, ", comparison.declinedCount, " declined,", " ", comparison.conditionalCount, " conditional)", !comparison.enoughHistory ? ` — not enough reviewed history yet (${comparison.reviewedCount} of ${comparison.minReviewed}) to show a median.` : "."), comparison.enoughHistory && /*#__PURE__*/React.createElement("table", {
+    className: "opt-table prop-checks prop-comparison-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "Metric"), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "This proposal"), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "vs all reviewed"), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "vs what you approved"), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "vs what you declined"))), /*#__PURE__*/React.createElement("tbody", null, Object.keys(COMPARISON_METRIC_LABELS).map(metric => /*#__PURE__*/React.createElement(ComparisonMetricRow, {
+    key: metric,
+    metric: metric,
+    card: item
+  }))))), /*#__PURE__*/React.createElement(ComparisonNearest, {
+    nearest: comparison.nearest
+  }));
+}
+
 // The broker reserves the FULL strike width, not the width net of the credit.
 // `risk` is what we can lose; this is what is locked up until the trade closes
 // — the two differ by exactly the credit, and sizing runs off this number, so
@@ -12385,6 +12543,8 @@ function ProposalCard({
     checks: item.checks
   }), !stranded && /*#__PURE__*/React.createElement(ProposalRules, {
     rules: item.rules
+  }), !stranded && /*#__PURE__*/React.createElement(ProposalComparison, {
+    item: item
   }), window.ProposalDiscussion && /*#__PURE__*/React.createElement(window.ProposalDiscussion, {
     proposalId: target.id,
     label: target.label
@@ -12725,7 +12885,10 @@ window.ProposedTradesInternals = {
   liveDte,
   planAge,
   cardAge,
-  DeckCapNote
+  DeckCapNote,
+  comparisonFeedbackTarget,
+  comparisonMetricValue,
+  COMPARISON_METRIC_LABELS
 };
 
 /* ---- pages/option-trade-detail.jsx ---- */
@@ -14964,6 +15127,14 @@ function proposalsAwaitingCount() {
   var items = plan && plan.intent || [];
   if (!items.length) return 0;
   return items.filter(it => {
+    // A card the sweep RETAINED with an unanswered comment (`carried: true`,
+    // carriedReason "unanswered_question") is still waiting on a human even
+    // though its contract has expired — sweep_expired_proposals() kept it on
+    // the deck specifically because that obligation isn't discharged. Check
+    // this BEFORE the expired filter below, or an expired-but-carried card
+    // sits on the deck un-badged (the sweep un-discharges it every scan
+    // until someone replies, but nothing tells the visitor).
+    if (it && it.carried && it.carriedReason === "unanswered_question") return true;
     // An expired contract can never fill and needs no decision — counting it
     // would nag a dead deck forever, past the point any human action helps.
     if (internals.isCardExpired && internals.isCardExpired(it)) return false;

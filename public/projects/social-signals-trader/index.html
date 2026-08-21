@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Mobile chrome: the Options Log is a real phone surface (bottom tab
+       bar, safe-area insets), so the browser UI is tinted to match the
+       dark shell instead of flashing white above it. -->
+  <meta name="theme-color" content="#090e13" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Options Log" />
   <title>Bilko Bibitkov · trading in public</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

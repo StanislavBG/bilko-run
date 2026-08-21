@@ -1175,6 +1175,106 @@ window.FEEDBACK_THREADS = {
   };
 })();
 
+/* ---- lib/viewport.js ---- */
+/* global React */
+/**
+ * Shared viewport primitive — the ONE definition of "this is a phone" on the
+ * JS side, and the ONE swipe gesture helper.
+ *
+ * Why a JS breakpoint at all, when styles.css already has media queries: the
+ * Options Log's mobile use-cases are not the desktop page reflowed. A phone
+ * visitor is here to do exactly two things — review the open book plus the
+ * Analyst's read on it, and review a proposed trade — and give a human
+ * opinion on either. That means a DIFFERENT component tree (stacked position
+ * cards instead of an 11-column table, a bottom tab bar instead of an 8-card
+ * scroll), which CSS alone cannot express.
+ *
+ * MOBILE_QUERY is deliberately the same 820px `--bp-mobile` the stylesheet
+ * uses. Two definitions of "mobile" that drift is exactly the bug this file
+ * exists to prevent — if you change one, change the other.
+ *
+ * Plain JS (no JSX), loaded as a plain <script> before the panels, same as
+ * lib/feedback.js and lib/glossary.js.
+ */
+(function () {
+  var MOBILE_QUERY = "(max-width: 820px)";
+  function mediaList() {
+    return window.matchMedia ? window.matchMedia(MOBILE_QUERY) : null;
+  }
+  function isMobile() {
+    var mql = mediaList();
+    return mql ? mql.matches : false;
+  }
+  function subscribe(onChange) {
+    var mql = mediaList();
+    if (!mql) return function () {};
+    // addEventListener("change") is the modern API; addListener is the
+    // deprecated one older iOS Safari still needs. Support both rather than
+    // silently never re-rendering on a rotate.
+    if (mql.addEventListener) {
+      mql.addEventListener("change", onChange);
+      return function () {
+        mql.removeEventListener("change", onChange);
+      };
+    }
+    mql.addListener(onChange);
+    return function () {
+      mql.removeListener(onChange);
+    };
+  }
+
+  // Re-renders the caller when the viewport crosses the breakpoint (rotate,
+  // desktop window resize, devtools device toolbar). useSyncExternalStore
+  // rather than useState+useEffect so the FIRST render already has the right
+  // answer — a phone must never paint the desktop table and then swap.
+  function useIsMobile() {
+    return React.useSyncExternalStore(subscribe, isMobile, function () {
+      return false; // server/no-matchMedia: assume desktop
+    });
+  }
+  var SWIPE_MIN_PX = 45; // shorter than this is a tap or a jitter
+  var SWIPE_MAX_OFF_AXIS = 0.8; // |dy| must be < 0.8*|dx| or it's a scroll
+
+  /**
+   * Touch-swipe props for a horizontally paged surface (the proposal deck).
+   * Returns props to spread onto the element. Vertical drags fall through
+   * untouched so the page still scrolls normally.
+   */
+  function useSwipe(handlers) {
+    var startRef = React.useRef(null);
+    var onLeft = handlers && handlers.onLeft;
+    var onRight = handlers && handlers.onRight;
+    return {
+      onTouchStart: function (e) {
+        var t = e.touches && e.touches[0];
+        startRef.current = t ? {
+          x: t.clientX,
+          y: t.clientY
+        } : null;
+      },
+      onTouchEnd: function (e) {
+        var start = startRef.current;
+        startRef.current = null;
+        var t = e.changedTouches && e.changedTouches[0];
+        if (!start || !t) return;
+        var dx = t.clientX - start.x;
+        var dy = t.clientY - start.y;
+        if (Math.abs(dx) < SWIPE_MIN_PX) return;
+        if (Math.abs(dy) > Math.abs(dx) * SWIPE_MAX_OFF_AXIS) return;
+        if (dx < 0 && onLeft) onLeft();
+        if (dx > 0 && onRight) onRight();
+      }
+    };
+  }
+  window.Viewport = {
+    MOBILE_QUERY: MOBILE_QUERY,
+    isMobile: isMobile,
+    useIsMobile: useIsMobile,
+    useSwipe: useSwipe,
+    SWIPE_MIN_PX: SWIPE_MIN_PX
+  };
+})();
+
 /* ---- lib/spread-format.js ---- */
 // Shared option-spread formatting/parsing — the single OCC parser + spread
 // classifier + breakeven math used by every panel that renders option legs
@@ -9288,7 +9388,7 @@ function HowToReadThisPage({
     className: "opt-log-empty opts-howto"
   }, "We sell credit spreads: a defined-risk options trade where the broker pays us cash (the credit) up front, in exchange for us taking on the risk that the stock crosses a price we picked (the strike). We keep that cash if the stock stays on the safe side of the strike through expiration; we owe money if it doesn't. Every number below traces back to that one idea \u2014 how much cash we collected, how much room the stock has before we're at risk, and whether that room is shrinking."), /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty opts-howto"
-  }, "Every card is written by one of three voices, named on its byline: the", " ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and writes what it thinks (", cadenceLabel || FALLBACK_CADENCE_LABEL, ", weekdays); the ", /*#__PURE__*/React.createElement("b", null, "User"), " \u2014 that's you \u2014 comments in public on a proposal or a card; the", " ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and decides from the Analyst's latest read, your comments, and the fund's frozen rules. Tap a byline's ", /*#__PURE__*/React.createElement("code", null, "?"), " for what each voice actually does."));
+  }, "Every card is written by one of three voices, named on its byline: the", " ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and writes what it thinks (", cadenceLabel || FALLBACK_CADENCE_LABEL, "); the ", /*#__PURE__*/React.createElement("b", null, "User"), " \u2014 that's you \u2014 comments in public on a proposal or a card; the", " ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and decides from the Analyst's latest read, your comments, and the fund's frozen rules. Tap a byline's ", /*#__PURE__*/React.createElement("code", null, "?"), " for what each voice actually does."));
 }
 
 // The "Book totals" bullet gets three extra input-carrying `?` badges (one
@@ -9792,12 +9892,161 @@ function UnpairedLegs({
     className: "opts-unpaired-note"
   }, "These carry no credit, no width and no loss cap of their own, so the book totals above exclude them. They still move with the underlying \u2014 check them against the broker. When the trade log shows the spread this leg belonged to as closed (e.g. the short was bought back and this leg left to expire worthless), the \"Spread's outcome\" column names the same realized P&L the ", /*#__PURE__*/React.createElement("code", null, "#trade/<key>"), " detail page shows \u2014 read from", /*#__PURE__*/React.createElement("code", null, " spread_trader.closed_trade_for_symbol()"), ", not recomputed here."));
 }
+
+// MOBILE. The same position, same `positions_display` cell strings, as a
+// stacked card instead of one row of an 11-column table. An 11-column table
+// on a 390px screen is a horizontal-scroll puzzle: the reader has to drag
+// sideways to see whether they are up or down, which is the single number
+// they came for. So the card leads with open P/L + % captured in large type,
+// then the four figures that decide "do I act on this" (cushion, band, live
+// spread price, spot), and keeps the frozen-entry provenance last.
+//
+// No new data and no second formatting pass — every value is the identical
+// `cells.*` string the desktop table renders (options_summary_render.py's
+// positions_display_rows() stays the one formatter), so the phone and the
+// desktop can never disagree about a number.
+var POSITION_CARD_FIGURES = [{
+  key: "cushion",
+  label: "Cushion",
+  term: "cushion",
+  calc: "cushion"
+}, {
+  key: "spread_price",
+  label: "Spread price",
+  term: "close_cost",
+  calc: "close_cost"
+}, {
+  key: "spot",
+  label: "Spot",
+  term: "spot"
+}, {
+  key: "short_delta",
+  label: "Short Δ",
+  term: "short_leg_delta"
+}];
+function PositionCard({
+  pos,
+  display,
+  fallbackAsOf
+}) {
+  var missingField = missingPositionField(pos);
+  if (missingField) {
+    var label = pos && pos.short_symbol ? ` (${pos.short_symbol})` : "";
+    return /*#__PURE__*/React.createElement("li", {
+      className: "opts-pos-card opts-pos-card--error"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "opts-line-warn"
+    }, "\u26A0 Could not render this position", label, " \u2014 missing `", missingField, "`."));
+  }
+  var cells = display ? display.cells : legacyDisplayCells(pos);
+  var key = tradeKeyForPosition(pos);
+  var feedbackTarget = positionFeedbackTarget(pos);
+  var calcProps = positionRowCalcProps(pos, fallbackAsOf);
+  var openDetail = key != null ? () => {
+    location.hash = "trade/" + encodeURIComponent(key);
+  } : null;
+  var suspect = (cells.conf || "").indexOf("⚠") !== -1;
+  return /*#__PURE__*/React.createElement("li", {
+    className: "opts-pos-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: openDetail ? "opts-pos-card-tap" : undefined,
+    onClick: openDetail || undefined,
+    role: openDetail ? "link" : undefined,
+    tabIndex: openDetail ? 0 : undefined,
+    onKeyDown: openDetail ? e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openDetail();
+      }
+    } : undefined
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "opts-pos-card-head"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "opts-pos-card-title"
+  }, cells.spread), /*#__PURE__*/React.createElement(BandBadge, {
+    value: cells.band
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "opts-pos-card-lead"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "opts-pos-card-lead-item"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "opts-pos-card-label"
+  }, "Open P/L"), /*#__PURE__*/React.createElement("span", {
+    className: "opts-pos-card-big"
+  }, colorizeSigned(cells.open_pl))), /*#__PURE__*/React.createElement("div", {
+    className: "opts-pos-card-lead-item"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "opts-pos-card-label"
+  }, "% captured"), /*#__PURE__*/React.createElement("span", {
+    className: "opts-pos-card-big"
+  }, colorizeSigned(cells.pct_captured)))), /*#__PURE__*/React.createElement("dl", {
+    className: "opts-pos-card-grid"
+  }, POSITION_CARD_FIGURES.map(({
+    key: ck,
+    label,
+    term,
+    calc
+  }) => /*#__PURE__*/React.createElement("div", {
+    className: "opts-pos-card-cell",
+    key: ck
+  }, /*#__PURE__*/React.createElement("dt", {
+    className: "opts-pos-card-label"
+  }, label, term && /*#__PURE__*/React.createElement(window.Help, {
+    term: term,
+    inputs: calc ? calcProps[calc] : undefined,
+    asOf: calcProps.asOf
+  })), /*#__PURE__*/React.createElement("dd", {
+    className: "opts-pos-card-value"
+  }, colorizeSigned(cells[ck]))))), /*#__PURE__*/React.createElement("p", {
+    className: "opts-pos-card-frozen"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "opts-pos-card-label"
+  }, cells.contracts, " contract", cells.contracts === "1" ? "" : "s", " \xB7 entry (filled / net / credit)", /*#__PURE__*/React.createElement(window.Help, {
+    term: "frozen_entry",
+    inputs: calcProps.risk,
+    asOf: calcProps.asOf
+  })), /*#__PURE__*/React.createElement("span", null, cells.frozen_entry)), suspect && /*#__PURE__*/React.createElement("p", {
+    className: "opts-line-warn opts-pos-card-suspect"
+  }, cells.conf, " \u2014 wide-quoted leg, this mark is the least trustworthy number on the card.")), /*#__PURE__*/React.createElement("footer", {
+    className: "opts-pos-card-foot"
+  }, window.FeedbackButton && feedbackTarget && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+    target: {
+      kind: "position",
+      ...feedbackTarget
+    }
+  }), /*#__PURE__*/React.createElement(PositionFeedbackIndicator, {
+    feedbackTarget: feedbackTarget,
+    tradeKeyValue: key
+  }), openDetail && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "opts-pos-card-more",
+    onClick: openDetail
+  }, "Full detail \u2192")));
+}
+function PositionCards({
+  positions,
+  positionsDisplay,
+  fallbackAsOf
+}) {
+  var displayBySymbol = new Map((positionsDisplay || []).map(d => [d.short_symbol, d]));
+  return /*#__PURE__*/React.createElement("ul", {
+    className: "opts-pos-cards"
+  }, positions.map((pos, ri) => /*#__PURE__*/React.createElement(PositionCard, {
+    key: pos && pos.short_symbol || ri,
+    pos: pos,
+    display: pos && pos.short_symbol ? displayBySymbol.get(pos.short_symbol) : null,
+    fallbackAsOf: fallbackAsOf
+  })));
+}
 function PositionsTable({
   positions,
   positionsDisplay,
   fallbackAsOf,
   unpairedLegs
 }) {
+  // Unconditional — window.Viewport is a plain <script> loaded ahead of every
+  // panel (index.html), so this is never conditionally called.
+  var isMobile = window.Viewport.useIsMobile();
   var posList = positions || [];
   if (!posList.length) {
     return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
@@ -9806,8 +10055,21 @@ function PositionsTable({
       legs: unpairedLegs
     }));
   }
+  if (isMobile) {
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(PositionCards, {
+      positions: posList,
+      positionsDisplay: positionsDisplay,
+      fallbackAsOf: fallbackAsOf
+    }), /*#__PURE__*/React.createElement(UnpairedLegs, {
+      legs: unpairedLegs
+    }));
+  }
   var displayBySymbol = new Map((positionsDisplay || []).map(d => [d.short_symbol, d]));
-  return /*#__PURE__*/React.createElement("div", {
+  // UnpairedLegs also renders here, not only in the empty branch: an unpaired
+  // leg is a real broker position with real P&L, and it used to vanish from
+  // this card the moment the book held at least one paired spread — the
+  // "no open positions" path was the only one that showed it.
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "opt-table-scroll"
   }, /*#__PURE__*/React.createElement("table", {
     className: "opt-table opt-table--orders opts-positions-table"
@@ -9827,7 +10089,9 @@ function PositionsTable({
     pos: pos,
     display: pos && pos.short_symbol ? displayBySymbol.get(pos.short_symbol) : null,
     fallbackAsOf: fallbackAsOf
-  })))));
+  }))))), /*#__PURE__*/React.createElement(UnpairedLegs, {
+    legs: unpairedLegs
+  }));
 }
 function PositionsSection({
   positions,
@@ -11243,6 +11507,7 @@ window.FeedbackThreadsInternals = {
 };
 
 /* ---- panels/proposed-trades.jsx ---- */
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 /* global React */
 // Proposed Trades — the human-in-the-loop surface.
 //
@@ -11955,6 +12220,20 @@ function ProposedTrades() {
       e.preventDefault();
     }
   };
+
+  // Same paging as ←/→, by the gesture a phone reader will actually try
+  // first. Only the deck itself listens, so a horizontal drag over the
+  // scorecard's own table still scrolls that table.
+  var isMobile = window.Viewport.useIsMobile();
+  var swipe = window.Viewport.useSwipe({
+    onLeft: () => {
+      if (items.length > 1) setIndex((safeIndex + 1) % items.length);
+    },
+    onRight: () => {
+      if (items.length > 1) setIndex((safeIndex - 1 + items.length) % items.length);
+    }
+  });
+  var deckProps = isMobile && items.length > 1 ? swipe : {};
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel prop-panel",
     id: "proposed-trades"
@@ -11988,12 +12267,12 @@ function ProposedTrades() {
     deployment: plan.deployment,
     totalCollateral: items.reduce((sum, it) => sum + (Number(it.collateral) || 0), 0),
     tally: approvalTally(items)
-  }), items.length ? /*#__PURE__*/React.createElement("div", {
+  }), items.length ? /*#__PURE__*/React.createElement("div", _extends({
     className: "prop-deck",
     tabIndex: 0,
     onKeyDown: onKeyDown,
     "aria-live": "polite"
-  }, /*#__PURE__*/React.createElement(ProposalPager, {
+  }, deckProps), /*#__PURE__*/React.createElement(ProposalPager, {
     items: items,
     index: safeIndex,
     onGo: setIndex
@@ -12001,7 +12280,9 @@ function ProposedTrades() {
     key: active.id || safeIndex,
     item: active,
     equity: plan.deployment && plan.deployment.equity
-  }), /*#__PURE__*/React.createElement(ProposalPager, {
+  }), isMobile ? items.length > 1 && /*#__PURE__*/React.createElement("p", {
+    className: "prop-swipe-hint"
+  }, "Swipe or tap \u2039 \u203A to see the other ", items.length - 1) : /*#__PURE__*/React.createElement(ProposalPager, {
     items: items,
     index: safeIndex,
     onGo: setIndex
@@ -14097,6 +14378,122 @@ function tickerFromUrl() {
 // window.OptimizationClient.optionChain() (a real Alpaca call through the
 // trader API), never a bundled snapshot. The only snapshotting in this app
 // happens at trade time (options_chain.snapshot_legs), not here.
+// ============================ MOBILE ============================
+// The phone is here for two jobs, and only two:
+//   1. review the open book + the Analyst's read on it, and say what I think
+//   2. review a proposed trade, and say what I think
+// Everything else on this page (the trade-log history, the expiry ladder, the
+// ticker worksheet, the policy reference) is desk work. Stacking all eight
+// cards into one 20-screen scroll buries both jobs, so the mobile layout is
+// three tabs with a thumb-reachable bottom bar instead of one long page — the
+// same components, re-grouped. No new data, no new API: every tab renders the
+// identical parts object the desktop page lays out side by side.
+var MOBILE_TABS = [{
+  key: "positions",
+  label: "Book",
+  icon: "▣",
+  hint: "Open positions + the Analyst's read"
+}, {
+  key: "proposals",
+  label: "Proposed",
+  icon: "◈",
+  hint: "Trades awaiting your opinion"
+}, {
+  key: "more",
+  label: "More",
+  icon: "☰",
+  hint: "Trade log, ladders, worksheet, rules"
+}];
+
+// A tab badge earns attention only when something is WAITING ON THE HUMAN:
+// a proposal with no verdict yet, or an unanswered comment on one. A plain
+// count of proposals would be permanently lit and stop meaning anything.
+function proposalsAwaitingCount() {
+  var internals = window.ProposedTradesInternals;
+  var plan = internals && internals.proposalPlan ? internals.proposalPlan() : null;
+  var items = plan && plan.intent || [];
+  if (!items.length) return 0;
+  return items.filter(it => {
+    // `verdict`, not `state`: an un-reviewed proposal's state string is
+    // `not_reviewed` (approvalStatus's own vocabulary), while `verdict`
+    // normalises every not-yet-approved shape to "pending" — matching on the
+    // state word silently counted nothing.
+    var verdict = internals.approvalStatus ? internals.approvalStatus(it).verdict : "pending";
+    var unanswered = internals.unansweredCountFor ? internals.unansweredCountFor(it) : 0;
+    return verdict === "pending" || unanswered > 0;
+  }).length;
+}
+function MobileTabBar({
+  tab,
+  setTab,
+  badges
+}) {
+  return /*#__PURE__*/React.createElement("nav", {
+    className: "mob-tabbar",
+    "aria-label": "Options Log sections"
+  }, MOBILE_TABS.map(t => {
+    var on = t.key === tab;
+    var badge = badges[t.key];
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.key,
+      type: "button",
+      className: `mob-tab${on ? " mob-tab--on" : ""}`,
+      "aria-current": on ? "page" : undefined,
+      title: t.hint,
+      onClick: () => setTab(t.key)
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "mob-tab-icon",
+      "aria-hidden": "true"
+    }, t.icon), /*#__PURE__*/React.createElement("span", {
+      className: "mob-tab-label"
+    }, t.label), badge > 0 && /*#__PURE__*/React.createElement("span", {
+      className: "mob-tab-badge",
+      "aria-label": `${badge} awaiting you`
+    }, badge));
+  }));
+}
+function MobileOptionsPage({
+  summary,
+  tradeLog,
+  worksheet
+}) {
+  var [tab, setTabRaw] = useState(() => {
+    // A phone visitor arriving on a deep link to one ticker wants the
+    // worksheet, not the book — honour the link rather than dropping them on
+    // a tab that ignores the URL they tapped.
+    if (tickerFromUrl()) return "more";
+    return "positions";
+  });
+  var setTab = t => {
+    setTabRaw(t);
+    window.scrollTo(0, 0);
+  };
+  var badges = {
+    proposals: proposalsAwaitingCount()
+  };
+  return /*#__PURE__*/React.createElement("main", {
+    className: "shell opts-page opts-page--mobile",
+    id: "ticker-details"
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "opts-page-head opts-page-head--mobile"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "opts-mob-title"
+  }, "Options Log"), /*#__PURE__*/React.createElement("p", {
+    className: "opts-mob-loop"
+  }, "The ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " posts its read (", summary.cadenceLabel || "on schedule", "); the", " ", /*#__PURE__*/React.createElement("b", null, "Trader"), " applies the frozen rules on its own 15-minute tick. Your comment is the human voice on both \u2014 and on a proposal, a positive comment IS the approval."), /*#__PURE__*/React.createElement(ExecutionState, null)), tab === "positions" && /*#__PURE__*/React.createElement(React.Fragment, null, summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
+    id: "options-summary"
+  }, summary.positions), summary.whatWeThink, summary.actionQueue)), tab === "proposals" && /*#__PURE__*/React.createElement(React.Fragment, null, window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null)), tab === "more" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    id: "options-trade-log"
+  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, tradeLog.expiryLadder, summary.whereBookStands, tradeLog.openOrders), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
+    className: "opts-strategy"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "opts-section-title"
+  }, "Strategy & rules"), summary.howto, /*#__PURE__*/React.createElement(StrategyPolicy, null), summary.rulesInForce, summary.provenance), window.SystemFeedbackPanel && /*#__PURE__*/React.createElement(window.SystemFeedbackPanel, null)), /*#__PURE__*/React.createElement(MobileTabBar, {
+    tab: tab,
+    setTab: setTab,
+    badges: badges
+  }));
+}
 function TickerDetailsPage() {
   var urlTicker = tickerFromUrl();
   var [input, setInput] = useState(urlTicker);
@@ -14147,48 +14544,20 @@ function TickerDetailsPage() {
     return () => window.removeEventListener("hashchange", onHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  var isMobile = window.Viewport.useIsMobile();
   var summary = window.optionsSummaryParts && window.optionsSummaryParts() || {};
   var tradeLog = window.optionsTradeLogParts && window.optionsTradeLogParts(window.SPREAD_LOG, summary.positionsCount) || {};
 
-  // Reading order, top to bottom: what happened today → what we hold → the
-  // full history of what we did → when positions roll off and where the book
-  // stands → what we make of it → what to do → what's queued → the ticker
-  // worksheet. Everything explanatory (how a credit spread works, the fund
-  // policy, the rules, provenance) is compacted into one "Strategy & rules"
-  // block at the very bottom: it's reference material, read once, not a live
-  // reading.
-  return /*#__PURE__*/React.createElement("main", {
-    className: "shell opts-page",
-    id: "ticker-details"
-  }, /*#__PURE__*/React.createElement("header", {
-    className: "opts-page-head"
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      margin: 0,
-      fontSize: 20
-    }
-  }, "Options Log"), /*#__PURE__*/React.createElement("span", {
-    className: "opts-page-sub"
-  }, "every open credit spread, what it's worth now, and what we did"), /*#__PURE__*/React.createElement("p", {
-    className: "opts-page-loop"
-  }, "Three voices write this page: the ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and posts its opinion", " ", "(", summary.cadenceLabel || "on schedule", ", weekdays); you, the ", /*#__PURE__*/React.createElement("b", null, "User"), ", comment in public on any card or proposal; the ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and applies the fund's frozen rules \u2014 arithmetic only. The Analyst's read and your comments are for the human reading this page; neither is an input to the Trader's decision."), /*#__PURE__*/React.createElement(ExecutionState, null)), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
-    id: "options-summary"
-  }, summary.positions)), window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null), /*#__PURE__*/React.createElement("div", {
-    id: "options-trade-log"
-  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Row2, null, tradeLog.expiryLadder, summary.whereBookStands), /*#__PURE__*/React.createElement(Row2, null, summary.whatWeThink, summary.actionQueue), /*#__PURE__*/React.createElement(Row2, null, tradeLog.openOrders)), tradeLog.foot, /*#__PURE__*/React.createElement("section", {
+  // One definition of the ticker worksheet, placed by whichever layout is
+  // mounted — inline on desktop, inside the "More" tab on a phone.
+  var worksheet = /*#__PURE__*/React.createElement("section", {
     className: "opts-worksheet"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "opts-section-title"
   }, "Ticker worksheet"), /*#__PURE__*/React.createElement("p", {
     className: "opts-page-sub"
   }, "Give it one ticker; it returns everything the options market will tell us about that name, scored for premium selling. Spreads are included so a $300 stock costs a few hundred dollars of risk instead of $30k of cash."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      alignItems: "center",
-      marginTop: 10,
-      flexWrap: "wrap"
-    }
+    className: "opts-worksheet-form"
   }, /*#__PURE__*/React.createElement("input", {
     value: input,
     onChange: e => setInput(e.target.value.toUpperCase()),
@@ -14196,28 +14565,13 @@ function TickerDetailsPage() {
       if (e.key === "Enter") lookup();
     },
     placeholder: "Ticker, e.g. AAPL",
-    style: {
-      background: "var(--surface-2)",
-      border: "1px solid var(--line)",
-      borderRadius: 6,
-      padding: "7px 12px",
-      color: "var(--text)",
-      fontFamily: "var(--mono)",
-      fontSize: 13,
-      width: 160
-    }
+    className: "opts-worksheet-input"
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => lookup(),
     disabled: busy || !input.trim(),
+    className: "opts-worksheet-go",
     style: {
-      padding: "7px 16px",
-      background: "var(--accent)",
-      color: "var(--bg)",
-      border: "1px solid var(--line)",
-      borderRadius: 6,
       cursor: busy ? "wait" : "pointer",
-      fontSize: 12,
-      fontWeight: 600,
       opacity: busy || !input.trim() ? 0.6 : 1
     }
   }, busy ? "Loading…" : "Get options")), /*#__PURE__*/React.createElement("div", {
@@ -14262,7 +14616,41 @@ function TickerDetailsPage() {
       color: "var(--text-3)",
       marginTop: 14
     }
-  }, "Enter a ticker above to pull its chain.")), /*#__PURE__*/React.createElement("section", {
+  }, "Enter a ticker above to pull its chain."));
+  if (isMobile) {
+    return /*#__PURE__*/React.createElement(MobileOptionsPage, {
+      summary: summary,
+      tradeLog: tradeLog,
+      worksheet: worksheet
+    });
+  }
+
+  // Reading order, top to bottom: what happened today → what we hold → the
+  // full history of what we did → when positions roll off and where the book
+  // stands → what we make of it → what to do → what's queued → the ticker
+  // worksheet. Everything explanatory (how a credit spread works, the fund
+  // policy, the rules, provenance) is compacted into one "Strategy & rules"
+  // block at the very bottom: it's reference material, read once, not a live
+  // reading.
+  return /*#__PURE__*/React.createElement("main", {
+    className: "shell opts-page",
+    id: "ticker-details"
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "opts-page-head"
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      margin: 0,
+      fontSize: 20
+    }
+  }, "Options Log"), /*#__PURE__*/React.createElement("span", {
+    className: "opts-page-sub"
+  }, "every open credit spread, what it's worth now, and what we did"), /*#__PURE__*/React.createElement("p", {
+    className: "opts-page-loop"
+  }, "Three voices write this page: the ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and posts its opinion", " ", "(", summary.cadenceLabel || "on schedule", "); you, the ", /*#__PURE__*/React.createElement("b", null, "User"), ", comment in public on any card or proposal; the ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and applies the fund's frozen rules \u2014 arithmetic only. The Analyst's read and your comments are for the human reading this page; neither is an input to the Trader's decision."), /*#__PURE__*/React.createElement(ExecutionState, null)), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
+    id: "options-summary"
+  }, summary.positions)), window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null), /*#__PURE__*/React.createElement("div", {
+    id: "options-trade-log"
+  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Row2, null, tradeLog.expiryLadder, summary.whereBookStands), /*#__PURE__*/React.createElement(Row2, null, summary.whatWeThink, summary.actionQueue), /*#__PURE__*/React.createElement(Row2, null, tradeLog.openOrders)), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
     className: "opts-strategy"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "opts-section-title"

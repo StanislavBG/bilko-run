@@ -12304,6 +12304,27 @@ function ProposalScorecard({
 // with it. Rendering the full scorecard/checks/rules for one would show
 // "0 of 0 gates ✕", which reads as a failing trade rather than an approval
 // waiting for the board to catch up.
+// A `carried` card (PRD 1167 — "if there has been any feedback then we act
+// on it, don't just sweep them") is one `spread_trader.sweep_expired_proposals()`
+// RETAINED past its own expiry because a visitor's feedback obligation on it
+// isn't discharged yet — see `proposal_obligation.py`. Plain-English per
+// `carriedReason`, so a reviewer sees WHY a stale-looking card is still here
+// without reading the sweep's own vocabulary.
+var CARRIED_REASON_LABEL = {
+  unanswered_question: "kept here because your question hasn't been answered yet",
+  approved_never_filled: "kept here — approved but never filled; the fund has recorded this and will re-propose it",
+  declined_not_recorded: "kept here — declined; the fund is recording that decision",
+  unknown: "kept here — we couldn't confirm the feedback on this proposal has been handled"
+};
+function CarriedBanner({
+  item
+}) {
+  if (!item.carried) return null;
+  var label = CARRIED_REASON_LABEL[item.carriedReason] || CARRIED_REASON_LABEL.unknown;
+  return /*#__PURE__*/React.createElement("p", {
+    className: "prop-carried-note"
+  }, "\u26A0 This proposal is past its usual review window, but it\u2019s ", label, ". It will not fill \u2014 nothing here needs a broker decision, only a reply.");
+}
 function ProposalCard({
   item,
   equity
@@ -12312,10 +12333,11 @@ function ProposalCard({
   var target = proposalFeedbackTarget(item);
   var stranded = !!item.stranded;
   var strandedIsConditional = stranded && item.approval && item.approval.verdict === "conditional";
+  var carried = !!item.carried;
   var expired = isCardExpired(item);
   var age = cardAge(item);
   return /*#__PURE__*/React.createElement("article", {
-    className: `prop-card${stranded ? " prop-card--stranded" : ""}${expired ? " prop-card--expired" : ""}`,
+    className: `prop-card${stranded ? " prop-card--stranded" : ""}${expired ? " prop-card--expired" : ""}` + `${carried ? " prop-card--carried" : ""}`,
     id: `proposal-${item.id || ""}`
   }, /*#__PURE__*/React.createElement("header", {
     className: "prop-card-head"
@@ -12329,7 +12351,7 @@ function ProposalCard({
     className: "prop-card-head-right"
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-badge"
-  }, expired ? "EXPIRED · not reviewable" : stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+  }, carried ? "CARRIED · will not fill" : expired ? "EXPIRED · not reviewable" : stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
     target: target
   }))), /*#__PURE__*/React.createElement("div", {
     className: "prop-card-meta"
@@ -12337,7 +12359,9 @@ function ProposalCard({
     className: age.known ? "opts-section-stamp" : "opts-section-stamp opts-section-stamp--stale"
   }, age.known ? `On the deck since ${age.text} · ${window.AsOfTime.relativeAge(age.ms)}` : "On the deck since: unknown (no firstProposedAt recorded on this card)", window.Help && /*#__PURE__*/React.createElement(window.Help, {
     term: "proposal_deck_freshness"
-  }))), expired && /*#__PURE__*/React.createElement("p", {
+  }))), /*#__PURE__*/React.createElement(CarriedBanner, {
+    item: item
+  }), expired && !carried && /*#__PURE__*/React.createElement("p", {
     className: "prop-expired-note"
   }, "\u26A0 This contract", item.expiry ? ` expired on ${item.expiry}` : " has expired", " \u2014 it cannot fill, and the figures below are frozen from when this was scanned, not live prices. Nothing here needs a decision."), /*#__PURE__*/React.createElement("div", {
     className: "prop-card-body"
@@ -12463,6 +12487,10 @@ function EmptyState({
   // above and the count that actually got proposed: this many were
   // deployable and simply already on the deck.
   ["Already on the deck — awaiting your comment", funnel.rejected_pending_duplicate], ["Proposed", funnel.passed],
+  // Applied LAST, after book limits — the deck shortlist cap
+  // (`max_proposals`). Shown even here (usually 0, since an empty deck has
+  // nothing to cap) so the bucket is never silently absent from the funnel.
+  ["Qualified but set aside — over the deck's review cap", funnel.rejected_over_deck_cap],
   // "0 proposed" and "0 approved" read identically unless the split is
   // shown — a board that produced proposals but approved none of them
   // must be distinguishable from a board that produced none at all.
@@ -12554,13 +12582,35 @@ function ProposalPager({
     className: "prop-pager-count"
   }, index + 1, " of ", items.length, items[index] && items[index].ticker ? ` · ${items[index].ticker}` : ""));
 }
+
+// The deck is a shortlist (`max_proposals`, spread_trader.py), not
+// everything the scanner found — states that plainly near the pager so a
+// reviewer isn't left assuming N proposals is the whole board. `funnel.
+// rejected_over_deck_cap` is what `plan()` set aside after the EV sort;
+// "qualified" = what's shown plus what was set aside, i.e. everything that
+// cleared every gate before the cap was applied.
+function DeckCapNote({
+  funnel,
+  shown
+}) {
+  var capped = funnel && typeof funnel.rejected_over_deck_cap === "number" ? funnel.rejected_over_deck_cap : null;
+  if (capped === null) return null;
+  var qualified = shown + capped;
+  return /*#__PURE__*/React.createElement("p", {
+    className: "prop-deck-cap-note"
+  }, "Best ", shown, " of ", qualified, " that qualified this cycle", capped > 0 ? ` — ${capped} more set aside.` : ".");
+}
 function ProposedTrades() {
   // No target — just the subscription, so a pending echo anywhere on this
   // deck (opened via the discussion panel below) re-renders the pager ring.
   window.FeedbackClient.usePendingFeedback();
   var plan = proposalPlan();
   var items = plan.intent;
-  var allExpired = items.length > 0 && items.every(isCardExpired);
+  // A `carried` card is never counted as "expired" for this purpose — it's
+  // deliberately kept on screen by the sweep (see `CarriedBanner`), so a
+  // deck made up ENTIRELY of carried cards must still render the deck, not
+  // fall through to the empty-funnel state.
+  var allExpired = items.length > 0 && items.every(it => !it.carried && isCardExpired(it));
   var [index, setIndex] = React.useState(0);
   // A regenerated plan can be shorter than the one that was on screen; clamp
   // rather than render a blank card off the end of the list.
@@ -12621,7 +12671,11 @@ function ProposedTrades() {
     className: "opts-page-sub prop-lede"
   }, "Nothing here has been placed. These are the trades the fund intends to open on the next tick, each explained from scratch, with the rules it had to clear. Disagree with one? Use its \uD83D\uDCAC button \u2014 the comment thread under a proposal is how you tell the fund what to do with it, and it is read before anything fills."), /*#__PURE__*/React.createElement(DeploymentLine, {
     deployment: plan.deployment,
-    totalCollateral: items.reduce((sum, it) => sum + (isCardExpired(it) ? 0 : Number(it.collateral) || 0), 0),
+    totalCollateral: items.reduce(
+    // A `carried` card will not fill (see `CarriedBanner`) — it must
+    // not inflate "these proposals would tie up $X of collateral" any
+    // more than an already-expired one does.
+    (sum, it) => sum + (it.carried ? 0 : isCardExpired(it) ? 0 : Number(it.collateral) || 0), 0),
     tally: approvalTally(items)
   }), items.length && !allExpired ? /*#__PURE__*/React.createElement("div", _extends({
     className: "prop-deck",
@@ -12632,6 +12686,9 @@ function ProposedTrades() {
     items: items,
     index: safeIndex,
     onGo: setIndex
+  }), /*#__PURE__*/React.createElement(DeckCapNote, {
+    funnel: plan.funnel,
+    shown: items.reduce((n, it) => n + (it.carried ? 0 : 1), 0)
   }), /*#__PURE__*/React.createElement(ProposalCard, {
     key: active.id || safeIndex,
     item: active,
@@ -12667,7 +12724,8 @@ window.ProposedTradesInternals = {
   isCardExpired,
   liveDte,
   planAge,
-  cardAge
+  cardAge,
+  DeckCapNote
 };
 
 /* ---- pages/option-trade-detail.jsx ---- */

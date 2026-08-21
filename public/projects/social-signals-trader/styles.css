@@ -1857,6 +1857,15 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   font-size: 11px; font-weight: 700; color: var(--neg); margin-bottom: 6px;
 }
 .prop-all-expired-note { font-size: 12px; color: var(--neg); font-weight: 600; margin-top: 8px; }
+/* A card RETAINED past its own expiry because its feedback obligation isn't
+   discharged yet (PRD 1167 — "if there has been any feedback then we act on
+   it, don't just sweep them"). Distinct amber tone from the plain --expired
+   red: this one is still awaiting a human action, not just stale. */
+.prop-card--carried { border-left-color: var(--warn); opacity: 0.85; }
+.prop-carried-note {
+  font-size: 12px; color: var(--warn); font-weight: 600; margin: 8px 0 0; max-width: 85ch;
+}
+.prop-deck-cap-note { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
 .prop-pager-count {
   font-size: 11px; font-family: var(--mono); color: var(--muted); margin-left: auto;
 }

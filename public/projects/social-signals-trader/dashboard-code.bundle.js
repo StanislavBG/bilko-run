@@ -2875,6 +2875,24 @@ window.FEEDBACK_THREADS = {
       short: "This row already has at least one question or comment filed against it.",
       long: "Click it to jump to where the discussion and any reply live — the matching trade's own page (its “Questions & feedback on this trade” section) when this position has one, or wherever this row's feedback surfaces otherwise. A count with an exclamation mark means at least one thread is still awaiting a reply.",
       example: "\"2!\" on the BABA 143/144 row means two threads are filed against this spread and at least one hasn't been answered yet."
+    },
+    analyst_recommendation: {
+      label: "Analyst recommendation",
+      short: "The Analyst's bounded opinion on this position — an OPINION for a human to act on, never an order the fund places itself.",
+      long: "One of five values: hold (thesis intact, no action suggested), close_early (the Analyst thinks this is worth closing before its normal exit trigger), roll (worth rolling to a new expiry/strike), watch_closely (a watch condition fired — nothing to do yet, but worth attention), or data_suspect (the numbers behind this position look unreliable, e.g. a stale/wide quote). Only close_early, watch_closely, and data_suspect surface on the Action queue — hold and roll don't need a human's attention right now. No control here submits, modifies, or cancels an order; the deterministic exit policy is the only thing that actually closes a position.",
+      example: "A close_early recommendation on the AVGO 370/365 put spread means the Analyst thinks it's worth closing now — a human still has to act on it; nothing executes automatically."
+    },
+    analyst_confidence: {
+      label: "Analyst confidence",
+      short: "How sure the Analyst is about this session's recommendation — low, medium, or high.",
+      long: "Reflects how clear-cut the read was this session, not a probability of the trade winning. A low-confidence read is worth a closer look before treating the recommendation as settled.",
+      example: "\"close_early, confidence: low\" reads as a lean, not a strong signal — the Analyst itself is flagging some uncertainty."
+    },
+    analyst_flags: {
+      label: "Watch flags",
+      short: "Which of the Analyst's eight watch conditions were live on the position when this note was written (docs/analyst-spec.md).",
+      long: "Examples: the position moved ≥15% since the last session, it's approaching the profit target or the max-loss stop, spot is within 1.5% of the short strike without having breached it, DTE is 3 or fewer, it's a new position since the last session, it closed out-of-band with no matching close event, or its mark has been suspect for two or more consecutive prep passes. These are context for the recommendation, not a second verdict.",
+      example: "flags: [\"pre_breach_proximity\", \"expiry_pressure\"] on a note explains why that session flagged a position that otherwise looks unremarkable on the Positions table."
     }
   };
   function normalizeTerm(term) {
@@ -10274,11 +10292,125 @@ function ActionQueueRow({
     term: rowTerm
   }));
 }
+
+// Analyst recommendations are advisory opinions (docs/analyst-spec.md), not
+// the deterministic exit-trigger rows `lines` renders above — a distinct
+// severity/label set makes that visible at a glance rather than blending
+// into "Armed" (which the trader DOES act on next tick).
+var ANALYST_REC_DISPLAY = {
+  close_early: {
+    emoji: "🟡",
+    verb: "Analyst opinion: consider closing early"
+  },
+  watch_closely: {
+    emoji: "🔵",
+    verb: "Analyst opinion: watch closely"
+  },
+  data_suspect: {
+    emoji: "🚫",
+    verb: "Analyst opinion: data looks unreliable"
+  }
+};
+
+// Same tolerant numeric-key match `option-trade-detail.jsx`'s
+// `_reasoningRowMatches` already uses for `position_reasoning` rows — kept
+// local rather than shared since the two files intentionally avoid a shared
+// runtime dependency beyond what's already global.
+function analystNoteMatchesPosition(note, pos) {
+  if (!note || !pos) return false;
+  if (String(note.ticker || "").toUpperCase() !== String(pos.underlying || "").toUpperCase()) return false;
+  var close = (a, b) => a != null && b != null && Math.abs(Number(a) - Number(b)) < 0.005;
+  return close(note.short_strike, pos.short_strike) && close(note.long_strike, pos.long_strike) && note.expiry === pos.expiry;
+}
+function AnalystRecommendationRow({
+  rec,
+  positionsByTicker
+}) {
+  var display = ANALYST_REC_DISPLAY[rec.recommendation] || {
+    emoji: "\u{1F50E}",
+    verb: "Analyst opinion"
+  };
+  // Bucketed by ticker (built once per render in AnalystRecommendations)
+  // rather than a fresh linear scan of every open position per row — a
+  // ticker bucket is almost always exactly one position.
+  var candidates = positionsByTicker && positionsByTicker.get(String(rec.ticker || "").toUpperCase()) || [];
+  var pos = candidates.find(p => analystNoteMatchesPosition(rec, p));
+  var tradeKeyValue = pos ? tradeKeyForPosition(pos) : null;
+  var label = `${rec.ticker} ${rec.short_strike}/${rec.long_strike} ${rec.expiry}`;
+  var clickable = Boolean(tradeKeyValue);
+  var go = clickable ? () => {
+    location.hash = "trade/" + encodeURIComponent(tradeKeyValue);
+  } : undefined;
+  var onKeyDown = clickable ? e => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      go();
+    }
+  } : undefined;
+  return /*#__PURE__*/React.createElement("li", {
+    className: `opts-action opts-action--watch${clickable ? " opts-action--clickable" : ""}`,
+    onClick: go,
+    role: clickable ? "button" : undefined,
+    tabIndex: clickable ? 0 : undefined,
+    onKeyDown: onKeyDown
+  }, display.emoji, " ", display.verb, " \u2014 ", /*#__PURE__*/React.createElement("strong", null, label), ": ", rec.assessment, /*#__PURE__*/React.createElement(window.Help, {
+    term: "analyst_recommendation"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "opts-analyst-meta"
+  }, "confidence: ", rec.confidence, /*#__PURE__*/React.createElement(window.Help, {
+    term: "analyst_confidence"
+  })), rec.flags && rec.flags.length > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "opts-analyst-meta"
+  }, "flags: ", rec.flags.join(", "), /*#__PURE__*/React.createElement(window.Help, {
+    term: "analyst_flags"
+  })));
+}
+
+// The Analyst's live recommendations, folded into the SAME Action queue card
+// rather than a second card (options-status-refresh-summary.sh's own
+// WRITE_SET is locked to data-options-summary.js, so this group is sourced
+// from `window.ANALYST_NOTES` — a different cron, a different SectionStamp —
+// but still one Action queue on the page). Renders nothing when the Analyst
+// has never run (fresh install); once it has, a book with nothing to flag
+// says so explicitly rather than the group silently vanishing.
+function AnalystRecommendations({
+  analystNotes,
+  positions
+}) {
+  if (!analystNotes || !analystNotes.notes || !analystNotes.notes.length) return null;
+  var recs = analystNotes.openRecommendations || [];
+  var positionsByTicker = new Map();
+  (positions || []).forEach(p => {
+    var key = String(p.underlying || "").toUpperCase();
+    var bucket = positionsByTicker.get(key);
+    if (bucket) bucket.push(p);else positionsByTicker.set(key, [p]);
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    className: "opts-action-group"
+  }, /*#__PURE__*/React.createElement("h4", {
+    className: "opts-action-group-label"
+  }, "Analyst recommendations", /*#__PURE__*/React.createElement(window.Help, {
+    term: "analyst"
+  })), analystNotes.generatedAt && /*#__PURE__*/React.createElement(SectionStamp, {
+    iso: analystNotes.generatedAt,
+    schedule: null
+  }), recs.length ? /*#__PURE__*/React.createElement("ul", {
+    className: "opts-bullets opts-action-queue"
+  }, recs.map((rec, i) => /*#__PURE__*/React.createElement(AnalystRecommendationRow, {
+    key: i,
+    rec: rec,
+    positionsByTicker: positionsByTicker
+  }))) : /*#__PURE__*/React.createElement("p", {
+    className: "opt-log-empty"
+  }, "Nothing flagged by the Analyst right now."));
+}
 function ActionQueue({
   lines,
   updatedAt,
   anchors,
-  schedule
+  schedule,
+  analystNotes,
+  positions
 }) {
   var counts = parseActionCounts(lines);
   var groups = parseActionGroups(lines);
@@ -10306,7 +10438,10 @@ function ActionQueue({
     anchors: anchorSet
   }))))) : /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
-  }, "Nothing needs attention right now."));
+  }, "Nothing needs attention right now."), /*#__PURE__*/React.createElement(AnalystRecommendations, {
+    analystNotes: analystNotes,
+    positions: positions
+  }));
 }
 var OPEN_QUEUE_HEADER_TERM = {
   Short: "short_leg",
@@ -10551,7 +10686,9 @@ function optionsSummaryParts(data) {
       lines: findSection(sections, "Action queue").lines,
       updatedAt: fallbackAsOf,
       anchors: whatWeThinkAnchors,
-      schedule: schedule
+      schedule: schedule,
+      analystNotes: window.ANALYST_NOTES,
+      positions: record.positions
     }),
     // No `openQueue` key: the live page (ticker-details.jsx) never mounted
     // one, and Proposed trades is what a reader sees for "what's about to
@@ -13102,6 +13239,132 @@ function DecisionNarrativeLine({
     }
   }, costLabel));
 }
+
+// --- "The Analyst's opinion" ------------------------------------------------
+
+// Same tolerant numeric-key match `_reasoningRowMatches` uses for
+// `position_reasoning` rows, applied to `kind: "analyst_note"` rows
+// (`analyst_opinion.py`, docs/analyst-spec.md). A dedicated matcher rather
+// than reusing `_reasoningRowMatches` because the two kinds carry different
+// field sets (no `early_close_flag`/`pct_captured` here) even though the
+// identity fields line up.
+function _analystNoteMatches(row, ticker, shortStrike, longStrike, expiry) {
+  if (!row || row.kind !== "analyst_note" || row.status !== "ok") return false;
+  if (String(row.ticker || "").toUpperCase() !== String(ticker || "").toUpperCase()) return false;
+  var close = (a, b) => a != null && b != null && Math.abs(Number(a) - Number(b)) < 0.005;
+  return close(row.short_strike, shortStrike) && close(row.long_strike, longStrike) && row.expiry === expiry;
+}
+
+// This position's full Analyst journal, newest session first — every
+// bulk-opinion note the Analyst wrote about this exact position, whether or
+// not it's still open, so a closed trade keeps the record of what the
+// Analyst thought while it was live.
+function analystNotesFor(ev, facts) {
+  var ticker = ev.ticker;
+  var shortStrike = facts.shortParsed ? facts.shortParsed.strike : null;
+  var longStrike = facts.longParsed ? facts.longParsed.strike : null;
+  var expiry = expiryOf(ev, facts);
+  if (!ticker || shortStrike == null || longStrike == null || !expiry) return [];
+  var notes = window.ANALYST_NOTES && window.ANALYST_NOTES.notes || [];
+  return notes.filter(r => _analystNoteMatches(r, ticker, shortStrike, longStrike, expiry)).sort((a, b) => new Date(b.ts) - new Date(a.ts));
+}
+var ANALYST_REC_LABEL = {
+  hold: "Hold",
+  close_early: "Close early",
+  roll: "Roll",
+  watch_closely: "Watch closely",
+  data_suspect: "Data suspect"
+};
+function AnalystNoteRow({
+  note
+}) {
+  var recLabel = ANALYST_REC_LABEL[note.recommendation] || note.recommendation;
+  var flags = note.flags || [];
+  return /*#__PURE__*/React.createElement("div", {
+    className: "optd-analyst-note",
+    style: {
+      padding: "12px 14px",
+      borderBottom: "1px solid var(--line)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: "var(--mono)",
+      fontSize: 10.5,
+      color: "var(--muted)"
+    }
+  }, tsPretty(note.ts)), /*#__PURE__*/React.createElement("span", {
+    className: `opt-badge${note.recommendation === "hold" ? " opt-badge--close" : " opt-badge--open"}`,
+    style: {
+      fontSize: 10
+    }
+  }, recLabel), /*#__PURE__*/React.createElement(Help, {
+    term: "analyst_recommendation"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "mono-dim",
+    style: {
+      fontSize: 10.5
+    }
+  }, "confidence: ", note.confidence), /*#__PURE__*/React.createElement(Help, {
+    term: "analyst_confidence"
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "optd-explainer",
+    style: {
+      marginTop: 6,
+      marginBottom: 4
+    }
+  }, note.assessment), /*#__PURE__*/React.createElement("p", {
+    className: "optd-explainer",
+    style: {
+      marginTop: 0,
+      marginBottom: flags.length ? 6 : 0
+    }
+  }, note.risk_read), flags.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 4,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "mono-dim",
+    style: {
+      fontSize: 10.5
+    }
+  }, "flags live this session: ", flags.join(", ")), /*#__PURE__*/React.createElement(Help, {
+    term: "analyst_flags"
+  })));
+}
+function AnalystJournal({
+  ev,
+  facts
+}) {
+  var notes = analystNotesFor(ev, facts);
+  if (!notes.length) return null;
+  return /*#__PURE__*/React.createElement("section", {
+    className: "card opt-panel optd-section"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "optd-h2"
+  }, "The Analyst\u2019s opinion", /*#__PURE__*/React.createElement(Help, {
+    term: "analyst"
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "optd-explainer"
+  }, "Advisory only \u2014 the Analyst reviews this position on its own schedule and writes what it thinks; nothing here places, modifies, or cancels an order. Newest session first, each row showing the watch flags that were live when it was written."), /*#__PURE__*/React.createElement("div", {
+    className: "optd-reasoning-journal",
+    style: {
+      borderTop: "1px solid var(--line)"
+    }
+  }, notes.map((n, i) => /*#__PURE__*/React.createElement(AnalystNoteRow, {
+    key: n.ts || i,
+    note: n
+  }))));
+}
 function WhatActuallyHappened({
   ev,
   facts
@@ -13501,6 +13764,9 @@ function OptionTradeDetailPage() {
     ev: ev,
     facts: facts,
     livePrice: livePrice
+  }), /*#__PURE__*/React.createElement(AnalystJournal, {
+    ev: ev,
+    facts: facts
   }), /*#__PURE__*/React.createElement(WhatActuallyHappened, {
     ev: ev,
     facts: facts

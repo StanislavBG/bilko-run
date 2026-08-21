@@ -1179,6 +1179,13 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 4px;
 }
 
+/* Analyst recommendation row's confidence/flags — inline, muted, secondary
+   to the recommendation sentence itself. */
+.opts-analyst-meta {
+  display: inline-flex; align-items: center; gap: 2px; margin-left: 8px;
+  font-size: 11px; font-family: var(--mono); color: var(--muted);
+}
+
 /* Counts chip in the card head, next to the SectionStamp. */
 .opts-action-counts-chip {
   display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;

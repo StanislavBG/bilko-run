@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-08-16T21:45:02Z",
+    "generatedAt": "2026-08-17T04:35:02Z",
     "open": 15,
     "proposals": {
       "approved": 1,
@@ -30,7 +30,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-16T21:45:02Z",
+  "generatedAt": "2026-08-17T04:35:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -1534,8 +1534,8 @@ window.FEEDBACK_THREADS = {
     last_updated: {
       label: "Last updated",
       short: "When the job that wrote this card last ran.",
-      long: "The read-through of the book — what we think, what needs action, and the Positions table — is re-derived wholesale by the Analyst cron (scripts/options-status-refresh-summary.sh), pre-open plus 4x through the session on weekdays only, never live in your browser. This stamp is that job's own generated_at, shown in Pacific time with its age; it turns amber once wall-clock has passed the job's own next scheduled run plus its grace period, which means a weekday run was missed — not merely that the last run happened a while ago (a Friday-evening or weekend view of Friday's last run is not flagged).",
-      example: "A stamp reading '12:55 PM PDT, Fri Aug 8 · ~2h old · pre-open + 4x through the session' means the cron last ran at 12:55 PM Pacific — the prices quoted in the bullets are from then, not from right now."
+      long: "The read-through of the book — what we think, what needs action, and the Positions table — is re-derived wholesale by the Analyst cron (scripts/options-status-refresh-summary.sh), pre-open plus 4x through the session on weekdays only, never live in your browser. This stamp is that job's own generated_at, shown in ET — the market's clock — with its age; it turns amber once wall-clock has passed the job's own next scheduled run plus its grace period, which means a weekday run was missed — not merely that the last run happened a while ago (a Friday-evening or weekend view of Friday's last run is not flagged).",
+      example: "A stamp reading '12:55 PM ET, Fri Aug 8 · ~2h old · pre-open + 4x through the session' means the cron last ran at 12:55 PM Eastern — the prices quoted in the bullets are from then, not from right now."
     },
     expiry: {
       label: "Expiry",
@@ -2524,13 +2524,13 @@ window.FEEDBACK_THREADS = {
       label: "Analyst",
       short: "The voice that reads the book and writes an opinion on a schedule.",
       long: "Runs the options-status-refresh-summary cron on its own published schedule (pre-open plus four more times through the weekday session) and re-derives Positions, Where the book stands, What we think right now, Action queue, and Provenance wholesale each time. It never places an order.",
-      example: "A card stamped \"ANALYST · updated 2:00 PM PDT · every 2h\" is the Analyst's most recent read, not a live number."
+      example: "A card stamped \"ANALYST · updated 2:00 PM ET · every 2h\" is the Analyst's most recent read, not a live number."
     },
     trader: {
       label: "Trader",
       short: "The voice that decides and acts, on its own 15-minute tick.",
       long: "trader-tick.sh wakes every 15 minutes and decides from three inputs: the Analyst's latest read, any User comments filed since its last tick, and the frozen fund rules in force at the time — never re-reading rules live. Proposed trades, the Trade Log, Expiry ladder, Open Orders, and Rules in force are all Trader-authored or Trader-executed.",
-      example: "A comment left on a proposal at 2:07 PM PDT is read by the Trader at its next tick, at or after 2:15 PM PDT."
+      example: "A comment left on a proposal at 2:07 PM ET is read by the Trader at its next tick, at or after 2:15 PM ET."
     },
     user: {
       label: "User",
@@ -2762,7 +2762,7 @@ window.FEEDBACK_THREADS = {
       label: "Feedback thread",
       short: "One conversation about this trade — every message from the visitor and every reply from the fund, in order, each labelled with who said it.",
       long: "Each submission opens its own thread, so two questions about the same trade stay two conversations and an answer can never land under the wrong one. A thread is a back-and-forth: “Visitor” messages are what was asked or followed up with, “Trading agent” messages are the fund's replies — both render in the order they happened. The status pill reads awaiting reply until the fund answers, then answered; a stale thread the fund has retired is marked archived but stays visible here. A conversation follows the trade itself, not just one page of it: a question asked while the trade was still a proposal keeps showing — with an “asked while proposed” chip — once that proposal fills and becomes a position, and again once it lands in the trade log (“asked while open” / “asked on the trade log”), all interleaved by time on every one of those three surfaces.",
-      example: "Visitor asks “why did you close BABA early?” on Aug 9 at 1:35 PM PDT; Trading agent replies Aug 9 at 4:02 PM PDT in the same thread, so the card reads “2 messages” — a separate question about the credit shown at entry opens its own thread below it."
+      example: "Visitor asks “why did you close BABA early?” on Aug 9 at 1:35 PM ET; Trading agent replies Aug 9 at 4:02 PM ET in the same thread, so the card reads “2 messages” — a separate question about the credit shown at entry opens its own thread below it."
     },
     system_feedback: {
       label: "Feedback on the site",
@@ -2832,17 +2832,28 @@ window.FEEDBACK_THREADS = {
     entry: "entry fill",
     quotes: "quotes"
   };
+
+  // THE display clock for the whole site: US Eastern, because the market runs
+  // on it. Every rendered timestamp reads in ET regardless of where the reader
+  // (or the box that generated the data) sits, so a fill time on the site and
+  // a fill time in the broker's own log are the same number. Changed from
+  // America/Los_Angeles 2026-08-20 — do not reintroduce a second display zone.
+  //
+  // This is DISPLAY only. Stored data stays UTC ISO, and a DATE-ONLY value
+  // (an expiry like "2026-08-28") must never be run through here: pinning it
+  // to a zone shifts the calendar day. Use formatMarketDate for those.
+  var MARKET_TZ = "America/New_York";
   function formatAsOfTime(iso) {
     var d = new Date(iso);
     if (!iso || Number.isNaN(d.getTime())) return null;
     var timePart = d.toLocaleTimeString("en-US", {
-      timeZone: "America/Los_Angeles",
+      timeZone: MARKET_TZ,
       hour: "numeric",
       minute: "2-digit",
       timeZoneName: "short"
     });
     var datePart = d.toLocaleDateString("en-US", {
-      timeZone: "America/Los_Angeles",
+      timeZone: MARKET_TZ,
       month: "short",
       day: "numeric"
     });
@@ -2850,6 +2861,25 @@ window.FEEDBACK_THREADS = {
       text: `${timePart}, ${datePart}`,
       ms: d.getTime()
     };
+  }
+
+  // Calendar date of an instant, on the market clock. For a full ISO timestamp
+  // this is the ET trading day it belongs to — a fill at 2026-08-14T01:03Z is
+  // Aug 13 in New York, and the site must say Aug 13. A bare "YYYY-MM-DD" is
+  // already a calendar date with no instant attached, so it is pinned at UTC
+  // midnight and read back in UTC — untouched by any zone.
+  function formatMarketDate(isoLike, opts) {
+    if (!isoLike) return null;
+    var raw = String(isoLike);
+    var dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+    var d = new Date(dateOnly ? raw + "T00:00:00Z" : raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("en-US", Object.assign({
+      month: "short",
+      day: "numeric"
+    }, opts || {}, {
+      timeZone: dateOnly ? "UTC" : MARKET_TZ
+    }));
   }
   function relativeAge(ms) {
     var delta = Math.abs(Date.now() - ms);
@@ -3121,7 +3151,9 @@ window.FEEDBACK_THREADS = {
   // never disagree on how a timestamp reads.
   window.AsOfTime = {
     format: formatAsOfTime,
-    relativeAge: relativeAge
+    relativeAge: relativeAge,
+    marketDate: formatMarketDate,
+    TZ: MARKET_TZ
   };
 })();
 
@@ -5329,14 +5361,18 @@ function RealizedDayTip({
   y,
   flip
 }) {
+  // ET, like every other clock on the site — the P&L day is a trading day.
+  var dayTz = window.AsOfTime && window.AsOfTime.TZ || "America/New_York";
   var dateStr = day.date ? new Date(day.date + "T12:00:00Z").toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
-    day: "numeric"
+    day: "numeric",
+    timeZone: dayTz
   }) : new Date(day.t).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
-    day: "numeric"
+    day: "numeric",
+    timeZone: dayTz
   });
   var trades = day.trades || [];
   var style = flip ? {
@@ -7766,10 +7802,12 @@ function closeDateLabel(ev) {
   var ts = resp.filled_at || ev.ts;
   var d = ts ? new Date(ts) : null;
   if (!d || Number.isNaN(d.getTime())) return "Closed";
+  // The ET trading day this close belongs to, not the UTC one — a fill at
+  // 01:03Z is the PREVIOUS session in New York.
   return `Closed ${d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    timeZone: "UTC"
+    timeZone: window.AsOfTime && window.AsOfTime.TZ || "America/New_York"
   })}`;
 }
 
@@ -10600,7 +10638,7 @@ function feedbackPayload() {
   };
 }
 
-// "2026-08-09T20:35:04Z" -> "Aug 9, 1:35 PM PDT". Display-only; the raw ISO
+// "2026-08-09T20:35:04Z" -> "Aug 9, 4:35 PM ET". Display-only; the raw ISO
 // stays on the element title so the exact instant is never lost.
 function whenLabel(iso) {
   if (!iso) return "";
@@ -10611,7 +10649,7 @@ function whenLabel(iso) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "America/Los_Angeles",
+    timeZone: window.AsOfTime && window.AsOfTime.TZ || "America/New_York",
     timeZoneName: "short"
   });
 }
@@ -11273,7 +11311,8 @@ function proposalFeedbackTarget(item) {
   };
 }
 
-// Plan timestamps are UTC ISO; every time on this site reads in Pacific.
+// Plan timestamps are UTC ISO; every time on this site reads in ET — the
+// market's clock (window.AsOfTime.TZ is the one definition).
 function whenPlanned(iso) {
   var d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
@@ -11282,7 +11321,7 @@ function whenPlanned(iso) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "America/Los_Angeles",
+    timeZone: window.AsOfTime && window.AsOfTime.TZ || "America/New_York",
     timeZoneName: "short"
   });
 }
@@ -12122,15 +12161,25 @@ var BADGE_CLASS = {
 // --- plain-English helpers -------------------------------------------------
 
 // "2026-08-10" or an ISO timestamp -> "10 Aug". Display-only; never fed back
-// into any calculation, so this stays local rather than living in SpreadFormat.
+// into any calculation.
+//
+// Slicing an ISO instant to its first 10 chars took the UTC calendar day, which
+// is the WRONG session for anything stamped after 20:00 ET (a close at
+// 2026-08-14T01:03Z is the Aug 13 session in New York). window.AsOfTime.marketDate
+// resolves an instant on the market clock and leaves a bare date UTC-pinned.
 function shortDate(isoLike) {
   if (!isoLike) return null;
-  var d = new Date(String(isoLike).slice(0, 10) + "T00:00:00Z");
+  if (window.AsOfTime && window.AsOfTime.marketDate) {
+    return window.AsOfTime.marketDate(isoLike);
+  }
+  var raw = String(isoLike);
+  var dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  var d = new Date(dateOnly ? raw + "T00:00:00Z" : raw);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    timeZone: "UTC"
+    timeZone: dateOnly ? "UTC" : window.AsOfTime && window.AsOfTime.TZ || "America/New_York"
   });
 }
 
@@ -14450,11 +14499,14 @@ var UC_EMPTY = {
 function formatDateHeader(iso) {
   if (!iso) return "—";
   // Treat as US-Eastern calendar date (matches the trader's NY-anchored day).
+  // The zone is now PINNED rather than left to the reader's browser — noon UTC
+  // happened to land on the right ET day for most readers, but not all of them.
   var d = new Date(iso + "T12:00:00Z");
   return d.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
-    day: "numeric"
+    day: "numeric",
+    timeZone: window.AsOfTime && window.AsOfTime.TZ || "America/New_York"
   });
 }
 function fmtMoney(v) {

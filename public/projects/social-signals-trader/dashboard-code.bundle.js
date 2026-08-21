@@ -2,19 +2,19 @@
 /* ---- data-feedback.js ---- */
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 19,
+    "active": 21,
     "answered": 6,
     "archived": 0,
-    "proposal": 17,
+    "proposal": 19,
     "system": 0,
-    "total": 19,
+    "total": 21,
     "trade": 2,
-    "unanswered": 13
+    "unanswered": 15
   },
   "funnel": {
-    "breachingSla": 15,
-    "generatedAt": "2026-08-17T04:35:02Z",
-    "open": 15,
+    "breachingSla": 16,
+    "generatedAt": "2026-08-21T19:05:02Z",
+    "open": 16,
     "proposals": {
       "approved": 1,
       "conditional": 0,
@@ -22,7 +22,7 @@ window.FEEDBACK_THREADS = {
       "pending": 8,
       "stranded": 0
     },
-    "resolvedThisWeek": 2,
+    "resolvedThisWeek": 0,
     "routedToPrd": 4,
     "triagedBySeverity": {
       "high": 0,
@@ -30,9 +30,99 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-17T04:35:02Z",
+  "generatedAt": "2026-08-21T19:05:02Z",
   "schema": 2,
   "threads": [{
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "SPY-C-790-791-2026-08-28",
+    "createdAt": "2026-08-17T14:01:22.000Z",
+    "description": "Looks good. at 10:00 am premium would be $700.\nPlease add the price of a single contract",
+    "hasImage": false,
+    "id": "fb_msxay0js_eozthtx5",
+    "lastActivityAt": "2026-08-17T14:01:22.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "Looks good. at 10:00 am premium would be $700.\nPlease add the price of a single contract",
+      "createdAt": "2026-08-17T14:01:22.000Z",
+      "hasImage": false,
+      "id": "fb_msxay0js_eozthtx5",
+      "role": "user",
+      "title": "Go for it"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-17 10:01 AM EDT against SPY 790/791 call spread, expires 2026-08-28. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-21T19:05:02Z",
+      "hasImage": false,
+      "id": "fb_msxay0js_eozthtx5.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-17 10:01 AM EDT against SPY 790/791 call spread, expires 2026-08-28. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-21T19:05:02Z",
+      "id": "fb_msxay0js_eozthtx5.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-SPY-call-790-791-2026-08-28",
+    "targetKind": "component",
+    "targetLabel": "SPY 790/791 call spread, expires 2026-08-28",
+    "title": "Go for it",
+    "type": "feedback"
+  }, {
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "QQQ-C-742.5-743-2026-08-21",
+    "createdAt": "2026-08-17T13:56:25.000Z",
+    "description": "24 delta (9:56am) seems a little too high",
+    "hasImage": false,
+    "id": "fb_msxarn3p_3cmacxgw",
+    "lastActivityAt": "2026-08-17T13:56:25.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "24 delta (9:56am) seems a little too high",
+      "createdAt": "2026-08-17T13:56:25.000Z",
+      "hasImage": false,
+      "id": "fb_msxarn3p_3cmacxgw",
+      "role": "user",
+      "title": "maybe no"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-17 9:56 AM EDT against QQQ 742.5/743 call spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-21T19:05:02Z",
+      "hasImage": false,
+      "id": "fb_msxarn3p_3cmacxgw.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-17 9:56 AM EDT against QQQ 742.5/743 call spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-21T19:05:02Z",
+      "id": "fb_msxarn3p_3cmacxgw.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "open",
+    "targetId": "proposal-QQQ-call-742.5-743-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "QQQ 742.5/743 call spread, expires 2026-08-21",
+    "title": "maybe no",
+    "type": "feedback"
+  }, {
     "answered": false,
     "archivedAt": null,
     "contractKey": "TSLA-P-310-305-2026-09-11",
@@ -1863,6 +1953,12 @@ window.FEEDBACK_THREADS = {
       short: "The actual bid/ask/last on each leg the scored credit was priced from, and when they were taken.",
       long: "Bid is the best price a buyer will pay right now, ask is the best price a seller will accept, and the mid is the halfway point between them — (bid + ask) ÷ 2. “NBBO mid credit” is the short leg's mid minus the long leg's mid, × 100 — the fair-value credit implied by the current market, before the pessimistic fill assumption that produces the credit shown elsewhere on this card. The as-of time is read from the quote itself, not from when the page loaded — a quote older than a few minutes is flagged stale rather than shown as if it were current. Frozen at the moment this proposal was scanned, same as everything else on the card: it will not silently re-price as you sit on this page.",
       example: "Short leg bid $0.42 / ask $0.48 (mid $0.45), long leg bid $0.09 / ask $0.13 (mid $0.11) → NBBO mid credit = ($0.45 − $0.11) × 100 = $34 per contract."
+    },
+    proposal_deck_freshness: {
+      label: "Deck freshness",
+      short: "How old this scan is, and how long this proposal has sat here without a fresh look.",
+      long: "Two clocks, both computed in your browser at render time rather than trusted from the page's last publish. The deck header's 'Scanned' stamp is when spread_trader last scanned and wrote this whole plan (SPREAD_PLAN.generatedAt) — it turns amber once that scan happened on an earlier ET trading day than today, the same session-day rule the server-side sweep uses to decide a proposal has gone stale (a proposal is valid for the trading day it was made, not for a rolling 24h window — a 6am proposal and a 12:45pm proposal both expire at the same end-of-day boundary). Per-card, 'On the deck since' is when THIS exact proposal first appeared (firstProposedAt) — a card can be far older than the plan's own generatedAt if it has survived several rescans unchanged, or say 'unknown' if the card predates that field. This exists because nothing server-side guarantees freshness on its own: if no trader cron is running to prune a stale deck, the browser is the only thing left to say the numbers on screen are old.",
+      example: "A plan scanned Aug 14 at 12:15pm ET, viewed on Aug 21, reads 'Scanned 12:15 PM ET, Aug 14 · 7d old' in amber — Aug 14 is an earlier trading day than Aug 21 — even though nothing else on the page changed to signal that on its own."
     },
     pop: {
       label: "PoP / win probability",
@@ -5480,18 +5576,15 @@ function RealizedDayTip({
   flip
 }) {
   // ET, like every other clock on the site — the P&L day is a trading day.
-  var dayTz = window.AsOfTime && window.AsOfTime.TZ || "America/New_York";
-  var dateStr = day.date ? new Date(day.date + "T12:00:00Z").toLocaleDateString("en-US", {
+  // window.AsOfTime.marketDate already knows the date-only-vs-timestamp
+  // distinction (day.date is a bare date, day.t is a full instant); reuse it
+  // rather than re-deriving the same UTC-noon-buffer trick here.
+  var opts = {
     weekday: "short",
     month: "short",
-    day: "numeric",
-    timeZone: dayTz
-  }) : new Date(day.t).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: dayTz
-  });
+    day: "numeric"
+  };
+  var dateStr = window.AsOfTime ? window.AsOfTime.marketDate(day.date || day.t, opts) : new Date(day.date ? day.date + "T12:00:00Z" : day.t).toLocaleDateString("en-US", opts);
   var trades = day.trades || [];
   var style = flip ? {
     right: `calc(100% - ${x}px)`,
@@ -7918,15 +8011,14 @@ function dteUrgencyClass(dte) {
 function closeDateLabel(ev) {
   var resp = ev.response || {};
   var ts = resp.filled_at || ev.ts;
-  var d = ts ? new Date(ts) : null;
-  if (!d || Number.isNaN(d.getTime())) return "Closed";
   // The ET trading day this close belongs to, not the UTC one — a fill at
-  // 01:03Z is the PREVIOUS session in New York.
-  return `Closed ${d.toLocaleDateString("en-US", {
+  // 01:03Z is the PREVIOUS session in New York. window.AsOfTime.marketDate
+  // already does this conversion; reuse it rather than a second copy.
+  var label = ts && window.AsOfTime ? window.AsOfTime.marketDate(ts, {
     month: "short",
-    day: "numeric",
-    timeZone: window.AsOfTime && window.AsOfTime.TZ || "America/New_York"
-  })}`;
+    day: "numeric"
+  }) : null;
+  return label ? `Closed ${label}` : "Closed";
 }
 
 // `outcome`, when set, overrides the live countdown for rows that are done
@@ -11669,6 +11761,93 @@ function _extends() { return _extends = Object.assign ? Object.assign.bind() : f
 
 var PROPOSAL_ID_PREFIX = "proposal-";
 
+// Today's calendar date on the market clock, as a bare YYYY-MM-DD — the same
+// shape `item.expiry` already is, so the two compare lexically with no
+// timezone conversion needed on either side.
+function marketToday() {
+  var tz = window.AsOfTime && window.AsOfTime.TZ || "America/New_York";
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: tz
+  });
+}
+
+// The ET trading day a full ISO timestamp falls on, as the same bare
+// YYYY-MM-DD shape marketToday() returns — so the two compare lexically.
+// Mirrors spread_trader._market_date_of() (src/social_signals_trader/
+// spread_trader.py): convert to the market TZ first, THEN take the date,
+// never the other way round.
+function marketDayOf(iso) {
+  if (typeof iso !== "string") return null;
+  var tz = window.AsOfTime && window.AsOfTime.TZ || "America/New_York";
+  var d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-CA", {
+    timeZone: tz
+  });
+}
+
+// A missing/unparseable expiry never reads as expired — fail-open, the same
+// direction spread_trader._pending_proposal_stale() takes for a bad
+// timestamp: a proposal a reviewer can't judge shouldn't silently vanish.
+// ON-OR-BEFORE today — mirrors spread_trader.proposal_freshness()'s
+// 'expired_contract' rule: a 0-DTE contract is not reviewable, and the
+// server and browser must not disagree about which cards are expired.
+function isCardExpired(item) {
+  var expiry = item && item.expiry;
+  if (typeof expiry !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return false;
+  return expiry <= marketToday();
+}
+
+// The frozen `item.dte` was true at scan time; this is the same arithmetic
+// recomputed against right now, so a card that has sat unscanned for days
+// can't quietly show a days-to-expiry number that has gone stale or negative.
+function liveDte(expiry) {
+  if (typeof expiry !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return null;
+  var exp = new Date(`${expiry}T00:00:00Z`);
+  var today = new Date(`${marketToday()}T00:00:00Z`);
+  if (Number.isNaN(exp.getTime()) || Number.isNaN(today.getTime())) return null;
+  return Math.round((exp.getTime() - today.getTime()) / 86400000);
+}
+
+// How old the plan itself is, and whether it's from an earlier trading day —
+// the deck's own honesty backstop. No trader cron running means generatedAt
+// can sit unchanged for days; the header must say so rather than showing a
+// fixed timestamp that silently reads as current. Mirrors
+// spread_trader.proposal_freshness()'s session-day rule (PRD 1166) — not a
+// rolling TTL — so the header agrees with which cards the server would
+// actually sweep as 'expired_session'.
+function planAge(plan) {
+  var t = plan && plan.generatedAt && window.AsOfTime ? window.AsOfTime.format(plan.generatedAt) : null;
+  if (!t) return {
+    known: false
+  };
+  var planDay = marketDayOf(plan.generatedAt);
+  var stale = planDay !== null && planDay < marketToday();
+  return {
+    known: true,
+    ms: t.ms,
+    text: t.text,
+    stale: stale
+  };
+}
+
+// "On the deck since" — how long this exact card has sat here, from
+// `firstProposedAt` (set once by export_plan() and carried forward tick to
+// tick). Every card on the live deck as of 2026-08-21 predates that field,
+// so this must say so plainly rather than guessing or rendering blank.
+function cardAge(item) {
+  var iso = item && item.firstProposedAt;
+  var t = typeof iso === "string" && window.AsOfTime ? window.AsOfTime.format(iso) : null;
+  if (!t) return {
+    known: false
+  };
+  return {
+    known: true,
+    ms: t.ms,
+    text: t.text
+  };
+}
+
 // Every card on this panel is written by the Trader (trader-tick /
 // spread_trader, plus the frozen rules) — the shared byline reused from
 // options-summary.jsx via window.OptionsSummaryInternals rather than a
@@ -11726,6 +11905,28 @@ function whenPlanned(iso) {
     timeZone: window.AsOfTime && window.AsOfTime.TZ || "America/New_York",
     timeZoneName: "short"
   });
+}
+
+// The deck header's own honesty backstop (see `planAge` above) — reuses the
+// exact opts-section-stamp / opts-section-stamp--stale idiom the leg-quote
+// block already established, rather than inventing a second staleness look.
+function PlanAgeStamp({
+  plan
+}) {
+  var age = planAge(plan);
+  if (!age.known) {
+    return /*#__PURE__*/React.createElement("span", {
+      className: "opts-section-stamp opts-section-stamp--stale"
+    }, "Scan time unknown \u2014 this plan has no generatedAt", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+      term: "proposal_deck_freshness"
+    }));
+  }
+  return /*#__PURE__*/React.createElement("span", {
+    className: age.stale ? "opts-section-stamp opts-section-stamp--stale" : "opts-section-stamp",
+    title: plan.generatedAt
+  }, /*#__PURE__*/React.createElement("span", null, age.stale ? "⚠ " : "", "Scanned ", age.text), /*#__PURE__*/React.createElement("span", null, "\xB7 ", window.AsOfTime.relativeAge(age.ms)), window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "proposal_deck_freshness"
+  }));
 }
 function propMoney(n, decimals) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
@@ -12027,15 +12228,21 @@ function ProposalQuotes({
 }
 function ProposalScorecard({
   item,
-  equity
+  equity,
+  expired
 }) {
   var tally = gateTally(item.checks);
   var clean = tally.total > 0 && tally.passed === tally.total;
   var chip = momentumChip(item);
   var pop = Number(item.pop);
+  var live = liveDte(item.expiry);
+  var dteMismatch = live !== null && Number.isFinite(Number(item.dte)) && Number(item.dte) !== live;
+  var expiresValue = dteMismatch ? `${item.expiry} (${item.dte}d at scan · ${live}d now)` : `${item.expiry} (${item.dte}d)`;
   return /*#__PURE__*/React.createElement("aside", {
-    className: "prop-scorecard"
-  }, /*#__PURE__*/React.createElement("div", {
+    className: `prop-scorecard${expired ? " prop-scorecard--expired" : ""}`
+  }, expired && /*#__PURE__*/React.createElement("div", {
+    className: "prop-score-expired-flag"
+  }, "\u26A0 Expired \u2014 these figures are frozen from scan time, not live"), /*#__PURE__*/React.createElement("div", {
     className: "prop-score-head"
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-score-title"
@@ -12045,13 +12252,13 @@ function ProposalScorecard({
     label: "We get paid",
     value: propMoney(item.credit),
     term: "credit_received",
-    tone: "pos",
+    tone: expired ? undefined : "pos",
     big: true
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Most we can lose",
     value: propMoney(item.risk),
     term: "risk",
-    tone: "neg",
+    tone: expired ? undefined : "neg",
     big: true
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Cash tied up (collateral)",
@@ -12061,7 +12268,7 @@ function ProposalScorecard({
     label: "Expected value",
     value: propMoney(item.ev),
     term: "ev",
-    tone: Number(item.ev) > 0 ? "pos" : "neg"
+    tone: expired ? undefined : Number(item.ev) > 0 ? "pos" : "neg"
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Chance we're right",
     value: propPct(item.pop),
@@ -12080,8 +12287,9 @@ function ProposalScorecard({
     term: "contracts"
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Expires",
-    value: `${item.expiry} (${item.dte}d)`,
-    term: "dte"
+    value: expiresValue,
+    term: "dte",
+    tone: expired ? "neg" : undefined
   }), chip && /*#__PURE__*/React.createElement("div", {
     className: "prop-score-chip"
   }, chip), /*#__PURE__*/React.createElement(ProposalQuotes, {
@@ -12104,8 +12312,10 @@ function ProposalCard({
   var target = proposalFeedbackTarget(item);
   var stranded = !!item.stranded;
   var strandedIsConditional = stranded && item.approval && item.approval.verdict === "conditional";
+  var expired = isCardExpired(item);
+  var age = cardAge(item);
   return /*#__PURE__*/React.createElement("article", {
-    className: `prop-card${stranded ? " prop-card--stranded" : ""}`,
+    className: `prop-card${stranded ? " prop-card--stranded" : ""}${expired ? " prop-card--expired" : ""}`,
     id: `proposal-${item.id || ""}`
   }, /*#__PURE__*/React.createElement("header", {
     className: "prop-card-head"
@@ -12119,9 +12329,17 @@ function ProposalCard({
     className: "prop-card-head-right"
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-badge"
-  }, stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+  }, expired ? "EXPIRED · not reviewable" : stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
     target: target
   }))), /*#__PURE__*/React.createElement("div", {
+    className: "prop-card-meta"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: age.known ? "opts-section-stamp" : "opts-section-stamp opts-section-stamp--stale"
+  }, age.known ? `On the deck since ${age.text} · ${window.AsOfTime.relativeAge(age.ms)}` : "On the deck since: unknown (no firstProposedAt recorded on this card)", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "proposal_deck_freshness"
+  }))), expired && /*#__PURE__*/React.createElement("p", {
+    className: "prop-expired-note"
+  }, "\u26A0 This contract", item.expiry ? ` expired on ${item.expiry}` : " has expired", " \u2014 it cannot fill, and the figures below are frozen from when this was scanned, not live prices. Nothing here needs a decision."), /*#__PURE__*/React.createElement("div", {
     className: "prop-card-body"
   }, /*#__PURE__*/React.createElement("div", {
     className: "prop-narrative"
@@ -12137,7 +12355,8 @@ function ProposalCard({
     item: item
   })), !stranded && /*#__PURE__*/React.createElement(ProposalScorecard, {
     item: item,
-    equity: equity
+    equity: equity,
+    expired: expired
   })), !stranded && /*#__PURE__*/React.createElement(ProposalChecks, {
     checks: item.checks
   }), !stranded && /*#__PURE__*/React.createElement(ProposalRules, {
@@ -12341,6 +12560,7 @@ function ProposedTrades() {
   window.FeedbackClient.usePendingFeedback();
   var plan = proposalPlan();
   var items = plan.intent;
+  var allExpired = items.length > 0 && items.every(isCardExpired);
   var [index, setIndex] = React.useState(0);
   // A regenerated plan can be shorter than the one that was on screen; clamp
   // rather than render a blank card off the end of the list.
@@ -12392,19 +12612,18 @@ function ProposedTrades() {
     className: "opt-panel-stats"
   }, /*#__PURE__*/React.createElement("span", {
     className: "fbt-count"
-  }, items.length, " proposal", items.length === 1 ? "" : "s"), plan.generatedAt && /*#__PURE__*/React.createElement("span", {
-    className: "fbt-count",
-    title: plan.generatedAt
-  }, "planned ", whenPlanned(plan.generatedAt)), plan.approvalGeneratedAt && /*#__PURE__*/React.createElement("span", {
+  }, items.length, " proposal", items.length === 1 ? "" : "s"), /*#__PURE__*/React.createElement(PlanAgeStamp, {
+    plan: plan
+  }), plan.approvalGeneratedAt && /*#__PURE__*/React.createElement("span", {
     className: "fbt-count",
     title: plan.approvalGeneratedAt
   }, "approvals as of ", whenPlanned(plan.approvalGeneratedAt)))), /*#__PURE__*/React.createElement("p", {
     className: "opts-page-sub prop-lede"
   }, "Nothing here has been placed. These are the trades the fund intends to open on the next tick, each explained from scratch, with the rules it had to clear. Disagree with one? Use its \uD83D\uDCAC button \u2014 the comment thread under a proposal is how you tell the fund what to do with it, and it is read before anything fills."), /*#__PURE__*/React.createElement(DeploymentLine, {
     deployment: plan.deployment,
-    totalCollateral: items.reduce((sum, it) => sum + (Number(it.collateral) || 0), 0),
+    totalCollateral: items.reduce((sum, it) => sum + (isCardExpired(it) ? 0 : Number(it.collateral) || 0), 0),
     tally: approvalTally(items)
-  }), items.length ? /*#__PURE__*/React.createElement("div", _extends({
+  }), items.length && !allExpired ? /*#__PURE__*/React.createElement("div", _extends({
     className: "prop-deck",
     tabIndex: 0,
     onKeyDown: onKeyDown,
@@ -12423,13 +12642,16 @@ function ProposedTrades() {
     items: items,
     index: safeIndex,
     onGo: setIndex
-  })) : /*#__PURE__*/React.createElement(EmptyState, {
+  })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(EmptyState, {
     funnel: plan.funnel
-  }));
+  }), allExpired && /*#__PURE__*/React.createElement("p", {
+    className: "prop-all-expired-note"
+  }, "\u26A0 All ", items.length, " proposal", items.length === 1 ? "" : "s", " on this deck expired \u2014 nothing here is reviewable. Nothing will replace them until a trader scan runs again.")));
 }
 window.ProposedTrades = ProposedTrades;
 window.ProposedTradesInternals = {
   PROPOSAL_ID_PREFIX,
+  marketDayOf,
   gateTally,
   unansweredCountFor,
   momentumChip,
@@ -12441,7 +12663,11 @@ window.ProposedTradesInternals = {
   proposalPlan,
   proposalFeedbackTarget,
   propMoney,
-  propPct
+  propPct,
+  isCardExpired,
+  liveDte,
+  planAge,
+  cardAge
 };
 
 /* ---- pages/option-trade-detail.jsx ---- */
@@ -14680,6 +14906,9 @@ function proposalsAwaitingCount() {
   var items = plan && plan.intent || [];
   if (!items.length) return 0;
   return items.filter(it => {
+    // An expired contract can never fill and needs no decision — counting it
+    // would nag a dead deck forever, past the point any human action helps.
+    if (internals.isCardExpired && internals.isCardExpired(it)) return false;
     // `verdict`, not `state`: an un-reviewed proposal's state string is
     // `not_reviewed` (approvalStatus's own vocabulary), while `verdict`
     // normalises every not-yet-approved shape to "pending" — matching on the
@@ -15152,15 +15381,22 @@ var UC_EMPTY = {
 
 function formatDateHeader(iso) {
   if (!iso) return "—";
-  // Treat as US-Eastern calendar date (matches the trader's NY-anchored day).
-  // The zone is now PINNED rather than left to the reader's browser — noon UTC
-  // happened to land on the right ET day for most readers, but not all of them.
+  // `iso` is a bare calendar date (matches the trader's NY-anchored day) —
+  // window.AsOfTime.marketDate already pins a date-only value at UTC rather
+  // than re-deriving the same UTC-noon buffer here; reuse it.
+  if (window.AsOfTime) {
+    return window.AsOfTime.marketDate(iso, {
+      weekday: "short",
+      month: "short",
+      day: "numeric"
+    });
+  }
   var d = new Date(iso + "T12:00:00Z");
   return d.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
-    timeZone: window.AsOfTime && window.AsOfTime.TZ || "America/New_York"
+    timeZone: "UTC"
   });
 }
 function fmtMoney(v) {

@@ -1843,6 +1843,20 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
    like an unanswered comment does, not just the border tone. */
 .prop-dot--stranded { box-shadow: 0 0 0 2px color-mix(in oklch, var(--warn) 45%, transparent); }
 .prop-card--stranded { border-left-color: var(--warn); }
+/* A card whose contract has already expired — client-side freshness
+   backstop (PRD 1163). Muted rather than removed: it stays visible so a
+   reviewer isn't left wondering where a card went, but nothing on it should
+   read as live or actionable. */
+.prop-card--expired { border-left-color: var(--neg); opacity: 0.72; }
+.prop-card-meta { margin-top: 4px; }
+.prop-expired-note {
+  font-size: 12px; color: var(--neg); font-weight: 600; margin: 8px 0 0; max-width: 85ch;
+}
+.prop-scorecard--expired { border-color: color-mix(in oklch, var(--neg) 40%, var(--line)); }
+.prop-score-expired-flag {
+  font-size: 11px; font-weight: 700; color: var(--neg); margin-bottom: 6px;
+}
+.prop-all-expired-note { font-size: 12px; color: var(--neg); font-weight: 600; margin-top: 8px; }
 .prop-pager-count {
   font-size: 11px; font-family: var(--mono); color: var(--muted); margin-left: auto;
 }

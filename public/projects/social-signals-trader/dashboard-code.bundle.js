@@ -12,25 +12,26 @@ window.FEEDBACK_THREADS = {
     "unanswered": 15
   },
   "funnel": {
-    "breachingSla": 16,
-    "generatedAt": "2026-08-21T19:05:02Z",
-    "open": 16,
+    "breachingSla": 15,
+    "generatedAt": "2026-08-22T00:45:02Z",
+    "open": 15,
     "proposals": {
       "approved": 1,
+      "carried": 8,
       "conditional": 0,
       "declined": 0,
-      "pending": 8,
+      "pending": 7,
       "stranded": 0
     },
     "resolvedThisWeek": 0,
     "routedToPrd": 4,
     "triagedBySeverity": {
       "high": 0,
-      "low": 17,
+      "low": 19,
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-21T19:05:02Z",
+  "generatedAt": "2026-08-22T00:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,

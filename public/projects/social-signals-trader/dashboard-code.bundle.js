@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-08-22T07:45:02Z",
+    "generatedAt": "2026-08-22T08:45:02Z",
     "open": 15,
     "proposals": {
       "approved": 1,
@@ -31,7 +31,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-22T07:45:02Z",
+  "generatedAt": "2026-08-22T08:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -12633,11 +12633,24 @@ function ProposalScorecard({
 // isn't discharged yet — see `proposal_obligation.py`. Plain-English per
 // `carriedReason`, so a reviewer sees WHY a stale-looking card is still here
 // without reading the sweep's own vocabulary.
+//
+// PRD 1258 — staying on the deck is no longer automatic just because a
+// comment is unanswered: `spread_trader.export_plan()` re-prices every
+// carried card, then ranks it only against the OTHER CARRIED cards for
+// whatever `max_proposals` slots this cycle's fresh scan left over — a
+// carried card never competes with, and can never displace, a fresh one.
+// A carried card that ranks below the leftover cut (or that re-priced
+// worse than its own entry gates) is retired off the deck entirely (its
+// feedback thread stays open elsewhere; see CLAUDE.md). So a card that IS
+// still here earned one of the leftover seats among carried proposals, not
+// merely by having an open question — the banner says so, so a reviewer
+// doesn't read it as "surviving by default" or as having outranked a fresh
+// pick.
 var CARRIED_REASON_LABEL = {
-  unanswered_question: "kept here because your question hasn't been answered yet",
-  approved_never_filled: "kept here — approved but never filled; the fund has recorded this and will re-propose it",
-  declined_not_recorded: "kept here — declined; the fund is recording that decision",
-  unknown: "kept here — we couldn't confirm the feedback on this proposal has been handled"
+  unanswered_question: "your question hasn't been answered yet",
+  approved_never_filled: "approved but never filled; the fund has recorded this and will re-propose it",
+  declined_not_recorded: "declined; the fund is recording that decision",
+  unknown: "we couldn't confirm the feedback on this proposal has been handled"
 };
 function CarriedBanner({
   item
@@ -12646,7 +12659,7 @@ function CarriedBanner({
   var label = CARRIED_REASON_LABEL[item.carriedReason] || CARRIED_REASON_LABEL.unknown;
   return /*#__PURE__*/React.createElement("p", {
     className: "prop-carried-note"
-  }, "\u26A0 This proposal is past its usual review window, but it\u2019s ", label, ". It will not fill \u2014 nothing here needs a broker decision, only a reply.");
+  }, "\u26A0 This proposal is past its usual review window, but there was room left on the board after today's new picks, and this is the strongest of the proposals still waiting on a reply, so it's kept on the deck \u2014 ", label, ". It will not fill \u2014 nothing here needs a broker decision, only a reply.");
 }
 function ProposalCard({
   item,

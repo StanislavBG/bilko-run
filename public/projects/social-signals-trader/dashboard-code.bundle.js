@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-08-22T06:45:02Z",
+    "generatedAt": "2026-08-22T07:45:02Z",
     "open": 15,
     "proposals": {
       "approved": 1,
@@ -31,7 +31,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-22T06:45:02Z",
+  "generatedAt": "2026-08-22T07:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -1980,6 +1980,12 @@ window.FEEDBACK_THREADS = {
       short: "How old this scan is, and how long this proposal has sat here without a fresh look.",
       long: "Two clocks, both computed in your browser at render time rather than trusted from the page's last publish. The deck header's 'Scanned' stamp is when spread_trader last scanned and wrote this whole plan (SPREAD_PLAN.generatedAt) — it turns amber once that scan happened on an earlier ET trading day than today, the same session-day rule the server-side sweep uses to decide a proposal has gone stale (a proposal is valid for the trading day it was made, not for a rolling 24h window — a 6am proposal and a 12:45pm proposal both expire at the same end-of-day boundary). Per-card, 'On the deck since' is when THIS exact proposal first appeared (firstProposedAt) — a card can be far older than the plan's own generatedAt if it has survived several rescans unchanged, or say 'unknown' if the card predates that field. This exists because nothing server-side guarantees freshness on its own: if no trader cron is running to prune a stale deck, the browser is the only thing left to say the numbers on screen are old.",
       example: "A plan scanned Aug 14 at 12:15pm ET, viewed on Aug 21, reads 'Scanned 12:15 PM ET, Aug 14 · 7d old' in amber — Aug 14 is an earlier trading day than Aug 21 — even though nothing else on the page changed to signal that on its own."
+    },
+    proposal_reprice: {
+      label: "Re-priced",
+      short: "This carried proposal's price, PoP and spot were just re-derived from the live chain — the stamp is when.",
+      long: "A proposal normally sits unpriced between scans — old in age only, not in price. A CARRIED card (one the sweep kept past its usual review window because a comment on it hasn't been answered yet) is the exception: trader-tick re-runs the same chain pricing and momentum math against its exact contract every tick, so the numbers on screen stay live even though the card itself is old. 'Re-priced' is when that last happened. Then-vs-now shows only the metrics that actually moved since the proposal was first made (from `originalEconomics`, captured once at the original scan) — a metric that hasn't changed stays silent rather than cluttering the card. If a re-price attempt itself fails (a chain error, a missing quote), the card says so plainly and the figures are marked frozen from the last successful price, not live — the same 'not live' flag an expired contract shows, so a failed re-price can never look like a fresh one. A re-price can also reveal the trade no longer clears its own entry gates (`stillQualifies: false`) — that card is marked not reviewable and excluded from anything that assumes it could still fill.",
+      example: "A proposal first made Aug 14 (credit $1,410) shows 'Re-priced 9:32 AM ET, Aug 24' with 'credit $1,337 (was $1,410 when proposed)' — the contract is unchanged, but the market has moved against it since."
     },
     pop: {
       label: "PoP / win probability",
@@ -11869,6 +11875,154 @@ function cardAge(item) {
   };
 }
 
+// A carried card is re-priced against the live chain by trader-tick
+// (reprice_carried_card(), spread_trader.py) — `repricedAt` /
+// `originalEconomics` / `stillQualifies` / `repriceFailed` are only written
+// onto a card that went through that path. A fresh proposal from this
+// cycle's scan carries none of them, and this must degrade to "not present"
+// rather than a blank/NaN stamp on that ordinary card.
+function repriceStamp(item) {
+  var iso = item && item.repricedAt;
+  if (iso === undefined || iso === null) return {
+    present: false
+  };
+  var t = typeof iso === "string" && window.AsOfTime ? window.AsOfTime.format(iso) : null;
+  if (!t) return {
+    present: true,
+    known: false
+  };
+  return {
+    present: true,
+    known: true,
+    ms: t.ms,
+    text: t.text
+  };
+}
+
+// Then-vs-now on the metrics a reviewer actually watches — only the ones
+// that moved. Comparing FORMATTED strings (not raw floats) means a $0.004
+// float wobble that renders identically both times is correctly treated as
+// "unchanged," and a metric neither side can format ("—") never fabricates
+// a fake delta.
+var REPRICE_DRIFT_METRICS = [{
+  key: "credit",
+  label: "credit",
+  now: item => item.credit,
+  was: o => o.credit,
+  fmt: v => propMoney(v)
+}, {
+  key: "pop",
+  label: "PoP",
+  now: item => item.pop,
+  was: o => o.pop,
+  fmt: v => propPct(v)
+}, {
+  key: "spot",
+  label: "spot",
+  now: item => item.spot,
+  was: o => o.spot,
+  fmt: v => propMoney(v, 2)
+}];
+function repriceDrift(item) {
+  var orig = item && item.originalEconomics;
+  if (!orig || typeof orig !== "object") return {
+    known: false,
+    rows: []
+  };
+  var rows = REPRICE_DRIFT_METRICS.map(m => ({
+    key: m.key,
+    label: m.label,
+    nowText: m.fmt(m.now(item)),
+    wasText: m.fmt(m.was(orig))
+  })).filter(r => r.nowText !== "—" && r.wasText !== "—" && r.nowText !== r.wasText);
+  return {
+    known: true,
+    rows
+  };
+}
+
+// Reuses the exact opts-section-stamp idiom PlanAgeStamp/ProposalQuotes
+// already established, rather than inventing a second stamp look for a
+// third kind of timestamp on this card.
+function RepriceStamp({
+  item
+}) {
+  var stamp = repriceStamp(item);
+  if (!stamp.present) return null;
+  if (!stamp.known) {
+    return /*#__PURE__*/React.createElement("span", {
+      className: "opts-section-stamp opts-section-stamp--stale"
+    }, "Re-priced: unknown", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+      term: "proposal_reprice"
+    }));
+  }
+  return /*#__PURE__*/React.createElement("span", {
+    className: "opts-section-stamp",
+    title: item.repricedAt
+  }, /*#__PURE__*/React.createElement("span", null, "Re-priced ", stamp.text), /*#__PURE__*/React.createElement("span", null, "\xB7 ", window.AsOfTime.relativeAge(stamp.ms)), window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "proposal_reprice"
+  }));
+}
+
+// Mounted inside the scorecard, next to the numbers it explains — this is
+// the whole point of re-pricing: a reviewer can't tell a freshly-repriced
+// card from a frozen one without seeing what moved since it was first
+// proposed. A metric that hasn't changed stays silent so the card doesn't
+// drown in unchanged noise.
+function RepriceDriftLine({
+  item
+}) {
+  var stamp = repriceStamp(item);
+  if (!stamp.present) return null;
+  var drift = repriceDrift(item);
+  if (!drift.known) {
+    return /*#__PURE__*/React.createElement("p", {
+      className: "prop-reprice-drift prop-reprice-drift--unknown"
+    }, "Then-vs-now: unknown (no originalEconomics on this card)");
+  }
+  if (!drift.rows.length) return null;
+  return /*#__PURE__*/React.createElement("p", {
+    className: "prop-reprice-drift"
+  }, drift.rows.map((r, i) => /*#__PURE__*/React.createElement("span", {
+    key: r.key,
+    className: "prop-reprice-drift-metric"
+  }, i > 0 ? " · " : "", r.label, " ", r.nowText, " (was ", r.wasText, " when proposed)")));
+}
+
+// A carried card the live chain re-priced but that no longer clears its own
+// entry gates (`stillQualifies: false`, named `failingGates`) is not a
+// reviewable trade — it cannot fill regardless of any approval, same rule an
+// expired contract follows, so this gets the same visual weight
+// (`prop-expired-note`) rather than a quieter treatment that would let it
+// read as still actionable.
+function DisqualifiedBanner({
+  item
+}) {
+  // A failed reprice (chain error, no quote) also defaults `stillQualifies`
+  // to false as a defensive "can't confirm" state — the gates were never
+  // actually re-evaluated against the live chain in that case, so this must
+  // defer to RepriceFailedBanner rather than claiming a gate check happened.
+  if (item.stillQualifies !== false || item.repriceFailed) return null;
+  var gates = Array.isArray(item.failingGates) ? item.failingGates : [];
+  return /*#__PURE__*/React.createElement("p", {
+    className: "prop-expired-note prop-disqualified-note"
+  }, "\u26A0 No longer passes its entry gates \u2014 re-priced against the live chain and it now fails:", " ", gates.length ? gates.join(", ") : "gate detail unavailable", ". It cannot fill. Nothing here needs a decision.");
+}
+
+// A re-price attempt can itself fail (chain error, no quote, etc.) — that
+// must never look like a successful, live re-price. `repriceFailedReason`
+// is optional context from the trader; the figures stay frozen from the
+// last successful price either way, same "not live" flag the expired
+// scorecard already carries (see ProposalScorecard).
+function RepriceFailedBanner({
+  item
+}) {
+  if (!item.repriceFailed) return null;
+  return /*#__PURE__*/React.createElement("p", {
+    className: "prop-reprice-failed-note"
+  }, "\u26A0 Re-price failed", item.repriceFailedReason ? `: ${item.repriceFailedReason}` : "", " \u2014 the figures below are frozen from the last successful price, not live.");
+}
+
 // Every card on this panel is written by the Trader (trader-tick /
 // spread_trader, plus the frozen rules) — the shared byline reused from
 // options-summary.jsx via window.OptionsSummaryInternals rather than a
@@ -12397,27 +12551,35 @@ function ProposalScorecard({
   var live = liveDte(item.expiry);
   var dteMismatch = live !== null && Number.isFinite(Number(item.dte)) && Number(item.dte) !== live;
   var expiresValue = dteMismatch ? `${item.expiry} (${item.dte}d at scan · ${live}d now)` : `${item.expiry} (${item.dte}d)`;
+  // A failed re-price freezes the figures exactly like an expired contract
+  // does — reuse the SAME flag/class rather than a second "is this live?"
+  // signal, so a failed re-price can never render indistinguishably from a
+  // successful one.
+  var repriceFailed = !!item.repriceFailed;
+  var frozen = expired || repriceFailed;
   return /*#__PURE__*/React.createElement("aside", {
-    className: `prop-scorecard${expired ? " prop-scorecard--expired" : ""}`
-  }, expired && /*#__PURE__*/React.createElement("div", {
+    className: `prop-scorecard${frozen ? " prop-scorecard--expired" : ""}`
+  }, frozen && /*#__PURE__*/React.createElement("div", {
     className: "prop-score-expired-flag"
-  }, "\u26A0 Expired \u2014 these figures are frozen from scan time, not live"), /*#__PURE__*/React.createElement("div", {
+  }, expired ? "⚠ Expired — these figures are frozen from scan time, not live" : "⚠ Re-price failed — these figures are frozen from the last successful price, not live"), /*#__PURE__*/React.createElement("div", {
     className: "prop-score-head"
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-score-title"
   }, "Scorecard"), /*#__PURE__*/React.createElement("span", {
     className: `prop-score-gates prop-score-gates--${clean ? "pass" : "fail"}`
-  }, clean ? "✓" : "✕", " ", tally.passed, " of ", tally.total, " gates")), /*#__PURE__*/React.createElement(ScoreRow, {
+  }, clean ? "✓" : "✕", " ", tally.passed, " of ", tally.total, " gates")), /*#__PURE__*/React.createElement(RepriceStamp, {
+    item: item
+  }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "We get paid",
     value: propMoney(item.credit),
     term: "credit_received",
-    tone: expired ? undefined : "pos",
+    tone: frozen ? undefined : "pos",
     big: true
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Most we can lose",
     value: propMoney(item.risk),
     term: "risk",
-    tone: expired ? undefined : "neg",
+    tone: frozen ? undefined : "neg",
     big: true
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Cash tied up (collateral)",
@@ -12427,7 +12589,7 @@ function ProposalScorecard({
     label: "Expected value",
     value: propMoney(item.ev),
     term: "ev",
-    tone: expired ? undefined : Number(item.ev) > 0 ? "pos" : "neg"
+    tone: frozen ? undefined : Number(item.ev) > 0 ? "pos" : "neg"
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Chance we're right",
     value: propPct(item.pop),
@@ -12440,7 +12602,9 @@ function ProposalScorecard({
     style: {
       width: `${Math.max(0, Math.min(100, pop * 100))}%`
     }
-  })), /*#__PURE__*/React.createElement(ScoreRow, {
+  })), /*#__PURE__*/React.createElement(RepriceDriftLine, {
+    item: item
+  }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Contracts",
     value: item.contracts,
     term: "contracts"
@@ -12494,9 +12658,10 @@ function ProposalCard({
   var strandedIsConditional = stranded && item.approval && item.approval.verdict === "conditional";
   var carried = !!item.carried;
   var expired = isCardExpired(item);
+  var disqualified = item.stillQualifies === false;
   var age = cardAge(item);
   return /*#__PURE__*/React.createElement("article", {
-    className: `prop-card${stranded ? " prop-card--stranded" : ""}${expired ? " prop-card--expired" : ""}` + `${carried ? " prop-card--carried" : ""}`,
+    className: `prop-card${stranded ? " prop-card--stranded" : ""}${expired ? " prop-card--expired" : ""}` + `${carried ? " prop-card--carried" : ""}${disqualified ? " prop-card--disqualified" : ""}`,
     id: `proposal-${item.id || ""}`
   }, /*#__PURE__*/React.createElement("header", {
     className: "prop-card-head"
@@ -12510,7 +12675,7 @@ function ProposalCard({
     className: "prop-card-head-right"
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-badge"
-  }, carried ? "CARRIED · will not fill" : expired ? "EXPIRED · not reviewable" : stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+  }, carried ? "CARRIED · will not fill" : expired ? "EXPIRED · not reviewable" : disqualified ? "NO LONGER QUALIFIES · not reviewable" : stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
     target: target
   }))), /*#__PURE__*/React.createElement("div", {
     className: "prop-card-meta"
@@ -12519,6 +12684,10 @@ function ProposalCard({
   }, age.known ? `On the deck since ${age.text} · ${window.AsOfTime.relativeAge(age.ms)}` : "On the deck since: unknown (no firstProposedAt recorded on this card)", window.Help && /*#__PURE__*/React.createElement(window.Help, {
     term: "proposal_deck_freshness"
   }))), /*#__PURE__*/React.createElement(CarriedBanner, {
+    item: item
+  }), /*#__PURE__*/React.createElement(DisqualifiedBanner, {
+    item: item
+  }), /*#__PURE__*/React.createElement(RepriceFailedBanner, {
     item: item
   }), expired && !carried && /*#__PURE__*/React.createElement("p", {
     className: "prop-expired-note"
@@ -12833,10 +13002,12 @@ function ProposedTrades() {
   }, "Nothing here has been placed. These are the trades the fund intends to open on the next tick, each explained from scratch, with the rules it had to clear. Disagree with one? Use its \uD83D\uDCAC button \u2014 the comment thread under a proposal is how you tell the fund what to do with it, and it is read before anything fills."), /*#__PURE__*/React.createElement(DeploymentLine, {
     deployment: plan.deployment,
     totalCollateral: items.reduce(
-    // A `carried` card will not fill (see `CarriedBanner`) — it must
-    // not inflate "these proposals would tie up $X of collateral" any
-    // more than an already-expired one does.
-    (sum, it) => sum + (it.carried ? 0 : isCardExpired(it) ? 0 : Number(it.collateral) || 0), 0),
+    // A `carried` card will not fill (see `CarriedBanner`), and neither
+    // will one the live re-price just failed its own gates on
+    // (`stillQualifies: false`) — neither may inflate "these proposals
+    // would tie up $X of collateral" any more than an already-expired
+    // one does.
+    (sum, it) => sum + (it.carried ? 0 : it.stillQualifies === false ? 0 : isCardExpired(it) ? 0 : Number(it.collateral) || 0), 0),
     tally: approvalTally(items)
   }), items.length && !allExpired ? /*#__PURE__*/React.createElement("div", _extends({
     className: "prop-deck",
@@ -12889,7 +13060,9 @@ window.ProposedTradesInternals = {
   DeckCapNote,
   comparisonFeedbackTarget,
   comparisonMetricValue,
-  COMPARISON_METRIC_LABELS
+  COMPARISON_METRIC_LABELS,
+  repriceStamp,
+  repriceDrift
 };
 
 /* ---- pages/option-trade-detail.jsx ---- */
@@ -15139,6 +15312,10 @@ function proposalsAwaitingCount() {
     // An expired contract can never fill and needs no decision — counting it
     // would nag a dead deck forever, past the point any human action helps.
     if (internals.isCardExpired && internals.isCardExpired(it)) return false;
+    // A re-priced card that no longer clears its own entry gates
+    // (`stillQualifies: false`) can never fill either, regardless of any
+    // approval — same "needs no decision" reasoning as an expired contract.
+    if (it && it.stillQualifies === false) return false;
     // `verdict`, not `state`: an un-reviewed proposal's state string is
     // `not_reviewed` (approvalStatus's own vocabulary), while `verdict`
     // normalises every not-yet-approved shape to "pending" — matching on the

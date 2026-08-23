@@ -1881,6 +1881,21 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   font-size: 12px; color: var(--warn); font-weight: 600; margin: 8px 0 0; max-width: 85ch;
 }
 .prop-deck-cap-note { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
+/* Then-vs-now on a re-priced carried card — context for the scorecard's real
+   numbers, not a competing figure, so it follows the same quiet-annotation
+   treatment as .prop-deck-cap-note rather than a headline weight. */
+.prop-reprice-drift { font-size: 11px; color: var(--muted); margin: 4px 0 0; max-width: 85ch; }
+.prop-reprice-drift-metric { color: var(--muted); }
+/* "We cannot compute then-vs-now" must not read like a real measurement —
+   de-emphasised further than a known drift value via italics + reduced opacity. */
+.prop-reprice-drift--unknown { font-style: italic; opacity: 0.75; }
+/* Modifier layered on .prop-expired-note (DisqualifiedBanner renders both
+   classes together) — a delta, not a standalone block, so it must not fight
+   the base rule's warning weight. */
+.prop-disqualified-note { }
+.prop-reprice-failed-note {
+  font-size: 12px; color: var(--neg); font-weight: 600; margin: 8px 0 0; max-width: 85ch;
+}
 .prop-pager-count {
   font-size: 11px; font-family: var(--mono); color: var(--muted); margin-left: auto;
 }

@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-08-22T23:45:02Z",
+    "generatedAt": "2026-08-23T00:45:02Z",
     "open": 15,
     "proposals": {
       "approved": 1,
@@ -31,7 +31,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-22T23:45:02Z",
+  "generatedAt": "2026-08-23T00:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -1935,7 +1935,7 @@ window.FEEDBACK_THREADS = {
       label: "Proposed trade",
       short: "A trade the fund intends to open and has not opened. No money is committed yet.",
       example: "A proposal reading 'NVDA 150/145 put spread, expires Aug 21' means the fund wants to sell that spread on the next tick and has not yet. Nothing is at risk while it sits here, and a comment on it — 'the strike is too close' — is read before anything fills.",
-      long: "Proposals are produced by the pre-bell plan (spread_trader --preopen) after a candidate clears every entry gate. They sit here so a human can read the reasoning and object before the next tick tries to fill them. Comment on one with its \u{1F4AC} button — that thread is read before anything is placed. A proposal that fills moves to the Trade Log; one that doesn't simply disappears at the next plan."
+      long: "Proposals are produced by trader-tick's plan step, before it ever submits an order, after a candidate clears every entry gate. They sit here so a human can read the reasoning and object before that same tick tries to fill them. Comment on one with its \u{1F4AC} button — that thread is read before anything is placed. A proposal that fills moves to the Trade Log; one that doesn't simply disappears at the next plan."
     },
     proposal_approval: {
       label: "Approval",
@@ -12123,7 +12123,7 @@ function MissingCard({
 }) {
   return /*#__PURE__*/React.createElement("p", {
     className: "prop-error"
-  }, "This proposal has no explanation attached (no ", /*#__PURE__*/React.createElement("code", null, "explain"), " block on", " ", item.ticker || "the intent row", ") \u2014 data-spread-plan.js was written by an older spread_trader. Re-run ", /*#__PURE__*/React.createElement("code", null, "spread_trader --preopen"), " to regenerate it.");
+  }, "This proposal has no explanation attached (no ", /*#__PURE__*/React.createElement("code", null, "explain"), " block on", " ", item.ticker || "the intent row", ") \u2014 data-spread-plan.js was written by an older spread_trader. Wait for the next ", /*#__PURE__*/React.createElement("code", null, "trader-tick"), " cron run (every 15 min during market hours) to regenerate it.");
 }
 function ProposalChecks({
   checks

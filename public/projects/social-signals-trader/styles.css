@@ -1814,6 +1814,12 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
   border-top: 1px solid var(--line); max-width: 85ch;
 }
 
+/* Precedent-similarity score line inside the scorecard (PRD 2058) —
+   measurement only, never a gate. */
+.prop-precedent-note { font-size: 11px; color: var(--text-2); margin: 8px 0 0; }
+.prop-precedent-note--none { color: var(--muted); }
+.prop-precedent-note--close { color: var(--pos); }
+
 .prop-empty { margin-top: 4px; }
 .prop-funnel { list-style: none; margin: 8px 0 0; padding: 0; max-width: 560px; }
 .prop-funnel li {
@@ -1842,8 +1848,11 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .prop-dot:hover { border-color: var(--accent); }
 /* The open proposal reads as the big filled dot in ‹ o o O o o ›. */
 .prop-dot--on { width: 13px; height: 13px; background: var(--accent); border-color: var(--accent); }
-/* An unanswered comment on a proposal you are not looking at is still news. */
-.prop-dot--flagged { box-shadow: 0 0 0 2px color-mix(in oklch, var(--warn) 60%, transparent); }
+/* An unanswered comment on a proposal you are not looking at is still worth
+   a glance, but demoted (thinner, lower-opacity ring) now that the open
+   position — not the proposal — is the primary comment target (see
+   CLAUDE.md's "propose -> act -> review loop"). */
+.prop-dot--flagged { box-shadow: 0 0 0 1px color-mix(in oklch, var(--warn) 40%, transparent); }
 /* Approval state is a distinct channel from the flagged ring above (border
    color vs box-shadow), so a dot can show both at once — declined-and-
    unanswered is not the same as declined-and-read. Declared after --on so

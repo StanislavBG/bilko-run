@@ -13,8 +13,11 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 18,
-    "generatedAt": "2026-08-25T01:45:02Z",
+    "generatedAt": "2026-08-25T02:45:01Z",
     "open": 18,
+    "positions": {
+      "openWithUnansweredComment": 0
+    },
     "proposals": {
       "approved": 0,
       "carried": 2,
@@ -31,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-25T01:45:02Z",
+  "generatedAt": "2026-08-25T02:45:01Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -4224,6 +4227,12 @@ window.FEEDBACK_THREADS = {
     var target = props && props.target;
     var malformed = !target || typeof target !== "object" || !target.kind || !target.id || !target.label || VALID_KINDS.indexOf(target.kind) === -1;
     var isReply = !!(props && props.parentId);
+    // `variant="secondary"` gets the same quiet visual treatment as a reply
+    // button without actually being one (still starts a NEW topic) — used to
+    // demote the proposal deck's comment affordance now that the open
+    // position, not the proposal, is the primary comment target (see
+    // CLAUDE.md's "propose -> act -> review loop").
+    var secondary = !isReply && props && props.variant === "secondary";
     var [open, setOpen] = React.useState(false);
     var btnRef = React.useRef(null);
     if (malformed) return null;
@@ -4239,7 +4248,7 @@ window.FEEDBACK_THREADS = {
     }, React.createElement("button", {
       type: "button",
       ref: btnRef,
-      className: "feedback-btn" + (isReply ? " feedback-btn--reply" : ""),
+      className: "feedback-btn" + (isReply || secondary ? " feedback-btn--reply" : ""),
       "aria-label": isReply ? "Reply in the thread " + target.label : "Leave feedback on " + target.label,
       "aria-expanded": open,
       onClick: function (e) {
@@ -11637,6 +11646,7 @@ function FeedbackFunnel({
   var proposals = funnel.proposals || {};
   var proposalsPending = proposals.pending || 0;
   var proposalsTotal = proposalsPending + (proposals.approved || 0) + (proposals.declined || 0);
+  var positionsOpenUnanswered = (funnel.positions || {}).openWithUnansweredComment || 0;
   return /*#__PURE__*/React.createElement("div", {
     className: "fbt-funnel",
     role: "group",
@@ -11657,7 +11667,9 @@ function FeedbackFunnel({
     className: "fbt-funnel-stat" + (proposalsPending > 0 ? " fbt-funnel-stat--warn" : "")
   }, /*#__PURE__*/React.createElement("b", null, proposalsPending), " proposals awaiting a decision", /*#__PURE__*/React.createElement("span", {
     className: "fbt-funnel-sub"
-  }, " ", "(", proposals.approved || 0, " approved / ", proposals.declined || 0, " declined)")));
+  }, " ", "(", proposals.approved || 0, " approved / ", proposals.declined || 0, " declined)")), positionsOpenUnanswered > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "fbt-funnel-stat fbt-funnel-stat--warn"
+  }, /*#__PURE__*/React.createElement("b", null, positionsOpenUnanswered), " open position", positionsOpenUnanswered === 1 ? "" : "s", " with an unanswered comment"));
 }
 function SystemFeedbackPanel() {
   window.FeedbackClient.usePendingFeedback();
@@ -12539,6 +12551,31 @@ function ProposalQuotes({
     className: "opts-section-stamp opts-section-stamp--stale"
   }, "Quote time unavailable"));
 }
+
+// Measurement-only precedent-similarity score (PRD 2058). `item.precedentScore`
+// is built by `proposal_precedent.score_precedent()` inside `proposal_cards.
+// build_proposal()` — advisory only, same contract as `ProposalComparison`
+// above: nothing here is read by any gate/threshold/sizing/approval logic.
+// `wouldAutoApprove` is a REPORT of what a precedent-based auto-approve gate
+// WOULD have done, not something acted on.
+function PrecedentScoreLine({
+  score
+}) {
+  if (!score) return null;
+  if (!score.matched) {
+    var reason = score.reasons && score.reasons[0] || "not enough approved precedent yet";
+    var label = reason.startsWith("insufficient_approved_precedent") ? `not enough approved precedent yet (${score.approvedWithEconomicsCount} of ${score.minApprovedWithEconomics} needed)` : reason.startsWith("gate_asymmetry") ? "fails a gate its nearest approved precedent passed — never counted as close" : reason.replaceAll("_", " ");
+    return /*#__PURE__*/React.createElement("p", {
+      className: "prop-precedent-note prop-precedent-note--none"
+    }, "Precedent match: ", label, ".");
+  }
+  var nearest = score.nearest || {};
+  return /*#__PURE__*/React.createElement("p", {
+    className: `prop-precedent-note${score.wouldAutoApprove ? " prop-precedent-note--close" : ""}`
+  }, "Precedent match: ", /*#__PURE__*/React.createElement("span", {
+    className: "prop-mono"
+  }, (score.distance * 100).toFixed(1), "%"), " from", " ", /*#__PURE__*/React.createElement("b", null, nearest.contractKey || "unknown"), nearest.visitorSaid ? /*#__PURE__*/React.createElement(React.Fragment, null, " \u2014 you said \u201C", nearest.visitorSaid, "\u201D") : null, ".", " ", score.wouldAutoApprove ? "Would auto-approve under the current report-only threshold." : "Not close enough to auto-approve.");
+}
 function ProposalScorecard({
   item,
   equity,
@@ -12615,7 +12652,9 @@ function ProposalScorecard({
     tone: expired ? "neg" : undefined
   }), chip && /*#__PURE__*/React.createElement("div", {
     className: "prop-score-chip"
-  }, chip), /*#__PURE__*/React.createElement(ProposalQuotes, {
+  }, chip), /*#__PURE__*/React.createElement(PrecedentScoreLine, {
+    score: item.precedentScore
+  }), /*#__PURE__*/React.createElement(ProposalQuotes, {
     quotes: item.quotes
   }));
 }
@@ -12689,7 +12728,8 @@ function ProposalCard({
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-badge"
   }, carried ? "CARRIED · will not fill" : expired ? "EXPIRED · not reviewable" : disqualified ? "NO LONGER QUALIFIES · not reviewable" : stranded ? strandedIsConditional ? "CONDITIONAL · NOT ON THE BOARD" : "APPROVED · NOT ON THE BOARD" : "PROPOSED · not yet placed"), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
-    target: target
+    target: target,
+    variant: "secondary"
   }))), /*#__PURE__*/React.createElement("div", {
     className: "prop-card-meta"
   }, /*#__PURE__*/React.createElement("span", {
@@ -13159,15 +13199,14 @@ function TradeDetailFeedbackButton({
     label: `${ev.ticker || "this ticker"} ${structureName}`
   };
   return /*#__PURE__*/React.createElement(window.FeedbackButton, {
-    target: target
+    target: target,
+    variant: "secondary"
   });
 }
 
-// Which feedback targets this page owns: the trade key itself, plus the id
-// the Options Log's Positions table files position feedback under — reused
-// from its one definition (positionFeedbackTarget on OptionsSummaryInternals),
-// never re-derived here, so a question asked from the positions table and one
-// asked from this page land in the same discussion.
+// Resolves the SAME `positionFeedbackTarget()` builder the Positions
+// table/cards use, so a question asked from this page and one asked from
+// the Positions row land in the same thread.
 //
 // While the trade is still open that id comes straight off the live position
 // row. Once it's closed there's no live row left to read it from, but the
@@ -13179,16 +13218,12 @@ function TradeDetailFeedbackButton({
 // rather than going stranded the moment the live row disappears — the
 // contract-continuity merge (`FeedbackThreadsInternals.selectThreadsForContract`)
 // needs at least one of these legacy identities to seed the search from.
-function feedbackTargets(tradeKeyValue, pos, ev, facts) {
-  var targets = [];
-  if (tradeKeyValue) targets.push({
-    kind: "trade",
-    id: tradeKeyValue
-  });
+function resolvePositionFeedbackTarget(pos, ev, facts) {
   var summaryInternals = window.OptionsSummaryInternals;
   var buildTarget = summaryInternals && summaryInternals.positionFeedbackTarget;
-  var posTarget = pos && buildTarget ? buildTarget(pos) : null;
-  if (!posTarget && buildTarget && ev && facts && facts.shortParsed && facts.longParsed) {
+  if (!buildTarget) return null;
+  var posTarget = pos ? buildTarget(pos) : null;
+  if (!posTarget && ev && facts && facts.shortParsed && facts.longParsed) {
     posTarget = buildTarget({
       underlying: ev.ticker,
       right: facts.shortParsed.right,
@@ -13197,6 +13232,41 @@ function feedbackTargets(tradeKeyValue, pos, ev, facts) {
       expiry: facts.shortParsed.expiry
     });
   }
+  return posTarget;
+}
+
+// PRIMARY feedback affordance on this page while the position is still open.
+// CLAUDE.md's "propose -> act -> review loop": the open position, not the
+// trade-log row, is the primary comment target now that a proposal fills
+// without a human approval gate.
+function TradeDetailPositionFeedbackButton({
+  pos,
+  ev,
+  facts
+}) {
+  if (!window.FeedbackButton) return null;
+  var posTarget = resolvePositionFeedbackTarget(pos, ev, facts);
+  if (!posTarget) return null;
+  return /*#__PURE__*/React.createElement(window.FeedbackButton, {
+    target: {
+      kind: "position",
+      ...posTarget
+    }
+  });
+}
+
+// Which feedback targets this page owns: the trade key itself, plus the id
+// the Options Log's Positions table files position feedback under — reused
+// from its one definition (`resolvePositionFeedbackTarget` above), never
+// re-derived here, so a question asked from the positions table and one
+// asked from this page land in the same discussion.
+function feedbackTargets(tradeKeyValue, pos, ev, facts) {
+  var targets = [];
+  if (tradeKeyValue) targets.push({
+    kind: "trade",
+    id: tradeKeyValue
+  });
+  var posTarget = resolvePositionFeedbackTarget(pos, ev, facts);
   if (posTarget) targets.push({
     kind: "position",
     id: posTarget.id
@@ -14362,7 +14432,11 @@ function OptionTradeDetailPage() {
       alignItems: "center",
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement(BackToTradeLog, null), /*#__PURE__*/React.createElement(TradeDetailFeedbackButton, {
+  }, /*#__PURE__*/React.createElement(BackToTradeLog, null), /*#__PURE__*/React.createElement(TradeDetailPositionFeedbackButton, {
+    pos: pos,
+    ev: ev,
+    facts: facts
+  }), /*#__PURE__*/React.createElement(TradeDetailFeedbackButton, {
     ev: ev,
     facts: facts,
     tradeKeyValue: key

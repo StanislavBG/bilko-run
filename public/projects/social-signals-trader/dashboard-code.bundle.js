@@ -3,27 +3,27 @@
 window.FEEDBACK_THREADS = {
   "counts": {
     "active": 21,
-    "answered": 6,
+    "answered": 9,
     "archived": 0,
     "proposal": 19,
     "system": 0,
     "total": 21,
     "trade": 2,
-    "unanswered": 15
+    "unanswered": 12
   },
   "funnel": {
-    "breachingSla": 15,
-    "generatedAt": "2026-08-25T14:45:01Z",
-    "open": 16,
+    "breachingSla": 12,
+    "generatedAt": "2026-08-25T15:45:01Z",
+    "open": 14,
     "positions": {
       "openWithUnansweredComment": 0
     },
     "proposals": {
       "approved": 0,
-      "carried": 2,
+      "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 3,
+      "pending": 2,
       "stranded": 0
     },
     "resolvedThisWeek": 0,
@@ -34,9 +34,192 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-25T14:45:01Z",
+  "generatedAt": "2026-08-25T15:45:01Z",
   "schema": 2,
   "threads": [{
+    "answered": true,
+    "archivedAt": null,
+    "contractKey": "ORCL-P-140-139-2026-08-21",
+    "createdAt": "2026-08-14T19:53:35.000Z",
+    "description": "and it looks like there is still momentum to go up",
+    "hasImage": false,
+    "id": "fb_mstd7f1g_ekk8u4nv",
+    "lastActivityAt": "2026-08-25T15:30:08Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "and it looks like there is still momentum to go up",
+      "createdAt": "2026-08-14T19:53:35.000Z",
+      "hasImage": false,
+      "id": "fb_mstd7f1g_ekk8u4nv",
+      "role": "user",
+      "title": "no 2"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:53 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:55:02Z",
+      "hasImage": false,
+      "id": "fb_mstd7f1g_ekk8u4nv.r1",
+      "kind": "ack",
+      "role": "agent"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "You called this correctly and our own card agreed with you. The momentum check on that ORCL put spread reads 'Momentum \u2014 oversold (put side): RSI 54.72, %K 77.1' against a rule of RSI below 60 and %K below 60 \u2014 it FAILED, and the card said so, yet the proposal was still put in front of you. A put credit spread wants a stock that has stopped falling; ORCL still had upward momentum, exactly as you said. The contract expired 2026-08-21 unfilled and we are retiring it now, with your comment and the card kept on file as precedent. Thank you for reading the gate line rather than just the headline number.",
+      "createdAt": "2026-08-25T15:30:08Z",
+      "hasImage": false,
+      "id": "fb_mstd7f1g_ekk8u4nv.r2",
+      "kind": "reply",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:53 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T19:55:02Z",
+      "id": "fb_mstd7f1g_ekk8u4nv.r1",
+      "kind": "ack"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "You called this correctly and our own card agreed with you. The momentum check on that ORCL put spread reads 'Momentum \u2014 oversold (put side): RSI 54.72, %K 77.1' against a rule of RSI below 60 and %K below 60 \u2014 it FAILED, and the card said so, yet the proposal was still put in front of you. A put credit spread wants a stock that has stopped falling; ORCL still had upward momentum, exactly as you said. The contract expired 2026-08-21 unfilled and we are retiring it now, with your comment and the card kept on file as precedent. Thank you for reading the gate line rather than just the headline number.",
+      "createdAt": "2026-08-25T15:30:08Z",
+      "id": "fb_mstd7f1g_ekk8u4nv.r2",
+      "kind": "reply"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "answered",
+    "targetId": "proposal-ORCL-put-140-139-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "ORCL 140/139 put spread, expires 2026-08-21",
+    "title": "no 2",
+    "type": "feedback"
+  }, {
+    "answered": true,
+    "archivedAt": null,
+    "contractKey": "ORCL-P-140-139-2026-08-21",
+    "createdAt": "2026-08-14T19:56:18.000Z",
+    "description": "credit is too small. If we can get $1025, go for it. \nNet time add bid/ask/last prices and the time of recommending the spread",
+    "hasImage": false,
+    "id": "fb_mstdawnk_gx1xj6on",
+    "lastActivityAt": "2026-08-25T15:30:08Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "credit is too small. If we can get $1025, go for it. \nNet time add bid/ask/last prices and the time of recommending the spread",
+      "createdAt": "2026-08-14T19:56:18.000Z",
+      "hasImage": false,
+      "id": "fb_mstdawnk_gx1xj6on",
+      "role": "user",
+      "title": "no?"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:56 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T20:00:02Z",
+      "hasImage": false,
+      "id": "fb_mstdawnk_gx1xj6on.r1",
+      "kind": "ack",
+      "role": "agent"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Your condition was met and we still did not trade it \u2014 that one is on us. You said go for it at $1,025 and the spread was priced at exactly $1,025 credit. It never registered as an approval because the classifier that reads conditional comments errored out on that run and fell back to 'pending', which fails closed. The contract expired 2026-08-21 unfilled. We are retiring the proposal now and keeping your comment and the full card against it for reference. On your second point \u2014 bid, ask, last and the time the spread was priced are now carried on the proposal card, so the numbers you are judging are the numbers we priced against, with their as-of time. Since then the fund has moved to auto-trading, so proposals no longer wait on a comment; the place to weigh in is now on the open positions themselves.",
+      "createdAt": "2026-08-25T15:30:08Z",
+      "hasImage": false,
+      "id": "fb_mstdawnk_gx1xj6on.r2",
+      "kind": "reply",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-14 12:56 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-14T20:00:02Z",
+      "id": "fb_mstdawnk_gx1xj6on.r1",
+      "kind": "ack"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Your condition was met and we still did not trade it \u2014 that one is on us. You said go for it at $1,025 and the spread was priced at exactly $1,025 credit. It never registered as an approval because the classifier that reads conditional comments errored out on that run and fell back to 'pending', which fails closed. The contract expired 2026-08-21 unfilled. We are retiring the proposal now and keeping your comment and the full card against it for reference. On your second point \u2014 bid, ask, last and the time the spread was priced are now carried on the proposal card, so the numbers you are judging are the numbers we priced against, with their as-of time. Since then the fund has moved to auto-trading, so proposals no longer wait on a comment; the place to weigh in is now on the open positions themselves.",
+      "createdAt": "2026-08-25T15:30:08Z",
+      "id": "fb_mstdawnk_gx1xj6on.r2",
+      "kind": "reply"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "answered",
+    "targetId": "proposal-ORCL-put-140-139-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "ORCL 140/139 put spread, expires 2026-08-21",
+    "title": "no?",
+    "type": "feedback"
+  }, {
+    "answered": true,
+    "archivedAt": null,
+    "contractKey": "QQQ-C-742.5-743-2026-08-21",
+    "createdAt": "2026-08-17T13:56:25.000Z",
+    "description": "24 delta (9:56am) seems a little too high",
+    "hasImage": false,
+    "id": "fb_msxarn3p_3cmacxgw",
+    "lastActivityAt": "2026-08-25T15:29:56Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "24 delta (9:56am) seems a little too high",
+      "createdAt": "2026-08-17T13:56:25.000Z",
+      "hasImage": false,
+      "id": "fb_msxarn3p_3cmacxgw",
+      "role": "user",
+      "title": "maybe no"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-17 9:56 AM EDT against QQQ 742.5/743 call spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-21T19:05:02Z",
+      "hasImage": false,
+      "id": "fb_msxarn3p_3cmacxgw.r1",
+      "kind": "ack",
+      "role": "agent"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "You were reading a live number and we were showing a stale one. The card was scanned at short delta 0.183; by 9:56am the quote had moved to the 0.24 you saw. Our cap is 0.34, so 0.24 still cleared the rule \u2014 but you were right that the card was not telling you what the market was telling you. That contract expired on 2026-08-21 unfilled and we are retiring the proposal now. Two things changed because of comments like this one: proposals are re-priced against the live chain every cycle instead of showing scan-time numbers, and the card now flags when its own figures are frozen rather than live. Thank you \u2014 this was a real gap.",
+      "createdAt": "2026-08-25T15:29:56Z",
+      "hasImage": false,
+      "id": "fb_msxarn3p_3cmacxgw.r2",
+      "kind": "reply",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-17 9:56 AM EDT against QQQ 742.5/743 call spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-21T19:05:02Z",
+      "id": "fb_msxarn3p_3cmacxgw.r1",
+      "kind": "ack"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "You were reading a live number and we were showing a stale one. The card was scanned at short delta 0.183; by 9:56am the quote had moved to the 0.24 you saw. Our cap is 0.34, so 0.24 still cleared the rule \u2014 but you were right that the card was not telling you what the market was telling you. That contract expired on 2026-08-21 unfilled and we are retiring the proposal now. Two things changed because of comments like this one: proposals are re-priced against the live chain every cycle instead of showing scan-time numbers, and the card now flags when its own figures are frozen rather than live. Thank you \u2014 this was a real gap.",
+      "createdAt": "2026-08-25T15:29:56Z",
+      "id": "fb_msxarn3p_3cmacxgw.r2",
+      "kind": "reply"
+    }],
+    "route": "#options",
+    "scope": "proposal",
+    "stage": "proposal",
+    "status": "answered",
+    "targetId": "proposal-QQQ-call-742.5-743-2026-08-21",
+    "targetKind": "component",
+    "targetLabel": "QQQ 742.5/743 call spread, expires 2026-08-21",
+    "title": "maybe no",
+    "type": "feedback"
+  }, {
     "answered": false,
     "archivedAt": null,
     "contractKey": "SPY-C-790-791-2026-08-28",
@@ -80,51 +263,6 @@ window.FEEDBACK_THREADS = {
     "targetKind": "component",
     "targetLabel": "SPY 790/791 call spread, expires 2026-08-28",
     "title": "Go for it",
-    "type": "feedback"
-  }, {
-    "answered": false,
-    "archivedAt": null,
-    "contractKey": "QQQ-C-742.5-743-2026-08-21",
-    "createdAt": "2026-08-17T13:56:25.000Z",
-    "description": "24 delta (9:56am) seems a little too high",
-    "hasImage": false,
-    "id": "fb_msxarn3p_3cmacxgw",
-    "lastActivityAt": "2026-08-17T13:56:25.000Z",
-    "messages": [{
-      "author": "visitor",
-      "authorLabel": "Visitor",
-      "body": "24 delta (9:56am) seems a little too high",
-      "createdAt": "2026-08-17T13:56:25.000Z",
-      "hasImage": false,
-      "id": "fb_msxarn3p_3cmacxgw",
-      "role": "user",
-      "title": "maybe no"
-    }, {
-      "author": "agent",
-      "authorLabel": "Trading agent",
-      "body": "Got it \u2014 logged at 2026-08-17 9:56 AM EDT against QQQ 742.5/743 call spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
-      "createdAt": "2026-08-21T19:05:02Z",
-      "hasImage": false,
-      "id": "fb_msxarn3p_3cmacxgw.r1",
-      "kind": "ack",
-      "role": "agent"
-    }],
-    "replies": [{
-      "author": "agent",
-      "authorLabel": "Trading agent",
-      "body": "Got it \u2014 logged at 2026-08-17 9:56 AM EDT against QQQ 742.5/743 call spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
-      "createdAt": "2026-08-21T19:05:02Z",
-      "id": "fb_msxarn3p_3cmacxgw.r1",
-      "kind": "ack"
-    }],
-    "route": "#options",
-    "scope": "proposal",
-    "stage": "proposal",
-    "status": "open",
-    "targetId": "proposal-QQQ-call-742.5-743-2026-08-21",
-    "targetKind": "component",
-    "targetLabel": "QQQ 742.5/743 call spread, expires 2026-08-21",
-    "title": "maybe no",
     "type": "feedback"
   }, {
     "answered": false,
@@ -260,96 +398,6 @@ window.FEEDBACK_THREADS = {
     "targetKind": "component",
     "targetLabel": "AMD 420/410 put spread, expires 2026-09-18",
     "title": "do it",
-    "type": "feedback"
-  }, {
-    "answered": false,
-    "archivedAt": null,
-    "contractKey": "ORCL-P-140-139-2026-08-21",
-    "createdAt": "2026-08-14T19:56:18.000Z",
-    "description": "credit is too small. If we can get $1025, go for it. \nNet time add bid/ask/last prices and the time of recommending the spread",
-    "hasImage": false,
-    "id": "fb_mstdawnk_gx1xj6on",
-    "lastActivityAt": "2026-08-14T19:56:18.000Z",
-    "messages": [{
-      "author": "visitor",
-      "authorLabel": "Visitor",
-      "body": "credit is too small. If we can get $1025, go for it. \nNet time add bid/ask/last prices and the time of recommending the spread",
-      "createdAt": "2026-08-14T19:56:18.000Z",
-      "hasImage": false,
-      "id": "fb_mstdawnk_gx1xj6on",
-      "role": "user",
-      "title": "no?"
-    }, {
-      "author": "agent",
-      "authorLabel": "Trading agent",
-      "body": "Got it \u2014 logged at 2026-08-14 12:56 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
-      "createdAt": "2026-08-14T20:00:02Z",
-      "hasImage": false,
-      "id": "fb_mstdawnk_gx1xj6on.r1",
-      "kind": "ack",
-      "role": "agent"
-    }],
-    "replies": [{
-      "author": "agent",
-      "authorLabel": "Trading agent",
-      "body": "Got it \u2014 logged at 2026-08-14 12:56 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
-      "createdAt": "2026-08-14T20:00:02Z",
-      "id": "fb_mstdawnk_gx1xj6on.r1",
-      "kind": "ack"
-    }],
-    "route": "#options",
-    "scope": "proposal",
-    "stage": "proposal",
-    "status": "open",
-    "targetId": "proposal-ORCL-put-140-139-2026-08-21",
-    "targetKind": "component",
-    "targetLabel": "ORCL 140/139 put spread, expires 2026-08-21",
-    "title": "no?",
-    "type": "feedback"
-  }, {
-    "answered": false,
-    "archivedAt": null,
-    "contractKey": "ORCL-P-140-139-2026-08-21",
-    "createdAt": "2026-08-14T19:53:35.000Z",
-    "description": "and it looks like there is still momentum to go up",
-    "hasImage": false,
-    "id": "fb_mstd7f1g_ekk8u4nv",
-    "lastActivityAt": "2026-08-14T19:53:35.000Z",
-    "messages": [{
-      "author": "visitor",
-      "authorLabel": "Visitor",
-      "body": "and it looks like there is still momentum to go up",
-      "createdAt": "2026-08-14T19:53:35.000Z",
-      "hasImage": false,
-      "id": "fb_mstd7f1g_ekk8u4nv",
-      "role": "user",
-      "title": "no 2"
-    }, {
-      "author": "agent",
-      "authorLabel": "Trading agent",
-      "body": "Got it \u2014 logged at 2026-08-14 12:53 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
-      "createdAt": "2026-08-14T19:55:02Z",
-      "hasImage": false,
-      "id": "fb_mstd7f1g_ekk8u4nv.r1",
-      "kind": "ack",
-      "role": "agent"
-    }],
-    "replies": [{
-      "author": "agent",
-      "authorLabel": "Trading agent",
-      "body": "Got it \u2014 logged at 2026-08-14 12:53 PM PDT against ORCL 140/139 put spread, expires 2026-08-21. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
-      "createdAt": "2026-08-14T19:55:02Z",
-      "id": "fb_mstd7f1g_ekk8u4nv.r1",
-      "kind": "ack"
-    }],
-    "route": "#options",
-    "scope": "proposal",
-    "stage": "proposal",
-    "status": "open",
-    "targetId": "proposal-ORCL-put-140-139-2026-08-21",
-    "targetKind": "component",
-    "targetLabel": "ORCL 140/139 put spread, expires 2026-08-21",
-    "title": "no 2",
     "type": "feedback"
   }, {
     "answered": false,

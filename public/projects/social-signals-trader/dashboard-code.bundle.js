@@ -12,8 +12,8 @@ window.FEEDBACK_THREADS = {
     "unanswered": 14
   },
   "funnel": {
-    "breachingSla": 12,
-    "generatedAt": "2026-08-27T21:45:03Z",
+    "breachingSla": 14,
+    "generatedAt": "2026-08-27T22:45:01Z",
     "open": 17,
     "positions": {
       "openWithUnansweredComment": 0
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-27T21:45:03Z",
+  "generatedAt": "2026-08-27T22:45:01Z",
   "schema": 2,
   "threads": [{
     "answered": false,

@@ -1652,6 +1652,32 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
    an accent left-edge and full-width cards rather than a compact row. */
 .prop-panel { border-left: 3px solid color-mix(in oklch, var(--accent) 55%, transparent); }
 .prop-lede { max-width: 90ch; margin: 6px 0 10px; }
+
+/* Collapse control for the proposed-trades deck. The deck stopped being the
+   human-in-the-loop gate when `require_proposal_approval` went false, so it
+   renders collapsed by default on #options and this is how a reader opens it.
+   Quiet, secondary treatment — same reasoning as .feedback-btn--reply: still
+   available, no longer the headline call to action. */
+.prop-collapse-toggle {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 7px;
+}
+.prop-collapse-toggle:hover { color: var(--text); border-color: var(--muted); }
+.prop-collapse-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The one-line stand-in shown in place of the deck while it's collapsed. */
+.prop-collapsed-sub {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin: 4px 0 2px;
+}
 .prop-deployment {
   display: flex; flex-direction: column; gap: 4px;
   font-size: 12px; color: var(--text-2); margin-bottom: 12px;
@@ -2039,17 +2065,33 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
     font-family: var(--mono); font-size: 11px; color: var(--text-2);
   }
   .opts-pos-card-suspect { margin: 8px 0 0; font-size: 11px; }
+  /* Stacked, not side-by-side: commenting is the job, "Full detail" is the
+     escape hatch. Two equal-weight buttons in a row made the reader choose
+     between them; this makes the primary action unmissable and puts the
+     secondary one underneath at link weight. */
   .opts-pos-card-foot {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 8px 12px; border-top: 1px solid var(--line); background: var(--surface);
+    display: block;
+    padding: 10px 12px; border-top: 1px solid var(--line); background: var(--surface);
   }
-  /* Commenting is the point of this page on a phone — the pill gets a real
-     44px target here, not the 22px chip it is in a dense desktop table. */
-  .opts-pos-card-foot .feedback-btn { min-height: 40px; padding: 8px 16px; font-size: 13px; }
+  .opts-pos-card-act { display: flex; align-items: center; gap: 8px; }
+  /* The button, and the <span class="feedback"> wrapper it sits in, both go
+     full width — otherwise the wrapper shrink-wraps and the 100% below
+     resolves against the wrong box. */
+  .opts-pos-card-act .feedback { flex: 1; display: block; }
+  /* Commenting is the point of this page on a phone — a real full-width 44px
+     target, filled rather than outlined, so it reads as THE action. */
+  .opts-pos-card-foot .feedback-btn {
+    width: 100%; justify-content: center;
+    min-height: 44px; padding: 10px 16px; font-size: 14px; font-weight: 600;
+    background: var(--accent); border-color: var(--accent); color: var(--bg);
+  }
+  .opts-pos-card-foot .feedback-btn:hover { filter: brightness(1.08); }
+  /* Still a 40px target even at link weight — it is a tappable control on a
+     phone, and the quieter styling must not shrink the box a thumb aims at. */
   .opts-pos-card-more {
-    margin-left: auto; min-height: 40px; padding: 8px 12px;
+    display: block; width: 100%; margin: 4px 0 0; min-height: 40px; padding: 4px;
     background: none; border: none; color: var(--muted);
-    font-family: var(--sans); font-size: 12px; cursor: pointer;
+    font-family: var(--sans); font-size: 12px; cursor: pointer; text-align: center;
   }
 
   /* An unpaired leg's table is 5 columns of prose; let it scroll in its own

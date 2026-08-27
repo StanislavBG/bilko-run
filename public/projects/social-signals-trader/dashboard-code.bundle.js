@@ -2,19 +2,19 @@
 /* ---- data-feedback.js ---- */
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 21,
+    "active": 23,
     "answered": 9,
     "archived": 0,
     "proposal": 19,
     "system": 0,
-    "total": 21,
-    "trade": 2,
-    "unanswered": 12
+    "total": 23,
+    "trade": 4,
+    "unanswered": 14
   },
   "funnel": {
     "breachingSla": 12,
-    "generatedAt": "2026-08-27T17:45:01Z",
-    "open": 12,
+    "generatedAt": "2026-08-27T18:15:02Z",
+    "open": 16,
     "positions": {
       "openWithUnansweredComment": 0
     },
@@ -23,20 +23,110 @@ window.FEEDBACK_THREADS = {
       "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 0,
+      "pending": 2,
       "stranded": 0
     },
     "resolvedThisWeek": 0,
     "routedToPrd": 4,
     "triagedBySeverity": {
       "high": 0,
-      "low": 19,
+      "low": 21,
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-27T17:45:01Z",
+  "generatedAt": "2026-08-27T18:15:02Z",
   "schema": 2,
   "threads": [{
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "SPY-C-777-778-2026-08-31",
+    "createdAt": "2026-08-27T17:53:52.000Z",
+    "description": "Delta is too high today.",
+    "hasImage": false,
+    "id": "fb_mtbtniy7_bul00e8j",
+    "lastActivityAt": "2026-08-27T17:53:52.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "Delta is too high today.",
+      "createdAt": "2026-08-27T17:53:52.000Z",
+      "hasImage": false,
+      "id": "fb_mtbtniy7_bul00e8j",
+      "role": "user",
+      "title": "?no"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-27 1:53 PM EDT against SPY 777/778 call spread, expires Aug 31. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-27T17:55:02Z",
+      "hasImage": false,
+      "id": "fb_mtbtniy7_bul00e8j.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-27 1:53 PM EDT against SPY 777/778 call spread, expires Aug 31. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-27T17:55:02Z",
+      "id": "fb_mtbtniy7_bul00e8j.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "position",
+    "stage": "position",
+    "status": "open",
+    "targetId": "SPY-C-777/778-2026-08-31",
+    "targetKind": "position",
+    "targetLabel": "SPY 777/778 call spread, expires Aug 31",
+    "title": "?no",
+    "type": "feedback"
+  }, {
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "QQQ-C-735-736-2026-09-04",
+    "createdAt": "2026-08-27T17:49:00.000Z",
+    "description": "Too high delta for a call spread",
+    "hasImage": false,
+    "id": "fb_mtbth9oy_9iwqwa6g",
+    "lastActivityAt": "2026-08-27T17:49:00.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "Too high delta for a call spread",
+      "createdAt": "2026-08-27T17:49:00.000Z",
+      "hasImage": false,
+      "id": "fb_mtbth9oy_9iwqwa6g",
+      "role": "user",
+      "title": "Maybe no"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-27 1:49 PM EDT against QQQ 735/736 call spread, expires Sep 4. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-27T17:50:03Z",
+      "hasImage": false,
+      "id": "fb_mtbth9oy_9iwqwa6g.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-27 1:49 PM EDT against QQQ 735/736 call spread, expires Sep 4. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-27T17:50:03Z",
+      "id": "fb_mtbth9oy_9iwqwa6g.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "position",
+    "stage": "position",
+    "status": "open",
+    "targetId": "QQQ-C-735/736-2026-09-04",
+    "targetKind": "position",
+    "targetLabel": "QQQ 735/736 call spread, expires Sep 4",
+    "title": "Maybe no",
+    "type": "feedback"
+  }, {
     "answered": true,
     "archivedAt": null,
     "contractKey": "ORCL-P-140-139-2026-08-21",
@@ -4303,9 +4393,15 @@ window.FEEDBACK_THREADS = {
         e.stopPropagation();
         setOpen(true);
       }
-    }, FeedbackIcon(), React.createElement("span", {
+    }, FeedbackIcon(),
+    // `label` lets a surface name the action in its own words — the
+    // mobile position card says "Comment on this position", because on a
+    // phone this button IS the job the reader came to do and a bare
+    // "Feedback" next to "Full detail →" reads as the lesser of the two.
+    // Defaults to the generic wording everywhere else.
+    React.createElement("span", {
       className: "feedback-btn-label"
-    }, isReply ? "Reply" : "Feedback")), open ? ReactDOM.createPortal(React.createElement(FeedbackModal, {
+    }, props && props.label || (isReply ? "Reply" : "Feedback"))), open ? ReactDOM.createPortal(React.createElement(FeedbackModal, {
       target: target,
       parentId: props.parentId,
       parentType: props.parentType,
@@ -9484,8 +9580,15 @@ function panelComponentId(title) {
 // hardcoded interval. `feedbackId` is opt-in too — when omitted it's
 // derived from `title` via panelComponentId() so every card built on
 // Section gets a feedback button with no per-call-site change.
+// `mobileTitle` — an optional shorter heading for the phone layout. A desktop
+// panel title often explains the TABLE (e.g. "entry snapshot (frozen) vs now
+// (live)" describes the two halves of an 11-column grid); on mobile there is
+// no such grid to explain and that subtitle is pure vertical cost above the
+// content. Kept here rather than at each call site so the responsive choice
+// has one implementation.
 function Section({
   title,
+  mobileTitle,
   titleTerm,
   feedbackId,
   updatedAt,
@@ -9494,6 +9597,8 @@ function Section({
   extraHead,
   children
 }) {
+  var isMobileSection = window.Viewport.useIsMobile();
+  var shownTitle = isMobileSection && mobileTitle ? mobileTitle : title;
   var resolvedFeedbackId = feedbackId || panelComponentId(title);
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel"
@@ -9501,7 +9606,7 @@ function Section({
     className: "opt-panel-head"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "opt-panel-title"
-  }, title, titleTerm && /*#__PURE__*/React.createElement(window.Help, {
+  }, shownTitle, titleTerm && /*#__PURE__*/React.createElement(window.Help, {
     term: titleTerm
   }), window.FeedbackButton && /*#__PURE__*/React.createElement(window.FeedbackButton, {
     target: {
@@ -10203,15 +10308,18 @@ function PositionCard({
     className: "opts-line-warn opts-pos-card-suspect"
   }, cells.conf, " \u2014 wide-quoted leg, this mark is the least trustworthy number on the card.")), /*#__PURE__*/React.createElement("footer", {
     className: "opts-pos-card-foot"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "opts-pos-card-act"
   }, window.FeedbackButton && feedbackTarget && /*#__PURE__*/React.createElement(window.FeedbackButton, {
     target: {
       kind: "position",
       ...feedbackTarget
-    }
+    },
+    label: "Comment on this position"
   }), /*#__PURE__*/React.createElement(PositionFeedbackIndicator, {
     feedbackTarget: feedbackTarget,
     tradeKeyValue: key
-  }), openDetail && /*#__PURE__*/React.createElement("button", {
+  })), openDetail && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "opts-pos-card-more",
     onClick: openDetail
@@ -10296,6 +10404,7 @@ function PositionsSection({
 }) {
   return /*#__PURE__*/React.createElement(Section, {
     title: "Positions \u2014 entry snapshot (frozen) vs now (live)",
+    mobileTitle: "Positions",
     updatedAt: fallbackAsOf,
     schedule: schedule,
     role: ROLE.ANALYST
@@ -13031,10 +13140,59 @@ function DeckCapNote({
     className: "prop-deck-cap-note"
   }, "Best ", shown, " of ", qualified, " that qualified this cycle", capped > 0 ? ` — ${capped} more set aside.` : ".");
 }
-function ProposedTrades() {
+
+// Where the reader's expand/collapse choice is remembered, so opening the
+// deck once doesn't have to be repeated on every page load.
+var COLLAPSE_KEY = "sst.proposedTrades.expanded";
+function readStoredExpanded() {
+  try {
+    var v = window.localStorage.getItem(COLLAPSE_KEY);
+    return v === null ? null : v === "1";
+  } catch (e) {
+    // Private mode / storage disabled — fall back to the caller's default.
+    return null;
+  }
+}
+function storeExpanded(next) {
+  try {
+    window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+  } catch (e) {
+    /* not worth surfacing — the panel still works, it just won't remember */
+  }
+}
+
+// The one-line stand-in shown while the deck is collapsed. Carries the only
+// two numbers a reader needs to decide whether to open it: how many live
+// proposals there are, and what they'd tie up.
+function CollapsedSummary({
+  items,
+  collateral
+}) {
+  var live = items.reduce((n, it) => n + (it.carried || it.stillQualifies === false || isCardExpired(it) ? 0 : 1), 0);
+  if (!items.length) return /*#__PURE__*/React.createElement("span", {
+    className: "prop-collapsed-sub"
+  }, "Nothing proposed this cycle.");
+  return /*#__PURE__*/React.createElement("span", {
+    className: "prop-collapsed-sub"
+  }, live, " live proposal", live === 1 ? "" : "s", collateral > 0 ? ` · ${window.fmtUSD ? window.fmtUSD(collateral) : "$" + Math.round(collateral).toLocaleString()} collateral if all filled` : "", items.length > live ? ` · ${items.length - live} not fillable` : "");
+}
+
+// `defaultExpanded` — the desktop #options page passes nothing and gets the
+// collapsed default (PRD: the deck stopped being the human-in-the-loop gate
+// when `require_proposal_approval` went false, so a full-height deck above
+// the trade log is no longer earning its space). The mobile "Proposed" tab
+// passes `true`, because there the panel IS the whole tab and collapsing it
+// would leave the tab empty.
+function ProposedTrades({
+  defaultExpanded = false
+}) {
   // No target — just the subscription, so a pending echo anywhere on this
   // deck (opened via the discussion panel below) re-renders the pager ring.
   window.FeedbackClient.usePendingFeedback();
+  var [expanded, setExpanded] = React.useState(() => {
+    var stored = readStoredExpanded();
+    return stored === null ? defaultExpanded : stored;
+  });
   var plan = proposalPlan();
   var items = plan.intent;
   // A `carried` card is never counted as "expired" for this purpose — it's
@@ -13072,6 +13230,19 @@ function ProposedTrades() {
     }
   });
   var deckProps = isMobile && items.length > 1 ? swipe : {};
+
+  // A `carried` card will not fill (see `CarriedBanner`), and neither will
+  // one the live re-price just failed its own gates on (`stillQualifies:
+  // false`) — neither may inflate "these proposals would tie up $X of
+  // collateral" any more than an already-expired one does. Hoisted out of
+  // the DeploymentLine call so the collapsed one-liner reports the identical
+  // figure rather than computing its own.
+  var totalCollateral = items.reduce((sum, it) => sum + (it.carried ? 0 : it.stillQualifies === false ? 0 : isCardExpired(it) ? 0 : Number(it.collateral) || 0), 0);
+  var toggle = () => {
+    var next = !expanded;
+    setExpanded(next);
+    storeExpanded(next);
+  };
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel prop-panel",
     id: "proposed-trades"
@@ -13098,17 +13269,23 @@ function ProposedTrades() {
   }), plan.approvalGeneratedAt && /*#__PURE__*/React.createElement("span", {
     className: "fbt-count",
     title: plan.approvalGeneratedAt
-  }, "approvals as of ", whenPlanned(plan.approvalGeneratedAt)))), /*#__PURE__*/React.createElement("p", {
+  }, "approvals as of ", whenPlanned(plan.approvalGeneratedAt)), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "prop-collapse-toggle",
+    onClick: toggle,
+    "aria-expanded": expanded,
+    "aria-controls": "proposed-trades-body",
+    title: expanded ? "Collapse proposed trades" : "Expand proposed trades"
+  }, expanded ? "Hide ▲" : "Show ▼"))), !expanded && /*#__PURE__*/React.createElement(CollapsedSummary, {
+    items: items,
+    collateral: totalCollateral
+  }), expanded && /*#__PURE__*/React.createElement("div", {
+    id: "proposed-trades-body"
+  }, /*#__PURE__*/React.createElement("p", {
     className: "opts-page-sub prop-lede"
   }, "Nothing here has been placed. These are the trades the fund intends to open on the next tick, each explained from scratch, with the rules it had to clear. Disagree with one? Use its \uD83D\uDCAC button \u2014 the comment thread under a proposal is how you tell the fund what to do with it, and it is read before anything fills."), /*#__PURE__*/React.createElement(DeploymentLine, {
     deployment: plan.deployment,
-    totalCollateral: items.reduce(
-    // A `carried` card will not fill (see `CarriedBanner`), and neither
-    // will one the live re-price just failed its own gates on
-    // (`stillQualifies: false`) — neither may inflate "these proposals
-    // would tie up $X of collateral" any more than an already-expired
-    // one does.
-    (sum, it) => sum + (it.carried ? 0 : it.stillQualifies === false ? 0 : isCardExpired(it) ? 0 : Number(it.collateral) || 0), 0),
+    totalCollateral: totalCollateral,
     tally: approvalTally(items)
   }), items.length && !allExpired ? /*#__PURE__*/React.createElement("div", _extends({
     className: "prop-deck",
@@ -13136,7 +13313,7 @@ function ProposedTrades() {
     funnel: plan.funnel
   }), allExpired && /*#__PURE__*/React.createElement("p", {
     className: "prop-all-expired-note"
-  }, "\u26A0 All ", items.length, " proposal", items.length === 1 ? "" : "s", " on this deck expired \u2014 nothing here is reviewable. Nothing will replace them until a trader scan runs again.")));
+  }, "\u26A0 All ", items.length, " proposal", items.length === 1 ? "" : "s", " on this deck expired \u2014 nothing here is reviewable. Nothing will replace them until a trader scan runs again."))));
 }
 window.ProposedTrades = ProposedTrades;
 window.ProposedTradesInternals = {
@@ -15519,7 +15696,9 @@ function MobileOptionsPage({
     className: "opts-mob-loop"
   }, "The ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " posts its read (", summary.cadenceLabel || "on schedule", "); the", " ", /*#__PURE__*/React.createElement("b", null, "Trader"), " applies the frozen rules on its own 15-minute tick. Your comment is the human voice on both \u2014 and on a proposal, a positive comment IS the approval."), /*#__PURE__*/React.createElement(ExecutionState, null)), tab === "positions" && /*#__PURE__*/React.createElement(React.Fragment, null, summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
     id: "options-summary"
-  }, summary.positions), summary.whatWeThink, summary.actionQueue)), tab === "proposals" && /*#__PURE__*/React.createElement(React.Fragment, null, window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null)), tab === "more" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, summary.positions), summary.whatWeThink, summary.actionQueue)), tab === "proposals" && /*#__PURE__*/React.createElement(React.Fragment, null, window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, {
+    defaultExpanded: true
+  })), tab === "more" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     id: "options-trade-log"
   }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, tradeLog.expiryLadder, summary.whereBookStands, tradeLog.openOrders), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
     className: "opts-strategy"

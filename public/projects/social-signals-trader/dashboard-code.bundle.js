@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 14,
-    "generatedAt": "2026-08-28T16:45:03Z",
+    "generatedAt": "2026-08-28T19:35:02Z",
     "open": 16,
     "positions": {
       "openWithUnansweredComment": 0
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-28T16:45:03Z",
+  "generatedAt": "2026-08-28T19:35:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -7836,7 +7836,17 @@ var TERMINAL_LABELS = {
   canceled: "CANCELLED",
   expired: "EXPIRED",
   rejected: "REJECTED",
-  unknown_to_broker: "UNKNOWN"
+  unknown_to_broker: "UNKNOWN",
+  // A REPLACED order is dead: Alpaca's order-replace kills the original and
+  // mints a successor under a new id (and, since 520b7b6, a new
+  // `client_order_id` with an `_RPEG<n>` suffix). The successor is the live
+  // order; the original can never fill again. Omitting `replaced` here left
+  // every re-pegged order behind as a permanently "QUEUED" ghost in Open
+  // Orders — 2026-08-28: the card counted 5 still-open against Alpaca's 3,
+  // the two extras being replaced originals from Aug 26 and Aug 27. That
+  // accumulates one ghost per successful re-peg, so it got worse exactly as
+  // the re-peg started working (PRD 2643).
+  replaced: "REPLACED"
 };
 function isFullyFilled(record) {
   var resp = record.response || {};

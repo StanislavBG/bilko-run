@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 14,
-    "generatedAt": "2026-08-28T19:45:02Z",
+    "generatedAt": "2026-08-28T20:45:02Z",
     "open": 17,
     "positions": {
       "openWithUnansweredComment": 0
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-28T19:45:02Z",
+  "generatedAt": "2026-08-28T20:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -15279,9 +15279,9 @@ function StrategyPolicy() {
       margin: "6px 0 0",
       maxWidth: 760
     }
-  }, /*#__PURE__*/React.createElement("b", null, "Suppressors:"), " a ", /*#__PURE__*/React.createElement(window.Help, {
+  }, /*#__PURE__*/React.createElement("b", null, "Suppressors:"), " a structurally impossible mark (raw cost above the spread's arithmetic max value) disables both mark-driven exits \u2014 max-loss stop and profit target \u2014 while the strike breach stays active, since the breach keys on spot vs strike, not the mark. A merely wide", " ", /*#__PURE__*/React.createElement(window.Help, {
     term: "mark_suspect"
-  }), "suspect mark disables both mark-driven exits \u2014 max-loss stop and profit target \u2014 while the strike breach stays active, since the breach keys on spot vs strike, not the mark. A non-positive entry credit disables the same two percent-of-credit exits (there is no credit to take a percent of), leaving only the strike breach.", /*#__PURE__*/React.createElement(PolicyFeedback, {
+  }), "quote is checked differently per side: the max-loss stop uses a strict percentage-of-mid test, while the profit target uses a looser test that also accepts a small absolute-cents spread \u2014 a winning trade's short leg decays toward zero, which balloons its percentage spread even on a perfectly tradeable one-tick quote, so percentage alone would make the profit target unreachable for a winner. A non-positive entry credit disables the same two percent-of-credit exits (there is no credit to take a percent of), leaving only the strike breach.", /*#__PURE__*/React.createElement(PolicyFeedback, {
     section: "Exit \u2014 suppressors",
     compact: true
   })));

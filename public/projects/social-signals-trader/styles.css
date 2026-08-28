@@ -1769,6 +1769,16 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .prop-score-row--big .prop-score-value { font-size: 18px; }
 .prop-score-value--pos { color: var(--pos); }
 .prop-score-value--neg { color: var(--neg); }
+/* Per-contract decomposition under a package total — quieter than the row
+   it explains, and never tinted pos/neg so a frozen figure can't read live.
+   The parent row's own divider moves down to sit under this sub-line instead
+   of between the two, so the pair reads as one group. */
+.prop-score-row:has(+ .prop-score-sub) { border-bottom: 0; }
+.prop-score-sub {
+  font-size: 10px; color: var(--muted); text-align: right;
+  padding: 0 0 5px; margin-top: -3px; border-bottom: 1px solid var(--line);
+}
+.prop-score-sub:last-child { border-bottom: 0; }
 .prop-meter {
   height: 4px; border-radius: 999px; background: var(--surface-2);
   overflow: hidden; margin: 2px 0 6px;

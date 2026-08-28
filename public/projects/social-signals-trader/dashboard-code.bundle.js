@@ -13,8 +13,8 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 14,
-    "generatedAt": "2026-08-28T19:35:02Z",
-    "open": 16,
+    "generatedAt": "2026-08-28T19:45:02Z",
+    "open": 17,
     "positions": {
       "openWithUnansweredComment": 0
     },
@@ -23,7 +23,7 @@ window.FEEDBACK_THREADS = {
       "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 2,
+      "pending": 3,
       "stranded": 0
     },
     "resolvedThisWeek": 0,
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-28T19:35:02Z",
+  "generatedAt": "2026-08-28T19:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -2499,6 +2499,28 @@ window.FEEDBACK_THREADS = {
         result: v => v.contracts ? v.credit / v.contracts : null,
         unit: "$",
         source: "src/social_signals_trader/spread_trader.py:1415"
+      }
+    },
+    collateral_per_contract: {
+      label: "Collateral per contract",
+      short: "The cash the broker locks up for a single spread contract.",
+      long: "This is the GROSS strike width x 100 the broker reserves per contract while the spread is open — not the net-of-credit max loss. It differs from max loss by exactly the credit received. Multiply by the number of contracts to get the total collateral tied up.",
+      calc: {
+        expr: "collateral ÷ contracts",
+        inputs: [{
+          key: "collateral",
+          label: "Collateral",
+          unit: "$",
+          priced: true,
+          clock: "entry"
+        }, {
+          key: "contracts",
+          label: "Contracts",
+          unit: ""
+        }],
+        result: v => v.contracts ? v.collateral / v.contracts : null,
+        unit: "$",
+        source: "src/social_signals_trader/proposal_cards.py:538"
       }
     },
     fill_state: {
@@ -9932,12 +9954,12 @@ var POSITIONS_COLUMNS = [{
   frozen: true
 }, {
   key: "frozen_entry",
-  header: "FROZEN entry (filled / net / credit)",
+  header: "FROZEN entry (filled / net per contract / total credit)",
   term: "frozen_entry",
   frozen: true
 }, {
   key: "spread_price",
-  header: "LIVE spread price (Δ)",
+  header: "LIVE spread price / contract (position total) (Δ)",
   term: "close_cost"
 }, {
   key: "spot",
@@ -10052,6 +10074,8 @@ function legacyDisplayCells(pos) {
     contracts: pos.qty === null || pos.qty === undefined ? "—" : String(pos.qty),
     frozen_entry: `${filled} / ${num(entry.net_per_contract, 2)} / ${money(entry.credit)}`,
     spread_price: `${money(now.close_cost)} (—)`,
+    entry_credit_per_contract: "—",
+    live_price_per_contract: "—",
     spot: now.spot === null || now.spot === undefined ? "—" : `$${Number(now.spot).toFixed(2)}`,
     cushion: `${pct(now.cushion_pct)} (—)`,
     band: now.band || "—",
@@ -10225,6 +10249,11 @@ var POSITION_CARD_FIGURES = [{
   term: "close_cost",
   calc: "close_cost"
 }, {
+  key: "live_price_per_contract",
+  label: "Per contract (now)",
+  term: "close_cost",
+  calc: "close_cost"
+}, {
   key: "spot",
   label: "Spot",
   term: "spot"
@@ -10310,7 +10339,11 @@ function PositionCard({
     className: "opts-pos-card-frozen"
   }, /*#__PURE__*/React.createElement("span", {
     className: "opts-pos-card-label"
-  }, cells.contracts, " contract", cells.contracts === "1" ? "" : "s", " \xB7 entry (filled / net / credit)", /*#__PURE__*/React.createElement(window.Help, {
+  }, cells.contracts, " contract", cells.contracts === "1" ? "" : "s", " \xB7 ", cells.entry_credit_per_contract, " credit per contract", /*#__PURE__*/React.createElement(window.Help, {
+    term: "credit_per_contract",
+    inputs: calcProps.risk,
+    asOf: calcProps.asOf
+  }), " ", "\xB7 entry (filled / net / credit)", /*#__PURE__*/React.createElement(window.Help, {
     term: "frozen_entry",
     inputs: calcProps.risk,
     asOf: calcProps.asOf
@@ -12533,9 +12566,10 @@ function ScoreRow({
   value,
   term,
   tone,
-  big
+  big,
+  sub
 }) {
-  return /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: `prop-score-row${big ? " prop-score-row--big" : ""}`
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-score-label"
@@ -12543,7 +12577,23 @@ function ScoreRow({
     term: term
   })), /*#__PURE__*/React.createElement("span", {
     className: `prop-score-value${tone ? ` prop-score-value--${tone}` : ""}`
-  }, value));
+  }, value)), sub);
+}
+
+// The per-contract decomposition of a package total — "We get paid $700"
+// tells a reviewer nothing they can check against a live option quote.
+// Reads the ALREADY-SCORED per-contract field rather than deriving it from
+// the package total in the JSX, so this can never round differently from
+// the number `proposal_cards._enrich_row()` actually priced. Shared by the
+// credit and collateral rows so the two don't fork into near-identical
+// blocks.
+function perContractSub(amount, contracts, term) {
+  if (amount === null || amount === undefined || contracts === null || contracts === undefined) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "prop-score-sub"
+  }, propMoney(amount, 2), " per contract x ", contracts, term && window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: term
+  }));
 }
 
 // A proposal only reaches this panel by clearing every gate, so the badge
@@ -12778,7 +12828,8 @@ function ProposalScorecard({
     value: propMoney(item.credit),
     term: "credit_received",
     tone: frozen ? undefined : "pos",
-    big: true
+    big: true,
+    sub: perContractSub(item.credit_per_contract, item.contracts, "credit_per_contract")
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Most we can lose",
     value: propMoney(item.risk),
@@ -12788,7 +12839,8 @@ function ProposalScorecard({
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Cash tied up (collateral)",
     value: collateralLabel(item, equity),
-    term: "collateral"
+    term: "collateral",
+    sub: perContractSub(item.collateral_per_contract, item.contracts, "collateral_per_contract")
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Expected value",
     value: propMoney(item.ev),

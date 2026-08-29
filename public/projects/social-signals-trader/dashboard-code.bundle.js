@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 14,
-    "generatedAt": "2026-08-29T09:45:02Z",
+    "generatedAt": "2026-08-29T17:45:02Z",
     "open": 14,
     "positions": {
       "openWithUnansweredComment": 0
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-29T09:45:02Z",
+  "generatedAt": "2026-08-29T17:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -9876,6 +9876,33 @@ function positionFeedbackTarget(pos) {
   } : null;
 }
 
+// Mirrors options_summary_render.py's `_anchor_id()` verbatim — the anchor
+// shape (`pos-<underlying>-<right>-<short_strike>-<expiry>`) is unrelated to
+// positionFeedbackTarget's id shape, so resolving one FROM the other means
+// recomputing this same string per live position and matching, never
+// string-munging the anchor apart.
+function anchorIdForPosition(pos) {
+  if (!pos) return null;
+  if (pos.underlying == null || pos.right == null || pos.short_strike == null || pos.expiry == null) return null;
+  return `pos-${pos.underlying}-${pos.right}-${pos.short_strike}-${pos.expiry}`;
+}
+
+// The ONE anchor -> feedback-target resolver, shared by WhatWeThink and
+// ActionQueueRow so a comment filed from either widget joins the same
+// thread a Positions-table row would file into. A stale anchor naming a
+// position that's since closed (or missing an anchor at all) resolves to
+// null — the caller renders no button, never a broken one.
+function feedbackTargetForAnchor(anchorId, positions) {
+  if (!anchorId) return null;
+  var pos = (positions || []).find(p => anchorIdForPosition(p) === anchorId);
+  if (!pos) return null;
+  var target = positionFeedbackTarget(pos);
+  return target ? {
+    kind: "position",
+    ...target
+  } : null;
+}
+
 // After setting the hash to a trade's detail page, that page mounts
 // asynchronously (React re-render off the hashchange event) — so this retries
 // a few times rather than assuming #trade-feedback exists on the next tick.
@@ -10493,7 +10520,8 @@ function scrollToWhatWeThinkRow(anchorId) {
 function WhatWeThink({
   lines,
   updatedAt,
-  schedule
+  schedule,
+  positions
 }) {
   var items = bulletsOf(lines);
   return /*#__PURE__*/React.createElement(Section, {
@@ -10508,11 +10536,15 @@ function WhatWeThink({
       text,
       anchorId
     } = stripAnchorComment(raw);
+    var feedbackTarget = feedbackTargetForAnchor(anchorId, positions);
     return /*#__PURE__*/React.createElement("li", {
       key: i,
       id: anchorId || undefined,
       className: text.indexOf("⚠") !== -1 ? "opts-line-warn" : undefined
-    }, renderInlineMd(text));
+    }, renderInlineMd(text), window.FeedbackButton && feedbackTarget && /*#__PURE__*/React.createElement(window.FeedbackButton, {
+      target: feedbackTarget,
+      variant: "secondary"
+    }));
   })) : /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
   }, plainLinesOf(lines)[0] || "No open options positions — nothing to assess."));
@@ -10594,7 +10626,8 @@ function ActionQueueCounts({
 }
 function ActionQueueRow({
   text,
-  anchors
+  anchors,
+  positions
 }) {
   var {
     text: visible,
@@ -10610,6 +10643,7 @@ function ActionQueueRow({
       activate();
     }
   } : undefined;
+  var feedbackTarget = feedbackTargetForAnchor(anchorId, positions);
   return /*#__PURE__*/React.createElement("li", {
     className: `opts-action opts-action--${sev}${clickable ? " opts-action--clickable" : ""}`,
     onClick: activate,
@@ -10618,7 +10652,13 @@ function ActionQueueRow({
     onKeyDown: onKeyDown
   }, renderInlineMdGlossy(visible), rowTerm && /*#__PURE__*/React.createElement(window.Help, {
     term: rowTerm
-  }));
+  }), window.FeedbackButton && feedbackTarget && /*#__PURE__*/React.createElement("span", {
+    onClick: e => e.stopPropagation(),
+    onKeyDown: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement(window.FeedbackButton, {
+    target: feedbackTarget,
+    variant: "secondary"
+  })));
 }
 
 // Analyst recommendations are advisory opinions (docs/analyst-spec.md), not
@@ -10763,7 +10803,8 @@ function ActionQueue({
   }, g.items.map((t, i) => /*#__PURE__*/React.createElement(ActionQueueRow, {
     key: i,
     text: t,
-    anchors: anchorSet
+    anchors: anchorSet,
+    positions: positions
   }))))) : /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
   }, "Nothing needs attention right now."), /*#__PURE__*/React.createElement(AnalystRecommendations, {
@@ -11008,7 +11049,8 @@ function optionsSummaryParts(data) {
     whatWeThink: /*#__PURE__*/React.createElement(WhatWeThink, {
       lines: whatWeThinkLines,
       updatedAt: fallbackAsOf,
-      schedule: schedule
+      schedule: schedule,
+      positions: record.positions
     }),
     actionQueue: /*#__PURE__*/React.createElement(ActionQueue, {
       lines: findSection(sections, "Action queue").lines,
@@ -13470,27 +13512,6 @@ function BackToTradeLog() {
   }, "\u2190 Back to trade log");
 }
 
-// Same target shape/id as the row this page was opened from (options-trade-log.jsx's
-// tradeKey), so a visitor's feedback from the row and from the detail page join to
-// the same trade regardless of which surface they used.
-function TradeDetailFeedbackButton({
-  ev,
-  facts,
-  tradeKeyValue
-}) {
-  if (!window.FeedbackButton || !tradeKeyValue) return null;
-  var structureName = facts.structure ? facts.structure.name : "credit spread";
-  var target = {
-    kind: "trade",
-    id: tradeKeyValue,
-    label: `${ev.ticker || "this ticker"} ${structureName}`
-  };
-  return /*#__PURE__*/React.createElement(window.FeedbackButton, {
-    target: target,
-    variant: "secondary"
-  });
-}
-
 // Resolves the SAME `positionFeedbackTarget()` builder the Positions
 // table/cards use, so a question asked from this page and one asked from
 // the Positions row land in the same thread.
@@ -13522,23 +13543,39 @@ function resolvePositionFeedbackTarget(pos, ev, facts) {
   return posTarget;
 }
 
-// PRIMARY feedback affordance on this page while the position is still open.
-// CLAUDE.md's "propose -> act -> review loop": the open position, not the
-// trade-log row, is the primary comment target now that a proposal fills
-// without a human approval gate.
-function TradeDetailPositionFeedbackButton({
+// ONE feedback affordance on this page: it comments on the spread as a
+// whole (both legs), per CLAUDE.md's "propose -> act -> review loop" — the
+// open position, not the trade-log row, is the primary comment target now
+// that a proposal fills without a human approval gate. `positionFeedbackTarget`
+// already keys/labels on both legs (`<TICKER>-<right>-<short>/<long>-<expiry>`),
+// so that's the button; the `kind: "trade"` identity (`feedbackTargets` below)
+// is kept only on the reading side, as a fallback here and for thread
+// continuity, never rendered as a second control.
+function TradeDetailSpreadFeedbackButton({
   pos,
   ev,
-  facts
+  facts,
+  tradeKeyValue
 }) {
   if (!window.FeedbackButton) return null;
   var posTarget = resolvePositionFeedbackTarget(pos, ev, facts);
-  if (!posTarget) return null;
+  if (posTarget) {
+    return /*#__PURE__*/React.createElement(window.FeedbackButton, {
+      target: {
+        kind: "position",
+        ...posTarget
+      }
+    });
+  }
+  if (!tradeKeyValue) return null;
+  var structureName = facts.structure ? facts.structure.name : "credit spread";
+  var target = {
+    kind: "trade",
+    id: tradeKeyValue,
+    label: `${ev.ticker || "this ticker"} ${structureName}`
+  };
   return /*#__PURE__*/React.createElement(window.FeedbackButton, {
-    target: {
-      kind: "position",
-      ...posTarget
-    }
+    target: target
   });
 }
 
@@ -14719,11 +14756,8 @@ function OptionTradeDetailPage() {
       alignItems: "center",
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement(BackToTradeLog, null), /*#__PURE__*/React.createElement(TradeDetailPositionFeedbackButton, {
+  }, /*#__PURE__*/React.createElement(BackToTradeLog, null), /*#__PURE__*/React.createElement(TradeDetailSpreadFeedbackButton, {
     pos: pos,
-    ev: ev,
-    facts: facts
-  }), /*#__PURE__*/React.createElement(TradeDetailFeedbackButton, {
     ev: ev,
     facts: facts,
     tradeKeyValue: key

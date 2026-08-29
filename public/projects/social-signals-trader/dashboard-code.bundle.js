@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 14,
-    "generatedAt": "2026-08-29T18:45:02Z",
+    "generatedAt": "2026-08-29T19:45:02Z",
     "open": 14,
     "positions": {
       "openWithUnansweredComment": 0
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-29T18:45:02Z",
+  "generatedAt": "2026-08-29T19:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -9876,15 +9876,27 @@ function positionFeedbackTarget(pos) {
   } : null;
 }
 
-// Mirrors options_summary_render.py's `_anchor_id()` verbatim — the anchor
-// shape (`pos-<underlying>-<right>-<short_strike>-<expiry>`) is unrelated to
+// Mirrors options_summary_render.py's `_anchor_id()` — the anchor shape
+// (`pos-<underlying>-<right>-<short_strike>-<expiry>`) is unrelated to
 // positionFeedbackTarget's id shape, so resolving one FROM the other means
 // recomputing this same string per live position and matching, never
-// string-munging the anchor apart.
-function anchorIdForPosition(pos) {
-  if (!pos) return null;
-  if (pos.underlying == null || pos.right == null || pos.short_strike == null || pos.expiry == null) return null;
-  return `pos-${pos.underlying}-${pos.right}-${pos.short_strike}-${pos.expiry}`;
+// string-munging the anchor apart (a ticker or strike containing a `-` would
+// break any attempt to split it).
+//
+// The strike is the one segment the two languages disagree about. Python
+// interpolates the stored float, so 781.0 renders "781.0"; JSON.parse hands
+// JS the Number 781 and `${781}` renders "781". Matching on the JS rendering
+// alone found NOTHING and every row silently lost its button. So build BOTH
+// renderings and accept either: an integer-valued strike could legitimately
+// have been stored as a Python int (→ "781") or a float (→ "781.0"), and a
+// fractional strike (781.5) renders identically on both sides.
+function anchorIdsForPosition(pos) {
+  if (!pos) return [];
+  if (pos.underlying == null || pos.right == null || pos.short_strike == null || pos.expiry == null) return [];
+  var strike = Number(pos.short_strike);
+  if (!Number.isFinite(strike)) return [];
+  var renderings = Number.isInteger(strike) ? [String(strike), strike.toFixed(1)] : [String(strike)];
+  return renderings.map(s => `pos-${pos.underlying}-${pos.right}-${s}-${pos.expiry}`);
 }
 
 // The ONE anchor -> feedback-target resolver, shared by WhatWeThink and
@@ -9894,7 +9906,7 @@ function anchorIdForPosition(pos) {
 // null — the caller renders no button, never a broken one.
 function feedbackTargetForAnchor(anchorId, positions) {
   if (!anchorId) return null;
-  var pos = (positions || []).find(p => anchorIdForPosition(p) === anchorId);
+  var pos = (positions || []).find(p => anchorIdsForPosition(p).indexOf(anchorId) !== -1);
   if (!pos) return null;
   var target = positionFeedbackTarget(pos);
   return target ? {

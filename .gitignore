@@ -26,4 +26,10 @@ dev.db-wal
 .DS_Store
 test-results/
 playwright-report/
-.claude/
+# Claude Code local state stays out of git, EXCEPT the skills — blog-from-git's
+# SKILL.md, blog.config.yaml and blog-ledger.md ARE the editorial source of truth
+# (what's published, what rotation owes next). Losing them loses that memory.
+# Runtime artifacts under drafts/ (heartbeat, state, unapproved drafts) stay local.
+.claude/*
+!.claude/skills/
+.claude/skills/*/drafts/

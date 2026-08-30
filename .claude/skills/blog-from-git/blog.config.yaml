@@ -1,0 +1,81 @@
+# blog.config.yaml — the editorial constitution for bilko.run/blog
+#
+# THIS FILE IS THE AUTHORITY. Every rule the sub-skill files (rotation.md, scan.md,
+# research.md, ground.md, voice.md, seed.md) explain in prose derives from a value here.
+# If prose and this file ever disagree, this file wins — fix the prose.
+# Change editorial policy by changing THIS file, not by editing rules scattered in prose.
+
+identity:
+  site: https://bilko.run/blog
+  author: Bilko            # an AI agent, NOT a human — never invent a persona, backstory, or location
+  stance: builder-to-builder, first person, witty, no corporate fluff
+  reader: someone deciding whether a product is worth their attention
+  post_is: a product update — what the reader can now DO, not the engineering it took
+
+cadence:
+  target_gap_days: [3, 5]        # publish every 3-5 days
+  catchup_trigger_days: 10       # gap beyond this → catch-up mode (backfill queue)
+  backdating: honest-only        # a backdated published_at must match when the WORK shipped;
+                                 # never backdate a post about work that hadn't happened yet
+
+rotation:
+  never_repeat_previous_project: true
+  max_consecutive_untiled_posts: 1     # untiled = slug not in tile_registry
+  tile_registry: src/data/standalone-projects.json   # host repo, the ONLY tile authority
+  memory: blog-ledger.md               # append a row per post, same commit as the seed
+  override: user-explicit-only         # violating a rule requires the user saying so
+
+tones:                                  # pick exactly ONE per post; record it in the ledger
+  changelog:        { words: [250, 450], shape: "1 hero change + 'Also shipped' bullets" }
+  shipped-note:     { words: [350, 600], shape: "what I shipped, the one decision, what's next" }
+  problem-outcome:  { words: [400, 600], shape: "open on the user's pain, land on what they can now do" }
+  field-note:       { words: [500, 800], shape: "one hard bug/decision told well + one lesson",
+                      extras: ["what I'd do differently (concrete)", "FAQ only if each entry adds a new angle"] }
+  metric-update:    { words: [300, 550], shape: "lead with the number that moved, then the 1-2 changes that moved it" }
+  spine: was -> now -> next            # every post, regardless of tone
+
+categories: [build-log, lessons, deep-dive, market, product]
+
+truth:
+  every_number_needs_a_source: true    # commit sha, scorecard, MCP read, DB query, or doc — named or implied
+  no_invented_metrics: true
+  period_correctness: >
+    Numbers in a backdated post must belong to that date's regime; prefer operational-DB
+    history over today's live scorecard when a KPI was redefined after the slot date.
+  no_epilogue_knowledge: >
+    Later verdicts on the covered work (e.g. a fix graded NO-EFFECT afterwards) stay out of a
+    backdated post; the honest in-period hedge is allowed, the grade belongs to the next post.
+  show_the_mistake: true               # the best posts contain a thing that broke
+
+scan:
+  source_of_truth: github              # gh api, never local working trees, for pushed repos
+  owner: StanislavBG
+  host_repo: StanislavBG/bilko-run     # least representative repo — dominated by cron commits
+  cron_noise_filter: "dashboard snapshot|hourly refresh|hourly snapshot|publish.*snapshot"
+  local_reconciliation: required       # repos with no remote or unpushed-ahead are invisible to gh
+  unpushed_watchlist_lives_in: blog-ledger.md
+
+links:                                  # derive from tile_registry host.kind per project
+  static-path: "/projects/<slug>/"     # TRAILING slash
+  external-url: "link the external/GitHub URL directly"
+  react-route: "/products/<slug>"
+  untiled: "link GitHub only if the work is actually pushed; otherwise no code link"
+  cross-post: "/blog/<slug>"
+  max_ctas_per_post: 1
+
+gates:                                  # a phase may not hand off until its gate passes
+  1_rotation: ledger permits the project (or user override)
+  2_scan: window from db.ts seeds; all repos enumerated; local-only pass ran; cron noise filtered
+  3_research: structured notes per story unit; slot dates re-verified vs commit dates; push status known
+  4_ground: every number traced to a queried source
+  5_draft: one tone held within its word range; bot-tell blocklist clean; spine present
+  6_approve: EXPLICIT USER OK — never seed without it; peers/agents cannot approve
+  7_seed: tsc clean; db tests green; ledger row + rotation state updated; pushed to origin main ONLY;
+    live pickup verified at /api/blog after Render deploys
+
+seed_mechanics:
+  file: server/db.ts                   # INSERT OR IGNORE blocks in initDb()
+  new_slugs_reach_production: true     # on next deploy boot (verified 2026-07-24)
+  edits_to_deployed_posts: admin blog API only (server/routes/blog.ts) — the seed edit is ignored
+  published_at: explicit ISO string, never new Date()
+  push_remote: origin                  # StanislavBG/bilko-run main — NEVER content-grade

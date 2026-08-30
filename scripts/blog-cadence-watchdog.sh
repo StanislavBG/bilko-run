@@ -98,6 +98,20 @@ if [[ -f "$STATE_FILE" ]]; then
   fi
 fi
 
+# --- drafts already pending human review: don't pile more on top ---
+# Unreviewed drafts are awaiting phase-6 human approval; drafting more while
+# they sit there is what produced an ambiguous pile of "whose is this?" files
+# (see PRD 1002's postmortem). A run that finds *.md drafts already present
+# stops here instead of invoking claude -p.
+shopt -s nullglob
+EXISTING_DRAFTS=("$DRAFTS_DIR"/*.md)
+shopt -u nullglob
+if (( ${#EXISTING_DRAFTS[@]} > 0 )); then
+  echo "[blog-cadence-watchdog] ${#EXISTING_DRAFTS[@]} unreviewed draft(s) already pending review — skipping: ${EXISTING_DRAFTS[*]}"
+  write_heartbeat "ok: ${#EXISTING_DRAFTS[@]} unreviewed draft(s) already pending review — skipping"
+  exit 0
+fi
+
 if (( GAP_DAYS >= CATCHUP_TRIGGER )); then
   MODE="catchup"
   MODE_INSTRUCTIONS="Catch-up mode (gap ${GAP_DAYS}d >= catchup_trigger_days ${CATCHUP_TRIGGER}d): scan the WHOLE portfolio's activity since the last live post ($NEWEST_PUBLISHED_AT) via GitHub (per scan.md — gh, not local working trees, for pushed repos; local reconciliation for unpushed/no-remote repos per the ledger's watchlist) and produce a QUEUE of separate, normal-sized backdated posts at 3-5 day cadence, each honestly dated to when its work actually shipped (blog.config.yaml backdating: honest-only), per rotation.md Part 0.5. Write one draft file per queued post."
@@ -105,6 +119,10 @@ else
   MODE="portfolio"
   MODE_INSTRUCTIONS="Portfolio mode (gap ${GAP_DAYS}d, no project named): scan the whole portfolio's activity since the last live post ($NEWEST_PUBLISHED_AT) via GitHub (per scan.md) and draft ONE arc post spanning the repos that moved."
 fi
+
+# stamped into every draft's front matter below — from the script's own
+# clock, not the model's guess at the current time.
+AUTHORED_AT="$(TZ=America/Los_Angeles date -Iseconds)"
 
 PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past its ${UPPER_BOUND}-day cadence target. There is NO human present in this session.
 
@@ -117,10 +135,18 @@ STOP AFTER PHASE 5. Do not run phase 6 (Approve) or phase 7 (Seed) — this repo
 - edit or append to blog-ledger.md
 - run git add, git commit, or git push
 - seed or publish anything
+- delete, move, or overwrite any pre-existing file in .claude/skills/blog-from-git/drafts/ — that directory is append-only for automated runs; only a human (or an explicitly human-approved seed step) removes drafts from it
+- describe a file you did not create in this run as your own output — if you find drafts already present, report them as pre-existing and leave them untouched
 
-Instead, write each finished draft as a standalone markdown file (front matter: title, slug, category, published_at, tone) under .claude/skills/blog-from-git/drafts/<published-date-YYYY-MM-DD>-<slug>.md, creating the directory if needed. When done, print a one-line list of the draft file path(s) you wrote and nothing else."
+Instead, write each finished draft as a standalone markdown file under .claude/skills/blog-from-git/drafts/<published-date-YYYY-MM-DD>-<slug>.md, creating the directory if needed. Each draft's front matter MUST include: title, slug, category, published_at, tone, authored_by: blog-cadence-watchdog, authored_at: $AUTHORED_AT (use this exact timestamp — it is this run's actual start time, not a guess). When done, print a one-line list of the draft file path(s) you wrote and nothing else."
 
 echo "[blog-cadence-watchdog] mode=$MODE — invoking claude -p to draft (phases 1-5 only, stopping before approve/seed)"
+
+# Record intent to run BEFORE invoking claude -p, not after. Writing this
+# after the call (the original ordering) let a timeout mid-draft strand
+# partial drafts on disk with no state recorded — the exact condition that
+# produced seven unattributed "orphan" files during PRD 1002's postmortem.
+echo "$TODAY $MODE $GAP_DAYS" > "$STATE_FILE"
 
 set +e
 timeout 2400 claude -p "$PROMPT" \
@@ -131,11 +157,17 @@ CLAUDE_RC=$?
 set -e
 
 if [[ $CLAUDE_RC -ne 0 ]]; then
+  # Undo the "ran today" marker: nothing was actually drafted (or the
+  # EXISTING_DRAFTS guard on the next invocation will catch any partial
+  # orphan files from a mid-draft timeout), so a same-day retry — whether
+  # from the next cron trigger or a human rerunning by hand after fixing
+  # the underlying error — must not be blocked by the idempotent-per-day
+  # check above thinking today's draft already happened.
+  rm -f "$STATE_FILE"
   echo "[blog-cadence-watchdog] claude -p exited $CLAUDE_RC (timed out or errored) — will retry next scheduled run" >&2
   write_heartbeat "error: claude -p exited $CLAUDE_RC mode=$MODE gap=${GAP_DAYS}d"
   exit "$CLAUDE_RC"
 fi
 
-echo "$TODAY $MODE $GAP_DAYS" > "$STATE_FILE"
 write_heartbeat "ok: drafted mode=$MODE gap=${GAP_DAYS}d"
 echo "[blog-cadence-watchdog] done — drafts (if any) are in $DRAFTS_DIR, awaiting human review/seed"

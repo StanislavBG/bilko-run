@@ -50,6 +50,14 @@ pays for itself from ~2 story units up; for a single small changelog post it may
 reading the diffs inline). Phases 5–6 run per post (a catch-up backfill loops 5→6 per post, then
 one combined phase 7).
 
+**Phase 5 drafts directory is append-only for automated runs.** `drafts/` may already contain
+`.md` files a prior run (human or automated, e.g. `scripts/blog-cadence-watchdog.sh`) wrote and
+left pending phase-6 approval. Never delete, move, or overwrite a pre-existing draft — only a
+human, or an explicitly human-approved seed step (`seed.md`), removes files from this directory.
+If you find drafts you did not author in this run, report them as pre-existing and attribute
+them to their `authored_by` front-matter value; never present someone else's draft as your own
+output. A clean `git status` proves nothing here — `drafts/` is gitignored.
+
 ## Mode decision (after phase 1, before phase 2)
 
 | Mode | When | Scope | Output |

@@ -1,5 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { dbAll } from '../db.js';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { load as loadYaml } from 'js-yaml';
+import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
 import { flushEgress, topEgress, topEgressBySlug, topStaticAssets, earliestEgressDate, dayKey } from '../egress.js';
@@ -199,5 +202,51 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const assets = await safeQuery(() => topStaticAssets(days, limit, q.slug || undefined), []);
 
     return { rows, bySlug, totalBytes, assets, earliestDate, days, generatedAt: Math.floor(Date.now() / 1000) };
+  });
+
+  // Days since the last LIVE blog post, colour-coded against blog.config.yaml's
+  // cadence policy — this is the tile the 36-day gap incident would have
+  // caught (nothing on-site showed a number before this route existed).
+  // Reads the same DB table the public /api/blog route serves, not a cache,
+  // so this can never show "healthy" while the public site is actually stale.
+  app.get('/api/admin/blog-cadence', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+
+    const configPath = resolve(process.cwd(), '.claude/skills/blog-from-git/blog.config.yaml');
+    let config: { target_gap_days?: [number, number]; catchup_trigger_days?: number } | null;
+    try {
+      const raw = readFileSync(configPath, 'utf-8');
+      const parsed = loadYaml(raw) as { cadence?: typeof config };
+      config = parsed.cadence ?? null;
+    } catch (err) {
+      // Logged, not silently swallowed — a broken read must not look
+      // identical to "cadence just isn't configured" (status: 'unknown').
+      req.log.error({ err, configPath }, '[blog-cadence] failed to read/parse blog.config.yaml');
+      config = null;
+    }
+
+    const latest = await safeQuery(
+      () => dbGet<{ published_at: string }>(
+        `SELECT published_at FROM blog_posts WHERE published = 1 ORDER BY published_at DESC LIMIT 1`,
+      ),
+      undefined,
+    );
+
+    const targetUpperDays = config?.target_gap_days?.[1] ?? null;
+    const catchupTriggerDays = config?.catchup_trigger_days ?? null;
+    const lastPublishedAt = latest?.published_at ?? null;
+    const gapDays = lastPublishedAt
+      ? Math.floor((Date.now() - new Date(lastPublishedAt).getTime()) / 86_400_000)
+      : null;
+
+    let status: 'ok' | 'warn' | 'critical' | 'unknown' = 'unknown';
+    if (gapDays !== null && targetUpperDays !== null && catchupTriggerDays !== null) {
+      if (gapDays < targetUpperDays) status = 'ok';
+      else if (gapDays < catchupTriggerDays) status = 'warn';
+      else status = 'critical';
+    }
+
+    return { lastPublishedAt, gapDays, targetUpperDays, catchupTriggerDays, status };
   });
 }

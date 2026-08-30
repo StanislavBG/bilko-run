@@ -1,0 +1,10 @@
+[Unit]
+Description=Dead-man's-switch: verify blog-cadence-watchdog's heartbeat is fresh
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/Bilko
+ExecStart=%h/Projects/Bilko/scripts/check-blog-watchdog-heartbeat.sh
+StandardOutput=journal
+StandardError=journal

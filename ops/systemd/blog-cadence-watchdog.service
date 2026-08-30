@@ -1,0 +1,11 @@
+[Unit]
+Description=Bilko blog cadence watchdog — drafts a catch-up post when the live publishing gap blows the target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/Bilko
+ExecStart=%h/Projects/Bilko/scripts/blog-cadence-watchdog.sh
+StandardOutput=append:%h/Projects/Bilko/.claude/skills/blog-from-git/drafts/.watchdog.log
+StandardError=append:%h/Projects/Bilko/.claude/skills/blog-from-git/drafts/.watchdog.log

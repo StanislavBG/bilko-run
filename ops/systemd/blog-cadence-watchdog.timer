@@ -1,0 +1,10 @@
+[Unit]
+Description=Run blog-cadence-watchdog daily, replaying a missed run after downtime
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+AccuracySec=15min
+
+[Install]
+WantedBy=timers.target

@@ -3,6 +3,7 @@ import { useUser, useAuth } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 import { ADMIN_EMAILS } from '../../constants.js';
 import { BandwidthPanel } from './BandwidthPanel.js';
+import { BlogCadencePanel } from './BlogCadencePanel.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -398,6 +399,8 @@ export function ObservabilityPage() {
               Latest host-kit: <code className="font-mono">{data.latestKit}</code>
             </p>
           )}
+
+          <BlogCadencePanel />
 
           <div className="pt-4 border-t border-warm-100">
             <BandwidthPanel />

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run blog-watchdog-heartbeat-check every 6h — independent of the watchdog's own timer
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=6h
+Persistent=true
+AccuracySec=15min
+
+[Install]
+WantedBy=timers.target

@@ -33,22 +33,35 @@ cd "$(dirname "$0")/.."
 # cron runs with a bare PATH; the claude CLI lives in ~/.local/bin.
 export PATH="$HOME/.local/bin:$PATH"
 
+CONFIG_FILE=".claude/skills/blog-from-git/blog.config.yaml"
+DRAFTS_DIR=".claude/skills/blog-from-git/drafts"
+STATE_FILE="$DRAFTS_DIR/.watchdog-state"
+HEARTBEAT_FILE="$DRAFTS_DIR/.watchdog-heartbeat"
+
+# Written on EVERY exit path, including lock contention and "within cadence,
+# no action" — so a stale heartbeat means the watchdog itself is dead, not
+# "nothing to do" or "a normal overlapping run got skipped". See
+# check-blog-watchdog-heartbeat.sh, the independent dead-man's-switch that
+# reads this file.
+write_heartbeat() {
+  mkdir -p "$DRAFTS_DIR"
+  echo "$(TZ=America/Los_Angeles date -Iseconds) $1" > "$HEARTBEAT_FILE"
+}
+
 LOCKFILE="/tmp/bilko.blog-cadence-watchdog.lock"
 exec 9>"$LOCKFILE"
 if ! flock -n 9; then
   echo "[blog-cadence-watchdog] another instance running — skipping" >&2
+  write_heartbeat "ok: skipped, another instance running"
   exit 0
 fi
-
-CONFIG_FILE=".claude/skills/blog-from-git/blog.config.yaml"
-DRAFTS_DIR=".claude/skills/blog-from-git/drafts"
-STATE_FILE="$DRAFTS_DIR/.watchdog-state"
 
 # --- read cadence policy from the config file — never hard-code it here ---
 UPPER_BOUND="$(grep -m1 'target_gap_days:' "$CONFIG_FILE" | grep -oP '\[\d+,\s*\K\d+')"
 CATCHUP_TRIGGER="$(grep -m1 'catchup_trigger_days:' "$CONFIG_FILE" | grep -oP 'catchup_trigger_days:\s*\K\d+')"
 if [[ -z "$UPPER_BOUND" || -z "$CATCHUP_TRIGGER" ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not parse cadence thresholds from $CONFIG_FILE" >&2
+  write_heartbeat "error: could not parse cadence thresholds"
   exit 1
 fi
 
@@ -57,6 +70,7 @@ BLOG_JSON="$(curl -s --max-time 20 https://bilko.run/api/blog)"
 NEWEST_PUBLISHED_AT="$(echo "$BLOG_JSON" | jq -r '[.[].published_at] | max')"
 if [[ -z "$NEWEST_PUBLISHED_AT" || "$NEWEST_PUBLISHED_AT" == "null" ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not read published_at from https://bilko.run/api/blog" >&2
+  write_heartbeat "error: could not read published_at from /api/blog"
   exit 1
 fi
 
@@ -69,6 +83,7 @@ echo "[blog-cadence-watchdog] $TODAY (PT): newest live post=$NEWEST_PUBLISHED_AT
 
 if (( GAP_DAYS < UPPER_BOUND )); then
   echo "[blog-cadence-watchdog] within cadence — no action"
+  write_heartbeat "ok: within cadence gap=${GAP_DAYS}d no action"
   exit 0
 fi
 
@@ -78,6 +93,7 @@ if [[ -f "$STATE_FILE" ]]; then
   LAST_RUN_DATE="$(cut -d' ' -f1 "$STATE_FILE" 2>/dev/null || true)"
   if [[ "$LAST_RUN_DATE" == "$TODAY" ]]; then
     echo "[blog-cadence-watchdog] already drafted today per $STATE_FILE — skipping"
+    write_heartbeat "ok: already drafted today gap=${GAP_DAYS}d"
     exit 0
   fi
 fi
@@ -116,8 +132,10 @@ set -e
 
 if [[ $CLAUDE_RC -ne 0 ]]; then
   echo "[blog-cadence-watchdog] claude -p exited $CLAUDE_RC (timed out or errored) — will retry next scheduled run" >&2
+  write_heartbeat "error: claude -p exited $CLAUDE_RC mode=$MODE gap=${GAP_DAYS}d"
   exit "$CLAUDE_RC"
 fi
 
 echo "$TODAY $MODE $GAP_DAYS" > "$STATE_FILE"
+write_heartbeat "ok: drafted mode=$MODE gap=${GAP_DAYS}d"
 echo "[blog-cadence-watchdog] done — drafts (if any) are in $DRAFTS_DIR, awaiting human review/seed"

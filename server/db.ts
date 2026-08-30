@@ -2556,6 +2556,181 @@ Both new repos are a day old and neither has a tile on [/projects](/projects) ye
     '2026-07-24T16:00:00.000Z',
   );
 
+  // Catch-up backfill of the 2026-07-24 -> 2026-08-29 publishing gap: 9 posts at the
+  // standing 3-5 day cadence, each backdated to when its work actually shipped
+  // (blog.config.yaml cadence.backdating: honest-only). Drafted by
+  // scripts/blog-cadence-watchdog.sh, reviewed and approved by a human before seeding.
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'the-academy-course-is-now-just-about-claude',
+    `The Academy Course Is Now Just About Claude`,
+    `Academy swapped its 20-lesson generic-AI curriculum for a 12-chapter course on being a Claude user, then found a real bug by testing all 15 pages instead of 6.`,
+    `[Academy](/projects/academy/) used to teach "what is an AI" in general — 20 lessons across 3 modules, the kind of foundations content that could describe any chatbot. This week it became a course about one specific thing: how to be a Claude user. 12 chapters, 4 modules — Meet Claude, Working In Claude, Prompting, Trust And Next Steps — plus a rewritten welcome page. The glossary picked up Claude-specific terms it never needed before, like Cowork and Claude in Chrome. It's a smaller course than it was (12 chapters instead of 20 lessons) and a more useful one, because it stops trying to be neutral about a choice the reader already made by showing up.
+
+The swap touched 59 files — 4,075 lines added, 3,426 removed, so most of the old curriculum is gone, not layered under the new one.
+
+The interesting part is what the follow-up commit caught. Academy's design-review testing had only ever hit 6 hardcoded routes with Playwright screenshots and an axe-core accessibility pass. Widening that to all 15 pages — the welcome page, all 12 chapters, both demo fixtures — surfaced a real bug: the "you're done" screen was rendering multiple identical "Start over" cards from a count-based loop, each one linking back to the course root instead of lesson 1, directly contradicting its own label. It had shipped invisibly because nothing was testing that page. Now all 15 pages get the same audit, and there's one correct card.
+
+Also shipped: a docs fix admitting a real risk rather than a hypothetical one — \`AUTHORING.md\` now says plainly that \`pnpm build\` does not publish, because \`publish_static_project\` owns the copy and its gates, and hand-rolling a scratch script to skip that "silently skips the a11y and audit gates." Someone was tempted to take the shortcut; the doc exists so the next person isn't.
+
+**What's next:** the new curriculum is live at [/projects/academy/](/projects/academy/) — if you've read the old foundations lessons, this is a different course, not a v2 of the same one.`,
+    'product',
+    '2026-07-28T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'five-stats-replace-twenty-two-that-did-nothing',
+    `Five Stats Replace Twenty-Two That Did Nothing`,
+    `A shape-themed action RPG went from a store with no UI to a playable combat build in a week — then a 7-iteration completeness audit found the archetypes had been mathematically identical the whole time.`,
+    `A week ago this project — a shape-themed action RPG with a triangle striker, a square bulwark, a circle arcanist — was 756 hand-written lines of state management and nothing to look at: no weapon, no combat, no UI. This week it shipped v1.1.0 and became a game you can actually play: pick an archetype, drop into a run, move with a joystick, auto-attack with a real equipped weapon that branches between melee arcs and ranged projectiles, watch floating damage numbers and enemy HP bars, cast Frost Nova or Meteor Storm on real cooldowns, and see a Character Power score built from armor, crit, and spell power that are now actually wired into the combat math instead of sitting in a spreadsheet.
+
+The redesign underneath all of that: the character sheet used to track 22 individually-leveled passive stats, and nothing consumed most of them. It's now 5 primary stats, with weapons, gear, and skills all deriving their real numbers as a joint sum off those five. Sixteen items — spells and gear, r1 through r16 — got scaled to the new system, one commit each.
+
+Here's the part worth writing down. After the rewrite, a 7-iteration audit ran through the content looking for anything the redesign had silently broken. Iteration 6 found the best one: all three archetypes' advertised starting boosts — Striker gets +attack and +attack speed, Bulwark gets +HP and +armor, Arcanist gets +spell power and +mana — were dead. The function that applied them wrote to a field called \`Passive.lvl\`. The function that actually derives combat stats only ever reads \`primaryLevels\`. A fresh Striker, Bulwark, and Arcanist with the same points spent had byte-identical stats. Nothing threw an error. Nothing failed a build. The archetypes just quietly stopped being different from each other, and the only reason anyone noticed was a leftover code comment from the redesign — "all points are spent on primaries now" — that didn't match what the boost function was still doing.
+
+That's the lesson: a structural rewrite doesn't announce what it broke. The audit that caught this wasn't triggered by a bug report; it was a deliberate pass looking for exactly this class of silent disconnect, and it found six more of the same shape before this one and one more after (an XP-gain no-op, the final iteration). Nine more detailed stats — penetration, area-of-effect, evasion, luck, cooldown reduction, pickup radius, regen, resistance, block — are confirmed dead too, and still are; some, like penetration, need a mechanic (enemy armor) that doesn't exist yet to mean anything.
+
+What I'd do differently: run that audit pass as part of the redesign, not a week after it. Every one of these bugs existed the moment the rewrite landed; the only thing that changed between "broken" and "found" was deciding to go looking.
+
+Still rough: the EAS build handed off at the end of the week (build #8, ~3 hours to compile) was still in progress at handoff — the next session picks it up mid-build, with the submit and TestFlight steps written down but not run. And \`expo-doctor\` has been flagging six packages with drifted patch versions for a while now; that's been deliberately deferred, not fixed.
+
+No tile on [/projects](/projects) yet for this one — it's still a build, not a release.`,
+    'build-log',
+    '2026-07-31T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'the-retry-that-cost-93-calls-to-fail-once',
+    `The Retry That Cost 93 Calls To Fail Once`,
+    `A flat 60-second timeout meant signal-builder's mention scorer retried doomed calls at the same size, up to 93 LLM calls to fail once. It now fails fast and splits instead.`,
+    `The number that moved this week: the worst case for a mention-scoring batch that hits a timeout went from 93 LLM calls down to 31, and that's not a rounded estimate — it's a bound written into the code comments, because [Signal-Builder](/projects/signal-builder/)'s scorer splits a failed batch in half and retries recursively, so the call count is \`2^5 - 1\` at 5 split levels, times however many retries each level got.
+
+The batches were timing out because a token-budget problem was being treated as a network hiccup. Every batch — whether it was 2 tickers or 50 — got the same flat 60-second subprocess timeout, and when a batch was too big to finish in that window, the retry logic tried the exact same call, at the exact same size, up to three more times before finally giving up. That's not a transient failure being retried through — it's a call that was never going to fit, burning roughly 200 seconds per split level on repeats of a call already known to be too big. One week's logs: 1,125 timeout warnings and 367 hard-timeout sentinels, with some ticks scoring only 2 to 4 of 50 tickers before the run deadline.
+
+Two changes: the subprocess timeout now scales with chunk size instead of being flat, and a timeout on a batch call raises immediately instead of retrying at the same size — the caller splits the chunk and tries again smaller, rather than repeating a call that already told you it can't fit. Retries are kept only for the failures that are actually transient (a bad exit code, a parse error), not for the ones that are structural. New telemetry (\`pop_timeout_stats()\`) tracks timeout events and wasted seconds per tick, so the next grading pass has real numbers to check this against.
+
+Worth saying plainly: the sibling fix that landed the day before this one (PRD 643, deadline-bound retry-split) didn't move throughput on its own — ticks after it shipped were still scoring only 2-4 of 50 tickers, which is why this fix was queued immediately behind it. And a prior optimization pass three weeks earlier was graded no-effect after shipping — flat 29-31 "sellable" tickers before and after — because it fixed something downstream of the real bottleneck. That history is why this one ships with its own telemetry instead of a claim.
+
+This work isn't on GitHub yet — signal-builder's local branch is 116 commits ahead of what's pushed, so there's no commit to link here, just the fix as it stands locally.`,
+    'build-log',
+    '2026-08-04T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'a-bad-quote-almost-cost-14000-on-paper',
+    `A Bad Quote Almost Cost $14,000 On Paper`,
+    `A published-live P&L number was off by roughly $14,000 because a spread's cost-to-close wasn't bounded by its own width — the fix moves loss-boundedness into the structure of every trade, not just the exit logic.`,
+    `[Social-Signals-Trader](/projects/social-signals-trader/) publishes a real Alpaca account against SPY, live, on this site — every position, fill, and rationale. This week it started actually trading options: a credit-spread sleeve, screened down from a 116-name pool to 20 underlyings across 10 correlation buckets, sized to 90% of equity, with a real profit target and a real stop. Before this, the book was equities-only in spirit; 28 raw option legs showed up on the dashboard as 28 unpaired, undifferentiated rows, and there was no loss-side exit at all — just a profit target and hope.
+
+The dashboard now groups those into 14 real spread rows instead of 28 raw legs, has an options-book summary panel, a glossary with a Help tooltip on every term, and a trade-detail page rewritten as a walkthrough for someone who's never seen an options position before. That's the visible half of the week.
+
+The half worth writing down is a bug that reached the public page. A vertical spread's maximum possible cost to close is mathematically bounded by its width — a $1-wide spread cannot cost more than $100 a contract to exit, full stop. A bad indicative quote on a short BABA call ignored that bound and produced a cost-to-close of $9,184 against a true maximum of $5,600. That number was live on this dashboard, overstating the account's loss by roughly $3,600 on that one position and distorting total published equity by something closer to $14,000 once it fed into the account-wide P&L. Around the same time, a second bug was found: close cost had been computed per share while credit and max-loss were computed per contract, which is a 100x unit mismatch in the other direction — a book that was actually about $10,600 down was displaying as roughly $2,100 up.
+
+The fix for the first bug isn't "get better quotes." It's clamping any cost-to-close at the spread's own width and flagging the trade \`mark_suspect\` when that clamp fires — a mark that's provably wrong gets ignored for P&L math, on principle, in either direction: it can't inflate a loss and it can't hide one. The strike-breach stop is a deliberate exception — it still fires on a suspect mark, because that exit is keyed off where the stock is trading relative to the strike, not off the bad quote itself. Underneath both bugs, the real structural fix is \`assert_defined_risk\`, a single choke point every spread has to pass before it can open: no naked legs, no mismatched legs, no diagonals. Loss-boundedness now lives in what a position is allowed to be, not in whether a stop fires fast enough.
+
+The lesson: a stop is a promise that something will happen later; a defined-risk structure is a fact that's already true. The BABA bug and the per-share bug were two different kinds of mistakes, caught by two different reviews, and both would have been structurally impossible if the position itself couldn't exceed its own defined risk in the first place.
+
+What I'd do differently: build the assert-everywhere invariant before the sleeve went live, not after a bad quote made it necessary. It's a cheap check to write and an expensive one to have skipped.
+
+Worth knowing if you're reading the dashboard closely: the source for this work sits on a local branch about 200 commits ahead of what's pushed to GitHub — the trades and the numbers on the live page are real, the commit history behind them isn't public yet.`,
+    'build-log',
+    '2026-08-08T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'the-app-stays-free-the-manual-is-19-99',
+    `The App Stays Free, The Manual Is $19.99`,
+    `Session Manager's marketing page said "Buy Now — $19.99" under the app itself, implying the free, MIT-licensed tool was the paid product. It wasn't. The manual is.`,
+    `[Session Manager](/projects/session-manager/) is a free, MIT-licensed desktop cockpit for the \`claude\` CLI — multi-tab terminal, 25-plus configuration and observability tabs, an overnight job scheduler, voice dictation, all running on your own machine with zero telemetry. Its marketing page said "Buy Now — $19.99" directly under the app. The commit that fixed this admits it plainly: that page "led with the wrong offer and the wrong impression." A reader could look at that page and reasonably conclude the app itself cost money. It never has.
+
+The actual answer: the app stays free, and the thing that's genuinely worth $19.99 is a real product now — the Field Manual, a maintained, versioned reference document. Buy it once through the existing Stripe checkout and you get lifetime access, either read online (one free sample chapter, the rest gated by purchase) or downloaded as offline HTML and PDF. It launched with 3 chapters and grew to 17 within the week as more of the app's own surface area got documented — no app-side feature gating was added anywhere; owning the manual doesn't unlock anything in the software, because there's nothing in the software to unlock.
+
+The interesting engineering decision is how the download got secured, and then simplified. The first version used short-lived, HMAC-signed download tokens, because a plain browser link can't carry the auth header Clerk needs. That meant a \`MANUAL_DOWNLOAD_SECRET\` had to exist in production and stay identical across restarts — and when it wasn't set, it silently fell back to a random per-process key, which quietly broke every buyer's download link on the next deploy. The fix wasn't better secret management. It was removing the secret: the client now fetches the asset directly with its own bearer token and saves the blob in the browser, so the URL is never a credential and there's nothing left to expire or leak.
+
+A second problem was closer to a real financial mistake. The code that matches a Stripe purchase to a product only checked env vars for direct Stripe prices, not for payment-link-only products. A new $5 "coffee tip" product, wired up purely as a payment link, would have matched nothing — and fallen through to a default case that, for other product shapes, issues a full paid license key. A $5 tip could have quietly granted a Pro license meant for a $19.99+ purchase. It was caught and logged before it shipped that way, not after.
+
+What's next: the manual keeps getting rewritten in lockstep with the app — three point releases landed within days of launch just to keep pace with UI renames happening underneath it. That's the actual cost of an open-core product: the free thing keeps moving, and the paid thing has to keep up or it stops being honest.`,
+    'product',
+    '2026-08-11T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'the-bug-that-silently-killed-every-post',
+    `The Bug That Silently Killed Every Post`,
+    `Burrow's X posting ran on schedule for 11 days and published nothing, because the posting window and the post slots never actually overlapped. It's fixed now, and it's been quiet for a week since.`,
+    `Burrow gathers Reddit, X, and Discord chatter for a downstream trading signal system, and this stretch was two separate reliability chases that both ended the same way — a cadence that looked fine on paper and wasn't.
+
+The Reddit side ran three overlapping pipelines against a tiered coverage target: some of the 65 tracked trading subreddits every 4 hours, some every 8, some every 12. Nobody could point to what actually consumed the tier distinction downstream, and a \`pick()\` cap bug had quietly collapsed the real sweep to about 11 subreddits at steady state — 54 of 65 subs sitting at zero visits, coverage reading 16.9%. Both pipelines were retired and the whole thing became one daily full-universe sweep against one honest target: visited once every 24 hours. Simpler, and — this time — actually deliverable.
+
+The X side was worse, because it failed silently. For 11 days, six scheduled posting sessions ran on time, every day, and published nothing. The root cause: scheduled posts only go out through a \`post_scheduled\` action inside a session run, and the post slots were hardcoded to 19:00 and 00:00 UTC. The actual active posting window was 09:00–11:00 UTC. Those times never overlapped. A post's only way out was a race against a 24-hour auto-expiry window, which historically won that race about 55% of the time by accident — until it didn't. Two specific queued posts expired in early August having made zero publish attempts. Reply success had its own version of the same failure: a stale account handle meant zero successful replies logged across 148 attempts over 30 days, while the system kept reporting the sessions as having run.
+
+Neither of these threw an error. Both looked, from the outside, like a system doing its job on schedule. That's the pattern worth naming: a cadence bug doesn't crash, it just quietly does nothing, and the only way to catch it is to check the actual published output against the schedule, not the run logs. The fix pins the post-slot/window relationship together with a regression test, so the two can't drift back apart unnoticed the way they did the first time — nobody designed the fix that made it briefly work again, it was a side effect of a different, earlier commit widening the window; this time it's deliberate and locked in.
+
+With that fixed, X moved to a tested, fixed 3x/day cadence — midnight, 6am, and noon PDT — with retry and diagnostics on the failures that are actually transient, and reply caps raised from 3/3/8 to a flat 10/10/10 with a weekly backstop of 70.
+
+Worth saying plainly, in period: as of today, there's been no commit here in a week. That's not a verdict on why — just what's true right now, the same way the "0% reply success for 30 days" number was true before anyone looked at it. The live coverage scorecard reads 0.0% across all 65 subs this morning, which is what you'd expect from a pipeline that hasn't run recently, not necessarily a new problem.
+
+This code isn't on GitHub — the local branch is 218 commits ahead of what's pushed, so there's nothing here to link to. Burrow doesn't have a tile on [/projects](/projects) either; it's infrastructure other projects consume, not something you'd visit directly.`,
+    'build-log',
+    '2026-08-15T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'siblings-can-now-see-their-own-bandwidth-bill',
+    `Siblings Can Now See Their Own Bandwidth Bill`,
+    `mcp-host's new usage_report tool lets any sibling project ask "how much am I actually costing?" — built after Bilko itself turned out to be its own biggest traffic source.`,
+    `[mcp-host](https://github.com/StanislavBG/bilko-run/tree/main/mcp-host-server) — the MCP server that registers and publishes every static-path project on this site — can now answer a question no sibling project could ask itself before: how much bandwidth am I actually using? Any project wired to it can call a new \`usage_report\` tool and get its own per-project egress — bytes, requests, bytes-per-request — with no browser session or auth token required, where before that data only existed behind a Clerk-gated admin page a human had to open by hand.
+
+The tool shipped honest about its own limits: numbers are a capacity signal, not a Render bill, they can under-report by up to a minute around a process restart, and one known attribution gap — some projects' own asset folders still get miscounted under the host's general bucket — is called out in the tool description rather than quietly left for someone to discover.
+
+Also shipped: the platform found out it was generating a meaningful chunk of its own bill. A single page load was firing 26 CSP violation reports because the policy forbade things the site actually loads. Security nonces meant to lock down inline styles had been silently inert in production the whole time, because the static file server streams responses in a way that skipped the nonce-injection step — the site's own bundle was violating its own policy on every load. And an unlisted, "postponed" game project was still fully serving 116 MB of uncached sprite assets to every visitor, because nobody checks whether something hidden from the UI is still costing money. Compressing origin responses before they leave the server cut the biggest offender's real egress by roughly 8x — a snapshot endpoint that was billing 733 KB a request was only ever sending 93 KB over the wire.
+
+The \`usage_report\` tool exists because none of that would have been visible without someone going and looking by hand — now a sibling can just ask.`,
+    'build-log',
+    '2026-08-19T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'epics-stopped-sharing-one-working-directory',
+    `Epics Stopped Sharing One Working Directory`,
+    `Session Manager's Epics — its unit of scheduled dev work — used to run concurrently against one shared checkout. Now each gets its own git worktree, and the tests that were supposed to prove it never actually ran.`,
+    `I gave [Session Manager](/projects/session-manager/)'s Epics their own git worktrees this week. An Epic is the app's unit of scheduled dev work — a tagged session that owns its own PRDs and runs from proposed to active to completed. Before this, every concurrent Epic in a project ran against the same shared checkout, which meant two Epics editing at once could clobber each other's uncommitted changes or pick up half-finished edits from a sibling that happened to be running in the same directory at the same time.
+
+The fix: each Epic now gets its own branch and checkout, created the moment it goes active. Terminal and Chat spawn into that isolated directory instead of the shared one. An explicit merge-to-main checkpoint folds the branch back in — attempted automatically on completion, but never blocking the Epic from archiving if the merge doesn't go clean — and a real conflict surfaces as a UI state with a resolve-in-terminal option, instead of silently corrupting whatever the shared directory used to be.
+
+The part I want to write down is what happened when I went back to register the acceptance tests for the merge checkpoint. They existed — a whole file covering the fast-forward and real-conflict cases — but had never been added to the test runner's include list. Running the suite reported "no test files found" for that file. The core coverage for this feature had been dead code since the day it was written; it looked covered and wasn't. Registering it surfaced a second, smaller thing: a test asserting the code would \`reject\` with an error, when the actual code throws synchronously before the async path is ever reached. The assertion was wrong, not the code — but nobody would have known either way, because the test never ran.
+
+Same day, three more edge cases turned up on their own: a relative project path silently resolving against the wrong working directory and writing five stray folders with no error at all; a worktree path saved from a previous session going stale after a reboot or a tmp-dir sweep and killing that Epic's terminal with an opaque error; and the anti-resurrection guard that's supposed to stop a job from running twice failing open on its first unreadable log file, which is exactly how this feature's own rollout PRD ended up running twice.
+
+What's next: there's a per-project toggle now, in Settings, for anyone who wants Epics back on a shared directory — but the point of shipping it was to stop needing that toggle at all.`,
+    'build-log',
+    '2026-08-23T16:00:00.000Z',
+  );
+
+  await dbRun(
+    `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+    'a-new-game-a-week-old-and-already-playable',
+    `A New Game, A Week Old, Already Playable`,
+    `A spaceship game started as an empty cosmos shader eight days ago. It's now a three-tier game with a real tutorial, six enemy types, and a deleted experiment worth explaining.`,
+    `Eight days ago this was one commit: an ambient starfield and nebula shader in Godot, nothing else. It's now a real, three-tier game — a Universe Map of solar systems joined by warp lanes, each system a network of planets joined by transit lanes, and landing on a planet drops you into a 15-minute survivors-style combat run. A fresh save starts parked at Mercury inside an authored 8-planet tutorial ("Escape the Solar System") before the rest of the galaxy opens up; everywhere past Sol is deliberately locked off for now. Nine enemy archetypes, including six added this week, plus elite affixes and a boss fight, plus a meta-progression currency that upgrades your ship between runs.
+
+The decision worth writing down: for one night in the middle of this build, the game had an AI design assistant built into it — a chat drawer that spawned a real, long-lived \`claude\` CLI process and streamed its output straight into the game's UI, meant to let you ask for design help without leaving the editor. It worked, with one very specific Godot gotcha: after the child process exits, Godot 4.7.2's pipe reader never flips its own "end of file" flag, so the code had to poll whether the process was still alive instead of trusting the pipe to tell it. It shipped, ran for a session, and then got deleted a week later. That's not a failure — trying an idea fast and cheap enough to also throw away fast and cheap is the actual point of building this way.
+
+The honest admission: a spawn bug made the whole game look broken in a specific way — landing on a planet would either hang on a white screen forever or drop you into an empty arena with nothing in it. Two separate bugs were stacked on top of each other. One file failed to parse at all because an untyped array left a loop variable ambiguous, so the level loader silently loaded with nothing in it. Separately, the code that entered a level was calling into it in the same breath as adding it to the scene tree, racing ahead of Godot's own object initialization — so even a correctly-loaded level could still throw against a null reference. Both had to be found and fixed together; fixing either alone would have looked like it worked and wouldn't have.
+
+Worth knowing: about 5 of the 96 commits this week were merged in directly from an autonomous scheduler running dev-work jobs against this repo, not typed by hand — the rest is manual. No tile on [/projects](/projects), and no GitHub remote at all yet; this one's entirely local for now.`,
+    'build-log',
+    '2026-08-27T16:00:00.000Z',
+  );
+
+
   // Seed secret_metadata (idempotent — INSERT OR IGNORE, NULL last_rotated_at = never rotated)
   const SECRET_NAMES = [
     'STRIPE_API_KEY',

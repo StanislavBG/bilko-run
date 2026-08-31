@@ -2,41 +2,86 @@
 /* ---- data-feedback.js ---- */
 window.FEEDBACK_THREADS = {
   "counts": {
-    "active": 23,
+    "active": 24,
     "answered": 9,
     "archived": 0,
     "proposal": 19,
     "system": 0,
-    "total": 23,
-    "trade": 4,
-    "unanswered": 14
+    "total": 24,
+    "trade": 5,
+    "unanswered": 15
   },
   "funnel": {
     "breachingSla": 14,
-    "generatedAt": "2026-08-31T14:45:02Z",
-    "open": 18,
+    "generatedAt": "2026-08-31T15:45:02Z",
+    "open": 16,
     "positions": {
-      "openWithUnansweredComment": 0
+      "openWithUnansweredComment": 1
     },
     "proposals": {
       "approved": 0,
       "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 4,
+      "pending": 1,
       "stranded": 0
     },
     "resolvedThisWeek": 0,
     "routedToPrd": 4,
     "triagedBySeverity": {
       "high": 0,
-      "low": 21,
+      "low": 22,
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-31T14:45:02Z",
+  "generatedAt": "2026-08-31T15:45:02Z",
   "schema": 2,
   "threads": [{
+    "answered": false,
+    "archivedAt": null,
+    "contractKey": "SPY-C-777-778-2026-09-11",
+    "createdAt": "2026-08-31T15:00:52.000Z",
+    "description": "What does \u201c-$600 of $1300 risked\u201d mean?",
+    "hasImage": false,
+    "id": "fb_mthd8giz_wu76p6jt",
+    "lastActivityAt": "2026-08-31T15:00:52.000Z",
+    "messages": [{
+      "author": "visitor",
+      "authorLabel": "Visitor",
+      "body": "What does \u201c-$600 of $1300 risked\u201d mean?",
+      "createdAt": "2026-08-31T15:00:52.000Z",
+      "hasImage": false,
+      "id": "fb_mthd8giz_wu76p6jt",
+      "role": "user",
+      "title": "Question"
+    }, {
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-31 11:00 AM EDT against SPY 777/778 call spread, expires Sep 11. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-31T15:05:01Z",
+      "hasImage": false,
+      "id": "fb_mthd8giz_wu76p6jt.r1",
+      "kind": "ack",
+      "role": "agent"
+    }],
+    "replies": [{
+      "author": "agent",
+      "authorLabel": "Trading agent",
+      "body": "Got it \u2014 logged at 2026-08-31 11:00 AM EDT against SPY 777/778 call spread, expires Sep 11. We answer in public here, usually within 4 hours; you'll see a reply in this thread.",
+      "createdAt": "2026-08-31T15:05:01Z",
+      "id": "fb_mthd8giz_wu76p6jt.r1",
+      "kind": "ack"
+    }],
+    "route": "#options",
+    "scope": "position",
+    "stage": "position",
+    "status": "open",
+    "targetId": "SPY-C-777/778-2026-09-11",
+    "targetKind": "position",
+    "targetLabel": "SPY 777/778 call spread, expires Sep 11",
+    "title": "Question",
+    "type": "feedback"
+  }, {
     "answered": false,
     "archivedAt": null,
     "contractKey": "SPY-C-777-778-2026-08-31",

@@ -1224,6 +1224,34 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
    never competes for width with the data columns it sits beside. */
 .opts-col-feedback { width: 1%; white-space: nowrap; text-align: center; }
 
+/* Positions table only: the Positions table is wide enough that this
+   trailing cell scrolls off the right edge of .opt-table-scroll at any
+   normal viewport width, so the per-position Feedback button reads as
+   reachable only from the Trade Log below it. Pinning it to the scroll
+   container's right edge (both the header and every body cell) makes it
+   read the same way as the Trade Log's own row-end icon. Scoped to
+   `.opts-positions-table` so the Trade Log's identical `.opts-col-feedback`
+   cells — already visible without scrolling — are untouched. `var(--surface)`
+   matches `.card`'s own background so the pinned column doesn't look like a
+   different surface than the table it belongs to; without an opaque
+   background here, cells scrolled underneath would show through. */
+.opts-positions-table .opts-col-feedback {
+  position: sticky; right: 0; z-index: 2;
+  background: var(--surface);
+  box-shadow: -4px 0 6px -4px rgba(0, 0, 0, 0.35);
+}
+.opts-positions-table thead .opts-col-feedback { z-index: 3; }
+
+/* Visually hidden but NOT position:absolute, unlike .sr-only below — that
+   rule's `position: absolute !important` fights `position: sticky` on the
+   pinned header cell above. This keeps the "Feedback" label in normal flow
+   (as an effectively zero-size span) so it stays reachable to screen readers
+   without breaking the sticky positioning of its parent `<th>`. */
+.opts-visually-hidden {
+  width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
 /* Visually hidden but still reachable by screen readers — used for table
    header labels that would otherwise be redundant icon-only columns.
    !important because table header cells (.opt-table--orders thead th) set

@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 14,
-    "generatedAt": "2026-08-31T16:45:02Z",
+    "generatedAt": "2026-08-31T17:45:02Z",
     "open": 16,
     "positions": {
       "openWithUnansweredComment": 1
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-08-31T16:45:02Z",
+  "generatedAt": "2026-08-31T17:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -1979,7 +1979,7 @@ window.FEEDBACK_THREADS = {
     contracts: {
       label: "Contracts",
       short: "How many copies of this spread we're holding.",
-      long: "Each option contract represents 100 shares, so gains, losses, and credit all scale by this number.",
+      long: "Each option contract represents 100 shares, so gains, losses, and credit all scale by this number. Shown as \"Qty\" in the Positions table header to keep that column narrow.",
       example: "3 contracts of a $1.20 credit spread means $360 of credit total (3 × $1.20 × 100), not $1.20."
     },
     delta: {
@@ -2675,13 +2675,13 @@ window.FEEDBACK_THREADS = {
     spread: {
       label: "Spread",
       short: "The two-option combo — one sold, one bought — that makes up this trade.",
-      long: "Selling the short leg brings in the credit; buying the long leg caps the risk. Together they define one defined-risk position.",
+      long: "Selling the short leg brings in the credit; buying the long leg caps the risk. Together they define one defined-risk position. The Positions table's Spread column shows a compact form (e.g. \"SPY 775/776 P\") with days-to-expiry underneath — hover the cell (or use this Help) for the full ticker/strikes/expiry text.",
       example: "Selling the $255 put and buying the $250 put together is one spread — a $5-wide bull put spread."
     },
     frozen_entry: {
       label: "Frozen entry",
       short: "The fill time, price, and credit exactly as they were the moment this trade opened.",
-      long: "This never updates — it's the historical snapshot, kept alongside the live/now columns so you can see how far the trade has moved since it opened.",
+      long: "This never updates — it's the historical snapshot, kept alongside the live/now columns so you can see how far the trade has moved since it opened. The Positions table's Entry column shows a compact credit/net form (e.g. \"$2,250 credit @ +0.15\"); the fill timestamp is dropped from the printed cell but still available on hover (or via this Help).",
       example: "A trade filled at 10:02 AM PT for $1.20/contract keeps that fill time and price in frozen_entry forever, even after the market moves."
     },
     min_net_credit: {
@@ -10033,12 +10033,12 @@ var POSITIONS_COLUMNS = [{
   frozen: true
 }, {
   key: "contracts",
-  header: "Contracts",
+  header: "Qty",
   term: "contracts",
   frozen: true
 }, {
   key: "frozen_entry",
-  header: "FROZEN entry (filled / net per contract / total credit)",
+  header: "Entry",
   term: "frozen_entry",
   frozen: true
 }, {
@@ -10220,7 +10220,13 @@ function PositionsRow({
     value: cells.band
   }) : ck === "conf" ? /*#__PURE__*/React.createElement(ConfCell, {
     value: cells.conf
-  }) : ck === "frozen_entry" ? /*#__PURE__*/React.createElement(React.Fragment, null, cells.frozen_entry, /*#__PURE__*/React.createElement(window.Help, {
+  }) : ck === "spread" ? /*#__PURE__*/React.createElement("span", {
+    title: cells.spread
+  }, cells.spread_compact || cells.spread, cells.expiry_compact && /*#__PURE__*/React.createElement("div", {
+    className: "mono-dim opt-cell-sublabel"
+  }, cells.expiry_compact)) : ck === "frozen_entry" ? /*#__PURE__*/React.createElement("span", {
+    title: cells.frozen_entry
+  }, cells.frozen_entry_compact || cells.frozen_entry, /*#__PURE__*/React.createElement(window.Help, {
     term: "risk",
     inputs: calcProps.risk,
     asOf: calcProps.asOf
@@ -10512,8 +10518,13 @@ function PositionsTable({
   }, header, term && /*#__PURE__*/React.createElement(window.Help, {
     term: term
   }))), /*#__PURE__*/React.createElement("th", {
-    className: "sr-only"
-  }, "Feedback"))), /*#__PURE__*/React.createElement("tbody", null, posList.map((pos, ri) => /*#__PURE__*/React.createElement(PositionsRow, {
+    className: "opts-col-feedback",
+    "aria-label": "Feedback"
+  }, /*#__PURE__*/React.createElement("span", {
+    "aria-hidden": "true"
+  }, "\u{1F4AC}"), /*#__PURE__*/React.createElement("span", {
+    className: "opts-visually-hidden"
+  }, "Feedback")))), /*#__PURE__*/React.createElement("tbody", null, posList.map((pos, ri) => /*#__PURE__*/React.createElement(PositionsRow, {
     key: pos && pos.short_symbol || ri,
     pos: pos,
     display: pos && pos.short_symbol ? displayBySymbol.get(pos.short_symbol) : null,

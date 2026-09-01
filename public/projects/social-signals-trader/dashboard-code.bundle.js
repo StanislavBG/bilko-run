@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-09-01T14:45:03Z",
+    "generatedAt": "2026-09-01T15:45:02Z",
     "open": 16,
     "positions": {
       "openWithUnansweredComment": 1
@@ -28,13 +28,17 @@ window.FEEDBACK_THREADS = {
     },
     "resolvedThisWeek": 0,
     "routedToPrd": 4,
+    "stuckDrafts": {
+      "count": 15,
+      "oldestAgeHours": 431.74824838
+    },
     "triagedBySeverity": {
       "high": 0,
       "low": 22,
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-01T14:45:03Z",
+  "generatedAt": "2026-09-01T15:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -2385,6 +2389,31 @@ window.FEEDBACK_THREADS = {
         result: v => v.credit - v.close_cost,
         unit: "$",
         source: "src/social_signals_trader/options_summary.py:266"
+      }
+    },
+    risked_of: {
+      label: "$X of $Y risked",
+      short: "How far into the worst case this position has gone right now — open P/L against max loss.",
+      long: "The first figure is Open P/L, the live paper profit or loss on this position (negative once the trade has moved against us). The second is Max loss, the entry-time ceiling on how bad this trade can get. Reading them together answers 'how much of the worst case has already happened.'",
+      example: "SPY 777/778 call spread, Sep 11 expiry: $3,150 credit, $11,850 max loss. With open P/L at -$900, the row reads '-$900.00 of $11,850.00 risked' — down $900 against an $11,850 worst case.",
+      calc: {
+        expr: "open P/L ÷ max loss",
+        inputs: [{
+          key: "open_pl",
+          label: "Open P/L",
+          unit: "$",
+          priced: true,
+          clock: "quotes"
+        }, {
+          key: "max_loss",
+          label: "Max loss",
+          unit: "$",
+          priced: true,
+          clock: "entry"
+        }],
+        result: v => v.max_loss ? v.open_pl / v.max_loss : null,
+        unit: "%",
+        source: "src/social_signals_trader/options_summary_render.py:674"
       }
     },
     realized_pl: {
@@ -9949,9 +9978,12 @@ function anchorIdsForPosition(pos) {
 // thread a Positions-table row would file into. A stale anchor naming a
 // position that's since closed (or missing an anchor at all) resolves to
 // null — the caller renders no button, never a broken one.
-function feedbackTargetForAnchor(anchorId, positions) {
+function findPositionForAnchor(anchorId, positions) {
   if (!anchorId) return null;
-  var pos = (positions || []).find(p => anchorIdsForPosition(p).indexOf(anchorId) !== -1);
+  return (positions || []).find(p => anchorIdsForPosition(p).indexOf(anchorId) !== -1) || null;
+}
+function feedbackTargetForAnchor(anchorId, positions) {
+  var pos = findPositionForAnchor(anchorId, positions);
   if (!pos) return null;
   var target = positionFeedbackTarget(pos);
   return target ? {
@@ -10692,10 +10724,17 @@ function ActionQueueCounts({
     term: "at_stake"
   }));
 }
+
+// The "$X of $Y risked" suffix (_dollar_consequence() in
+// options_summary_render.py) always ends the row text with exactly this
+// phrase — cheaper and less brittle than re-deriving which of the three
+// row-building branches emitted it.
+var RISKED_OF_RE = / risked$/;
 function ActionQueueRow({
   text,
   anchors,
-  positions
+  positions,
+  fallbackAsOf
 }) {
   var {
     text: visible,
@@ -10712,6 +10751,17 @@ function ActionQueueRow({
     }
   } : undefined;
   var feedbackTarget = feedbackTargetForAnchor(anchorId, positions);
+  var showRiskedHelp = RISKED_OF_RE.test(visible);
+  var riskedPos = showRiskedHelp ? findPositionForAnchor(anchorId, positions) : null;
+  var riskedNow = riskedPos && riskedPos.now || {};
+  var riskedInputs = {
+    open_pl: riskedNow.open_pl,
+    max_loss: riskedNow.max_loss
+  };
+  var riskedAsOf = {
+    quotes: riskedPos && riskedPos.oldest_quote_ts || fallbackAsOf,
+    entry: riskedPos && riskedPos.entry && riskedPos.entry.filled_at || fallbackAsOf
+  };
   return /*#__PURE__*/React.createElement("li", {
     className: `opts-action opts-action--${sev}${clickable ? " opts-action--clickable" : ""}`,
     onClick: activate,
@@ -10720,6 +10770,10 @@ function ActionQueueRow({
     onKeyDown: onKeyDown
   }, renderInlineMdGlossy(visible), rowTerm && /*#__PURE__*/React.createElement(window.Help, {
     term: rowTerm
+  }), showRiskedHelp && /*#__PURE__*/React.createElement(window.Help, {
+    term: "risked_of",
+    inputs: riskedInputs,
+    asOf: riskedAsOf
   }), window.FeedbackButton && feedbackTarget && /*#__PURE__*/React.createElement("span", {
     onClick: e => e.stopPropagation(),
     onKeyDown: e => e.stopPropagation()
@@ -10872,7 +10926,8 @@ function ActionQueue({
     key: i,
     text: t,
     anchors: anchorSet,
-    positions: positions
+    positions: positions,
+    fallbackAsOf: updatedAt
   }))))) : /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
   }, "Nothing needs attention right now."), /*#__PURE__*/React.createElement(AnalystRecommendations, {

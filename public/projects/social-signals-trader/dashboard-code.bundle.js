@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-09-01T15:45:02Z",
+    "generatedAt": "2026-09-01T16:45:03Z",
     "open": 16,
     "positions": {
       "openWithUnansweredComment": 1
@@ -30,7 +30,7 @@ window.FEEDBACK_THREADS = {
     "routedToPrd": 4,
     "stuckDrafts": {
       "count": 15,
-      "oldestAgeHours": 431.74824838
+      "oldestAgeHours": 432.7483605941666
     },
     "triagedBySeverity": {
       "high": 0,
@@ -38,7 +38,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-01T15:45:02Z",
+  "generatedAt": "2026-09-01T16:45:03Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -3253,6 +3253,33 @@ window.FEEDBACK_THREADS = {
       short: "Which of the Analyst's eight watch conditions were live on the position when this note was written (docs/analyst-spec.md).",
       long: "Examples: the position moved ≥15% since the last session, it's approaching the profit target or the max-loss stop, spot is within 1.5% of the short strike without having breached it, DTE is 3 or fewer, it's a new position since the last session, it closed out-of-band with no matching close event, or its mark has been suspect for two or more consecutive prep passes. These are context for the recommendation, not a second verdict.",
       example: "flags: [\"pre_breach_proximity\", \"expiry_pressure\"] on a note explains why that session flagged a position that otherwise looks unremarkable on the Positions table."
+    },
+    funnel_names_priced_zero: {
+      label: "Names that priced zero",
+      short: "How many universe tickers priced NO spreads at all on this scan — the chain answered, but every leg died before anything could be listed.",
+      long: "A ticker lands here when spread_trader.scan() gets a chain back with no error, but ends up with zero put or call spreads after every gate _spread_rows applies while pricing: the entry-quote-width gate (see funnel_names_priced_zero's sibling row, quote_rejected_legs) is one cause, but insufficient credit, an out-of-band max loss, or no admissible long leg at any strike/expiry can zero out a name too, without moving quote_rejected_legs at all — check that sibling row before assuming the quote gate is why a given name is at zero. A universe that has silently collapsed to a handful of tradable names looks identical to a genuinely quiet day unless this count — and the concentration figure next to it — are shown alongside 'nothing to propose'.",
+      example: "117 names configured, 85 priced zero spreads on 2026-08-31 — only 32 names contributed anything to the 'priced' total at all, though nothing in the funnel said so before this figure existed."
+    },
+    funnel_top_ticker_share: {
+      label: "Top name's share of priced spreads",
+      short: "The single busiest ticker's share of everything the chain priced this scan — how concentrated the board is in one name.",
+      long: "Computed per scan from the same per-ticker breakdown the disclosure below lists: the largest single ticker's `priced` count divided by the funnel's total `priced` count. A high share means the board is effectively one or two names wearing a 118-ticker universe's clothing — 118 tickers scanned and 0 chain errors reads as healthy breadth even when one name accounts for most of what was actually priced.",
+      example: "SPY alone priced 312 of the 926 spreads priced across the whole universe on 2026-08-31 — a 34% share, with QQQ close behind.",
+      calc: {
+        expr: "top ticker priced ÷ total priced",
+        inputs: [{
+          key: "top_ticker_priced",
+          label: "Top ticker's priced spreads",
+          unit: ""
+        }, {
+          key: "total_priced",
+          label: "Total spreads priced across the universe",
+          unit: ""
+        }],
+        result: v => v.total_priced > 0 ? v.top_ticker_priced / v.total_priced : null,
+        unit: "%",
+        source: "src/social_signals_trader/spread_trader.py:scan"
+      }
     }
   };
   function normalizeTerm(term) {
@@ -12529,12 +12556,12 @@ function ProposalChecks({
     className: "al"
   }, "Why the rule exists"))), /*#__PURE__*/React.createElement("tbody", null, checks.map((c, i) => /*#__PURE__*/React.createElement("tr", {
     key: i,
-    className: c.pass ? undefined : "prop-check-fail"
+    className: c.informational ? "prop-check-info" : c.pass ? undefined : "prop-check-fail"
   }, /*#__PURE__*/React.createElement("td", {
     className: "al"
   }, /*#__PURE__*/React.createElement("span", {
-    className: `prop-tick prop-tick--${c.pass ? "pass" : "fail"}`
-  }, c.pass ? "✓" : "✕"), c.label), /*#__PURE__*/React.createElement("td", {
+    className: `prop-tick prop-tick--${c.informational ? "info" : c.pass ? "pass" : "fail"}`
+  }, c.informational ? "ℹ" : c.pass ? "✓" : "✕"), c.label), /*#__PURE__*/React.createElement("td", {
     className: "al prop-mono"
   }, c.observed), /*#__PURE__*/React.createElement("td", {
     className: "al prop-mono"
@@ -12771,10 +12798,15 @@ function perContractSub(amount, contracts, term) {
 // A proposal only reaches this panel by clearing every gate, so the badge
 // normally reads "8 of 8". It is computed, not assumed: a hand-edited plan or
 // a future soft gate must show the real count rather than a green lie.
+// `informational` checks (e.g. the width-normalised breakeven figure — see
+// docs/screen-width-bias-2026-08.md) are reported for context but are not
+// gates the candidate had to clear, so they are excluded from both the
+// numerator and denominator here — otherwise a fully-qualifying proposal
+// could show "7 of 8" for failing a check that never actually blocked it.
 function gateTally(checks) {
-  var list = Array.isArray(checks) ? checks : [];
+  var list = (Array.isArray(checks) ? checks : []).filter(c => c && !c.informational);
   return {
-    passed: list.filter(c => c && c.pass).length,
+    passed: list.filter(c => c.pass).length,
     total: list.length
   };
 }
@@ -13253,7 +13285,13 @@ function EmptyState({
   // exported funnel so an already-published plan renders it too.
   var num = v => typeof v === "number" ? v : null;
   var screened = num(funnel.priced) !== null && num(funnel.selected) !== null ? funnel.priced - funnel.selected : null;
-  var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced], ["Dropped — negative expected value, too few days, or wrong size", screened], ["Cleared that screen", funnel.selected], ["Dropped — no positive net credit at all", funnel.rejected_non_positive_credit], ["Dropped — expected value or credit too small", funnel.rejected_ev_or_credit], ["Dropped — win probability outside the band", funnel.rejected_pop_band], [funnel.momentum_gate ? "Dropped — wrong side for the stock's momentum" : "Momentum gate OFF this run", funnel.momentum_gate ? funnel.rejected_momentum : "—"], [funnel.trade_corroboration ? "Dropped — no matching trade print on the tape" : "Trade-corroboration gate OFF this run", funnel.trade_corroboration ? funnel.rejected_no_trade_corroboration : "—"],
+  var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced],
+  // Quote-width gate visibility (2026-08-31): a name whose every leg is
+  // rejected here prices ZERO spreads and used to vanish from the funnel
+  // entirely — 85 names pricing nothing read the same as a quiet board.
+  // Both counters are absent from plans published before they existed, in
+  // which case the filter below simply drops the rows.
+  ["Legs rejected by the quote-width gate", funnel.quote_rejected_legs], ["Dropped — negative expected value, too few days, or wrong size", screened], ["Cleared that screen", funnel.selected], ["Dropped — no positive net credit at all", funnel.rejected_non_positive_credit], ["Dropped — expected value or credit too small", funnel.rejected_ev_or_credit], ["Dropped — win probability outside the band", funnel.rejected_pop_band], [funnel.momentum_gate ? "Dropped — wrong side for the stock's momentum" : "Momentum gate OFF this run", funnel.momentum_gate ? funnel.rejected_momentum : "—"], [funnel.trade_corroboration ? "Dropped — no matching trade print on the tape" : "Trade-corroboration gate OFF this run", funnel.trade_corroboration ? funnel.rejected_no_trade_corroboration : "—"],
   // Suppression is checked LAST in scan() (see spread_trader.py), after
   // every quality gate above — a suppressed candidate already cleared all
   // of them. It is placed here, immediately before "Proposed", so the
@@ -13276,15 +13314,36 @@ function EmptyState({
   // changes that.
   var best = funnel.best_credit_ratio;
   var need = funnel.credit_ratio_required;
+  // Universe-breadth headline (PRD 3577): a universe that has silently
+  // collapsed to a handful of names and a universe that is genuinely quiet
+  // both show "0 proposed" — these two figures, plus the per-ticker
+  // disclosure below, are what tells them apart. `byTicker` is absent from
+  // plans published before this PRD, in which case the block is simply
+  // omitted rather than showing zeros as if they were measured.
+  var byTicker = Array.isArray(funnel.byTicker) ? funnel.byTicker : null;
+  var namesPricedZero = num(funnel.names_priced_zero);
+  var topTickerShare = num(funnel.top_ticker_share);
   return /*#__PURE__*/React.createElement("div", {
     className: "prop-empty"
   }, /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
-  }, "No proposals right now \u2014 and that is a measurement, not a blank screen. Here is the whole funnel behind it:"), /*#__PURE__*/React.createElement("ul", {
+  }, "No proposals right now \u2014 and that is a measurement, not a blank screen. Here is the whole funnel behind it:"), (namesPricedZero !== null || topTickerShare !== null) && /*#__PURE__*/React.createElement("ul", {
+    className: "prop-funnel prop-funnel-headline"
+  }, namesPricedZero !== null && /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("span", null, "Names that priced zero spreads", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_names_priced_zero"
+  })), /*#__PURE__*/React.createElement("b", null, namesPricedZero, " of ", funnel.tickers)), topTickerShare !== null && /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("span", null, "Top name's share of priced spreads", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_top_ticker_share"
+  })), /*#__PURE__*/React.createElement("b", null, (topTickerShare * 100).toFixed(0), "%"))), /*#__PURE__*/React.createElement("ul", {
     className: "prop-funnel"
   }, rows.map(([label, value], i) => /*#__PURE__*/React.createElement("li", {
     key: i
-  }, /*#__PURE__*/React.createElement("span", null, label), /*#__PURE__*/React.createElement("b", null, value === undefined || value === null ? "—" : value)))), best !== null && best !== undefined && /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("span", null, label), /*#__PURE__*/React.createElement("b", null, value === undefined || value === null ? "—" : value)))), byTicker && byTicker.length > 0 && /*#__PURE__*/React.createElement("details", {
+    className: "prop-funnel-byticker"
+  }, /*#__PURE__*/React.createElement("summary", null, "Per-ticker breakdown (", byTicker.length, " names)"), /*#__PURE__*/React.createElement("table", {
+    className: "prop-funnel-byticker-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Ticker"), /*#__PURE__*/React.createElement("th", null, "Priced"), /*#__PURE__*/React.createElement("th", null, "Selected"), /*#__PURE__*/React.createElement("th", null, "Proposed"))), /*#__PURE__*/React.createElement("tbody", null, byTicker.map(row => /*#__PURE__*/React.createElement("tr", {
+    key: row.ticker
+  }, /*#__PURE__*/React.createElement("td", null, row.ticker), /*#__PURE__*/React.createElement("td", null, row.priced), /*#__PURE__*/React.createElement("td", null, row.selected), /*#__PURE__*/React.createElement("td", null, row.passed)))))), best !== null && best !== undefined && /*#__PURE__*/React.createElement("p", {
     className: `prop-funnel-verdict${best < 1 ? " prop-funnel-verdict--short" : ""}`
   }, "Best credit on the board: ", /*#__PURE__*/React.createElement("b", null, Number(best).toFixed(2), "\xD7"), " fair value", need ? /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 policy needs ", /*#__PURE__*/React.createElement("b", null, Number(need).toFixed(2), "\xD7")) : null, ".", best < 1 ? " Below 1.00× the market is paying less than the trade is worth — every candidate has negative expected value, so nothing can pass without knowingly trading at a loss." : " At or above 1.00× the market is paying fair value or better."), funnel.chain_errors > 0 && /*#__PURE__*/React.createElement("p", {
     className: "prop-funnel-note"

@@ -1850,9 +1850,11 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .prop-checks .prop-mono { font-family: var(--mono); }
 .prop-checks .prop-why { color: var(--text-2); }
 .prop-check-fail { color: var(--neg); }
+.prop-check-info { color: var(--muted); }
 .prop-tick { display: inline-block; width: 14px; font-weight: 700; }
 .prop-tick--pass { color: var(--accent); }
 .prop-tick--fail { color: var(--neg); }
+.prop-tick--info { color: var(--muted); }
 .prop-rules { list-style: none; margin: 0; padding: 0; }
 .prop-rules li {
   display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
@@ -1892,6 +1894,18 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 }
 .prop-funnel li b { font-family: var(--mono); color: var(--text); }
 .prop-funnel-note { font-size: 11px; color: var(--warn); margin: 8px 0 0; }
+.prop-funnel-headline li b { font-size: 13px; }
+.prop-funnel-byticker { margin: 12px 0 0; max-width: 560px; }
+.prop-funnel-byticker summary { font-size: 12px; color: var(--text-2); cursor: pointer; }
+.prop-funnel-byticker-table {
+  width: 100%; margin: 8px 0 0; border-collapse: collapse; font-size: 12px;
+}
+.prop-funnel-byticker-table th, .prop-funnel-byticker-table td {
+  text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--line); color: var(--text-2);
+}
+.prop-funnel-byticker-table th:first-child, .prop-funnel-byticker-table td:first-child {
+  text-align: left; color: var(--text); font-family: var(--mono);
+}
 
 /* Pager for the one-at-a-time proposal deck. Rendered above AND below the
    card: at full height a proposal is taller than the viewport, so a pager

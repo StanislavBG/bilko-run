@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-09-01T13:45:03Z",
+    "generatedAt": "2026-09-01T14:45:03Z",
     "open": 16,
     "positions": {
       "openWithUnansweredComment": 1
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-01T13:45:02Z",
+  "generatedAt": "2026-09-01T14:45:03Z",
   "schema": 2,
   "threads": [{
     "answered": false,
@@ -11957,6 +11957,9 @@ function FeedbackFunnel({
   var proposalsPending = proposals.pending || 0;
   var proposalsTotal = proposalsPending + (proposals.approved || 0) + (proposals.declined || 0);
   var positionsOpenUnanswered = (funnel.positions || {}).openWithUnansweredComment || 0;
+  var stuckDrafts = funnel.stuckDrafts || {};
+  var stuckDraftsCount = stuckDrafts.count || 0;
+  var stuckDraftsOldest = stuckDrafts.oldestAgeHours;
   return /*#__PURE__*/React.createElement("div", {
     className: "fbt-funnel",
     role: "group",
@@ -11979,7 +11982,11 @@ function FeedbackFunnel({
     className: "fbt-funnel-sub"
   }, " ", "(", proposals.approved || 0, " approved / ", proposals.declined || 0, " declined)")), positionsOpenUnanswered > 0 && /*#__PURE__*/React.createElement("span", {
     className: "fbt-funnel-stat fbt-funnel-stat--warn"
-  }, /*#__PURE__*/React.createElement("b", null, positionsOpenUnanswered), " open position", positionsOpenUnanswered === 1 ? "" : "s", " with an unanswered comment"));
+  }, /*#__PURE__*/React.createElement("b", null, positionsOpenUnanswered), " open position", positionsOpenUnanswered === 1 ? "" : "s", " with an unanswered comment"), stuckDraftsCount > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "fbt-funnel-stat fbt-funnel-stat--warn"
+  }, /*#__PURE__*/React.createElement("b", null, stuckDraftsCount), " draft", stuckDraftsCount === 1 ? "" : "s", " stuck past SLA", /*#__PURE__*/React.createElement("span", {
+    className: "fbt-funnel-sub"
+  }, " ", "(oldest ", stuckDraftsOldest != null ? `${Math.round(stuckDraftsOldest)}h` : "unknown", ")")));
 }
 function SystemFeedbackPanel() {
   window.FeedbackClient.usePendingFeedback();

@@ -12,9 +12,9 @@ window.FEEDBACK_THREADS = {
     "unanswered": 15
   },
   "funnel": {
-    "breachingSla": 16,
-    "generatedAt": "2026-09-01T03:45:02Z",
-    "open": 16,
+    "breachingSla": 15,
+    "generatedAt": "2026-09-01T04:45:02Z",
+    "open": 15,
     "positions": {
       "openWithUnansweredComment": 1
     },
@@ -23,7 +23,7 @@ window.FEEDBACK_THREADS = {
       "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 1,
+      "pending": 0,
       "stranded": 0
     },
     "resolvedThisWeek": 0,
@@ -34,7 +34,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-01T03:45:02Z",
+  "generatedAt": "2026-09-01T04:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,

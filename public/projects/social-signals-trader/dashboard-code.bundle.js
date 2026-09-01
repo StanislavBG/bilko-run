@@ -13,8 +13,8 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 15,
-    "generatedAt": "2026-09-01T16:45:03Z",
-    "open": 16,
+    "generatedAt": "2026-09-01T17:45:02Z",
+    "open": 18,
     "positions": {
       "openWithUnansweredComment": 1
     },
@@ -23,14 +23,14 @@ window.FEEDBACK_THREADS = {
       "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 1,
+      "pending": 3,
       "stranded": 0
     },
     "resolvedThisWeek": 0,
     "routedToPrd": 4,
     "stuckDrafts": {
       "count": 15,
-      "oldestAgeHours": 432.7483605941666
+      "oldestAgeHours": 433.74812647333334
     },
     "triagedBySeverity": {
       "high": 0,
@@ -38,7 +38,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-01T16:45:03Z",
+  "generatedAt": "2026-09-01T17:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": false,

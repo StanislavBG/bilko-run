@@ -6,9 +6,14 @@
  *   1. anonymous       → TOC + free sample chapter + sign-in-to-buy
  *   2. signed in, not entitled → same, plus a real Buy button
  *   3. entitled        → full reader + download buttons
+ *
+ * The reader half is written for a first-time visitor who has never used the
+ * app: the chapter is deep-linkable (`/manual#scheduler`), cross-references
+ * inside a chapter body switch chapters instead of dead-ending on a `#slug`
+ * that isn't in the DOM, and every chapter ends with where to go next.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth, useUser, SignInButton } from '@clerk/clerk-react';
 import { usePageView } from '../hooks/usePageView.js';
 import {
@@ -28,6 +33,13 @@ function isLocked(c: ManualChapterBody | ManualChapterLocked | null): c is Manua
   return !!c && (c as ManualChapterLocked).locked === true;
 }
 
+/** The chapter named by `#slug`, if it is one this release actually has. */
+function slugFromHash(toc: ManualToc | null): string | null {
+  if (!toc) return null;
+  const raw = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+  return toc.chapters.some(c => c.slug === raw) ? raw : null;
+}
+
 export default function ManualPage() {
   usePageView();
 
@@ -43,6 +55,10 @@ export default function ManualPage() {
   const [chapterLoading, setChapterLoading] = useState(false);
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
+  const articleRef = useRef<HTMLElement | null>(null);
+  // First chapter render is the page load — scrolling then would jump a visitor
+  // past the header they haven't read yet.
+  const firstChapterRender = useRef(true);
 
   const entitled = status?.entitled === true;
 
@@ -70,10 +86,30 @@ export default function ManualPage() {
     return () => { cancelled = true; };
   }, [isSignedIn, getToken]);
 
-  // Open the first chapter by default so the page is never an empty shell.
+  // Open the chapter the URL asks for, else the first one — the page is never
+  // an empty shell, and a shared `/manual#scheduler` link lands where it says.
   useEffect(() => {
-    if (!activeSlug && toc?.chapters.length) setActiveSlug(toc.chapters[0].slug);
+    if (activeSlug || !toc?.chapters.length) return;
+    setActiveSlug(slugFromHash(toc) ?? toc.chapters[0].slug);
   }, [toc, activeSlug]);
+
+  // Back/forward and hand-edited hashes move the reader too.
+  useEffect(() => {
+    const onHashChange = () => {
+      const slug = slugFromHash(toc);
+      if (slug) setActiveSlug(slug);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [toc]);
+
+  /** Single entry point for "show me this chapter" — keeps the URL in step. */
+  const openChapter = useCallback((slug: string) => {
+    setActiveSlug(slug);
+    if (window.location.hash !== `#${slug}`) {
+      window.history.pushState(null, '', `#${slug}`);
+    }
+  }, []);
 
   useEffect(() => {
     if (!activeSlug) return;
@@ -85,6 +121,27 @@ export default function ManualPage() {
     })();
     return () => { cancelled = true; };
   }, [activeSlug, entitled, getToken]);
+
+  // Land at the top of the chapter you just chose, not halfway down the
+  // previous one's scroll position.
+  useEffect(() => {
+    if (!activeSlug) return;
+    if (firstChapterRender.current) { firstChapterRender.current = false; return; }
+    articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [activeSlug]);
+
+  // Chapters cross-reference each other as `<a href="#other-chapter">`, which
+  // is correct in the offline single-file edition but points at nothing here,
+  // where one chapter renders at a time. Resolve those to a chapter switch.
+  const handleArticleClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    const anchor = (e.target as HTMLElement).closest('a');
+    const href = anchor?.getAttribute('href');
+    if (!href?.startsWith('#')) return;
+    const slug = href.slice(1);
+    if (!toc?.chapters.some(c => c.slug === slug)) return;
+    e.preventDefault();
+    openChapter(slug);
+  }, [toc, openChapter]);
 
   const handleBuy = useCallback(async () => {
     if (!email) { setError('Sign in first so we can attach the purchase to your account.'); return; }
@@ -122,6 +179,11 @@ export default function ManualPage() {
     );
   }
 
+  const freeChapters = toc.chapters.filter(c => c.free);
+  const activeIndex = toc.chapters.findIndex(c => c.slug === activeSlug);
+  const prev = activeIndex > 0 ? toc.chapters[activeIndex - 1] : null;
+  const next = activeIndex >= 0 && activeIndex < toc.chapters.length - 1 ? toc.chapters[activeIndex + 1] : null;
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <header className="border-b border-neutral-800 pb-8">
@@ -132,6 +194,15 @@ export default function ManualPage() {
           v{toc.version} · released {new Date(toc.releasedAt).toLocaleDateString()} · documents
           Session Manager v{toc.documentsAppVersion}
         </p>
+
+        {/* What's in the box, before anyone has to click a locked chapter to
+            find out. Derived from the manifest, so it can't drift. */}
+        <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-sm text-neutral-400">
+          <li>{toc.chapters.length} chapters, one per surface of the app</li>
+          {freeChapters.length > 0 && <li className="text-emerald-400">{freeChapters.length} readable free, right now</li>}
+          {toc.assets.length > 0 && <li>{toc.assets.map(a => a.label).join(' + ')} to keep</li>}
+          <li>Free updates for every future edition</li>
+        </ul>
 
         {!entitled && (
           <div className="mt-6 flex flex-wrap items-center gap-4 rounded-lg border border-emerald-800/50 bg-emerald-950/20 p-5">
@@ -147,6 +218,12 @@ export default function ManualPage() {
                 <code className="rounded bg-neutral-900 px-1.5 py-0.5">npx claude-code-session-manager@latest</code>.
                 This is the guide that teaches it.
               </p>
+              {!isSignedIn && (
+                <p className="mt-2 text-xs text-neutral-500">
+                  Signing in first attaches the purchase to your account, so you can re-download
+                  every future edition without hunting for a receipt.
+                </p>
+              )}
             </div>
             {isSignedIn ? (
               <button
@@ -163,6 +240,21 @@ export default function ManualPage() {
                 </button>
               </SignInButton>
             )}
+            <p className="w-full text-xs text-neutral-500">
+              {freeChapters.length > 0 && (
+                <>
+                  Not sure yet?{' '}
+                  <button
+                    onClick={() => openChapter(freeChapters[0].slug)}
+                    className="text-sky-400 underline-offset-2 hover:underline"
+                  >
+                    Read “{freeChapters[0].title}” free →
+                  </button>
+                  {'  ·  '}
+                </>
+              )}
+              Already bought it? <a className="text-sky-400" href="/my-manual">Find your purchase →</a>
+            </p>
           </div>
         )}
 
@@ -186,11 +278,30 @@ export default function ManualPage() {
       </header>
 
       <div className="mt-8 grid gap-8 md:grid-cols-[260px_1fr]">
-        <nav className="space-y-1">
+        {/* Below md the chapter list is 21 rows of nav standing between a phone
+            visitor and the words they came for — collapse it to one control. */}
+        <label className="md:hidden">
+          <span className="text-xs uppercase tracking-widest text-neutral-500">Chapter</span>
+          <select
+            value={activeSlug ?? ''}
+            onChange={e => openChapter(e.target.value)}
+            className="mt-1 w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-200"
+          >
+            {toc.chapters.map((c, i) => (
+              <option key={c.slug} value={c.slug}>
+                {String(i + 1).padStart(2, '0')} · {c.title}{!entitled && !c.free ? ' 🔒' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <nav className="hidden space-y-1 md:block md:sticky md:top-6 md:max-h-[calc(100vh-3rem)] md:self-start md:overflow-y-auto">
           {toc.chapters.map((c, i) => (
             <button
               key={c.slug}
-              onClick={() => setActiveSlug(c.slug)}
+              onClick={() => openChapter(c.slug)}
+              title={c.blurb}
+              aria-current={activeSlug === c.slug ? 'true' : undefined}
               className={`block w-full rounded px-3 py-2 text-left text-sm ${
                 activeSlug === c.slug ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-400 hover:bg-neutral-900'
               }`}
@@ -204,7 +315,7 @@ export default function ManualPage() {
           ))}
         </nav>
 
-        <article className="min-h-[320px]">
+        <article ref={articleRef} onClick={handleArticleClick} className="min-h-[320px] scroll-mt-6">
           {chapterLoading && <p className="text-neutral-500">Loading chapter…</p>}
 
           {!chapterLoading && isLocked(chapter) && (
@@ -229,6 +340,14 @@ export default function ManualPage() {
                   </button>
                 </SignInButton>
               )}
+              {freeChapters.length > 0 && (
+                <p className="mt-4 text-sm text-neutral-500">
+                  Want to read one first?{' '}
+                  <button onClick={() => openChapter(freeChapters[0].slug)} className="text-sky-400 underline-offset-2 hover:underline">
+                    “{freeChapters[0].title}” is free →
+                  </button>
+                </p>
+              )}
               <p className="mt-4 text-xs text-neutral-600">
                 Already bought it? <a className="text-sky-400" href="/my-manual">Find your purchase →</a>
               </p>
@@ -243,6 +362,31 @@ export default function ManualPage() {
 
           {!chapterLoading && !chapter && (
             <p className="text-neutral-500">This chapter couldn't be loaded. Try another one.</p>
+          )}
+
+          {/* Reading straight through shouldn't mean going back to the sidebar
+              after every chapter. */}
+          {!chapterLoading && (prev || next) && (
+            <nav className="mt-12 flex flex-wrap gap-3 border-t border-neutral-800 pt-6 text-sm">
+              {prev && (
+                <button
+                  onClick={() => openChapter(prev.slug)}
+                  className="flex-1 min-w-[220px] rounded-md border border-neutral-800 px-4 py-3 text-left text-neutral-300 hover:border-neutral-600"
+                >
+                  <span className="block text-xs text-neutral-500">← Previous</span>
+                  {prev.title}{!entitled && !prev.free && <span className="ml-2 text-neutral-600">🔒</span>}
+                </button>
+              )}
+              {next && (
+                <button
+                  onClick={() => openChapter(next.slug)}
+                  className="flex-1 min-w-[220px] rounded-md border border-neutral-800 px-4 py-3 text-right text-neutral-300 hover:border-neutral-600"
+                >
+                  <span className="block text-xs text-neutral-500">Next →</span>
+                  {next.title}{!entitled && !next.free && <span className="ml-2 text-neutral-600">🔒</span>}
+                </button>
+              )}
+            </nav>
           )}
         </article>
       </div>

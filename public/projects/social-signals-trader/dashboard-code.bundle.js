@@ -13,8 +13,8 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-02T18:45:02Z",
-    "open": 0,
+    "generatedAt": "2026-09-02T19:45:03Z",
+    "open": 2,
     "positions": {
       "openWatchClosely": 0,
       "openWithUnansweredComment": 0
@@ -24,7 +24,7 @@ window.FEEDBACK_THREADS = {
       "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 0,
+      "pending": 2,
       "stranded": 0,
       "untrustedRefusals": 4
     },
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-02T18:45:02Z",
+  "generatedAt": "2026-09-02T19:45:03Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -3435,6 +3435,12 @@ window.FEEDBACK_THREADS = {
         unit: "$",
         source: "src/social_signals_trader/options_summary.py:250"
       }
+    },
+    order_expires: {
+      label: "Order expires",
+      short: "When the broker cancels this order by itself if it has not filled. Our entries and exits are DAY orders, so that is the 4:00 PM ET close of the session it was submitted in.",
+      long: "An order resting at the bell is cancelled by the broker, not by us: no position opens or closes, nothing is owed. The next morning's scan starts fresh at that day's prices, so an entry that expired unfilled may come back as a different strike or not at all. Shown in ET with the time left, like every other time on this site.",
+      example: "An INTC put spread submitted at 11:47 AM ET as a DAY order shows 'Sep 2, 4:00 PM ET (in 2h 13m)' at 1:47 PM ET; if it is still unfilled at the bell the broker cancels it and the row disappears from this table."
     },
     tif: {
       label: "TIF",
@@ -9078,6 +9084,69 @@ var OPEN_ORDER_BADGE_CLASS = {
 // One resting/unfilled/partially-filled/terminal order. The label is never a
 // bare broker status string — QUEUED / PARTIAL n/N / EXPIRED / CANCELLED /
 // REJECTED / UNKNOWN only.
+/* When the broker will cancel a resting order by itself. Our entries and
+   exits are DAY limit orders: they die at the 4:00 PM ET close of the session
+   they were submitted in (operator ask, 2026-09-02 — six single-name entries
+   sat unfilled for hours and the page gave no hint they would simply vanish
+   at the bell). Renders in ET like every other time on the site. */
+function orderExpiry(ev) {
+  var resp = ev.response || {};
+  var tif = String(resp.time_in_force || "day").toLowerCase();
+  var submitted = resp.submitted_at || resp.created_at || ev.ts;
+  if (!submitted) return {
+    label: "—",
+    rel: "",
+    state: "unknown"
+  };
+  if (tif !== "day") return {
+    label: tif.toUpperCase(),
+    rel: "no session expiry",
+    state: "open"
+  };
+  var tz = window.AsOfTime && window.AsOfTime.TZ || "America/New_York";
+  var d = new Date(submitted);
+  var parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZoneName: "short"
+  }).formatToParts(d);
+  var get = t => (parts.find(p => p.type === t) || {}).value;
+  var offset = get("timeZoneName") === "EDT" ? "-04:00" : "-05:00";
+  var expires = new Date(`${get("year")}-${get("month")}-${get("day")}T16:00:00${offset}`);
+  var label = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(expires) + " ET";
+  var msLeft = expires.getTime() - Date.now();
+  if (msLeft <= 0) return {
+    label,
+    rel: "expired at the bell",
+    state: "expired"
+  };
+  var h = Math.floor(msLeft / 3600000);
+  var m = Math.floor(msLeft % 3600000 / 60000);
+  return {
+    label,
+    rel: h > 0 ? `in ${h}h ${m}m` : `in ${m}m`,
+    state: "open"
+  };
+}
+function OrderExpiresCell({
+  ev
+}) {
+  var x = orderExpiry(ev);
+  return /*#__PURE__*/React.createElement("span", {
+    title: x.rel,
+    className: x.state === "expired" ? "mono-dim" : undefined
+  }, x.label, x.rel ? /*#__PURE__*/React.createElement("span", {
+    className: "opt-money-note"
+  }, " (", x.rel, ")") : null);
+}
 function OpenOrderRow({
   ev,
   classification,
@@ -9165,7 +9234,9 @@ function OpenOrderRow({
       right
     },
     asOf: asOf
-  })), /*#__PURE__*/React.createElement("td", null, resp.submitted_at ? String(resp.submitted_at).replace("T", " ").slice(0, 19) : "—"), /*#__PURE__*/React.createElement("td", null, resp.time_in_force || "—"));
+  })), /*#__PURE__*/React.createElement("td", null, resp.submitted_at ? String(resp.submitted_at).replace("T", " ").slice(0, 19) : "—"), /*#__PURE__*/React.createElement("td", null, resp.time_in_force || "—"), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(OrderExpiresCell, {
+    ev: ev
+  })));
 }
 
 // One order Alpaca reports 100% filled — the only rows that count as trades.
@@ -9425,6 +9496,8 @@ function OpenOrdersTable({
     term: "breakeven"
   })), /*#__PURE__*/React.createElement("th", null, "Submitted"), /*#__PURE__*/React.createElement("th", null, "TIF", /*#__PURE__*/React.createElement(window.Help, {
     term: "tif"
+  })), /*#__PURE__*/React.createElement("th", null, "Order expires", /*#__PURE__*/React.createElement(window.Help, {
+    term: "order_expires"
   })))), /*#__PURE__*/React.createElement("tbody", null, orders.map(o => /*#__PURE__*/React.createElement(OpenOrderRow, {
     key: (o.ev.client_order_id || "") + o.index,
     ev: o.ev,
@@ -17452,11 +17525,11 @@ function MobileOptionsPage({
     className: "opts-mob-loop"
   }, "The ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " posts its read (", summary.cadenceLabel || "on schedule", "); the", " ", /*#__PURE__*/React.createElement("b", null, "Trader"), " applies the frozen rules on its own 15-minute tick. Your comment is the human voice on both \u2014 and on a proposal, a positive comment IS the approval."), /*#__PURE__*/React.createElement(ExecutionState, null)), tab === "positions" && /*#__PURE__*/React.createElement(React.Fragment, null, summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
     id: "options-summary"
-  }, summary.positions), summary.whatWeThink, summary.actionQueue)), tab === "proposals" && /*#__PURE__*/React.createElement(React.Fragment, null, window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, {
+  }, summary.positions), tradeLog.openOrders, summary.whatWeThink, summary.actionQueue)), tab === "proposals" && /*#__PURE__*/React.createElement(React.Fragment, null, window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, {
     defaultExpanded: true
   })), tab === "more" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     id: "options-trade-log"
-  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, tradeLog.expiryLadder, summary.whereBookStands, window.OutcomeStatsCard && /*#__PURE__*/React.createElement(window.OutcomeStatsCard, null), tradeLog.openOrders), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
+  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, tradeLog.expiryLadder, summary.whereBookStands, window.OutcomeStatsCard && /*#__PURE__*/React.createElement(window.OutcomeStatsCard, null)), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
     className: "opts-strategy"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "opts-section-title"
@@ -17620,9 +17693,9 @@ function TickerDetailsPage() {
     className: "opts-page-loop"
   }, "Three voices write this page: the ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and posts its opinion", " ", "(", summary.cadenceLabel || "on schedule", "); you, the ", /*#__PURE__*/React.createElement("b", null, "User"), ", comment in public on any card or proposal; the ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and applies the fund's frozen rules \u2014 arithmetic only. The Analyst's read and your comments are for the human reading this page; neither is an input to the Trader's decision."), /*#__PURE__*/React.createElement(ExecutionState, null)), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
     id: "options-summary"
-  }, summary.positions)), window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null), /*#__PURE__*/React.createElement("div", {
+  }, summary.positions), tradeLog.openOrders), window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null), /*#__PURE__*/React.createElement("div", {
     id: "options-trade-log"
-  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Row2, null, tradeLog.expiryLadder, summary.whereBookStands, window.OutcomeStatsCard && /*#__PURE__*/React.createElement(window.OutcomeStatsCard, null)), /*#__PURE__*/React.createElement(Row2, null, summary.whatWeThink, summary.actionQueue), /*#__PURE__*/React.createElement(Row2, null, tradeLog.openOrders)), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
+  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Row2, null, tradeLog.expiryLadder, summary.whereBookStands, window.OutcomeStatsCard && /*#__PURE__*/React.createElement(window.OutcomeStatsCard, null)), /*#__PURE__*/React.createElement(Row2, null, summary.whatWeThink, summary.actionQueue)), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
     className: "opts-strategy"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "opts-section-title"

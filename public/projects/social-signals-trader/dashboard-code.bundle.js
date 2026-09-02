@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-02T06:45:03Z",
+    "generatedAt": "2026-09-02T07:45:03Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -29,6 +29,11 @@ window.FEEDBACK_THREADS = {
       "untrustedRefusals": 4
     },
     "resolvedThisWeek": 0,
+    "routeBlocked": {
+      "count": 1,
+      "epicId": "feedback-handling-there-is-currently-some-feedba-9000c4e7",
+      "reason": "no open Epic to join"
+    },
     "routedToPrd": 4,
     "stuckDrafts": {
       "count": 0,
@@ -40,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-02T06:45:03Z",
+  "generatedAt": "2026-09-02T07:45:03Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -3071,6 +3076,20 @@ window.FEEDBACK_THREADS = {
         source: "src/social_signals_trader/spread_trader.py:170"
       }
     },
+    max_drawdown_from_peak_pct: {
+      label: "Max drawdown from peak",
+      short: "New entries halt once account equity has fallen this far from its own all-time high.",
+      long: "Derived on read from Alpaca's own portfolio history — no separate state file. Halting means the sleeve stops OPENING new positions; existing positions keep managing their own exits (strike breach, max-loss stop, profit target) unchanged. A same-day, tighter-window sibling of this rail already exists (see the daily-loss circuit breaker) — this one watches the longer horizon of drawdown from the account's peak, not just today's move.",
+      example: "With the cap at 15%, an account that peaked at $130,000 and has fallen to $112,000 (13.8% off peak) still opens new entries; a fall to $109,000 (16.2% off peak) halts new entries until equity recovers.",
+      source: "src/social_signals_trader/spread_trader.py — SpreadConfig.max_drawdown_from_peak_pct / drawdown_status()"
+    },
+    max_index_cluster_pct: {
+      label: "Max index cluster",
+      short: "The most of deployed collateral that broad-market index ETFs (SPY, QQQ, DIA, IWM, TQQQ, …) may occupy together, treated as one correlated bet.",
+      long: "max_per_underlying bounds a single NAME; it says nothing about several index ETFs moving together in the same market drop. A candidate that would push the combined index share of gross deployed collateral past this cap is skipped — the next-ranked non-index candidate takes the slot instead. This re-allocates capital toward single-name diversification; it never loosens any other gate.",
+      example: "With the cap at 70% and the book already 70% index-ETF collateral, a new SPY or QQQ candidate is skipped (rejected_index_cluster_cap) while a DELL candidate that cleared every other gate is still accepted.",
+      source: "src/social_signals_trader/spread_trader.py — SpreadConfig.max_index_cluster_pct / plan()"
+    },
     min_pop: {
       label: "Min PoP requirement",
       short: "The lowest win-probability estimate a candidate needs to even be considered.",
@@ -3507,6 +3526,12 @@ window.FEEDBACK_THREADS = {
       short: "How many universe tickers priced NO spreads at all on this scan — the chain answered, but every leg died before anything could be listed.",
       long: "A ticker lands here when spread_trader.scan() gets a chain back with no error, but ends up with zero put or call spreads after every gate _spread_rows applies while pricing: the entry-quote-width gate (see funnel_names_priced_zero's sibling row, quote_rejected_legs) is one cause, but insufficient credit, an out-of-band max loss, or no admissible long leg at any strike/expiry can zero out a name too, without moving quote_rejected_legs at all — check that sibling row before assuming the quote gate is why a given name is at zero. A universe that has silently collapsed to a handful of tradable names looks identical to a genuinely quiet day unless this count — and the concentration figure next to it — are shown alongside 'nothing to propose'.",
       example: "117 names configured, 85 priced zero spreads on 2026-08-31 — only 32 names contributed anything to the 'priced' total at all, though nothing in the funnel said so before this figure existed."
+    },
+    funnel_working_entries: {
+      label: "Working at the broker",
+      short: "Entry orders submitted and still resting at the broker — not yet filled, cancelled or expired — with the gross collateral the broker has locked up for them.",
+      long: "Counted by spread_trader.working_entries_summary() off the trade log plus the broker-state file (no live broker call), the same figure the markdown summary, the brief's 'Entry fills' line and data/entry_fill_stats.json report. Since 2026-09-01 the re-peg walk HOLDS an unfilled entry at its EV floor (the lowest credit that still clears the same EV / credit-ratio / max-loss gates it was scored on) instead of cancelling it — so an empty proposal deck can sit above real capital resting on the book until it fills or the pre-close cutoff cancels it. Collateral is the gross figure: full strike width × 100 × contracts, what the broker reserves while the order works, the same basis as the daily collateral rail and every proposal card.",
+      example: "2 ($30,000 collateral): two spreads are resting at their floor credit; if both fill, $30,000 of buying power is committed — if neither does by 15 minutes before the close, both are cancelled explicitly."
     },
     funnel_ticker_drop_reason: {
       label: "Top drop reason (per ticker)",
@@ -13817,59 +13842,15 @@ function DeploymentLine({
 // "Nothing to review" is only believable with the count of what was looked
 // at. Without the funnel, a barren option chain and a broken scanner render
 // identically — which is what an empty panel meant before this.
-// Numeric-or-null: a missing funnel key must read as "unmeasured", never 0.
-var num = v => typeof v === "number" ? v : null;
-
-// Human label per `dropped` key on a per-ticker funnel row
-// (spread_trader._DROPPED_REASONS). The five `select_*` keys are
-// options_chain.select_spreads' own filters, which run BEFORE the counted
-// gates — a name that priced 250 and selected 0 used to show every counter
-// here at zero because those drops were never attributed anywhere.
-var DROP_REASON_LABELS = {
-  select_pop: "win probability below floor",
-  select_ann_yield: "annualised yield too low",
-  select_dte: "expiry too soon",
-  select_ev_nonpositive: "EV ≤ 0 (credit under fair value)",
-  select_notional_band: "outside the notional band",
-  non_positive_credit: "no positive net credit",
-  ev_or_credit: "EV or credit too small",
-  pop_too_risky: "win probability too low",
-  pop_too_safe: "win probability too high",
-  index_dte: "index DTE cap",
-  momentum: "momentum gate",
-  no_trade_corroboration: "no trade corroboration",
-  pending_duplicate: "already on the deck"
-};
-
-// The single largest `dropped` bucket on a per-ticker row, as "reason (n)".
-// "—" when nothing was dropped (nothing priced, or everything proposed).
-// Ties go to the first key in declaration order, which is also gate order.
-var dominantDropReason = row => {
-  var dropped = row && row.dropped && typeof row.dropped === "object" ? row.dropped : null;
-  if (!dropped) return "—";
-  var bestKey = null;
-  var bestN = 0;
-  for (var key of Object.keys(dropped)) {
-    var n = typeof dropped[key] === "number" ? dropped[key] : 0;
-    if (n > bestN) {
-      bestKey = key;
-      bestN = n;
-    }
-  }
-  if (!bestKey) return "—";
-  return `${DROP_REASON_LABELS[bestKey] || bestKey} (${bestN})`;
-};
-
-// "0.47 shaded / 0.71 mid" — the row's best credit-vs-breakeven ratio at
-// the configured entry_fill_fraction, then at pure mid. "—" when nothing
-// priced (both are null), and "—" for the mid half alone if only it is
-// unmeasurable (a row missing a usable leg quote).
-var creditRatioLabel = row => {
-  var shaded = num(row && row.best_credit_ratio);
-  if (shaded === null) return "—";
-  var mid = num(row && row.best_credit_ratio_mid);
-  return `${shaded.toFixed(2)} shaded / ${mid === null ? "—" : mid.toFixed(2)} mid`;
-};
+// `funnel.working_entries` -> "2 ($30,000 collateral)", or null when the key
+// is absent/unmeasured so the row filter drops it rather than showing 0.
+function workingEntriesLabel(working) {
+  if (!working || num(working.count) === null) return null;
+  var collateral = num(working.collateral);
+  if (collateral === null) return String(working.count);
+  var money = window.fmtUSD ? window.fmtUSD(collateral) : "$" + Math.round(collateral).toLocaleString();
+  return `${working.count} (${money} collateral)`;
+}
 function EmptyState({
   funnel
 }) {
@@ -13885,6 +13866,7 @@ function EmptyState({
   // funnel unaccounted for on screen, which is the same "where did they all
   // go?" this panel exists to answer. Derived here rather than added to the
   // exported funnel so an already-published plan renders it too.
+  var num = v => typeof v === "number" ? v : null;
   var screened = num(funnel.priced) !== null && num(funnel.selected) !== null ? funnel.priced - funnel.selected : null;
   var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced],
   // Quote-width gate visibility (2026-08-31): a name whose every leg is
@@ -13904,7 +13886,11 @@ function EmptyState({
   // `plan()` set aside so one name can't consume the whole daily budget
   // (`max_daily_entries_per_underlying` / `max_new_per_underlying_per_tick`).
   // Absent from plans published before the caps existed — filtered out.
-  ["Set aside — that underlying already had its entries for today", funnel.rejected_underlying_daily_cap], ["Set aside — one new entry per underlying per cycle", funnel.rejected_underlying_tick_cap], ["Proposed", funnel.passed],
+  ["Set aside — that underlying already had its entries for today", funnel.rejected_underlying_daily_cap], ["Set aside — one new entry per underlying per cycle", funnel.rejected_underlying_tick_cap],
+  // Correlated-exposure cap (docs/MANDATE.md "Risk budget", 2026-09-02):
+  // an index candidate (SPY/QQQ/DIA/IWM/TQQQ/…) that would push the
+  // combined index share of deployed collateral past max_index_cluster_pct.
+  ["Set aside — index-cluster collateral cap", funnel.rejected_index_cluster_cap], ["Proposed", funnel.passed],
   // Applied LAST, after book limits — the deck shortlist cap
   // (`max_proposals`). Shown even here (usually 0, since an empty deck has
   // nothing to cap) so the bucket is never silently absent from the funnel.
@@ -13912,7 +13898,15 @@ function EmptyState({
   // "0 proposed" and "0 approved" read identically unless the split is
   // shown — a board that produced proposals but approved none of them
   // must be distinguishable from a board that produced none at all.
-  ["Approved", funnel.approval && funnel.approval.approved], ["Awaiting approval", funnel.approval && funnel.approval.pending], ["Declined", funnel.approval && funnel.approval.declined], ["Stuck — approved but not matched by the scanner", funnel.approval && funnel.approval.stranded]].filter(([, v]) => v !== null && v !== undefined);
+  ["Approved", funnel.approval && funnel.approval.approved], ["Awaiting approval", funnel.approval && funnel.approval.pending], ["Declined", funnel.approval && funnel.approval.declined], ["Stuck — approved but not matched by the scanner", funnel.approval && funnel.approval.stranded],
+  // Orders out working at the broker (2026-09-01): the re-peg walk now
+  // HOLDS an entry at its EV floor instead of cancelling it, so an empty
+  // deck can sit above real capital resting on the book. Count plus the
+  // gross collateral the broker has locked up for them; absent from plans
+  // published before this key existed — filtered out below.
+  [/*#__PURE__*/React.createElement("span", null, "Working at the broker \u2014 submitted, not yet filled", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_working_entries"
+  })), workingEntriesLabel(funnel.working_entries)]].filter(([, v]) => v !== null && v !== undefined);
   // EV > 0 is exactly "credit > breakeven credit", i.e. ratio > 1.00. Showing
   // the best ratio on the board turns "0 proposed" from a shrug into a
   // measurement: 0.81 means the market paid 81% of fair value at its most
@@ -13947,29 +13941,9 @@ function EmptyState({
     className: "prop-funnel-byticker"
   }, /*#__PURE__*/React.createElement("summary", null, "Per-ticker breakdown (", byTicker.length, " names)"), /*#__PURE__*/React.createElement("table", {
     className: "prop-funnel-byticker-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Ticker"), /*#__PURE__*/React.createElement("th", null, "Priced"), /*#__PURE__*/React.createElement("th", null, "Selected"), /*#__PURE__*/React.createElement("th", null, "Proposed"), /*#__PURE__*/React.createElement("th", {
-    className: "prop-funnel-byticker-reason"
-  }, "Top drop reason", window.Help && /*#__PURE__*/React.createElement(window.Help, {
-    term: "funnel_ticker_drop_reason"
-  })), /*#__PURE__*/React.createElement("th", {
-    className: "prop-funnel-byticker-ratio"
-  }, "Credit vs fair", window.Help && /*#__PURE__*/React.createElement(window.Help, {
-    term: "funnel_ticker_credit_ratio"
-  })))), /*#__PURE__*/React.createElement("tbody", null, [...byTicker].sort((a, b) => (num(b.priced) || 0) - (num(a.priced) || 0)).map(row => {
-    // Computed once per row; the desktop columns and the mobile
-    // sub-line (CSS swaps which is visible) render the SAME strings.
-    var reason = dominantDropReason(row);
-    var ratio = creditRatioLabel(row);
-    return /*#__PURE__*/React.createElement("tr", {
-      key: row.ticker
-    }, /*#__PURE__*/React.createElement("td", null, row.ticker, /*#__PURE__*/React.createElement("div", {
-      className: "prop-funnel-byticker-sub"
-    }, reason, ratio !== "—" ? ` · ${ratio}` : "")), /*#__PURE__*/React.createElement("td", null, row.priced), /*#__PURE__*/React.createElement("td", null, row.selected), /*#__PURE__*/React.createElement("td", null, row.passed), /*#__PURE__*/React.createElement("td", {
-      className: "prop-funnel-byticker-reason"
-    }, reason), /*#__PURE__*/React.createElement("td", {
-      className: "prop-funnel-byticker-ratio"
-    }, ratio));
-  })))), best !== null && best !== undefined && /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Ticker"), /*#__PURE__*/React.createElement("th", null, "Priced"), /*#__PURE__*/React.createElement("th", null, "Selected"), /*#__PURE__*/React.createElement("th", null, "Proposed"))), /*#__PURE__*/React.createElement("tbody", null, byTicker.map(row => /*#__PURE__*/React.createElement("tr", {
+    key: row.ticker
+  }, /*#__PURE__*/React.createElement("td", null, row.ticker), /*#__PURE__*/React.createElement("td", null, row.priced), /*#__PURE__*/React.createElement("td", null, row.selected), /*#__PURE__*/React.createElement("td", null, row.passed)))))), best !== null && best !== undefined && /*#__PURE__*/React.createElement("p", {
     className: `prop-funnel-verdict${best < 1 ? " prop-funnel-verdict--short" : ""}`
   }, "Best credit on the board: ", /*#__PURE__*/React.createElement("b", null, Number(best).toFixed(2), "\xD7"), " fair value", need ? /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 policy needs ", /*#__PURE__*/React.createElement("b", null, Number(need).toFixed(2), "\xD7")) : null, ".", best < 1 ? " Below 1.00× the market is paying less than the trade is worth — every candidate has negative expected value, so nothing can pass without knowingly trading at a loss." : " At or above 1.00× the market is paying fair value or better."), funnel.chain_errors > 0 && /*#__PURE__*/React.createElement("p", {
     className: "prop-funnel-note"
@@ -16009,6 +15983,21 @@ function StrategyPolicy() {
     }, "Strategy config unavailable \u2014 dashboard/data-spread-config.js is missing or failed to load. Not showing stand-in numbers here on purpose."));
   }
   var c = sc.config;
+  // Equity-relative sizing (2026-09-01) — `spread_trader.effective_limits()`'s
+  // resolved dollar figures, exported alongside the raw `config` fixed
+  // fields so the card shows what actually bound THIS tick, not just the
+  // fallback numbers. `eff.limitsSource === "fixed_fallback"` when equity was
+  // unreadable (or the corresponding `*_pct_equity` field is off) — in that
+  // case the value is identical to the plain `usd()` reading of the fixed
+  // field and no "% of equity" annotation is shown, since none applied.
+  var eff = sc.effective || {};
+  var effUsd = value => {
+    if (value == null) return "—";
+    if (eff.limitsSource === "pct_equity" && eff.equity) {
+      return `${usd(value)} (${pct(value / eff.equity)} of equity)`;
+    }
+    return usd(value);
+  };
   // Most of these terms describe a config *threshold* (a band, a ceiling),
   // not a value this file can plug into that term's own calc — the calc's
   // input keys (e.g. pop's short_leg_delta) don't correspond to a single
@@ -16199,13 +16188,13 @@ function StrategyPolicy() {
     section: "Entry gates"
   })), /*#__PURE__*/React.createElement("div", {
     style: grid
-  }, field("Short-leg delta", deltaBand, "a BAND, not just a ceiling — too far ITM (above the ceiling) is too risky, but too far OTM (below the floor) is too safe: the credit no longer covers the round-trip cost", "short_leg_delta"), field("Win probability", popBand, "also a band: below the floor is rejected as too risky, but above the ceiling is rejected as too safe too — a very high PoP means a small credit that a fixed round-trip cost swallows", "pop"), field("DTE window", `${dash(c.min_dte)}–${dash(c.max_dte)}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte"), field("Risk per position", `${usd(c.min_notional)}–${usd(c.max_notional)}`, "capital-at-risk band per position, not a ceiling alone", "risk"), field("Min net credit", `> ${usd2(c.min_net_credit)}`, "the unconditional floor — a candidate whose net credit does not clear this is refused before submission, checked again against the exact price about to be sent to the broker, not just the earlier scan estimate; a fill that slips through anyway pages the operator", "min_net_credit"), field("Min credit", usd2(c.min_credit), "an ADDITIONAL absolute floor a candidate must ALSO clear — below this, fees dominate the trade regardless of how favorable the breakeven ratio looks", "min_credit"), field("Min breakeven multiple", c.min_credit_breakeven_multiple > 0 ? `≥ ${c.min_credit_breakeven_multiple}× breakeven` : "off", c.min_credit_breakeven_multiple > 0 ? "the binding credit gate — credit must be at least this multiple of (1 − pop) × width × 100, the spread's own breakeven credit, i.e. a margin over what it needed just to break even" : "not used — leaving only the absolute Min credit floor", "min_credit_breakeven_multiple"), field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev"), field("Max quote width", c.max_quote_spread_pct > 0 ? pct(c.max_quote_spread_pct) : "off", c.max_quote_spread_pct > 0 ? "per leg, (ask − bid) ÷ mid — BOTH legs must be tighter than this or the spread is dropped before it is scored. The credit is computed off the mid, and on an illiquid contract that mid is not a tradeable price" : "not used — a spread can be scored off a mid no one will trade at"), field("Fill assumption", dash(c.entry_fill_fraction), c.entry_fill_fraction >= 1 ? "1.0 — every candidate is priced assuming we cross the bid/ask on BOTH legs. The most pessimistic setting: the credit on every card above is what we would get at the worst fill, not the mid" : `${c.entry_fill_fraction} — candidates are priced assuming we cross this fraction of the bid/ask on both legs (0 = both legs fill at the mid, 1 = both legs cross). Lower is a more optimistic credit than we are likely to receive`), field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? `minimum annualized yield required — ann_yield is credit/collateral annualised over the ${dash(c.min_dte)}–${dash(c.max_dte)}d hold, so this isn't a typo: 10.0 renders as 1000%/yr` : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")), /*#__PURE__*/React.createElement("h4", {
+  }, field("Short-leg delta", deltaBand, "a BAND, not just a ceiling — too far ITM (above the ceiling) is too risky, but too far OTM (below the floor) is too safe: the credit no longer covers the round-trip cost", "short_leg_delta"), field("Win probability", popBand, "also a band: below the floor is rejected as too risky, but above the ceiling is rejected as too safe too — a very high PoP means a small credit that a fixed round-trip cost swallows", "pop"), field("DTE window", `${dash(c.min_dte)}–${dash(c.max_dte)}d`, "floor keeps out of 1-DTE gamma; cap keeps capital turning over", "dte"), field("Risk per position", `${effUsd(eff.minNotional)}–${effUsd(eff.maxNotional)}`, "capital-at-risk band per position, not a ceiling alone — scales with account equity unless the underlying pct_equity field is off", "risk"), field("Min net credit", `> ${usd2(c.min_net_credit)}`, "the unconditional floor — a candidate whose net credit does not clear this is refused before submission, checked again against the exact price about to be sent to the broker, not just the earlier scan estimate; a fill that slips through anyway pages the operator", "min_net_credit"), field("Min credit", usd2(c.min_credit), "an ADDITIONAL absolute floor a candidate must ALSO clear — below this, fees dominate the trade regardless of how favorable the breakeven ratio looks", "min_credit"), field("Min breakeven multiple", c.min_credit_breakeven_multiple > 0 ? `≥ ${c.min_credit_breakeven_multiple}× breakeven` : "off", c.min_credit_breakeven_multiple > 0 ? "the binding credit gate — credit must be at least this multiple of (1 − pop) × width × 100, the spread's own breakeven credit, i.e. a margin over what it needed just to break even" : "not used — leaving only the absolute Min credit floor", "min_credit_breakeven_multiple"), field("Expected value", `≥ ${usd2(c.min_ev)}${c.require_positive_ev ? " (must be positive)" : ""}`, "pop × credit − (1−pop) × max loss must clear this", "ev"), field("Max quote width", c.max_quote_spread_pct > 0 ? pct(c.max_quote_spread_pct) : "off", c.max_quote_spread_pct > 0 ? "per leg, (ask − bid) ÷ mid — BOTH legs must be tighter than this or the spread is dropped before it is scored. The credit is computed off the mid, and on an illiquid contract that mid is not a tradeable price" : "not used — a spread can be scored off a mid no one will trade at"), field("Fill assumption", dash(c.entry_fill_fraction), c.entry_fill_fraction >= 1 ? "1.0 — every candidate is priced assuming we cross the bid/ask on BOTH legs. The most pessimistic setting: the credit on every card above is what we would get at the worst fill, not the mid" : `${c.entry_fill_fraction} — candidates are priced assuming we cross this fraction of the bid/ask on both legs (0 = both legs fill at the mid, 1 = both legs cross). Lower is a more optimistic credit than we are likely to receive`), field("Ann. yield floor", c.min_ann_yield > 0 ? pct(c.min_ann_yield) : "off (0)", c.min_ann_yield > 0 ? `minimum annualized yield required — ann_yield is credit/collateral annualised over the ${dash(c.min_dte)}–${dash(c.max_dte)}d hold, so this isn't a typo: 10.0 renders as 1000%/yr` : "not used — a high yield floor mechanically forces 1-DTE risk", "ann_yield")), /*#__PURE__*/React.createElement("h4", {
     style: h4
   }, "Book limits", /*#__PURE__*/React.createElement(PolicyFeedback, {
     section: "Book limits"
   })), /*#__PURE__*/React.createElement("div", {
     style: grid
-  }, field("Max positions", dash(c.max_positions), "open spreads across the whole book at once", "max_positions"), field("Max total risk", `${dash(c.max_total_risk_equity_multiple)}× equity`, "a BACKSTOP above the target_invested_pct budget below — that budget is what actually binds day to day; this only catches equity being misread or growing unexpectedly", "max_total_risk"), field("Max per underlying", dash(c.max_per_underlying), "at most this many open spreads per name at a time", "max_per_underlying"), field("Margin buffer", pct(c.margin_buffer_pct), "new entries are refused once maintenance margin would exceed equity minus this buffer", "margin_buffer_pct"), field("Max expiry concentration", c.max_expiry_concentration_pct > 0 ? pct(c.max_expiry_concentration_pct) : "off", c.max_expiry_concentration_pct > 0 ? "no single expiry date may hold more than this share of total book risk — existing positions plus everything already chosen this batch" : "not used — no cap on how much risk sits on one expiry", "max_expiry_concentration_pct"), field("Target deployment", pct(c.target_invested_pct), `the deployment target the sleeve fills toward — new entries pause once deployed capital is within ${pct(c.deploy_band_pct)} of this target`, "target_invested_pct"), field("Beta gate floor", pct(c.beta_gate_floor_pct), "the deployment ceiling while the realized-vs-delta-implied beta is unmeasured (or shows no edge) — floors target deployment down from target_invested_pct until beta is actually measured against outcomes", "beta_gate_floor_pct")), /*#__PURE__*/React.createElement("h4", {
+  }, field("Max positions", dash(c.max_positions), "open spreads across the whole book at once", "max_positions"), field("Max total risk", `${dash(c.max_total_risk_equity_multiple)}× equity`, "a BACKSTOP above the target_invested_pct budget below — that budget is what actually binds day to day; this only catches equity being misread or growing unexpectedly", "max_total_risk"), field("Max per underlying", dash(c.max_per_underlying), "at most this many open spreads per name at a time", "max_per_underlying"), field("Margin buffer", pct(c.margin_buffer_pct), "new entries are refused once maintenance margin would exceed equity minus this buffer", "margin_buffer_pct"), field("Max expiry concentration", c.max_expiry_concentration_pct > 0 ? pct(c.max_expiry_concentration_pct) : "off", c.max_expiry_concentration_pct > 0 ? "no single expiry date may hold more than this share of total book risk — existing positions plus everything already chosen this batch" : "not used — no cap on how much risk sits on one expiry", "max_expiry_concentration_pct"), field("Target deployment", pct(c.target_invested_pct), `the deployment target the sleeve fills toward — new entries pause once deployed capital is within ${pct(c.deploy_band_pct)} of this target`, "target_invested_pct"), field("Beta gate floor", pct(c.beta_gate_floor_pct), "the deployment ceiling while the realized-vs-delta-implied beta is unmeasured (or shows no edge) — floors target deployment down from target_invested_pct until beta is actually measured against outcomes", "beta_gate_floor_pct"), field("Max daily collateral", effUsd(eff.maxDailyCollateral), "the most gross collateral (buying-power reduction) a single trading day may commit across every new entry — scales with account equity unless max_daily_collateral_pct_equity is off, so the rail grows with the book instead of becoming the binding constraint as equity does"), field("Max drawdown from peak", pct(c.max_drawdown_from_peak_pct), "new entries halt once equity has fallen this far from its own peak (derived fresh from Alpaca's portfolio history, no separate state file) — existing positions keep managing exits, only new entries pause", "max_drawdown_from_peak_pct"), field("Max index cluster", pct(c.max_index_cluster_pct), "SPY/QQQ/DIA/IWM/TQQQ and the rest of index_underlyings are treated as ONE correlated bet — a candidate that would push their combined share of deployed collateral past this cap is skipped in favor of the next-ranked non-index candidate", "max_index_cluster_pct")), /*#__PURE__*/React.createElement("h4", {
     style: h4
   }, "Legs \u2014 who sells, who buys, and why", /*#__PURE__*/React.createElement(PolicyFeedback, {
     section: "Legs"
@@ -16278,7 +16267,7 @@ function StrategyPolicy() {
     style: {
       fontFamily: "var(--mono)"
     }
-  }, usd(c.min_notional), "\u2013", usd(c.max_notional)), "). This leg is never opened on its own \u2014 it exists purely to convert the short put's uncapped risk into a defined max loss (width minus credit received)."), /*#__PURE__*/React.createElement("p", {
+  }, effUsd(eff.minNotional), "\u2013", effUsd(eff.maxNotional)), "). This leg is never opened on its own \u2014 it exists purely to convert the short put's uncapped risk into a defined max loss (width minus credit received)."), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 11,
       color: "var(--text-2)",
@@ -16338,7 +16327,7 @@ function StrategyPolicy() {
     style: {
       fontFamily: "var(--mono)"
     }
-  }, usd(c.min_notional), "\u2013", usd(c.max_notional)), "). This leg is never opened on its own \u2014 it exists purely to convert the short call's uncapped risk into a defined max loss (width minus credit received)."), /*#__PURE__*/React.createElement("p", {
+  }, effUsd(eff.minNotional), "\u2013", effUsd(eff.maxNotional)), "). This leg is never opened on its own \u2014 it exists purely to convert the short call's uncapped risk into a defined max loss (width minus credit received)."), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 11,
       color: "var(--text-2)",

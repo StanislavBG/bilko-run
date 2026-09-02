@@ -881,6 +881,26 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 .opt-badge--fill-unfilled { background: var(--surface); color: var(--muted); }
 .opt-badge--fill-partial  { background: color-mix(in oklch, var(--warn) 18%, transparent); color: var(--warn); }
 .opt-badge--fill-filled   { background: color-mix(in oklch, var(--pos) 14%, transparent); color: var(--pos); }
+/* Structure chips (PRD 3987): `IC` on a folded iron condor, `from condor`
+   on the remaining wing after the other wing closed on its own, and
+   `WING CLOSE` on a wing_closed trade-log event. Same pill as every other
+   opt-badge so a condor never reads as a different kind of row. */
+.opt-badge--structure { background: color-mix(in oklch, var(--accent) 12%, transparent); color: var(--accent); margin-left: 6px; }
+.opt-badge--lineage { background: var(--surface-2); color: var(--muted); margin-left: 6px; }
+.opt-badge--wing-close { background: color-mix(in oklch, var(--warn) 18%, transparent); color: var(--warn); }
+/* A wing_closed event nests under its parent condor's row in the Trade Log:
+   indented, quieter, with a left rule so the parent/child relationship is
+   visible without a colSpan (see test_no_inline_detail_row_or_colspan). */
+.opt-row--nested td:first-child { padding-left: 26px; }
+.opt-row--nested td { color: var(--text-2); font-size: 11px; }
+.opt-row--nested .opt-chev { color: var(--line-2); }
+.opt-nested-rule { display: inline-block; width: 10px; border-top: 1px solid var(--line-2); vertical-align: middle; margin-right: 6px; }
+/* Condor wing table on #trade/<key> (option-trade-detail.jsx). */
+.optd-wings-table { width: 100%; font-size: 12px; }
+.optd-wings-table td, .optd-wings-table th { vertical-align: top; white-space: normal; }
+.optd-wing-name { font-weight: 600; }
+.optd-wing-status--open { color: var(--pos); }
+.optd-wing-status--closed { color: var(--muted); }
 
 .opt-trade-body { padding: 10px 12px 14px; border-top: 1px solid var(--line); background: var(--surface); }
 

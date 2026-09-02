@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-02T08:45:02Z",
+    "generatedAt": "2026-09-02T09:45:02Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-02T08:45:02Z",
+  "generatedAt": "2026-09-02T09:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -2613,6 +2613,67 @@ window.FEEDBACK_THREADS = {
       short: "A trade that profits if the stock stays below a certain price.",
       long: "We sell a call at a lower strike and buy a call at a higher strike for protection, collecting credit up front — the bet is the stock stays below the strike we sold.",
       example: "Sell the $260 call, buy the $265 call: we collect credit now and keep it all as long as the stock stays below $260 at expiry."
+    },
+    iron_condor: {
+      label: "Iron condor",
+      short: "A put credit spread and a call credit spread on the same name and expiry, sold together as one four-leg order — the bet is the price stays BETWEEN the two short strikes.",
+      long: "Two wings: a bull put spread below today's price and a bear call spread above it. We collect both wings' credit up front and keep all of it if the price finishes between the two strikes we sold. The price can only finish on one side, so the two wings can never both lose at once — which is why the broker only holds the WIDER wing's width as collateral (see the collateral rule) rather than both wings added together. The Positions table folds a condor into ONE row (legs read like 772P/770P · 785C/787C, structure chip IC); the trade log tags it IC and nests each wing's own close under it. Each wing exits on its own rules — when one wing closes early, the other keeps trading as a plain vertical and its row carries a 'from condor' chip so the lineage is not lost.",
+      example: "Sell the SPY 772 put / buy the 770 put AND sell the 785 call / buy the 787 call, 2 contracts each, in one order for $260 of combined credit. Both wings are $2 wide, so the broker holds $2 × 100 × 2 = $400, not $800, and the most we can lose is $400 − $260 = $140."
+    },
+    wing: {
+      label: "Wing",
+      short: "One half of an iron condor — the put spread (lower wing) or the call spread (upper wing). The Legs cell writes each wing as short/long strike with its right: 772P/770P is the put wing, 785C/787C the call wing.",
+      long: "Each wing is an ordinary two-leg credit spread and is managed as one: the same strike-breach / max-loss / profit-target exits apply to each wing separately (spread_trader.condor_wings splits the condor back into two vertical-shaped records for exactly that). A wing that hits its exit is bought back on its own (a wing_closed event in the trade log) while the other wing stays open as a plain vertical spread. For a plain vertical the Legs cell is just that one pair — 100P/95P.",
+      example: "SPY 772P/770P · 785C/787C: the put wing is short the 772 put and long the 770 put; the call wing is short the 785 call and long the 787 call. If SPY rallies and the call wing hits its max-loss stop, only 785C/787C is bought back; 772P/770P keeps running."
+    },
+    spread_collateral_rule: {
+      label: "Collateral — the wider wing sets margin",
+      short: "The cash the broker locks up is the full strike width of the WIDEST spread in the structure × 100 × contracts — for an iron condor that is the wider of its two wings, never both wings added together.",
+      long: "Alpaca's Level 3 universal spread rule margins a position at its worst-case payoff. A vertical spread's worst case is its full width. An iron condor's worst case is ONE wing finishing fully in the money — the price cannot be below the put strikes and above the call strikes at the same time — so the requirement is the wider wing's width, not the sum. Proved against the paper account in scripts/prove-condor-margin.py (PRD 3985) and computed the same way in options_chain.pair_condor (gross_risk) and options_summary_render._collateral_for. Max loss is this figure net of the credit received; sizing runs off the gross figure because that is what the broker actually holds.",
+      example: "A 2-contract condor with a $2-wide put wing and a $3-wide call wing reserves $3 × 100 × 2 = $600 (not $2 + $3 = $1,000). For a plain 2-contract $5-wide vertical the same rule gives $5 × 100 × 2 = $1,000 — the 'other wing' is simply $0 wide.",
+      calc: {
+        expr: "max(put width, call width) × 100 × contracts",
+        inputs: [{
+          key: "put_width",
+          label: "Put width",
+          unit: "$"
+        }, {
+          key: "call_width",
+          label: "Call width",
+          unit: "$"
+        }, {
+          key: "contracts",
+          label: "Contracts",
+          unit: ""
+        }],
+        result: v => Math.max(v.put_width, v.call_width) * 100 * v.contracts,
+        unit: "$",
+        source: "src/social_signals_trader/options_chain.py:1021"
+      }
+    },
+    condor_pop: {
+      label: "Condor win probability",
+      short: "The chance the price finishes BETWEEN the two short strikes at expiry — both wings expiring worthless at once.",
+      long: "Each short leg's own 1 − |delta| approximates that wing's one-sided chance of finishing out of the money. The two tails — finishing below the put strike, finishing above the call strike — are (to first order) disjoint, so subtracting BOTH deltas from 1 approximates the chance of avoiding either. It is lower than either wing's own probability, because the condor needs both to be right; in exchange it collects both credits for one wing's collateral. An estimate from option-pricing math, not a guarantee.",
+      calc: {
+        expr: "1 − |put short delta| − |call short delta|",
+        inputs: [{
+          key: "put_short_delta",
+          label: "Put short-leg delta",
+          unit: "",
+          priced: true,
+          clock: "quotes"
+        }, {
+          key: "call_short_delta",
+          label: "Call short-leg delta",
+          unit: "",
+          priced: true,
+          clock: "quotes"
+        }],
+        result: v => 1 - Math.abs(v.put_short_delta) - Math.abs(v.call_short_delta),
+        unit: "%",
+        source: "src/social_signals_trader/options_chain.py:1021"
+      }
     },
     open_pl: {
       label: "Open P/L",
@@ -8515,6 +8576,13 @@ function tradeKey(ev, i) {
 // Inverse of tradeKey: walk `log.events` looking for the event whose key
 // matches. Returns null (never throws) when the log is missing/empty or the
 // key matches nothing — a stale bookmark against a regenerated log.
+//
+// A canonical contract key also resolves — `SPY-IC-772-770-785-787-2026-08-21`
+// for an iron condor (contract_key.condor_contract_key), or a vertical's
+// `SPY-P-772-770-2026-08-21` — to the `open` record carrying that
+// `contractKey`. The log is published newest-first, so on a re-entered
+// contract the FIRST match is the most recent open. Order-id keys are tried
+// first so an id can never be shadowed by a same-text contract key.
 function resolveTrade(key, log) {
   var events = log && log.events || [];
   for (var i = 0; i < events.length; i++) {
@@ -8527,7 +8595,88 @@ function resolveTrade(key, log) {
       };
     }
   }
+  for (var _i = 0; _i < events.length; _i++) {
+    var _ev = events[_i];
+    if (_ev && _ev.contractKey === key && (_ev.event || "open") === "open") {
+      return {
+        ev: _ev,
+        index: _i,
+        classification: classifyOrder(_ev)
+      };
+    }
+  }
   return null;
+}
+
+// `close` flattens a whole position; `wing_closed` (spread_trader.
+// _manage_condor) buys back ONE wing of an iron condor while the other keeps
+// trading. Both are exits with an exit_cost / realized_pnl of their own, so
+// every "is this a close" branch reads this, never `event === "close"` alone.
+function isCloseEvent(ev) {
+  return !!ev && (ev.event === "close" || ev.event === "wing_closed");
+}
+
+// An iron condor record — an `open` (or the synthetic both-wings `close`)
+// carrying its four legs under `put_wing`/`call_wing`, the shape
+// spread_trader.condor_wings() reads. A `wing_closed` event is NOT a condor
+// record: it carries the one wing's own `short`/`long` like any vertical.
+function isCondorEvent(ev) {
+  return !!ev && ev.structure === "iron_condor" && !!(ev.put_wing || ev.call_wing) && ev.event !== "wing_closed";
+}
+
+// The four parsed legs of a condor plus the derived figures a vertical gets
+// from its single pair: the WIDER wing's width (what the broker margins —
+// see the `spread_collateral_rule` glossary entry) and the two breakevens,
+// each short strike moved by the COMBINED credit per share.
+function condorFacts(ev, maxGain) {
+  var put = ev.put_wing || {};
+  var call = ev.call_wing || {};
+  var putShort = parseOccSymbol(put.short);
+  var putLong = parseOccSymbol(put.long);
+  var callShort = parseOccSymbol(call.short);
+  var callLong = parseOccSymbol(call.long);
+  var wingWidth = (wing, s, l) => wing.width ?? (s && l && s.strike != null && l.strike != null ? Math.abs(s.strike - l.strike) : null);
+  var putWidth = wingWidth(put, putShort, putLong);
+  var callWidth = wingWidth(call, callShort, callLong);
+  var widths = [putWidth, callWidth].filter(w => w != null);
+  var width = widths.length ? Math.max(...widths) : null;
+  var creditPerShare = maxGain != null && maxGain > 0 && ev.contracts ? maxGain / ev.contracts / 100 : null;
+  return {
+    put: {
+      shortParsed: putShort,
+      longParsed: putLong,
+      width: putWidth,
+      creditPerContract: put.credit_per_contract ?? null
+    },
+    call: {
+      shortParsed: callShort,
+      longParsed: callLong,
+      width: callWidth,
+      creditPerContract: call.credit_per_contract ?? null
+    },
+    putWidth,
+    callWidth,
+    width,
+    beLow: creditPerShare != null && putShort ? putShort.strike - creditPerShare : null,
+    beHigh: creditPerShare != null && callShort ? callShort.strike + creditPerShare : null
+  };
+}
+
+// `772P/770P · 785C/787C` — same put-wing-first form the Positions table's
+// Legs cell prints (options_summary_render._legs_str), so a condor reads
+// identically in both tables.
+function condorLegsLabel(condor) {
+  var leg = (p, letter) => p ? `${p.strike}${letter}` : "?";
+  return `${leg(condor.put.shortParsed, "P")}/${leg(condor.put.longParsed, "P")} · ${leg(condor.call.shortParsed, "C")}/${leg(condor.call.longParsed, "C")}`;
+}
+
+// Every `wing_closed` event logged against this condor's own order id,
+// oldest first — the per-wing exit history the #trade/<key> page's wing
+// table and timeline both read.
+function wingClosesFor(ev, log) {
+  var events = (log || window.SPREAD_LOG) && (log || window.SPREAD_LOG).events || [];
+  if (!ev || !ev.client_order_id) return [];
+  return events.filter(e => e && e.event === "wing_closed" && e.opened_by === ev.client_order_id).sort((a, b) => new Date(a.ts) - new Date(b.ts));
 }
 
 // Derive every value a row (either table) needs to render, once per event.
@@ -8535,10 +8684,20 @@ function resolveTrade(key, log) {
 // OptionsTradeLog's bucketing pass) and threaded through here rather than
 // re-run per row.
 function tradeFacts(ev, classification) {
-  var isClose = ev.event === "close";
-  var shortParsed = parseOccSymbol(ev.short);
-  var longParsed = parseOccSymbol(ev.long);
-  var structure = spreadStructure(shortParsed, longParsed, ev.ticker);
+  var isClose = isCloseEvent(ev);
+  var isWingClose = ev.event === "wing_closed";
+  var isCondor = isCondorEvent(ev);
+  // Close events keep the entry credit under `entry_credit`, not `credit` —
+  // same value, different field name (see the note on maxGain below).
+  var condor = isCondor ? condorFacts(ev, ev.credit ?? ev.entry_credit) : null;
+  // A condor has no single leg pair; its put wing stands in wherever one
+  // pair is expected (same convention as the Positions table's folded row).
+  var shortParsed = isCondor ? condor.put.shortParsed : parseOccSymbol(ev.short);
+  var longParsed = isCondor ? condor.put.longParsed : parseOccSymbol(ev.long);
+  var structure = isCondor ? {
+    name: "Iron condor",
+    gloss: condor.put.shortParsed && condor.call.shortParsed ? `profits if ${ev.ticker} stays between $${condor.put.shortParsed.strike} and $${condor.call.shortParsed.strike} through ${condor.put.shortParsed.expiry}` : null
+  } : spreadStructure(shortParsed, longParsed, ev.ticker);
   var fs = fillState(ev);
   var received = creditReceived(ev);
   // Close events keep the entry credit under `entry_credit`, not `credit` —
@@ -8556,18 +8715,27 @@ function tradeFacts(ev, classification) {
   // record (width * 100 * contracts - credit), using the strikes parsed
   // straight off the leg symbols since `width` isn't logged on close events
   // either.
-  var width = ev.width ?? (shortParsed && longParsed && shortParsed.strike != null && longParsed.strike != null ? Math.abs(shortParsed.strike - longParsed.strike) : null);
+  var width = isCondor ? condor.width : ev.width ?? (shortParsed && longParsed && shortParsed.strike != null && longParsed.strike != null ? Math.abs(shortParsed.strike - longParsed.strike) : null);
   var maxLoss = ev.risk ?? (width != null && ev.contracts != null && maxGain != null ? width * 100 * ev.contracts - maxGain : null);
   // A "credit" spread that filled at a net DEBIT (BABA 143/144, 2026-08-07) has
   // no max gain — the best case at expiry is $0, not the negative "credit"
   // number. Every reader of `maxGain` must brand it as a debit paid, not print
   // the negative figure as though it were an upside.
   var isNetDebit = maxGain != null && maxGain < 0;
-  var be = breakeven(shortParsed, maxGain, ev.contracts);
+  // A condor has TWO breakevens (condor.beLow / condor.beHigh); its single
+  // `be` stays null so no vertical-shaped reader draws one line for it.
+  var be = isCondor ? null : breakeven(shortParsed, maxGain, ev.contracts);
   var riskReward = maxLoss != null && maxGain ? maxLoss / maxGain : null;
   var pnl = isClose ? ev.realized_pnl : null;
   return {
     isClose,
+    isWingClose,
+    isCondor,
+    condor,
+    // `wing` ("put" | "call") names which wing a wing_closed event bought
+    // back; `openedBy` is the parent condor's order id (its #trade/<key>).
+    wing: isWingClose ? ev.wing || null : null,
+    openedBy: isWingClose ? ev.opened_by || null : null,
     shortParsed,
     longParsed,
     structure,
@@ -8649,7 +8817,16 @@ function StructureCell({
   facts,
   ev
 }) {
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, facts.structure ? facts.structure.name : "Credit spread"), /*#__PURE__*/React.createElement("div", {
+  if (facts.isCondor) {
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, "Iron condor", /*#__PURE__*/React.createElement("span", {
+      className: "opt-badge opt-badge--structure"
+    }, "IC")), /*#__PURE__*/React.createElement("div", {
+      className: "mono-dim"
+    }, condorLegsLabel(facts.condor)));
+  }
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, facts.structure ? facts.structure.name : "Credit spread", facts.wing && /*#__PURE__*/React.createElement("span", {
+    className: "opt-badge opt-badge--lineage"
+  }, facts.wing, " wing \xB7 from condor")), /*#__PURE__*/React.createElement("div", {
     className: "mono-dim"
   }, facts.shortParsed && facts.longParsed ? `$${facts.shortParsed.strike}/$${facts.longParsed.strike}` : ev.short_strike ? `${ev.short_strike}/${ev.long_strike}` : ev.short));
 }
@@ -8738,6 +8915,17 @@ function ExpiresCell({
 // different day) nets out only the one close it actually pairs with, not
 // every open sharing that key. Risk is summed from facts.maxLoss (ev.risk),
 // the same value already rendered per-row — never recomputed a second way.
+// The identity an `open` and its `close` share. An iron condor's `open`
+// has no top-level short/long (its legs sit under put_wing/call_wing) and
+// its synthetic both-wings `close` (spread_trader._manage_condor) carries the
+// same wing blocks, so both key on the two short legs; a wing_closed event
+// never enters this queue at all (see computeOpenPositions).
+function positionKey(ev) {
+  if (isCondorEvent(ev) && ev.put_wing && ev.call_wing) {
+    return `${ev.ticker}|${ev.put_wing.short}|${ev.call_wing.short}`;
+  }
+  return `${ev.ticker}|${ev.short}|${ev.long}`;
+}
 function computeOpenPositions(trades) {
   var byTime = [...trades].sort((a, b) => new Date(a.ev.ts) - new Date(b.ev.ts));
   var openQueues = new Map(); // key -> FIFO queue of still-open {ev, classification}
@@ -8745,7 +8933,11 @@ function computeOpenPositions(trades) {
     var {
       ev
     } = t;
-    var key = `${ev.ticker}|${ev.short}|${ev.long}`;
+    // One wing bought back leaves the condor OPEN (the other wing is still
+    // trading as a plain vertical) — only the whole-position `close` retires
+    // it. A wing_closed row is therefore neither an open nor a close here.
+    if (ev.event === "wing_closed") return;
+    var key = positionKey(ev);
     if (ev.event === "close") {
       var q = openQueues.get(key);
       if (q && q.length) q.shift();
@@ -8787,6 +8979,9 @@ function computeOpenPositionKeys(trades) {
 function tradeStatus(ev, facts, openPositionKeys) {
   if (!ev) return "closed";
   if (ev.event === "close") return "closed";
+  // A wing's own exit is a finished round trip for THAT wing; the parent
+  // condor's row carries the still-open status of whatever wing remains.
+  if (ev.event === "wing_closed") return "closed";
   if (!openPositionKeys || !openPositionKeys.has(ev)) return "closed";
   var expiry = facts ? resolveExpiry(ev, facts) : null;
   var dte = expiry ? dteFromExpiry(expiry) : null;
@@ -8985,18 +9180,35 @@ function tradeFeedbackTarget(ev, facts, index) {
     label: `${ev.ticker || "this ticker"} ${structureName}`
   };
 }
+
+// `nested` marks a wing_closed event rendered directly under its parent
+// condor's row (TradeLogTable pairs them by `opened_by`) — indented and
+// quieter, so the per-wing exit reads as part of the condor's history rather
+// than a second unrelated trade.
 function TradeLogRow({
   ev,
   classification,
-  index
+  index,
+  nested
 }) {
   var facts = tradeFacts(ev, classification);
   var {
     isClose,
+    isWingClose,
     received,
     pnl,
     maxGain
   } = facts;
+  var eventBadge = isWingClose ? {
+    cls: "opt-badge--wing-close",
+    text: `WING CLOSE${facts.wing ? ` · ${facts.wing.toUpperCase()}` : ""}`
+  } : isClose ? {
+    cls: "opt-badge--close",
+    text: "CLOSE"
+  } : {
+    cls: "opt-badge--open",
+    text: "OPEN"
+  };
   // A close event never sets `ev.credit` (it carries `entry_credit` /
   // `exit_cost` instead — see spread_trader.py's `manage()`), so
   // creditReceived(ev) is always null/0 for a close row. Read the cost to
@@ -9019,18 +9231,21 @@ function TradeLogRow({
     entry: resp.filled_at
   };
   return /*#__PURE__*/React.createElement("tr", {
-    className: "opt-row",
+    className: `opt-row${nested ? " opt-row--nested" : ""}`,
     onClick: openDetail,
     tabIndex: 0,
     role: "link",
     onKeyDown: onKeyDown
   }, /*#__PURE__*/React.createElement("td", {
     className: "al"
-  }, /*#__PURE__*/React.createElement("span", {
+  }, nested ? /*#__PURE__*/React.createElement("span", {
+    className: "opt-nested-rule",
+    "aria-hidden": "true"
+  }) : null, /*#__PURE__*/React.createElement("span", {
     className: "opt-chev"
   }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    className: `opt-badge opt-badge--${isClose ? "close" : "open"}`
-  }, isClose ? "CLOSE" : "OPEN")), /*#__PURE__*/React.createElement("td", {
+    className: `opt-badge ${eventBadge.cls}`
+  }, eventBadge.text)), /*#__PURE__*/React.createElement("td", {
     className: "al"
   }, /*#__PURE__*/React.createElement("strong", {
     className: "opt-ticker"
@@ -9310,8 +9525,57 @@ function groupLabelFor(groupBy, t) {
   }
   return null;
 }
+
+// Every exit's realized P&L — whole-position closes AND per-wing closes (a
+// condor's synthetic both-wings `close` carries no realized_pnl of its own;
+// the money was realised wing by wing). `nested` wing closes are included
+// via the parent group's row list, see TradeLogTable.
 function realizedOf(trades) {
-  return trades.filter(t => t.ev.event === "close").reduce((n, t) => n + (t.ev.realized_pnl || 0), 0);
+  return trades.flatMap(t => [t, ...(t.nested || [])]).filter(t => isCloseEvent(t.ev)).reduce((n, t) => n + (t.ev.realized_pnl || 0), 0);
+}
+
+// Pair every wing_closed event with its parent condor row (by `opened_by`)
+// so it renders nested under that row instead of as its own top-level trade.
+// A wing close whose parent is not in this list (older than the published
+// window, or filtered into the other table) stays top-level rather than
+// vanishing. O(n) with one index.
+function nestWingCloses(rows) {
+  var byId = new Map();
+  rows.forEach(t => {
+    if (t.ev.event !== "wing_closed" && t.ev.client_order_id != null) byId.set(t.ev.client_order_id, t);
+  });
+  var nestedByParent = new Map();
+  var topLevel = [];
+  rows.forEach(t => {
+    var parent = t.ev.event === "wing_closed" && t.ev.opened_by != null ? byId.get(t.ev.opened_by) : null;
+    if (parent) {
+      if (!nestedByParent.has(parent)) nestedByParent.set(parent, []);
+      nestedByParent.get(parent).push(t);
+    } else {
+      topLevel.push(t);
+    }
+  });
+  return topLevel.map(t => ({
+    ...t,
+    nested: (nestedByParent.get(t) || []).sort((a, b) => new Date(a.ev.ts) - new Date(b.ev.ts))
+  }));
+}
+
+// One parent row plus its nested wing-close rows, in that order.
+function tradeRowsFor(t) {
+  var parentKey = (t.ev.client_order_id || "") + t.index;
+  return [/*#__PURE__*/React.createElement(TradeLogRow, {
+    key: parentKey,
+    ev: t.ev,
+    classification: t.classification,
+    index: t.index
+  }), ...(t.nested || []).map(n => /*#__PURE__*/React.createElement(TradeLogRow, {
+    key: (n.ev.client_order_id || "") + n.index,
+    ev: n.ev,
+    classification: n.classification,
+    index: n.index,
+    nested: true
+  }))];
 }
 function GroupHeaderRow({
   label,
@@ -9351,14 +9615,14 @@ function TradeLogTable({
   // O(n) over trades: one facts + status derivation per row, computed once
   // per render and reused by the counts, the filter, and the grouping below.
   var openPositionKeys = computeOpenPositionKeys(trades);
-  var enriched = trades.map(t => {
+  var enriched = nestWingCloses(trades.map(t => {
     var facts = tradeFacts(t.ev, t.classification);
     return {
       ...t,
       facts,
       status: tradeStatus(t.ev, facts, openPositionKeys)
     };
-  })
+  }))
   // Newest first: descending event timestamp, ties broken by descending
   // index so the order is stable and deterministic regardless of the
   // incoming SPREAD_LOG.events append order.
@@ -9468,12 +9732,7 @@ function TradeLogTable({
         }));
         lastLabel = item.label;
       }
-      groupedBodyRows.push(/*#__PURE__*/React.createElement(TradeLogRow, {
-        key: (item.t.ev.client_order_id || "") + item.t.index,
-        ev: item.t.ev,
-        classification: item.t.classification,
-        index: item.t.index
-      }));
+      groupedBodyRows.push(...tradeRowsFor(item.t));
     });
   }
 
@@ -9573,12 +9832,7 @@ function TradeLogTable({
     term: "realized_pl"
   })), /*#__PURE__*/React.createElement("th", {
     className: "sr-only"
-  }, "Feedback"))), /*#__PURE__*/React.createElement("tbody", null, groups ? groupedBodyRows : pageRows.map(t => /*#__PURE__*/React.createElement(TradeLogRow, {
-    key: (t.ev.client_order_id || "") + t.index,
-    ev: t.ev,
-    classification: t.classification,
-    index: t.index
-  }))))), /*#__PURE__*/React.createElement(TradeLogPagination, {
+  }, "Feedback"))), /*#__PURE__*/React.createElement("tbody", null, groups ? groupedBodyRows : pageRows.flatMap(t => tradeRowsFor(t))))), /*#__PURE__*/React.createElement(TradeLogPagination, {
     page: effectivePage,
     pageCount: pageCount,
     pageSize: pageSize,
@@ -9738,7 +9992,12 @@ window.OptionsTradeLogInternals = {
   LegDetail,
   TradeDetail,
   tradeStatus,
-  computeOpenPositionKeys
+  computeOpenPositionKeys,
+  isCloseEvent,
+  isCondorEvent,
+  condorLegsLabel,
+  wingClosesFor,
+  nestWingCloses
 };
 
 /* ---- panels/options-summary.jsx ---- */
@@ -10311,11 +10570,26 @@ function ConfCell({
 // resolves to exactly one SPREAD_LOG event AND that event describes the same
 // spread (underlying/right/short strike/expiry) as the position — a stale or
 // reused client_order_id must never link to the wrong trade.
+// The short OCC symbol(s) a trade-log event holds: one for a vertical
+// (`ev.short`), two for an iron condor `open` record, which carries no
+// top-level `short` at all — its legs live under `put_wing`/`call_wing`
+// (see spread_trader.condor_wings). One place for this so the position
+// matcher below and the #trade/<key> page's matchedPosition read the same
+// legs off the same record shape.
+function eventShortSymbols(ev) {
+  if (!ev) return [];
+  if (ev.structure === "iron_condor" && (ev.put_wing || ev.call_wing)) {
+    return [ev.put_wing && ev.put_wing.short, ev.call_wing && ev.call_wing.short].filter(Boolean);
+  }
+  return ev.short ? [ev.short] : [];
+}
 function eventMatchesPosition(pos, ev) {
   if (!pos || !ev || !window.SpreadFormat) return false;
-  var parsed = window.SpreadFormat.parseOccSymbol(ev.short);
-  if (!parsed) return false;
-  return parsed.root === pos.underlying && parsed.right.toLowerCase() === String(pos.right).toLowerCase() && Number(parsed.strike) === Number(pos.short_strike) && parsed.expiry === pos.expiry;
+  return eventShortSymbols(ev).some(symbol => {
+    var parsed = window.SpreadFormat.parseOccSymbol(symbol);
+    if (!parsed) return false;
+    return parsed.root === pos.underlying && parsed.right.toLowerCase() === String(pos.right).toLowerCase() && Number(parsed.strike) === Number(pos.short_strike) && parsed.expiry === pos.expiry;
+  });
 }
 function tradeKeyForPosition(pos) {
   var tag = pos && pos.entry && pos.entry.tag;
@@ -10500,6 +10774,15 @@ var POSITIONS_COLUMNS = [{
   header: "Spread",
   term: "spread",
   frozen: true
+},
+// Every leg of the row — two for a vertical (`100P/95P`), four for a
+// folded iron condor (`772P/770P · 785C/787C`) — with the structure chip
+// (`IC` / `from condor`) beside it. Frozen: strikes never move.
+{
+  key: "legs",
+  header: "Legs",
+  term: "wing",
+  frozen: true
 }, {
   key: "contracts",
   header: "Qty",
@@ -10509,6 +10792,15 @@ var POSITIONS_COLUMNS = [{
   key: "frozen_entry",
   header: "Entry",
   term: "frozen_entry",
+  frozen: true
+},
+// GROSS buying-power reduction the broker holds: the WIDER wing's width
+// x 100 x contracts (a vertical's "other wing" is $0 wide) — the one
+// rule for every structure, computed in positions_display_rows().
+{
+  key: "collateral",
+  header: "Collateral",
+  term: "spread_collateral_rule",
   frozen: true
 }, {
   key: "spread_price",
@@ -10598,6 +10890,62 @@ function positionRowCalcProps(pos, fallbackAsOf) {
     } : {}
   };
 }
+
+// The raw numbers behind the `legs` / `collateral` / `credit` cells, read
+// straight off `positions_display[i].calc` (written by
+// positions_display_rows() alongside the strings — the JSX never recomputes
+// them). Absent on a legacy snapshot, in which case every Help degrades to
+// its formula-only tooltip.
+function displayCalcProps(display) {
+  var calc = display && display.calc || {};
+  return {
+    collateral: {
+      put_width: calc.put_width,
+      call_width: calc.call_width,
+      contracts: calc.contracts
+    },
+    credit: {
+      credit: calc.credit,
+      contracts: calc.contracts
+    }
+  };
+}
+
+// `IC` on a folded iron condor, `from condor` on the wing left trading as a
+// plain vertical after its partner closed — nothing on an ordinary spread.
+// The chip text itself comes from `cells.structure` (formatted in Python,
+// never re-derived here); only the styling class is decided in the JSX.
+function StructureChip({
+  cells
+}) {
+  var text = cells && cells.structure;
+  if (!text || text === "spread") return null;
+  var cls = text === "IC" ? "opt-badge opt-badge--structure" : "opt-badge opt-badge--lineage";
+  return /*#__PURE__*/React.createElement("span", {
+    className: cls
+  }, text, /*#__PURE__*/React.createElement(window.Help, {
+    term: "iron_condor"
+  }));
+}
+
+// Iron condor: positions_display folds a condor's two wing positions into
+// ONE row (in the put wing's slot) and lists both wings' short symbols in
+// `member_symbols`. Render one row per DISPLAY row, and skip any raw
+// position absorbed into another row's `member_symbols` — never render a
+// wing twice. Without positions_display (legacy snapshot) every position is
+// its own row exactly as before.
+function displayRowsFor(positions, positionsDisplay) {
+  var displayBySymbol = new Map((positionsDisplay || []).map(d => [d.short_symbol, d]));
+  var absorbed = new Set();
+  (positionsDisplay || []).forEach(d => {
+    (d.member_symbols || []).slice(1).forEach(s => absorbed.add(s));
+  });
+  return (positions || []).filter(pos => !(pos && pos.short_symbol && absorbed.has(pos.short_symbol))).map((pos, ri) => ({
+    pos,
+    display: pos && pos.short_symbol ? displayBySymbol.get(pos.short_symbol) || null : null,
+    key: pos && pos.short_symbol || ri
+  }));
+}
 var colClass = makeColClass(POSITIONS_COLUMNS.filter(c => c.frozen).length);
 
 // LEGACY-SNAPSHOT FALLBACK. `positions_display` is the single source of cell
@@ -10622,8 +10970,16 @@ function legacyDisplayCells(pos) {
   var now = pos.now || {};
   var greeks = pos.greeks || {};
   var filled = entry.filled_at ? String(entry.filled_at).slice(0, 10) : "—";
+  // A legacy snapshot predates condor folding, so every row here is one
+  // vertical: two legs, `spread` structure, collateral = width x 100 x qty.
+  var rightLetter = String(pos.right || "").charAt(0).toUpperCase();
+  var collateral = pos.width === null || pos.width === undefined || pos.qty === null || pos.qty === undefined ? null : Number(pos.width) * 100 * Number(pos.qty);
   return {
     spread: `${pos.underlying} ${pos.right} ${pos.short_strike}/${pos.long_strike} ${pos.expiry}`,
+    legs: `${pos.short_strike}${rightLetter}/${pos.long_strike}${rightLetter}`,
+    structure: "spread",
+    collateral: money(collateral),
+    credit: money(entry.credit),
     contracts: pos.qty === null || pos.qty === undefined ? "—" : String(pos.qty),
     frozen_entry: `${filled} / ${num(entry.net_per_contract, 2)} / ${money(entry.credit)}`,
     spread_price: `${money(now.close_cost)} (—)`,
@@ -10672,6 +11028,7 @@ function PositionsRow({
     }
   } : undefined;
   var calcProps = positionRowCalcProps(pos, fallbackAsOf);
+  var displayCalc = displayCalcProps(display);
   var wideQuoteNote = (cells.conf || "").indexOf("⚠") !== -1 ? "⚠ Wide-quoted leg(s) on this row — this mark is the least trustworthy number in the table." : undefined;
   return /*#__PURE__*/React.createElement("tr", {
     className: openDetail ? "opt-row" : undefined,
@@ -10698,6 +11055,14 @@ function PositionsRow({
   }, cells.frozen_entry_compact || cells.frozen_entry, /*#__PURE__*/React.createElement(window.Help, {
     term: "risk",
     inputs: calcProps.risk,
+    asOf: calcProps.asOf
+  })) : ck === "legs" ? /*#__PURE__*/React.createElement("span", {
+    className: "opts-legs-cell"
+  }, cells.legs, /*#__PURE__*/React.createElement(StructureChip, {
+    cells: cells
+  })) : ck === "collateral" ? /*#__PURE__*/React.createElement(React.Fragment, null, cells.collateral, /*#__PURE__*/React.createElement(window.Help, {
+    term: "spread_collateral_rule",
+    inputs: displayCalc.collateral,
     asOf: calcProps.asOf
   })) : ck === "spread_price" ? /*#__PURE__*/React.createElement(React.Fragment, null, colorizeSigned(cells.spread_price), /*#__PURE__*/React.createElement(window.Help, {
     term: "close_cost",
@@ -10820,6 +11185,24 @@ var POSITION_CARD_FIGURES = [{
   key: "short_delta",
   label: "Short Δ",
   term: "short_leg_delta"
+},
+// Same `cells.*` strings the desktop Legs / Collateral columns print —
+// an iron condor's four legs, its wider-wing collateral and combined
+// credit come from the one Python formatting pass, never rebuilt here.
+{
+  key: "legs",
+  label: "Legs",
+  term: "wing"
+}, {
+  key: "collateral",
+  label: "Collateral",
+  term: "spread_collateral_rule",
+  calc: "collateral"
+}, {
+  key: "credit",
+  label: "Credit",
+  term: "credit_received",
+  calc: "credit"
 }];
 function PositionCard({
   pos,
@@ -10838,7 +11221,10 @@ function PositionCard({
   var cells = display ? display.cells : legacyDisplayCells(pos);
   var key = tradeKeyForPosition(pos);
   var feedbackTarget = positionFeedbackTarget(pos);
-  var calcProps = positionRowCalcProps(pos, fallbackAsOf);
+  var calcProps = {
+    ...positionRowCalcProps(pos, fallbackAsOf),
+    ...displayCalcProps(display)
+  };
   var openDetail = key != null ? () => {
     location.hash = "trade/" + encodeURIComponent(key);
   } : null;
@@ -10860,7 +11246,9 @@ function PositionCard({
     className: "opts-pos-card-head"
   }, /*#__PURE__*/React.createElement("span", {
     className: "opts-pos-card-title"
-  }, cells.spread), /*#__PURE__*/React.createElement(BandBadge, {
+  }, cells.spread, /*#__PURE__*/React.createElement(StructureChip, {
+    cells: cells
+  })), /*#__PURE__*/React.createElement(BandBadge, {
     value: cells.band
   })), /*#__PURE__*/React.createElement("div", {
     className: "opts-pos-card-lead"
@@ -10932,13 +11320,16 @@ function PositionCards({
   positionsDisplay,
   fallbackAsOf
 }) {
-  var displayBySymbol = new Map((positionsDisplay || []).map(d => [d.short_symbol, d]));
   return /*#__PURE__*/React.createElement("ul", {
     className: "opts-pos-cards"
-  }, positions.map((pos, ri) => /*#__PURE__*/React.createElement(PositionCard, {
-    key: pos && pos.short_symbol || ri,
+  }, displayRowsFor(positions, positionsDisplay).map(({
+    pos,
+    display,
+    key
+  }) => /*#__PURE__*/React.createElement(PositionCard, {
+    key: key,
     pos: pos,
-    display: pos && pos.short_symbol ? displayBySymbol.get(pos.short_symbol) : null,
+    display: display,
     fallbackAsOf: fallbackAsOf
   })));
 }
@@ -10968,7 +11359,6 @@ function PositionsTable({
       legs: unpairedLegs
     }));
   }
-  var displayBySymbol = new Map((positionsDisplay || []).map(d => [d.short_symbol, d]));
   // UnpairedLegs also renders here, not only in the empty branch: an unpaired
   // leg is a real broker position with real P&L, and it used to vanish from
   // this card the moment the book held at least one paired spread — the
@@ -10993,10 +11383,14 @@ function PositionsTable({
     "aria-hidden": "true"
   }, "\u{1F4AC}"), /*#__PURE__*/React.createElement("span", {
     className: "opts-visually-hidden"
-  }, "Feedback")))), /*#__PURE__*/React.createElement("tbody", null, posList.map((pos, ri) => /*#__PURE__*/React.createElement(PositionsRow, {
-    key: pos && pos.short_symbol || ri,
+  }, "Feedback")))), /*#__PURE__*/React.createElement("tbody", null, displayRowsFor(posList, positionsDisplay).map(({
+    pos,
+    display,
+    key
+  }) => /*#__PURE__*/React.createElement(PositionsRow, {
+    key: key,
     pos: pos,
-    display: pos && pos.short_symbol ? displayBySymbol.get(pos.short_symbol) : null,
+    display: display,
     fallbackAsOf: fallbackAsOf
   }))))), /*#__PURE__*/React.createElement(UnpairedLegs, {
     legs: unpairedLegs
@@ -11576,7 +11970,11 @@ function optionsSummaryParts(data) {
     // count can be reconciled against Alpaca's own record.positions[] —
     // two independent sources that can (and did — PRD 1059) drift when the
     // trade log is missing a close event.
-    positionsCount: record.positions.length,
+    // One DISPLAY row per position: a folded iron condor is one row here
+    // and one `open` event in the trade log, so the reconciliation counts
+    // the same thing on both sides. Falls back to raw positions on a
+    // legacy snapshot with no positions_display.
+    positionsCount: displayRowsFor(record.positions, summaryData.positions_display).length,
     // Exposed so the page head (ticker-details.jsx) can state the Analyst's
     // real cadence in its sub-header without re-deriving or hardcoding it —
     // HowToReadThisPage isn't the only reader of this value.
@@ -11654,7 +12052,9 @@ function OptionsSummaryPanel({
 // rather than a third, drift-prone matcher.
 window.OptionsSummaryInternals = {
   eventMatchesPosition,
+  eventShortSymbols,
   tradeKeyForPosition,
+  displayRowsFor,
   ageLabel,
   isStaleAsOf,
   FALLBACK_STALE_AFTER_MS,
@@ -13340,14 +13740,20 @@ function ScoreRow({
   term,
   tone,
   big,
-  sub
+  sub,
+  inputs,
+  asOf,
+  note
 }) {
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: `prop-score-row${big ? " prop-score-row--big" : ""}`
   }, /*#__PURE__*/React.createElement("span", {
     className: "prop-score-label"
   }, label, term && window.Help && /*#__PURE__*/React.createElement(window.Help, {
-    term: term
+    term: term,
+    inputs: inputs,
+    asOf: asOf,
+    note: note
   })), /*#__PURE__*/React.createElement("span", {
     className: `prop-score-value${tone ? ` prop-score-value--${tone}` : ""}`
   }, value)), sub);
@@ -13386,8 +13792,28 @@ function gateTally(checks) {
 }
 function momentumChip(item) {
   if (item.rsi === null || item.rsi === undefined) return null;
+  // An iron condor sells BOTH sides: its momentum reading cleared the put
+  // gate and the call gate at once, so neither "oversold" nor "overbought"
+  // alone describes it.
+  if (isCondorItem(item)) return `Both sides · RSI ${item.rsi} · %K ${item.stoch_k}`;
   var isPut = String(item.right || "").toLowerCase() === "put";
   return `${isPut ? "Oversold" : "Overbought"} · RSI ${item.rsi} · %K ${item.stoch_k}`;
+}
+
+// A `SPREAD_PLAN.intent[]` entry built by proposal_cards._condor_card_fields
+// — four legs under put_wing/call_wing, wider-wing collateral, between-the-
+// strikes PoP with its formula on `pop_formula`.
+function isCondorItem(item) {
+  return !!item && item.structure === "iron_condor";
+}
+
+// `772P/770P · 785C/787C` — the same put-wing-first legs form the Positions
+// table and the Trade Log print for a condor.
+function condorLegsLabel(item) {
+  var put = item.put_wing || {};
+  var call = item.call_wing || {};
+  var s = v => v === null || v === undefined ? "?" : Number(v).toString();
+  return `${s(put.short_strike)}P/${s(put.long_strike)}P · ${s(call.short_strike)}C/${s(call.long_strike)}C`;
 }
 
 // The five states an operator can find a proposal in — see
@@ -13530,13 +13956,29 @@ function ProposalQuotes({
     className: "prop-score-title"
   }, "Leg quotes", window.Help && /*#__PURE__*/React.createElement(window.Help, {
     term: "proposal_leg_quotes"
-  }))), /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
+  }))), quotes.put && quotes.call ?
+  /*#__PURE__*/
+  // Iron condor (proposal_cards.build_quotes' 4-leg shape): both wings'
+  // legs, put wing first, then the COMBINED NBBO mid credit below.
+  React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
+    leg: quotes.put.short,
+    label: "Put short"
+  }), /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
+    leg: quotes.put.long,
+    label: "Put long"
+  }), /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
+    leg: quotes.call.short,
+    label: "Call short"
+  }), /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
+    leg: quotes.call.long,
+    label: "Call long"
+  })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
     leg: quotes.short,
     label: "Short"
   }), /*#__PURE__*/React.createElement(ProposalQuoteLeg, {
     leg: quotes.long,
     label: "Long"
-  }), /*#__PURE__*/React.createElement(ScoreRow, {
+  })), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "NBBO mid credit",
     value: quotes.nbbo_mid_credit === null || quotes.nbbo_mid_credit === undefined ? "—" : propMoney(quotes.nbbo_mid_credit, 2)
   }), t ? /*#__PURE__*/React.createElement("span", {
@@ -13589,6 +14031,14 @@ function ProposalScorecard({
   // successful one.
   var repriceFailed = !!item.repriceFailed;
   var frozen = expired || repriceFailed;
+  // Iron condor: the collateral row explains the wider-wing margin rule
+  // with this card's own two widths, and the win-probability row is the
+  // between-the-strikes figure with both short deltas — not one leg's
+  // 1 − |delta|. Quote clock = the card's own leg-quote stamp.
+  var condor = isCondorItem(item);
+  var quoteAsOf = {
+    quotes: item.quotes && item.quotes.as_of
+  };
   return /*#__PURE__*/React.createElement("aside", {
     className: `prop-scorecard${frozen ? " prop-scorecard--expired" : ""}`
   }, frozen && /*#__PURE__*/React.createElement("div", {
@@ -13614,7 +14064,18 @@ function ProposalScorecard({
     term: "risk",
     tone: frozen ? undefined : "neg",
     big: true
-  }), /*#__PURE__*/React.createElement(ScoreRow, {
+  }), condor ? /*#__PURE__*/React.createElement(ScoreRow, {
+    label: "Cash tied up (collateral)",
+    value: collateralLabel(item, equity),
+    term: "spread_collateral_rule",
+    inputs: {
+      put_width: item.put_width,
+      call_width: item.call_width,
+      contracts: item.contracts
+    },
+    note: "Iron condor: the broker holds the WIDER wing's width, not both wings added together \u2014 only one side can be breached at expiry.",
+    sub: perContractSub(item.collateral_per_contract, item.contracts, "collateral_per_contract")
+  }) : /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Cash tied up (collateral)",
     value: collateralLabel(item, equity),
     term: "collateral",
@@ -13627,7 +14088,13 @@ function ProposalScorecard({
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Chance we're right",
     value: propPct(item.pop),
-    term: "pop"
+    term: condor ? "condor_pop" : "pop",
+    inputs: condor ? {
+      put_short_delta: item.put_short_delta,
+      call_short_delta: item.call_short_delta
+    } : undefined,
+    asOf: condor ? quoteAsOf : undefined,
+    note: condor && item.pop_formula ? `Both wings must finish out of the money: ${item.pop_formula}.` : undefined
   }), Number.isFinite(pop) && /*#__PURE__*/React.createElement("div", {
     className: "prop-meter",
     title: `${(pop * 100).toFixed(1)}% probability of profit`
@@ -13638,6 +14105,10 @@ function ProposalScorecard({
     }
   })), /*#__PURE__*/React.createElement(RepriceDriftLine, {
     item: item
+  }), condor && /*#__PURE__*/React.createElement(ScoreRow, {
+    label: "Legs",
+    value: condorLegsLabel(item),
+    term: "wing"
   }), /*#__PURE__*/React.createElement(ScoreRow, {
     label: "Contracts",
     value: item.contracts,
@@ -14216,6 +14687,8 @@ window.ProposedTradesInternals = {
   unansweredCountFor,
   momentumChip,
   collateralLabel,
+  isCondorItem,
+  condorLegsLabel,
   approvalStatus,
   approvalTally,
   APPROVAL_STATE_LABEL,
@@ -14480,6 +14953,29 @@ function headlineSentence(ev, facts) {
   // its scored credit). Saying "it pays us -$84" reads as a typo, not a
   // fill outcome, so a net-debit fill gets its own honest sentence instead.
   var isNetDebit = creditVal != null && creditVal < 0;
+
+  // One wing of an iron condor bought back on its own (spread_trader.
+  // _manage_condor's `wing_closed`): the headline says WHICH wing and what
+  // happened to the other one, instead of reading as a whole-spread trade.
+  if (facts.isWingClose) {
+    var wing = facts.wing || "one";
+    var other = facts.wing === "put" ? "call" : facts.wing === "call" ? "put" : "other";
+    var sibling = siblingWingState(ev, facts);
+    return `On ${dateStr} we bought back the ${wing} wing of an iron condor on ${ticker}` + (structure.gloss && shortParsed ? ` — the ${name} that ${structure.gloss}` : "") + `. The ${other} wing ${sibling === "closed" ? "was closed on its own as well" : "stays open and keeps trading as a plain credit spread"}.`;
+  }
+  if (facts.isCondor) {
+    var c = facts.condor;
+    var range = c.put.shortParsed && c.call.shortParsed ? ` as long as ${ticker} stays between $${c.put.shortParsed.strike} and $${c.call.shortParsed.strike}${expiryStr ? ` through ${expiryStr}` : ""}` : "";
+    var s = `On ${dateStr} we sold an iron condor on ${ticker} — a put spread below the price and a call spread above it, placed as one four-leg order.`;
+    if (isNetDebit) {
+      s += ` It was meant to collect a credit, but filled at a net debit of ${money(Math.abs(creditVal))} instead.`;
+    } else if (creditStr) {
+      s += unfilled ? ` It would pay us ${creditStr} if it fills${range}.` : ` It pays us ${creditStr}${range}.`;
+    } else if (range) {
+      s += ` It wins${range}.`;
+    }
+    return s;
+  }
   var sentence = `On ${dateStr} we sold a ${name} on ${ticker}.`;
   if (isNetDebit) {
     sentence += ` It was meant to collect a credit, but filled at a net debit of ${money(Math.abs(creditVal))} instead`;
@@ -14493,6 +14989,20 @@ function headlineSentence(ev, facts) {
     sentence += ` It ${conditionClause}.`;
   }
   return sentence;
+}
+
+// For a wing_closed event: has the OTHER wing of the same condor also been
+// bought back ("closed"), or is it still trading ("open")? Read off the
+// parent condor's own wing_closed history (wingClosesFor, keyed on
+// `opened_by`) — never guessed from this one event.
+function siblingWingState(ev, facts) {
+  var internals = window.OptionsTradeLogInternals;
+  if (!facts.isWingClose || !facts.openedBy || !internals || !internals.wingClosesFor) return "unknown";
+  var closes = internals.wingClosesFor({
+    client_order_id: facts.openedBy
+  }, window.SPREAD_LOG);
+  var other = facts.wing === "put" ? "call" : "put";
+  return closes.some(e => e.wing === other) ? "closed" : "open";
 }
 
 // The one-line outcome banner: closed (win/loss in words), still open, or
@@ -14509,6 +15019,20 @@ function outcomeBanner(ev, facts) {
       text: `Not filled — ${classification.label}. No money has changed hands.`
     };
   }
+  if (facts.isWingClose) {
+    var wing = facts.wing || "one";
+    var other = facts.wing === "put" ? "call" : "put";
+    var rest = siblingWingState(ev, facts) === "closed" ? `the ${other} wing is closed too` : `the ${other} wing stays open`;
+    if (pnl == null) return {
+      tone: "neutral",
+      text: `Closed the ${wing} wing — result not yet reported; ${rest}.`
+    };
+    var verb = pnl >= 0 ? "gain" : "loss";
+    return {
+      tone: pnl >= 0 ? "pos" : "neg",
+      text: `Closed the ${wing} wing early for a ${money(Math.abs(pnl))} ${verb} — ${rest}.`
+    };
+  }
   if (isClose) {
     if (pnl == null) return {
       tone: "neutral",
@@ -14518,10 +15042,10 @@ function outcomeBanner(ev, facts) {
     var closeDate = ev.ts ? new Date(ev.ts) : null;
     var expiryDate = expiry ? new Date(expiry + "T00:00:00Z") : null;
     var early = closeDate && expiryDate && !Number.isNaN(closeDate.getTime()) && !Number.isNaN(expiryDate.getTime()) && closeDate < expiryDate;
-    var verb = pnl >= 0 ? "gain" : "loss";
+    var _verb = pnl >= 0 ? "gain" : "loss";
     return {
       tone: pnl >= 0 ? "pos" : "neg",
-      text: `Closed ${early ? "early " : ""}for a ${money(Math.abs(pnl))} ${verb}.`
+      text: `Closed ${early ? "early " : ""}for a ${money(Math.abs(pnl))} ${_verb}.`
     };
   }
   return {
@@ -14531,6 +15055,11 @@ function outcomeBanner(ev, facts) {
 }
 function breakevenCaption(facts) {
   if (facts.isNetDebit) return "This spread filled at a net debit — it cannot win at any price, so there is no breakeven.";
+  if (facts.isCondor) {
+    var c = facts.condor;
+    if (c.beLow == null || c.beHigh == null) return "Not enough data to compute the two breakevens.";
+    return `Two breakevens — ${money(c.beLow)} on the put side and ${money(c.beHigh)} on the call side. Between them we keep some or all of the credit; outside either one we start losing money.`;
+  }
   if (facts.be == null || !facts.shortParsed) return "Not enough data to compute a breakeven.";
   var dir = profitDirection(facts.shortParsed) === "below" ? "above" : "below";
   return `Breakeven ${money(facts.be)} — ${dir} this price we start losing money.`;
@@ -14556,7 +15085,16 @@ function matchedPosition(ev, facts) {
     if (longParsed && pos.long_strike != null && Number(pos.long_strike) !== Number(longParsed.strike)) return false;
     return true;
   });
+  if (facts.isCondor) return condorWingPosition(candidates, ev);
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+// A condor's `open` matches BOTH wing positions (eventMatchesPosition reads
+// both legs off put_wing/call_wing); the put wing stands in for the condor —
+// spot and the quote clock are the same on either wing.
+function condorWingPosition(candidates, ev) {
+  var putShort = ev.put_wing && ev.put_wing.short;
+  return candidates.find(pos => pos.short_symbol === putShort) || null;
 }
 
 // Header price element: the live spot from the matched position when one
@@ -14630,6 +15168,86 @@ function LegRow({
 // insurance) but the sentence has to match the direction actually traded:
 // "collects the premium" is only true while the position is open — on a
 // close we're buying that leg back, not collecting anything.
+// The two wings of an iron condor, one row each: what was sold, what was
+// bought as the safety net, the wing's width and its own credit, and where
+// that wing stands now — still open, or bought back on its own (with the
+// realized result and a link to that wing_closed event's page). Widths and
+// strikes come from tradeFacts' condorFacts; wing exits from wingClosesFor.
+function CondorWingsTable({
+  ev,
+  facts
+}) {
+  var internals = window.OptionsTradeLogInternals;
+  var c = facts.condor;
+  var events = window.SPREAD_LOG && window.SPREAD_LOG.events || [];
+  var closes = internals.wingClosesFor(ev, window.SPREAD_LOG);
+  var wings = [{
+    key: "put",
+    name: "Put wing",
+    w: c.put,
+    raw: ev.put_wing || {}
+  }, {
+    key: "call",
+    name: "Call wing",
+    w: c.call,
+    raw: ev.call_wing || {}
+  }];
+  var legText = (parsed, symbol) => parsed ? `${parsed.root} $${parsed.strike} ${parsed.right.toLowerCase()}` : symbol || "—";
+  return /*#__PURE__*/React.createElement("div", {
+    className: "optd-legtable-wrap"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "opt-table optd-wings-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "Wing", /*#__PURE__*/React.createElement(Help, {
+    term: "wing"
+  })), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "Sold (collects the premium)"), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "Bought (safety net)"), /*#__PURE__*/React.createElement("th", null, "Width", /*#__PURE__*/React.createElement(Help, {
+    term: "width"
+  })), /*#__PURE__*/React.createElement("th", null, "Credit / contract", /*#__PURE__*/React.createElement(Help, {
+    term: "credit_per_contract"
+  })), /*#__PURE__*/React.createElement("th", {
+    className: "al"
+  }, "Where it stands"))), /*#__PURE__*/React.createElement("tbody", null, wings.map(({
+    key,
+    name,
+    w,
+    raw
+  }) => {
+    var close = closes.find(e => e.wing === key) || null;
+    var closeKey = close ? internals.tradeKey(close, events.indexOf(close)) : null;
+    var closeDate = close && window.AsOfTime ? window.AsOfTime.marketDate(close.response && close.response.filled_at || close.ts, {
+      month: "short",
+      day: "numeric"
+    }) : null;
+    return /*#__PURE__*/React.createElement("tr", {
+      key: key
+    }, /*#__PURE__*/React.createElement("td", {
+      className: "al optd-wing-name"
+    }, name), /*#__PURE__*/React.createElement("td", {
+      className: "al"
+    }, legText(w.shortParsed, raw.short), /*#__PURE__*/React.createElement("div", {
+      className: "mono-dim optd-occ"
+    }, raw.short || "—")), /*#__PURE__*/React.createElement("td", {
+      className: "al"
+    }, legText(w.longParsed, raw.long), /*#__PURE__*/React.createElement("div", {
+      className: "mono-dim optd-occ"
+    }, raw.long || "—")), /*#__PURE__*/React.createElement("td", null, w.width != null ? money(w.width) : "—"), /*#__PURE__*/React.createElement("td", null, w.creditPerContract != null ? money(w.creditPerContract) : "—"), /*#__PURE__*/React.createElement("td", {
+      className: "al"
+    }, close ? /*#__PURE__*/React.createElement("span", {
+      className: "optd-wing-status--closed"
+    }, "Bought back", closeDate ? ` ${closeDate}` : "", close.realized_pnl != null ? /*#__PURE__*/React.createElement(React.Fragment, null, " — ", /*#__PURE__*/React.createElement("span", {
+      className: close.realized_pnl >= 0 ? "up" : "down"
+    }, money(close.realized_pnl))) : null, close.reason ? ` (${reasonPhrase(close.reason)})` : "", closeKey ? /*#__PURE__*/React.createElement(React.Fragment, null, " · ", /*#__PURE__*/React.createElement("a", {
+      href: `#trade/${encodeURIComponent(closeKey)}`
+    }, "that exit")) : null) : /*#__PURE__*/React.createElement("span", {
+      className: "optd-wing-status--open"
+    }, facts.isClose ? "Closed with the position" : "Still open")));
+  }))));
+}
 function WhatWeDid({
   ev,
   facts
@@ -14637,13 +15255,33 @@ function WhatWeDid({
   var hasLegs = !!(ev.short || ev.long);
   var shortRole = facts.isClose ? "the leg that had been collecting the premium, now bought back to close" : "this is the leg that collects the premium";
   var longRole = facts.isClose ? "the insurance leg, now sold since the position is closing" : "the insurance leg that caps our loss";
+  if (facts.isCondor) {
+    return /*#__PURE__*/React.createElement("section", {
+      className: "card opt-panel optd-section"
+    }, /*#__PURE__*/React.createElement("h2", {
+      className: "optd-h2"
+    }, "What we did"), /*#__PURE__*/React.createElement("p", {
+      className: "optd-explainer optd-explainer--wide"
+    }, "An iron condor is two credit spreads sold at once on the same expiry \u2014 a put wing below today\u2019s price and a call wing above it \u2014 in one four-leg order. Each wing is managed on its own rules and can be bought back by itself while the other keeps trading.", /*#__PURE__*/React.createElement(Help, {
+      term: "iron_condor"
+    })), /*#__PURE__*/React.createElement(CondorWingsTable, {
+      ev: ev,
+      facts: facts
+    }));
+  }
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel optd-section"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "optd-h2"
   }, "What we did"), /*#__PURE__*/React.createElement("p", {
     className: "optd-explainer"
-  }, "A credit spread sells one option to collect cash up front, then buys a further-out option purely as insurance so the most we can lose is capped."), hasLegs ? /*#__PURE__*/React.createElement("ul", {
+  }, "A credit spread sells one option to collect cash up front, then buys a further-out option purely as insurance so the most we can lose is capped."), facts.isWingClose && /*#__PURE__*/React.createElement("p", {
+    className: "optd-explainer"
+  }, "This is the ", /*#__PURE__*/React.createElement("strong", null, facts.wing || "one", " wing"), " of an iron condor, bought back on its own.", facts.openedBy && /*#__PURE__*/React.createElement(React.Fragment, null, " ", /*#__PURE__*/React.createElement("a", {
+    href: `#trade/${encodeURIComponent(facts.openedBy)}`
+  }, "See the whole condor \u2192")), /*#__PURE__*/React.createElement(Help, {
+    term: "wing"
+  })), hasLegs ? /*#__PURE__*/React.createElement("ul", {
     className: "optd-leg-list"
   }, /*#__PURE__*/React.createElement(LegRow, {
     ev: ev,
@@ -14687,11 +15325,144 @@ function payoffAnchors(facts, ev, livePrice) {
     profitSide: profitDirection(short) === "below" ? "left" : "right"
   };
 }
+
+// Condor payoff: profit between the two breakevens, loss beyond either one,
+// with all four strikes marked. Same 20% padding and marker vocabulary as
+// payoffAnchors/PayoffStrip for a vertical so the two strips read alike.
+function condorPayoffAnchors(facts, ev, livePrice) {
+  var c = facts.condor;
+  if (!c || c.beLow == null || c.beHigh == null) return null;
+  var strikes = [c.put.longParsed, c.put.shortParsed, c.call.shortParsed, c.call.longParsed].filter(Boolean).map(p => p.strike);
+  var spot = num(ev.spot_at_entry);
+  var values = [...strikes, c.beLow, c.beHigh];
+  if (spot != null) values.push(spot);
+  if (livePrice != null) values.push(livePrice);
+  var lo = Math.min(...values);
+  var hi = Math.max(...values);
+  if (!(hi > lo)) return null;
+  var pad = (hi - lo) * 0.2;
+  var min = lo - pad;
+  var max = hi + pad;
+  var pct = v => (v - min) / (max - min) * 100;
+  return {
+    beLowPct: pct(c.beLow),
+    beHighPct: pct(c.beHigh),
+    strikes: strikes.map(s => ({
+      strike: s,
+      pct: pct(s)
+    })),
+    spotPct: spot != null ? pct(spot) : null,
+    nowPct: livePrice != null ? pct(livePrice) : null
+  };
+}
+function CondorPayoffStrip({
+  facts,
+  ev,
+  livePrice
+}) {
+  var a = condorPayoffAnchors(facts, ev, livePrice);
+  if (!a) {
+    return /*#__PURE__*/React.createElement("p", {
+      className: "optd-payoff-empty"
+    }, "Not enough data to draw the payoff strip.");
+  }
+  var c = facts.condor;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-track"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-zone optd-payoff-zone--loss",
+    style: {
+      left: "0%",
+      width: `${a.beLowPct}%`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-zone optd-payoff-zone--profit",
+    style: {
+      left: `${a.beLowPct}%`,
+      width: `${a.beHighPct - a.beLowPct}%`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-zone optd-payoff-zone--loss",
+    style: {
+      left: `${a.beHighPct}%`,
+      width: `${100 - a.beHighPct}%`
+    }
+  }), a.strikes.map(({
+    strike,
+    pct
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: strike,
+    className: "optd-payoff-marker",
+    style: {
+      left: `${pct}%`
+    },
+    title: `Strike $${strike}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-dot"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-tag"
+  }, "$", strike))), /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-marker optd-payoff-marker--be",
+    style: {
+      left: `${a.beLowPct}%`
+    },
+    title: `Breakeven ${money(c.beLow)}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-dot"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-tag"
+  }, "BE ", money(c.beLow))), /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-marker optd-payoff-marker--be",
+    style: {
+      left: `${a.beHighPct}%`
+    },
+    title: `Breakeven ${money(c.beHigh)}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-dot"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-tag"
+  }, "BE ", money(c.beHigh))), a.spotPct != null && /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-marker optd-payoff-marker--spot",
+    style: {
+      left: `${a.spotPct}%`
+    },
+    title: `Spot at entry ${money(ev.spot_at_entry)}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-dot"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-tag"
+  }, "Spot at entry ", money(ev.spot_at_entry))), a.nowPct != null && /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-marker optd-payoff-marker--now",
+    style: {
+      left: `${a.nowPct}%`
+    },
+    title: `Stock trading at ${money(livePrice)} now`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-dot"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-tag"
+  }, "Now ", money(livePrice)))), /*#__PURE__*/React.createElement("div", {
+    className: "optd-payoff-legend"
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-swatch optd-payoff-swatch--profit"
+  }), " Profit zone"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    className: "optd-payoff-swatch optd-payoff-swatch--loss"
+  }), " Loss zone")), /*#__PURE__*/React.createElement("p", {
+    className: "optd-payoff-caption"
+  }, "Green is the range the stock can trade in and this condor still wins \u2014 between the two breakevens; red on either side is where it starts losing money."));
+}
 function PayoffStrip({
   facts,
   ev,
   livePrice
 }) {
+  if (facts.isCondor) return /*#__PURE__*/React.createElement(CondorPayoffStrip, {
+    facts: facts,
+    ev: ev,
+    livePrice: livePrice
+  });
   var a = payoffAnchors(facts, ev, livePrice);
   if (!a) {
     return /*#__PURE__*/React.createElement("p", {
@@ -14830,6 +15601,18 @@ function realizedLossCaption(facts) {
   if (!facts.isClose || facts.pnl == null || facts.pnl >= 0) return null;
   return "This lost money because the short leg — the one collecting the premium — moved against us: " + "the underlying moved toward (or through) the short strike, so buying that leg back to close cost " + "more than the credit collected when it opened. The long leg is insurance that caps how bad this " + "gets; it doesn't prevent a loss.";
 }
+
+// The breakeven figure as printed: one price for a vertical, the
+// `$low – $high` pair for a condor, and the honest words for a net-debit
+// fill. Shared by the hero stat and "The numbers" so they cannot differ.
+function breakevenValue(facts) {
+  if (facts.isCondor) {
+    var c = facts.condor;
+    return c.beLow != null && c.beHigh != null ? `${money(c.beLow)} – ${money(c.beHigh)}` : "—";
+  }
+  if (facts.be != null) return money(facts.be);
+  return facts.isNetDebit ? "no breakeven — net debit" : "—";
+}
 function WhatHadToHappen({
   ev,
   facts,
@@ -14881,7 +15664,7 @@ function WhatHadToHappen({
     asOf: calc.breakeven.asOf
   })), /*#__PURE__*/React.createElement("div", {
     className: "optd-stat-value"
-  }, facts.be != null ? money(facts.be) : facts.isNetDebit ? "no breakeven — net debit" : "—"), /*#__PURE__*/React.createElement("div", {
+  }, breakevenValue(facts)), /*#__PURE__*/React.createElement("div", {
     className: "optd-stat-sub"
   }, "Breakeven"), /*#__PURE__*/React.createElement("div", {
     className: "optd-stat-caption"
@@ -14892,7 +15675,8 @@ function WhatHadToHappen({
   }, "Chance this wins", /*#__PURE__*/React.createElement(Help, {
     term: "pop",
     inputs: calc.pop.inputs,
-    asOf: calc.pop.asOf
+    asOf: calc.pop.asOf,
+    note: calc.pop.note
   })), /*#__PURE__*/React.createElement("div", {
     className: "optd-stat-value"
   }, pctv(ev.pop)), /*#__PURE__*/React.createElement("div", {
@@ -14925,10 +15709,30 @@ function timelineSteps(ev, facts) {
       label: `Broker filled ${qtyPhrase}`
     });
   }
-  if (facts.isClose && ev.ts) {
+  if (facts.isWingClose && ev.ts) {
+    steps.push({
+      ts: ev.ts,
+      label: `We bought back the ${facts.wing || "one"} wing of the condor early`
+    });
+  } else if (facts.isClose && ev.ts) {
     steps.push({
       ts: ev.ts,
       label: "We closed the position early"
+    });
+  }
+  // A condor's own timeline carries every wing exit logged against it
+  // (wing_closed events keyed on `opened_by`), each with its realized
+  // result and reason, so "what actually happened" reads wing by wing.
+  if (facts.isCondor) {
+    var internals = window.OptionsTradeLogInternals;
+    (internals && internals.wingClosesFor ? internals.wingClosesFor(ev, window.SPREAD_LOG) : []).forEach(w => {
+      var wing = w.wing ? `${w.wing.charAt(0).toUpperCase()}${w.wing.slice(1)}` : "One";
+      var result = w.realized_pnl != null ? ` for a ${money(Math.abs(w.realized_pnl))} ${w.realized_pnl >= 0 ? "gain" : "loss"}` : "";
+      var why = w.reason ? ` (${reasonPhrase(w.reason)})` : "";
+      steps.push({
+        ts: w.response && w.response.filled_at || w.ts,
+        label: `${wing} wing bought back${result}${why}`
+      });
     });
   }
   return steps.filter(s => s.ts).sort((a, b) => new Date(a.ts) - new Date(b.ts));
@@ -15223,12 +16027,16 @@ function WhatActuallyHappened({
 // The short leg's own entry-snapshot row (from ev.entry_legs) — the source
 // of the short-leg delta that drives PoP/EV's live-quote-clock inputs. Same
 // shape resolution as LegDetail's own rows: array or {short, long} object.
-function shortEntryLeg(ev) {
+function entryLegFor(ev, symbol) {
   var legs = ev.entry_legs;
-  if (!legs) return null;
+  if (!legs || !symbol) return null;
   var rows = Array.isArray(legs) ? legs : Object.values(legs).filter(l => l && l.symbol);
-  return rows.find(l => l.symbol === ev.short) || null;
+  return rows.find(l => l.symbol === symbol) || null;
 }
+function shortEntryLeg(ev) {
+  return entryLegFor(ev, ev.short);
+}
+var CONDOR_POP_NOTE = "Iron condor: the chance the price finishes BETWEEN the two short strikes — 1 − |put short delta| − |call short delta| (see the Condor win probability row in The numbers), not one leg's 1 − |delta|.";
 
 // One place computing every calc-driving `{inputs, asOf}` pair for this
 // trade's own numbers — reused by both the hero stat grid and "The numbers"
@@ -15257,6 +16065,14 @@ function tradeCalcProps(ev, facts) {
     },
     asOf: asOfEntry
   };
+  // Iron condor: the wider-wing collateral rule and the between-the-strikes
+  // PoP read both wings' figures (widths off tradeFacts' condorFacts, short
+  // deltas off each wing's own entry-leg snapshot). A vertical is the same
+  // collateral rule with its other wing $0 wide.
+  var c = facts.condor;
+  var putShortLeg = c ? entryLegFor(ev, ev.put_wing && ev.put_wing.short) : null;
+  var callShortLeg = c ? entryLegFor(ev, ev.call_wing && ev.call_wing.short) : null;
+  var isPut = right === "PUT";
   return {
     max_gain: {
       inputs: {
@@ -15275,12 +16091,34 @@ function tradeCalcProps(ev, facts) {
       },
       asOf: asOfEntry
     },
-    pop: {
+    pop: facts.isCondor ? {
+      inputs: {},
+      asOf: {
+        quotes: quoteTs
+      },
+      note: CONDOR_POP_NOTE
+    } : {
       inputs: {
         short_leg_delta: shortDelta
       },
       asOf: {
         quotes: quoteTs
+      }
+    },
+    condor_pop: {
+      inputs: {
+        put_short_delta: putShortLeg && putShortLeg.greeks ? putShortLeg.greeks.delta : undefined,
+        call_short_delta: callShortLeg && callShortLeg.greeks ? callShortLeg.greeks.delta : undefined
+      },
+      asOf: {
+        quotes: putShortLeg && putShortLeg.quote_ts || callShortLeg && callShortLeg.quote_ts || quoteTs
+      }
+    },
+    spread_collateral_rule: {
+      inputs: {
+        put_width: c ? c.putWidth : isPut ? facts.width : 0,
+        call_width: c ? c.callWidth : isPut ? 0 : facts.width,
+        contracts: ev.contracts
       }
     },
     risk_reward: {
@@ -15403,6 +16241,23 @@ function openPlCalcProps(pos) {
     }
   };
 }
+
+// The two "The numbers" rows whose glossary term depends on the structure.
+// Collateral is the GROSS buying-power reduction — the wider wing x 100 x
+// contracts, the one rule for every structure (spread_collateral_rule); a
+// vertical's is simply its width. Not logged on the record, so derived from
+// the same `facts.width` the max-loss figure uses. The win-probability row
+// points at `condor_pop` (1 − |put δ| − |call δ|) for a condor and at the
+// single-leg `pop` otherwise — two rows, so each term's Help is the one that
+// actually describes the number printed next to it.
+function structureAwareRows(ev, facts) {
+  var collateral = facts.width != null && ev.contracts != null ? facts.width * 100 * ev.contracts : null;
+  return {
+    collateral: ["Collateral (broker holds)", collateral != null ? money(collateral) : null, "spread_collateral_rule", facts.isCondor ? "Wider wing × 100 × contracts" : "Width × 100 × contracts"],
+    pop: facts.isCondor ? ["Chance this wins", pctv(ev.pop), "condor_pop", "Win prob (POP), both wings out of the money"] : ["Chance this wins", pctv(ev.pop), "pop", "Win prob (POP)"],
+    breakeven: ["Break-even price", breakevenValue(facts), "breakeven", facts.isCondor ? "Two breakevens — put side / call side" : "Breakeven"]
+  };
+}
 function TheNumbers({
   ev,
   facts,
@@ -15431,6 +16286,7 @@ function TheNumbers({
   // must never both render for the same trade (one is a live mark, the other
   // is final).
   var openPl = !isClose && pos && pos.now ? pos.now.open_pl : null;
+  var structureRows = structureAwareRows(ev, facts);
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel optd-section"
   }, /*#__PURE__*/React.createElement("h2", {
@@ -15443,14 +16299,14 @@ function TheNumbers({
     // in the money at expiry — NOT what it's showing right now. Kept
     // apart from "Current open P&L" below (a live mark that moves
     // every quote) so the two are never mistaken for each other.
-    ["Most we can lose", money(maxLoss), "max_loss", "Max loss (risk, worst case at expiry)"], ["Current open P&L", openPl != null ? money(openPl) : null, "open_pl", "Live mark, not worst case"], ["Break-even price", be != null ? money(be) : isNetDebit ? "no breakeven — net debit" : null, "breakeven", "Breakeven"], ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null, "risk_reward"], ["Credit if filled", money(ev.credit ?? ev.entry_credit), "credit_if_filled"],
+    ["Most we can lose", money(maxLoss), "max_loss", "Max loss (risk, worst case at expiry)"], structureRows.collateral, ["Current open P&L", openPl != null ? money(openPl) : null, "open_pl", "Live mark, not worst case"], structureRows.breakeven, ["Risk:reward", riskReward != null ? `${riskReward.toFixed(1)} : 1 against` : null, "risk_reward"], ["Credit if filled", money(ev.credit ?? ev.entry_credit), "credit_if_filled"],
     // A CLOSE event's own `received` is what it cost to close, not a
     // credit — that's the "Exit cost" row below, not this one.
-    ["Credit received", classification.bucket === "trade" && !isClose ? money(received) : null, "credit_received"], ["Realized P&L", isClose ? money(pnl) : null, "realized_pl"], ["EV at entry", money(ev.ev), "ev"], ["Chance this wins", pctv(ev.pop), "pop", "Win prob (POP)"], ["Exit cost", isClose ? money(ev.exit_cost) : null, "exit_cost"]]
+    ["Credit received", classification.bucket === "trade" && !isClose ? money(received) : null, "credit_received"], ["Realized P&L", isClose ? money(pnl) : null, "realized_pl"], ["EV at entry", money(ev.ev), "ev"], structureRows.pop, ["Exit cost", isClose ? money(ev.exit_cost) : null, "exit_cost"]]
   }), /*#__PURE__*/React.createElement(KvGroup, {
     title: "The contract",
     calc: calc,
-    items: [["Days until it expires", ev.dte, "dte", "DTE"], ["Expiry", expiryOf(ev, facts), "expiry"], ["Spot at entry", money(ev.spot_at_entry), "spot_at_entry"], ["IV at entry", pctv(ev.iv_at_entry), "iv"], ["Width", money(ev.width), "width"], ["Contracts", ev.contracts, "contracts"], ["Credit per contract", money(ev.credit_per_contract), "credit_per_contract"], ["Profit target", pctv(ev.profit_target_pct), "profit_target"]]
+    items: [["Days until it expires", ev.dte, "dte", "DTE"], ["Expiry", expiryOf(ev, facts), "expiry"], ["Spot at entry", money(ev.spot_at_entry), "spot_at_entry"], ["IV at entry", pctv(ev.iv_at_entry), "iv"], ["Width", money(facts.width), "width", facts.isCondor ? "Wider wing (sets the margin)" : null], ["Contracts", ev.contracts, "contracts"], ["Credit per contract", money(ev.credit_per_contract), "credit_per_contract"], ["Profit target", pctv(ev.profit_target_pct), "profit_target"]]
   }), /*#__PURE__*/React.createElement(KvGroup, {
     title: "The order",
     items: (() => {

@@ -12,8 +12,8 @@ window.FEEDBACK_THREADS = {
     "unanswered": 0
   },
   "funnel": {
-    "breachingSla": 0,
-    "generatedAt": "2026-09-02T22:45:02Z",
+    "breachingSla": 4,
+    "generatedAt": "2026-09-02T23:45:03Z",
     "open": 4,
     "positions": {
       "openWatchClosely": 0,
@@ -30,11 +30,11 @@ window.FEEDBACK_THREADS = {
     },
     "resolvedThisWeek": 0,
     "routeBlocked": {
-      "count": 1,
-      "epicId": "feedback-handling-there-is-currently-some-feedba-9000c4e7",
-      "reason": "no open Epic to join"
+      "count": 0,
+      "epicId": null,
+      "reason": null
     },
-    "routedToPrd": 4,
+    "routedToPrd": 5,
     "stuckDrafts": {
       "count": 0,
       "oldestAgeHours": null
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-02T22:45:02Z",
+  "generatedAt": "2026-09-02T23:45:03Z",
   "schema": 2,
   "threads": [{
     "answered": true,

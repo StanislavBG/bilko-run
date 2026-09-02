@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-02T05:45:03Z",
+    "generatedAt": "2026-09-02T06:45:03Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -40,7 +40,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-02T05:45:03Z",
+  "generatedAt": "2026-09-02T06:45:03Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -2899,6 +2899,12 @@ window.FEEDBACK_THREADS = {
       long: "This is the number that moves day to day as positions gain or lose value; it's what performance is measured against.",
       example: "$40,000 cash plus $10,000 of open-position value marks equity at $50,000, even with no positions closed today."
     },
+    mandate_pace: {
+      label: "Pace vs mandate",
+      short: "How the trailing-30-day account return compares to the run-rate needed to hit the fund's 500%/yr objective.",
+      long: "docs/MANDATE.md states the objective (500% total account return per year, set 2026-09-01) as a monthly/weekly run-rate via compounding: required monthly = (1 + target)^(1/12) − 1. \"Realized\" here is the trailing 30-day account-equity return, the same window docs/MANDATE.md's own Standing table uses as its monthly-pace convention. Amber means the trailing-30d window fell short of that run-rate — it does not change any gate, sizing, or deployment decision by itself.",
+      example: "A trailing-30-day account return of +8.8% against a required +16.1%/mo (for the 500%/yr target) reads as \"8.8% / 16.1% per month\" and renders amber — the account is running at roughly half the pace the mandate needs."
+    },
     cash: {
       label: "Cash",
       short: "The uninvested dollars sitting in the account, not committed to any open position.",
@@ -3502,6 +3508,33 @@ window.FEEDBACK_THREADS = {
       long: "A ticker lands here when spread_trader.scan() gets a chain back with no error, but ends up with zero put or call spreads after every gate _spread_rows applies while pricing: the entry-quote-width gate (see funnel_names_priced_zero's sibling row, quote_rejected_legs) is one cause, but insufficient credit, an out-of-band max loss, or no admissible long leg at any strike/expiry can zero out a name too, without moving quote_rejected_legs at all — check that sibling row before assuming the quote gate is why a given name is at zero. A universe that has silently collapsed to a handful of tradable names looks identical to a genuinely quiet day unless this count — and the concentration figure next to it — are shown alongside 'nothing to propose'.",
       example: "117 names configured, 85 priced zero spreads on 2026-08-31 — only 32 names contributed anything to the 'priced' total at all, though nothing in the funnel said so before this figure existed."
     },
+    funnel_ticker_drop_reason: {
+      label: "Top drop reason (per ticker)",
+      short: "The single gate that removed the most of this ticker's priced spreads on this scan, with the count it removed.",
+      long: "Every priced spread that did not become a proposal is attributed to exactly ONE gate — the first one it failed, in the order the scanner applies them. The deployment filter (options_chain.select_spreads: win-probability floor, annualised-yield floor, minimum DTE, EV ≤ 0, notional band) runs before the counted policy gates (net credit, EV/credit multiple, win-probability band, index DTE cap, momentum, trade corroboration, deck duplicate). 'EV ≤ 0' means the credit collected was below the delta-implied breakeven credit — the market was paying less than the trade is worth — and is the reason that empties most single-name boards while the index ETFs still clear.",
+      example: "TSLA priced 250 spreads and selected 0 on 2026-09-01: 249 of them fell to 'EV ≤ 0', versus SPY where 81 of 626 cleared. Before this column every TSLA drop counter read zero."
+    },
+    funnel_ticker_credit_ratio: {
+      label: "Credit vs fair (shaded / mid)",
+      short: "This ticker's BEST credit as a multiple of the delta-implied breakeven credit — first at the shaded fill we actually trade, then at pure mid.",
+      long: "credit ÷ breakeven_credit, where breakeven_credit = (1 − pop) × width × 100 is the credit at which a spread's expected value is exactly zero; above 1.00× the market is paying more than fair value. 'shaded' uses the credit at the configured entry_fill_fraction (the pessimistic fill between mid and the worst case, the same number the EV gate ran on); 'mid' recomputes it at fill_fraction = 0, off the same leg quotes, with no extra market call. The gap between the two is how much of the EV deficit is quote-width shading; a 'mid' figure still below 1.00× means the market is simply not paying fair value for that name at any fill.",
+      example: "0.47 shaded / 0.71 mid: even filled at pure mid this name's best spread collects only 71% of fair value — no fill assumption rescues it. 0.92 shaded / 1.08 mid: the market is paying fair value, but the width of the quote eats the edge.",
+      calc: {
+        expr: "best credit ÷ breakeven credit",
+        inputs: [{
+          key: "credit",
+          label: "Credit per contract",
+          unit: "$"
+        }, {
+          key: "breakeven_credit",
+          label: "Breakeven credit = (1 − pop) × width × 100",
+          unit: "$"
+        }],
+        result: v => v.breakeven_credit > 0 ? v.credit / v.breakeven_credit : null,
+        unit: "×",
+        source: "src/social_signals_trader/spread_trader.py:scan"
+      }
+    },
     funnel_top_ticker_share: {
       label: "Top name's share of priced spreads",
       short: "The single busiest ticker's share of everything the chain priced this scan — how concentrated the board is in one name.",
@@ -3522,6 +3555,75 @@ window.FEEDBACK_THREADS = {
         unit: "%",
         source: "src/social_signals_trader/spread_trader.py:scan"
       }
+    },
+    outcome_n_closed: {
+      label: "Closed spreads",
+      short: "How many credit spreads have been fully closed (any exit reason) since the log began.",
+      long: "Counts every CLOSED position — expired, stopped out, rolled off early, or flattened out of band — joined back to its own opening fill. A position still open today is not counted here.",
+      example: "144 closed spreads means 144 opens have a matching close event somewhere in the trade log."
+    },
+    outcome_exit_reason: {
+      label: "Exit reason",
+      short: "How this batch of closed spreads actually ended — as opposed to how the rules INTENDED them to end.",
+      long: "Every close is folded onto one of a fixed set of reasons: profit target (closed at the 50%-of-credit target), max loss (closed at the 100%-of-credit stop), strike breach (the short strike traded through before either stop fired), expired worthless, assigned, exercised, flattened out of band (closed by the out-of-band reconciliation sweep, not a policy trigger), or other. A reason bucket's count and realized P&L are shown together so a bar can be read as both 'how often' and 'how much it mattered'.",
+      example: "38 of 144 closes hit the profit target for a combined +$1,900; 6 closes were strike breaches for a combined -$3,400 — the same count of events can carry very different P&L weight.",
+      source: "src/social_signals_trader/outcome_stats.py:_normalize_exit_reason"
+    },
+    outcome_win_rate: {
+      label: "Win rate",
+      short: "The share of closed spreads in this group that made money (realized P&L > $0).",
+      long: "Counts a trade as a winner the moment its realized P&L is positive, however small — it says nothing about the SIZE of wins vs losses, only how often the trade ended in the black. A high win rate with a small credit-capture figure usually means small frequent wins offset by a few large losers.",
+      example: "8 winners out of 12 closed put spreads is a 66.7% win rate for that bucket.",
+      source: "src/social_signals_trader/outcome_stats.py:_aggregate"
+    },
+    outcome_realized_pnl: {
+      label: "Realized P&L",
+      short: "Actual dollars booked on closed spreads in this group — not an open, mark-to-market estimate.",
+      long: "Summed straight off each close event's own `realized_pnl` (or its `close_reconciled` correction, if the fill was later reconciled against the broker) — the same number Alpaca's own fill would show, never a re-derived estimate.",
+      example: "Seven closes with realized P&L of +50, -100, -40, +60, -30, +90, +20 sum to a group total of +$50."
+    },
+    outcome_credit_capture: {
+      label: "Credit capture",
+      short: "What fraction of the credit collected at entry was kept (or given back) by the time the trade closed.",
+      long: "1.0 means the full credit was kept (expired worthless or hit the profit target on a trade that later expired flat); 0.0 means the trade closed at breakeven; a negative number means the trade gave back more than it collected, i.e. a loss bigger than the original credit.",
+      calc: {
+        expr: "realized P&L ÷ credit received at entry",
+        inputs: [{
+          key: "realized_pnl",
+          label: "Realized P&L",
+          unit: "$"
+        }, {
+          key: "credit",
+          label: "Credit received at entry",
+          unit: "$",
+          priced: true,
+          clock: "entry"
+        }],
+        result: v => v.credit ? v.realized_pnl / v.credit : null,
+        unit: "%",
+        source: "src/social_signals_trader/outcome_stats.py:_closed_trades"
+      }
+    },
+    outcome_dte_bucket: {
+      label: "DTE bucket (at entry)",
+      short: "Days-to-expiry band the spread was opened in, not how long it was actually held.",
+      long: "Grouping trades by their entry DTE (not days held) answers 'does the rules' choice of expiry matter to the outcome' — a short-DTE trade and a long-DTE trade can have identical exit reasons but very different win rates because of how much time premium and gamma risk they carried at entry.",
+      example: "A spread opened 6 days from expiry falls in the '5-9' bucket regardless of whether it closed the next day or held to expiry.",
+      source: "src/social_signals_trader/beta.py:_dte_bucket"
+    },
+    outcome_side: {
+      label: "Side",
+      short: "Put credit spread or call credit spread, taken from the short leg's option right.",
+      long: "Splits closed-trade outcomes by which side of the market the position was betting against — puts (bearish-neutral) vs calls (bullish-neutral) — so a rules change to one side's momentum gate can be checked against that side's own realized track record instead of the whole book's.",
+      example: "Put spreads might show a 70% win rate while call spreads show 40% over the same window — that split is invisible in an all-trades total.",
+      source: "src/social_signals_trader/outcome_stats.py:_side"
+    },
+    outcome_thin_bucket: {
+      label: "Thin sample",
+      short: "This bucket has fewer than 5 closed trades — its win rate and P&L are not yet statistically meaningful.",
+      long: "A bucket with 1-2 trades can show a 100% or 0% win rate purely from noise. Thin buckets are still shown (an empty/thin bucket is itself informative — it says the rules rarely land here), just visually muted so they aren't read with the same confidence as a bucket built on dozens of trades.",
+      example: "A DTE bucket with 2 closed trades, one win and one loss, reports a 50% win rate that could easily flip with the next single trade — treat it as a data point, not a conclusion.",
+      source: "src/social_signals_trader/outcome_stats.py:_THIN_THRESHOLD"
     }
   };
   function normalizeTerm(term) {
@@ -10028,11 +10130,50 @@ function AccountBalance({
     className: "opts-balance-sub"
   }, "cash ", money(a.cash), a.options_buying_power !== undefined && a.options_buying_power !== null ? ` · options buying power ${money(a.options_buying_power)}` : "", a.balance_asof ? ` · as of ${a.balance_asof}` : ""));
 }
+
+// One decimal, sign-prefixed, "—" on missing/NaN — the shared formatter for
+// every mandate-pace percentage on the banner (fraction in, e.g. 0.088).
+function pctFraction(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return "—";
+  return `${(Number(v) * 100).toFixed(1)}%`;
+}
+
+// docs/MANDATE.md: 500%/yr, stated 2026-09-01. Realized = trailing-30d
+// account return (the same convention the mandate doc's own Standing table
+// uses as "monthly pace"); amber when that window is behind the required
+// run-rate. Renders nothing until enough portfolio history exists for a
+// verdict (mandate_pace.compute() on an empty/short series).
+function MandatePace({
+  mandatePace
+}) {
+  var m = mandatePace || {};
+  var t30 = m.trailing30d || {};
+  if (t30.return === null || t30.return === undefined || m.requiredMonthly === null || m.requiredMonthly === undefined) {
+    return null;
+  }
+  var targetPct = Math.round((m.targetAnnual || 0) * 100);
+  var behind = t30.onPace === false;
+  return /*#__PURE__*/React.createElement("div", {
+    className: behind ? "opts-mandate-pace opts-mandate-pace--behind" : "opts-mandate-pace"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "opts-mandate-pace-label"
+  }, "Pace vs ", targetPct, "%/yr", /*#__PURE__*/React.createElement(window.Help, {
+    term: "mandate_pace",
+    inputs: {
+      realized: t30.return,
+      required: m.requiredMonthly,
+      targetAnnual: m.targetAnnual
+    }
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "opts-mandate-pace-value"
+  }, pctFraction(t30.return), " / ", pctFraction(m.requiredMonthly), " per month"));
+}
 function Headline({
   text,
   staleLabel,
   cadenceLabel,
-  account
+  account,
+  mandatePace
 }) {
   return /*#__PURE__*/React.createElement("div", {
     className: "opts-headline"
@@ -10042,7 +10183,9 @@ function Headline({
     className: "opts-headline-text"
   }, glossify(text)), staleLabel && /*#__PURE__*/React.createElement("div", {
     className: "opts-stale-banner"
-  }, "\u26A0 STALE \u2014 refreshed ", staleLabel, ", expected ", cadenceLabel || FALLBACK_CADENCE_LABEL)), /*#__PURE__*/React.createElement(AccountBalance, {
+  }, "\u26A0 STALE \u2014 refreshed ", staleLabel, ", expected ", cadenceLabel || FALLBACK_CADENCE_LABEL), /*#__PURE__*/React.createElement(MandatePace, {
+    mandatePace: mandatePace
+  })), /*#__PURE__*/React.createElement(AccountBalance, {
     account: account
   }));
 }
@@ -11420,7 +11563,8 @@ function optionsSummaryParts(data) {
       text: headlineText,
       staleLabel: staleLabel,
       cadenceLabel: cadenceLabel,
-      account: record.account
+      account: record.account,
+      mandatePace: record.mandatePace
     }),
     whereBookStands: /*#__PURE__*/React.createElement(WhereBookStands, {
       lines: findSection(sections, "Where the book stands").lines,
@@ -11494,11 +11638,174 @@ window.OptionsSummaryInternals = {
   componentId: panelComponentId,
   positionFeedbackTarget,
   RoleByline,
-  ROLE
+  ROLE,
+  // Shared card shell, re-exported so other panels (outcome-stats.jsx) get
+  // the identical head/title/feedback-button/SectionStamp treatment instead
+  // of a near-copy.
+  Section,
+  SectionStamp
 };
 window.OptionsSummaryPanel = OptionsSummaryPanel;
 // Per-card access for the page that owns the Options Log layout.
 window.optionsSummaryParts = optionsSummaryParts;
+
+/* ---- panels/outcome-stats.jsx ---- */
+/* global React */
+// "How our exits actually end" — renders window.OUTCOME_STATS (written every
+// tick/reconcile by outcome_stats.write(), src/social_signals_trader/
+// outcome_stats.py). Derive-on-read, non-gating report: exit-reason
+// distribution as a horizontal bar list, plus a compact win-rate/P&L
+// breakdown by DTE bucket and by side. Consumes ONLY window.OUTCOME_STATS —
+// no other global, no live fetch.
+//
+// Reuses options-summary.jsx's Section/SectionStamp shell via
+// window.OptionsSummaryInternals rather than re-implementing the card
+// head/title/feedback-button/stamp treatment a third time on this page.
+
+var OUTCOME_DTE_ORDER = ["0-4", "5-9", "10-14", "15-21", "22-35", "36+", "unknown"];
+var OUTCOME_SIDE_ORDER = ["put", "call", "unknown"];
+var OUTCOME_SIDE_LABEL = {
+  put: "Put spreads",
+  call: "Call spreads",
+  unknown: "Unknown side"
+};
+function money(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+  var v = Number(n);
+  var sign = v > 0 ? "+" : "";
+  return `${sign}$${v.toLocaleString("en-US", {
+    maximumFractionDigits: 0
+  })}`;
+}
+function pct(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+  return `${(Number(n) * 100).toFixed(1)}%`;
+}
+function pnlClass(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "";
+  return Number(n) > 0 ? "outcome-pos" : Number(n) < 0 ? "outcome-neg" : "";
+}
+function orderedEntries(byGroup, order) {
+  var known = order.filter(key => byGroup[key]).map(key => [key, byGroup[key]]);
+  var rest = Object.keys(byGroup).filter(key => !order.includes(key)).sort().map(key => [key, byGroup[key]]);
+  return known.concat(rest);
+}
+var EXIT_REASON_LABEL = {
+  profit_target: "Profit target",
+  max_loss: "Max-loss stop",
+  strike_breach: "Strike breach",
+  expired_worthless: "Expired worthless",
+  assigned: "Assigned",
+  exercised: "Exercised",
+  flattened_out_of_band: "Flattened out of band",
+  other: "Other"
+};
+function ExitReasonBars({
+  byExitReason
+}) {
+  var entries = Object.entries(byExitReason || {}).sort((a, b) => b[1].n - a[1].n);
+  var maxN = Math.max(1, ...entries.map(([, v]) => v.n));
+  if (!entries.length) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "outcome-bar-list"
+  }, entries.map(([reason, v]) => /*#__PURE__*/React.createElement("div", {
+    key: reason,
+    className: `outcome-bar-row${v.thin ? " outcome-bar-row--thin" : ""}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "outcome-bar-label"
+  }, EXIT_REASON_LABEL[reason] || reason, v.thin && /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_thin_bucket",
+    note: "Thin sample \u2014 fewer than 5 trades"
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "outcome-bar-track"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "outcome-bar-fill",
+    style: {
+      width: `${v.n / maxN * 100}%`
+    }
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "outcome-bar-n"
+  }, v.n, /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_n_closed"
+  })), /*#__PURE__*/React.createElement("span", {
+    className: `outcome-bar-pnl ${pnlClass(v.realized_pnl)}`
+  }, money(v.realized_pnl), /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_realized_pnl"
+  })))));
+}
+function BreakdownTable({
+  title,
+  titleTerm,
+  entries,
+  labelFor
+}) {
+  if (!entries.length) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "outcome-subtable"
+  }, /*#__PURE__*/React.createElement("h4", {
+    className: "outcome-subtable-title"
+  }, title, titleTerm && /*#__PURE__*/React.createElement(window.Help, {
+    term: titleTerm
+  })), /*#__PURE__*/React.createElement("table", {
+    className: "outcome-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Group"), /*#__PURE__*/React.createElement("th", null, "N", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_n_closed"
+  })), /*#__PURE__*/React.createElement("th", null, "Win rate", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_win_rate"
+  })), /*#__PURE__*/React.createElement("th", null, "P&L", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_realized_pnl"
+  })), /*#__PURE__*/React.createElement("th", null, "Credit capture", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_credit_capture"
+  })))), /*#__PURE__*/React.createElement("tbody", null, entries.map(([key, v]) => /*#__PURE__*/React.createElement("tr", {
+    key: key,
+    className: v.thin ? "outcome-row--thin" : undefined
+  }, /*#__PURE__*/React.createElement("td", null, labelFor(key), v.thin && /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_thin_bucket",
+    note: "Thin sample \u2014 fewer than 5 trades"
+  })), /*#__PURE__*/React.createElement("td", null, v.n), /*#__PURE__*/React.createElement("td", null, pct(v.win_rate)), /*#__PURE__*/React.createElement("td", {
+    className: pnlClass(v.realized_pnl)
+  }, money(v.realized_pnl)), /*#__PURE__*/React.createElement("td", null, pct(v.avg_pct_captured)))))));
+}
+function OutcomeStatsCard() {
+  var stats = window.OUTCOME_STATS;
+  var internals = window.OptionsSummaryInternals;
+  var Section = internals && internals.Section;
+  if (!Section) return null;
+  var body = !stats || !stats.n_closed ? /*#__PURE__*/React.createElement("p", {
+    className: "opt-log-empty"
+  }, "No closed spreads yet.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "outcome-overall"
+  }, /*#__PURE__*/React.createElement("span", null, stats.n_closed, " closed", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_n_closed"
+  })), /*#__PURE__*/React.createElement("span", {
+    className: pnlClass(stats.overall.realized_pnl)
+  }, money(stats.overall.realized_pnl)), /*#__PURE__*/React.createElement("span", null, pct(stats.overall.win_rate), " win rate", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_win_rate"
+  })), /*#__PURE__*/React.createElement("span", null, pct(stats.overall.avg_credit_capture), " avg credit capture", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_credit_capture"
+  }))), /*#__PURE__*/React.createElement(ExitReasonBars, {
+    byExitReason: stats.by_exit_reason
+  }), /*#__PURE__*/React.createElement(BreakdownTable, {
+    title: "By DTE bucket at entry",
+    titleTerm: "outcome_dte_bucket",
+    entries: orderedEntries(stats.by_dte_bucket || {}, OUTCOME_DTE_ORDER),
+    labelFor: k => k === "unknown" ? "Unknown" : `${k} DTE`
+  }), /*#__PURE__*/React.createElement(BreakdownTable, {
+    title: "By side",
+    titleTerm: "outcome_side",
+    entries: orderedEntries(stats.by_side || {}, OUTCOME_SIDE_ORDER),
+    labelFor: k => OUTCOME_SIDE_LABEL[k] || k
+  }));
+  return /*#__PURE__*/React.createElement(Section, {
+    title: "How our exits actually end",
+    titleTerm: "outcome_exit_reason",
+    updatedAt: stats && stats.generatedAt,
+    schedule: {
+      cadenceLabel: "every tick"
+    }
+  }, body);
+}
+window.OutcomeStatsCard = OutcomeStatsCard;
 
 /* ---- panels/feedback-threads.jsx ---- */
 /* global React */
@@ -13510,6 +13817,59 @@ function DeploymentLine({
 // "Nothing to review" is only believable with the count of what was looked
 // at. Without the funnel, a barren option chain and a broken scanner render
 // identically — which is what an empty panel meant before this.
+// Numeric-or-null: a missing funnel key must read as "unmeasured", never 0.
+var num = v => typeof v === "number" ? v : null;
+
+// Human label per `dropped` key on a per-ticker funnel row
+// (spread_trader._DROPPED_REASONS). The five `select_*` keys are
+// options_chain.select_spreads' own filters, which run BEFORE the counted
+// gates — a name that priced 250 and selected 0 used to show every counter
+// here at zero because those drops were never attributed anywhere.
+var DROP_REASON_LABELS = {
+  select_pop: "win probability below floor",
+  select_ann_yield: "annualised yield too low",
+  select_dte: "expiry too soon",
+  select_ev_nonpositive: "EV ≤ 0 (credit under fair value)",
+  select_notional_band: "outside the notional band",
+  non_positive_credit: "no positive net credit",
+  ev_or_credit: "EV or credit too small",
+  pop_too_risky: "win probability too low",
+  pop_too_safe: "win probability too high",
+  index_dte: "index DTE cap",
+  momentum: "momentum gate",
+  no_trade_corroboration: "no trade corroboration",
+  pending_duplicate: "already on the deck"
+};
+
+// The single largest `dropped` bucket on a per-ticker row, as "reason (n)".
+// "—" when nothing was dropped (nothing priced, or everything proposed).
+// Ties go to the first key in declaration order, which is also gate order.
+var dominantDropReason = row => {
+  var dropped = row && row.dropped && typeof row.dropped === "object" ? row.dropped : null;
+  if (!dropped) return "—";
+  var bestKey = null;
+  var bestN = 0;
+  for (var key of Object.keys(dropped)) {
+    var n = typeof dropped[key] === "number" ? dropped[key] : 0;
+    if (n > bestN) {
+      bestKey = key;
+      bestN = n;
+    }
+  }
+  if (!bestKey) return "—";
+  return `${DROP_REASON_LABELS[bestKey] || bestKey} (${bestN})`;
+};
+
+// "0.47 shaded / 0.71 mid" — the row's best credit-vs-breakeven ratio at
+// the configured entry_fill_fraction, then at pure mid. "—" when nothing
+// priced (both are null), and "—" for the mid half alone if only it is
+// unmeasurable (a row missing a usable leg quote).
+var creditRatioLabel = row => {
+  var shaded = num(row && row.best_credit_ratio);
+  if (shaded === null) return "—";
+  var mid = num(row && row.best_credit_ratio_mid);
+  return `${shaded.toFixed(2)} shaded / ${mid === null ? "—" : mid.toFixed(2)} mid`;
+};
 function EmptyState({
   funnel
 }) {
@@ -13525,7 +13885,6 @@ function EmptyState({
   // funnel unaccounted for on screen, which is the same "where did they all
   // go?" this panel exists to answer. Derived here rather than added to the
   // exported funnel so an already-published plan renders it too.
-  var num = v => typeof v === "number" ? v : null;
   var screened = num(funnel.priced) !== null && num(funnel.selected) !== null ? funnel.priced - funnel.selected : null;
   var rows = [["Names scanned", funnel.tickers], ["Spreads the chain priced", funnel.priced],
   // Quote-width gate visibility (2026-08-31): a name whose every leg is
@@ -13540,7 +13899,12 @@ function EmptyState({
   // narrative reads as its own outcome distinct from both the rejections
   // above and the count that actually got proposed: this many were
   // deployable and simply already on the deck.
-  ["Already on the deck — awaiting your comment", funnel.rejected_pending_duplicate], ["Proposed", funnel.passed],
+  ["Already on the deck — awaiting your comment", funnel.rejected_pending_duplicate],
+  // Per-underlying allocation (2026-09-01): qualifying candidates that
+  // `plan()` set aside so one name can't consume the whole daily budget
+  // (`max_daily_entries_per_underlying` / `max_new_per_underlying_per_tick`).
+  // Absent from plans published before the caps existed — filtered out.
+  ["Set aside — that underlying already had its entries for today", funnel.rejected_underlying_daily_cap], ["Set aside — one new entry per underlying per cycle", funnel.rejected_underlying_tick_cap], ["Proposed", funnel.passed],
   // Applied LAST, after book limits — the deck shortlist cap
   // (`max_proposals`). Shown even here (usually 0, since an empty deck has
   // nothing to cap) so the bucket is never silently absent from the funnel.
@@ -13583,9 +13947,29 @@ function EmptyState({
     className: "prop-funnel-byticker"
   }, /*#__PURE__*/React.createElement("summary", null, "Per-ticker breakdown (", byTicker.length, " names)"), /*#__PURE__*/React.createElement("table", {
     className: "prop-funnel-byticker-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Ticker"), /*#__PURE__*/React.createElement("th", null, "Priced"), /*#__PURE__*/React.createElement("th", null, "Selected"), /*#__PURE__*/React.createElement("th", null, "Proposed"))), /*#__PURE__*/React.createElement("tbody", null, byTicker.map(row => /*#__PURE__*/React.createElement("tr", {
-    key: row.ticker
-  }, /*#__PURE__*/React.createElement("td", null, row.ticker), /*#__PURE__*/React.createElement("td", null, row.priced), /*#__PURE__*/React.createElement("td", null, row.selected), /*#__PURE__*/React.createElement("td", null, row.passed)))))), best !== null && best !== undefined && /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Ticker"), /*#__PURE__*/React.createElement("th", null, "Priced"), /*#__PURE__*/React.createElement("th", null, "Selected"), /*#__PURE__*/React.createElement("th", null, "Proposed"), /*#__PURE__*/React.createElement("th", {
+    className: "prop-funnel-byticker-reason"
+  }, "Top drop reason", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_ticker_drop_reason"
+  })), /*#__PURE__*/React.createElement("th", {
+    className: "prop-funnel-byticker-ratio"
+  }, "Credit vs fair", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_ticker_credit_ratio"
+  })))), /*#__PURE__*/React.createElement("tbody", null, [...byTicker].sort((a, b) => (num(b.priced) || 0) - (num(a.priced) || 0)).map(row => {
+    // Computed once per row; the desktop columns and the mobile
+    // sub-line (CSS swaps which is visible) render the SAME strings.
+    var reason = dominantDropReason(row);
+    var ratio = creditRatioLabel(row);
+    return /*#__PURE__*/React.createElement("tr", {
+      key: row.ticker
+    }, /*#__PURE__*/React.createElement("td", null, row.ticker, /*#__PURE__*/React.createElement("div", {
+      className: "prop-funnel-byticker-sub"
+    }, reason, ratio !== "—" ? ` · ${ratio}` : "")), /*#__PURE__*/React.createElement("td", null, row.priced), /*#__PURE__*/React.createElement("td", null, row.selected), /*#__PURE__*/React.createElement("td", null, row.passed), /*#__PURE__*/React.createElement("td", {
+      className: "prop-funnel-byticker-reason"
+    }, reason), /*#__PURE__*/React.createElement("td", {
+      className: "prop-funnel-byticker-ratio"
+    }, ratio));
+  })))), best !== null && best !== undefined && /*#__PURE__*/React.createElement("p", {
     className: `prop-funnel-verdict${best < 1 ? " prop-funnel-verdict--short" : ""}`
   }, "Best credit on the board: ", /*#__PURE__*/React.createElement("b", null, Number(best).toFixed(2), "\xD7"), " fair value", need ? /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 policy needs ", /*#__PURE__*/React.createElement("b", null, Number(need).toFixed(2), "\xD7")) : null, ".", best < 1 ? " Below 1.00× the market is paying less than the trade is worth — every candidate has negative expected value, so nothing can pass without knowingly trading at a loss." : " At or above 1.00× the market is paying fair value or better."), funnel.chain_errors > 0 && /*#__PURE__*/React.createElement("p", {
     className: "prop-funnel-note"
@@ -16227,7 +16611,7 @@ function MobileOptionsPage({
     defaultExpanded: true
   })), tab === "more" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     id: "options-trade-log"
-  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, tradeLog.expiryLadder, summary.whereBookStands, tradeLog.openOrders), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
+  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, tradeLog.expiryLadder, summary.whereBookStands, window.OutcomeStatsCard && /*#__PURE__*/React.createElement(window.OutcomeStatsCard, null), tradeLog.openOrders), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
     className: "opts-strategy"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "opts-section-title"
@@ -16393,7 +16777,7 @@ function TickerDetailsPage() {
     id: "options-summary"
   }, summary.positions)), window.ProposedTrades && /*#__PURE__*/React.createElement(window.ProposedTrades, null), /*#__PURE__*/React.createElement("div", {
     id: "options-trade-log"
-  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Row2, null, tradeLog.expiryLadder, summary.whereBookStands), /*#__PURE__*/React.createElement(Row2, null, summary.whatWeThink, summary.actionQueue), /*#__PURE__*/React.createElement(Row2, null, tradeLog.openOrders)), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
+  }, tradeLog.empty || tradeLog.tradeLog), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Row2, null, tradeLog.expiryLadder, summary.whereBookStands, window.OutcomeStatsCard && /*#__PURE__*/React.createElement(window.OutcomeStatsCard, null)), /*#__PURE__*/React.createElement(Row2, null, summary.whatWeThink, summary.actionQueue), /*#__PURE__*/React.createElement(Row2, null, tradeLog.openOrders)), tradeLog.foot, worksheet, /*#__PURE__*/React.createElement("section", {
     className: "opts-strategy"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "opts-section-title"

@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 4,
-    "generatedAt": "2026-09-03T00:45:02Z",
+    "generatedAt": "2026-09-03T01:00:02Z",
     "open": 4,
     "positions": {
       "openWatchClosely": 0,
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-03T00:45:02Z",
+  "generatedAt": "2026-09-03T01:00:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -3616,7 +3616,8 @@ window.FEEDBACK_THREADS = {
         inputs: [{
           key: "credit",
           label: "Credit per contract",
-          unit: "$"
+          unit: "$",
+          priced: true
         }, {
           key: "breakeven_credit",
           label: "Breakeven credit = (1 − pop) × width × 100",

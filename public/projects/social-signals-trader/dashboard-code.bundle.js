@@ -13,8 +13,8 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-04T15:45:02Z",
-    "open": 5,
+    "generatedAt": "2026-09-04T16:45:03Z",
+    "open": 3,
     "positions": {
       "openWatchClosely": 0,
       "openWithUnansweredComment": 0
@@ -24,7 +24,7 @@ window.FEEDBACK_THREADS = {
       "carried": 0,
       "conditional": 0,
       "declined": 0,
-      "pending": 5,
+      "pending": 3,
       "stranded": 0,
       "untrustedRefusals": 4
     },
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-04T15:45:02Z",
+  "generatedAt": "2026-09-04T16:45:03Z",
   "schema": 2,
   "threads": [{
     "answered": true,

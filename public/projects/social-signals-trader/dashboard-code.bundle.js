@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-05T11:45:03Z",
+    "generatedAt": "2026-09-05T12:45:04Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-05T11:45:03Z",
+  "generatedAt": "2026-09-05T12:45:04Z",
   "schema": 2,
   "threads": [{
     "answered": true,

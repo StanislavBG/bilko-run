@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-05T23:45:02Z",
+    "generatedAt": "2026-09-06T00:45:02Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-05T23:45:02Z",
+  "generatedAt": "2026-09-06T00:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -3648,6 +3648,48 @@ window.FEEDBACK_THREADS = {
         unit: "%",
         source: "src/social_signals_trader/spread_trader.py:scan"
       }
+    },
+    funnel_drawdown_halt: {
+      label: "Drawdown halt",
+      short: "New entries are halted because the account has drawn down too far from its peak equity — existing positions are unaffected.",
+      long: "spread_trader.drawdown_status() compares current equity against the highest equity point in the trailing 1-month portfolio history (maxed against the live reading, so an intraday peak is never lost). Once the drop from that peak reaches max_drawdown_from_peak_pct, execute() refuses every new entry for the rest of the tick — exits, re-pegs, and reconciliation are untouched, since halting means 'stop opening new positions', never 'start closing existing ones'. Fails CLOSED on an unreadable portfolio history (halts rather than silently trading through a data outage). Because plan() itself is never gated on this rail (the deck is a preview, not a checkpoint), a halted day still shows candidates that WOULD have traded — this line is the only place that context is visible next to them.",
+      example: "Equity peaked at $210,000, now sits at $161,700 — a 23% drawdown against a 15% limit halts new entries until the account recovers or the peak is revised down by a full month rolling off.",
+      source: "src/social_signals_trader/spread_trader.py:drawdown_status"
+    },
+    funnel_rejected_max_per_underlying: {
+      label: "Set aside — per-underlying position cap",
+      short: "Qualifying candidates set aside because that underlying already holds max_per_underlying open/working positions.",
+      long: "Counted in plan()'s allocation loop (_allocate()) before a candidate is priced against any book-level budget — a second SPY candidate is set aside here even if the book has plenty of room left in general, because SPY specifically is already at its per-underlying position limit.",
+      example: "max_per_underlying=2 and the book already holds two open SPY spreads: a third, otherwise-qualifying SPY candidate is set aside here rather than competing for the risk budget.",
+      source: "src/social_signals_trader/spread_trader.py:_allocate"
+    },
+    funnel_rejected_risk_budget: {
+      label: "Set aside — book risk budget already spent",
+      short: "Qualifying candidates set aside because adding them would push total open risk past the book's deployment target for this tick.",
+      long: "The running total of every already-chosen candidate's total_risk (plus the existing open/working book) versus deployment()'s target minus stock value — the same budget the book fills to before this rail binds. A candidate ranked low enough in EV order can lose out to earlier picks even though it individually would have qualified.",
+      example: "The book's target risk budget is $50,000; after filling $48,000 of it with higher-EV picks, a $5,000-risk candidate ranked further down the list is set aside here.",
+      source: "src/social_signals_trader/spread_trader.py:_allocate"
+    },
+    funnel_rejected_buying_power: {
+      label: "Set aside — options buying power already spent",
+      short: "Qualifying candidates set aside because this tick's NEW risk has already used up the broker's reported options buying power.",
+      long: "A separate cap from the risk budget above: buying power is only consumed by what THIS tick is about to add, not by what is already posted. A book that is under its risk-budget target can still hit this cap if the broker is reporting tight options buying power.",
+      example: "$10,000 of options buying power remains; two $6,000-risk candidates cannot both be added even though the risk budget has room for both — the second is set aside here.",
+      source: "src/social_signals_trader/spread_trader.py:_allocate"
+    },
+    funnel_rejected_margin_cap: {
+      label: "Set aside — broker margin cap",
+      short: "Qualifying candidates set aside because adding them would push the broker's projected maintenance margin past the fund's own margin cap.",
+      long: "Projects this order's own risk onto the broker's maintenance margin (the same width × 100 × contracts figure broker_spreads() reports as risk, which is what the broker holds as collateral) and compares it against margin_cap = equity × (1 − margin_buffer_pct). Distinct from the risk budget and buying power caps above — this one tracks the broker's own margin accounting, not the fund's internal deployment target.",
+      example: "Maintenance margin sits $2,000 under the cap; a $3,000-risk candidate would breach it and is set aside here, even though it clears every other book-level check.",
+      source: "src/social_signals_trader/spread_trader.py:_allocate"
+    },
+    funnel_rejected_expiry_concentration: {
+      label: "Set aside — expiry-concentration cap",
+      short: "Qualifying candidates set aside because too much of the book's risk already sits on that same expiry date.",
+      long: "Compares one expiry's cumulative risk (seeded from the already-open/working book, then added to as this tick's own picks land on it) against max_expiry_concentration_pct of the book's target risk budget — measured against the TARGET, not the currently-deployed amount, so the very first position of an empty book is never treated as '100% of book risk' on its own expiry.",
+      example: "max_expiry_concentration_pct=0.30 and the 2026-09-11 expiry already holds 28% of the book's target risk: a candidate on that same expiry that would push it to 35% is set aside here, even though a same-EV candidate on a different expiry would clear.",
+      source: "src/social_signals_trader/spread_trader.py:_allocate"
     },
     outcome_n_closed: {
       label: "Closed spreads",
@@ -14435,7 +14477,22 @@ function EmptyState({
   // Correlated-exposure cap (docs/MANDATE.md "Risk budget", 2026-09-02):
   // an index candidate (SPY/QQQ/DIA/IWM/TQQQ/…) that would push the
   // combined index share of deployed collateral past max_index_cluster_pct.
-  ["Set aside — index-cluster collateral cap", funnel.rejected_index_cluster_cap], ["Proposed", funnel.passed],
+  ["Set aside — index-cluster collateral cap", funnel.rejected_index_cluster_cap],
+  // The five book-level allocation gates in `_allocate()`'s main loop
+  // (PRD 4055) — every bare `continue` there now has a named bucket so a
+  // funnel showing `passed: N` and `proposed: 0` is explained here rather
+  // than silently unaccounted for.
+  [/*#__PURE__*/React.createElement("span", null, "Set aside \u2014 per-underlying position cap", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_rejected_max_per_underlying"
+  })), funnel.rejected_max_per_underlying], [/*#__PURE__*/React.createElement("span", null, "Set aside \u2014 book risk budget already spent", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_rejected_risk_budget"
+  })), funnel.rejected_risk_budget], [/*#__PURE__*/React.createElement("span", null, "Set aside \u2014 options buying power already spent", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_rejected_buying_power"
+  })), funnel.rejected_buying_power], [/*#__PURE__*/React.createElement("span", null, "Set aside \u2014 broker margin cap", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_rejected_margin_cap"
+  })), funnel.rejected_margin_cap], [/*#__PURE__*/React.createElement("span", null, "Set aside \u2014 expiry-concentration cap", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_rejected_expiry_concentration"
+  })), funnel.rejected_expiry_concentration], ["Proposed", funnel.passed],
   // Applied LAST, after book limits — the deck shortlist cap
   // (`max_proposals`). Shown even here (usually 0, since an empty deck has
   // nothing to cap) so the bucket is never silently absent from the funnel.
@@ -14468,9 +14525,20 @@ function EmptyState({
   var byTicker = Array.isArray(funnel.byTicker) ? funnel.byTicker : null;
   var namesPricedZero = num(funnel.names_priced_zero);
   var topTickerShare = num(funnel.top_ticker_share);
+  // The max-drawdown-from-peak halt (docs/MANDATE.md "Risk budget") is
+  // enforced in execute(), which never runs when plan() already returned
+  // nothing — so on a halted day this line is the ONLY place other than
+  // /project-status the halt is visible at all (PRD 4055).
+  var drawdown = funnel.risk_rails && funnel.risk_rails.drawdown;
+  var halted = !!(drawdown && drawdown.halted);
+  var pct = v => typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "unknown";
   return /*#__PURE__*/React.createElement("div", {
     className: "prop-empty"
-  }, /*#__PURE__*/React.createElement("p", {
+  }, halted && /*#__PURE__*/React.createElement("p", {
+    className: "opt-log-empty opt-log-empty--halted"
+  }, "Entries halted: drawdown ", pct(drawdown.drawdownPct), " from peak (limit ", pct(drawdown.limit), ")", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+    term: "funnel_drawdown_halt"
+  })), /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
   }, "No proposals right now \u2014 and that is a measurement, not a blank screen. Here is the whole funnel behind it:"), (namesPricedZero !== null || topTickerShare !== null) && /*#__PURE__*/React.createElement("ul", {
     className: "prop-funnel prop-funnel-headline"

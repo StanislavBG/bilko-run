@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-10T22:45:01Z",
+    "generatedAt": "2026-09-10T23:45:02Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-10T22:45:01Z",
+  "generatedAt": "2026-09-10T23:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -14528,15 +14528,25 @@ function EmptyState({
   // The max-drawdown-from-peak halt (docs/MANDATE.md "Risk budget") is
   // enforced in execute(), which never runs when plan() already returned
   // nothing — so on a halted day this line is the ONLY place other than
-  // /project-status the halt is visible at all (PRD 4055).
+  // /project-status the halt is visible at all (PRD 4055). PRD 4058 adds the
+  // peak date / clears-on date / operator-override detail so the banner
+  // states WHEN and HOW the halt clears, not only that it is in effect.
   var drawdown = funnel.risk_rails && funnel.risk_rails.drawdown;
   var halted = !!(drawdown && drawdown.halted);
+  var overrideActive = !!(drawdown && drawdown.overrideActive);
   var pct = v => typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "unknown";
+  var md = iso => {
+    if (typeof iso !== "string") return null;
+    var d = new Date(`${iso}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    return `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  };
+  var peakDetail = drawdown && typeof drawdown.peak === "number" && md(drawdown.peakAsOf) ? `, peak $${Math.round(drawdown.peak).toLocaleString()} on ${md(drawdown.peakAsOf)}` + (md(drawdown.clearsOn) ? `, clears ${md(drawdown.clearsOn)}` : "") : "";
   return /*#__PURE__*/React.createElement("div", {
     className: "prop-empty"
-  }, halted && /*#__PURE__*/React.createElement("p", {
+  }, (halted || overrideActive) && /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty opt-log-empty--halted"
-  }, "Entries halted: drawdown ", pct(drawdown.drawdownPct), " from peak (limit ", pct(drawdown.limit), ")", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+  }, overrideActive ? `Entries halt OVERRIDDEN until ${md(drawdown.overrideUntil) || drawdown.overrideUntil}: drawdown ${pct(drawdown.drawdownPct)} from peak (limit ${pct(drawdown.limit)})${peakDetail}` : `Entries halted: drawdown ${pct(drawdown.drawdownPct)} from peak (limit ${pct(drawdown.limit)})${peakDetail}`, window.Help && /*#__PURE__*/React.createElement(window.Help, {
     term: "funnel_drawdown_halt"
   })), /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 // Static text checks only — this script shells out to `curl` and `claude -p`,
 // neither of which this suite may invoke. See PRD 1002's postmortem: the
@@ -82,5 +83,67 @@ describe('blog-cadence-watchdog.sh', () => {
 
     // a config-parse failure fails loud rather than silently defaulting
     expect(guardBlock).toMatch(/error: could not parse pending_draft_alert_days/);
+  });
+
+  it('retries the /api/blog fetch with a backoff before giving up', () => {
+    // three attempts, each keeping the original --max-time 20 curl
+    const curlMatches = script.match(/curl -s --max-time 20 https:\/\/bilko\.run\/api\/blog/g) ?? [];
+    expect(curlMatches.length).toBeGreaterThanOrEqual(1);
+    expect(script).toMatch(/for attempt in 1 2 3/);
+    expect(script).toMatch(/sleep 10/);
+  });
+
+  it('validates the fetch response is a non-empty JSON array before indexing .published_at', () => {
+    const shapeGateIndex = script.indexOf("jq -e 'type == \"array\" and length > 0'");
+    const firstPublishedAtAccessIndex = script.indexOf(
+      "jq -r '[.[].published_at] | max'",
+      shapeGateIndex + 1
+    );
+    expect(shapeGateIndex).toBeGreaterThan(-1);
+    expect(firstPublishedAtAccessIndex).toBeGreaterThan(-1);
+    expect(shapeGateIndex).toBeLessThan(firstPublishedAtAccessIndex);
+  });
+
+  it('falls through to the existing FATAL branch with a heartbeat when all fetch retries are exhausted', () => {
+    expect(script).toMatch(/FETCH_OK" -ne 1/);
+    const fatalMatches = script.match(/FATAL: could not read published_at from https:\/\/bilko\.run\/api\/blog/g) ?? [];
+    expect(fatalMatches.length).toBeGreaterThanOrEqual(1);
+    expect(script).toMatch(/write_heartbeat "error: could not read published_at from \/api\/blog"/);
+  });
+
+  it('installs an EXIT trap that guarantees a heartbeat on any unhandled exit, without double-writing one already sent', () => {
+    expect(script).toMatch(/trap on_exit EXIT/);
+    expect(script).toMatch(/HEARTBEAT_WRITTEN=0/);
+    // write_heartbeat marks itself written so the trap's fallback never overwrites a real one
+    const writeHeartbeatFn = script.match(/write_heartbeat\(\) \{[\s\S]*?\n\}/);
+    expect(writeHeartbeatFn).not.toBeNull();
+    expect(writeHeartbeatFn![0]).toMatch(/HEARTBEAT_WRITTEN=1/);
+    const onExitFn = script.match(/on_exit\(\) \{[\s\S]*?\n\}/);
+    expect(onExitFn).not.toBeNull();
+    expect(onExitFn![0]).toMatch(/HEARTBEAT_WRITTEN"\s*-eq\s*0/);
+  });
+
+  it('behaviorally verifies the shape gate rejects non-array/empty bodies and accepts a valid array', () => {
+    const gateExpr = 'type == "array" and length > 0';
+    const cases: Array<[string, boolean]> = [
+      ['0', false],
+      ['null', false],
+      ['[]', false],
+      ['{}', false],
+      ['[{"published_at":"2026-01-01"}]', true],
+    ];
+    for (const [body, shouldPass] of cases) {
+      let exitCode = 0;
+      try {
+        execFileSync('jq', ['-e', gateExpr], { input: body, stdio: ['pipe', 'ignore', 'ignore'] });
+      } catch (err: any) {
+        exitCode = typeof err.status === 'number' ? err.status : 1;
+      }
+      if (shouldPass) {
+        expect(exitCode).toBe(0);
+      } else {
+        expect(exitCode).not.toBe(0);
+      }
+    }
   });
 });

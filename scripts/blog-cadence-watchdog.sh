@@ -43,10 +43,25 @@ HEARTBEAT_FILE="$DRAFTS_DIR/.watchdog-heartbeat"
 # "nothing to do" or "a normal overlapping run got skipped". See
 # check-blog-watchdog-heartbeat.sh, the independent dead-man's-switch that
 # reads this file.
+HEARTBEAT_WRITTEN=0
 write_heartbeat() {
   mkdir -p "$DRAFTS_DIR"
   echo "$(TZ=America/Los_Angeles date -Iseconds) $1" > "$HEARTBEAT_FILE"
+  HEARTBEAT_WRITTEN=1
 }
+
+# Backstop for any future `set -e` abort we didn't anticipate: if the script
+# exits without having written a heartbeat via the normal call sites above,
+# the dead-man's-switch (check-blog-watchdog-heartbeat.sh) must still see a
+# fresh, error-flavored line rather than silently going stale (see PRD:
+# 2026-09-11 boot-race crash left the heartbeat frozen with no error recorded).
+on_exit() {
+  local rc=$?
+  if [[ "$HEARTBEAT_WRITTEN" -eq 0 ]]; then
+    write_heartbeat "error: unexpected exit (rc=$rc)"
+  fi
+}
+trap on_exit EXIT
 
 LOCKFILE="/tmp/bilko.blog-cadence-watchdog.lock"
 exec 9>"$LOCKFILE"
@@ -66,7 +81,33 @@ if [[ -z "$UPPER_BOUND" || -z "$CATCHUP_TRIGGER" ]]; then
 fi
 
 # --- measure the LIVE gap, not server/db.ts's seed data ---
-BLOG_JSON="$(curl -s --max-time 20 https://bilko.run/api/blog)"
+# Retry through a boot-time network race (see PRD: the 2026-09-11 00:02 PT
+# run fired before the network was up, curl returned a non-JSON-array body,
+# and `jq -r '[.[].published_at] | max'` aborted the whole script under
+# set -euo pipefail — before write_heartbeat ever ran). The fetch is now
+# non-fatal per attempt: validate the body's TYPE with `jq -e` (status
+# checked, not indexed blind) before ever touching .published_at.
+BLOG_JSON=""
+FETCH_OK=0
+for attempt in 1 2 3; do
+  if candidate="$(curl -s --max-time 20 https://bilko.run/api/blog)" \
+    && echo "$candidate" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+    BLOG_JSON="$candidate"
+    FETCH_OK=1
+    break
+  fi
+  echo "[blog-cadence-watchdog] fetch attempt $attempt/3 of /api/blog failed or returned a non-array body — retrying" >&2
+  if [[ "$attempt" -lt 3 ]]; then
+    sleep 10
+  fi
+done
+
+if [[ "$FETCH_OK" -ne 1 ]]; then
+  echo "[blog-cadence-watchdog] FATAL: could not read published_at from https://bilko.run/api/blog" >&2
+  write_heartbeat "error: could not read published_at from /api/blog"
+  exit 1
+fi
+
 NEWEST_PUBLISHED_AT="$(echo "$BLOG_JSON" | jq -r '[.[].published_at] | max')"
 if [[ -z "$NEWEST_PUBLISHED_AT" || "$NEWEST_PUBLISHED_AT" == "null" ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not read published_at from https://bilko.run/api/blog" >&2

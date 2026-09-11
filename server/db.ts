@@ -278,6 +278,33 @@ const MIGRATIONS = [
     created_at    INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_app_errors_app_created ON app_errors (app, created_at DESC)`,
+  // Slowly-changing dimension, not an event stream: one row per install_id,
+  // upserted on every app start. Keyed like usage_daily rather than logged like
+  // funnel_events so "how many distinct installs ran version X" is a GROUP BY,
+  // not a de-dup over an append-only table.
+  `CREATE TABLE IF NOT EXISTS app_installs (
+    install_id       TEXT PRIMARY KEY,
+    app              TEXT NOT NULL,
+    app_version      TEXT,
+    platform         TEXT,
+    os_release       TEXT,
+    arch             TEXT,
+    cpu_count        INTEGER,
+    total_mem_mb     INTEGER,
+    node_version     TEXT,
+    electron_version TEXT,
+    install_channel  TEXT,
+    locale           TEXT,
+    timezone         TEXT,
+    identify_email   TEXT,
+    first_seen_at    INTEGER NOT NULL,
+    last_seen_at     INTEGER NOT NULL,
+    seen_count       INTEGER NOT NULL DEFAULT 1
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_app_installs_app_last_seen ON app_installs (app, last_seen_at DESC)`,
+  // Version rollups ("did the release I just shipped make things worse") scan
+  // app_errors by app+version over a time window; without this they table-scan.
+  `CREATE INDEX IF NOT EXISTS idx_app_errors_app_version_created ON app_errors (app, version, created_at DESC)`,
   `CREATE TABLE IF NOT EXISTS app_manifests (
     slug             TEXT PRIMARY KEY,
     schema_version   INTEGER NOT NULL,

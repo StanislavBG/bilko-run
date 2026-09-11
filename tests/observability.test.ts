@@ -41,6 +41,7 @@ beforeEach(async () => {
   await dbRun('DELETE FROM cost_alerts');
   await dbRun('DELETE FROM api_egress_daily');
   await dbRun('DELETE FROM static_asset_daily');
+  await dbRun('DELETE FROM app_installs');
   delete process.env.BILKO_LATEST_HOST_KIT;
   // Reset to default: reject
   mockAdmin.mockImplementation(async (_req: any, reply: any) => {
@@ -335,5 +336,78 @@ describe('GET /api/admin/egress — bandwidth visible without manifests', () => 
     const body = JSON.parse(res.body);
     expect(body.earliestDate).toBe('2020-01-01');
     expect(body.rows).toEqual([]); // nothing in the 1-day window, but metering clearly has run
+  });
+});
+
+describe('Session Manager panel — /api/admin/observability/installs', () => {
+  const now = Math.floor(Date.now() / 1000);
+
+  async function seedInstall(id: string, over: Record<string, unknown> = {}) {
+    const r = {
+      app: 'session-manager', app_version: '0.81.0', platform: 'linux', arch: 'x64',
+      first_seen_at: now - 60 * 86_400, last_seen_at: now, ...over,
+    };
+    await dbRun(
+      `INSERT INTO app_installs (install_id, app, app_version, platform, arch, first_seen_at, last_seen_at, seen_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      id, r.app, r.app_version, r.platform, r.arch, r.first_seen_at, r.last_seen_at,
+    );
+  }
+
+  it('requires admin', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/admin/observability/installs' });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('rolls up total / active / new installs and breakdowns', async () => {
+    asAdmin();
+    await seedInstall('a');
+    await seedInstall('b', { platform: 'darwin', arch: 'arm64', app_version: '0.82.0' });
+    await seedInstall('c', { last_seen_at: now - 20 * 86_400 });          // active30, not active7
+    await seedInstall('d', { first_seen_at: now - 2 * 86_400 });          // new in last 7d
+    await seedInstall('other', { app: 'not-session-manager' });           // must be excluded
+
+    const res = await app.inject({ method: 'GET', url: '/api/admin/observability/installs' });
+    const body = JSON.parse(res.body);
+    expect(body.app).toBe('session-manager');
+    expect(body.installs.total).toBe(4);
+    expect(body.installs.active7).toBe(3);
+    expect(body.installs.active30).toBe(4);
+    expect(body.installs.new7).toBe(1);
+    expect(body.installs.byPlatform.find((p: any) => p.platform === 'linux').n).toBe(3);
+    expect(body.installs.byArch.find((a: any) => a.arch === 'arm64').n).toBe(1);
+    expect(body.installs.byVersion.find((v: any) => v.app_version === '0.82.0').installs).toBe(1);
+  });
+
+  it('groups errors by version and returns top signatures with counts', async () => {
+    asAdmin();
+    const ins = (v: string, msg: string, vis: string) => dbRun(
+      `INSERT INTO app_errors (app, version, name, msg, visitor_id, created_at)
+       VALUES ('session-manager', ?, 'TypeError', ?, ?, ?)`,
+      v, msg, vis, now,
+    );
+    await ins('0.82.0', 'boom', 'i1');
+    await ins('0.82.0', 'boom', 'i2');
+    await ins('0.82.0', 'other', 'i1');
+    await ins('0.81.0', 'boom', 'i3');
+
+    const res = await app.inject({ method: 'GET', url: '/api/admin/observability/installs' });
+    const body = JSON.parse(res.body);
+
+    const bad = body.errorsByVersion.find((e: any) => e.version === '0.82.0');
+    expect(bad.errors).toBe(3);
+    expect(bad.visitors).toBe(2);
+
+    expect(body.topSignatures[0].msg).toBe('boom');
+    expect(body.topSignatures[0].n).toBe(3);
+    expect(body.topSignatures[0].visitors).toBe(3);
+  });
+
+  it('the main observability payload advertises desktop apps', async () => {
+    asAdmin();
+    await seedInstall('a');
+    const res = await app.inject({ method: 'GET', url: '/api/admin/observability' });
+    const body = JSON.parse(res.body);
+    expect(body.desktopApps).toEqual([{ app: 'session-manager', installs: 1, active7: 1 }]);
   });
 });

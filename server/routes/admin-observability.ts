@@ -53,7 +53,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     await safeQuery(() => flushEgress(), undefined);
     const egressSinceDate = dayKey(Date.now() - 86_400_000);
 
-    const [manifests, traffic, bytesOut, errors, warns, synthSummary, latestErrors, alerts] = await Promise.all([
+    const [manifests, traffic, bytesOut, errors, warns, synthSummary, latestErrors, alerts, desktopApps] = await Promise.all([
       safeQuery(() => dbAll<{
         slug: string; app_version: string; git_sha: string;
         host_kit_version: string; built_at: string; bundle_size_gz: number;
@@ -117,6 +117,17 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       safeQuery(() => dbAll<{ alert_kind: string; app_slug: string | null; details_json: string }>(
         `SELECT alert_kind, app_slug, details_json FROM cost_alerts WHERE resolved_at IS NULL`,
       ), []),
+
+      // Desktop/phone-home apps that report into app_installs. They have no
+      // manifest so they can never appear in `rows`; this teaser exists so the
+      // dashboard can link out to /api/admin/observability/installs?app=<app>
+      // without the panel being invisible until someone knows to ask for it.
+      safeQuery(() => dbAll<{ app: string; installs: number; active7: number }>(
+        `SELECT app, COUNT(*) AS installs,
+                SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) AS active7
+           FROM app_installs GROUP BY app ORDER BY installs DESC`,
+        since - 6 * 86_400,
+      ), []),
     ]);
 
     const latestKit = process.env.BILKO_LATEST_HOST_KIT ?? null;
@@ -166,7 +177,109 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       };
     });
 
-    return { rows, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
+    return { rows, desktopApps, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
+  });
+
+  // Desktop-app panel: installs are a slowly-changing dimension (app_installs),
+  // not an event stream, so the rollups here are GROUP BYs over one row per
+  // machine. Separate route from the per-app observability rollup above because
+  // that one is keyed by published static-app slug — a desktop app has no
+  // manifest, no synthetic run and no egress, and would be an all-null row there.
+  //
+  // `app` defaults to session-manager but is a parameter: any phone-home client
+  // posting to /api/telemetry/install with its own `app` gets the same panel.
+  app.get('/api/admin/observability/installs', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+
+    const q = req.query as { app?: string; days?: string; limit?: string };
+    const appName = (q.app || 'session-manager').slice(0, 60);
+    const days = Math.min(Math.max(parseInt(q.days || '30', 10) || 30, 1), 365);
+    const limit = Math.min(Math.max(parseInt(q.limit || '20', 10) || 20, 1), 100);
+
+    const now = Math.floor(Date.now() / 1000);
+    const since7 = now - 7 * 86_400;
+    const since30 = now - 30 * 86_400;
+    const sinceWindow = now - days * 86_400;
+
+    const [totals, byPlatform, byArch, byVersion, errorsByVersion, topSignatures, logLevels] = await Promise.all([
+      safeQuery(() => dbGet<{
+        total: number; active7: number; active30: number; new7: number;
+      }>(
+        `SELECT COUNT(*) AS total,
+                SUM(CASE WHEN last_seen_at  >= ? THEN 1 ELSE 0 END) AS active7,
+                SUM(CASE WHEN last_seen_at  >= ? THEN 1 ELSE 0 END) AS active30,
+                SUM(CASE WHEN first_seen_at >= ? THEN 1 ELSE 0 END) AS new7
+           FROM app_installs WHERE app = ?`,
+        since7, since30, since7, appName,
+      ), undefined),
+
+      safeQuery(() => dbAll<{ platform: string | null; n: number }>(
+        `SELECT platform, COUNT(*) AS n FROM app_installs
+          WHERE app = ? GROUP BY platform ORDER BY n DESC`,
+        appName,
+      ), []),
+
+      safeQuery(() => dbAll<{ arch: string | null; n: number }>(
+        `SELECT arch, COUNT(*) AS n FROM app_installs
+          WHERE app = ? GROUP BY arch ORDER BY n DESC`,
+        appName,
+      ), []),
+
+      safeQuery(() => dbAll<{ app_version: string | null; installs: number; active7: number }>(
+        `SELECT app_version, COUNT(*) AS installs,
+                SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) AS active7
+           FROM app_installs WHERE app = ?
+          GROUP BY app_version ORDER BY installs DESC`,
+        since7, appName,
+      ), []),
+
+      // The release-regression query: errors per version, and how many distinct
+      // machines they came from (10 000 errors from one looping install is a
+      // very different signal from 10 errors across 10 installs).
+      safeQuery(() => dbAll<{ version: string | null; errors: number; visitors: number }>(
+        `SELECT version, COUNT(*) AS errors, COUNT(DISTINCT visitor_id) AS visitors
+           FROM app_errors WHERE app = ? AND created_at >= ?
+          GROUP BY version ORDER BY errors DESC`,
+        appName, sinceWindow,
+      ), []),
+
+      // Top-N signatures with counts, rather than the single latest `msg`
+      // sample the per-app rollup above exposes.
+      safeQuery(() => dbAll<{
+        name: string | null; msg: string; n: number; visitors: number; last_seen: number;
+      }>(
+        `SELECT name, msg, COUNT(*) AS n, COUNT(DISTINCT visitor_id) AS visitors,
+                MAX(created_at) AS last_seen
+           FROM app_errors WHERE app = ? AND created_at >= ?
+          GROUP BY name, msg ORDER BY n DESC LIMIT ?`,
+        appName, sinceWindow, limit,
+      ), []),
+
+      safeQuery(() => dbAll<{ level: string; n: number }>(
+        `SELECT level, COUNT(*) AS n FROM app_logs
+          WHERE app = ? AND created_at >= ? GROUP BY level`,
+        appName, sinceWindow,
+      ), []),
+    ]);
+
+    return {
+      app: appName,
+      days,
+      installs: {
+        total:    totals?.total    ?? 0,
+        active7:  totals?.active7  ?? 0,
+        active30: totals?.active30 ?? 0,
+        new7:     totals?.new7     ?? 0,
+        byPlatform,
+        byArch,
+        byVersion,
+      },
+      errorsByVersion,
+      topSignatures,
+      logLevels,
+      generatedAt: now,
+    };
   });
 
   // Where the bandwidth actually goes. Separate from the per-app rollup above

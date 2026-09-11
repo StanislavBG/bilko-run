@@ -61,9 +61,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       errorsDaily,
     ] = await Promise.all([
       // ---- installs -------------------------------------------------------
-      // app_installs is populated by POST /api/telemetry/install. Until that
-      // ships, every installs.* query falls back to zeros rather than 500ing —
-      // the dashboard's empty state is a first-class view.
+      // app_installs is the upsert written by POST /api/telemetry/install,
+      // keyed on install_id — which is the same value every event/log/error
+      // beacon sends as visitor_id. safeQuery still wraps these so a migration
+      // that has not run yet yields zeros rather than a 500; the dashboard's
+      // empty state is a first-class view.
       safeQuery(() => dbGet<{ total: number; active7: number; active30: number; new7: number }>(
         `SELECT COUNT(*) AS total,
                 SUM(CASE WHEN last_seen_at  > ? THEN 1 ELSE 0 END) AS active7,
@@ -160,14 +162,23 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
         APP, since,
       ), []),
 
-      // Platform is not a column on app_errors; approximate it from the UA
-      // string the beacon already sends, picking the most common per signature.
-      safeQuery(() => dbAll<{ signature: string; ua: string | null; n: number }>(
-        `SELECT COALESCE(name, 'Error') || '|' || SUBSTR(COALESCE(stack, ''), 1, 80) AS signature,
-                ua, COUNT(*) AS n
-         FROM app_errors
-         WHERE app = ? AND created_at > ?
-         GROUP BY signature, ua`,
+      // Real platform, not a UA guess: every beacon stamps platform into
+      // context_json (PRD 1140), and app_errors.visitor_id IS
+      // app_installs.install_id, so the join backfills rows written before the
+      // stamp existed. UA sniffing is the last resort.
+      safeQuery(() => dbAll<{ signature: string; platform: string | null; n: number }>(
+        `SELECT COALESCE(e.name, 'Error') || '|' || SUBSTR(COALESCE(e.stack, ''), 1, 80) AS signature,
+                COALESCE(
+                  json_extract(e.context_json, '$.platform'),
+                  i.platform,
+                  e.ua
+                ) AS platform,
+                COUNT(*) AS n
+         FROM app_errors e
+         LEFT JOIN app_installs i
+                ON i.install_id = e.visitor_id AND i.app = e.app
+         WHERE e.app = ? AND e.created_at > ?
+         GROUP BY signature, platform`,
         APP, since,
       ), []),
 
@@ -210,7 +221,7 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
 
     const topPlatformBySig = new Map<string, { platform: string; n: number }>();
     for (const row of issuePlatforms) {
-      const platform = uaPlatform(row.ua);
+      const platform = normalizePlatform(row.platform);
       const best = topPlatformBySig.get(row.signature);
       if (!best || row.n > best.n) topPlatformBySig.set(row.signature, { platform, n: row.n });
     }
@@ -282,10 +293,13 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
   });
 }
 
-function uaPlatform(ua: string | null): string {
-  if (!ua) return 'unknown';
-  if (/Windows/i.test(ua)) return 'win32';
-  if (/Mac OS X|Macintosh/i.test(ua)) return 'darwin';
-  if (/Linux|X11/i.test(ua)) return 'linux';
+// Accepts either a real process.platform value (the common case) or a UA
+// string from a row that predates the platform stamp.
+function normalizePlatform(raw: string | null): string {
+  if (!raw) return 'unknown';
+  if (raw === 'linux' || raw === 'darwin' || raw === 'win32') return raw;
+  if (/Windows/i.test(raw)) return 'win32';
+  if (/Mac OS X|Macintosh/i.test(raw)) return 'darwin';
+  if (/Linux|X11/i.test(raw)) return 'linux';
   return 'unknown';
 }

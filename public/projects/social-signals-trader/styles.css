@@ -1189,6 +1189,7 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
 /* --- outcome-stats.jsx — "How our exits actually end" ------------------ */
 .outcome-pos { color: var(--pos); }
 .outcome-neg { color: var(--neg); }
+.outcome-pending { color: var(--warn); }
 .outcome-overall {
   display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px;
   font-size: 12.5px; font-family: var(--mono);

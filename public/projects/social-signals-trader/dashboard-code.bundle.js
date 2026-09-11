@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-09-11T03:45:02Z",
+    "generatedAt": "2026-09-11T04:45:02Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-09-11T03:45:02Z",
+  "generatedAt": "2026-09-11T04:45:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -3752,6 +3752,13 @@ window.FEEDBACK_THREADS = {
       long: "Splits closed-trade outcomes by which side of the market the position was betting against — puts (bearish-neutral) vs calls (bullish-neutral) — so a rules change to one side's momentum gate can be checked against that side's own realized track record instead of the whole book's.",
       example: "Put spreads might show a 70% win rate while call spreads show 40% over the same window — that split is invisible in an all-trades total.",
       source: "src/social_signals_trader/outcome_stats.py:_side"
+    },
+    outcome_pending_closes: {
+      label: "Pending closes",
+      short: "Closes submitted to the broker but not yet confirmed filled — not counted as closed trades above.",
+      long: "A close order can rest unfilled for a while (re-pegged on later ticks) before the broker actually fills it. Until that fill is confirmed, the position is still open at the broker, so it is deliberately excluded from the closed-trade count and realized P&L above — counting it early would report a loss (or win) that may still change once the real fill lands.",
+      example: "2 pending closes means 2 positions have a close order working at the broker right now, neither yet reflected in the 'closed' totals.",
+      source: "src/social_signals_trader/outcome_stats.py:_pending_closes_count"
     },
     outcome_thin_bucket: {
       label: "Thin sample",
@@ -12307,14 +12314,33 @@ function BreakdownTable({
     className: pnlClass(v.realized_pnl)
   }, money(v.realized_pnl)), /*#__PURE__*/React.createElement("td", null, pct(v.avg_pct_captured)))))));
 }
+function PendingClosesNote({
+  n
+}) {
+  if (!n) return null;
+  return /*#__PURE__*/React.createElement("span", {
+    className: "outcome-pending"
+  }, n, " pending ", n === 1 ? "close" : "closes", " (working at broker)", /*#__PURE__*/React.createElement(window.Help, {
+    term: "outcome_pending_closes"
+  }));
+}
 function OutcomeStatsCard() {
   var stats = window.OUTCOME_STATS;
   var internals = window.OptionsSummaryInternals;
   var Section = internals && internals.Section;
   if (!Section) return null;
-  var body = !stats || !stats.n_closed ? /*#__PURE__*/React.createElement("p", {
+
+  // The pending-closes count must render even with zero CONFIRMED closes —
+  // that is exactly the state a resting, unfilled close order produces
+  // (PRD 4056), and it is the one case an empty-state message would
+  // otherwise hide it in.
+  var body = !stats || !stats.n_closed ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
-  }, "No closed spreads yet.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+  }, "No closed spreads yet."), stats && /*#__PURE__*/React.createElement("p", {
+    className: "outcome-overall"
+  }, /*#__PURE__*/React.createElement(PendingClosesNote, {
+    n: stats.n_pending_closes
+  }))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "outcome-overall"
   }, /*#__PURE__*/React.createElement("span", null, stats.n_closed, " closed", /*#__PURE__*/React.createElement(window.Help, {
     term: "outcome_n_closed"
@@ -12324,7 +12350,9 @@ function OutcomeStatsCard() {
     term: "outcome_win_rate"
   })), /*#__PURE__*/React.createElement("span", null, pct(stats.overall.avg_credit_capture), " avg credit capture", /*#__PURE__*/React.createElement(window.Help, {
     term: "outcome_credit_capture"
-  }))), /*#__PURE__*/React.createElement(ExitReasonBars, {
+  })), /*#__PURE__*/React.createElement(PendingClosesNote, {
+    n: stats.n_pending_closes
+  })), /*#__PURE__*/React.createElement(ExitReasonBars, {
     byExitReason: stats.by_exit_reason
   }), /*#__PURE__*/React.createElement(BreakdownTable, {
     title: "By DTE bucket at entry",

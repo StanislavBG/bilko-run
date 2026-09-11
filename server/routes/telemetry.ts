@@ -30,7 +30,102 @@ function bumpAndCheck(key: string, limit: number): boolean {
 function ipKey(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
   const fwd = req.headers['x-forwarded-for'];
   const raw = Array.isArray(fwd) ? fwd[0] : (fwd ?? req.ip ?? '');
-  return `tel:${raw.split(',')[0].trim()}`;
+  const tag = beaconTag(req);
+  return `tel:${tag}:${raw.split(',')[0].trim()}`;
+}
+
+// --- Abuse controls that do not know who the caller is ---------------------
+// These beacons are deliberately unauthenticated: a fresh install on a stranger's
+// machine must be able to POST successfully the first time it runs, with nothing
+// configured. So every control below is identity-free, and every one of them
+// DROPS SILENTLY WITH A 200 rather than a 4xx — a client that treats 4xx as
+// "the contract is broken, stop reporting" must not be permanently disabled by
+// routine throttling. Only the per-IP limiter (which predates this) answers 429,
+// which well-behaved clients back off from rather than disable on.
+
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+
+// Per-install limits. A stable anonymous install UUID (`visitor_id`) is the only
+// identity we have, and it catches what per-IP misses in both directions: one
+// looping install behind CGNAT shares an IP with thousands of innocents, and an
+// office of five real installs shares one IP with each other.
+const VISITOR_HOURLY_LIMIT = 200;
+const VISITOR_DAILY_LIMIT = 2_000;
+
+// Per-app ceiling, so a single pathological release cannot fill the DB overnight
+// even if it rotates install UUIDs and IPs. Counted in records, not requests.
+const APP_DAILY_LIMIT = 250_000;
+
+// `app` is free-form (any sibling may ingest under its own slug), so there is no
+// allowlist to maintain — but a value that is not slug-shaped is not one of ours,
+// and is rejected before the record reaches the DB.
+const APP_SLUG_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
+
+type Bucket = { count: number; windowStart: number };
+
+function bumpWindow(map: Map<string, Bucket>, key: string, windowMs: number, limit: number, n: number): boolean {
+  const now = Date.now();
+  const e = map.get(key);
+  if (!e || now - e.windowStart > windowMs) {
+    map.set(key, { count: n, windowStart: now });
+    if (map.size > 20_000) {
+      for (const [k, v] of map) if (now - v.windowStart > windowMs) map.delete(k);
+    }
+    return n <= limit;
+  }
+  e.count += n;
+  return e.count <= limit;
+}
+
+const _visitorHour = new Map<string, Bucket>();
+const _visitorDay = new Map<string, Bucket>();
+const _appDay = new Map<string, Bucket>();
+
+// Records with no visitor_id are exempt here (browser SDK traffic often has none
+// on a first hit); they are still covered by the per-IP limiter and the per-app
+// ceiling.
+function allowVisitor(visitorId: string): boolean {
+  if (!visitorId) return true;
+  const hourOk = bumpWindow(_visitorHour, visitorId, HOUR_MS, VISITOR_HOURLY_LIMIT, 1);
+  const dayOk = bumpWindow(_visitorDay, visitorId, DAY_MS, VISITOR_DAILY_LIMIT, 1);
+  return hourOk && dayOk;
+}
+
+function allowApp(appName: string): boolean {
+  return bumpWindow(_appDay, appName, DAY_MS, APP_DAILY_LIMIT, 1);
+}
+
+// Shape + quota gate applied to every record of every batch, before any INSERT.
+// Returns the records that survive; everything else is dropped without a trace
+// of it reaching the caller.
+function admit(batch: unknown[]): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (const r of batch) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+    const rec = r as Record<string, unknown>;
+    const appName = typeof rec.app === 'string' ? rec.app : '';
+    if (!APP_SLUG_RE.test(appName)) continue;
+    if (!allowApp(appName)) continue;
+    if (!allowVisitor(typeof rec.visitor_id === 'string' ? rec.visitor_id.slice(0, 80) : '')) continue;
+    out.push(rec);
+  }
+  return out;
+}
+
+// A build-constant tag compiled into a client package (e.g.
+// `X-SM-Beacon: session-manager/1.2.3`). It ships inside a public npm package,
+// so it is NOT a secret and nothing here treats it as authentication. Its only
+// job is to give recognised client traffic its own per-IP bucket, so a scanner
+// hammering a public POST route cannot exhaust the budget of a real install that
+// happens to share an egress IP with it. Untagged traffic is never dropped for
+// being untagged — the browser SDK does not send it.
+const BEACON_RE = /^[a-z0-9][a-z0-9._-]{0,39}\/[0-9][0-9a-z.\-+]{0,19}$/i;
+
+function beaconTag(req: { headers: Record<string, string | string[] | undefined> }): string {
+  const h = req.headers['x-sm-beacon'];
+  const raw = Array.isArray(h) ? h[0] : (h ?? '');
+  return BEACON_RE.test(raw) ? raw.split('/')[0].toLowerCase() : '';
 }
 
 function clamp(s: unknown, n: number): string {
@@ -94,8 +189,8 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
   app.post('/api/telemetry/event', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 1200)) return reply.code(429).send({ error: 'rate_limited' });
     const body = req.body as { batch?: unknown[] } | null;
-    const batch = Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : [];
-    for (const e of batch as Record<string, unknown>[]) {
+    const batch = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
+    for (const e of batch) {
       await dbRun(
         `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -113,8 +208,8 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
   app.post('/api/telemetry/log', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 600)) return reply.code(429).send({ error: 'rate_limited' });
     const body = req.body as { batch?: unknown[] } | null;
-    const batch = Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : [];
-    for (const l of batch as Record<string, unknown>[]) {
+    const batch = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
+    for (const l of batch) {
       if (!ALLOWED_LEVELS.has(String(l.level))) continue; // drop invalid levels silently
       await dbRun(
         `INSERT INTO app_logs (app, version, level, msg, visitor_id, session_id, fields_json, created_at)
@@ -136,8 +231,8 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
   app.post('/api/telemetry/error', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 300)) return reply.code(429).send({ error: 'rate_limited' });
     const body = req.body as { batch?: unknown[] } | null;
-    const batch = Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : [];
-    for (const e of batch as Record<string, unknown>[]) {
+    const batch = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
+    for (const e of batch) {
       await dbRun(
         `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -166,15 +261,23 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
     if (!bumpAndCheck(ipKey(req as any), 60)) return reply.code(429).send({ error: 'rate_limited' });
     const b = (req.body ?? {}) as Record<string, unknown>;
     const installId = clamp(b.install_id, 80);
+    // A missing install_id is a genuinely malformed body, not throttling — the
+    // one case on this route that still earns a 4xx.
     if (!installId) return reply.code(400).send({ error: 'install_id_required' });
+    const appName = clamp(b.app, 60);
+    if (!APP_SLUG_RE.test(appName)) return { ok: true };
+    // Silent drops from here down: an upsert that is throttled must look
+    // identical to one that landed, or the client disables itself.
+    if (!allowApp(appName)) return { ok: true };
+    if (!bumpWindow(_visitorDay, `install:${installId}`, DAY_MS, VISITOR_DAILY_LIMIT, 1)) return { ok: true };
     const now = Math.floor(Date.now() / 1000);
 
     await dbRun(
       `INSERT INTO app_installs (
          install_id, app, app_version, platform, os_release, arch, cpu_count,
          total_mem_mb, node_version, electron_version, install_channel, locale,
-         timezone, identify_email, first_seen_at, last_seen_at, seen_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+         timezone, first_seen_at, last_seen_at, seen_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON CONFLICT(install_id) DO UPDATE SET
          app              = excluded.app,
          app_version      = excluded.app_version,
@@ -188,12 +291,10 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
          install_channel  = excluded.install_channel,
          locale           = excluded.locale,
          timezone         = excluded.timezone,
-         -- an absent identify_email must not wipe a previously opted-in one
-         identify_email   = COALESCE(excluded.identify_email, app_installs.identify_email),
          last_seen_at     = excluded.last_seen_at,
          seen_count       = app_installs.seen_count + 1`,
       installId,
-      clamp(b.app, 60),
+      appName,
       clamp(b.app_version, 20),
       clamp(b.platform, 20),
       clamp(b.os_release, 80),
@@ -205,7 +306,6 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
       clamp(b.install_channel, 20),
       clamp(b.locale, 20),
       clamp(b.timezone, 60),
-      typeof b.identify_email === 'string' && b.identify_email ? clamp(b.identify_email, 160) : null,
       now,
       now,
     );

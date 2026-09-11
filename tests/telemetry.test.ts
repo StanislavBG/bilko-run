@@ -116,12 +116,6 @@ describe('Telemetry ingest — /api/telemetry/install', () => {
     expect(before).toHaveLength(1);
   });
 
-  it('an absent identify_email does not wipe a previously opted-in one', async () => {
-    await inject('POST', '/api/telemetry/install', { ...profile, identify_email: 'a@b.com' }, '10.1.0.3');
-    await inject('POST', '/api/telemetry/install', profile, '10.1.0.3');
-    const rows = await dbAll<{ identify_email: string }>('SELECT identify_email FROM app_installs');
-    expect(rows[0].identify_email).toBe('a@b.com');
-  });
 
   it('rejects a post with no install_id', async () => {
     const res = await inject('POST', '/api/telemetry/install', { app: 'session-manager' }, '10.1.0.4');
@@ -174,5 +168,94 @@ describe('Telemetry retention — pruneTelemetry()', () => {
     const errs = await dbAll<{ msg: string }>(`SELECT msg FROM app_errors WHERE app = 'old-app'`);
     expect(logs.map(l => l.msg)).toEqual(['fresh']);
     expect(errs.map(e => e.msg)).toEqual(['fresh']);
+  });
+});
+
+describe('Telemetry abuse controls — identity-free, silent', () => {
+  it('a record whose `app` is not slug-shaped is dropped before the INSERT', async () => {
+    const res = await inject('POST', '/api/telemetry/log', {
+      batch: [
+        { app: 'bad app/../etc', version: '1', level: 'info', msg: 'junk' },
+        { app: 'good-app', version: '1', level: 'info', msg: 'legit' },
+      ],
+    }, '10.2.0.1');
+    expect(res.statusCode).toBe(200);
+    const rows = await dbAll<{ app: string }>('SELECT app FROM app_logs');
+    expect(rows.map(r => r.app)).toEqual(['good-app']);
+  });
+
+  it('a record with no `app` at all is dropped', async () => {
+    await inject('POST', '/api/telemetry/error', { batch: [{ msg: 'anonymous' }] }, '10.2.0.2');
+    expect(await dbAll('SELECT * FROM app_errors')).toHaveLength(0);
+  });
+
+  it('per-install hourly limit drops silently with a 200, never a 4xx', async () => {
+    const visitor = `install-${Math.random()}`;
+    let lastStatus = 0;
+    // 5 requests × 50 records = 250 > the 200/hour per-install cap.
+    for (let i = 0; i < 5; i++) {
+      const res = await inject('POST', '/api/telemetry/error', {
+        batch: Array.from({ length: 50 }, () => ({ app: 'quota-app', msg: 'burst', visitor_id: visitor })),
+      }, `10.2.1.${i}`); // different IPs each time: only the per-install cap can bite
+      lastStatus = res.statusCode;
+    }
+    expect(lastStatus).toBe(200); // throttling must never look like a broken contract
+    const rows = await dbAll<{ n: number }>(`SELECT COUNT(*) AS n FROM app_errors WHERE app = 'quota-app'`);
+    expect(rows[0].n).toBe(200); // capped, not 250
+  });
+
+  it('records with no visitor_id are not caught by the per-install limiter', async () => {
+    for (let i = 0; i < 5; i++) {
+      await inject('POST', '/api/telemetry/log', {
+        batch: Array.from({ length: 50 }, () => ({ app: 'anon-app', level: 'info', msg: 'x' })),
+      }, `10.2.2.${i}`);
+    }
+    const rows = await dbAll<{ n: number }>(`SELECT COUNT(*) AS n FROM app_logs WHERE app = 'anon-app'`);
+    expect(rows[0].n).toBe(250);
+  });
+
+  it('the beacon tag gives recognised clients their own per-IP bucket', async () => {
+    // Same IP: untagged traffic burns the shared bucket to 429, tagged traffic
+    // on that same IP is unaffected because it keys a different bucket.
+    let untaggedSaw429 = false;
+    for (let i = 0; i < 320; i++) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/telemetry/error',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.2.3.9' },
+        body: JSON.stringify({ batch: [] }),
+      });
+      if (res.statusCode === 429) { untaggedSaw429 = true; break; }
+    }
+    expect(untaggedSaw429).toBe(true);
+
+    const tagged = await app.inject({
+      method: 'POST',
+      url: '/api/telemetry/error',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '10.2.3.9',
+        'x-sm-beacon': 'session-manager/0.81.0',
+      },
+      body: JSON.stringify({ batch: [{ app: 'session-manager', msg: 'still gets through' }] }),
+    });
+    expect(tagged.statusCode).toBe(200);
+    const rows = await dbAll<{ msg: string }>(`SELECT msg FROM app_errors WHERE app = 'session-manager'`);
+    expect(rows.map(r => r.msg)).toEqual(['still gets through']);
+  });
+
+  it('install: an unrecognised app slug is dropped silently with a 200', async () => {
+    const res = await inject('POST', '/api/telemetry/install', {
+      install_id: 'shape-test', app: 'not a slug!!',
+    }, '10.2.4.1');
+    expect(res.statusCode).toBe(200);
+    expect(await dbAll('SELECT * FROM app_installs')).toHaveLength(0);
+  });
+
+  it('app_installs has no column that could hold PII', async () => {
+    const cols = await dbAll<{ name: string }>(`SELECT name FROM pragma_table_info('app_installs')`);
+    const names = cols.map(c => c.name);
+    expect(names).not.toContain('identify_email');
+    expect(names.filter(n => /email|user|host|name$/i.test(n))).toEqual([]);
   });
 });

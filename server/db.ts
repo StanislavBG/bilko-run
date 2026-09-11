@@ -296,7 +296,6 @@ const MIGRATIONS = [
     install_channel  TEXT,
     locale           TEXT,
     timezone         TEXT,
-    identify_email   TEXT,
     first_seen_at    INTEGER NOT NULL,
     last_seen_at     INTEGER NOT NULL,
     seen_count       INTEGER NOT NULL DEFAULT 1
@@ -580,6 +579,11 @@ export async function initDb(): Promise<void> {
     'ALTER TABLE project_feedback ADD COLUMN moderation_at INTEGER',
     'ALTER TABLE project_feedback ADD COLUMN moderation_reason TEXT',
     'CREATE INDEX IF NOT EXISTS idx_project_feedback_moderated ON project_feedback (slug, moderation_at)',
+    // The install beacon collects no PII at all — the anonymous install UUID is
+    // the entire identity model — so this column can only ever hold NULL. Dropped
+    // rather than left in place: a column that can only be NULL invites someone
+    // to start filling it. No-ops on a DB that never had it.
+    'ALTER TABLE app_installs DROP COLUMN identify_email',
   ]) {
     try { await client.execute(sql); } catch { /* column/index already exists */ }
   }

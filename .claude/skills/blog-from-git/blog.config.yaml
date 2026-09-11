@@ -72,8 +72,11 @@ gates:                                  # a phase may not hand off until its gat
   3_research: structured notes per story unit; slot dates re-verified vs commit dates; push status known
   4_ground: every number traced to a queried source
   5_draft: one tone held within its word range; bot-tell blocklist clean; spine present
-  6_approve: EXPLICIT USER OK — never seed without it; peers/agents cannot approve
-  7_seed: tsc clean; db tests green; ledger row + rotation state updated; pushed to origin main ONLY;
+  6_approve: autonomous gate — autonomy.autonomous_publish is true AND the phase-4/5 quality
+    self-check (SKILL.md) passed; when autonomous_publish is false, this reverts to requiring an
+    EXPLICIT USER OK, and peers/agents still cannot approve on the owner's behalf
+  7_seed: tsc clean; db tests green; ledger row + rotation state updated in the SAME commit; commit
+    uses explicit pathspecs only (never `git add -A`/`.`/`-a`); pushed to origin main ONLY;
     live pickup verified at /api/blog after Render deploys
 
 seed_mechanics:
@@ -82,3 +85,18 @@ seed_mechanics:
   edits_to_deployed_posts: admin blog API only (server/routes/blog.ts) — the seed edit is ignored
   published_at: explicit ISO string, never new Date()
   push_remote: origin                  # StanislavBG/bilko-run main — NEVER content-grade
+
+autonomy:                               # OWNER'S CONTROL SURFACE — Bilko is an autonomous agent,
+                                         # not a human-supervised pipeline; this block is how the
+                                         # owner governs that, not an interactive OK.
+  autonomous_publish: true              # MASTER KILL SWITCH. false restores the human-gated
+                                         # phases-1-5-only behavior verbatim (draft, then wait for
+                                         # an explicit human OK before phase 6/7 ever run).
+  max_posts_per_run: 1                  # cap on posts a single run may seed, even in catch-up mode;
+                                         # remaining queued posts are left for subsequent runs
+  push_remote: origin                   # StanislavBG/bilko-run main — NEVER content-grade
+  push_branch: main
+  allowed_commit_paths:                 # the ONLY paths an autonomous seed commit may stage —
+                                         # explicit pathspecs only, never `git add -A`/`.`/`-a`
+    - server/db.ts
+    - .claude/skills/blog-from-git/blog-ledger.md

@@ -14,7 +14,7 @@ beforeAll(() => {
 });
 
 describe('blog-cadence-watchdog.sh', () => {
-  it('has a drafts-already-present guard that exits 0 without invoking claude -p', () => {
+  it('has a drafts-already-present guard that exits 0 without invoking claude -p ONLY in non-autonomous mode', () => {
     const guardMatch = script.match(
       /EXISTING_DRAFTS=\("\$DRAFTS_DIR"\/\*\.md\)[\s\S]*?exit 0\s*\nfi/
     );
@@ -22,18 +22,30 @@ describe('blog-cadence-watchdog.sh', () => {
     const guardBlock = guardMatch![0];
     expect(guardBlock).toMatch(/exit 0/);
     expect(guardBlock).not.toMatch(/claude -p/);
+    // the skip-exit path is gated behind autonomous_publish being false
+    expect(guardBlock).toMatch(/AUTONOMOUS_PUBLISH.*!=.*"true"/);
 
     // the guard must appear textually before the claude -p invocation
     const guardIndex = script.indexOf('EXISTING_DRAFTS=');
-    const claudeInvocationIndex = script.indexOf('timeout 2400 claude -p');
+    const claudeInvocationIndex = script.indexOf('claude -p "$PROMPT"');
     expect(guardIndex).toBeGreaterThan(-1);
     expect(claudeInvocationIndex).toBeGreaterThan(-1);
     expect(guardIndex).toBeLessThan(claudeInvocationIndex);
   });
 
+  it('consumes pending drafts (seeds instead of skipping) when autonomous_publish is true', () => {
+    expect(script).toMatch(/CONSUME_EXISTING_DRAFTS=1/);
+    expect(script).toMatch(/CONSUME_EXISTING_DRAFTS=0/);
+    // the consuming branch does NOT exit 0 — it falls through to invoke claude -p
+    const consumeIndex = script.indexOf('CONSUME_EXISTING_DRAFTS=1');
+    const claudeInvocationIndex = script.indexOf('claude -p "$PROMPT"');
+    expect(consumeIndex).toBeGreaterThan(-1);
+    expect(consumeIndex).toBeLessThan(claudeInvocationIndex);
+  });
+
   it('writes .watchdog-state before invoking claude -p, not after', () => {
     const stateWriteIndex = script.indexOf('> "$STATE_FILE"');
-    const claudeInvocationIndex = script.indexOf('timeout 2400 claude -p');
+    const claudeInvocationIndex = script.indexOf('timeout "$CLAUDE_TIMEOUT" claude -p');
     expect(stateWriteIndex).toBeGreaterThan(-1);
     expect(claudeInvocationIndex).toBeGreaterThan(-1);
     expect(stateWriteIndex).toBeLessThan(claudeInvocationIndex);
@@ -46,8 +58,54 @@ describe('blog-cadence-watchdog.sh', () => {
     expect(script).toMatch(/AUTHORED_AT="\$\(TZ=America\/Los_Angeles date -Iseconds\)"/);
   });
 
-  it('prohibits deleting pre-existing drafts', () => {
+  it('prohibits deleting a deferred draft, but allows deleting a draft that was actually seeded (autonomous consumption)', () => {
+    // non-autonomous prompt: still an unconditional prohibition
     expect(script.toLowerCase()).toMatch(/delete, move, or overwrite any pre-existing file/);
+    // autonomous prompt: a seeded draft's file IS deleted as part of its seed commit,
+    // but a deferred (over-the-cap) draft must be left untouched
+    expect(script).toMatch(/delete its file from \.claude\/skills\/blog-from-git\/drafts\//);
+    expect(script.toLowerCase()).toMatch(/never delete, move, or overwrite a draft you are not seeding/);
+  });
+
+  it('parses the autonomy.autonomous_publish kill switch and autonomy.max_posts_per_run with the same defensive grep pattern as target_gap_days, FATAL on parse failure', () => {
+    expect(script).toMatch(/AUTONOMOUS_PUBLISH="\$\(grep -m1 'autonomous_publish:' "\$CONFIG_FILE" \| grep -oP/);
+    expect(script).toMatch(/MAX_POSTS_PER_RUN="\$\(grep -m1 'max_posts_per_run:' "\$CONFIG_FILE" \| grep -oP/);
+    const guardIndex = script.indexOf('AUTONOMOUS_PUBLISH=');
+    const fatalBlock = script.slice(guardIndex, guardIndex + 500);
+    expect(fatalBlock).toMatch(/-z "\$AUTONOMOUS_PUBLISH" \|\| -z "\$MAX_POSTS_PER_RUN"/);
+    expect(fatalBlock).toMatch(/FATAL: could not parse autonomy settings/);
+    expect(fatalBlock).toMatch(/write_heartbeat "error: could not parse autonomy settings"/);
+    expect(fatalBlock).toMatch(/exit 1/);
+  });
+
+  it('runs the full pipeline (phases 1-7) when autonomous_publish is true, phases 1-5 only when false', () => {
+    expect(script).toMatch(/running PHASES 1-7/);
+    expect(script).toMatch(/run PHASES 1-5 ONLY/);
+    const autonomousBranch = script.slice(
+      script.indexOf('running PHASES 1-7') - 200,
+      script.indexOf('running PHASES 1-7') + 400
+    );
+    expect(autonomousBranch).toMatch(/7 Seed \(seed\.md\)/);
+  });
+
+  it('seeds using explicit git add pathspecs, and never a blanket add anywhere in the script', () => {
+    expect(script).toMatch(/git add server\/db\.ts \.claude\/skills\/blog-from-git\/blog-ledger\.md/);
+    expect(script).not.toMatch(/git add -A/);
+    expect(script).not.toMatch(/git add \./);
+    expect(script).not.toMatch(/git commit -a/);
+  });
+
+  it('asserts the configured push remote resolves to StanislavBG/bilko-run before any autonomous run proceeds', () => {
+    expect(script).toMatch(/git remote get-url "\$PUSH_REMOTE_NAME"/);
+    expect(script).toMatch(/StanislavBG\/bilko-run/);
+    expect(script).toMatch(/write_heartbeat "error: push remote does not resolve to StanislavBG\/bilko-run"/);
+  });
+
+  it('distinguishes a published outcome from a no-op and an error via a SEED_RESULT line', () => {
+    expect(script).toMatch(/SEED_RESULT: published=/);
+    expect(script).toMatch(/SEED_RESULT: noop/);
+    expect(script).toMatch(/SEED_RESULT: error/);
+    expect(script).toMatch(/SEED_LINE="\$\(echo "\$CLAUDE_OUTPUT" \| grep -o 'SEED_RESULT:\.\*' \| tail -1\)"/);
   });
 
   it('pins an explicit --model on every claude -p call', () => {

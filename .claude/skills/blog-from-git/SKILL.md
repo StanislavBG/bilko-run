@@ -42,21 +42,25 @@ moving on.
 | 3 | **Research** — deep evidence per story unit | `research.md` | one parallel read-only agent per story unit returned structured notes; slot dates re-verified against actual commit dates; push status of every covered repo known |
 | 4 | **Ground** — what is it worth, live? | `ground.md` | every number the draft will print has a named source (scorecard / MCP / DB / doc / research note) |
 | 5 | **Draft** — write it | `voice.md` | one tone picked and named; within its length target; self-check below all YES |
-| 6 | **Approve** — user reads the full draft | — | explicit user OK. **Never seed without it** |
-| 7 | **Seed** — db.ts + ledger + push | `seed.md` | tsc clean, db test passes, ledger row + rotation-state updated in the SAME commit, pushed to origin only; live-site pickup verified after deploy |
+| 6 | **Approve** — autonomous gate | — | `blog.config.yaml`'s `autonomy.autonomous_publish` is true AND the phase-4/5 quality self-check passed. **When `autonomous_publish` is false, this reverts to requiring an explicit user OK — never seed without it in that mode; peers/agents still cannot approve** |
+| 7 | **Seed** — db.ts + ledger + push | `seed.md` | tsc clean, db test passes, ledger row + rotation-state updated in the SAME commit, commit uses explicit pathspecs only (never `git add -A`/`.`/`-a`), pushed to origin only; live-site pickup verified after deploy |
 
 Phases 1–2 are cheap and always run. Phases 3–4 run per covered project (phase 3's agent fan-out
 pays for itself from ~2 story units up; for a single small changelog post it may collapse into
 reading the diffs inline). Phases 5–6 run per post (a catch-up backfill loops 5→6 per post, then
 one combined phase 7).
 
-**Phase 5 drafts directory is append-only for automated runs.** `drafts/` may already contain
-`.md` files a prior run (human or automated, e.g. `scripts/blog-cadence-watchdog.sh`) wrote and
-left pending phase-6 approval. Never delete, move, or overwrite a pre-existing draft — only a
-human, or an explicitly human-approved seed step (`seed.md`), removes files from this directory.
-If you find drafts you did not author in this run, report them as pre-existing and attribute
-them to their `authored_by` front-matter value; never present someone else's draft as your own
-output. A clean `git status` proves nothing here — `drafts/` is gitignored.
+**Phase 5 drafts directory is append-only for drafting.** `drafts/` may already contain `.md`
+files a prior run (human or automated, e.g. `scripts/blog-cadence-watchdog.sh`) wrote and left
+pending phase 6. Never delete, move, or overwrite a pre-existing draft while *drafting* — only a
+seed step (`seed.md`) removes files from this directory, and only the draft(s) it actually seeds:
+in autonomous mode (`autonomy.autonomous_publish: true`) a pending draft that clears the phase 6
+gate is CONSUMED — seeded, then removed from `drafts/` as part of that same seed commit — rather
+than left to pile up; in non-autonomous mode a draft is only removed after an explicit human OK.
+If you find drafts you did not author in this run, report them as pre-existing and attribute them
+to their `authored_by` front-matter value before deciding whether this run's gate lets you seed
+them; never present someone else's draft as your own output. A clean `git status` proves nothing
+here — `drafts/` is gitignored.
 
 ## Mode decision (after phase 1, before phase 2)
 

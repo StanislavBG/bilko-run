@@ -1,8 +1,11 @@
 # Sub-skill: seed (Part 3) — seed, verify, push, record
 
-**Outward-facing content: draft first, seed only on approval.** A blog post is published content.
-Show the user the full draft(s) and wait for an OK before editing `server/db.ts` / pushing — don't
-auto-publish. This gate applies before ANYTHING below runs.
+**Bilko is an autonomous agent, not a human-supervised publishing workflow.** The gate before
+seeding is `blog.config.yaml`'s `autonomy.autonomous_publish` (the owner's master kill switch) plus
+the phase-4/5 quality self-check (SKILL.md) having passed — not an interactive human OK. When
+`autonomous_publish` is `true`, proceed straight to seeding once that self-check is clean. When it
+is `false`, this reverts to the old gate verbatim: show the full draft(s) and wait for an explicit
+human OK before editing `server/db.ts` / pushing. This gate applies before ANYTHING below runs.
 
 ## Seeding mechanics
 

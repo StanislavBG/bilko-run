@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Daily watchdog for the bilko.run blog's declared 3-5 day cadence
 # (.claude/skills/blog-from-git/blog.config.yaml cadence.target_gap_days).
-# Nothing else enforces that cadence — /blog-from-git only ever runs when a
-# human types it — so before this script existed a publishing gap could grow
-# indefinitely and silently (see PRD: gap reached 36 days on 2026-08-29).
+# Nothing else enforces that cadence — before this script existed a
+# publishing gap could grow indefinitely and silently (see PRD: gap reached
+# 36 days on 2026-08-29, then 15 days again on 2026-09-11 because the
+# original version of this script hard-stopped at a human approval gate).
 #
 # TRIGGERS — this script is currently wired to run from TWO independent
 # schedulers on this machine (full detail, recommendation, and log contents:
@@ -20,24 +21,26 @@
 # watchdog.lock flock below serializes concurrent runs, and the same-day
 # .watchdog-state check makes a second run on one day idempotent.
 #
-# What this script does when the live gap blows the target:
-#   shells out to `claude -p` (model pinned, see shared/core.md's hard rule)
-#   to run ONLY phases 1-5 of the blog-from-git skill (Rotation, Scan,
-#   Research, Ground, Draft) and write draft markdown file(s) to
-#   .claude/skills/blog-from-git/drafts/. It STOPS there.
-#
-# HUMAN GATE — READ THIS: this script never seeds, never publishes, never
-# touches server/db.ts or blog-ledger.md, never commits, never pushes. Phase
-# 6 (Approve) and phase 7 (Seed) in .claude/skills/blog-from-git/SKILL.md
-# require an explicit human OK and stay entirely manual. To publish a draft
-# this watchdog produced:
-#   1. Read the draft(s) under .claude/skills/blog-from-git/drafts/
-#   2. If it reads right, tell Claude (interactively) to seed it — e.g.
-#      "seed the draft at .claude/skills/blog-from-git/drafts/<file>.md"
-#      so a human-driven session runs phase 6 (approve) then phase 7 (seed:
-#      db.ts + ledger + push), per seed.md.
-#   3. If it doesn't read right, edit the draft or delete it — nothing
-#      downstream depends on it until a human seeds it.
+# AUTONOMOUS FLOW — Bilko is an autonomous agent, not a human-supervised
+# publishing workflow. When the live gap blows the target, this script shells
+# out to `claude -p` (model pinned, see shared/core.md's hard rule) to run
+# the blog-from-git skill. How far it runs is controlled entirely by
+# .claude/skills/blog-from-git/blog.config.yaml's `autonomy.autonomous_publish`
+# — the OWNER'S CONTROL SURFACE and master kill switch:
+#   - autonomous_publish: true  (default) — runs the FULL pipeline through
+#     phase 7: draft, then seed (server/db.ts + blog-ledger.md, in the same
+#     commit), then push to origin main. Safety rails are mechanical, not a
+#     human in the loop: explicit commit pathspecs only, never a
+#     wildcard/blanket stage of the whole working tree, a `max_posts_per_run`
+#     cap even in catch-up mode, a remote-name assertion before pushing, and
+#     no push if tsc/db-tests fail.
+#   - autonomous_publish: false — restores the original human-gated
+#     behavior verbatim: only phases 1-5 (Rotation, Scan, Research, Ground,
+#     Draft) run, draft markdown file(s) land in
+#     .claude/skills/blog-from-git/drafts/, and the run stops there. Phase 6
+#     (Approve) and phase 7 (Seed) require an explicit human OK and stay
+#     entirely manual — the flow described in seed.md's non-autonomous path.
+# Flip that one line in blog.config.yaml to restore the gated behavior.
 #
 # Mirrors the cron-script conventions in
 # ~/Projects/social-signals-trader/scripts/analyst-tick.sh: lockfile in
@@ -93,6 +96,58 @@ if [[ -z "$UPPER_BOUND" || -z "$CATCHUP_TRIGGER" ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not parse cadence thresholds from $CONFIG_FILE" >&2
   write_heartbeat "error: could not parse cadence thresholds"
   exit 1
+fi
+
+# --- read the owner's autonomy control surface from the config file ---
+# autonomous_publish is the master kill switch (blog.config.yaml autonomy
+# block): true runs the full pipeline through phase 7 (seed + push); false
+# restores the original human-gated phases-1-5-only behavior verbatim.
+AUTONOMOUS_PUBLISH="$(grep -m1 'autonomous_publish:' "$CONFIG_FILE" | grep -oP 'autonomous_publish:\s*\K(true|false)')"
+MAX_POSTS_PER_RUN="$(grep -m1 'max_posts_per_run:' "$CONFIG_FILE" | grep -oP 'max_posts_per_run:\s*\K\d+')"
+if [[ -z "$AUTONOMOUS_PUBLISH" || -z "$MAX_POSTS_PER_RUN" ]]; then
+  echo "[blog-cadence-watchdog] FATAL: could not parse autonomy settings from $CONFIG_FILE" >&2
+  write_heartbeat "error: could not parse autonomy settings"
+  exit 1
+fi
+
+# --- autonomous mode pushes; refuse to even attempt it against the wrong remote ---
+# CLAUDE.md hard rule: never push Bilko to the content-grade remote. Assert the
+# configured push remote actually resolves to this repo before any claude -p
+# session gets a chance to seed or push anything.
+if [[ "$AUTONOMOUS_PUBLISH" == "true" ]]; then
+  PUSH_REMOTE_NAME="$(grep -m1 'push_remote:' "$CONFIG_FILE" | grep -oP 'push_remote:\s*\K\S+')"
+  if [[ -z "$PUSH_REMOTE_NAME" ]]; then
+    echo "[blog-cadence-watchdog] FATAL: could not parse push_remote from $CONFIG_FILE" >&2
+    write_heartbeat "error: could not parse push_remote"
+    exit 1
+  fi
+  REMOTE_URL="$(git remote get-url "$PUSH_REMOTE_NAME" 2>/dev/null || true)"
+  if [[ "$REMOTE_URL" != *"StanislavBG/bilko-run"* ]]; then
+    echo "[blog-cadence-watchdog] FATAL: remote '$PUSH_REMOTE_NAME' does not resolve to StanislavBG/bilko-run (got: '$REMOTE_URL') — refusing to run autonomous seed/push" >&2
+    write_heartbeat "error: push remote does not resolve to StanislavBG/bilko-run"
+    exit 1
+  fi
+
+  # --- load the mechanical rail from config, don't just leave it as prose ---
+  # autonomy.allowed_commit_paths in blog.config.yaml is documented as "the
+  # ONLY paths an autonomous seed commit may stage", but nothing previously
+  # read that key — the prompt below hard-codes the same two paths instead.
+  # Parse it here and cross-check it against the hard-coded pathspec so a
+  # future edit to one without the other fails loudly instead of silently
+  # doing nothing, and so ALLOWED_COMMIT_PATHS is available below to verify
+  # what the claude -p subprocess actually committed.
+  ALLOWED_COMMIT_PATHS=()
+  ALLOWED_PATHS_RAW="$(awk '/allowed_commit_paths:/{flag=1; next} flag && /^[[:space:]]*-[[:space:]]*/{print; next} flag{exit}' "$CONFIG_FILE")"
+  while IFS= read -r raw_line; do
+    path="$(echo "$raw_line" | sed -E 's/^[[:space:]]*-[[:space:]]*//; s/[[:space:]]*#.*$//')"
+    [[ -n "$path" ]] && ALLOWED_COMMIT_PATHS+=("$path")
+  done <<< "$ALLOWED_PATHS_RAW"
+  EXPECTED_COMMIT_PATHS=("server/db.ts" ".claude/skills/blog-from-git/blog-ledger.md")
+  if [[ "${#ALLOWED_COMMIT_PATHS[@]}" -eq 0 || "${ALLOWED_COMMIT_PATHS[*]}" != "${EXPECTED_COMMIT_PATHS[*]}" ]]; then
+    echo "[blog-cadence-watchdog] FATAL: autonomy.allowed_commit_paths in $CONFIG_FILE (got: '${ALLOWED_COMMIT_PATHS[*]}') no longer matches the seed pathspec this script commits (server/db.ts, .claude/skills/blog-from-git/blog-ledger.md) — update both together" >&2
+    write_heartbeat "error: allowed_commit_paths does not match hard-coded seed pathspec"
+    exit 1
+  fi
 fi
 
 # --- measure the LIVE gap, not server/db.ts's seed data ---
@@ -154,15 +209,18 @@ if [[ -f "$STATE_FILE" ]]; then
   fi
 fi
 
-# --- drafts already pending human review: don't pile more on top ---
+# --- drafts already pending: in non-autonomous mode, don't pile more on top ---
 # Unreviewed drafts are awaiting phase-6 human approval; drafting more while
 # they sit there is what produced an ambiguous pile of "whose is this?" files
 # (see PRD 1002's postmortem). A run that finds *.md drafts already present
-# stops here instead of invoking claude -p.
+# stops here instead of invoking claude -p — but ONLY when autonomous_publish
+# is false. In autonomous mode a pending draft must not deadlock the pipeline
+# forever: it is consumed (seeded, then removed from drafts/) instead.
 shopt -s nullglob
 EXISTING_DRAFTS=("$DRAFTS_DIR"/*.md)
 shopt -u nullglob
-if (( ${#EXISTING_DRAFTS[@]} > 0 )); then
+CONSUME_EXISTING_DRAFTS=0
+if (( ${#EXISTING_DRAFTS[@]} > 0 )) && [[ "$AUTONOMOUS_PUBLISH" != "true" ]]; then
   PENDING_ALERT_DAYS="$(grep -m1 'pending_draft_alert_days:' "$CONFIG_FILE" | grep -oP 'pending_draft_alert_days:\s*\K\d+')"
   if [[ -z "$PENDING_ALERT_DAYS" ]]; then
     echo "[blog-cadence-watchdog] FATAL: could not parse pending_draft_alert_days from $CONFIG_FILE" >&2
@@ -191,6 +249,15 @@ if (( ${#EXISTING_DRAFTS[@]} > 0 )); then
   exit 0
 fi
 
+# Autonomous mode never hits the skip branch above — a pending draft (left
+# over from a prior run, or from a run made while autonomous_publish was
+# false) must not deadlock the pipeline forever. It is consumed: seeded, then
+# removed from drafts/, instead of piling up unreviewed.
+if (( ${#EXISTING_DRAFTS[@]} > 0 )); then
+  CONSUME_EXISTING_DRAFTS=1
+  echo "[blog-cadence-watchdog] autonomous mode — ${#EXISTING_DRAFTS[@]} pending draft(s) found: ${EXISTING_DRAFTS[*]} — will seed (up to max_posts_per_run=$MAX_POSTS_PER_RUN) instead of skipping"
+fi
+
 if (( GAP_DAYS >= CATCHUP_TRIGGER )); then
   MODE="catchup"
   MODE_INSTRUCTIONS="Catch-up mode (gap ${GAP_DAYS}d >= catchup_trigger_days ${CATCHUP_TRIGGER}d): scan the WHOLE portfolio's activity since the last live post ($NEWEST_PUBLISHED_AT) via GitHub (per scan.md — gh, not local working trees, for pushed repos; local reconciliation for unpushed/no-remote repos per the ledger's watchlist) and produce a QUEUE of separate, normal-sized backdated posts at 3-5 day cadence, each honestly dated to when its work actually shipped (blog.config.yaml backdating: honest-only), per rotation.md Part 0.5. Write one draft file per queued post."
@@ -203,7 +270,9 @@ fi
 # clock, not the model's guess at the current time.
 AUTHORED_AT="$(TZ=America/Los_Angeles date -Iseconds)"
 
-PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past its ${UPPER_BOUND}-day cadence target. There is NO human present in this session.
+if [[ "$AUTONOMOUS_PUBLISH" != "true" ]]; then
+  # --- non-autonomous path: the original human-gated behavior, verbatim ---
+  PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past its ${UPPER_BOUND}-day cadence target. There is NO human present in this session.
 
 Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run PHASES 1-5 ONLY: 1 Rotation (read rotation.md + blog-ledger.md — respect never_repeat_previous_project and max_consecutive_untiled_posts), 2 Scan, 3 Research, 4 Ground, 5 Draft (voice.md).
 
@@ -218,8 +287,41 @@ STOP AFTER PHASE 5. Do not run phase 6 (Approve) or phase 7 (Seed) — this repo
 - describe a file you did not create in this run as your own output — if you find drafts already present, report them as pre-existing and leave them untouched
 
 Instead, write each finished draft as a standalone markdown file under .claude/skills/blog-from-git/drafts/<published-date-YYYY-MM-DD>-<slug>.md, creating the directory if needed. Each draft's front matter MUST include: title, slug, category, published_at, tone, authored_by: blog-cadence-watchdog, authored_at: $AUTHORED_AT (use this exact timestamp — it is this run's actual start time, not a guess). When done, print a one-line list of the draft file path(s) you wrote and nothing else."
+  CLAUDE_TIMEOUT=2400
+else
+  # --- autonomous path: mechanical rails replace the human OK ---
+  REQUIREMENTS="Autonomy: blog.config.yaml's autonomy.autonomous_publish is true (the owner's master kill switch) — that plus the phase-4/5 quality self-check in SKILL.md passing IS your phase-6 approval; do not wait for a human. Run phase 7 (seed.md) yourself, honoring every rail below:
+- Seed by editing server/db.ts (INSERT OR IGNORE per seed.md) and, in the SAME commit, append/update .claude/skills/blog-from-git/blog-ledger.md (a row per post + the rewritten \"Current rotation state\" block).
+- Before committing, run \`npx tsc --noEmit -p tsconfig.json\` and \`pnpm test tests/db.test.ts\`. If either fails, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"<the failing check>\"\`, and nothing else.
+- Stage ONLY server/db.ts and .claude/skills/blog-from-git/blog-ledger.md via explicit pathspecs: \`git add server/db.ts .claude/skills/blog-from-git/blog-ledger.md\`. NEVER stage the whole working tree with a wildcard/blanket git-add, and never commit with an all-tracked-files shortcut flag — this working tree carries hundreds of unrelated modified files (e.g. public/outdoor-hours/hourly/*.json) that must never be swept into this commit.
+- Push with \`git push origin main\` only — never any other remote (never content-grade) and never any other branch.
+- Cap how many posts you seed in this run at ${MAX_POSTS_PER_RUN} (blog.config.yaml autonomy.max_posts_per_run), even in catch-up mode. If more publishable posts exist than the cap, seed only the first ${MAX_POSTS_PER_RUN} (oldest-dated, honest backdating per blog.config.yaml truth rules) in one commit, and leave the rest queued in blog-ledger.md's \"Planned backfill queue\" block for a later run. Log how many you seeded vs deferred.
+- If there is genuinely no publishable material in this window, do NOT invent a post to satisfy cadence (blog.config.yaml truth.no_invented_metrics / every_number_needs_a_source still bind) — finish by printing exactly one line, \`SEED_RESULT: noop note=\"<why nothing was publishable>\"\`, and nothing else.
+- On success, finish by printing exactly one line, \`SEED_RESULT: published=<n> deferred=<m> note=\"<short summary>\"\`, and nothing else after it."
 
-echo "[blog-cadence-watchdog] mode=$MODE — invoking claude -p to draft (phases 1-5 only, stopping before approve/seed)"
+  if [[ "$CONSUME_EXISTING_DRAFTS" -eq 1 ]]; then
+    PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh). blog.config.yaml's autonomy.autonomous_publish is true.
+
+${#EXISTING_DRAFTS[@]} draft(s) are already pending in .claude/skills/blog-from-git/drafts/ from a prior run: ${EXISTING_DRAFTS[*]}. Phases 1-5 (Rotation, Scan, Research, Ground, Draft) are DONE for these — do not re-draft them. Read each draft, re-check it still passes the SKILL.md final self-check (the phase 5 gate), then go straight to phase 6/7 per the requirements below.
+
+$REQUIREMENTS
+
+For each draft you seed, delete its file from .claude/skills/blog-from-git/drafts/ as part of the same operation that commits its seed — a consumed draft must not linger. Any draft you defer under the cap must be LEFT UNTOUCHED in drafts/ for a later run — never delete, move, or overwrite a draft you are not seeding in this run."
+  else
+    PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past its ${UPPER_BOUND}-day cadence target. There is NO human present in this session. blog.config.yaml's autonomy.autonomous_publish is true — run the FULL pipeline, PHASES 1-7.
+
+Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md), running PHASES 1-7: 1 Rotation (read rotation.md + blog-ledger.md — respect never_repeat_previous_project and max_consecutive_untiled_posts), 2 Scan, 3 Research, 4 Ground, 5 Draft (voice.md), 6 Approve (autonomous gate, see below), 7 Seed (seed.md).
+
+$MODE_INSTRUCTIONS
+
+$REQUIREMENTS
+
+While drafting, write each finished draft as a standalone markdown file under .claude/skills/blog-from-git/drafts/<published-date-YYYY-MM-DD>-<slug>.md (front matter: title, slug, category, published_at, tone, authored_by: blog-cadence-watchdog, authored_at: $AUTHORED_AT) so there is a durable record before you seed it — then seed the ones within this run's cap and delete their draft files as part of that same operation; leave any deferred draft's file in place for a later run."
+  fi
+  CLAUDE_TIMEOUT=3300
+fi
+
+echo "[blog-cadence-watchdog] mode=$MODE autonomous=$AUTONOMOUS_PUBLISH consume_existing=$CONSUME_EXISTING_DRAFTS — invoking claude -p"
 
 # Record intent to run BEFORE invoking claude -p, not after. Writing this
 # after the call (the original ordering) let a timeout mid-draft strand
@@ -228,25 +330,83 @@ echo "[blog-cadence-watchdog] mode=$MODE — invoking claude -p to draft (phases
 echo "$TODAY $MODE $GAP_DAYS" > "$STATE_FILE"
 
 set +e
-timeout 2400 claude -p "$PROMPT" \
+CLAUDE_OUTPUT="$(timeout "$CLAUDE_TIMEOUT" claude -p "$PROMPT" \
   --model claude-sonnet-5 \
   --dangerously-skip-permissions \
-  --output-format text
+  --output-format text 2>&1)"
 CLAUDE_RC=$?
 set -e
+echo "$CLAUDE_OUTPUT"
 
 if [[ $CLAUDE_RC -ne 0 ]]; then
-  # Undo the "ran today" marker: nothing was actually drafted (or the
+  # Undo the "ran today" marker: nothing was actually drafted/seeded (or the
   # EXISTING_DRAFTS guard on the next invocation will catch any partial
-  # orphan files from a mid-draft timeout), so a same-day retry — whether
+  # orphan files from a mid-run timeout), so a same-day retry — whether
   # from the next cron trigger or a human rerunning by hand after fixing
   # the underlying error — must not be blocked by the idempotent-per-day
-  # check above thinking today's draft already happened.
+  # check above thinking today's run already happened.
   rm -f "$STATE_FILE"
   echo "[blog-cadence-watchdog] claude -p exited $CLAUDE_RC (timed out or errored) — will retry next scheduled run" >&2
   write_heartbeat "error: claude -p exited $CLAUDE_RC mode=$MODE gap=${GAP_DAYS}d"
   exit "$CLAUDE_RC"
 fi
 
-write_heartbeat "ok: drafted mode=$MODE gap=${GAP_DAYS}d"
-echo "[blog-cadence-watchdog] done — drafts (if any) are in $DRAFTS_DIR, awaiting human review/seed"
+if [[ "$AUTONOMOUS_PUBLISH" != "true" ]]; then
+  write_heartbeat "ok: drafted mode=$MODE gap=${GAP_DAYS}d"
+  echo "[blog-cadence-watchdog] done — drafts (if any) are in $DRAFTS_DIR, awaiting human review/seed"
+  exit 0
+fi
+
+# --- autonomous mode: the claude -p session reports its outcome via a single
+# SEED_RESULT line so this heartbeat can distinguish a real publish from a
+# no-op from an error, instead of assuming success from a zero exit code. ---
+SEED_LINE="$(echo "$CLAUDE_OUTPUT" | grep -o 'SEED_RESULT:.*' | tail -1)"
+if [[ "$SEED_LINE" == SEED_RESULT:\ error* ]]; then
+  echo "[blog-cadence-watchdog] $SEED_LINE" >&2
+  write_heartbeat "error: ${SEED_LINE#SEED_RESULT: }"
+  exit 1
+elif [[ "$SEED_LINE" == SEED_RESULT:\ noop* ]]; then
+  echo "[blog-cadence-watchdog] $SEED_LINE"
+  write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: }"
+elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
+  # Mechanical check, not just trusting the subprocess's self-report: confirm
+  # the commit it claims to have made only touched the allowed paths, and
+  # that it actually reached origin/main — the prompt's rails (pathspec-only
+  # staging, push to origin main only) are instructions to a `claude -p`
+  # session running with --dangerously-skip-permissions, not something this
+  # script enforced before now.
+  git fetch origin main --quiet 2>/dev/null || true
+  LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown-local)"
+  REMOTE_HEAD="$(git rev-parse origin/main 2>/dev/null || echo unknown-remote)"
+  CHANGED_FILES="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
+  BAD_PATH=""
+  while IFS= read -r changed_file; do
+    [[ -z "$changed_file" ]] && continue
+    is_allowed=0
+    for allowed in "${ALLOWED_COMMIT_PATHS[@]}"; do
+      [[ "$changed_file" == "$allowed" ]] && is_allowed=1 && break
+    done
+    if [[ "$is_allowed" -eq 0 ]]; then
+      BAD_PATH="$changed_file"
+      break
+    fi
+  done <<< "$CHANGED_FILES"
+  if [[ -n "$BAD_PATH" ]]; then
+    echo "[blog-cadence-watchdog] $SEED_LINE — but the last commit touched disallowed path '$BAD_PATH', treating as error" >&2
+    write_heartbeat "error: seed commit touched disallowed path $BAD_PATH"
+    exit 1
+  fi
+  if [[ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]]; then
+    echo "[blog-cadence-watchdog] $SEED_LINE — but local HEAD ($LOCAL_HEAD) does not match origin/main ($REMOTE_HEAD), push did not land" >&2
+    write_heartbeat "error: local HEAD does not match origin/main after claimed publish"
+    exit 1
+  fi
+  echo "[blog-cadence-watchdog] $SEED_LINE"
+  write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: }"
+else
+  echo "[blog-cadence-watchdog] claude -p exited 0 but printed no SEED_RESULT line — cannot confirm outcome" >&2
+  write_heartbeat "error: no SEED_RESULT line from claude -p mode=$MODE gap=${GAP_DAYS}d"
+  exit 1
+fi
+
+echo "[blog-cadence-watchdog] done"

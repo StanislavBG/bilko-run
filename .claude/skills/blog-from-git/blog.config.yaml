@@ -17,6 +17,9 @@ cadence:
   catchup_trigger_days: 10       # gap beyond this → catch-up mode (backfill queue)
   backdating: honest-only        # a backdated published_at must match when the WORK shipped;
                                  # never backdate a post about work that hadn't happened yet
+  pending_draft_alert_days: 2    # applies ONLY when autonomy.autonomous_publish is false: age
+                                 # (whole days, by file mtime) at which a still-pending draft
+                                 # escalates the watchdog heartbeat from ok: to warn:
 
 rotation:
   never_repeat_previous_project: true

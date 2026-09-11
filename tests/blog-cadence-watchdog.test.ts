@@ -56,4 +56,31 @@ describe('blog-cadence-watchdog.sh', () => {
       expect(call).toMatch(/--model\s+\S+/);
     }
   });
+
+  it('escalates the pending-drafts heartbeat to warn: once the oldest draft crosses pending_draft_alert_days, reading the threshold from blog.config.yaml', () => {
+    const guardMatch = script.match(
+      /EXISTING_DRAFTS=\("\$DRAFTS_DIR"\/\*\.md\)[\s\S]*?exit 0\s*\nfi/
+    );
+    expect(guardMatch).not.toBeNull();
+    const guardBlock = guardMatch![0];
+
+    // threshold comes from the config file, never a hard-coded number
+    expect(guardBlock).toMatch(/pending_draft_alert_days:/);
+    expect(guardBlock).toMatch(/\$CONFIG_FILE/);
+
+    // oldest draft is found by file mtime, per the PRD's implementation note
+    expect(guardBlock).toMatch(/date -r "\$draft" \+%s/);
+
+    // escalation compares age-in-days to the threshold and only then writes warn:
+    const pendingAlertIndex = guardBlock.indexOf('PENDING_ALERT_DAYS');
+    const warnWriteIndex = guardBlock.indexOf('write_heartbeat "warn:');
+    const okWriteIndex = guardBlock.lastIndexOf('write_heartbeat "ok:');
+    expect(pendingAlertIndex).toBeGreaterThan(-1);
+    expect(warnWriteIndex).toBeGreaterThan(pendingAlertIndex);
+    expect(okWriteIndex).toBeGreaterThan(warnWriteIndex);
+    expect(guardBlock).toMatch(/OLDEST_DRAFT_AGE_DAYS\s*>=\s*PENDING_ALERT_DAYS/);
+
+    // a config-parse failure fails loud rather than silently defaulting
+    expect(guardBlock).toMatch(/error: could not parse pending_draft_alert_days/);
+  });
 });

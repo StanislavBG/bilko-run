@@ -107,8 +107,31 @@ shopt -s nullglob
 EXISTING_DRAFTS=("$DRAFTS_DIR"/*.md)
 shopt -u nullglob
 if (( ${#EXISTING_DRAFTS[@]} > 0 )); then
-  echo "[blog-cadence-watchdog] ${#EXISTING_DRAFTS[@]} unreviewed draft(s) already pending review — skipping: ${EXISTING_DRAFTS[*]}"
-  write_heartbeat "ok: ${#EXISTING_DRAFTS[@]} unreviewed draft(s) already pending review — skipping"
+  PENDING_ALERT_DAYS="$(grep -m1 'pending_draft_alert_days:' "$CONFIG_FILE" | grep -oP 'pending_draft_alert_days:\s*\K\d+')"
+  if [[ -z "$PENDING_ALERT_DAYS" ]]; then
+    echo "[blog-cadence-watchdog] FATAL: could not parse pending_draft_alert_days from $CONFIG_FILE" >&2
+    write_heartbeat "error: could not parse pending_draft_alert_days"
+    exit 1
+  fi
+
+  OLDEST_DRAFT=""
+  OLDEST_DRAFT_EPOCH=""
+  for draft in "${EXISTING_DRAFTS[@]}"; do
+    draft_epoch="$(date -r "$draft" +%s)"
+    if [[ -z "$OLDEST_DRAFT_EPOCH" || "$draft_epoch" -lt "$OLDEST_DRAFT_EPOCH" ]]; then
+      OLDEST_DRAFT_EPOCH="$draft_epoch"
+      OLDEST_DRAFT="$draft"
+    fi
+  done
+  OLDEST_DRAFT_AGE_DAYS=$(( (NOW_EPOCH - OLDEST_DRAFT_EPOCH) / 86400 ))
+
+  echo "[blog-cadence-watchdog] ${#EXISTING_DRAFTS[@]} unreviewed draft(s) already pending review — skipping: ${EXISTING_DRAFTS[*]} — oldest: $OLDEST_DRAFT (${OLDEST_DRAFT_AGE_DAYS}d)"
+
+  if (( OLDEST_DRAFT_AGE_DAYS >= PENDING_ALERT_DAYS )); then
+    write_heartbeat "warn: ${#EXISTING_DRAFTS[@]} unreviewed draft(s) pending review, oldest ${OLDEST_DRAFT_AGE_DAYS}d ($OLDEST_DRAFT) >= ${PENDING_ALERT_DAYS}d threshold"
+  else
+    write_heartbeat "ok: ${#EXISTING_DRAFTS[@]} unreviewed draft(s) already pending review — skipping"
+  fi
   exit 0
 fi
 

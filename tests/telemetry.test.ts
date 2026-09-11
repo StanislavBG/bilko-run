@@ -259,3 +259,37 @@ describe('Telemetry abuse controls — identity-free, silent', () => {
     expect(names.filter(n => /email|user|host|name$/i.test(n))).toEqual([]);
   });
 });
+
+describe('Telemetry ingest — /api/telemetry/event version attribution', () => {
+  beforeEach(async () => {
+    await dbRun("DELETE FROM funnel_events WHERE tool IN ('version-app','browser-app')");
+  });
+
+  it('persists the version from props.appVersion and from a top-level version', async () => {
+    const res = await inject('POST', '/api/telemetry/event', {
+      batch: [
+        { app: 'version-app', name: 'app.launch', visitor_id: 'v1', props: { appVersion: '0.82.0' } },
+        { app: 'version-app', name: 'app.launch', visitor_id: 'v2', version: '0.83.0' },
+      ],
+    }, '10.9.0.1');
+    expect(res.statusCode).toBe(200);
+    const rows = await dbAll<{ version: string | null; email: string | null }>(
+      'SELECT version, email FROM funnel_events WHERE tool = ? ORDER BY version',
+      'version-app',
+    );
+    expect(rows.map((r) => r.version)).toEqual(['0.82.0', '0.83.0']);
+    // Telemetry ingest is strictly anonymous — it never writes the email column.
+    expect(rows.every((r) => r.email === null)).toBe(true);
+  });
+
+  it('leaves version NULL for callers that do not report one', async () => {
+    await inject('POST', '/api/telemetry/event', {
+      batch: [{ app: 'browser-app', name: 'page.view', props: { path: '/' } }],
+    }, '10.9.0.2');
+    const rows = await dbAll<{ version: string | null }>(
+      'SELECT version FROM funnel_events WHERE tool = ?', 'browser-app',
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].version).toBeNull();
+  });
+});

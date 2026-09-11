@@ -566,6 +566,12 @@ export async function initDb(): Promise<void> {
     'ALTER TABLE funnel_events ADD COLUMN path TEXT',
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_tool ON funnel_events(tool)',
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_session ON funnel_events(session_id)',
+    // Desktop apps (unlike browser apps, which are always "latest") sit on old
+    // releases for months, so "did release X make usage worse" needs the version
+    // as a real column. Appended last so existing INSERT column orders are
+    // untouched; browser-app callers simply leave it NULL.
+    'ALTER TABLE funnel_events ADD COLUMN version TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_funnel_events_tool_version ON funnel_events(tool, version)',
     'CREATE INDEX IF NOT EXISTS idx_page_views_email ON page_views(email)',
     'CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email)',
     'CREATE INDEX IF NOT EXISTS idx_token_transactions_reason ON token_transactions(reason)',

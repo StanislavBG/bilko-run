@@ -138,6 +138,17 @@ function clampInt(v: unknown, max: number): number | null {
   return Math.max(0, Math.min(Math.floor(n), max));
 }
 
+// Clients send the app version either top-level (`version`) or nested in the
+// props blob (`appVersion`, which is where the desktop SDK puts it). Accept
+// both; NULL rather than '' when neither is present, so `WHERE version IS NULL`
+// means "caller does not report a version" (every browser-app caller).
+function eventVersion(e: Record<string, unknown>): string | null {
+  const props = e.props as Record<string, unknown> | undefined;
+  const raw = e.version ?? props?.appVersion ?? props?.version;
+  const v = clamp(raw, 20).trim();
+  return v || null;
+}
+
 function safeMeta(val: unknown, maxBytes: number): string {
   try { return JSON.stringify(val ?? {}).slice(0, maxBytes); } catch { return '{}'; }
 }
@@ -192,14 +203,15 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
     const batch = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
     for (const e of batch) {
       await dbRun(
-        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         clamp(e.name, 80),
         clamp(e.app, 60),
         safeMeta(e.props, MAX_FIELD_BYTES),
         clamp(e.session_id, 80),
         clamp(e.visitor_id, 80),
         clamp((e.props as Record<string, unknown> | undefined)?.path, 200),
+        eventVersion(e),
       );
     }
     return { ok: true, ingested: batch.length };

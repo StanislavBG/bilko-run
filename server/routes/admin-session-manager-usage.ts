@@ -14,7 +14,9 @@ const EV_EPIC = 'epic.create';
 
 // funnel_events.created_at is a DATETIME string ('YYYY-MM-DD HH:MM:SS', UTC);
 // app_logs/app_errors.created_at are epoch seconds. Two window forms needed.
-const FUNNEL_VERSION = `json_extract(metadata, '$.appVersion')`;
+// Prefer the real column, fall back to the props blob so rows written before
+// funnel_events.version existed still attribute.
+const FUNNEL_VERSION = `COALESCE(version, json_extract(metadata, '$.appVersion'))`;
 
 async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }

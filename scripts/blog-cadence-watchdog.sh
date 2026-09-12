@@ -45,6 +45,19 @@
 # Mirrors the cron-script conventions in
 # ~/Projects/social-signals-trader/scripts/analyst-tick.sh: lockfile in
 # /tmp, PATH fix for cron's bare env, bounded timeout, log via cron redirect.
+#
+# POST-PUBLISH VERIFICATION — blog.config.yaml gates.7_seed requires "live
+# pickup verified at /api/blog after Render deploys", but nothing previously
+# enforced that: a push that lands but a deploy that never boots (or crashes)
+# was invisible until the next cadence-gap heartbeat, weeks later. After a
+# successful autonomous seed+push this script polls https://bilko.run/api/blog
+# (reusing fetch_blog_json below — one fetch implementation, not two) until
+# every slug it just seeded appears, or autonomy.verify_deploy_timeout_seconds
+# expires. WORST-CASE RUNTIME: CLAUDE_TIMEOUT (3300s in autonomous mode) +
+# verify_deploy_timeout_seconds (900s default) = ~4200s (~70 min) for a single
+# run — the push already happened before this poll starts, so a verification
+# timeout only ever reports (no revert, no re-seed, no re-push); the next
+# scheduled run is the retry path.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -169,20 +182,34 @@ fi
 # set -euo pipefail — before write_heartbeat ever ran). The fetch is now
 # non-fatal per attempt: validate the body's TYPE with `jq -e` (status
 # checked, not indexed blind) before ever touching .published_at.
+#
+# This is the ONE fetch implementation in the script — the post-publish
+# verification poll (below) calls it too, rather than a second raw
+# curl+jq path (PRD: single hardened fetch helper).
+fetch_blog_json() {
+  local max_attempts="$1"
+  local backoff_seconds="$2"
+  local candidate
+  for attempt in $(seq 1 "$max_attempts"); do
+    if candidate="$(curl -s --max-time 20 https://bilko.run/api/blog)" \
+      && echo "$candidate" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+    echo "[blog-cadence-watchdog] fetch attempt $attempt/$max_attempts of /api/blog failed or returned a non-array body — retrying" >&2
+    if [[ "$attempt" -lt "$max_attempts" ]]; then
+      sleep "$backoff_seconds"
+    fi
+  done
+  return 1
+}
+
 BLOG_JSON=""
 FETCH_OK=0
-for attempt in 1 2 3; do
-  if candidate="$(curl -s --max-time 20 https://bilko.run/api/blog)" \
-    && echo "$candidate" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
-    BLOG_JSON="$candidate"
-    FETCH_OK=1
-    break
-  fi
-  echo "[blog-cadence-watchdog] fetch attempt $attempt/3 of /api/blog failed or returned a non-array body — retrying" >&2
-  if [[ "$attempt" -lt 3 ]]; then
-    sleep 10
-  fi
-done
+if candidate_json="$(fetch_blog_json 3 10)"; then
+  BLOG_JSON="$candidate_json"
+  FETCH_OK=1
+fi
 
 if [[ "$FETCH_OK" -ne 1 ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not read published_at from https://bilko.run/api/blog" >&2
@@ -309,7 +336,7 @@ else
 - Push with \`git push origin main\` only — never any other remote (never content-grade) and never any other branch.
 - Cap how many posts you seed in this run at ${MAX_POSTS_PER_RUN} (blog.config.yaml autonomy.max_posts_per_run), even in catch-up mode. If more publishable posts exist than the cap, seed only the first ${MAX_POSTS_PER_RUN} (oldest-dated, honest backdating per blog.config.yaml truth rules) in one commit, and leave the rest queued in blog-ledger.md's \"Planned backfill queue\" block for a later run. Log how many you seeded vs deferred.
 - If there is genuinely no publishable material in this window, do NOT invent a post to satisfy cadence (blog.config.yaml truth.no_invented_metrics / every_number_needs_a_source still bind) — finish by printing exactly one line, \`SEED_RESULT: noop note=\"<why nothing was publishable>\"\`, and nothing else.
-- On success, finish by printing exactly one line, \`SEED_RESULT: published=<n> deferred=<m> note=\"<short summary>\"\`, and nothing else after it."
+- On success, finish by printing exactly one line, \`SEED_RESULT: published=<n> deferred=<m> slugs=\"<comma-separated-slugs-you-just-seeded>\" note=\"<short summary>\"\`, and nothing else after it. The slugs list is how the watchdog verifies live pickup afterward — list every slug you seeded this run, not the ones you deferred."
 
   if [[ "$CONSUME_EXISTING_DRAFTS" -eq 1 ]]; then
     PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh). blog.config.yaml's autonomy.autonomous_publish is true.
@@ -491,7 +518,56 @@ elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
     exit 1
   fi
   echo "[blog-cadence-watchdog] $SEED_LINE"
-  write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: }"
+
+  # --- verify live pickup at /api/blog (gates.7_seed) — the push above is
+  # already done and does NOT get reverted/re-pushed on a failure here; this
+  # step only reports whether Render's auto-deploy actually surfaced the
+  # slug(s) we just seeded, or times out reporting that it didn't. ---
+  SEEDED_SLUGS_RAW="$(echo "$SEED_LINE" | grep -oP 'slugs="\K[^"]*' || true)"
+  if [[ -z "$SEEDED_SLUGS_RAW" ]]; then
+    echo "[blog-cadence-watchdog] $SEED_LINE reported no slugs= field — cannot verify live pickup, recording success as-is" >&2
+    write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: }"
+  else
+    IFS=',' read -r -a SEEDED_SLUGS <<< "$SEEDED_SLUGS_RAW"
+
+    VERIFY_DEPLOY_TIMEOUT_SECONDS="$(grep -m1 'verify_deploy_timeout_seconds:' "$CONFIG_FILE" | grep -oP 'verify_deploy_timeout_seconds:\s*\K\d+')"
+    VERIFY_DEPLOY_INTERVAL_SECONDS="$(grep -m1 'verify_deploy_interval_seconds:' "$CONFIG_FILE" | grep -oP 'verify_deploy_interval_seconds:\s*\K\d+')"
+    if [[ -z "$VERIFY_DEPLOY_TIMEOUT_SECONDS" || -z "$VERIFY_DEPLOY_INTERVAL_SECONDS" ]]; then
+      echo "[blog-cadence-watchdog] FATAL: could not parse verify_deploy_timeout_seconds/verify_deploy_interval_seconds from $CONFIG_FILE" >&2
+      write_heartbeat "error: could not parse verify_deploy settings"
+      exit 1
+    fi
+
+    VERIFY_DEADLINE_EPOCH=$(( $(date +%s) + VERIFY_DEPLOY_TIMEOUT_SECONDS ))
+    VERIFY_LIVE=0
+    while [[ "$(date +%s)" -lt "$VERIFY_DEADLINE_EPOCH" ]]; do
+      # A transient non-array body or curl failure mid-poll counts as "not yet
+      # live" — the poll continues to its deadline rather than aborting.
+      if POLL_JSON="$(fetch_blog_json 1 0)"; then
+        MISSING_SLUGS=()
+        for slug in "${SEEDED_SLUGS[@]}"; do
+          if ! echo "$POLL_JSON" | jq -e --arg s "$slug" '[.[].slug] | index($s) != null' >/dev/null 2>&1; then
+            MISSING_SLUGS+=("$slug")
+          fi
+        done
+        if [[ "${#MISSING_SLUGS[@]}" -eq 0 ]]; then
+          VERIFY_LIVE=1
+          break
+        fi
+      fi
+      sleep "$VERIFY_DEPLOY_INTERVAL_SECONDS"
+    done
+
+    if [[ "$VERIFY_LIVE" -eq 1 ]]; then
+      VERIFY_OBSERVED_AT="$(TZ=America/Los_Angeles date -Iseconds)"
+      echo "[blog-cadence-watchdog] live pickup verified at https://bilko.run/api/blog for slug(s): ${SEEDED_SLUGS[*]} (observed $VERIFY_OBSERVED_AT) — https://bilko.run/blog/${SEEDED_SLUGS[0]}"
+      write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: } live_at=$VERIFY_OBSERVED_AT slugs=${SEEDED_SLUGS[*]}"
+    else
+      echo "[blog-cadence-watchdog] FATAL: seeded slug(s) not live at https://bilko.run/api/blog after ${VERIFY_DEPLOY_TIMEOUT_SECONDS}s: ${SEEDED_SLUGS[*]}" >&2
+      write_heartbeat "error: seeded slug(s) not live after ${VERIFY_DEPLOY_TIMEOUT_SECONDS}s: ${SEEDED_SLUGS[*]}"
+      exit 1
+    fi
+  fi
 else
   echo "[blog-cadence-watchdog] claude -p exited 0 but printed no SEED_RESULT line — cannot confirm outcome" >&2
   write_heartbeat "error: no SEED_RESULT line from claude -p mode=$MODE gap=${GAP_DAYS}d"

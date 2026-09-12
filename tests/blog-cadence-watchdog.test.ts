@@ -144,11 +144,14 @@ describe('blog-cadence-watchdog.sh', () => {
   });
 
   it('retries the /api/blog fetch with a backoff before giving up', () => {
-    // three attempts, each keeping the original --max-time 20 curl
+    // one shared fetch_blog_json helper, keeping the original --max-time 20 curl
     const curlMatches = script.match(/curl -s --max-time 20 https:\/\/bilko\.run\/api\/blog/g) ?? [];
-    expect(curlMatches.length).toBeGreaterThanOrEqual(1);
-    expect(script).toMatch(/for attempt in 1 2 3/);
-    expect(script).toMatch(/sleep 10/);
+    expect(curlMatches.length).toBe(1);
+    expect(script).toMatch(/fetch_blog_json\(\) \{/);
+    expect(script).toMatch(/for attempt in \$\(seq 1 "\$max_attempts"\)/);
+    expect(script).toMatch(/sleep "\$backoff_seconds"/);
+    // the initial gap-check call keeps the original 3-attempts/10s-backoff behavior
+    expect(script).toMatch(/fetch_blog_json 3 10/);
   });
 
   it('validates the fetch response is a non-empty JSON array before indexing .published_at', () => {
@@ -343,6 +346,80 @@ describe('blog-cadence-watchdog.sh', () => {
         '\t- .claude/skills/blog-from-git/blog-ledger.md',
       ].join('\n');
       expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+    });
+  });
+
+  describe('post-publish live-pickup verification poll', () => {
+    function extractVerificationBlock(): string {
+      const start = script.indexOf('SEEDED_SLUGS_RAW=');
+      const end = script.indexOf('\nelse\n  echo "[blog-cadence-watchdog] claude -p exited 0 but printed no SEED_RESULT');
+      expect(start).toBeGreaterThan(-1);
+      expect(end).toBeGreaterThan(start);
+      return script.slice(start, end);
+    }
+
+    it('exists and is bounded by a config-read deadline, not a fixed loop count', () => {
+      const block = extractVerificationBlock();
+      expect(block).toMatch(/verify_deploy_timeout_seconds:/);
+      expect(block).toMatch(/verify_deploy_interval_seconds:/);
+      expect(block).toMatch(/\$CONFIG_FILE/);
+      expect(block).toMatch(/VERIFY_DEADLINE_EPOCH=\$\(\( \$\(date \+%s\) \+ VERIFY_DEPLOY_TIMEOUT_SECONDS \)\)/);
+      expect(block).toMatch(/while \[\[ "\$\(date \+%s\)" -lt "\$VERIFY_DEADLINE_EPOCH" \]\]/);
+    });
+
+    it('FATALs with an error: heartbeat and exit 1 when the verify_deploy config keys fail to parse', () => {
+      const block = extractVerificationBlock();
+      expect(block).toMatch(/-z "\$VERIFY_DEPLOY_TIMEOUT_SECONDS" \|\| -z "\$VERIFY_DEPLOY_INTERVAL_SECONDS"/);
+      expect(block).toMatch(/FATAL: could not parse verify_deploy_timeout_seconds\/verify_deploy_interval_seconds/);
+      expect(block).toMatch(/write_heartbeat "error: could not parse verify_deploy settings"/);
+    });
+
+    it('reuses fetch_blog_json rather than a second raw curl+jq path', () => {
+      const block = extractVerificationBlock();
+      expect(block).toMatch(/fetch_blog_json 1 0/);
+      expect(block).not.toMatch(/curl -s --max-time 20/);
+    });
+
+    it('treats a missing slug as "not yet live" and keeps polling to the deadline', () => {
+      const block = extractVerificationBlock();
+      expect(block).toMatch(/MISSING_SLUGS=\(\)/);
+      expect(block).toMatch(/if ! echo "\$POLL_JSON" \| jq -e --arg s "\$slug"/);
+      expect(block).toMatch(/sleep "\$VERIFY_DEPLOY_INTERVAL_SECONDS"/);
+    });
+
+    it('on success writes an ok: heartbeat naming the slug(s) and observed live time, and logs the live URL', () => {
+      const block = extractVerificationBlock();
+      expect(block).toMatch(/VERIFY_LIVE=1/);
+      expect(block).toMatch(/live pickup verified at https:\/\/bilko\.run\/api\/blog/);
+      expect(block).toMatch(/https:\/\/bilko\.run\/blog\//);
+      expect(block).toMatch(/write_heartbeat "ok: \$\{SEED_LINE#SEED_RESULT: \} live_at=\$VERIFY_OBSERVED_AT slugs=\$\{SEEDED_SLUGS\[\*\]\}"/);
+    });
+
+    it('on timeout writes an error: heartbeat naming the not-live slug(s) and exits non-zero, without reverting/re-pushing/re-seeding', () => {
+      const block = extractVerificationBlock();
+      expect(block).toMatch(/FATAL: seeded slug\(s\) not live at https:\/\/bilko\.run\/api\/blog after \$\{VERIFY_DEPLOY_TIMEOUT_SECONDS\}s/);
+      expect(block).toMatch(/write_heartbeat "error: seeded slug\(s\) not live after \$\{VERIFY_DEPLOY_TIMEOUT_SECONDS\}s/);
+      expect(block).toMatch(/exit 1/);
+      expect(block).not.toMatch(/git revert/);
+      expect(block).not.toMatch(/push --force/);
+      expect(block).not.toMatch(/reset --hard/);
+      expect(block).not.toMatch(/git commit/);
+      expect(block).not.toMatch(/git push/);
+    });
+
+    it('a run that seeded nothing (noop) never enters the verification block', () => {
+      const noopIndex = script.indexOf("SEED_LINE\" == SEED_RESULT:\\ noop*");
+      const verifyIndex = script.indexOf('SEEDED_SLUGS_RAW=');
+      expect(noopIndex).toBeGreaterThan(-1);
+      expect(verifyIndex).toBeGreaterThan(noopIndex);
+      // the noop branch's write_heartbeat happens before the verification block even starts
+      const noopBlock = script.slice(noopIndex, verifyIndex);
+      expect(noopBlock).toMatch(/write_heartbeat "ok: \$\{SEED_LINE#SEED_RESULT: \}"/);
+    });
+
+    it('the claude -p prompt asks for a slugs= field in SEED_RESULT so verification knows what to check', () => {
+      expect(script).toMatch(/slugs=\\"<comma-separated-slugs-you-just-seeded>\\"/);
+      expect(script).toMatch(/SEEDED_SLUGS_RAW="\$\(echo "\$SEED_LINE" \| grep -oP 'slugs="\\K\[\^"\]\*'/);
     });
   });
 

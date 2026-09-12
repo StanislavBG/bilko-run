@@ -100,3 +100,8 @@ autonomy:                               # OWNER'S CONTROL SURFACE — Bilko is a
                                          # explicit pathspecs only, never `git add -A`/`.`/`-a`
     - server/db.ts
     - .claude/skills/blog-from-git/blog-ledger.md
+  verify_deploy_timeout_seconds: 900     # bounded post-publish poll: how long to wait for a
+                                         # seeded slug to appear at /api/blog before treating
+                                         # Render's auto-deploy as stuck. A starting point, not a
+                                         # measured value — deploy latency varies.
+  verify_deploy_interval_seconds: 60     # how often to re-poll /api/blog during that window

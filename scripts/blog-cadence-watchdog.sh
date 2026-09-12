@@ -375,10 +375,83 @@ elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
   # staging, push to origin main only) are instructions to a `claude -p`
   # session running with --dangerously-skip-permissions, not something this
   # script enforced before now.
+  #
+  # This repo has a SECOND independent cron writer to origin/main: the
+  # social-signals-trader hourly `:47` snapshot push, which never pulls or
+  # rebases before pushing and has recorded 16 rejected / 8 non-fast-forward
+  # events. This watchdog's own `claude -p` push can lose that race — the
+  # seed commit lands locally but the subprocess's push is rejected. Recover
+  # by rebasing OUR seed commit onto the freshly fetched origin/main and
+  # retrying, bounded, instead of immediately declaring an error. Never a
+  # forced/destructive rewrite of history and never touching a commit already
+  # on origin — only our own not-yet-pushed seed commit gets replayed.
+  SEED_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown-local)"
   git fetch origin main --quiet 2>/dev/null || true
-  LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown-local)"
-  REMOTE_HEAD="$(git rev-parse origin/main 2>/dev/null || echo unknown-remote)"
-  CHANGED_FILES="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
+
+  if git merge-base --is-ancestor "$SEED_COMMIT" origin/main 2>/dev/null; then
+    # Edge case: the push may have actually landed even though the earlier
+    # status read was ambiguous — detect that instead of re-pushing or
+    # double-seeding. Fast-forward local HEAD to match if origin moved past
+    # our commit (e.g. a snapshot push landed right after ours); this is a
+    # fast-forward-only merge, never a rewrite.
+    echo "[blog-cadence-watchdog] seed commit $SEED_COMMIT already present on origin/main — publish had actually landed"
+    if [[ "$(git rev-parse HEAD 2>/dev/null)" != "$(git rev-parse origin/main 2>/dev/null)" ]]; then
+      git merge --ff-only origin/main --quiet 2>/dev/null || true
+    fi
+  else
+    RECOVERY_MAX_ATTEMPTS=3
+    RECOVERY_BACKOFF_SECONDS=10
+    RECOVERED=0
+    for attempt in $(seq 1 "$RECOVERY_MAX_ATTEMPTS"); do
+      PRE_REBASE_STATUS="$(git status --porcelain)"
+      if ! REBASE_OUTPUT="$(git rebase origin/main 2>&1)"; then
+        echo "[blog-cadence-watchdog] rebase of seed commit onto origin/main hit a conflict on attempt $attempt/$RECOVERY_MAX_ATTEMPTS — aborting, not auto-resolving" >&2
+        echo "$REBASE_OUTPUT" >&2
+        git rebase --abort 2>/dev/null || true
+        write_heartbeat "error: rebase conflict recovering seed commit onto origin/main (attempt $attempt): $(echo "$REBASE_OUTPUT" | tail -1)"
+        exit 1
+      fi
+      POST_REBASE_STATUS="$(git status --porcelain)"
+      if [[ "$PRE_REBASE_STATUS" != "$POST_REBASE_STATUS" ]]; then
+        echo "[blog-cadence-watchdog] FATAL: unstaged working tree state changed during push-race recovery — aborting" >&2
+        write_heartbeat "error: unstaged working tree changed during push-race recovery"
+        exit 1
+      fi
+
+      if PUSH_OUTPUT="$(git push origin main 2>&1)"; then
+        RECOVERED=1
+        break
+      fi
+      if echo "$PUSH_OUTPUT" | grep -qiE 'non-fast-forward|fetch first|\[rejected\]'; then
+        echo "[blog-cadence-watchdog] push rejected (non-fast-forward race) on attempt $attempt/$RECOVERY_MAX_ATTEMPTS — refetching origin/main and retrying" >&2
+        echo "$PUSH_OUTPUT" >&2
+        git fetch origin main --quiet 2>/dev/null || true
+        if [[ "$attempt" -lt "$RECOVERY_MAX_ATTEMPTS" ]]; then
+          sleep "$RECOVERY_BACKOFF_SECONDS"
+        fi
+        continue
+      fi
+      # Rejected for a reason other than a fast-forward race (auth failure,
+      # network loss, remote refusing) — not a rebase-able race, straight to
+      # the error heartbeat with the actual git stderr recorded.
+      echo "[blog-cadence-watchdog] git push origin main failed for a reason other than a fast-forward race — not retrying as a push race" >&2
+      echo "$PUSH_OUTPUT" >&2
+      write_heartbeat "error: git push origin main failed: $(echo "$PUSH_OUTPUT" | tail -1)"
+      exit 1
+    done
+
+    if [[ "$RECOVERED" -ne 1 ]]; then
+      echo "[blog-cadence-watchdog] FATAL: exhausted $RECOVERY_MAX_ATTEMPTS push-race recovery attempts, seed commit did not reach origin/main" >&2
+      write_heartbeat "error: exhausted push-race recovery attempts, local HEAD does not match origin/main"
+      exit 1
+    fi
+  fi
+
+  # The existing post-push safety audit still runs AFTER recovery: the
+  # disallowed-path check is against SEED_COMMIT's own diff (stable whether
+  # or not a rebase replayed it onto a new parent — the object itself still
+  # exists locally), then the final HEAD-matches-origin assertion.
+  CHANGED_FILES="$(git diff --name-only "$SEED_COMMIT"~1 "$SEED_COMMIT" 2>/dev/null || true)"
   BAD_PATH=""
   while IFS= read -r changed_file; do
     [[ -z "$changed_file" ]] && continue
@@ -396,6 +469,10 @@ elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
     write_heartbeat "error: seed commit touched disallowed path $BAD_PATH"
     exit 1
   fi
+
+  git fetch origin main --quiet 2>/dev/null || true
+  LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || echo unknown-local)"
+  REMOTE_HEAD="$(git rev-parse origin/main 2>/dev/null || echo unknown-remote)"
   if [[ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]]; then
     echo "[blog-cadence-watchdog] $SEED_LINE — but local HEAD ($LOCAL_HEAD) does not match origin/main ($REMOTE_HEAD), push did not land" >&2
     write_heartbeat "error: local HEAD does not match origin/main after claimed publish"

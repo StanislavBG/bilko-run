@@ -181,6 +181,76 @@ describe('blog-cadence-watchdog.sh', () => {
     expect(onExitFn![0]).toMatch(/HEARTBEAT_WRITTEN"\s*-eq\s*0/);
   });
 
+  it('recovers a rejected/non-fast-forward push by rebasing the seed commit onto freshly fetched origin/main and retrying, bounded', () => {
+    const publishedBranchIndex = script.indexOf('SEED_RESULT:\\ published=*');
+    expect(publishedBranchIndex).toBeGreaterThan(-1);
+    const publishedBranchOkIndex = script.indexOf('write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: }"', publishedBranchIndex);
+    const publishedBranch = script.slice(publishedBranchIndex, publishedBranchOkIndex);
+
+    // bounded retry loop
+    expect(publishedBranch).toMatch(/RECOVERY_MAX_ATTEMPTS=3/);
+    expect(publishedBranch).toMatch(/for attempt in \$\(seq 1 "\$RECOVERY_MAX_ATTEMPTS"\)/);
+    expect(publishedBranch).toMatch(/sleep "\$RECOVERY_BACKOFF_SECONDS"/);
+
+    // recovery uses fetch + rebase, never reset --hard / force push / history rewrite
+    expect(publishedBranch).toMatch(/git rebase origin\/main/);
+    expect(publishedBranch).not.toMatch(/push --force/);
+    expect(publishedBranch).not.toMatch(/push.*--force-with-lease/);
+    expect(publishedBranch).not.toMatch(/reset --hard/);
+
+    // gives up loud after exhausting retries
+    expect(publishedBranch).toMatch(/exhausted \$RECOVERY_MAX_ATTEMPTS push-race recovery attempts/);
+    expect(publishedBranch).toMatch(/write_heartbeat "error: exhausted push-race recovery attempts/);
+  });
+
+  it('aborts (never auto-resolves) a rebase conflict during push-race recovery, leaving the working tree untouched', () => {
+    expect(script).toMatch(/git rebase --abort/);
+    const conflictIndex = script.indexOf('git rebase --abort');
+    const surrounding = script.slice(conflictIndex - 600, conflictIndex + 200);
+    expect(surrounding).toMatch(/hit a conflict on attempt.*not auto-resolving/);
+    expect(surrounding).toMatch(/write_heartbeat "error: rebase conflict recovering seed commit/);
+    // unstaged working-tree state is asserted unchanged across the recovery
+    expect(surrounding).toMatch(/PRE_REBASE_STATUS="\$\(git status --porcelain\)"/);
+  });
+
+  it('asserts the unstaged working tree is unchanged across a successful rebase recovery too', () => {
+    expect(script).toMatch(/POST_REBASE_STATUS="\$\(git status --porcelain\)"/);
+    expect(script).toMatch(/PRE_REBASE_STATUS"\s*!=\s*"\$POST_REBASE_STATUS"/);
+    expect(script).toMatch(/write_heartbeat "error: unstaged working tree changed during push-race recovery"/);
+  });
+
+  it('does not retry a push rejected for a non-race reason (auth/network/other) — goes straight to the error heartbeat with git stderr recorded', () => {
+    expect(script).toMatch(/non-fast-forward\|fetch first\|\\\[rejected\\\]/);
+    expect(script).toMatch(/failed for a reason other than a fast-forward race — not retrying as a push race/);
+    expect(script).toMatch(/write_heartbeat "error: git push origin main failed: \$\(echo "\$PUSH_OUTPUT" \| tail -1\)"/);
+  });
+
+  it('detects a seed commit already present on origin/main and reports success instead of re-pushing or double-seeding', () => {
+    expect(script).toMatch(/git merge-base --is-ancestor "\$SEED_COMMIT" origin\/main/);
+    expect(script).toMatch(/already present on origin\/main — publish had actually landed/);
+    expect(script).toMatch(/git merge --ff-only origin\/main/);
+  });
+
+  it('never uses push --force, push --force-with-lease, reset --hard, or a blanket git add/commit anywhere in the script', () => {
+    expect(script).not.toMatch(/push\s+--force(?!-with-lease)/);
+    expect(script).not.toMatch(/--force-with-lease/);
+    expect(script).not.toMatch(/reset\s+--hard/);
+    expect(script).not.toMatch(/git add -A/);
+    expect(script).not.toMatch(/git add \./);
+    expect(script).not.toMatch(/git commit -a\b/);
+  });
+
+  it('re-runs the disallowed-path check and final origin/main HEAD assertion after recovery, before writing ok:', () => {
+    const publishedBranchIndex = script.indexOf('SEED_RESULT:\\ published=*');
+    const badPathIndex = script.indexOf('BAD_PATH="$changed_file"', publishedBranchIndex);
+    const finalHeadCheckIndex = script.indexOf('"$LOCAL_HEAD" != "$REMOTE_HEAD"', publishedBranchIndex);
+    const okWriteIndex = script.indexOf('write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: }"', finalHeadCheckIndex);
+    expect(publishedBranchIndex).toBeGreaterThan(-1);
+    expect(badPathIndex).toBeGreaterThan(publishedBranchIndex);
+    expect(finalHeadCheckIndex).toBeGreaterThan(badPathIndex);
+    expect(okWriteIndex).toBeGreaterThan(finalHeadCheckIndex);
+  });
+
   it('behaviorally verifies the shape gate rejects non-array/empty bodies and accepts a valid array', () => {
     const gateExpr = 'type == "array" and length > 0';
     const cases: Array<[string, boolean]> = [

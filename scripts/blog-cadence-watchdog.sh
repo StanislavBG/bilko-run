@@ -136,8 +136,20 @@ if [[ "$AUTONOMOUS_PUBLISH" == "true" ]]; then
   # future edit to one without the other fails loudly instead of silently
   # doing nothing, and so ALLOWED_COMMIT_PATHS is available below to verify
   # what the claude -p subprocess actually committed.
+  # ALLOWED_PATHS_AWK is a named variable (not inlined) so the test suite can
+  # execute this exact program against the real config file instead of only
+  # matching script text — a comment-only continuation line under the key
+  # (blog.config.yaml wraps the key's trailing comment onto its own line)
+  # must be skipped, not treated as the end of the block.
   ALLOWED_COMMIT_PATHS=()
-  ALLOWED_PATHS_RAW="$(awk '/allowed_commit_paths:/{flag=1; next} flag && /^[[:space:]]*-[[:space:]]*/{print; next} flag{exit}' "$CONFIG_FILE")"
+  ALLOWED_PATHS_AWK='
+    /allowed_commit_paths:/ { flag=1; next }
+    flag && /^[[:space:]]*$/ { next }
+    flag && /^[[:space:]]*#/ { next }
+    flag && /^[[:space:]]*-[[:space:]]*/ { print; next }
+    flag { exit }
+  '
+  ALLOWED_PATHS_RAW="$(awk "$ALLOWED_PATHS_AWK" "$CONFIG_FILE")"
   while IFS= read -r raw_line; do
     path="$(echo "$raw_line" | sed -E 's/^[[:space:]]*-[[:space:]]*//; s/[[:space:]]*#.*$//')"
     [[ -n "$path" ]] && ALLOWED_COMMIT_PATHS+=("$path")

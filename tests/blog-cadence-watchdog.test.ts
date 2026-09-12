@@ -251,6 +251,101 @@ describe('blog-cadence-watchdog.sh', () => {
     expect(okWriteIndex).toBeGreaterThan(finalHeadCheckIndex);
   });
 
+  describe('allowed_commit_paths parser (behavioral, not just static text match)', () => {
+    // Extract the actual awk program from the script so these tests run the
+    // real parser, not a re-implementation that could drift from it.
+    function extractAllowedPathsAwk(): string {
+      const match = script.match(/ALLOWED_PATHS_AWK='([\s\S]*?)'\n/);
+      expect(match).not.toBeNull();
+      return match![1];
+    }
+
+    function runAwk(awkProgram: string, input: string): string[] {
+      const output = execFileSync('awk', [awkProgram], { input, encoding: 'utf-8' });
+      return output
+        .split('\n')
+        .map((line) => line.replace(/^[\s]*-[\s]*/, '').replace(/[\s]*#.*$/, '').trim())
+        .filter((line) => line.length > 0);
+    }
+
+    it('returns exactly the two configured paths when run against the real blog.config.yaml', () => {
+      const awkProgram = extractAllowedPathsAwk();
+      const configPath = join(__dirname, '../.claude/skills/blog-from-git/blog.config.yaml');
+      const output = execFileSync('awk', [awkProgram, configPath], { encoding: 'utf-8' });
+      const paths = output
+        .split('\n')
+        .map((line) => line.replace(/^[\s]*-[\s]*/, '').replace(/[\s]*#.*$/, '').trim())
+        .filter((line) => line.length > 0);
+      expect(paths).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+    });
+
+    it('skips a comment-only continuation line between the key and the first item (the exact defect)', () => {
+      const awkProgram = extractAllowedPathsAwk();
+      const input = [
+        'allowed_commit_paths:                 # trailing comment',
+        '                                       # wrapped continuation of that comment',
+        '  - server/db.ts',
+        '  - .claude/skills/blog-from-git/blog-ledger.md',
+        'push_branch: main',
+      ].join('\n');
+      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+    });
+
+    it('skips a blank line inside the block', () => {
+      const awkProgram = extractAllowedPathsAwk();
+      const input = [
+        'allowed_commit_paths:',
+        '',
+        '  - server/db.ts',
+        '',
+        '  - .claude/skills/blog-from-git/blog-ledger.md',
+        'push_branch: main',
+      ].join('\n');
+      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+    });
+
+    it('strips an inline trailing comment on a list item', () => {
+      const awkProgram = extractAllowedPathsAwk();
+      const input = [
+        'allowed_commit_paths:',
+        '  - server/db.ts   # the seed file',
+        '  - .claude/skills/blog-from-git/blog-ledger.md',
+      ].join('\n');
+      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+    });
+
+    it('terminates the block at the next real YAML key, without swallowing later config', () => {
+      const awkProgram = extractAllowedPathsAwk();
+      const input = [
+        'allowed_commit_paths:',
+        '  - server/db.ts',
+        '  - .claude/skills/blog-from-git/blog-ledger.md',
+        'push_branch: main',
+        '  - not/a/real/item',
+      ].join('\n');
+      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+    });
+
+    it('returns an empty list when the key is genuinely empty or missing (fail-closed still trips)', () => {
+      const awkProgram = extractAllowedPathsAwk();
+      const emptyKeyInput = ['allowed_commit_paths:', 'push_branch: main'].join('\n');
+      expect(runAwk(awkProgram, emptyKeyInput)).toEqual([]);
+
+      const missingKeyInput = ['push_branch: main', 'push_remote: origin'].join('\n');
+      expect(runAwk(awkProgram, missingKeyInput)).toEqual([]);
+    });
+
+    it('parses list items with extra indentation or a tab instead of spaces', () => {
+      const awkProgram = extractAllowedPathsAwk();
+      const input = [
+        'allowed_commit_paths:',
+        '        - server/db.ts',
+        '\t- .claude/skills/blog-from-git/blog-ledger.md',
+      ].join('\n');
+      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+    });
+  });
+
   it('behaviorally verifies the shape gate rejects non-array/empty bodies and accepts a valid array', () => {
     const gateExpr = 'type == "array" and length > 0';
     const cases: Array<[string, boolean]> = [

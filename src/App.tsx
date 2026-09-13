@@ -85,6 +85,15 @@ function MaybeStandaloneRedirect() {
   return <NotFoundPage />;
 }
 
+// Legacy top-level /manual → the canonical product-scoped path. Kept forever:
+// Stripe receipt emails already in customers' inboxes link to /manual, and every
+// chapter anchor (#getting-started, …) must survive the hop, so search AND hash
+// are carried across verbatim.
+function RedirectManualToProduct() {
+  const loc = useLocation();
+  return <Navigate to={'/products/session-manager/manual' + loc.search + loc.hash} replace />;
+}
+
 function RedirectAppToProducts() {
   const loc = useLocation();
   // /app/<old> → /products/<canonical>; /app/metrics → /admin; /app or anything else → /products
@@ -135,6 +144,14 @@ function AppRoutes() {
             <Route path="/products" element={<Navigate to="/projects" replace />} />
             <Route path="/products/*">
               {toolRoutes()}
+              {/* The paid Field Manual lives under the Session Manager product
+                  root, not at top level — /manual implied "the bilko.run manual"
+                  on a host with ~25 projects. Declared before the splat so the
+                  static segments outrank MaybeStandaloneRedirect. */}
+              <Route
+                path="session-manager/manual"
+                element={<React.Suspense fallback={null}><ManualPage /></React.Suspense>}
+              />
               {/* unknown slug under /products/* — maybe a static-path project? */}
               <Route path="*" element={<MaybeStandaloneRedirect />} />
             </Route>
@@ -167,7 +184,10 @@ function AppRoutes() {
             <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />
 
             {/* ── Paid digital products ── */}
-            <Route path="/manual" element={<React.Suspense fallback={null}><ManualPage /></React.Suspense>} />
+            {/* Canonical path is /products/session-manager/manual (see above).
+                These two never die — they are in customers' receipt emails. */}
+            <Route path="/manual" element={<RedirectManualToProduct />} />
+            <Route path="/manual/*" element={<RedirectManualToProduct />} />
           </Route>
 
           {/* /products/session-manager — standalone marketing/checkout page.

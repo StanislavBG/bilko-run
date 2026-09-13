@@ -87,6 +87,58 @@ A single entry in `src/data/projectsRegistry.ts`:
 - `/app/<old-slug>` redirects to `/products/<canonical-slug>` per the `APP_TO_PRODUCT` map in `src/App.tsx`. (Pre-refactor compatibility.)
 - `/projects/<slug>/` (trailing slash, `static-path`) does **not** redirect — it's a different host kind serving different bytes.
 
+### Sub-paths of a `react-route` product
+
+A `react-route` app may own arbitrary sub-paths of `/products/<slug>/` — React
+Router's static segments outrank the `/products/*` splat, and a Fastify route
+declared for a specific sub-path outranks `@fastify/static`'s `/*` wildcard, so
+either the SPA or a server handler can claim one. Use this to keep a product's
+whole surface under one root instead of scattering it across top-level paths.
+
+Worked example — Session Manager owns everything under `/products/session-manager`:
+
+| Path | Served by |
+|---|---|
+| `/products/session-manager` | SPA, outside `<Layout />` (own chrome) |
+| `/products/session-manager/manual` | SPA, inside `<Layout />` — the paid Field Manual reader |
+| `/products/session-manager/my-manual` | Fastify (`server/routes/manual.ts`) — purchase recovery |
+| `/products/session-manager/remote` | Fastify 301 → the published web-remote bundle |
+| `/manual`, `/my-manual` | Fastify 301 → the two paths above, **permanently** |
+
+The two legacy top-level paths can never be deleted: they are printed in Stripe
+receipt emails already in customers' inboxes (`server/routes/stripe.ts`). Chapter
+anchors (`#getting-started`, …) survive the hop for free — a fragment is never
+sent to the server, and the browser re-applies it to the redirect target.
+
+### What must NOT move under `/products/<slug>/`
+
+A published `static-path` **bundle**. `public/projects/<slug>/` is the only
+prefix `publish_static_project` writes, and a bundle's own URL can be compiled
+into deployed clients. Session Manager's web-remote is the case in point: its
+relay URL is baked into already-paired phones, so `/products/session-manager/remote`
+is a **301 to the bundle**, not a second copy of it. One artifact, one canonical
+URL, discoverable from the product root.
+
+Migrating such a path is a three-step sequence, never a rename:
+
+1. Host serves the WS relay at **both** paths (`RELAY_WS_PATHS` in
+   `server/sm-relay/router.ts` — done; `/products/session-manager/relay` is live).
+2. The sibling publishes a new bundle pointing at the new path.
+3. Only then does the old path get retired.
+
+### One publisher per `/projects/<slug>/` prefix
+
+`publish_static_project` does `rm -rf public/projects/<slug>` before copying, so
+two publishers targeting one slug silently delete each other's bytes — including
+when one writes only sub-directories (`/home/`, `/feature/`, `/architecture/`)
+that the other's bundle doesn't contain.
+
+**Rule: a slug's static prefix has exactly one publisher.** A project with a
+second static surface (project-home lenses, docs, a demo) either folds those
+files into the same bundle before publishing, or registers them under a distinct
+slug. For `session-manager`, the owning publisher is the **web-remote phone app**;
+project-home lenses must not target that prefix.
+
 ## Adding a new app — checklist
 
 1. Decide the host kind. Default `static-path` unless you need shared auth/credits → `react-route`.
@@ -336,6 +388,14 @@ Default budget per app: **200 KB gzipped**. Adjust via direct SQL (admin UI out 
 INSERT OR REPLACE INTO app_budgets (slug, max_size_gz_bytes, updated_at)
 VALUES ('my-app', 300000, strftime('%s','now'));
 ```
+
+A budget below what is **already live** for that slug is a dead gate: every
+future publish fails while the oversize bundle it was meant to stop stays
+served. `session-manager` sat in exactly that state (195 KB budget vs a live
+1,072,016-byte bundle). Seeds for apps that are oversize by design therefore
+use a raise-if-lower upsert (`OVERSIZE_BUDGETS` in `server/db.ts`) rather than
+`INSERT OR IGNORE`. When you tighten a budget, check the live manifest's
+`bundle.sizeBytesGz` first and pair the cut with a trim task in the sibling.
 
 ### sourceRepoPath requirement
 

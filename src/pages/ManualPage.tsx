@@ -1,5 +1,5 @@
 /**
- * /manual — the buy + read surface for the Session Manager Field Manual ($19.99).
+ * /products/session-manager/manual — the buy + read surface for the Session Manager Field Manual ($19.99).
  *
  * Three states, one page (deliberately not three routes — a buyer landing here
  * from a Stripe receipt, a signed-out visitor, and an owner all use one URL):
@@ -8,7 +8,7 @@
  *   3. entitled        → full reader + download buttons
  *
  * The reader half is written for a first-time visitor who has never used the
- * app: the chapter is deep-linkable (`/manual#scheduler`), cross-references
+ * app: the chapter is deep-linkable (`/products/session-manager/manual#scheduler`), cross-references
  * inside a chapter body switch chapters instead of dead-ending on a `#slug`
  * that isn't in the DOM, and every chapter ends with where to go next.
  */
@@ -87,7 +87,7 @@ export default function ManualPage() {
   }, [isSignedIn, getToken]);
 
   // Open the chapter the URL asks for, else the first one — the page is never
-  // an empty shell, and a shared `/manual#scheduler` link lands where it says.
+  // an empty shell, and a shared `/products/session-manager/manual#scheduler` link lands where it says.
   useEffect(() => {
     if (activeSlug || !toc?.chapters.length) return;
     setActiveSlug(slugFromHash(toc) ?? toc.chapters[0].slug);
@@ -253,7 +253,7 @@ export default function ManualPage() {
                   {'  ·  '}
                 </>
               )}
-              Already bought it? <a className="text-sky-400" href="/my-manual">Find your purchase →</a>
+              Already bought it? <a className="text-sky-400" href="/products/session-manager/my-manual">Find your purchase →</a>
             </p>
           </div>
         )}
@@ -349,7 +349,7 @@ export default function ManualPage() {
                 </p>
               )}
               <p className="mt-4 text-xs text-neutral-600">
-                Already bought it? <a className="text-sky-400" href="/my-manual">Find your purchase →</a>
+                Already bought it? <a className="text-sky-400" href="/products/session-manager/my-manual">Find your purchase →</a>
               </p>
             </div>
           )}

@@ -7,7 +7,8 @@
  *   GET  /api/manual/status                  auth     { entitled, toc } for the signed-in user
  *   GET  /api/manual/chapter/:slug           mixed    free chapters public, rest 402 unless entitled
  *   GET  /api/manual/download/:assetId       auth     streams the PDF / offline HTML
- *   GET  /my-manual                          public   email-based recovery page (payment-link buyers)
+ *   GET  /products/session-manager/my-manual public   email-based recovery page (payment-link buyers)
+ *   GET  /my-manual                          public   301 → the path above (legacy, in receipt emails)
  *
  * Entitlement itself is the already-wired `session_manager` one-time purchase —
  * see shared/manual-catalog.ts for why there's no second SKU.
@@ -37,6 +38,11 @@ function escHtml(s: string): string {
 
 /** 503 body used everywhere a release bundle hasn't been published yet. */
 const NOT_PUBLISHED = { error: 'The manual has not been published yet. Check back shortly.' };
+
+/** Canonical, product-scoped paths. Everything Session Manager hangs off
+ *  /products/session-manager; the old top-level /manual and /my-manual 301 here. */
+const MANUAL_PATH = '/products/session-manager/manual';
+const MY_MANUAL_PATH = '/products/session-manager/my-manual';
 
 export function registerManualRoutes(app: FastifyInstance): void {
   // ── Public: what you get for your money ────────────────────────────────────
@@ -169,7 +175,11 @@ export function registerManualRoutes(app: FastifyInstance): void {
 
   // ── Recovery page for buyers who paid via a static payment link ────────────
   // Mirrors /my-license: no Clerk session needed, just the purchase email.
-  app.get('/my-manual', async (req, reply) => {
+  //
+  // Canonical path is product-scoped so Session Manager's whole web presence
+  // hangs off /products/session-manager. The bare /my-manual is registered
+  // below as a permanent 301 — it is printed in receipt emails already sent.
+  app.get(MY_MANUAL_PATH, async (req, reply) => {
     const query = req.query as { email?: string };
     const email = (query.email ?? '').trim().toLowerCase();
     reply.type('text/html');
@@ -192,22 +202,41 @@ button{width:100%;padding:12px;background:#7fff7f;color:#000;border:none;border-
         return page('No purchase found', `
           <p>We couldn't find a ${escHtml(MANUAL_TITLE)} purchase for <strong>${escHtml(email)}</strong>.</p>
           <p>If you just paid, the webhook can take up to a minute — try again shortly.</p>
-          <p><a href="/my-manual">Try a different email</a> · <a href="/manual">Buy for ${MANUAL_PRICE_LABEL}</a></p>`);
+          <p><a href="${MY_MANUAL_PATH}">Try a different email</a> · <a href="${MANUAL_PATH}">Buy for ${MANUAL_PRICE_LABEL}</a></p>`);
       }
       const m = latestManifest();
       return page('Your manual is unlocked', `
         <p>Purchase confirmed for <strong>${escHtml(email)}</strong>.</p>
-        <p>Sign in at <a href="/manual">bilko.run/manual</a> with this email to read online and download
+        <p>Sign in at <a href="${MANUAL_PATH}">bilko.run${MANUAL_PATH}</a> with this email to read online and download
         ${m ? `<strong>v${escHtml(m.version)}</strong>` : 'the latest release'}.</p>
         <p style="color:#888;font-size:0.85em">Every future revision is included — no repeat purchase.</p>`);
     }
 
     return page('Find your manual', `
       <p>Enter the email you used to buy ${escHtml(MANUAL_TITLE)}.</p>
-      <form method="GET" action="/my-manual">
+      <form method="GET" action="${MY_MANUAL_PATH}">
         <input type="email" name="email" placeholder="you@example.com" required autofocus/>
         <button type="submit">Find my purchase</button>
       </form>
-      <p style="margin-top:24px">Don't have it yet? <a href="/manual">Get it for ${MANUAL_PRICE_LABEL} →</a></p>`);
+      <p style="margin-top:24px">Don't have it yet? <a href="${MANUAL_PATH}">Get it for ${MANUAL_PRICE_LABEL} →</a></p>`);
+  });
+
+  // ── Permanent redirects for the retired top-level paths ────────────────────
+  // These must keep working forever: Stripe receipt emails sent before the
+  // consolidation link to /manual and /my-manual. The query string is carried
+  // over (the recovery page takes ?email=). The fragment (#getting-started and
+  // every other chapter anchor) is never sent to the server — the browser
+  // re-applies it to the redirect target on its own, so anchors survive.
+  app.get('/my-manual', async (req, reply) => {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    return reply.redirect(MY_MANUAL_PATH + qs, 301);
+  });
+
+  // /manual is otherwise an SPA route; answering it here makes the hop a real
+  // 301 rather than a 200-then-client-redirect. src/App.tsx keeps a matching
+  // <Navigate> so in-app links that never touch the server redirect too.
+  app.get('/manual', async (req, reply) => {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    return reply.redirect(MANUAL_PATH + qs, 301);
   });
 }

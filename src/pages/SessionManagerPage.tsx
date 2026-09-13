@@ -273,7 +273,7 @@ function InstallCommand() {
  * Buy panel.
  *
  * Checkout is bound to the CLERK identity, never to a free-text email field.
- * The entitlement that unlocks /manual is looked up by the signed-in user's
+ * The entitlement that unlocks /products/session-manager/manual is looked up by the signed-in user's
  * email, so letting someone type a different address here meant they could pay
  * and then be told they own nothing. Sign-in first (Google is one click), then
  * buy — the address that pays is by construction the address that reads.
@@ -345,11 +345,11 @@ function BuyPanel() {
       )}
 
       <div className="mt-3 flex justify-center gap-3 text-[11px] text-warm-400">
-        <a href="/manual" className="underline underline-offset-2 hover:text-fire-600">
+        <a href="/products/session-manager/manual" className="underline underline-offset-2 hover:text-fire-600">
           Free sample chapter
         </a>
         <span aria-hidden="true">·</span>
-        <a href="/my-manual" className="underline underline-offset-2 hover:text-fire-600">
+        <a href="/products/session-manager/my-manual" className="underline underline-offset-2 hover:text-fire-600">
           Already bought it?
         </a>
       </div>
@@ -445,7 +445,7 @@ function FeaturePanel({ feature }: { feature: Feature }) {
           ))}
         </ul>
         <a
-          href="/manual"
+          href="/products/session-manager/manual"
           className="text-[12px] font-semibold text-fire-600 underline underline-offset-2 hover:text-fire-700"
         >
           Read a chapter free →
@@ -479,7 +479,7 @@ export default function SessionManagerPage() {
           </span>
         </div>
         <a
-          href="/manual"
+          href="/products/session-manager/manual"
           className="text-xs text-warm-400 underline underline-offset-2 hover:text-warm-600"
         >
           Read the manual →

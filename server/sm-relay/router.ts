@@ -12,7 +12,16 @@ import type { Duplex } from 'node:stream';
 import { consumeWsTicket } from './tokens.js';
 
 // Path the phone/agent connect to (same-origin under bilko.run).
+//
+// `RELAY_WS_PATH` stays the legacy `/projects/...` form because it is COMPILED
+// INTO already-paired phone bundles — changing it would break every paired
+// device until it reloads a new bundle. The product-scoped path is served in
+// parallel so a new bundle can move over whenever Session Manager publishes
+// one; the legacy path is retired only after that bundle is live.
+// Both are same-origin, so the host CSP's `connect-src 'self'` covers either.
 export const RELAY_WS_PATH = '/projects/session-manager/relay';
+export const RELAY_WS_PATH_CANONICAL = '/products/session-manager/relay';
+export const RELAY_WS_PATHS: readonly string[] = [RELAY_WS_PATH, RELAY_WS_PATH_CANONICAL];
 
 interface Envelope {
   type: string;
@@ -265,7 +274,7 @@ export function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer
     return false;
   }
 
-  if (pathname !== RELAY_WS_PATH) return false; // not ours — let other handlers run
+  if (!RELAY_WS_PATHS.includes(pathname)) return false; // not ours — let other handlers run
 
   if (!ticket) {
     socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');

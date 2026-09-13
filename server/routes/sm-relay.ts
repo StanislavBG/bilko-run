@@ -68,6 +68,17 @@ function checkRate(store: Map<string, { count: number; resetAt: number }>, key: 
 }
 
 export function registerSmRelayRoutes(app: FastifyInstance): void {
+  // ── Product-root entry point for the web-remote phone app ─────────────────
+  // Session Manager's whole web presence is reasoned about as one unit under
+  // /products/session-manager. The phone app's BUNDLE, though, stays published
+  // at /projects/session-manager/ — that is the host contract's static-path
+  // prefix, it is what mcp-host-server's publisher writes, and its URL is baked
+  // into already-paired devices. So the product root exposes a redirect rather
+  // than a second copy: one canonical artifact, discoverable from the product.
+  for (const from of ['/products/session-manager/remote', '/products/session-manager/remote/']) {
+    app.get(from, async (_req, reply) => reply.redirect('/projects/session-manager/', 301));
+  }
+
   // ── GET /api/sm-relay/me ──
   app.get('/api/sm-relay/me', async (req, reply) => {
     const auth = await requireRelayUser(req, reply);

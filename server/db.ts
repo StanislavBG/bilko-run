@@ -643,6 +643,30 @@ export async function initDb(): Promise<void> {
     });
   } catch { /* ignore */ }
 
+  // Oversize-by-design siblings. These use a raise-if-lower upsert, not
+  // INSERT OR IGNORE: an existing row that is BELOW the real bundle size makes
+  // the publish gate unpassable forever, which is exactly what happened to
+  // session-manager (budget 195 KB vs an already-live 1,072,016-byte bundle —
+  // the live bundle predates the budget row, so the gate could only ever block
+  // updates to a bundle it had already shipped). Raise-only: a budget that has
+  // been deliberately tightened below these defaults is left alone only if it
+  // is already above them.
+  const OVERSIZE_BUDGETS: Array<[string, number]> = [
+    // web-remote phone app: WebSocket client + terminal renderer. Trim target
+    // tracked in session-manager's repo; 1.3 MB admits what is already live.
+    ['session-manager', 1_300_000],
+  ];
+  for (const [slug, limit] of OVERSIZE_BUDGETS) {
+    try {
+      await client.execute({
+        sql: 'INSERT INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?) '
+           + 'ON CONFLICT(slug) DO UPDATE SET max_size_gz_bytes = ?, updated_at = ? '
+           + 'WHERE app_budgets.max_size_gz_bytes < ?',
+        args: [slug, limit, Math.floor(Date.now() / 1000), limit, Math.floor(Date.now() / 1000), limit],
+      });
+    } catch { /* ignore */ }
+  }
+
   // Seed app_spend_ceilings for all paid tools (idempotent)
   const PAID_TOOL_SLUGS = [
     'stack-audit', 'launch-grader', 'page-roast',

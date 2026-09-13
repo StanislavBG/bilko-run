@@ -403,9 +403,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         ? `
         <p>Your copy of <strong>The Session Manager Field Manual</strong> is unlocked for
         <strong>${escHtml(email)}</strong> — including every future revision.</p>
-        <p><a href="/manual" style="display:inline-block;background:#7fff7f;color:#000;padding:12px 20px;border-radius:6px;font-weight:600;text-decoration:none">Read the manual →</a></p>
+        <p><a href="/products/session-manager/manual" style="display:inline-block;background:#7fff7f;color:#000;padding:12px 20px;border-radius:6px;font-weight:600;text-decoration:none">Read the manual →</a></p>
         <p style="font-size:0.9em;color:#aaa">Sign in with <strong>${escHtml(email)}</strong> to read online and download the PDF.
-        Lost this page? <a href="/my-manual?email=${encodeURIComponent(email)}">Find your purchase</a>.</p>
+        Lost this page? <a href="/products/session-manager/my-manual?email=${encodeURIComponent(email)}">Find your purchase</a>.</p>
         <p style="font-size:0.9em;color:#888">The app itself is free — launch it any time with:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em">npx claude-code-session-manager@latest</pre>`
         : isSupportPurchase

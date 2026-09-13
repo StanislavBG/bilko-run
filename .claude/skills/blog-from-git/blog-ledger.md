@@ -9,6 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
+| 2026-09-02 | the-book-didnt-know-what-it-already-held | social-signals-trader | ✅ | field-note |
 | 2026-08-27 | a-new-game-a-week-old-and-already-playable | starry-night-ships | ❌ no tile | shipped-note |
 | 2026-08-23 | epics-stopped-sharing-one-working-directory | session-manager | ✅ | shipped-note |
 | 2026-08-19 | siblings-can-now-see-their-own-bandwidth-bill | mcp-host | ✅ | changelog |
@@ -37,27 +38,39 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** starry-night-ships (off-list, no tile), 2026-08-27, closing the
-  catch-up backfill of the 07-24→08-29 gap (9 posts seeded 2026-08-29 in one commit, backdated to
-  when the work shipped). These were the first posts DRAFTED BY AUTOMATION —
-  `scripts/blog-cadence-watchdog.sh` produced them unattended; a human reviewed and approved
-  before seeding, per SKILL.md phase 6.
-- **Rotation debt:** the last post was off-`/projects` (starry-night-ships) — the next post MUST be
-  an on-`/projects` project.
+- **Last project covered:** social-signals-trader (on-list, ✅ tile), post dated 2026-09-02, seeded
+  2026-09-12 by an unattended watchdog run — first post where the watchdog ran the FULL pipeline
+  (phases 1-7, including autonomous approve + seed) rather than stopping at draft. This is 1 of
+  potentially several backfill posts for the 08-27→09-12 gap (16 days); `max_posts_per_run: 1`
+  capped this run to one seed — remaining window is in the "Planned backfill queue" below.
+- **Rotation debt:** none — the last post was on-`/projects`. The next post MAY be off-list
+  (burrow is the strongest queued candidate) since two consecutive off-list posts is the rule being
+  guarded against, not one.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
   08-19), problem→outcome (07-02, 08-11), shipped-note (07-06, 07-21, 08-23, 08-27), field-note
-  (07-11, 07-31, 08-08, 08-15), metric-update (07-18, 08-04). Next: compare reception/readability
-  rather than adding tones.
-- **Cooling off (covered in this backfill, deprioritize):** session-manager (×2), social-signals-trader,
-  signal-builder, mcp-host, academy, burrow, 01-shapes-foundation, starry-night-ships.
+  (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18, 08-04). Next: compare
+  reception/readability rather than adding tones.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** social-signals-trader,
+  starry-night-ships, session-manager.
 - **Due / under-covered on-list projects** (good next candidates): outdoor-hours, local-score,
   game-academy, stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
   audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku, git-viewer, sigma.
-- **Unpushed-repo watchlist (re-verified 2026-08-29, all WORSE than 07-24):** signal-builder 116
-  commits ahead (was 105), burrow 218 ahead (was 174), social-signals-trader ~200 ahead,
-  starry-night-ships has no remote at all, sigma-plus still no remote. GitHub-first scans miss ALL
-  of this work — local reconciliation is mandatory, not optional.
+- **Unpushed-repo watchlist (re-verified 2026-09-12):** signal-builder 116 commits ahead (0 new
+  since 2026-08-27, unchanged), burrow 239 ahead (21 landed since 2026-08-27 — active, off-list,
+  next queued candidate), sigma-plus still no remote at all (0 new commits found), starry-night-ships
+  still no remote at all but very active (256 commits since 2026-08-27 — already covered/cooling,
+  skip). GitHub-first scans miss ALL of this work — local reconciliation is mandatory, not optional.
+- **Planned backfill queue (08-27 → 09-12 gap, 16 days; `catchup_trigger_days: 10` tripped):**
+  - ~~2026-09-02 · social-signals-trader · the-book-didnt-know-what-it-already-held (seeded this run)~~
+  - 2026-09-06ish · burrow (off-list) · candidate story units in the 21 unpushed commits since
+    2026-08-27 not yet researched in depth — next run should read them before drafting.
+  - claude-code-session-manager shipped substantial work in this window too (telemetry, scheduler
+    escalation/quarantine guards, v0.86.0 release) but is on cooldown until social-signals-trader
+    and starry-night-ships roll off — do not draft it next even though it's on-list and active.
+  - Remaining slots (09-10ish → today) still need a scan pass once burrow's story unit is placed;
+    a future run should re-run `scan.md` §5 for local-only repos before assuming this queue is complete.
 - **Cadence is now automated:** `blog-cadence-watchdog.timer` (systemd user timer, OnCalendar=daily,
-  Persistent=true) drafts into `drafts/` whenever the live gap blows `target_gap_days`. It never
-  seeds — phase 6 approval stays human. A stale watchdog is caught by
-  `blog-watchdog-heartbeat-check.timer`; the live gap shows on /admin observability.
+  Persistent=true) runs the full pipeline unattended per `blog.config.yaml`'s
+  `autonomy.autonomous_publish: true` — phases 6/7 (approve, seed) no longer wait on a human when
+  that flag is true. A stale watchdog is caught by `blog-watchdog-heartbeat-check.timer`; the live
+  gap shows on /admin observability.

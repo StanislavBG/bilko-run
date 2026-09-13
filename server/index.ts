@@ -6,6 +6,9 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
 import { initDb, dbAll } from './db.js';
+import { ADMIN_EMAILS } from './clerk.js';
+import { grantComp } from './services/comp-grants.js';
+import { MANUAL_PRODUCT_KEY } from '../shared/manual-catalog.js';
 import { registerToolRoutes } from './routes/tools/index.js';
 import { registerStripeRoutes } from './routes/stripe.js';
 import { registerLicenseRoutes } from './routes/license.js';
@@ -25,6 +28,7 @@ import { registerProjectEventsRoutes } from './routes/project-events.js';
 import { registerProjectFeedbackRoutes } from './routes/project-feedback.js';
 import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
+import { registerCompGrantRoutes } from './routes/admin-comp-grants.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
 import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
@@ -41,6 +45,25 @@ try {
 } catch (err) {
   console.error('[DB] Init failed, exiting:', err);
   process.exit(1);
+}
+
+// The owner can't buy his own paid products, so he'd otherwise have no way to QA
+// the paid Field Manual on the live site. Seed a comp entitlement for every admin
+// on boot — idempotent (see grantComp), and it lands in the same audited
+// comp_grants log as any other comp rather than as an invisible SQL poke.
+for (const adminEmail of ADMIN_EMAILS) {
+  try {
+    const r = await grantComp({
+      email: adminEmail,
+      productKey: MANUAL_PRODUCT_KEY,
+      reason: 'Owner QA access to the paid Field Manual (auto-seeded on boot)',
+      grantedBy: 'system:boot',
+    });
+    if (r.created) console.log(`[Comp] Seeded manual entitlement for ${adminEmail}`);
+  } catch (err) {
+    // Never block boot on a comp seed.
+    console.error('[Comp] Owner manual seed failed:', err);
+  }
 }
 
 
@@ -125,6 +148,7 @@ registerProjectDataRoutes(app);
 registerProjectFeedbackRoutes(app);
 registerSmRelayRoutes(app);
 registerManualRoutes(app);
+registerCompGrantRoutes(app);
 
 // Boot-time secret age check
 try {

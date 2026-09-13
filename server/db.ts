@@ -108,6 +108,21 @@ const MIGRATIONS = [
     product_key TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
+  // Audit trail for complimentary entitlements (see server/services/comp-grants.ts).
+  // The entitlement itself lives in stripe_one_time_purchases — this table only
+  // records who granted it and why, so a comp is never indistinguishable from a
+  // sale after the fact. UNIQUE(email, product_key) makes re-granting an upsert.
+  `CREATE TABLE IF NOT EXISTS comp_grants (
+    id INTEGER PRIMARY KEY,
+    email TEXT NOT NULL,
+    product_key TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    granted_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    revoked_at INTEGER,
+    revoked_by TEXT,
+    UNIQUE(email, product_key)
+  )`,
   `CREATE TABLE IF NOT EXISTS license_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT UNIQUE NOT NULL,

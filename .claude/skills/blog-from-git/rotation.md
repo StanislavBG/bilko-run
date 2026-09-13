@@ -6,9 +6,15 @@ been published and the source of truth for *what to cover next* — the git scan
 
 ## Two hard rules
 
-1. **Alternate projects.** Do not cover the same project as the immediately previous post. Rotate
-   through the roster; prefer an on-`/projects` project that hasn't had a post recently (the ledger
-   lists "due / under-covered" candidates).
+1. **3-post cooldown (blog.config.yaml `rotation.project_cooldown_posts: 3`).** A project covered
+   in ANY of the last 3 ledger rows is INELIGIBLE as the next post's subject — not just the
+   immediately previous post. "Never repeat the previous project" is the degenerate N=1 case of
+   this same rule; the binding constraint is the 3-post window. Evaluate this against
+   `blog-ledger.md`'s recorded per-post rows (the ledger IS the rotation memory), never against a
+   heuristic reading of post titles. Rotate through the roster; prefer an on-`/projects` project
+   that hasn't had a post recently (the ledger lists "due / under-covered" candidates). If a post
+   is due but every candidate project is on cooldown, do not invent one to fill the slot — see
+   `blog.config.yaml`'s truth rules.
 2. **Never run two consecutive posts about a project with no `/projects` tile.** A project is
    "on `/projects`" iff its slug is in `src/data/standalone-projects.json`. Off-list projects
    (burrow, edgar-rag, and anything untiled) may be blogged, but **not back-to-back** — an on-list

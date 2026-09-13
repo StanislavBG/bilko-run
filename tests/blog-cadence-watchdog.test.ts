@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 
 // Static text checks only — this script shells out to `curl` and `claude -p`,
@@ -482,6 +483,211 @@ describe('blog-cadence-watchdog.sh', () => {
     it('the noop branch actually calls this function rather than hard-coding ok:', () => {
       expect(script).toMatch(/heartbeat_status_for_outcome "\$GAP_DAYS" "\$UPPER_BOUND" 0/);
     });
+  });
+
+  describe('publish-due gate uses the LOWER bound of target_gap_days, not the upper (behavioral)', () => {
+    function extractPublishDueStatusFn(): string {
+      const match = script.match(/publish_due_status\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function runPublishDueStatus(gapDays: number, lowerBound: number): string {
+      const fn = extractPublishDueStatusFn();
+      const out = execFileSync(
+        'bash',
+        ['-c', `${fn}\npublish_due_status ${gapDays} ${lowerBound}`],
+        { encoding: 'utf-8' }
+      );
+      return out.trim();
+    }
+
+    it('gap=3, lower_bound=3 => due', () => {
+      expect(runPublishDueStatus(3, 3)).toBe('due');
+    });
+
+    it('gap=2, lower_bound=3 => not_due', () => {
+      expect(runPublishDueStatus(2, 3)).toBe('not_due');
+    });
+
+    it('gap=4 (between lower and upper bound), lower_bound=3 => due — publish does not wait for the upper bound', () => {
+      expect(runPublishDueStatus(4, 3)).toBe('due');
+    });
+
+    it('parses LOWER_BOUND as the first number in target_gap_days from the real config, distinct from UPPER_BOUND', () => {
+      expect(script).toMatch(/LOWER_BOUND="\$\(grep -m1 'target_gap_days:' "\$CONFIG_FILE" \| grep -oP '\\\[\\K\\d\+'\)"/);
+      const configPath = join(__dirname, '../.claude/skills/blog-from-git/blog.config.yaml');
+      const configText = readFileSync(configPath, 'utf-8');
+      const line = configText.match(/target_gap_days:.*/)![0];
+      expect(line).toMatch(/\[3,\s*5\]/);
+    });
+
+    it('the early "within cadence — no action" exit before scanning has been removed', () => {
+      expect(script).not.toMatch(/if \(\( GAP_DAYS < UPPER_BOUND \)\); then/);
+    });
+
+    it('scanning runs unconditionally via run_scan_only before the publish-due branch decides anything', () => {
+      expect(script).toMatch(/run_scan_only\(\) \{/);
+      expect(script).toMatch(/PUBLISH_DUE="\$\(publish_due_status "\$GAP_DAYS" "\$LOWER_BOUND"\)"/);
+      const scanFnIndex = script.indexOf('run_scan_only() {');
+      const publishDueIndex = script.indexOf('PUBLISH_DUE=');
+      expect(scanFnIndex).toBeGreaterThan(-1);
+      expect(publishDueIndex).toBeGreaterThan(scanFnIndex);
+    });
+
+    it('the same-day state-file lock scans (not exits) rather than short-circuiting the whole run', () => {
+      const lockIndex = script.indexOf('LAST_RUN_DATE="$(cut -d\' \' -f1');
+      expect(lockIndex).toBeGreaterThan(-1);
+      const lockBlock = script.slice(lockIndex, lockIndex + 400);
+      expect(lockBlock).toMatch(/run_scan_only/);
+    });
+  });
+
+  describe('rotation cooldown of N posts (behavioral, fixture ledger content)', () => {
+    function extractLedgerRecentProjectsFn(): string {
+      const match = script.match(/ledger_recent_projects\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function extractProjectInCooldownFn(): string {
+      const match = script.match(/project_in_cooldown\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function writeFixtureLedger(rows: Array<[string, string, string]>): string {
+      const header = [
+        '# fixture ledger',
+        '',
+        '| Date | Slug | Project | On /projects? | Tone |',
+        '|---|---|---|---|---|',
+      ];
+      const body = rows.map(([date, slug, project]) => `| ${date} | ${slug} | ${project} | ✅ | changelog |`);
+      const content = [...header, ...body].join('\n') + '\n';
+      const path = join(tmpdir(), `fixture-ledger-${Date.now()}-${Math.random().toString(36).slice(2)}.md`);
+      writeFileSync(path, content, 'utf-8');
+      return path;
+    }
+
+    it('project_cooldown_posts is parsed from blog.config.yaml with a FATAL guard on parse failure', () => {
+      expect(script).toMatch(/PROJECT_COOLDOWN_POSTS="\$\(grep -m1 'project_cooldown_posts:' "\$CONFIG_FILE" \| grep -oP/);
+      expect(script).toMatch(/FATAL: could not parse project_cooldown_posts/);
+      expect(script).toMatch(/write_heartbeat "error: could not parse project_cooldown_posts"/);
+    });
+
+    it('extracts the Project column of the last N rows (newest first) from a fixture ledger', () => {
+      const fn = extractLedgerRecentProjectsFn();
+      const ledgerPath = writeFixtureLedger([
+        ['2026-09-10', 'slug-a', 'project-a'],
+        ['2026-09-07', 'slug-b', 'project-b'],
+        ['2026-09-04', 'slug-c', 'project-c'],
+        ['2026-09-01', 'slug-d', 'project-d'],
+      ]);
+      const out = execFileSync('bash', ['-c', `${fn}\nledger_recent_projects "${ledgerPath}" 3`], {
+        encoding: 'utf-8',
+      });
+      const projects = out.trim().split('\n');
+      expect(projects).toEqual(['project-a', 'project-b', 'project-c']);
+    });
+
+    it('a project present in one of the last 3 ledger rows is in cooldown', () => {
+      const recentFn = extractLedgerRecentProjectsFn();
+      const cooldownFn = extractProjectInCooldownFn();
+      const ledgerPath = writeFixtureLedger([
+        ['2026-09-10', 'slug-a', 'project-a'],
+        ['2026-09-07', 'slug-b', 'project-b'],
+        ['2026-09-04', 'slug-c', 'project-c'],
+      ]);
+      const script2 = `${recentFn}\n${cooldownFn}\nrecent="$(ledger_recent_projects "${ledgerPath}" 3)"\nif project_in_cooldown "project-b" "$recent"; then echo BLOCKED; else echo ELIGIBLE; fi`;
+      const out = execFileSync('bash', ['-c', script2], { encoding: 'utf-8' }).trim();
+      expect(out).toBe('BLOCKED');
+    });
+
+    it('a project NOT present in the last 3 ledger rows is eligible', () => {
+      const recentFn = extractLedgerRecentProjectsFn();
+      const cooldownFn = extractProjectInCooldownFn();
+      const ledgerPath = writeFixtureLedger([
+        ['2026-09-10', 'slug-a', 'project-a'],
+        ['2026-09-07', 'slug-b', 'project-b'],
+        ['2026-09-04', 'slug-c', 'project-c'],
+      ]);
+      const script2 = `${recentFn}\n${cooldownFn}\nrecent="$(ledger_recent_projects "${ledgerPath}" 3)"\nif project_in_cooldown "project-z" "$recent"; then echo BLOCKED; else echo ELIGIBLE; fi`;
+      const out = execFileSync('bash', ['-c', script2], { encoding: 'utf-8' }).trim();
+      expect(out).toBe('ELIGIBLE');
+    });
+
+    it('uses however many rows exist when fewer than N posts are in the ledger, without erroring', () => {
+      const fn = extractLedgerRecentProjectsFn();
+      const ledgerPath = writeFixtureLedger([
+        ['2026-09-10', 'slug-a', 'project-a'],
+        ['2026-09-07', 'slug-b', 'project-b'],
+      ]);
+      const out = execFileSync('bash', ['-c', `${fn}\nledger_recent_projects "${ledgerPath}" 3`], {
+        encoding: 'utf-8',
+      });
+      const projects = out.trim().split('\n').filter(Boolean);
+      expect(projects).toEqual(['project-a', 'project-b']);
+    });
+
+    it('the real blog-ledger.md yields exactly 3 recent projects for the current cooldown window', () => {
+      const fn = extractLedgerRecentProjectsFn();
+      const ledgerPath = join(__dirname, '../.claude/skills/blog-from-git/blog-ledger.md');
+      const out = execFileSync('bash', ['-c', `${fn}\nledger_recent_projects "${ledgerPath}" 3`], {
+        encoding: 'utf-8',
+      });
+      const projects = out.trim().split('\n').filter(Boolean);
+      expect(projects.length).toBe(3);
+    });
+
+    it('scan_every_days is parsed from blog.config.yaml with a FATAL guard on parse failure or drift from 1', () => {
+      expect(script).toMatch(/SCAN_EVERY_DAYS="\$\(grep -m1 'scan_every_days:' "\$CONFIG_FILE" \| grep -oP/);
+      expect(script).toMatch(/FATAL: could not parse scan_every_days/);
+      expect(script).toMatch(/write_heartbeat "error: could not parse scan_every_days"/);
+      expect(script).toMatch(/"\$SCAN_EVERY_DAYS" != "1"/);
+      expect(script).toMatch(/write_heartbeat "error: scan_every_days is not 1/);
+    });
+
+    it('mechanically audits the seeded ledger project against the pre-run cooldown list rather than trusting the subprocess self-report', () => {
+      expect(script).toMatch(/ledger_recent_projects \/dev\/stdin 1/);
+      expect(script).toMatch(/project_in_cooldown "\$SEEDED_LEDGER_PROJECT" "\$RECENT_PROJECTS"/);
+      expect(script).toMatch(/write_heartbeat "error: seeded post violates rotation cooldown/);
+      // the audit runs after the disallowed-path check and before the final HEAD assertion
+      const badPathIndex = script.indexOf('BAD_PATH="$changed_file"');
+      const auditIndex = script.indexOf('SEEDED_LEDGER_PROJECT=');
+      const headCheckIndex = script.indexOf('"$LOCAL_HEAD" != "$REMOTE_HEAD"');
+      expect(badPathIndex).toBeGreaterThan(-1);
+      expect(auditIndex).toBeGreaterThan(badPathIndex);
+      expect(headCheckIndex).toBeGreaterThan(auditIndex);
+    });
+
+    it('a due post with every candidate on cooldown maps to warn: via a distinct cooldown_blocked SEED_RESULT, not the generic noop path', () => {
+      expect(script).toMatch(/SEED_RESULT:\s*cooldown_blocked/);
+      const blockIndex = script.indexOf('SEED_LINE" == SEED_RESULT:\\ cooldown_blocked*');
+      expect(blockIndex).toBeGreaterThan(-1);
+      const block = script.slice(blockIndex, blockIndex + 800);
+      expect(block).toMatch(/write_heartbeat "warn: \$\{SEED_LINE#SEED_RESULT: \}"/);
+      // this branch must come before the generic noop branch so it is matched first
+      const noopIndex = script.indexOf('SEED_LINE" == SEED_RESULT:\\ noop*');
+      expect(noopIndex).toBeGreaterThan(blockIndex);
+    });
+
+    it('heartbeat_status_for_outcome semantics are unchanged by the cooldown_blocked branch', () => {
+      expect(runStatusFnForCooldownCheck(12, 5, 0)).toBe('warn');
+      expect(runStatusFnForCooldownCheck(2, 5, 0)).toBe('ok');
+      expect(runStatusFnForCooldownCheck(2, 5, 1)).toBe('ok');
+    });
+
+    function runStatusFnForCooldownCheck(gapDays: number, upperBound: number, seeded: 0 | 1): string {
+      const match = script.match(/heartbeat_status_for_outcome\(\) \{[\s\S]*?\n\}/);
+      const fn = match![0];
+      const out = execFileSync(
+        'bash',
+        ['-c', `${fn}\nheartbeat_status_for_outcome ${gapDays} ${upperBound} ${seeded}`],
+        { encoding: 'utf-8' }
+      );
+      return out.trim();
+    }
   });
 
   describe('rotation-gate-blocked pending draft triggers a re-draft, not a stall (2026-09-12 incident)', () => {

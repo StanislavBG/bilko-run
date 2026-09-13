@@ -6,6 +6,14 @@
 # 36 days on 2026-08-29, then 15 days again on 2026-09-11 because the
 # original version of this script hard-stopped at a human approval gate).
 #
+# SCAN vs PUBLISH: scanning (phases 1-2 of blog-from-git) runs every day,
+# unconditionally (cadence.scan_every_days). Publishing is gated on the LOWER
+# bound of cadence.target_gap_days (3) — a post is "due" once the live gap
+# reaches 3 days, not 5. The upper bound (5) stays reserved for the
+# over-cadence/stall heartbeat classification. A due post's subject is also
+# gated by rotation.project_cooldown_posts: a project covered in any of the
+# last 3 ledger rows is ineligible, per blog-ledger.md's recorded rows.
+#
 # TRIGGERS — this script is currently wired to run from TWO independent
 # schedulers on this machine (full detail, recommendation, and log contents:
 # docs/blog-watchdog.md):
@@ -101,6 +109,46 @@ heartbeat_status_for_outcome() {
   fi
 }
 
+# Pure decision: is a post due for PUBLISHING? Gated on the LOWER bound of
+# cadence.target_gap_days ([3, 5] -> 3), never the upper bound — the upper
+# bound stays reserved for heartbeat_status_for_outcome's stall
+# classification above. Scanning (phases 1-2) always happens regardless of
+# this result; only phases 6-7 (Approve, Seed) are gated on it.
+publish_due_status() {
+  local gap_days="$1" lower_bound="$2"
+  if (( gap_days >= lower_bound )); then
+    echo "due"
+  else
+    echo "not_due"
+  fi
+}
+
+# Extract the Project column (blog-ledger.md's table: | Date | Slug | Project |
+# On /projects? | Tone |) of the last N post rows, newest first — the ledger
+# is the declared rotation memory, not a heuristic reading of post titles.
+ledger_recent_projects() {
+  local ledger_file="$1" n="$2"
+  awk -F'\\|' '
+    $0 ~ /^\| *[0-9]{4}-[0-9]{2}-[0-9]{2} *\|/ { print $4 }
+  ' "$ledger_file" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | head -n "$n"
+}
+
+# Pure decision: is $candidate blocked by the cooldown, given the recent
+# Project-column values (one per line, from ledger_recent_projects)? A
+# substring match in either direction so a candidate slug like "burrow"
+# still matches a compound ledger entry like "burrow / trading-stack".
+project_in_cooldown() {
+  local candidate="$1" recent_projects="$2"
+  local line
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "$line" == *"$candidate"* || "$candidate" == *"$line"* ]]; then
+      return 0
+    fi
+  done <<< "$recent_projects"
+  return 1
+}
+
 # Backstop for any future `set -e` abort we didn't anticipate: if the script
 # exits without having written a heartbeat via the normal call sites above,
 # the dead-man's-switch (check-blog-watchdog-heartbeat.sh) must still see a
@@ -123,11 +171,44 @@ if ! flock -n 9; then
 fi
 
 # --- read cadence policy from the config file — never hard-code it here ---
+# LOWER_BOUND (the first number in target_gap_days: [3, 5]) is what gates "a
+# post is due" for publishing. UPPER_BOUND (the second number) stays reserved
+# for the over-cadence/stall classification heartbeat_status_for_outcome
+# already uses — it is NOT the publish trigger.
+LOWER_BOUND="$(grep -m1 'target_gap_days:' "$CONFIG_FILE" | grep -oP '\[\K\d+')"
 UPPER_BOUND="$(grep -m1 'target_gap_days:' "$CONFIG_FILE" | grep -oP '\[\d+,\s*\K\d+')"
 CATCHUP_TRIGGER="$(grep -m1 'catchup_trigger_days:' "$CONFIG_FILE" | grep -oP 'catchup_trigger_days:\s*\K\d+')"
-if [[ -z "$UPPER_BOUND" || -z "$CATCHUP_TRIGGER" ]]; then
+if [[ -z "$LOWER_BOUND" || -z "$UPPER_BOUND" || -z "$CATCHUP_TRIGGER" ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not parse cadence thresholds from $CONFIG_FILE" >&2
   write_heartbeat "error: could not parse cadence thresholds"
+  exit 1
+fi
+
+# scan_every_days declares that scanning is daily and independent of whether a
+# post is due — this script's own scan cadence is hard-wired to whatever
+# triggers it (the daily systemd timer / crontab entry, docs/blog-watchdog.md),
+# not to a value read here. Parse it anyway and FATAL if it ever drifts from
+# 1, so a future edit to this key does not silently stop meaning what it says.
+SCAN_EVERY_DAYS="$(grep -m1 'scan_every_days:' "$CONFIG_FILE" | grep -oP 'scan_every_days:\s*\K\d+')"
+if [[ -z "$SCAN_EVERY_DAYS" ]]; then
+  echo "[blog-cadence-watchdog] FATAL: could not parse scan_every_days from $CONFIG_FILE" >&2
+  write_heartbeat "error: could not parse scan_every_days"
+  exit 1
+fi
+if [[ "$SCAN_EVERY_DAYS" != "1" ]]; then
+  echo "[blog-cadence-watchdog] FATAL: scan_every_days=$SCAN_EVERY_DAYS in $CONFIG_FILE, but this script's daily scan is driven by the daily systemd/cron triggers (docs/blog-watchdog.md), not by this value — a value other than 1 would silently misrepresent the real cadence" >&2
+  write_heartbeat "error: scan_every_days is not 1, but the scan trigger is hard-wired to daily"
+  exit 1
+fi
+
+# --- read the rotation cooldown policy — a project covered in ANY of the
+# last N ledger rows is ineligible as the next post's primary subject
+# (blog.config.yaml rotation.project_cooldown_posts; never_repeat_previous_project
+# is the degenerate N=1 case of this same rule) ---
+PROJECT_COOLDOWN_POSTS="$(grep -m1 'project_cooldown_posts:' "$CONFIG_FILE" | grep -oP 'project_cooldown_posts:\s*\K\d+')"
+if [[ -z "$PROJECT_COOLDOWN_POSTS" ]]; then
+  echo "[blog-cadence-watchdog] FATAL: could not parse project_cooldown_posts from $CONFIG_FILE" >&2
+  write_heartbeat "error: could not parse project_cooldown_posts"
   exit 1
 fi
 
@@ -249,22 +330,60 @@ NOW_EPOCH="$(TZ=America/Los_Angeles date +%s)"
 PUB_EPOCH="$(date -d "$NEWEST_PUBLISHED_AT" +%s)"
 GAP_DAYS=$(( (NOW_EPOCH - PUB_EPOCH) / 86400 ))
 
-echo "[blog-cadence-watchdog] $TODAY (PT): newest live post=$NEWEST_PUBLISHED_AT gap_days=$GAP_DAYS target_upper=$UPPER_BOUND catchup_trigger=$CATCHUP_TRIGGER"
+echo "[blog-cadence-watchdog] $TODAY (PT): newest live post=$NEWEST_PUBLISHED_AT gap_days=$GAP_DAYS target_lower=$LOWER_BOUND target_upper=$UPPER_BOUND catchup_trigger=$CATCHUP_TRIGGER"
 
-if (( GAP_DAYS < UPPER_BOUND )); then
-  echo "[blog-cadence-watchdog] within cadence — no action"
-  write_heartbeat "ok: within cadence gap=${GAP_DAYS}d no action"
+LEDGER_FILE=".claude/skills/blog-from-git/blog-ledger.md"
+RECENT_PROJECTS="$(ledger_recent_projects "$LEDGER_FILE" "$PROJECT_COOLDOWN_POSTS")"
+RECENT_PROJECTS_CSV="$(echo "$RECENT_PROJECTS" | paste -sd, -)"
+
+# Scanning (phases 1-2 of the blog-from-git skill) runs every day, independent
+# of whether a post is due to publish — cadence.scan_every_days in
+# blog.config.yaml. Only the PUBLISH decision below is gated on the gap.
+run_scan_only() {
+  local reason="$1"
+  local scan_prompt="You are running unattended, triggered by a daily cadence watchdog (scripts/blog-cadence-watchdog.sh). $reason blog.config.yaml's cadence.scan_every_days requires a scan every day, independent of whether a post is due to publish.
+
+Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run PHASES 1-2 ONLY: 1 Rotation (read rotation.md + blog-ledger.md) and 2 Scan (scan.md — gh, not local working trees, for pushed repos; local reconciliation for unpushed/no-remote repos per the ledger's watchlist).
+
+Do NOT draft, seed, or publish anything this run. Do NOT create any file under .claude/skills/blog-from-git/drafts/. Do NOT edit server/db.ts or blog-ledger.md. Do NOT run git add, git commit, or git push.
+
+When done, print exactly one line summarizing what changed since the last scan (repos touched, notable commits), prefixed with 'SCAN_RESULT: ', and nothing else after it."
+
+  set +e
+  local scan_output
+  scan_output="$(timeout 600 claude -p "$scan_prompt" \
+    --model claude-sonnet-5 \
+    --dangerously-skip-permissions \
+    --output-format text 2>&1)"
+  local scan_rc=$?
+  set -e
+  echo "$scan_output"
+
+  if [[ $scan_rc -ne 0 ]]; then
+    echo "[blog-cadence-watchdog] daily scan claude -p exited $scan_rc (timed out or errored)" >&2
+    write_heartbeat "error: daily scan claude -p exited $scan_rc gap=${GAP_DAYS}d"
+    exit "$scan_rc"
+  fi
+
+  write_heartbeat "ok: gap=${GAP_DAYS}d scan complete no publish action"
+  echo "[blog-cadence-watchdog] done — daily scan complete, no action"
   exit 0
+}
+
+PUBLISH_DUE="$(publish_due_status "$GAP_DAYS" "$LOWER_BOUND")"
+if [[ "$PUBLISH_DUE" != "due" ]]; then
+  run_scan_only "The bilko.run blog's live publishing gap is ${GAP_DAYS} day(s), within the ${LOWER_BOUND}-day cadence target (not yet due to publish)."
 fi
 
-# --- idempotent per day: a second run on the same day is a no-op ---
+# --- idempotent per day: a second run on the same day never seeds a second
+# post (guards against double-PUBLISHING), but it must NOT short-circuit the
+# whole run — a post is due, so today's scan still runs via run_scan_only. ---
 mkdir -p "$DRAFTS_DIR"
 if [[ -f "$STATE_FILE" ]]; then
   LAST_RUN_DATE="$(cut -d' ' -f1 "$STATE_FILE" 2>/dev/null || true)"
   if [[ "$LAST_RUN_DATE" == "$TODAY" ]]; then
-    echo "[blog-cadence-watchdog] already drafted today per $STATE_FILE — skipping"
-    write_heartbeat "ok: already drafted today gap=${GAP_DAYS}d"
-    exit 0
+    echo "[blog-cadence-watchdog] already drafted/published today per $STATE_FILE — scanning only"
+    run_scan_only "The bilko.run blog's live publishing gap is ${GAP_DAYS} day(s) and a post is due, but this machine already ran today's publish attempt ($STATE_FILE)."
   fi
 fi
 
@@ -329,13 +448,25 @@ fi
 # clock, not the model's guess at the current time.
 AUTHORED_AT="$(TZ=America/Los_Angeles date -Iseconds)"
 
+# blog.config.yaml rotation.project_cooldown_posts: a project covered in ANY
+# of the last N ledger rows is INELIGIBLE as the next post's subject. Computed
+# from blog-ledger.md's recorded rows (RECENT_PROJECTS/RECENT_PROJECTS_CSV,
+# set earlier), not a heuristic reading of post titles.
+if [[ -z "$RECENT_PROJECTS_CSV" ]]; then
+  COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the ledger has no prior rows yet, so no project is on cooldown."
+else
+  COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the last ${PROJECT_COOLDOWN_POSTS} ledger row(s) covered these projects, in this exact form: ${RECENT_PROJECTS_CSV}. None of these may be the next post's primary subject (never_repeat_previous_project is the degenerate N=1 case of this same rule). If EVERY candidate project you would otherwise cover is on this cooldown list, do NOT invent a post to satisfy cadence (blog.config.yaml truth rules still bind) — finish by printing exactly one line, \`SEED_RESULT: cooldown_blocked note=\"<which projects were due but on cooldown>\"\`, and nothing else."
+fi
+
 if [[ "$AUTONOMOUS_PUBLISH" != "true" ]]; then
   # --- non-autonomous path: the original human-gated behavior, verbatim ---
-  PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past its ${UPPER_BOUND}-day cadence target. There is NO human present in this session.
+  PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past the ${LOWER_BOUND}-day publish-due threshold (cadence.target_gap_days lower bound). There is NO human present in this session.
 
 Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run PHASES 1-5 ONLY: 1 Rotation (read rotation.md + blog-ledger.md — respect never_repeat_previous_project and max_consecutive_untiled_posts), 2 Scan, 3 Research, 4 Ground, 5 Draft (voice.md).
 
 $MODE_INSTRUCTIONS
+
+$COOLDOWN_INSTRUCTIONS
 
 STOP AFTER PHASE 5. Do not run phase 6 (Approve) or phase 7 (Seed) — this repo's editorial gate requires an EXPLICIT human OK before any post is seeded or published, and no human is present to give it. Concretely, in this run you must NOT:
 - edit server/db.ts
@@ -350,6 +481,7 @@ Instead, write each finished draft as a standalone markdown file under .claude/s
 else
   # --- autonomous path: mechanical rails replace the human OK ---
   REQUIREMENTS="Autonomy: blog.config.yaml's autonomy.autonomous_publish is true (the owner's master kill switch) — that plus the phase-4/5 quality self-check in SKILL.md passing IS your phase-6 approval; do not wait for a human. Run phase 7 (seed.md) yourself, honoring every rail below:
+- $COOLDOWN_INSTRUCTIONS
 - Seed by editing server/db.ts (INSERT OR IGNORE per seed.md) and, in the SAME commit, append/update .claude/skills/blog-from-git/blog-ledger.md (a row per post + the rewritten \"Current rotation state\" block).
 - Before committing, run \`npx tsc --noEmit -p tsconfig.json\` and \`pnpm test tests/db.test.ts\`. If either fails, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"<the failing check>\"\`, and nothing else.
 - Stage ONLY server/db.ts and .claude/skills/blog-from-git/blog-ledger.md via explicit pathspecs: \`git add server/db.ts .claude/skills/blog-from-git/blog-ledger.md\`. NEVER stage the whole working tree with a wildcard/blanket git-add, and never commit with an all-tracked-files shortcut flag — this working tree carries hundreds of unrelated modified files (e.g. public/outdoor-hours/hourly/*.json) that must never be swept into this commit.
@@ -375,7 +507,7 @@ $REQUIREMENTS
 
 For each draft you seed, delete its file from .claude/skills/blog-from-git/drafts/ as part of the same operation that commits its seed — a consumed draft must not linger. Any draft you defer under the cap must be LEFT UNTOUCHED in drafts/ for a later run — never delete, move, or overwrite a draft you are not seeding in this run, except a draft you are rejecting for failing the rotation gate, which you rename with the '.rejected-rotation-gate' suffix as described above."
   else
-    PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past its ${UPPER_BOUND}-day cadence target. There is NO human present in this session. blog.config.yaml's autonomy.autonomous_publish is true — run the FULL pipeline, PHASES 1-7.
+    PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past the ${LOWER_BOUND}-day publish-due threshold (cadence.target_gap_days lower bound). There is NO human present in this session. blog.config.yaml's autonomy.autonomous_publish is true — run the FULL pipeline, PHASES 1-7.
 
 Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md), running PHASES 1-7: 1 Rotation (read rotation.md + blog-ledger.md — respect never_repeat_previous_project and max_consecutive_untiled_posts), 2 Scan, 3 Research, 4 Ground, 5 Draft (voice.md), 6 Approve (autonomous gate, see below), 7 Seed (seed.md).
 
@@ -432,14 +564,20 @@ if [[ "$SEED_LINE" == SEED_RESULT:\ error* ]]; then
   echo "[blog-cadence-watchdog] $SEED_LINE" >&2
   write_heartbeat "error: ${SEED_LINE#SEED_RESULT: }"
   exit 1
+elif [[ "$SEED_LINE" == SEED_RESULT:\ cooldown_blocked* ]]; then
+  # A post IS due (GAP_DAYS >= LOWER_BOUND, or we would not have reached this
+  # invocation at all — see PUBLISH_DUE above), but every candidate project is
+  # inside the rotation.project_cooldown_posts window. blog.config.yaml's
+  # truth rules still forbid inventing a post to satisfy cadence, so this is
+  # always a warn:, independent of where GAP_DAYS sits relative to UPPER_BOUND.
+  echo "[blog-cadence-watchdog] $SEED_LINE" >&2
+  write_heartbeat "warn: ${SEED_LINE#SEED_RESULT: }"
 elif [[ "$SEED_LINE" == SEED_RESULT:\ noop* ]]; then
   echo "[blog-cadence-watchdog] $SEED_LINE"
-  # Reaching this branch means nothing was seeded; GAP_DAYS is always already
-  # >= UPPER_BOUND here (the earlier `if (( GAP_DAYS < UPPER_BOUND ))` block
-  # above already exited on the within-cadence case), so this is the exact
-  # stall this function exists to catch: a rotation-blocked (or otherwise
-  # unpublishable) draft must not report as healthy while the publishing gap
-  # keeps growing.
+  # Reaching this branch means nothing was seeded despite a post being due
+  # (PUBLISH_DUE gated this invocation), so this is the exact stall this
+  # function exists to catch: an otherwise-unpublishable draft must not
+  # report as healthy while the publishing gap keeps growing past UPPER_BOUND.
   NOOP_STATUS="$(heartbeat_status_for_outcome "$GAP_DAYS" "$UPPER_BOUND" 0)"
   write_heartbeat "${NOOP_STATUS}: ${SEED_LINE#SEED_RESULT: }"
 elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
@@ -541,6 +679,19 @@ elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
   if [[ -n "$BAD_PATH" ]]; then
     echo "[blog-cadence-watchdog] $SEED_LINE — but the last commit touched disallowed path '$BAD_PATH', treating as error" >&2
     write_heartbeat "error: seed commit touched disallowed path $BAD_PATH"
+    exit 1
+  fi
+
+  # Mechanical audit, not just trusting the subprocess's self-report: the
+  # newest row it just appended to blog-ledger.md must not be one of the
+  # projects RECENT_PROJECTS already found on cooldown BEFORE this run
+  # (rotation.project_cooldown_posts) — the same check the prompt asked the
+  # claude -p session to honor via COOLDOWN_INSTRUCTIONS.
+  SEEDED_LEDGER_PROJECT="$(git show "$SEED_COMMIT:.claude/skills/blog-from-git/blog-ledger.md" 2>/dev/null \
+    | ledger_recent_projects /dev/stdin 1 || true)"
+  if [[ -n "$SEEDED_LEDGER_PROJECT" ]] && project_in_cooldown "$SEEDED_LEDGER_PROJECT" "$RECENT_PROJECTS"; then
+    echo "[blog-cadence-watchdog] $SEED_LINE — but the seeded post's project '$SEEDED_LEDGER_PROJECT' is on the ${PROJECT_COOLDOWN_POSTS}-post rotation cooldown, treating as error" >&2
+    write_heartbeat "error: seeded post violates rotation cooldown (project=$SEEDED_LEDGER_PROJECT)"
     exit 1
   fi
 

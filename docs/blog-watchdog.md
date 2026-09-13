@@ -47,14 +47,31 @@ runs, but two safeguards make simultaneous/overlapping triggers a safe no-op:
 - **Concurrency lock**: `/tmp/bilko.blog-cadence-watchdog.lock` via `flock -n`. If the crontab
   trigger and the systemd trigger ever overlapped, the second to acquire the lock exits
   immediately with `"another instance running — skipping"` and still writes a heartbeat.
-- **Same-day idempotency**: `.watchdog-state` (`.claude/skills/blog-from-git/drafts/.watchdog-state`)
-  records the date of the last drafting run. A second run later the same day — whether triggered
-  by the other scheduler or a manual rerun — sees today's date already recorded and exits without
-  invoking `claude -p` again.
+- **Same-day idempotency guards PUBLISHING, not scanning**: `.watchdog-state`
+  (`.claude/skills/blog-from-git/drafts/.watchdog-state`) records the date of the last
+  draft/publish attempt. A second run later the same day — whether triggered by the other
+  scheduler or a manual rerun — never seeds a second post on the same day, but it still runs
+  today's scan (phases 1-2) rather than exiting outright; see "Scan vs publish cadence" below.
 
 So running the watchdog twice a day (once from cron at 12:00, once from systemd at ~00:00) wastes
-at most one skipped invocation's worth of a few seconds of shell/curl work — it never produces two
-drafts, two `claude -p` calls, or diverging state.
+at most one skipped invocation's worth of a few seconds of shell/curl work on the lock, and never
+seeds two posts or diverges state — but both invocations still scan.
+
+## Scan vs publish cadence
+
+Scanning and publishing are governed independently (`.claude/skills/blog-from-git/blog.config.yaml`
+`cadence:` block):
+
+- **Scan (phases 1-2 of blog-from-git) runs every day**, unconditionally
+  (`cadence.scan_every_days: 1`) — the watchdog no longer exits before scanning just because the
+  live gap is within cadence.
+- **Publish is gated on the LOWER bound of `cadence.target_gap_days` (`[3, 5]` → 3).** A post is
+  "due" once the live gap reaches 3 days, not 5 — the upper bound (5) is reserved for the
+  over-cadence/stall heartbeat classification, not the publish trigger.
+- **A due post's subject is also gated by `rotation.project_cooldown_posts` (3).** A project
+  covered in any of the last 3 `blog-ledger.md` rows is ineligible as the next subject. If a post
+  is due but every candidate is on cooldown, the watchdog writes a `warn:` heartbeat and does not
+  publish — it never invents a post to satisfy cadence.
 
 ## Is publishing autonomous or gated?
 

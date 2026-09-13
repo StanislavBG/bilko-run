@@ -13,7 +13,16 @@ identity:
   post_is: a product update — what the reader can now DO, not the engineering it took
 
 cadence:
-  target_gap_days: [3, 5]        # publish every 3-5 days
+  scan_every_days: 1              # SCANNING IS DAILY AND INDEPENDENT OF WHETHER A POST IS DUE —
+                                   # the watchdog runs phases 1-2 (Rotation, Scan) every day
+                                   # regardless of the publish gap; only phases 6-7 (Approve, Seed)
+                                   # are gated on target_gap_days below. The actual daily trigger is
+                                   # the systemd/cron timers (docs/blog-watchdog.md), not this
+                                   # value; blog-cadence-watchdog.sh FATALs if this ever drifts
+                                   # from 1, so the two stay honest with each other.
+  target_gap_days: [3, 5]        # LOWER bound (3) gates "a post is due" for publishing; UPPER
+                                  # bound (5) stays the threshold for the over-cadence/stall
+                                  # heartbeat classification (heartbeat_status_for_outcome).
   catchup_trigger_days: 10       # gap beyond this → catch-up mode (backfill queue)
   backdating: honest-only        # a backdated published_at must match when the WORK shipped;
                                  # never backdate a post about work that hadn't happened yet
@@ -22,6 +31,14 @@ cadence:
                                  # escalates the watchdog heartbeat from ok: to warn:
 
 rotation:
+  project_cooldown_posts: 3            # a project covered in ANY of the last N ledger rows is
+                                        # INELIGIBLE as the next post's primary subject. Evaluated
+                                        # against blog-ledger.md's recorded per-post rows (the
+                                        # ledger IS the rotation memory), never against a heuristic
+                                        # reading of post titles. never_repeat_previous_project
+                                        # below is the degenerate N=1 case of this same rule — kept
+                                        # for backward-compatible prose, but the cooldown of 3 is
+                                        # the binding constraint.
   never_repeat_previous_project: true
   max_consecutive_untiled_posts: 1     # untiled = slug not in tile_registry
   tile_registry: src/data/standalone-projects.json   # host repo, the ONLY tile authority

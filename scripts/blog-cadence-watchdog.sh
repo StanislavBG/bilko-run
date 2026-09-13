@@ -81,6 +81,26 @@ write_heartbeat() {
   HEARTBEAT_WRITTEN=1
 }
 
+# Pure decision, single source of truth for "was this a healthy quiet day or
+# a stall that should escalate": the ORIGINAL stall bug was ten straight days
+# of "ok: ... skipping" while the publishing gap grew unbounded; a later
+# incarnation was "ok: noop ..." for a rotation-blocked draft (see PRD). A
+# run that seeds nothing while already over cadence is a stall (warn); within
+# cadence, "nothing to publish" is just an ordinary quiet day (ok); actually
+# seeding something is always ok regardless of gap.
+heartbeat_status_for_outcome() {
+  local gap_days="$1" upper_bound="$2" seeded="$3"
+  if [[ "$seeded" -eq 1 ]]; then
+    echo "ok"
+    return
+  fi
+  if (( gap_days >= upper_bound )); then
+    echo "warn"
+  else
+    echo "ok"
+  fi
+}
+
 # Backstop for any future `set -e` abort we didn't anticipate: if the script
 # exits without having written a heartbeat via the normal call sites above,
 # the dead-man's-switch (check-blog-watchdog-heartbeat.sh) must still see a
@@ -341,11 +361,19 @@ else
   if [[ "$CONSUME_EXISTING_DRAFTS" -eq 1 ]]; then
     PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh). blog.config.yaml's autonomy.autonomous_publish is true.
 
-${#EXISTING_DRAFTS[@]} draft(s) are already pending in .claude/skills/blog-from-git/drafts/ from a prior run: ${EXISTING_DRAFTS[*]}. Phases 1-5 (Rotation, Scan, Research, Ground, Draft) are DONE for these — do not re-draft them. Read each draft, re-check it still passes the SKILL.md final self-check (the phase 5 gate), then go straight to phase 6/7 per the requirements below.
+${#EXISTING_DRAFTS[@]} draft(s) are already pending in .claude/skills/blog-from-git/drafts/ from a prior run: ${EXISTING_DRAFTS[*]}. Phases 1-5 (Rotation, Scan, Research, Ground, Draft) are marked done for these, but you must RE-VERIFY each one against the CURRENT blog-ledger.md 'Current rotation state' block and rotation.md's rules (never_repeat_previous_project, max_consecutive_untiled_posts) before doing anything else — a draft passing its phase-5 self-check at draft time does not guarantee it still clears the phase-6 rotation gate now.
+
+For each pending draft, exactly one of these two things happens — pick per-draft, do not skip this check:
+- STILL CLEARS the rotation gate and the SKILL.md phase-5 self-check: do not re-draft it — go straight to phase 6/7 per the requirements below.
+- FAILS the rotation gate (e.g. its subject would repeat the previous post's project, or would make a second consecutive off-/projects post): you must NOT leave it sitting in drafts/ blocking every future run, and you must NOT just stop here and report a no-op — a rejected gate is not a reason to do nothing. Move the rejected file out of the drafts/*.md glob by renaming it in place with a literal '.rejected-rotation-gate' suffix (e.g. \`mv \"\$draft\" \"\${draft}.rejected-rotation-gate\"\`) — NEVER delete it, its content is not recoverable once gone (drafts/ is gitignored).
+
+Across ALL rejected drafts combined, you get ONE re-draft attempt for this entire run, not one per rejected draft: after rejecting (and renaming) every draft that fails the gate, draft exactly ONE replacement post on a rotation-compliant subject — read blog-ledger.md's 'Current rotation state' block for any recorded rotation debt and pick a subject that satisfies it and rotation.md's rules. If that single replacement subject also fails a check, do not loop, retry, or draft a second replacement; fall through to the 'no publishable material' case in the requirements below rather than inventing a post to fill the cadence.
+
+The total number of drafts you seed this run (original or replacement) must never exceed max_posts_per_run=${MAX_POSTS_PER_RUN}, and you must not end the run having added a fresh unreviewed *.md file to drafts/ that you neither seeded nor rejected-and-renamed — every draft you touch this run leaves drafts/ either seeded-and-deleted, rejected-and-renamed, or (only for one you deferred under the cap) untouched exactly as you found it.
 
 $REQUIREMENTS
 
-For each draft you seed, delete its file from .claude/skills/blog-from-git/drafts/ as part of the same operation that commits its seed — a consumed draft must not linger. Any draft you defer under the cap must be LEFT UNTOUCHED in drafts/ for a later run — never delete, move, or overwrite a draft you are not seeding in this run."
+For each draft you seed, delete its file from .claude/skills/blog-from-git/drafts/ as part of the same operation that commits its seed — a consumed draft must not linger. Any draft you defer under the cap must be LEFT UNTOUCHED in drafts/ for a later run — never delete, move, or overwrite a draft you are not seeding in this run, except a draft you are rejecting for failing the rotation gate, which you rename with the '.rejected-rotation-gate' suffix as described above."
   else
     PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past its ${UPPER_BOUND}-day cadence target. There is NO human present in this session. blog.config.yaml's autonomy.autonomous_publish is true — run the FULL pipeline, PHASES 1-7.
 
@@ -406,7 +434,14 @@ if [[ "$SEED_LINE" == SEED_RESULT:\ error* ]]; then
   exit 1
 elif [[ "$SEED_LINE" == SEED_RESULT:\ noop* ]]; then
   echo "[blog-cadence-watchdog] $SEED_LINE"
-  write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: }"
+  # Reaching this branch means nothing was seeded; GAP_DAYS is always already
+  # >= UPPER_BOUND here (the earlier `if (( GAP_DAYS < UPPER_BOUND ))` block
+  # above already exited on the within-cadence case), so this is the exact
+  # stall this function exists to catch: a rotation-blocked (or otherwise
+  # unpublishable) draft must not report as healthy while the publishing gap
+  # keeps growing.
+  NOOP_STATUS="$(heartbeat_status_for_outcome "$GAP_DAYS" "$UPPER_BOUND" 0)"
+  write_heartbeat "${NOOP_STATUS}: ${SEED_LINE#SEED_RESULT: }"
 elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
   # Mechanical check, not just trusting the subprocess's self-report: confirm
   # the commit it claims to have made only touched the allowed paths, and

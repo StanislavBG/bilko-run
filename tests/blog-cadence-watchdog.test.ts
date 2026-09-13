@@ -414,7 +414,9 @@ describe('blog-cadence-watchdog.sh', () => {
       expect(verifyIndex).toBeGreaterThan(noopIndex);
       // the noop branch's write_heartbeat happens before the verification block even starts
       const noopBlock = script.slice(noopIndex, verifyIndex);
-      expect(noopBlock).toMatch(/write_heartbeat "ok: \$\{SEED_LINE#SEED_RESULT: \}"/);
+      // noop is a stall (over-cadence, nothing seeded) — status is computed, not hard-coded "ok:"
+      expect(noopBlock).toMatch(/NOOP_STATUS="\$\(heartbeat_status_for_outcome "\$GAP_DAYS" "\$UPPER_BOUND" 0\)"/);
+      expect(noopBlock).toMatch(/write_heartbeat "\$\{NOOP_STATUS\}: \$\{SEED_LINE#SEED_RESULT: \}"/);
     });
 
     it('the claude -p prompt asks for a slugs= field in SEED_RESULT so verification knows what to check', () => {
@@ -445,5 +447,91 @@ describe('blog-cadence-watchdog.sh', () => {
         expect(exitCode).not.toBe(0);
       }
     }
+  });
+
+  describe('heartbeat status selection (pure, behavioral — no network, no claude -p)', () => {
+    function extractHeartbeatStatusFn(): string {
+      const match = script.match(/heartbeat_status_for_outcome\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function runStatusFn(gapDays: number, upperBound: number, seeded: 0 | 1): string {
+      const fn = extractHeartbeatStatusFn();
+      const out = execFileSync(
+        'bash',
+        ['-c', `${fn}\nheartbeat_status_for_outcome ${gapDays} ${upperBound} ${seeded}`],
+        { encoding: 'utf-8' }
+      );
+      return out.trim();
+    }
+
+    it('over-cadence + nothing seeded => warn (the stall this PRD fixes)', () => {
+      expect(runStatusFn(12, 5, 0)).toBe('warn');
+    });
+
+    it('within-cadence + nothing to publish => ok (an ordinary quiet day)', () => {
+      expect(runStatusFn(2, 5, 0)).toBe('ok');
+    });
+
+    it('seeded => ok, regardless of gap', () => {
+      expect(runStatusFn(12, 5, 1)).toBe('ok');
+      expect(runStatusFn(2, 5, 1)).toBe('ok');
+    });
+
+    it('the noop branch actually calls this function rather than hard-coding ok:', () => {
+      expect(script).toMatch(/heartbeat_status_for_outcome "\$GAP_DAYS" "\$UPPER_BOUND" 0/);
+    });
+  });
+
+  describe('rotation-gate-blocked pending draft triggers a re-draft, not a stall (2026-09-12 incident)', () => {
+    function extractConsumeExistingDraftsPrompt(): string {
+      const start = script.indexOf('if [[ "$CONSUME_EXISTING_DRAFTS" -eq 1 ]]; then');
+      const end = script.indexOf('\n  else\n', start);
+      expect(start).toBeGreaterThan(-1);
+      expect(end).toBeGreaterThan(start);
+      return script.slice(start, end);
+    }
+
+    it('no longer tells the executor unconditionally not to re-draft pending drafts', () => {
+      // the exact defect: this phrase let "I was told not to re-draft" be a
+      // correct reading even when the pending draft is unusable
+      expect(script).not.toMatch(/are DONE for these — do not re-draft them/);
+    });
+
+    it('instructs re-verifying the rotation gate against the current ledger before doing anything else', () => {
+      const block = extractConsumeExistingDraftsPrompt();
+      expect(block).toMatch(/RE-VERIFY each one against the CURRENT blog-ledger\.md/);
+      expect(block).toMatch(/rotation\.md's rules/);
+    });
+
+    it('instructs moving a rotation-rejected draft out of the *.md glob by renaming, never deleting it', () => {
+      const block = extractConsumeExistingDraftsPrompt();
+      expect(block).toMatch(/FAILS the rotation gate/);
+      expect(block).toMatch(/\.rejected-rotation-gate/);
+      expect(block).toContain('mv');
+      expect(block).toContain('draft}.rejected-rotation-gate');
+      expect(block).toMatch(/NEVER delete it/);
+    });
+
+    it('instructs exactly one re-draft attempt on a rotation-compliant subject, with no retry loop', () => {
+      const block = extractConsumeExistingDraftsPrompt();
+      expect(block).toMatch(/draft exactly ONE replacement post on a rotation-compliant subject/);
+      expect(block).toMatch(/ONE re-draft attempt for this entire run, not one per rejected draft/);
+      expect(block).toMatch(/do not loop, retry, or draft a second replacement/);
+    });
+
+    it('bounds the re-draft by max_posts_per_run and forbids leaving a fresh unreviewed draft behind', () => {
+      const block = extractConsumeExistingDraftsPrompt();
+      expect(block).toMatch(/must never exceed max_posts_per_run=\$\{MAX_POSTS_PER_RUN\}/);
+      expect(block).toMatch(/neither seeded nor rejected-and-renamed/);
+    });
+
+    it('falls through to the no-invented-post noop case when no rotation-compliant subject exists at all', () => {
+      const block = extractConsumeExistingDraftsPrompt();
+      expect(block).toMatch(/fall through to the 'no publishable material' case/);
+      // that shared case (in $REQUIREMENTS) still forbids inventing a post
+      expect(script).toMatch(/do NOT invent a post to satisfy cadence/);
+    });
   });
 });

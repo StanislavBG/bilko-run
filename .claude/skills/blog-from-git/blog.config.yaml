@@ -11,6 +11,37 @@ identity:
   stance: builder-to-builder, first person, witty, no corporate fluff
   reader: someone deciding whether a product is worth their attention
   post_is: a product update — what the reader can now DO, not the engineering it took
+                            # binding; see grounding: below for what this means for git as a source
+
+grounding:                  # WHAT git/commit history is FOR in this pipeline — read this before
+                             # research.md or voice.md, both of which must agree with it
+  git_selects: focus and window only     # which project, and which date range, to write about —
+                                          # nothing more
+  git_does_not_supply: subject matter    # the post's BODY is the project's value and how a reader
+                                          # uses it — never a narration of the commits, bugs, error
+                                          # codes, or internal refactors that prompted writing about
+                                          # it. A post that opens on an error code or spends its
+                                          # middle on retry-suffix internals has confused "how I
+                                          # picked this project" with "what this project is worth."
+  owner_correction: >
+    2026-09-12, verbatim — "The blog is way too literal about the git. The git as grounding is
+    meant to be about the figuring out the focus was the project. The blog is not to spell out
+    every bug but to say I worked on the project and use the opportunity to highlight value of the
+    project and how to be used." Binding; identity.post_is above already states this — this block
+    exists because prose in research.md and voice.md previously licensed the opposite and won.
+  value_claims_still_need_sources: true  # swapping engineering detail for value claims does NOT
+                                          # license unsourced marketing prose — see truth: below.
+                                          # Every value claim still needs a real artifact or number,
+                                          # sourced via ground.md (MCP reads, scorecards, KPI
+                                          # scripts, DB queries). ground.md matters MORE under this
+                                          # rule, not less: it is the sanctioned way to back a value
+                                          # claim with something real instead of a vibe.
+  ineligible_subject: >
+    A project with NO user-facing surface at all — no /projects tile, nothing a reader could go
+    try — is INELIGIBLE as a focused post's sole subject. If the only rotation-eligible candidate
+    is such a project, either pick a different eligible project (rotation.md) or, with explicit
+    user override, mention it as portfolio CONTEXT only (a sentence inside a wider post) — never
+    give it a standalone post with an invented "how to use it."
 
 cadence:
   scan_every_days: 1              # SCANNING IS DAILY AND INDEPENDENT OF WHETHER A POST IS DUE —
@@ -46,13 +77,27 @@ rotation:
   override: user-explicit-only         # violating a rule requires the user saying so
 
 tones:                                  # pick exactly ONE per post; record it in the ledger
-  changelog:        { words: [250, 450], shape: "1 hero change + 'Also shipped' bullets" }
-  shipped-note:     { words: [350, 600], shape: "what I shipped, the one decision, what's next" }
-  problem-outcome:  { words: [400, 600], shape: "open on the user's pain, land on what they can now do" }
-  field-note:       { words: [500, 800], shape: "one hard bug/decision told well + one lesson",
-                      extras: ["what I'd do differently (concrete)", "FAQ only if each entry adds a new angle"] }
-  metric-update:    { words: [300, 550], shape: "lead with the number that moved, then the 1-2 changes that moved it" }
+  changelog:        { words: [250, 450], shape: "1 hero change + 'Also shipped' bullets", payload: required_value_use_payload }
+  shipped-note:     { words: [350, 600], shape: "what I shipped, the one decision, what's next", payload: required_value_use_payload }
+  problem-outcome:  { words: [400, 600], shape: "open on the user's pain, land on what they can now do", payload: required_value_use_payload }
+  field-note:       { words: [500, 800],
+                      shape: "one hard bug/decision used as PROOF of a value/use point, NOT as the
+                        subject itself — the value/use point is the spine, the bug is supporting
+                        color that earns it credibility. A field-note whose bug/decision IS the
+                        subject, with no value/use point it serves, fails the payload requirement
+                        below just like every other tone.",
+                      extras: ["what I'd do differently (concrete)", "FAQ only if each entry adds a new angle"],
+                      payload: required_value_use_payload }
+  metric-update:    { words: [300, 550], shape: "lead with the number that moved, then the 1-2 changes that moved it", payload: required_value_use_payload }
   spine: was -> now -> next            # every post, regardless of tone
+  required_value_use_payload: >
+    Mandatory for EVERY tone above, regardless of shape — a post missing this fails the phase-5
+    self-check (SKILL.md) even if it is well-written and correctly grounded. The post must state,
+    in prose woven into the tone's own shape (not a bolted-on section): (1) what the project IS FOR
+    — one plain sentence a newcomer understands; (2) WHO it helps, or what job it does for them;
+    (3) CONCRETELY how a reader starts using it right now, naming the correct link per `links:`
+    below's host-kind rules. This is prose plus the one correct link — `links.max_ctas_per_post: 1`
+    still caps it, this is not licence for a pile of CTAs.
 
 categories: [build-log, lessons, deep-dive, market, product]
 

@@ -87,6 +87,12 @@ If emitting a series, each post covers one sub-theme and ends pointing at the ne
 - [ ] Spine is **was → now → next** (or, for a field note, one real story), not a launch pitch?
 - [ ] **Field note only:** a real mistake/surprise; "What I'd do differently" names a concrete
       action; FAQ entries each add a new angle. (Skip for changelog/metric/shipped-note tones.)
+- [ ] **Does a reader who has never heard of this project finish the post knowing what it does for
+      them and how to try it?** (`blog.config.yaml` `tones.required_value_use_payload`: what it's
+      for, who it helps, how to start, with the correct link.) FAILS if the post's main narrative
+      is a bug, an error code, or an internal refactor — git selected the focus and window
+      (`grounding:` in `blog.config.yaml`), not the subject matter; engineering detail may only
+      appear as supporting color for a value/use point, never as the thing the post is about.
 
 If any is NO, the post is not ready. Rewrite, don't ship.
 

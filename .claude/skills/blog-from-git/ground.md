@@ -4,6 +4,13 @@ Diffs tell you *what changed*; they don't tell you what the feature is *worth* r
 that, query the project's own runtime surface during composing. A "feature value" claim backed by
 a live number from the system is the difference between a build log and a press release.
 
+**This file matters MORE, not less, under `blog.config.yaml`'s `grounding:` policy.** Git selects
+which project and window to write about; it does not supply the post's subject matter — the post's
+subject is the project's value and how a reader uses it. Shifting the post's weight away from
+engineering narrative does not mean value claims can go unsourced: every one still needs a real
+artifact or number, and this file is the sanctioned way to get one (MCP read, scorecard, KPI
+script, DB query) instead of writing an ungrounded marketing sentence.
+
 **A project may expose any of these — check for them before writing a focused post:**
 
 | Surface | How to find it | What it grounds |

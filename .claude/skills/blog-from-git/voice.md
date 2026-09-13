@@ -6,16 +6,25 @@ Read BEFORE drafting a word of the post body.
 
 The robotic failure mode isn't just bad sentences — it's writing a **list of what changed** instead
 of **what the change is worth**. For every feature you mention, the post must answer, in the prose,
-plainly:
+plainly, in this priority order:
 
-- **What it now does that it couldn't before** (the capability, concretely).
-- **Who/what is better off** because of it (the user, a downstream pipeline, the KPI).
-- **Why it was hard or non-obvious** (the real engineering, the thing that almost broke).
-- **Where this is heading** (the next move it unlocks — this is the "ongoing focus" spine).
+- **What it now does that it couldn't before** (the capability, concretely). Required.
+- **Who/what is better off** because of it (the user, a downstream pipeline, the KPI). Required.
+- **How a reader starts using it right now** (the concrete action and the correct link per
+  `blog.config.yaml` `links:` rules — see `tones.required_value_use_payload`). Required.
+- **Where this is heading** (the next move it unlocks — this is the "ongoing focus" spine). Required.
+- *Why it was hard or non-obvious* (the real engineering, the thing that almost broke). **Optional
+  and subordinate to the four bullets above** — include it only when it actually backs a value or
+  use claim (per `research.md` item 5); never let it become the paragraph's own point. Git selects
+  which project and window to write about, not what the post is about (`blog.config.yaml`
+  `grounding:`) — a paragraph whose engineering detail has no value/use point it serves is
+  changelog filler in the opposite direction and gets cut just like a bare capability statement.
 
 A paragraph that states a capability but none of its value is changelog filler — cut or fix it. The
 test: a reader who doesn't care about your commit history should still finish the section knowing
-why the feature matters. Ground the value in a real artifact or number (`ground.md`), never a vibe.
+why the feature matters AND how to go try it. Ground the value in a real artifact or number
+(`ground.md`), never a vibe — swapping engineering narrative for value claims does not mean the
+value claims can be unsourced.
 
 ## Tones (pick ONE per post; we are experimenting)
 
@@ -28,7 +37,7 @@ ground-every-claim rule; they differ in shape, length, and stance.
 | 1 | **Changelog** | 1 hero change told in 2–3 short paras + an "Also shipped" bullet bucket | 250–450 w | Tools with frequent small releases (the grader tools, sigma) |
 | 2 | **Shipped note** | First-person, informal: what I shipped, the one decision behind it, what's next | 350–600 w | Build-in-public cadence; honest in-progress work |
 | 3 | **Problem → outcome** | Open on the user's pain, land on what they can now do; benefit-led | 400–600 w | A feature with a clear user job (AdScorer mode, PageRoast) |
-| 4 | **Field note** (the old build-log, trimmed) | One hard bug/decision told well, one lesson, one concrete artifact | 500–800 w | Deep infra weeks (Burrow, signal-builder) — when there's a real story |
+| 4 | **Field note** (the old build-log, trimmed) | One hard bug/decision used as PROOF of a value/use point (never as the subject itself), one lesson, one concrete artifact | 500–800 w | Deep infra weeks (Burrow, signal-builder) — when the story backs a real value/use point, not for its own sake |
 | 5 | **Metric update** | Lead with the number that moved, then the 1–2 changes that moved it | 300–550 w | Projects with a live KPI (Burrow coverage %, trader vs SPY) |
 
 **Tone micro-examples** (the opening move of each):
@@ -36,7 +45,7 @@ ground-every-claim rule; they differ in shape, length, and stance.
 1. **Changelog** — "AdScorer now grades LinkedIn copy, not just Facebook and Google. Paste an ad, pick the platform, get the platform-specific teardown. Also shipped: faster scores, a fixed share-card bug."
 2. **Shipped note** — "I gave OutdoorHours a rule engine this week. The old version hard-coded what 'a comfortable hour' meant; now it's data, and you can see why any hour scored the way it did."
 3. **Problem → outcome** — "Writing a cold email sequence means staring at a blank draft five times. EmailForge now writes all five at once — AIDA, PAS, or Hormozi — and you edit instead of start."
-4. **Field note** — "Burrow looked like it was covering every subreddit. It was visiting them and forgetting them — the ticker never reached the index. Here's the two-day lag and the one-line sort that fixed it."
+4. **Field note** — "Burrow's coverage number is the thing that tells you whether the brain actually saw a subreddit before you ask it a question. It was quietly lying: subs got visited, then forgotten, never reaching the index. One sort fixed it, and coverage is climbing again — which is the number to check before you trust an answer from `burrow-brain`." (Note: the bug is in service of "here's the number that tells you whether to trust it," not the subject on its own.)
 5. **Metric update** — "Coverage is 80.4% this week, up from a number I didn't trust last week. Two changes moved it: a selector that picks subs by how overdue they are, and a metric that stopped lying at midnight."
 
 ### Length: shorter by default
@@ -102,11 +111,17 @@ Two real posts already in `server/db.ts` bracket the quality range:
   not a human** (memory `project_bilko_is_ai_agent`) — describe the work and the system; never
   invent a human persona, backstory, or location.
 - **Lead with the most surprising real thing**, not setup.
-- **Show the mistake.** The best posts contain a thing that broke and what it taught. "All green,
-  shipped clean" is boring and usually a lie.
+- **Show the mistake, but never as the subject.** The best posts contain a thing that broke and
+  what it taught — used as evidence for a value/use point, not narrated for its own sake. "All
+  green, shipped clean" is boring and usually a lie; so is a post whose only content is the bug.
 - **One spine, not a changelog.** A flat list of "also I did X, also Y" is a commit log, not a
   post — bucket the small stuff under "Also shipped."
+- **Every post tells the reader how to use the thing.** Required regardless of tone: what the
+  project is for, who it helps, and the concrete next action with the correct link
+  (`tones.required_value_use_payload` in `blog.config.yaml`). A post that never says how a reader
+  starts using it fails the phase-5 self-check even if the prose is otherwise clean.
 - **Structure** (tone-dependent): title <60 chars (insight, not clickbait) · 1-3 sentence hook that
-  leads with user value · the body shape for the chosen tone · link the product's tile · optional
-  one real CTA. "What I'd do differently" and an FAQ are **field-note-only** — a 250-word changelog
-  or metric update doesn't need them.
+  leads with user value · the body shape for the chosen tone · the how-to-use payload above · link
+  the product's tile · optional one real CTA (same link, not a second one). "What I'd do
+  differently" and an FAQ are **field-note-only** — a 250-word changelog or metric update doesn't
+  need them.

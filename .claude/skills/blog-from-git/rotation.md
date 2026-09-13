@@ -24,6 +24,12 @@ been published and the source of truth for *what to cover next* — the git scan
 **Why:** three consecutive Burrow (off-list) posts once ran in a row — readers got three updates
 about a thing with no tile to visit. That's the failure this sub-skill exists to prevent.
 
+**Third rule — no user-facing surface, no solo post.** A project with no `/projects` tile and
+nothing at all a reader could go try is INELIGIBLE as a post's sole subject (`blog.config.yaml`
+`grounding.ineligible_subject`). If that's the only candidate left after the two rules above, pick
+a different eligible project instead, or — with explicit user override — mention it as portfolio
+context inside a wider post, never as a standalone post with an invented "how to use it."
+
 ## Procedure
 
 - Read the ledger's "Current rotation state" block. If it says rotation debt is owed to an on-list

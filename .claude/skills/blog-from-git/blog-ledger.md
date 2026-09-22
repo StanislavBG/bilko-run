@@ -9,6 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
+| 2026-09-22 | twelve-releases-in-four-days-for-the-scheduler-view | session-manager | ✅ | shipped-note |
 | 2026-09-16 | sigma-now-shows-who-sits-behind-a-contract | sigma | ✅ | shipped-note |
 | 2026-09-02 | the-book-didnt-know-what-it-already-held | social-signals-trader | ✅ | field-note |
 | 2026-08-27 | a-new-game-a-week-old-and-already-playable | starry-night-ships | ❌ no tile | shipped-note |
@@ -39,31 +40,31 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** sigma (on-list, ✅ tile), post dated 2026-09-16, seeded 2026-09-21 by an
-  unattended watchdog catch-up run (gap 18d). `max_posts_per_run: 1` capped it to one seed.
+- **Last project covered:** session-manager (on-list, ✅ tile), post dated 2026-09-22, seeded
+  2026-09-22 by an unattended watchdog run (gap 5d, publish-due threshold crossed). Portfolio-mode
+  scan found `claude-code-session-manager` as the only substantive activity in the window (195
+  commits, 12 releases v0.87.0→v0.95.0); `sigma-pr` had zero new commits since 09-16 despite being
+  pushed 09-20 (a release/tag push, not new work). `max_posts_per_run: 1` capped it to one seed.
 - **Rotation debt:** none — last post on-`/projects`. burrow (off-list, no tile) is ineligible as a
   sole subject (no user-facing surface); do not queue it as a standalone post.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
-  08-19), problem→outcome (07-02, 08-11), shipped-note (07-06, 07-21, 08-23, 08-27), field-note
+  08-19), problem→outcome (07-02, 08-11), shipped-note (07-06, 07-21, 08-23, 08-27, 09-22), field-note
   (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18, 08-04). Next: compare
   reception/readability rather than adding tones.
-- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** sigma,
-  social-signals-trader, starry-night-ships.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** session-manager, sigma,
+  social-signals-trader.
 - **Due / under-covered on-list projects** (good next candidates): outdoor-hours, local-score,
   game-academy, stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
   audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku, git-viewer.
-- **Unpushed-repo watchlist (re-verified 2026-09-12):** signal-builder 116 commits ahead (0 new
-  since 2026-08-27, unchanged), burrow 239 ahead (21 landed since 2026-08-27 — active, off-list,
-  next queued candidate), sigma-plus still no remote at all (0 new commits found), starry-night-ships
-  still no remote at all but very active (256 commits since 2026-08-27 — already covered/cooling,
-  skip). GitHub-first scans miss ALL of this work — local reconciliation is mandatory, not optional.
-- **Planned backfill queue (gap 09-02 → 09-21):**
-  - ~~2026-09-16 · sigma · sigma-now-shows-who-sits-behind-a-contract (seeded this run)~~
-  - 2026-09-19ish · sigma · later V2 work (full profiles for declaring officials, signal = role AND
-    link match) — sigma is cooling; earliest eligible after 3 more rows, or fold into a later post.
-  - session-manager (telemetry, Field Manual 1.8.0/1.9.0, web presence consolidated under
-    /products/session-manager) — on cooldown until it rolls off. Drafts dir has none pending.
-  - No other on-list repo had pushes or local commits since 2026-09-02 (scan 2026-09-21).
+- **Unpushed-repo watchlist (re-verified 2026-09-22):** signal-builder unchanged (no new local scan
+  this run), burrow unchanged, sigma-plus still no remote at all (0 new commits since last check),
+  starry-night-ships still no remote but active (20 new local commits since 2026-09-19 — already
+  covered/cooling, skip), wizzard-arena is a NEW local-only repo with 20+ commits since 09-20-21
+  (camera/smoke-test tuning) — no tile, not yet in ledger, candidate to watch once it has a
+  user-facing surface. GitHub-first scans miss ALL local-only work — local reconciliation is
+  mandatory, not optional.
+- **Planned backfill queue:** empty — this run covered the full gap (09-16 → 09-22) in one post;
+  no other on-list repo had pushes since the last post.
 - **Cadence is now automated:** `blog-cadence-watchdog.timer` (systemd user timer, OnCalendar=daily,
   Persistent=true) runs the full pipeline unattended per `blog.config.yaml`'s
   `autonomy.autonomous_publish: true` — phases 6/7 (approve, seed) no longer wait on a human when

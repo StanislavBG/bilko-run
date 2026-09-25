@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth as useClerkAuth, useUser, SignInButton } from '@clerk/clerk-react';
 import { usePageView } from '../hooks/usePageView.js';
 import { startSessionManagerCheckout } from '../lib/sessionManagerCheckout.js';
@@ -269,6 +269,99 @@ function InstallCommand() {
   );
 }
 
+const FILM_SRC = '/apps/session-manager/promo.mp4?v=1';
+const FILM_POSTER = '/apps/session-manager/promo-poster.jpg';
+
+/**
+ * "Pip and the Paper Moon" — the 57-second hand-drawn promo film.
+ *
+ * The page is a single viewport by design, so the film never plays inline:
+ * a compact poster button sits under the install command and opens a native
+ * <dialog> lightbox (Escape and backdrop-click close it, focus is trapped by
+ * the browser). Autoplay is skipped when the visitor prefers reduced motion.
+ * The MP4 is a same-origin asset under public/apps/session-manager/ (the host
+ * caches video for a day; bump the ?v= query when the file changes).
+ */
+function WatchFilm() {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  function open() {
+    const d = dialogRef.current;
+    const v = videoRef.current;
+    if (!d || !v) return;
+    if (!d.open) d.showModal();
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    if (!reduced) v.play().catch(() => { /* autoplay may be blocked; controls are visible */ });
+  }
+
+  function close() {
+    const d = dialogRef.current;
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      v.currentTime = 0;
+    }
+    if (d?.open) d.close();
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={open}
+        aria-label="Watch the 57-second film: Pip and the Paper Moon"
+        className="group mt-3 flex w-full max-w-md items-center gap-3 rounded-lg border border-warm-200 bg-white p-1.5 pr-4 text-left transition-colors hover:border-fire-300"
+      >
+        <span className="relative block h-[54px] w-[96px] shrink-0 overflow-hidden rounded-md bg-warm-900">
+          <img src={FILM_POSTER} alt="" width={96} height={54} loading="lazy" className="h-full w-full object-cover" />
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center text-[22px] text-white drop-shadow transition-transform group-hover:scale-110"
+          >
+            ▶
+          </span>
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[13px] font-semibold text-warm-900">Watch the 57-second film</span>
+          <span className="block truncate text-[11.5px] text-warm-400">
+            “Pip and the Paper Moon” — the whole app in one paper-collage story
+          </span>
+        </span>
+      </button>
+
+      <dialog
+        ref={dialogRef}
+        onClose={close}
+        onClick={(e) => { if (e.target === dialogRef.current) close(); }}
+        aria-label="Pip and the Paper Moon — Session Manager film"
+        className="w-[min(96vw,1100px)] rounded-2xl border-0 bg-black p-0 shadow-2xl backdrop:bg-black/75"
+      >
+        <div className="relative aspect-video w-full">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption -- narration is burned in as on-screen captions */}
+          <video
+            ref={videoRef}
+            src={FILM_SRC}
+            poster={FILM_POSTER}
+            controls
+            playsInline
+            preload="metadata"
+            className="h-full w-full rounded-2xl"
+          />
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close film"
+            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-lg leading-none text-white hover:bg-black/80"
+          >
+            ×
+          </button>
+        </div>
+      </dialog>
+    </>
+  );
+}
+
 /**
  * Buy panel.
  *
@@ -508,6 +601,7 @@ export default function SessionManagerPage() {
             <p className="mt-2 text-[11.5px] text-warm-400">
               No account, no licence key, no trial limit — the app is never gated to sell the book.
             </p>
+            <WatchFilm />
           </div>
 
           <BuyPanel />

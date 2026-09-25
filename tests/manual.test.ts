@@ -48,7 +48,7 @@ const MANIFEST: ManualManifest = {
   summary: 'A tab-by-tab operator guide.',
   documentsAppVersion: '0.64.0',
   chapters: [
-    { slug: 'getting-started', title: 'Getting Started', blurb: 'Setup.', free: true, file: 'getting-started.html' },
+    { slug: 'getting-started', title: 'Getting Started', blurb: 'Setup.', free: true, file: 'getting-started.html', part: 'Onboarding' },
     { slug: 'scheduler', title: 'Scheduler', blurb: 'Queue work.', file: 'scheduler.html' },
   ],
   assets: [
@@ -92,6 +92,12 @@ describe('manual catalog', () => {
     expect(serialized).not.toContain('.pdf');
     expect(toc.chapters.map(c => c.free)).toEqual([true, false]);
     expect(toc.chapters[0].title).toBe('Getting Started');
+  });
+
+  it('carries a chapter\'s part through into the TOC, omitting it when absent', () => {
+    const toc = tocFromManifest(MANIFEST);
+    expect(toc.chapters[0].part).toBe('Onboarding');
+    expect(toc.chapters[1].part).toBeUndefined();
   });
 });
 

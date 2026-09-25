@@ -264,25 +264,85 @@ body {
    Styles the first-party chapter HTML served by /api/manual/chapter/:slug.
    The same rule set is inlined into the offline HTML edition by
    session-manager's scripts/build-manual.mjs — keep the two in sync when
-   either changes. */
-.manual-prose { color: #d4d4d4; line-height: 1.75; max-width: 46rem; }
-.manual-prose h1 { font-size: 2rem; line-height: 1.2; color: #f5f5f5; margin: 0 0 .5em; }
-.manual-prose h2 { font-size: 1.35rem; color: #f5f5f5; margin: 2em 0 .5em; }
-.manual-prose h3 { font-size: 1.08rem; color: #ededed; margin: 1.6em 0 .4em; }
+   either changes. Light theme — palette matches the warm/fire tokens used
+   across the rest of the site (see SessionManagerPage.tsx); every text
+   color below is verified >= 4.5:1 against the warm-50/white page backgrounds
+   it sits on. Component classes match session-manager-operations/manual/STYLE.md. */
+.manual-prose { color: #6b5a49; font-size: 18px; line-height: 1.7; max-width: 68ch; }
+.manual-prose h1 { font-size: 2rem; line-height: 1.2; color: #2d2520; margin: 0 0 .5em; }
+.manual-prose h2 { font-size: 1.35rem; color: #2d2520; margin: 2em 0 .5em; }
+.manual-prose h3 { font-size: 1.08rem; color: #2d2520; margin: 1.6em 0 .4em; }
 .manual-prose p { margin: .9em 0; }
-.manual-prose .lede { font-size: 1.1rem; color: #cfcfcf; }
-.manual-prose a { color: #7fc4ff; }
-.manual-prose code { background: #191919; padding: .15em .4em; border-radius: 4px; font-size: .9em; }
-.manual-prose pre { background: #111; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px; overflow-x: auto; }
+.manual-prose .lede { font-size: 1.1rem; color: #4a3d33; }
+.manual-prose a { color: #c04808; }
+.manual-prose a:hover { color: #993a0a; }
+.manual-prose code { background: #faf7f2; color: #2d2520; padding: .15em .4em; border-radius: 4px; font-size: .9em; }
+.manual-prose pre { background: #faf7f2; border: 1px solid #f0e9df; border-radius: 8px; padding: 16px; overflow-x: auto; }
 .manual-prose pre code { background: none; padding: 0; }
+.manual-prose kbd { display: inline-block; background: #fff; border: 1px solid #e0d5c5; border-bottom-width: 2px;
+  border-radius: 5px; padding: .1em .5em; font-family: monospace; font-size: .85em; color: #2d2520; }
 .manual-prose ol, .manual-prose ul { padding-left: 1.4em; }
 .manual-prose li { margin: .45em 0; }
+
+/* Analogy / tip / note / warning asides — shared shape, distinct accent per kind. */
+.manual-analogy, .manual-tip, .manual-note, .manual-warning {
+  padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 1.2em 0; color: #6b5a49;
+}
+.manual-analogy { border-left: 3px solid #14b8a6; background: #f0fdfa; }
+.manual-analogy strong { color: #0f766e; }
+.manual-tip { border-left: 3px solid #10b981; background: #ecfdf5; }
+.manual-tip strong { color: #047857; }
+.manual-note { border-left: 3px solid #0ea5e9; background: #f0f9ff; }
+.manual-note strong { color: #0369a1; }
+.manual-warning { border-left: 3px solid #ff6b1a; background: #fff7f0; }
+.manual-warning strong { color: #993a0a; }
+
+/* Numbered how-to. */
+.manual-steps { padding-left: 1.6em; margin: 1.2em 0; }
+.manual-steps li { margin: .6em 0; }
+.manual-steps li::marker { color: #c04808; font-weight: 700; }
+
+/* Conceptual box-and-arrow diagram — row of boxes on desktop, stacked column
+   with a downward arrow below 640px so it never gets squeezed illegibly. */
+.manual-flow { display: flex; flex-wrap: wrap; list-style: none; gap: 1.75em; margin: 1.4em 0; padding: 0; }
+.manual-flow li {
+  position: relative; flex: 1 1 160px; background: #fff; border: 1px solid #f0e9df;
+  border-radius: 8px; padding: 14px 16px; color: #6b5a49;
+}
+.manual-flow li:not(:last-child)::after {
+  content: "→"; position: absolute; top: 50%; right: -1.35em; transform: translateY(-50%);
+  color: #c04808; font-weight: 700;
+}
+@media (max-width: 640px) {
+  .manual-flow { flex-direction: column; gap: 2.25em; }
+  .manual-flow li:not(:last-child)::after {
+    content: "↓"; top: auto; right: 50%; bottom: -1.75em; transform: translateX(50%);
+  }
+}
+
 .manual-table { width: 100%; border-collapse: collapse; margin: 1.2em 0; font-size: .94em; }
-.manual-table th, .manual-table td { border: 1px solid #2a2a2a; padding: 10px 12px; text-align: left; vertical-align: top; }
-.manual-table th { background: #161616; color: #fff; }
-.manual-note { border-left: 3px solid #5fdf9f; background: #131a16; padding: 12px 16px; border-radius: 0 6px 6px 0; }
-.manual-incident { border: 1px solid #4a3520; background: #1a1410; border-radius: 8px; padding: 4px 18px; margin: 1.2em 0; }
-.manual-figure { margin: 1.6em 0; border: 1px solid #2a2a2a; border-radius: 8px; overflow: hidden; background: #111; }
+.manual-table th, .manual-table td { border: 1px solid #f0e9df; padding: 10px 12px; text-align: left; vertical-align: top; }
+.manual-table th { background: #faf7f2; color: #2d2520; }
+.manual-table td { color: #6b5a49; }
+
+/* Glossary chapter only. */
+.manual-glossary dt { color: #2d2520; font-weight: 700; margin-top: 1em; }
+.manual-glossary dd { color: #6b5a49; margin: .25em 0 0; }
+
+.manual-takeaways {
+  background: #fff; border: 1px solid #f0e9df; border-radius: 10px; padding: 18px 20px; margin: 2em 0 1.4em;
+}
+.manual-takeaways h2 { font-size: 1.05rem; color: #2d2520; margin: 0 0 .5em; }
+.manual-takeaways ul { padding-left: 1.2em; margin: 0; }
+.manual-takeaways li { color: #6b5a49; margin: .4em 0; }
+
+.manual-next {
+  margin-top: 2em; padding-top: 1.2em; border-top: 1px solid #f0e9df; font-size: .95em; color: #6b5a49;
+}
+.manual-next a { color: #c04808; }
+.manual-next a:hover { color: #993a0a; }
+
+.manual-figure { margin: 1.6em 0; border: 1px solid #f0e9df; border-radius: 8px; overflow: hidden; background: #fff; }
 .manual-figure img { display: block; width: 100%; }
 /* An uncaptured figure slot is production notes, not content: a paying reader
    should see no figure at all rather than a hatched "pending capture" box, and
@@ -291,7 +351,7 @@ body {
    <img>. Keep in sync with OFFLINE_CSS in session-manager's build-manual.mjs. */
 .manual-figure:has(.manual-figure__frame) { display: none; }
 .manual-figure__frame { display: none; }
-.manual-figure figcaption { padding: 12px 16px; color: #9a9a9a; font-size: .88em; display: flex; flex-wrap: wrap; gap: 14px; }
+.manual-figure figcaption { padding: 12px 16px; color: #6b5a49; font-size: .88em; display: flex; flex-wrap: wrap; gap: 14px; }
 .manual-figure .callout { display: inline-flex; align-items: center; justify-content: center;
-  width: 1.5em; height: 1.5em; border-radius: 50%; background: #5fdf9f; color: #000;
+  width: 1.5em; height: 1.5em; border-radius: 50%; background: #c04808; color: #fff;
   font-weight: 700; font-size: .8em; margin-right: .4em; }

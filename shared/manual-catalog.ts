@@ -58,6 +58,8 @@ export interface ManualChapter {
   file: string;
   /** Screenshot/annotation assets this chapter references, for integrity checks. */
   figures?: string[];
+  /** Part/section heading this chapter groups under in the reader nav, if any. */
+  part?: string;
 }
 
 /** `manifest.json` at the root of `data/manual/releases/<version>/`. */
@@ -112,7 +114,7 @@ export interface ManualToc {
   title: string;
   summary: string;
   documentsAppVersion: string;
-  chapters: Array<{ slug: string; title: string; blurb: string; free: boolean }>;
+  chapters: Array<{ slug: string; title: string; blurb: string; free: boolean; part?: string }>;
   assets: Array<{ id: string; label: string; bytes: number }>;
 }
 
@@ -123,7 +125,7 @@ export function tocFromManifest(m: ManualManifest): ManualToc {
     title: m.title,
     summary: m.summary,
     documentsAppVersion: m.documentsAppVersion,
-    chapters: m.chapters.map(c => ({ slug: c.slug, title: c.title, blurb: c.blurb, free: !!c.free })),
+    chapters: m.chapters.map(c => ({ slug: c.slug, title: c.title, blurb: c.blurb, free: !!c.free, ...(c.part ? { part: c.part } : {}) })),
     assets: m.assets.map(a => ({ id: a.id, label: a.label, bytes: a.bytes })),
   };
 }

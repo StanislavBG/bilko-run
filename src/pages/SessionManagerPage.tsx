@@ -269,7 +269,7 @@ function InstallCommand() {
   );
 }
 
-const FILM_SRC = '/apps/session-manager/promo.mp4?v=1';
+const FILM_SRC = '/apps/session-manager/promo.mp4?v=2';
 const FILM_POSTER = '/apps/session-manager/promo-poster.jpg';
 
 /**

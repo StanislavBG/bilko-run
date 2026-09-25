@@ -287,32 +287,61 @@ export default function ManualPage() {
             onChange={e => openChapter(e.target.value)}
             className="mt-1 w-full rounded-md border border-warm-300 bg-white px-3 py-2 text-warm-900"
           >
-            {toc.chapters.map((c, i) => (
-              <option key={c.slug} value={c.slug}>
-                {String(i + 1).padStart(2, '0')} · {c.title}{!entitled && !c.free ? ' 🔒' : ''}
-              </option>
-            ))}
+            {(() => {
+              let lastPart: string | undefined;
+              const groups: Array<{ part: string | undefined; items: Array<{ c: (typeof toc.chapters)[number]; i: number }> }> = [];
+              toc.chapters.forEach((c, i) => {
+                if (c.part !== lastPart || groups.length === 0) {
+                  groups.push({ part: c.part, items: [] });
+                  lastPart = c.part;
+                }
+                groups[groups.length - 1].items.push({ c, i });
+              });
+              return groups.map((g, gi) => {
+                const options = g.items.map(({ c, i }) => (
+                  <option key={c.slug} value={c.slug}>
+                    {String(i + 1).padStart(2, '0')} · {c.title}{!entitled && !c.free ? ' 🔒' : ''}
+                  </option>
+                ));
+                return g.part
+                  ? <optgroup key={`${g.part}-${gi}`} label={g.part}>{options}</optgroup>
+                  : options;
+              });
+            })()}
           </select>
         </label>
 
         <nav className="hidden space-y-1 md:block md:sticky md:top-6 md:max-h-[calc(100vh-3rem)] md:self-start md:overflow-y-auto">
-          {toc.chapters.map((c, i) => (
-            <button
-              key={c.slug}
-              onClick={() => openChapter(c.slug)}
-              title={c.blurb}
-              aria-current={activeSlug === c.slug ? 'true' : undefined}
-              className={`block w-full rounded px-3 py-2 text-left text-sm ${
-                activeSlug === c.slug ? 'bg-warm-100 text-warm-900' : 'text-warm-700 hover:bg-warm-50'
-              }`}
-            >
-              <span className="mr-2 text-warm-500">{String(i + 1).padStart(2, '0')}</span>
-              {c.title}
-              {!entitled && (c.free
-                ? <span className="ml-2 text-[10px] uppercase text-emerald-700">free</span>
-                : <span className="ml-2 text-[10px] text-warm-500">🔒</span>)}
-            </button>
-          ))}
+          {(() => {
+            let lastPart: string | undefined;
+            return toc.chapters.map((c, i) => {
+              const showHeading = c.part && c.part !== lastPart;
+              lastPart = c.part;
+              return (
+                <div key={c.slug}>
+                  {showHeading && (
+                    <div className="mt-4 mb-1 px-3 text-xs font-semibold uppercase tracking-widest text-warm-500 first:mt-0">
+                      {c.part}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => openChapter(c.slug)}
+                    title={c.blurb}
+                    aria-current={activeSlug === c.slug ? 'true' : undefined}
+                    className={`block w-full rounded px-3 py-2 text-left text-sm ${
+                      activeSlug === c.slug ? 'bg-warm-100 text-warm-900' : 'text-warm-700 hover:bg-warm-50'
+                    }`}
+                  >
+                    <span className="mr-2 text-warm-500">{String(i + 1).padStart(2, '0')}</span>
+                    {c.title}
+                    {!entitled && (c.free
+                      ? <span className="ml-2 text-[10px] uppercase text-emerald-700">free</span>
+                      : <span className="ml-2 text-[10px] text-warm-500">🔒</span>)}
+                  </button>
+                </div>
+              );
+            });
+          })()}
         </nav>
 
         <article ref={articleRef} onClick={handleArticleClick} className="min-h-[320px] scroll-mt-6">

@@ -21,7 +21,7 @@ import {
   type ManualStatus, type ManualChapterBody, type ManualChapterLocked,
 } from '../lib/manualClient.js';
 import { startSessionManagerCheckout } from '../lib/sessionManagerCheckout.js';
-import { MANUAL_PRICE_LABEL, MANUAL_TITLE, type ManualToc } from '../../shared/manual-catalog.js';
+import { MANUAL_PRICE_LABEL, MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../shared/manual-catalog.js';
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -191,7 +191,7 @@ export default function ManualPage() {
         <h1 className="mt-2 text-4xl font-semibold text-warm-900">{toc.title}</h1>
         <p className="mt-3 max-w-2xl text-warm-700">{toc.summary}</p>
         <p className="mt-2 text-sm text-warm-700">
-          v{toc.version} · released {new Date(toc.releasedAt).toLocaleDateString()} · documents
+          v{toc.version} · released {formatManualReleaseDate(toc.releasedAt)} · documents
           Session Manager v{toc.documentsAppVersion}
         </p>
 

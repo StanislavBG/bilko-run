@@ -118,6 +118,11 @@ export interface ManualToc {
   assets: Array<{ id: string; label: string; bytes: number }>;
 }
 
+/** Formats a `YYYY-MM-DD` release date for display without any local-timezone day shift. */
+export function formatManualReleaseDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString(undefined, { timeZone: 'UTC' });
+}
+
 export function tocFromManifest(m: ManualManifest): ManualToc {
   return {
     version: m.version,

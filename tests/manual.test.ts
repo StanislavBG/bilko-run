@@ -10,7 +10,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import {
   compareManualVersions, latestManualVersion, isValidManualVersion,
-  isValidManualSlug, tocFromManifest, MANUAL_PRODUCT_KEY, MANUAL_PRICE_TYPE,
+  isValidManualSlug, tocFromManifest, formatManualReleaseDate,
+  MANUAL_PRODUCT_KEY, MANUAL_PRICE_TYPE,
   type ManualManifest,
 } from '../shared/manual-catalog.js';
 import { entryForPriceType } from '../shared/product-catalog.js';
@@ -98,6 +99,14 @@ describe('manual catalog', () => {
     const toc = tocFromManifest(MANIFEST);
     expect(toc.chapters[0].part).toBe('Onboarding');
     expect(toc.chapters[1].part).toBeUndefined();
+  });
+
+  it('formats the release date without a local-timezone day shift', () => {
+    // A date-only ISO string parses as UTC midnight; formatting in local time
+    // (e.g. America/Los_Angeles, UTC-7/8) would render the previous day.
+    const formatted = formatManualReleaseDate('2026-09-25');
+    expect(formatted).toContain('25');
+    expect(formatted).not.toContain('24');
   });
 });
 

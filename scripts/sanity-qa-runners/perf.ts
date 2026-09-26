@@ -24,6 +24,10 @@ interface PerfScores {
   ttiMs: number;
 }
 
+// Godot wasm engine — Lighthouse perf score is not meaningful for a multi-MB
+// wasm game bundle, so these slugs are skipped rather than scored.
+const PERF_EXEMPT = new Set(['escape-velocity']);
+
 // Thresholds from PRD
 const THRESHOLDS = {
   performance: { pass: 85, warn: 80 },
@@ -181,13 +185,21 @@ export async function runPerf(targets: SanityTarget[], failFast = false): Promis
   const perTarget: Record<string, TargetStatus> = {};
   const rows: string[] = [];
 
+  const exempt = targets.filter(t => PERF_EXEMPT.has(t.slug));
+  const scored = targets.filter(t => !PERF_EXEMPT.has(t.slug));
+
+  for (const target of exempt) {
+    perTarget[target.slug] = 'skip';
+    rows.push(`| ${target.slug} | — | — | — | — | — | — | — | ⏭️ skipped (Godot wasm, perf not meaningful) |`);
+  }
+
   // Serve the built bundles locally so Lighthouse hits a COOP-free origin.
   const srv = await startStaticServer();
 
   try {
     // Run 2 Lighthouse audits at a time (CPU intensive)
-    for (let i = 0; i < targets.length; i += 2) {
-      const batch = targets.slice(i, i + 2);
+    for (let i = 0; i < scored.length; i += 2) {
+      const batch = scored.slice(i, i + 2);
       const results = await Promise.all(batch.map(async target => {
         const scores = await runLighthouse(localUrl(srv.port, target));
         return { target, scores };
@@ -236,7 +248,8 @@ export async function runPerf(targets: SanityTarget[], failFast = false): Promis
     name: 'perf',
     status,
     perTarget,
-    details: `${allStatuses.filter(s => s === 'pass').length}/${targets.length} within targets`,
+    details: `${allStatuses.filter(s => s === 'pass').length}/${scored.length} within targets` +
+      (exempt.length > 0 ? ` (${exempt.length} exempt)` : ''),
     sectionMd,
   };
 }

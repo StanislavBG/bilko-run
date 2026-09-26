@@ -9,6 +9,8 @@ const BUDGETS_BYTES: Record<string, number> = {
   sudoku:        250 * 1024,
   mindswiffer:   250 * 1024,
   'game-academy': 250 * 1024,
+  // escape-velocity — Godot web export (wasm engine), 30 MB gz budget
+  'escape-velocity': 30_000_000,
   // Academy — 400 KB gz
   academy:       400 * 1024,
   // Default AI tools / others — 200 KB gz
@@ -137,7 +139,8 @@ export async function runSize(targets: SanityTarget[], failFast = false): Promis
     '|---|---|---|---|---|',
     ...rows,
     '',
-    'Budgets: games=250 KB, academy=400 KB, others=200 KB. Max files=30.',
+    'Budgets: games=250 KB, academy=400 KB, others=200 KB. Max files=30. ' +
+      'Exception: escape-velocity=30 MB (Godot wasm export).',
   ].join('\n');
 
   return {

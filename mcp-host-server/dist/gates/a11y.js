@@ -13,16 +13,31 @@ const MIME = {
 export const a11yGate = async (ctx) => {
     if (!ctx.manifest)
         return { name: 'a11y', status: 'fail', details: 'manifest not loaded' };
-    // Dynamic import so the gate gracefully fails if playwright is not installed,
-    // and so the mcp-host-server compiles without playwright in its own package.json.
+    // Dynamic import so the gate gracefully fails if Playwright is not installed,
+    // and so the mcp-host-server compiles without it in its own package.json.
+    //
+    // The host repo depends on `@playwright/test`, NOT the bare `playwright`
+    // package — importing only 'playwright' made this gate fail 100% of the time
+    // with "playwright not installed", blocking every publish that reached it.
+    // `@playwright/test` re-exports the same browser launchers, so try both.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let chromium;
-    try {
-        const pw = await import('playwright');
-        chromium = pw.chromium;
+    for (const mod of ['playwright', '@playwright/test', 'playwright-core']) {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const pw = await import(/* @vite-ignore */ mod);
+            if (pw?.chromium) {
+                chromium = pw.chromium;
+                break;
+            }
+        }
+        catch { /* try the next candidate */ }
     }
-    catch {
-        return { name: 'a11y', status: 'fail', details: 'playwright not installed — run: pnpm add playwright' };
+    if (!chromium) {
+        return {
+            name: 'a11y', status: 'fail',
+            details: 'Playwright not installed — run: pnpm add -D @playwright/test && pnpm exec playwright install chromium',
+        };
     }
     // Serve the staged bundle over HTTP so axe can load relative URLs.
     const server = createServer(async (req, res) => {

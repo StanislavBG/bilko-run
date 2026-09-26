@@ -97,9 +97,17 @@ await app.register(compress, {
   encodings: ['br', 'gzip'],
   // @fastify/compress's default compressible-types regex doesn't match
   // `application/javascript` (only `text/*`, `*/json`, `*/xml`, `*/text`,
-  // `octet-stream`) — extend it so the static JS bundle actually compresses.
-  // PNG/JPEG/WebP/woff2/etc. still don't match, so they pass through untouched.
-  customTypes: /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)|javascript/u,
+  // `octet-stream`) — extend it to cover the static JS bundle explicitly.
+  // Also lists `application/wasm` (e.g. Godot web builds) for the same
+  // reason. Note: @fastify/compress's shouldCompress() already falls back to
+  // mime-db's own `compressible` flag for any type this regex misses, and
+  // mime-db marks both `application/javascript` and `application/wasm` as
+  // compressible — so both would compress even without these entries. They're
+  // kept explicit anyway as documentation of intent, not because they're
+  // load-bearing today.
+  // PNG/JPEG/WebP/woff2/etc. aren't compressible per mime-db either, so they
+  // pass through untouched by either path.
+  customTypes: /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)|javascript|^application\/wasm(?:;|$)/u,
 });
 
 // Per-route egress accounting. Registered before the routes so its onSend hook

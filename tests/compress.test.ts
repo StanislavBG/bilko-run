@@ -12,7 +12,7 @@ import { initDb, dbGet, dbRun } from '../server/db.js';
 
 // Compressible-types regex mirrors server/index.ts — kept in sync manually
 // since it isn't exported.
-const CUSTOM_TYPES = /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)|javascript/u;
+const CUSTOM_TYPES = /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)|javascript|^application\/wasm(?:;|$)/u;
 
 async function buildApp() {
   const app = Fastify({ logger: false });
@@ -122,11 +122,15 @@ describe('origin compression — static assets', () => {
   let staticApp: ReturnType<typeof Fastify>;
   const jsBody = 'console.log("x");'.repeat(2000); // well above 1KB threshold, compressible
   const pngBody = Buffer.alloc(5000, 0xff); // opaque binary, must pass through untouched
+  // Repeating byte pattern stands in for real wasm bytes — compressible like the
+  // actual Godot engine binary, well above the 1KB threshold.
+  const wasmBody = Buffer.alloc(5000, 0x2a);
 
   beforeAll(async () => {
     mkdirSync(join(fixtureRoot, 'projects', 'demo-app'), { recursive: true });
     writeFileSync(join(fixtureRoot, 'projects', 'demo-app', 'bundle.js'), jsBody);
     writeFileSync(join(fixtureRoot, 'projects', 'demo-app', 'sprite.png'), pngBody);
+    writeFileSync(join(fixtureRoot, 'projects', 'demo-app', 'index.wasm'), wasmBody);
     setStaticKnownSlugs(fixtureRoot);
 
     staticApp = Fastify({ logger: false });
@@ -161,6 +165,22 @@ describe('origin compression — static assets', () => {
     expect(row!.bytes).toBeGreaterThan(0);
     expect(row!.bytes).toBeLessThan(Buffer.byteLength(jsBody));
     expect(row!.bytes).toBe(res.rawPayload.length);
+  });
+
+  it('compresses a static wasm binary (e.g. Godot web build) like the JS bundle', async () => {
+    const res = await staticApp.inject({
+      method: 'GET',
+      url: '/projects/demo-app/index.wasm',
+      headers: { 'accept-encoding': 'br, gzip' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-encoding']).toBeTruthy();
+    expect(['br', 'gzip']).toContain(res.headers['content-encoding']);
+    expect(res.rawPayload.length).toBeLessThan(wasmBody.length);
+    // Drain the egress meter's in-memory buffer so it doesn't bleed into the
+    // next test's flush (same route key, 'static:demo-app', as the other
+    // fixtures in this suite).
+    await flushEgress();
   });
 
   it('does not compress a PNG even though it is above the threshold', async () => {

@@ -686,6 +686,8 @@ export async function initDb(): Promise<void> {
     // web-remote phone app: WebSocket client + terminal renderer. Trim target
     // tracked in session-manager's repo; 1.3 MB admits what is already live.
     ['session-manager', 1_300_000],
+    // Godot web game: ~10 MB gz wasm engine + game pck.
+    ['escape-velocity', 30_000_000],
   ];
   for (const [slug, limit] of OVERSIZE_BUDGETS) {
     try {

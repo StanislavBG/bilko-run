@@ -11,7 +11,6 @@
  */
 
 import React from 'react';
-import { PRODUCT_KEYS, type ProductKey } from '../../shared/product-catalog.js';
 
 /* ── Types ───────────────────────────────────────────────── */
 
@@ -104,9 +103,6 @@ export interface ToolDefinition {
 
   /** React.lazy loader for the page component */
   loader?: ToolLoader;
-
-  /** Stripe product key for one-off purchases — see shared/product-catalog */
-  productKey?: ProductKey;
 }
 
 /** Tailwind classes for the homepage tag pill — one entry per ToolTag. */
@@ -177,16 +173,20 @@ export const TOOLS: readonly ToolDefinition[] = [
   // dedupes PROJECTS by slug so the two merge into a single hub card, with this
   // react-route entry's href winning.
   //
-  // Open-core: the APP is free (npx claude-code-session-manager@latest). The
-  // Stripe checkout on this page sells The Field Manual ($19.99, read at
-  // /manual) — never the software. Keep that split explicit in any copy here;
-  // a card that reads like the app costs money is the failure mode.
+  // Open-core: the APP is free and stays free (npx claude-code-session-manager@latest).
+  // The Field Manual that teaches it is free too since its 2.0.1 release (read
+  // at /products/session-manager/manual) — nothing on this page is for sale. A
+  // card that reads like the app costs money is the failure mode.
   {
     slug: 'session-manager',
     name: 'Session Manager',
-    tagline: 'One cockpit for every Claude Code session — free',
-    description: 'A free local desktop cockpit for the Claude Code CLI — scheduler, subagent hive, full session history, live usage, voice, an embedded browser, and a self-hosted web remote. The paid Field Manual that teaches it is sold separately.',
-    features: ['Scheduler', 'Subagents · Hive', 'History', 'Usage', 'Voice', 'Browser', 'Web Remote'],
+    tagline: 'Claude Code, supercharged — free, and stays free',
+    description: "A free desktop app that bolts onto Claude Code: sessions that don't lose the plot, a scheduler that waits out your token limit, and every setting in one friendly window. The Field Manual that teaches it is free too.",
+    // Only surfaces that ship today, drawn from the landing page's Parts Bin:
+    // seven of its nine tabs (Tag Library is left off for length, and "The
+    // whole kit" is a summary, not a surface). Subagents/Hive never existed;
+    // Browser and the desktop Web Remote were retired (2026-08-06).
+    features: ['Sessions', 'Scheduler', 'Agent Library', 'Memory', 'History', 'Skills · Hooks · MCP', 'Voice'],
     category: 'devtools',
     status: 'live',
     accent: { text: 'text-fire-500', bg: 'bg-fire-400', hoverBorder: 'hover:border-fire-300' },
@@ -200,7 +200,6 @@ export const TOOLS: readonly ToolDefinition[] = [
       buttonShadow: 'shadow-fire-500/20',
     },
     loader: () => import('../pages/SessionManagerPage.js'),
-    productKey: PRODUCT_KEYS.SESSION_MANAGER,
   },
 ];
 

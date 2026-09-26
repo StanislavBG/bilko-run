@@ -15,8 +15,10 @@ const PERMISSIONS = [
 // into a burst of report POSTs (a single `/` load was generating 26 of them).
 //
 // - fonts.googleapis.com / fonts.gstatic.com: the Google Fonts <link> in
-//   index.html (Instrument Serif, Inter, JetBrains Mono, Caveat) and the .woff2
-//   files it pulls. Roughly 20 of those 26 reports per load were fonts alone.
+//   index.html (Instrument Serif, Inter, JetBrains Mono, Caveat), the
+//   page-scoped <link> the Session Manager landing page injects while mounted
+//   (Source Serif 4, Inter Tight, JetBrains Mono 600/700), and the .woff2 files
+//   they pull. Roughly 20 of those 26 reports per load were fonts alone.
 // - clerk.bilko.run: Clerk's Frontend API is CNAME'd onto our own domain, so
 //   `https://*.clerk.com` never matches it — every Clerk XHR was a violation.
 const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com';
@@ -127,9 +129,14 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
   // 'strict-dynamic' in script-src that made the app's own bundle a violation
   // on every single page load. HTML documents are small; buffering them is
   // cheap and it's the only way the nonce reaches the markup it's issued for.
+  //
+  // Downloads are the exception: an HTML file sent as an attachment (the Field
+  // Manual's offline edition) is saved, never rendered under this policy, so
+  // it must reach the visitor byte-for-byte, with its route's own caching.
   app.addHook('onSend', async (req, reply, payload) => {
     const ctype = String(reply.getHeader('content-type') ?? '');
     if (!ctype.startsWith('text/html')) return payload;
+    if (/^\s*attachment\b/i.test(String(reply.getHeader('content-disposition') ?? ''))) return payload;
     const nonce = (req as any).cspNonce as string;
     let html: string;
     if (typeof payload === 'string') {

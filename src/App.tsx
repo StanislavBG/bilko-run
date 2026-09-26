@@ -25,8 +25,8 @@ import { PROJECTS } from './data/projectsRegistry.js';
 // Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
 // only non-tool landing pages are declared here.
 const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
-// The paid Session Manager Field Manual reader — lazy because its bundle is only
-// ever needed by the small slice of visitors who bought (or are buying) it.
+// The Session Manager Field Manual reader — lazy because its bundle is only
+// needed by the slice of visitors who open the manual.
 const ManualPage = React.lazy(() => import('./pages/ManualPage.js'));
 
 // Build one React.lazy component per registered tool so code-splitting still works.
@@ -144,7 +144,7 @@ function AppRoutes() {
             <Route path="/products" element={<Navigate to="/projects" replace />} />
             <Route path="/products/*">
               {toolRoutes()}
-              {/* The paid Field Manual lives under the Session Manager product
+              {/* The Field Manual lives under the Session Manager product
                   root, not at top level — /manual implied "the bilko.run manual"
                   on a host with ~25 projects. Declared before the splat so the
                   static segments outrank MaybeStandaloneRedirect. */}
@@ -183,19 +183,20 @@ function AppRoutes() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />
 
-            {/* ── Paid digital products ── */}
+            {/* ── Legacy manual URLs ── */}
             {/* Canonical path is /products/session-manager/manual (see above).
                 These two never die — they are in customers' receipt emails. */}
             <Route path="/manual" element={<RedirectManualToProduct />} />
             <Route path="/manual/*" element={<RedirectManualToProduct />} />
           </Route>
 
-          {/* /products/session-manager — standalone marketing/checkout page.
+          {/* /products/session-manager — standalone marketing page (nothing is
+              sold there: the app and the Field Manual are both free).
               Deliberately OUTSIDE <Layout /> so it renders zero Bilko site
               chrome (no pf-topbar, no Bilko nav, no Cmd-K palette); it ships
-              its own sticky header instead. Still shares this repo's
-              AuthProvider (wraps <AppRoutes />, not Layout-scoped) and
-              Clerk/Stripe checkout wiring. */}
+              its own header instead. Still shares this repo's AuthProvider
+              (wraps <AppRoutes />, not Layout-scoped) and ClerkProvider, which
+              its header account chip reads. */}
           <Route path="/products/session-manager" element={lazyRoute(TOOL_COMPONENTS['session-manager'])} />
 
           {/* /app/* — legacy dashboard URLs redirect to canonical /products/* */}

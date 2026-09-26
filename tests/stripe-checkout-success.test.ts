@@ -4,6 +4,8 @@ import { entryForPriceType, PRODUCT_KEYS } from '../shared/product-catalog.js';
 
 const listLineItems = vi.fn();
 const sessionsRetrieve = vi.fn();
+const sessionsCreate = vi.fn(async () => ({ url: 'https://checkout.stripe.test/c/pay/cs_test_new' }));
+const customersCreate = vi.fn(async () => ({ id: 'cus_new' }));
 const upsertLicenseKey = vi.fn(async (_email: string, _customerId: string | undefined, productKey: string) => `KEY-FOR-${productKey}`);
 
 vi.mock('../server/services/stripe.js', () => ({
@@ -12,8 +14,10 @@ vi.mock('../server/services/stripe.js', () => ({
       sessions: {
         retrieve: sessionsRetrieve,
         listLineItems,
+        create: sessionsCreate,
       },
     },
+    customers: { create: customersCreate },
   }),
   isStripeConfigured: () => true,
   isAudienceDecoderConfigured: () => true,
@@ -64,6 +68,64 @@ describe('product catalog: session_manager', () => {
   });
 });
 
+describe('create-checkout-session: the Field Manual is free', () => {
+  const OLD_ENV = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = {
+      ...OLD_ENV,
+      STRIPE_PRICE_SESSION_MANAGER: 'price_session_manager_123',
+      STRIPE_PRICE_PUBLICTRADES_COFFEE: 'price_coffee_123',
+    };
+  });
+
+  it('refuses to start a new session_manager checkout with a 410, before touching Stripe', async () => {
+    const app = await buildApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/stripe/create-checkout-session',
+      payload: { email: 'a@b.co', priceType: 'session_manager' },
+    });
+
+    expect(res.statusCode).toBe(410);
+    expect(res.json().error).toContain('/products/session-manager/manual');
+    expect(res.body).not.toMatch(/\$\s?\d/);
+    expect(customersCreate).not.toHaveBeenCalled();
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('answers the 410 even without an email, so no request shape reaches checkout', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/stripe/create-checkout-session',
+      payload: { priceType: 'session_manager' },
+    });
+    expect(res.statusCode).toBe(410);
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('still creates checkouts for the products that are for sale', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/stripe/create-checkout-session',
+      payload: { email: 'a@b.co', priceType: 'publictrades_coffee' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(sessionsCreate).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it('keeps the catalog entry, so a late payment still resolves (see below)', () => {
+    expect(entryForPriceType('session_manager')?.envVar).toBe('STRIPE_PRICE_SESSION_MANAGER');
+  });
+});
+
 describe('/checkout/success product resolution', () => {
   const OLD_ENV = process.env;
 
@@ -86,6 +148,11 @@ describe('/checkout/success product resolution', () => {
     expect(res.statusCode).toBe(200);
     expect(upsertLicenseKey).toHaveBeenCalledWith('buyer@test.com', 'cus_123', PRODUCT_KEYS.SESSION_MANAGER);
     expect(res.body).toContain('Thanks for your support');
+    // The manual is free as of 2.0.1: a late payment is thanked and sent to the
+    // free reader, not told it "unlocked" anything or sent to a purchase lookup.
+    expect(res.body).toContain('free for everyone');
+    expect(res.body).toContain('href="/products/session-manager/manual"');
+    expect(res.body).not.toMatch(/unlocked|Find your purchase|my-manual/);
     await app.close();
   });
 

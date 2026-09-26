@@ -1,22 +1,23 @@
 /**
- * HTTP surface for the paid Session Manager Field Manual ($19.99).
+ * HTTP surface for the Session Manager Field Manual — free to read and
+ * download as of release 2.0.1.
  *
- * Route map — the whole buy → read → download framework:
+ * Route map:
  *
- *   GET  /api/manual/toc                     public   table of contents (sales page)
- *   GET  /api/manual/status                  auth     { entitled, toc } for the signed-in user
- *   GET  /api/manual/chapter/:slug           mixed    free chapters public, rest 402 unless entitled
- *   GET  /api/manual/download/:assetId       auth     streams the PDF / offline HTML
- *   GET  /products/session-manager/my-manual public   email-based recovery page (payment-link buyers)
+ *   GET  /api/manual/toc                     public   table of contents
+ *   GET  /api/manual/chapter/:slug           public   chapter body (every chapter is free since 2.0.1)
+ *   GET  /api/manual/download/:assetId       public   streams the PDF / offline HTML
+ *   GET  /products/session-manager/my-manual public   "it's free now" page for past buyers
  *   GET  /my-manual                          public   301 → the path above (legacy, in receipt emails)
  *
- * Entitlement itself is the already-wired `session_manager` one-time purchase —
- * see shared/manual-catalog.ts for why there's no second SKU.
+ * The manual used to be a one-time `session_manager` purchase. Those
+ * entitlement rows are kept (see shared/manual-catalog.ts), and the Stripe
+ * wiring stays so a late payment still resolves — nothing here sells anything.
  */
 
 import type { FastifyInstance } from 'fastify';
 import { createReadStream } from 'fs';
-import { requireAuth, verifyClerkToken, EMAIL_RE } from '../clerk.js';
+import { verifyClerkToken } from '../clerk.js';
 import {
   latestManifest,
   findChapter,
@@ -25,16 +26,7 @@ import {
   resolveReleaseFile,
   isEntitledToManual,
 } from '../services/manual.js';
-import {
-  tocFromManifest,
-  isValidManualSlug,
-  MANUAL_PRICE_LABEL,
-  MANUAL_TITLE,
-} from '../../shared/manual-catalog.js';
-
-function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+import { tocFromManifest, isValidManualSlug } from '../../shared/manual-catalog.js';
 
 /** 503 body used everywhere a release bundle hasn't been published yet. */
 const NOT_PUBLISHED = { error: 'The manual has not been published yet. Check back shortly.' };
@@ -44,34 +36,32 @@ const NOT_PUBLISHED = { error: 'The manual has not been published yet. Check bac
 const MANUAL_PATH = '/products/session-manager/manual';
 const MY_MANUAL_PATH = '/products/session-manager/my-manual';
 
+/**
+ * RFC 9110 §13.1.2: does an If-None-Match header match `etag`? Uses the weak
+ * comparison GET requires (a `W/` prefix on either side is ignored), accepts
+ * a comma-separated list, and treats `*` as matching any current file.
+ */
+function ifNoneMatchHits(header: string | string[] | undefined, etag: string): boolean {
+  if (!header) return false;
+  const opaque = (tag: string) => tag.trim().replace(/^W\//, '');
+  const want = opaque(etag);
+  return (Array.isArray(header) ? header.join(',') : header)
+    .split(',')
+    .some(tag => tag.trim() === '*' || opaque(tag) === want);
+}
+
 export function registerManualRoutes(app: FastifyInstance): void {
-  // ── Public: what you get for your money ────────────────────────────────────
+  // ── Public: what's in the manual ───────────────────────────────────────────
   app.get('/api/manual/toc', async (_req, reply) => {
     const m = latestManifest();
     if (!m) {
       reply.status(503);
       return NOT_PUBLISHED;
     }
-    return { priceLabel: MANUAL_PRICE_LABEL, toc: tocFromManifest(m) };
+    return { free: true, toc: tocFromManifest(m) };
   });
 
-  // ── Auth: does THIS user own it? ───────────────────────────────────────────
-  app.get('/api/manual/status', async (req, reply) => {
-    const email = await requireAuth(req, reply);
-    if (!email) return;
-
-    const m = latestManifest();
-    const entitled = await isEntitledToManual(email);
-    if (!m) {
-      // Still report entitlement — a buyer with no bundle yet should see
-      // "you own it, it's coming", not a bare error.
-      reply.status(200);
-      return { email, entitled, published: false, priceLabel: MANUAL_PRICE_LABEL, toc: null };
-    }
-    return { email, entitled, published: true, priceLabel: MANUAL_PRICE_LABEL, toc: tocFromManifest(m) };
-  });
-
-  // ── Mixed: free chapters are the marketing sample; the rest are paid ───────
+  // ── Public: one chapter's body ─────────────────────────────────────────────
   app.get('/api/manual/chapter/:slug', async (req, reply) => {
     const { slug } = req.params as { slug: string };
     if (!isValidManualSlug(slug)) {
@@ -91,18 +81,20 @@ export function registerManualRoutes(app: FastifyInstance): void {
       return { error: 'Chapter not found.' };
     }
 
+    // The manual is free as of release 2.0.1: its manifest marks every chapter
+    // `free: true`, so this branch never runs for it. The check stays as a
+    // guard on the manifest flag — a release that marks a chapter non-free
+    // gets a neutral 402 (the reader shows "isn't available right now", not a
+    // price), while a pre-2.0.1 buyer's entitlement row still opens it.
     if (!chapter.free) {
-      // Soft auth: no `requireAuth` here so a signed-out visitor gets the
-      // paywall shape (402 + price) rather than a bare 401 they can't act on.
+      // Soft auth: a signed-out visitor gets the 402 shape, not a bare 401.
       const email = await verifyClerkToken(req.headers.authorization);
       const entitled = email ? await isEntitledToManual(email) : false;
       if (!entitled) {
         reply.status(402);
         return {
-          error: 'This chapter is part of the paid manual.',
+          error: "This chapter isn't available right now.",
           locked: true,
-          signedIn: !!email,
-          priceLabel: MANUAL_PRICE_LABEL,
           title: chapter.title,
           blurb: chapter.blurb,
         };
@@ -119,28 +111,11 @@ export function registerManualRoutes(app: FastifyInstance): void {
     return { version: m.version, slug: chapter.slug, title: chapter.title, html };
   });
 
-  // ── Auth: the actual bytes ─────────────────────────────────────────────────
+  // ── Public: the actual bytes ───────────────────────────────────────────────
   //
-  // Entitlement is checked HERE, on the request that serves the file, against
-  // the persisted purchase row — the same check every other route uses. There
-  // is no signed URL, no download token, and no shared signing secret to
-  // configure or rotate.
-  //
-  // This works because the browser never navigates to this URL: ManualPage
-  // fetches it with the Clerk bearer header and saves the resulting blob (see
-  // src/lib/manualClient.ts). A plain `window.location = url` couldn't send
-  // that header, which is the only reason a signed-URL scheme was ever
-  // needed. The assets are a few hundred KB, so buffering one client-side
-  // costs nothing.
+  // Free since 2.0.1 — no sign-in, no entitlement. ManualPage links here
+  // directly and the attachment disposition makes the browser save the file.
   app.get('/api/manual/download/:assetId', async (req, reply) => {
-    const email = await requireAuth(req, reply);
-    if (!email) return;
-
-    if (!(await isEntitledToManual(email))) {
-      reply.status(402);
-      return { error: 'Purchase required.', locked: true, priceLabel: MANUAL_PRICE_LABEL };
-    }
-
     const { assetId } = req.params as { assetId: string };
     if (!isValidManualSlug(assetId)) {
       reply.status(400);
@@ -166,67 +141,57 @@ export function registerManualRoutes(app: FastifyInstance): void {
       return { error: 'Download is unavailable.' };
     }
 
+    // Asset ids are stable across releases (`pdf` is always the LATEST PDF),
+    // so a cache may keep the bytes but must revalidate before reusing them.
+    // The validator is what makes that revalidation cheap: a release directory
+    // is immutable once published, so version + id + size names these exact
+    // bytes, and a browser or Cloudflare holding them gets a bodiless 304
+    // instead of the whole file again. Weak, because @fastify/compress may
+    // send the offline HTML edition gzip/br-encoded.
+    const etag = `W/"${m.version}-${asset.id}-${asset.bytes}"`;
+    reply.header('ETag', etag);
+    reply.header('Cache-Control', 'no-cache');
+    if (ifNoneMatchHits(req.headers['if-none-match'], etag)) {
+      return reply.code(304).send();
+    }
+
     reply.header('Content-Type', asset.mime);
     reply.header('Content-Disposition', `attachment; filename="${asset.file.replace(/[^\w.\-]/g, '_')}"`);
-    // Per-user paid content — must never be cached by a shared proxy.
-    reply.header('Cache-Control', 'private, no-store');
     return reply.send(createReadStream(full));
   });
 
-  // ── Recovery page for buyers who paid via a static payment link ────────────
-  // Mirrors /my-license: no Clerk session needed, just the purchase email.
+  // ── "It's free now" page for past buyers ──────────────────────────────────
+  // This used to recover a purchase by email. The manual is free as of 2.0.1,
+  // so there is nothing to recover: every visitor, with or without the
+  // `?email=` that receipt emails carry, gets pointed at the reader.
   //
   // Canonical path is product-scoped so Session Manager's whole web presence
   // hangs off /products/session-manager. The bare /my-manual is registered
   // below as a permanent 301 — it is printed in receipt emails already sent.
-  app.get(MY_MANUAL_PATH, async (req, reply) => {
-    const query = req.query as { email?: string };
-    const email = (query.email ?? '').trim().toLowerCase();
+  app.get(MY_MANUAL_PATH, async (_req, reply) => {
     reply.type('text/html');
-
-    const page = (title: string, body: string) => `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${escHtml(title)} — Bilko.run</title>
+<title>The Field Manual is free now — Bilko.run</title>
 <style>
 body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#e8e8e8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
 .card{max-width:520px;width:90%;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:40px}
 h1{margin-top:0;font-size:1.5em}p{color:#aaa;font-size:0.95em}a{color:#7fc4ff}
-input{width:100%;box-sizing:border-box;padding:10px 14px;background:#111;border:1px solid #444;border-radius:6px;color:#e8e8e8;font-size:1em;margin:8px 0 16px}
-button{width:100%;padding:12px;background:#7fff7f;color:#000;border:none;border-radius:6px;font-size:1em;font-weight:600;cursor:pointer}
-</style></head><body><div class="card"><h1>${escHtml(title)}</h1>${body}</div></body></html>`;
-
-    if (email && EMAIL_RE.test(email)) {
-      const entitled = await isEntitledToManual(email);
-      if (!entitled) {
-        return page('No purchase found', `
-          <p>We couldn't find a ${escHtml(MANUAL_TITLE)} purchase for <strong>${escHtml(email)}</strong>.</p>
-          <p>If you just paid, the webhook can take up to a minute — try again shortly.</p>
-          <p><a href="${MY_MANUAL_PATH}">Try a different email</a> · <a href="${MANUAL_PATH}">Buy for ${MANUAL_PRICE_LABEL}</a></p>`);
-      }
-      const m = latestManifest();
-      return page('Your manual is unlocked', `
-        <p>Purchase confirmed for <strong>${escHtml(email)}</strong>.</p>
-        <p>Sign in at <a href="${MANUAL_PATH}">bilko.run${MANUAL_PATH}</a> with this email to read online and download
-        ${m ? `<strong>v${escHtml(m.version)}</strong>` : 'the latest release'}.</p>
-        <p style="color:#888;font-size:0.85em">Every future revision is included — no repeat purchase.</p>`);
-    }
-
-    return page('Find your manual', `
-      <p>Enter the email you used to buy ${escHtml(MANUAL_TITLE)}.</p>
-      <form method="GET" action="${MY_MANUAL_PATH}">
-        <input type="email" name="email" placeholder="you@example.com" required autofocus/>
-        <button type="submit">Find my purchase</button>
-      </form>
-      <p style="margin-top:24px">Don't have it yet? <a href="${MANUAL_PATH}">Get it for ${MANUAL_PRICE_LABEL} →</a></p>`);
+</style></head><body><div class="card">
+<h1>The Field Manual is free now</h1>
+<p><a href="${MANUAL_PATH}">Read it here →</a> Every chapter, plus the PDF and offline editions, with no sign-in needed.</p>
+<p>Bought a copy earlier? Thank you for the support. There's nothing to recover — it's all open to read.</p>
+</div></body></html>`;
   });
 
   // ── Permanent redirects for the retired top-level paths ────────────────────
   // These must keep working forever: Stripe receipt emails sent before the
   // consolidation link to /manual and /my-manual. The query string is carried
-  // over (the recovery page takes ?email=). The fragment (#getting-started and
-  // every other chapter anchor) is never sent to the server — the browser
-  // re-applies it to the redirect target on its own, so anchors survive.
+  // over for those old receipt links (they carry ?email=, which the "it's free
+  // now" page ignores). The fragment (#getting-started and every other chapter
+  // anchor) is never sent to the server — the browser re-applies it to the
+  // redirect target on its own, so anchors survive.
   app.get('/my-manual', async (req, reply) => {
     const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
     return reply.redirect(MY_MANUAL_PATH + qs, 301);

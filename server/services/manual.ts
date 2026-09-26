@@ -1,22 +1,15 @@
 /**
- * Server side of the paid Session Manager Field Manual.
+ * Server side of the Session Manager Field Manual (free as of release 2.0.1).
  *
  * Responsibilities, and deliberately nothing else:
  *   1. Resolve the release bundle on disk and read its manifest.
- *   2. Answer "is this email entitled?" (one-time purchase of MANUAL_PRODUCT_KEY).
+ *   2. Answer "does this email hold a pre-2.0.1 purchase?" (MANUAL_PRODUCT_KEY),
+ *      which the chapter route still honours for any chapter a release marks
+ *      non-free.
  *
- * There is deliberately NO download-token machinery here. Entitlement already
- * lives in one durable place — the `stripe_one_time_purchases` row that
- * `hasPurchased` reads — so every route, downloads included, checks that row
- * directly. An earlier revision signed short-lived HMAC download URLs because a
- * browser navigation can't carry an `Authorization` header; that bought nothing
- * except a `MANUAL_DOWNLOAD_SECRET` to configure, rotate, and keep in sync
- * across instances. The client now fetches the asset WITH its bearer token and
- * saves the blob (src/lib/manualClient.ts), so the header problem disappears
- * and so does the secret.
- *
- * The bundle lives under `data/manual/`, NOT `dist/`, so the static plugin can
- * never serve a chapter or PDF by guessed URL.
+ * The bundle lives under `data/manual/`, NOT `dist/`, so only the manual
+ * routes serve it: a chapter or asset is reachable solely through the
+ * manifest, never by a guessed static URL.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
@@ -93,7 +86,7 @@ export function readManifest(version: string): ManualManifest | null {
   }
 }
 
-/** The release a buyer gets today. Null when no bundle has been published yet. */
+/** The release every reader gets today. Null when no bundle has been published yet. */
 export function latestManifest(): ManualManifest | null {
   const v = latestManualVersion(listManualVersions());
   return v ? readManifest(v) : null;
@@ -136,9 +129,9 @@ export function readChapterHtml(version: string, chapter: ManualChapter): string
 // ── Entitlement ──────────────────────────────────────────────────────────────
 
 /**
- * One-time purchase of MANUAL_PRODUCT_KEY = lifetime access to the LATEST
- * release. There is no per-version entitlement by design — "buy once, keep
- * getting updates" is the product.
+ * Whether this email holds a one-time purchase of MANUAL_PRODUCT_KEY, bought
+ * before the manual went free. Never version-scoped: a buyer's row covers
+ * the LATEST release.
  */
 export async function isEntitledToManual(email: string): Promise<boolean> {
   const normalized = (email ?? '').trim().toLowerCase();

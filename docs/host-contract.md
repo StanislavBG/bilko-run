@@ -100,8 +100,8 @@ Worked example — Session Manager owns everything under `/products/session-mana
 | Path | Served by |
 |---|---|
 | `/products/session-manager` | SPA, outside `<Layout />` (own chrome) |
-| `/products/session-manager/manual` | SPA, inside `<Layout />` — the paid Field Manual reader |
-| `/products/session-manager/my-manual` | Fastify (`server/routes/manual.ts`) — purchase recovery |
+| `/products/session-manager/manual` | SPA, inside `<Layout />` — the Field Manual reader (free since 2.0.1) |
+| `/products/session-manager/my-manual` | Fastify (`server/routes/manual.ts`) — "it's free now" page for past buyers (receipt-email target) |
 | `/products/session-manager/remote` | Fastify 301 → the published web-remote bundle |
 | `/manual`, `/my-manual` | Fastify 301 → the two paths above, **permanently** |
 

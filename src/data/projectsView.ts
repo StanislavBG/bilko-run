@@ -79,8 +79,8 @@ const ENRICH: Record<string, Enrich> = {
     detail: 'Pulls every public repo, scores it by recency and activity, and renders a living portfolio. No manual upkeep — push code, the dashboard updates itself.',
   },
   'session-manager': {
-    metric: '240+', metricLabel: 'sessions tracked', lang: 'TypeScript',
-    detail: 'A terminal cockpit that lists, resumes, and diffs Claude Code sessions. Bookmarks, search, and a timeline so you never lose a thread mid-build.',
+    metric: 'free', metricLabel: 'app + manual', lang: 'TypeScript',
+    detail: 'A free desktop cockpit for Claude Code: sessions with a persona and a mission, a scheduler that waits out your token limit, and every setting in one window.',
   },
   'social-signals-trader': {
     metric: '10', metricLabel: 'subreddits', lang: 'Python',

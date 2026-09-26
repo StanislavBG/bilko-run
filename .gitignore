@@ -1,4 +1,7 @@
 node_modules/
+# Also match a node_modules SYMLINK (worktrees link the main checkout's): a trailing-slash
+# pattern only matches directories, so `git add -A` would commit a dangling link.
+/node_modules
 # Anchored to repo root — only ignores ./dist (Vite) and ./dist-server (host server tsc).
 # mcp-host-server/dist/ is intentionally tracked so sibling repos can reference
 # the built server.js from .mcp.json without a build step.

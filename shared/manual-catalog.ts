@@ -1,11 +1,11 @@
 /**
- * Single source of truth for the paid **Session Manager Field Manual** — the
- * $19.99 digital run-book sold at bilko.run/manual.
+ * Single source of truth for the **Session Manager Field Manual**, read at
+ * bilko.run/products/session-manager/manual. It is free — every chapter and
+ * every download — as of release 2.0.1; before that it was a one-time purchase.
  *
  * The manual is a *versioned release bundle* authored in the session-manager
  * repo (`session-manager-operations/manual/`) and committed into this repo
- * under `data/manual/releases/<version>/`. The buyer gets the LATEST release,
- * forever — that's the product promise, so entitlement is never version-scoped.
+ * under `data/manual/releases/<version>/`. Readers always get the LATEST release.
  *
  * Keep this file pure data + pure functions — no fs, no Stripe SDK, no env
  * reads — so it loads identically in the browser bundle and the Fastify server.
@@ -14,21 +14,14 @@
 import { PRODUCT_KEYS, type ProductKey } from './product-catalog.js';
 
 /**
- * The entitlement that unlocks the manual.
- *
- * Deliberately the ALREADY-WIRED `session_manager` one-time purchase
- * (`STRIPE_PRICE_SESSION_MANAGER`, $19.99) rather than a new SKU: the thing
- * that $19.99 buys IS the manual — the app itself is free on npm via
- * `npx claude-code-session-manager@latest`. Introducing a second price would
- * strand every existing buyer outside the product they already paid for.
+ * The entitlement a pre-2.0.1 purchase recorded: the `session_manager`
+ * one-time purchase (`STRIPE_PRICE_SESSION_MANAGER`). Nothing is sold any
+ * more, but it stays wired: existing buyers keep their rows, the chapter
+ * route still honours them for any chapter a release marks non-free, and
+ * checkout-success resolves a late or in-flight payment to this key instead
+ * of falling through to its contentgrade_pro fallback.
  */
 export const MANUAL_PRODUCT_KEY: ProductKey = PRODUCT_KEYS.SESSION_MANAGER;
-
-/** The priceType the checkout endpoint accepts for the manual. */
-export const MANUAL_PRICE_TYPE = 'session_manager' as const;
-
-/** Display price. The authoritative amount lives in Stripe; this is copy. */
-export const MANUAL_PRICE_LABEL = '$19.99';
 
 export const MANUAL_TITLE = 'The Session Manager Field Manual';
 
@@ -47,11 +40,11 @@ export interface ManualAsset {
 export interface ManualChapter {
   slug: string;
   title: string;
-  /** One-line summary, safe to show to NON-buyers on the sales page. */
+  /** One-line summary; public, shown in the table of contents. */
   blurb: string;
   /**
-   * Free preview chapters are readable without an entitlement — they're the
-   * marketing sample. Everything else 402s for anyone who hasn't bought.
+   * Readable by anyone. Every chapter is free from 2.0.1 on; a chapter a
+   * release leaves non-free 402s unless the reader has a pre-2.0.1 purchase.
    */
   free?: boolean;
   /** Filename of the chapter's HTML body inside the release directory. */
@@ -68,7 +61,7 @@ export interface ManualManifest {
   /** ISO-8601 date the release was cut. */
   releasedAt: string;
   title: string;
-  /** Short "what changed in this release" line, shown to returning buyers. */
+  /** Short "what changed in this release" line, shown under the reader's title. */
   summary: string;
   /** Version of session-manager this release documents. */
   documentsAppVersion: string;
@@ -104,9 +97,8 @@ export function isValidManualSlug(s: string): boolean {
 }
 
 /**
- * The non-entitled view of a manifest: chapter titles + blurbs, no bodies.
- * Drives the sales page's table-of-contents so the buyer sees exactly what
- * they get before paying.
+ * The public view of a manifest: chapter titles + blurbs, no bodies and no
+ * file paths. Drives the reader's table of contents.
  */
 export interface ManualToc {
   version: string;

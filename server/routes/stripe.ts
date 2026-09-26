@@ -54,6 +54,15 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       cancelUrl?: string;
     } | null;
 
+    // The Field Manual is free since release 2.0.1, so a NEW checkout for it
+    // must never start — not from a tab still running a pre-free bundle, not
+    // from a direct POST. Its PRICE_CATALOG entry stays only so a late or
+    // in-flight payment still resolves at /checkout/success and in the webhook.
+    if (body?.priceType === 'session_manager') {
+      reply.status(410);
+      return { error: 'The Field Manual is free now. Read it at /products/session-manager/manual.' };
+    }
+
     const email = (body?.email ?? '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       reply.status(400);
@@ -109,7 +118,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         // production without editing the live price: create a 100%-off coupon,
         // redeem it once, and every downstream step (payment_intent, the
         // checkout.session.completed webhook, the stripe_one_time_purchases
-        // row, /manual unlocking) runs exactly as it does for a paying buyer.
+        // row, the entitlement lookup) runs exactly as it does for a paying buyer.
         // Dropping the price to $0 instead would NOT be equivalent — Stripe
         // skips payment collection entirely for a zero-amount line item, so the
         // paid path never actually executes.
@@ -399,14 +408,16 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         ? `<p>Your support purchase is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>`
         : `<p>Payment confirmed for <strong>${escHtml(email)}</strong>.</p>`;
 
+      // The Field Manual is free as of 2.0.1, so nothing sells it any more. A
+      // session_manager payment reaching this page is a late or in-flight one
+      // (the catalog entry stays so it resolves here, not to contentgrade_pro):
+      // thank the buyer and send them to the free reader.
       const body = productKey === PRODUCT_KEYS.SESSION_MANAGER
         ? `
-        <p>Your copy of <strong>The Session Manager Field Manual</strong> is unlocked for
-        <strong>${escHtml(email)}</strong> — including every future revision.</p>
+        <p>Your payment is confirmed for <strong>${escHtml(email)}</strong> — thank you for buying <strong>The Session Manager Field Manual</strong>.</p>
+        <p>The manual is now free for everyone: every chapter, plus the PDF and offline editions, with no sign-in needed.</p>
         <p><a href="/products/session-manager/manual" style="display:inline-block;background:#7fff7f;color:#000;padding:12px 20px;border-radius:6px;font-weight:600;text-decoration:none">Read the manual →</a></p>
-        <p style="font-size:0.9em;color:#aaa">Sign in with <strong>${escHtml(email)}</strong> to read online and download the PDF.
-        Lost this page? <a href="/products/session-manager/my-manual?email=${encodeURIComponent(email)}">Find your purchase</a>.</p>
-        <p style="font-size:0.9em;color:#888">The app itself is free — launch it any time with:</p>
+        <p style="font-size:0.9em;color:#888">The app itself is free too — launch it any time with:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em">npx claude-code-session-manager@latest</pre>`
         : isSupportPurchase
         ? `

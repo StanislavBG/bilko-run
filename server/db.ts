@@ -1,4 +1,4 @@
-import { createClient, type Client, type Transaction } from '@libsql/client';
+import { createClient, type Client, type InStatement, type Transaction } from '@libsql/client';
 import { mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -516,6 +516,14 @@ const MIGRATIONS = [
     created_at INTEGER NOT NULL,
     PRIMARY KEY (slug, event_id)
   )`,
+  // One row per one-shot data migration that has run (see
+  // applyDataMigrationOnce). Schema changes stay in this array and the
+  // additive ALTER list; this is for fixes to seeded rows that an admin may
+  // edit afterwards, which must not be re-applied on the next boot.
+  `CREATE TABLE IF NOT EXISTS data_migrations (
+    id         TEXT PRIMARY KEY,
+    applied_at INTEGER NOT NULL
+  )`,
 ];
 
 const REFERRER_RULES_SEED: ReadonlyArray<[string, string, string]> = [
@@ -547,6 +555,29 @@ const SEEDS = [
   ['linear.app', 85, 'A', "Linear's site is so well-designed it makes you feel bad about your own product before you even sign up."],
   ['vercel.com', 74, 'B', "Vercel's hero section deploys faster than their actual deploys. The rest of the page is still loading."],
 ] as const;
+
+/**
+ * Runs `statements` at most once per database, keyed by `id` in
+ * data_migrations. Use it to correct a seeded row that the owner can edit
+ * afterwards (e.g. a blog post through routes/blog.ts): a guard on the row's
+ * own content ("only while the note is missing") would put the correction
+ * back on every deploy after the owner edits it out. The statements and the
+ * marker commit in one batch, so a boot that fails midway retries all of it.
+ * Two instances booting at once can both run the statements, so keep each one
+ * safe to apply twice.
+ */
+async function applyDataMigrationOnce(id: string, statements: InStatement[]): Promise<boolean> {
+  const done = await dbGet<{ n: number }>('SELECT 1 AS n FROM data_migrations WHERE id = ?', id);
+  if (done) return false;
+  await getClient().batch(
+    [
+      ...statements,
+      { sql: 'INSERT OR IGNORE INTO data_migrations (id, applied_at) VALUES (?, ?)', args: [id, Math.floor(Date.now() / 1000)] },
+    ],
+    'write',
+  );
+  return true;
+}
 
 export async function initDb(): Promise<void> {
   const client = getClient();
@@ -2716,12 +2747,27 @@ Worth knowing if you're reading the dashboard closely: the source for this work 
     '2026-08-08T16:00:00.000Z',
   );
 
+  // The Field Manual went free on 2026-09-25 (release 2.0.1). This dated post
+  // keeps its slug and its August story, but it must not read as a live $19.99
+  // offer anywhere it appears: the /blog index and the share text show the
+  // title, and the post page shows the excerpt above the body. So the title
+  // says "Was", the excerpt ends on the change, and the body opens with a
+  // dated note. A fresh database gets all three from this seed. INSERT OR
+  // IGNORE never touches the row production already has, so the one-shot
+  // data migration below rewrites that row once, and never again: an edit
+  // the owner makes later through the blog admin sticks.
+  const MANUAL_FREE_SLUG = 'the-app-stays-free-the-manual-is-19-99';
+  const MANUAL_FREE_TITLE = 'The App Stays Free, The Manual Was $19.99 (Now Free)';
+  const MANUAL_FREE_EXCERPT =
+    `Session Manager's marketing page said "Buy Now — $19.99" under the app itself, implying the free, MIT-licensed tool was the paid product. It wasn't — and since 2026-09-25 the manual is free too.`;
+  const MANUAL_FREE_NOTE =
+    `**Update, 2026-09-25:** the Field Manual is now free — every chapter, plus the PDF and offline editions, with no sign-in needed, at bilko.run/products/session-manager/manual. The app is still free too. What follows is the August story.\n\n`;
   await dbRun(
     `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
-    'the-app-stays-free-the-manual-is-19-99',
-    `The App Stays Free, The Manual Is $19.99`,
-    `Session Manager's marketing page said "Buy Now — $19.99" under the app itself, implying the free, MIT-licensed tool was the paid product. It wasn't. The manual is.`,
-    `[Session Manager](/projects/session-manager/) is a free, MIT-licensed desktop cockpit for the \`claude\` CLI — multi-tab terminal, 25-plus configuration and observability tabs, an overnight job scheduler, voice dictation, all running on your own machine with zero telemetry. Its marketing page said "Buy Now — $19.99" directly under the app. The commit that fixed this admits it plainly: that page "led with the wrong offer and the wrong impression." A reader could look at that page and reasonably conclude the app itself cost money. It never has.
+    MANUAL_FREE_SLUG,
+    MANUAL_FREE_TITLE,
+    MANUAL_FREE_EXCERPT,
+    MANUAL_FREE_NOTE + `[Session Manager](/projects/session-manager/) is a free, MIT-licensed desktop cockpit for the \`claude\` CLI — multi-tab terminal, 25-plus configuration and observability tabs, an overnight job scheduler, voice dictation, all running on your own machine with zero telemetry. Its marketing page said "Buy Now — $19.99" directly under the app. The commit that fixed this admits it plainly: that page "led with the wrong offer and the wrong impression." A reader could look at that page and reasonably conclude the app itself cost money. It never has.
 
 The actual answer: the app stays free, and the thing that's genuinely worth $19.99 is a real product now — the Field Manual, a maintained, versioned reference document. Buy it once through the existing Stripe checkout and you get lifetime access, either read online (one free sample chapter, the rest gated by purchase) or downloaded as offline HTML and PDF. It launched with 3 chapters and grew to 17 within the week as more of the app's own surface area got documented — no app-side feature gating was added anywhere; owning the manual doesn't unlock anything in the software, because there's nothing in the software to unlock.
 
@@ -2733,6 +2779,18 @@ What's next: the manual keeps getting rewritten in lockstep with the app — thr
     'product',
     '2026-08-11T16:00:00.000Z',
   );
+  await applyDataMigrationOnce('2026-09-25-blog-manual-now-free', [
+    {
+      sql: 'UPDATE blog_posts SET title = ?, excerpt = ?, updated_at = ? WHERE slug = ?',
+      args: [MANUAL_FREE_TITLE, MANUAL_FREE_EXCERPT, new Date().toISOString(), MANUAL_FREE_SLUG],
+    },
+    {
+      // Guarded so a fresh seed (or a second instance booting alongside this
+      // one) never gets the note twice.
+      sql: 'UPDATE blog_posts SET content = ? || content WHERE slug = ? AND content NOT LIKE ?',
+      args: [MANUAL_FREE_NOTE, MANUAL_FREE_SLUG, '**Update, 2026-09-25:%'],
+    },
+  ]);
 
   await dbRun(
     `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,

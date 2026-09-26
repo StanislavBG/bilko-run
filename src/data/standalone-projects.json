@@ -483,5 +483,24 @@
       "Host",
       "TypeScript"
     ]
+  },
+  {
+    "slug": "escape-velocity",
+    "name": "Escape Velocity",
+    "tagline": "Escape the Solar System: a keyboard-only space survivors run across Sol's eight planets.",
+    "category": "Game · Arcade",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/escape-velocity/",
+      "localPath": "~/Projects/starry-night-2"
+    },
+    "tags": [
+      "Game",
+      "Space",
+      "Godot",
+      "Free"
+    ]
   }
 ]

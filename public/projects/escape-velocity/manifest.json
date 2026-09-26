@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "slug": "escape-velocity",
+  "version": "1.0.0",
+  "builtAt": "2026-09-26T16:04:06.129Z",
+  "gitSha": "06c7034",
+  "gitBranch": "main",
+  "hostKit": {
+    "version": "0.0.0"
+  },
+  "golden": {
+    "path": "/projects/escape-velocity/",
+    "expect": "Escape Velocity"
+  },
+  "health": {},
+  "bundle": {
+    "sizeBytesGz": 24853719,
+    "fileCount": 13
+  }
+}

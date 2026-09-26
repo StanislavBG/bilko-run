@@ -541,7 +541,7 @@ bilko.run sends a strict CSP plus the OWASP-recommended security header set on e
 
 ```
 default-src 'self';
-script-src  'self' 'nonce-{NONCE}' https://js.clerk.com https://js.stripe.com 'strict-dynamic';
+script-src  'self' 'nonce-{NONCE}' 'wasm-unsafe-eval' https://js.clerk.com https://js.stripe.com 'strict-dynamic';
 style-src   'self' 'nonce-{NONCE}';
 img-src     'self' data: https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com;
 font-src    'self' data:;
@@ -556,6 +556,8 @@ upgrade-insecure-requests;
 ```
 
 A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook auto-injects `nonce="…"` onto every `<script>` and `<style>` tag in HTML string payloads, plus a `<meta name="csp-nonce">` for host-kit runtime CSS. Static-file streams served by `@fastify/static` are not rewritten (streams pass through unchanged).
+
+`'wasm-unsafe-eval'` in `script-src` allows WebAssembly compilation (not JS `eval`) for Godot/WebAssembly apps like the escape-velocity game and LocalScore's WebGPU pipeline.
 
 ### Mode toggle
 

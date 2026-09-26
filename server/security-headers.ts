@@ -28,7 +28,10 @@ const CLERK_FAPI_ORIGIN = 'https://clerk.bilko.run';
 function buildCsp(nonce: string): string {
   const directives = [
     `default-src 'self'`,
-    `script-src 'self' 'nonce-${nonce}' https://js.clerk.com https://js.stripe.com ${CLERK_FAPI_ORIGIN} 'strict-dynamic'`,
+    // 'wasm-unsafe-eval' allows WebAssembly compilation only (not JS eval) —
+    // needed by the Godot web game (escape-velocity) and LocalScore's
+    // WebGPU/wasm pipeline.
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://js.clerk.com https://js.stripe.com ${CLERK_FAPI_ORIGIN} 'strict-dynamic'`,
     `style-src 'self' 'nonce-${nonce}' ${FONT_CSS_ORIGIN}`,
     // React renders `style={{...}}` as inline style ATTRIBUTES, which a nonce
     // can never cover (nonces apply to elements). Without this the app emits a

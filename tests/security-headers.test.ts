@@ -42,6 +42,17 @@ describe('Security headers — HTML response', () => {
     expect(nonce!.length).toBeGreaterThan(8);
   });
 
+  it('script-src allows wasm compilation but not JS eval or inline', async () => {
+    const res = await app.inject({ method: 'GET', url: '/test-html' });
+    const csp = getCsp(res.headers);
+    const scriptSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
+    expect(scriptSrc).toBeTruthy();
+    const tokens = scriptSrc!.split(/\s+/);
+    expect(tokens).toContain(`'wasm-unsafe-eval'`);
+    expect(tokens).not.toContain(`'unsafe-eval'`);
+    expect(tokens).not.toContain(`'unsafe-inline'`);
+  });
+
   it('each request gets a different nonce', async () => {
     const r1 = await app.inject({ method: 'GET', url: '/test-html' });
     const r2 = await app.inject({ method: 'GET', url: '/test-html' });

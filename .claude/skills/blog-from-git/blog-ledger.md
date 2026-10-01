@@ -9,6 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
+| 2026-09-26 | a-space-shooter-shrank-66-percent-to-fit-in-your-browser | escape-velocity | ✅ | shipped-note |
 | 2026-09-22 | twelve-releases-in-four-days-for-the-scheduler-view | session-manager | ✅ | shipped-note |
 | 2026-09-16 | sigma-now-shows-who-sits-behind-a-contract | sigma | ✅ | shipped-note |
 | 2026-09-02 | the-book-didnt-know-what-it-already-held | social-signals-trader | ✅ | field-note |
@@ -40,31 +41,33 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** session-manager (on-list, ✅ tile), post dated 2026-09-22, seeded
-  2026-09-22 by an unattended watchdog run (gap 5d, publish-due threshold crossed). Portfolio-mode
-  scan found `claude-code-session-manager` as the only substantive activity in the window (195
-  commits, 12 releases v0.87.0→v0.95.0); `sigma-pr` had zero new commits since 09-16 despite being
-  pushed 09-20 (a release/tag push, not new work). `max_posts_per_run: 1` capped it to one seed.
+- **Last project covered:** escape-velocity (on-list, ✅ tile), post dated 2026-09-26, seeded
+  2026-10-01 by an unattended watchdog run (gap 9d, publish-due threshold crossed). GitHub scan of
+  the window (09-22 → 10-01) found only two repos pushed: `bilko-run` (host, mostly Field
+  Manual/promo-video work for session-manager — ineligible, on cooldown) and
+  `claude-code-session-manager` (also on cooldown). Local reconciliation caught the real story:
+  `starry-night-2` (local-only, 11 commits) ported a desktop Godot game to the browser and
+  registered it as a new tile, "Escape Velocity," on 2026-09-26 — a new launch, not on cooldown,
+  with a real user-facing surface. `max_posts_per_run: 1` capped it to one seed.
 - **Rotation debt:** none — last post on-`/projects`. burrow (off-list, no tile) is ineligible as a
   sole subject (no user-facing surface); do not queue it as a standalone post.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
-  08-19), problem→outcome (07-02, 08-11), shipped-note (07-06, 07-21, 08-23, 08-27, 09-22), field-note
-  (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18, 08-04). Next: compare
+  08-19), problem→outcome (07-02, 08-11), shipped-note (07-06, 07-21, 08-23, 08-27, 09-22, 09-26),
+  field-note (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18, 08-04). Next: compare
   reception/readability rather than adding tones.
-- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** session-manager, sigma,
-  social-signals-trader.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** escape-velocity,
+  session-manager, sigma.
 - **Due / under-covered on-list projects** (good next candidates): outdoor-hours, local-score,
   game-academy, stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
   audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku, git-viewer.
-- **Unpushed-repo watchlist (re-verified 2026-09-22):** signal-builder unchanged (no new local scan
-  this run), burrow unchanged, sigma-plus still no remote at all (0 new commits since last check),
-  starry-night-ships still no remote but active (20 new local commits since 2026-09-19 — already
-  covered/cooling, skip), wizzard-arena is a NEW local-only repo with 20+ commits since 09-20-21
-  (camera/smoke-test tuning) — no tile, not yet in ledger, candidate to watch once it has a
-  user-facing surface. GitHub-first scans miss ALL local-only work — local reconciliation is
-  mandatory, not optional.
-- **Planned backfill queue:** empty — this run covered the full gap (09-16 → 09-22) in one post;
-  no other on-list repo had pushes since the last post.
+- **Unpushed-repo watchlist (re-verified 2026-10-01):** `starry-night-2` is local-only (no remote)
+  despite now being published and tiled as escape-velocity — pushing it to GitHub is still
+  outstanding, flagged in the post itself. `wizzard-arena` is still local-only, 39 new commits
+  since 09-22, still no tile — not yet eligible for a standalone post. signal-builder, burrow,
+  sigma-plus unchanged (no new local scan this run). GitHub-first scans miss ALL local-only work —
+  local reconciliation is mandatory, not optional; it's what surfaced this run's actual story.
+- **Planned backfill queue:** empty — gap was 9d (under the 10d catch-up trigger), handled as a
+  single current post, not a backfill queue.
 - **Cadence is now automated:** `blog-cadence-watchdog.timer` (systemd user timer, OnCalendar=daily,
   Persistent=true) runs the full pipeline unattended per `blog.config.yaml`'s
   `autonomy.autonomous_publish: true` — phases 6/7 (approve, seed) no longer wait on a human when

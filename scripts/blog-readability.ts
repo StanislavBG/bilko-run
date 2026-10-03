@@ -17,11 +17,20 @@ export interface ReadabilityThresholds {
   longSentenceWords: number;
   maxLongSentences: number;
   jargonBlocklist: JargonPair[];
+  marketingBlocklist: string[];
 }
 
 export interface LinkIssue {
-  kind: 'relative-link' | 'unlinked-source-claim';
+  kind: 'relative-link' | 'unlinked-source-claim' | 'unknown-project-link';
   text: string;
+}
+
+export interface ProjectRegistryEntry {
+  slug: string;
+  host: {
+    kind: string;
+    path?: string;
+  };
 }
 
 export interface ReadabilityReport {
@@ -29,6 +38,7 @@ export interface ReadabilityReport {
   avgSentenceWords: number;
   longSentences: string[];
   jargonHits: JargonPair[];
+  marketingHits: string[];
   linkIssues: LinkIssue[];
   wordCount: number;
   pass: boolean;
@@ -59,6 +69,7 @@ export const DEFAULT_THRESHOLDS: ReadabilityThresholds = {
     { term: 'optimize', suggestion: 'improve' },
     { term: 'mitigate', suggestion: 'reduce' },
   ],
+  marketingBlocklist: ['sign up now', "don't miss", 'game-changer'],
 };
 
 function escapeRegExp(s: string): string {
@@ -154,9 +165,45 @@ export function findLinkIssues(markdown: string): LinkIssue[] {
   return issues;
 }
 
+const PROJECT_LINK_RE = /https:\/\/bilko\.run\/(projects|products)\/([a-z0-9-]+)(\/)?/gi;
+
+// Each registered project has exactly one valid link form for its host kind:
+// static-path needs /projects/<slug>/ (trailing slash), react-route needs
+// /products/<slug> (no trailing slash). Any other host kind has no valid
+// bilko.run/projects or bilko.run/products form at all.
+function expectedLinkForm(entry: ProjectRegistryEntry): { section: string; trailingSlash: boolean } | null {
+  if (entry.host.kind === 'static-path') return { section: 'projects', trailingSlash: true };
+  if (entry.host.kind === 'react-route') return { section: 'products', trailingSlash: false };
+  return null;
+}
+
+// Runs on the raw markdown so link destinations are still visible (same
+// reason findLinkIssues does), checked against a registry the caller supplies.
+export function findProjectLinkIssues(markdown: string, registry: ProjectRegistryEntry[]): LinkIssue[] {
+  const issues: LinkIssue[] = [];
+
+  for (const match of markdown.matchAll(PROJECT_LINK_RE)) {
+    const [text, section, slug, trailingSlash] = match;
+    const entry = registry.find((e) => e.slug === slug);
+    if (!entry) {
+      issues.push({ kind: 'unknown-project-link', text });
+      continue;
+    }
+    const expected = expectedLinkForm(entry);
+    const matches =
+      expected !== null && section.toLowerCase() === expected.section && Boolean(trailingSlash) === expected.trailingSlash;
+    if (!matches) {
+      issues.push({ kind: 'unknown-project-link', text });
+    }
+  }
+
+  return issues;
+}
+
 export function analyzeReadability(
   markdown: string,
   opts: Partial<ReadabilityThresholds> = {},
+  projectRegistry?: ProjectRegistryEntry[],
 ): ReadabilityReport {
   const thresholds: ReadabilityThresholds = {
     maxFkGrade: opts.maxFkGrade ?? DEFAULT_THRESHOLDS.maxFkGrade,
@@ -164,9 +211,13 @@ export function analyzeReadability(
     longSentenceWords: opts.longSentenceWords ?? DEFAULT_THRESHOLDS.longSentenceWords,
     maxLongSentences: opts.maxLongSentences ?? DEFAULT_THRESHOLDS.maxLongSentences,
     jargonBlocklist: opts.jargonBlocklist ?? DEFAULT_THRESHOLDS.jargonBlocklist,
+    marketingBlocklist: opts.marketingBlocklist ?? DEFAULT_THRESHOLDS.marketingBlocklist,
   };
 
-  const linkIssues = findLinkIssues(markdown);
+  const linkIssues = [
+    ...findLinkIssues(markdown),
+    ...(projectRegistry ? findProjectLinkIssues(markdown, projectRegistry) : []),
+  ];
   const prose = stripNonProse(markdown);
   const sentences = splitSentences(prose);
   const allWords = wordsOf(prose);
@@ -187,14 +238,20 @@ export function analyzeReadability(
     return re.test(prose);
   });
 
+  const marketingHits = thresholds.marketingBlocklist.filter((phrase) => {
+    const re = new RegExp(`\\b${escapeRegExp(phrase)}\\b`, 'i');
+    return re.test(prose);
+  });
+
   const pass =
     fkGrade <= thresholds.maxFkGrade &&
     avgSentenceWords <= thresholds.maxAvgSentenceWords &&
     longSentences.length <= thresholds.maxLongSentences &&
     jargonHits.length === 0 &&
+    marketingHits.length === 0 &&
     linkIssues.length === 0;
 
-  return { fkGrade, avgSentenceWords, longSentences, jargonHits, linkIssues, wordCount, pass };
+  return { fkGrade, avgSentenceWords, longSentences, jargonHits, marketingHits, linkIssues, wordCount, pass };
 }
 
 function isJargonBlocklist(value: unknown): value is JargonPair[] {
@@ -202,6 +259,22 @@ function isJargonBlocklist(value: unknown): value is JargonPair[] {
     Array.isArray(value) &&
     value.every((v) => v && typeof v === 'object' && typeof (v as any).term === 'string')
   );
+}
+
+function isMarketingBlocklist(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string');
+}
+
+function loadProjectRegistry(): ProjectRegistryEntry[] {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const registryPath = path.join(scriptDir, '..', 'src/data/standalone-projects.json');
+  try {
+    const raw = readFileSync(registryPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function loadThresholdsFromConfig(): ReadabilityThresholds {
@@ -223,12 +296,16 @@ function loadThresholdsFromConfig(): ReadabilityThresholds {
     const jargonBlocklist = isJargonBlocklist(r.jargon_blocklist)
       ? r.jargon_blocklist
       : DEFAULT_THRESHOLDS.jargonBlocklist;
+    const marketingBlocklist = isMarketingBlocklist(doc?.distribution?.marketing_blocklist)
+      ? doc.distribution.marketing_blocklist
+      : DEFAULT_THRESHOLDS.marketingBlocklist;
     return {
       maxFkGrade: r.max_fk_grade ?? DEFAULT_THRESHOLDS.maxFkGrade,
       maxAvgSentenceWords: r.max_avg_sentence_words ?? DEFAULT_THRESHOLDS.maxAvgSentenceWords,
       longSentenceWords: r.long_sentence_words ?? DEFAULT_THRESHOLDS.longSentenceWords,
       maxLongSentences: r.max_long_sentences ?? DEFAULT_THRESHOLDS.maxLongSentences,
       jargonBlocklist,
+      marketingBlocklist,
     };
   } catch (err) {
     // The file exists but failed to parse — that's a real mistake in a config someone just
@@ -256,7 +333,8 @@ function main(): void {
   }
 
   const thresholds = loadThresholdsFromConfig();
-  const report = analyzeReadability(markdown, thresholds);
+  const projectRegistry = loadProjectRegistry();
+  const report = analyzeReadability(markdown, thresholds, projectRegistry);
   console.log(JSON.stringify(report, null, 2));
   process.exit(report.pass ? 0 : 1);
 }

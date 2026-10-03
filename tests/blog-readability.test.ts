@@ -4,7 +4,12 @@ import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyzeReadability, DEFAULT_THRESHOLDS } from '../scripts/blog-readability';
+import {
+  analyzeReadability,
+  findProjectLinkIssues,
+  DEFAULT_THRESHOLDS,
+  type ProjectRegistryEntry,
+} from '../scripts/blog-readability';
 
 const BROKEN_LINK_PARAGRAPH = [
   'Check out [the project page](/projects/git-viewer/) for the full tour.',
@@ -132,6 +137,79 @@ describe('analyzeReadability link checks', () => {
     expect(claimIssues[0].text).toBe(
       'Best of all, the project is open source, so you can poke around the code.',
     );
+  });
+});
+
+const TEST_REGISTRY: ProjectRegistryEntry[] = [
+  { slug: 'git-viewer', host: { kind: 'static-path', path: '/projects/git-viewer/' } },
+  { slug: 'sudoku', host: { kind: 'react-route', path: '/products/sudoku' } },
+];
+
+describe('analyzeReadability marketing checks', () => {
+  it('fails when a blocklisted marketing phrase appears in the prose', () => {
+    const report = analyzeReadability(
+      'Sign up now and try the new scanner before the week is out.',
+    );
+    expect(report.pass).toBe(false);
+    expect(report.marketingHits).toContain('sign up now');
+  });
+
+  it('passes a clean draft with no marketing phrases', () => {
+    const report = analyzeReadability(PLAIN_PARAGRAPH);
+    expect(report.marketingHits).toEqual([]);
+    expect(report.pass).toBe(true);
+  });
+});
+
+describe('findProjectLinkIssues', () => {
+  it('flags a slug that is not in the registry', () => {
+    const issues = findProjectLinkIssues(
+      'Try it at https://bilko.run/projects/not-a-real-project/ today.',
+      TEST_REGISTRY,
+    );
+    expect(issues).toContainEqual({
+      kind: 'unknown-project-link',
+      text: 'https://bilko.run/projects/not-a-real-project/',
+    });
+  });
+
+  it('flags a static-path link missing its trailing slash', () => {
+    const issues = findProjectLinkIssues(
+      'Try it at https://bilko.run/projects/git-viewer today.',
+      TEST_REGISTRY,
+    );
+    expect(issues).toContainEqual({
+      kind: 'unknown-project-link',
+      text: 'https://bilko.run/projects/git-viewer',
+    });
+  });
+
+  it('passes a registered static-path link with its trailing slash', () => {
+    const issues = findProjectLinkIssues(
+      'Try it at https://bilko.run/projects/git-viewer/ today.',
+      TEST_REGISTRY,
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it('passes a registered react-route link in /products/<slug> form', () => {
+    const issues = findProjectLinkIssues(
+      'Play it at https://bilko.run/products/sudoku today.',
+      TEST_REGISTRY,
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it('flows through analyzeReadability and fails the whole report on an unknown slug', () => {
+    const report = analyzeReadability(
+      FIXED_LINK_PARAGRAPH + ' Also see https://bilko.run/projects/not-a-real-project/.',
+      {},
+      TEST_REGISTRY,
+    );
+    expect(report.pass).toBe(false);
+    expect(
+      report.linkIssues.some((issue) => issue.kind === 'unknown-project-link'),
+    ).toBe(true);
   });
 });
 

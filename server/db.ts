@@ -2,6 +2,7 @@ import { createClient, type Client, type InStatement, type Transaction } from '@
 import { mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { BLOG_REWRITES, type BlogRewrite } from './blog-rewrites/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -577,6 +578,22 @@ async function applyDataMigrationOnce(id: string, statements: InStatement[]): Pr
     'write',
   );
   return true;
+}
+
+/**
+ * Applies each rewrite's title/excerpt/content once per post, keyed by its own
+ * migrationId. Never touches slug, published_at, category or published, so a
+ * sibling PRD rewriting one post can't collide with another's.
+ */
+export async function applyBlogRewrites(rewrites: BlogRewrite[]): Promise<void> {
+  for (const r of rewrites) {
+    await applyDataMigrationOnce(r.migrationId, [
+      {
+        sql: 'UPDATE blog_posts SET title = ?, excerpt = ?, content = ?, updated_at = ? WHERE slug = ?',
+        args: [r.title, r.excerpt, r.content, new Date().toISOString(), r.slug],
+      },
+    ]);
+  }
 }
 
 export async function initDb(): Promise<void> {
@@ -3029,6 +3046,8 @@ Try it yourself at [the OutdoorHours project page](https://bilko.run/projects/ou
     'product',
     '2026-10-03T17:26:18.000Z',
   );
+
+  await applyBlogRewrites(BLOG_REWRITES);
 
   // Seed secret_metadata (idempotent — INSERT OR IGNORE, NULL last_rotated_at = never rotated)
   const SECRET_NAMES = [

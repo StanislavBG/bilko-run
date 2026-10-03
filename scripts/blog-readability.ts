@@ -143,10 +143,11 @@ export function findLinkIssues(markdown: string): LinkIssue[] {
     issues.push({ kind: 'relative-link', text: match[0] });
   }
 
-  const paragraphs = markdown.split(/\n\s*\n/);
-  for (const paragraph of paragraphs) {
-    if (SOURCE_CLAIM_RE.test(paragraph) && !GITHUB_LINK_RE.test(paragraph)) {
-      issues.push({ kind: 'unlinked-source-claim', text: paragraph.trim() });
+  if (!GITHUB_LINK_RE.test(markdown)) {
+    const paragraphs = markdown.split(/\n\s*\n/);
+    const claimingParagraph = paragraphs.find((paragraph) => SOURCE_CLAIM_RE.test(paragraph));
+    if (claimingParagraph) {
+      issues.push({ kind: 'unlinked-source-claim', text: claimingParagraph.trim() });
     }
   }
 

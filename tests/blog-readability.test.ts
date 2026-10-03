@@ -18,6 +18,22 @@ const FIXED_LINK_PARAGRAPH = [
 
 const MAILTO_PARAGRAPH = 'Questions? Email [the team](mailto:hello@bilko.run) any time.';
 
+const CLAIM_THEN_LATER_LINK_MARKDOWN = [
+  'The new tool is easy to use. You can score a blog post in one click.',
+  '',
+  'Best of all, the project is open source, so you can poke around the code.',
+  '',
+  'Most posts pass on the first try. The code lives at https://github.com/StanislavBG/git-viewer for anyone curious.',
+].join('\n');
+
+const CLAIM_WITH_NO_LINK_ANYWHERE_MARKDOWN = [
+  'The new tool is easy to use. You can score a blog post in one click.',
+  '',
+  'Best of all, the project is open source, so you can poke around the code.',
+  '',
+  'Most posts pass on the first try. Thanks for reading.',
+].join('\n');
+
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const PLAIN_PARAGRAPH = [
@@ -100,6 +116,22 @@ describe('analyzeReadability link checks', () => {
   it('allows mailto links', () => {
     const report = analyzeReadability(MAILTO_PARAGRAPH);
     expect(report.linkIssues).toEqual([]);
+  });
+
+  it('passes a source claim in one paragraph when the repo link is in a later paragraph', () => {
+    const report = analyzeReadability(CLAIM_THEN_LATER_LINK_MARKDOWN);
+    expect(
+      report.linkIssues.some((issue) => issue.kind === 'unlinked-source-claim'),
+    ).toBe(false);
+  });
+
+  it('flags a source claim once when the post has no repo link anywhere', () => {
+    const report = analyzeReadability(CLAIM_WITH_NO_LINK_ANYWHERE_MARKDOWN);
+    const claimIssues = report.linkIssues.filter((issue) => issue.kind === 'unlinked-source-claim');
+    expect(claimIssues).toHaveLength(1);
+    expect(claimIssues[0].text).toBe(
+      'Best of all, the project is open source, so you can poke around the code.',
+    );
   });
 });
 

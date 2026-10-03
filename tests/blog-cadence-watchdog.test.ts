@@ -782,6 +782,80 @@ describe('blog-cadence-watchdog.sh', () => {
     });
   });
 
+  describe('build_mode_instructions (catch-up mode must describe the spotlight fallback too — PRD 1019)', () => {
+    function extractBuildModeInstructionsFn(): string {
+      const match = script.match(/build_mode_instructions\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function runBuildModeInstructions(
+      mode: string,
+      gapDays: number,
+      catchupTrigger: number,
+      newestPublishedAt: string,
+      spotlightCsv: string
+    ): string {
+      const fn = extractBuildModeInstructionsFn();
+      const out = execFileSync(
+        'bash',
+        [
+          '-c',
+          `${fn}\nbuild_mode_instructions "${mode}" "${gapDays}" "${catchupTrigger}" "${newestPublishedAt}" "${spotlightCsv}"`,
+        ],
+        { encoding: 'utf-8' }
+      );
+      return out.trim();
+    }
+
+    it('describes the spotlight fallback in catch-up mode when spotlight candidates exist, naming the first candidate', () => {
+      const result = runBuildModeInstructions(
+        'catchup',
+        12,
+        10,
+        '2026-09-01T00:00:00-07:00',
+        'outdoor-hours,local-score'
+      );
+      expect(result).toMatch(/Catch-up mode/);
+      expect(result).toMatch(/spotlight/i);
+      expect(result).toMatch(/outdoor-hours/);
+      expect(result).toMatch(/AUTHORED_AT/);
+      // honest backdating still governs real backfill posts — the spotlight
+      // fallback post is the one exception, so it must not say "backdated"
+      expect(result).toMatch(/not backdated/);
+    });
+
+    it('omits the spotlight fallback note in catch-up mode when no spotlight candidates exist', () => {
+      const result = runBuildModeInstructions('catchup', 12, 10, '2026-09-01T00:00:00-07:00', '');
+      expect(result).toMatch(/Catch-up mode/);
+      expect(result).not.toMatch(/spotlight/i);
+    });
+
+    it('still produces the portfolio-mode spotlight fallback instructions unchanged', () => {
+      const result = runBuildModeInstructions(
+        'portfolio',
+        3,
+        10,
+        '2026-09-01T00:00:00-07:00',
+        'outdoor-hours,local-score'
+      );
+      expect(result).toMatch(/Portfolio mode/);
+      expect(result).toMatch(/FEATURE SPOTLIGHT/);
+      expect(result).toMatch(/SEED_RESULT: noop \/ cooldown_blocked are allowed ONLY when this candidate list is itself empty/);
+    });
+
+    it('is wired into the main script to produce MODE_INSTRUCTIONS for both modes', () => {
+      expect(script).toMatch(/MODE_INSTRUCTIONS="\$\(build_mode_instructions/);
+    });
+
+    it("COOLDOWN_INSTRUCTIONS' spotlight branch is self-contained, not dependent on portfolio-only wording", () => {
+      expect(script).not.toMatch(/described in the mode instructions above/);
+      expect(script).toMatch(
+        /SEED_RESULT: cooldown_blocked \/ SEED_RESULT: noop are allowed ONLY when no spotlight candidate exists either/
+      );
+    });
+  });
+
   describe('readability gate and non-catchup published_at rail (autonomous prompt)', () => {
     it('requires the readability checker to exit 0 before committing, with a bounded rewrite-and-recheck loop', () => {
       expect(script).toMatch(/npx tsx scripts\/blog-readability\.ts <draft-file>/);

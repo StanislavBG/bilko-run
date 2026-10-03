@@ -215,6 +215,33 @@ spotlight_candidates() {
   fi
 }
 
+# Builds MODE_INSTRUCTIONS for either mode. Catch-up mode's backfill queue can
+# turn up empty (every candidate with real new work is on rotation cooldown),
+# and when that happens the spotlight fallback is the only way to still
+# publish — so catch-up mode must describe it too, not just portfolio mode
+# (see PRD 1019: a prompt that promised a spotlight fallback "described in
+# the mode instructions above" while running in catch-up mode, where no such
+# description existed, was self-contradictory).
+build_mode_instructions() {
+  local mode="$1" gap_days="$2" catchup_trigger="$3" newest_published_at="$4" spotlight_csv="$5"
+
+  if [[ "$mode" == "catchup" ]]; then
+    local catchup_spotlight_note=""
+    if [[ -n "$spotlight_csv" ]]; then
+      catchup_spotlight_note=" If the backfill queue would otherwise be empty (no eligible new work since the last live post, or every candidate with real new work is on rotation cooldown), do NOT skip the post — instead write ONE evergreen FEATURE SPOTLIGHT post on the first of these tiled, off-cooldown, under-covered candidates (ordered never-covered-first, then oldest-last-covered — computed from the tile registry and blog-ledger.md's coverage age, never from git): ${spotlight_csv}. Date it AUTHORED_AT (not backdated) — it is not real backfilled work, so the honest-backdating rule above does not apply to it."
+    fi
+    echo "Catch-up mode (gap ${gap_days}d >= catchup_trigger_days ${catchup_trigger}d): scan the WHOLE portfolio's activity since the last live post ($newest_published_at) via GitHub (per scan.md — gh, not local working trees, for pushed repos; local reconciliation for unpushed/no-remote repos per the ledger's watchlist) and produce a QUEUE of separate, normal-sized backdated posts at 3-5 day cadence, each honestly dated to when its work actually shipped (blog.config.yaml backdating: honest-only), per rotation.md Part 0.5. Write one draft file per queued post.${catchup_spotlight_note}"
+  else
+    local spotlight_fallback_instructions
+    if [[ -n "$spotlight_csv" ]]; then
+      spotlight_fallback_instructions=" If there is no publishable new work in this window, or every project with new work is on rotation cooldown, do NOT skip the post (blog.config.yaml cadence.no_new_work_fallback: spotlight) — instead write an evergreen FEATURE SPOTLIGHT post on the first of these tiled, off-cooldown, under-covered candidates (ordered never-covered-first, then oldest-last-covered — computed from the tile registry and blog-ledger.md's coverage age, never from git): ${spotlight_csv}. Ground the spotlight in that candidate's LIVE /projects tile, its README, and its source (grounding: spotlight mode picks its focus by coverage age, not git) — plain GED-level language, leading with the coolest thing a reader can do with it (blog.config.yaml angle: lead_with). SEED_RESULT: noop / cooldown_blocked are allowed ONLY when this candidate list is itself empty."
+    else
+      spotlight_fallback_instructions=" No spotlight fallback candidates exist this run (every tiled project is on rotation cooldown) — SEED_RESULT: noop / cooldown_blocked remain allowed if there is no publishable new work."
+    fi
+    echo "Portfolio mode (gap ${gap_days}d, no project named): scan the whole portfolio's activity since the last live post ($newest_published_at) via GitHub (per scan.md) and draft ONE arc post spanning the repos that moved.${spotlight_fallback_instructions}"
+  fi
+}
+
 # Backstop for any future `set -e` abort we didn't anticipate: if the script
 # exits without having written a heartbeat via the normal call sites above,
 # the dead-man's-switch (check-blog-watchdog-heartbeat.sh) must still see a
@@ -513,16 +540,10 @@ fi
 
 if (( GAP_DAYS >= CATCHUP_TRIGGER )); then
   MODE="catchup"
-  MODE_INSTRUCTIONS="Catch-up mode (gap ${GAP_DAYS}d >= catchup_trigger_days ${CATCHUP_TRIGGER}d): scan the WHOLE portfolio's activity since the last live post ($NEWEST_PUBLISHED_AT) via GitHub (per scan.md — gh, not local working trees, for pushed repos; local reconciliation for unpushed/no-remote repos per the ledger's watchlist) and produce a QUEUE of separate, normal-sized backdated posts at 3-5 day cadence, each honestly dated to when its work actually shipped (blog.config.yaml backdating: honest-only), per rotation.md Part 0.5. Write one draft file per queued post."
 else
   MODE="portfolio"
-  if [[ -n "$SPOTLIGHT_CANDIDATES_TOP3" ]]; then
-    SPOTLIGHT_FALLBACK_INSTRUCTIONS=" If there is no publishable new work in this window, or every project with new work is on rotation cooldown, do NOT skip the post (blog.config.yaml cadence.no_new_work_fallback: spotlight) — instead write an evergreen FEATURE SPOTLIGHT post on the first of these tiled, off-cooldown, under-covered candidates (ordered never-covered-first, then oldest-last-covered — computed from the tile registry and blog-ledger.md's coverage age, never from git): ${SPOTLIGHT_CANDIDATES_TOP3}. Ground the spotlight in that candidate's LIVE /projects tile, its README, and its source (grounding: spotlight mode picks its focus by coverage age, not git) — plain GED-level language, leading with the coolest thing a reader can do with it (blog.config.yaml angle: lead_with). SEED_RESULT: noop / cooldown_blocked are allowed ONLY when this candidate list is itself empty."
-  else
-    SPOTLIGHT_FALLBACK_INSTRUCTIONS=" No spotlight fallback candidates exist this run (every tiled project is on rotation cooldown) — SEED_RESULT: noop / cooldown_blocked remain allowed if there is no publishable new work."
-  fi
-  MODE_INSTRUCTIONS="Portfolio mode (gap ${GAP_DAYS}d, no project named): scan the whole portfolio's activity since the last live post ($NEWEST_PUBLISHED_AT) via GitHub (per scan.md) and draft ONE arc post spanning the repos that moved.$SPOTLIGHT_FALLBACK_INSTRUCTIONS"
 fi
+MODE_INSTRUCTIONS="$(build_mode_instructions "$MODE" "$GAP_DAYS" "$CATCHUP_TRIGGER" "$NEWEST_PUBLISHED_AT" "${SPOTLIGHT_CANDIDATES_TOP3}")"
 
 # stamped into every draft's front matter below — from the script's own
 # clock, not the model's guess at the current time.
@@ -535,7 +556,7 @@ AUTHORED_AT="$(TZ=America/Los_Angeles date -Iseconds)"
 if [[ -z "$RECENT_PROJECTS_CSV" ]]; then
   COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the ledger has no prior rows yet, so no project is on cooldown."
 elif [[ -n "$SPOTLIGHT_CANDIDATES_TOP3" ]]; then
-  COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the last ${PROJECT_COOLDOWN_POSTS} ledger row(s) covered these projects, in this exact form: ${RECENT_PROJECTS_CSV}. None of these may be the next post's primary subject (never_repeat_previous_project is the degenerate N=1 case of this same rule). If EVERY candidate project with real new work is on this cooldown list, do NOT print SEED_RESULT: cooldown_blocked or SEED_RESULT: noop yet — spotlight fallback candidates remain available (${SPOTLIGHT_CANDIDATES_TOP3}); write the spotlight post described in the mode instructions above on the first one instead. SEED_RESULT: cooldown_blocked / SEED_RESULT: noop are allowed ONLY when no spotlight candidate exists either."
+  COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the last ${PROJECT_COOLDOWN_POSTS} ledger row(s) covered these projects, in this exact form: ${RECENT_PROJECTS_CSV}. None of these may be the next post's primary subject (never_repeat_previous_project is the degenerate N=1 case of this same rule). If EVERY candidate project with real new work is on this cooldown list, do NOT print SEED_RESULT: cooldown_blocked or SEED_RESULT: noop yet — spotlight fallback candidates remain available (${SPOTLIGHT_CANDIDATES_TOP3}); per blog.config.yaml cadence.no_new_work_fallback: spotlight, write ONE evergreen FEATURE SPOTLIGHT post on the first of these candidates instead, dated AUTHORED_AT (not backdated). SEED_RESULT: cooldown_blocked / SEED_RESULT: noop are allowed ONLY when no spotlight candidate exists either."
 else
   COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the last ${PROJECT_COOLDOWN_POSTS} ledger row(s) covered these projects, in this exact form: ${RECENT_PROJECTS_CSV}. None of these may be the next post's primary subject (never_repeat_previous_project is the degenerate N=1 case of this same rule). If EVERY candidate project you would otherwise cover is on this cooldown list, do NOT invent a post to satisfy cadence (blog.config.yaml truth rules still bind) — finish by printing exactly one line, \`SEED_RESULT: cooldown_blocked note=\"<which projects were due but on cooldown>\"\`, and nothing else."
 fi

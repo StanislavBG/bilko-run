@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout.js';
@@ -14,8 +14,6 @@ import { AdminCostPage } from './pages/AdminCostPage.js';
 import { ObservabilityPage } from './pages/admin/ObservabilityPage.js';
 import { SecretsPage } from './pages/admin/SecretsPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
-import { AcademyPage } from './pages/AcademyPage.js';
-import { AcademyLevelPage } from './pages/AcademyLevelPage.js';
 import { WorkflowsPage } from './pages/WorkflowsPage.js';
 import { ContactPage } from './pages/ContactPage.js';
 import { PortfolioProjectDetailPage } from './pages/PortfolioProjectDetailPage.js';
@@ -89,6 +87,15 @@ function MaybeStandaloneRedirect() {
 // Stripe receipt emails already in customers' inboxes link to /manual, and every
 // chapter anchor (#getting-started, …) must survive the hop, so search AND hash
 // are carried across verbatim.
+// The real Academy course lives in the static-path sibling app, not this
+// repo. Full page load (not <Navigate>) so Fastify serves that bundle.
+function RedirectAcademyToCourse() {
+  useEffect(() => {
+    window.location.replace('/projects/academy/');
+  }, []);
+  return null;
+}
+
 function RedirectManualToProduct() {
   const loc = useLocation();
   return <Navigate to={'/products/session-manager/manual' + loc.search + loc.hash} replace />;
@@ -177,8 +184,8 @@ function AppRoutes() {
             <Route path="/admin/secrets" element={<SecretsPage />} />
 
             {/* ── Portfolio sections ── */}
-            <Route path="/academy" element={<AcademyPage />} />
-            <Route path="/academy/:level" element={<AcademyLevelPage />} />
+            <Route path="/academy" element={<RedirectAcademyToCourse />} />
+            <Route path="/academy/*" element={<RedirectAcademyToCourse />} />
             <Route path="/workflows" element={<WorkflowsPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />

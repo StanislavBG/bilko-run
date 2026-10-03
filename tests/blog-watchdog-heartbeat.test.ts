@@ -14,25 +14,46 @@ interface RunResult {
   stderr: string;
 }
 
-function runChecker(heartbeatPath: string): RunResult {
-  try {
-    const stdout = execFileSync('bash', [SCRIPT], {
-      env: { ...process.env, BLOG_WATCHDOG_HEARTBEAT_FILE: heartbeatPath },
-      timeout: 10_000,
-      encoding: 'utf-8',
-    });
-    return { status: 0, stdout, stderr: '' };
-  } catch (err: unknown) {
-    const e = err as { status?: number; stdout?: string; stderr?: string };
-    return { status: e.status ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-  }
-}
-
 describe('check-blog-watchdog-heartbeat.sh', () => {
   let dir: string;
+  let fakeSystemctl: string;
+  let retryMarkerFile: string;
+
+  function runChecker(heartbeatPath: string): RunResult {
+    try {
+      const stdout = execFileSync('bash', [SCRIPT], {
+        env: {
+          ...process.env,
+          BLOG_WATCHDOG_HEARTBEAT_FILE: heartbeatPath,
+          // Never let a test touch the real systemd service or the real
+          // retry marker file — both are stubbed/isolated into the tmp dir.
+          SYSTEMCTL: fakeSystemctl,
+          BLOG_WATCHDOG_RETRY_MARKER_FILE: retryMarkerFile,
+        },
+        timeout: 10_000,
+        encoding: 'utf-8',
+      });
+      return { status: 0, stdout, stderr: '' };
+    } catch (err: unknown) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { status: e.status ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
+    }
+  }
 
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), 'blog-heartbeat-'));
+    fakeSystemctl = join(dir, 'fake-systemctl.sh');
+    writeFileSync(
+      fakeSystemctl,
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1 $2" == "--user is-active" ]]; then\n' +
+        '  echo inactive\n' +
+        '  exit 3\n' +
+        'fi\n' +
+        'exit 0\n',
+      { mode: 0o755 }
+    );
+    retryMarkerFile = join(dir, '.watchdog-retry-test');
   });
 
   afterAll(() => {
@@ -99,5 +120,65 @@ describe('check-blog-watchdog-heartbeat.sh', () => {
   it('exits 1 for a missing heartbeat file', () => {
     const result = runChecker(join(dir, 'does-not-exist.txt'));
     expect(result.status).toBe(1);
+  });
+});
+
+// should_retry is a pure function sourced directly out of the script (guarded
+// by a BASH_SOURCE/$0 check so sourcing it never runs the file-reading main
+// logic above). Never calls real systemctl.
+function runShouldRetry(
+  status: string,
+  nowEpoch: number,
+  markerContents: string,
+  serviceActive: string
+): string {
+  return execFileSync(
+    'bash',
+    [
+      '-c',
+      'source "$1"; should_retry "$2" "$3" "$4" "$5"',
+      '_',
+      SCRIPT,
+      status,
+      String(nowEpoch),
+      markerContents,
+      serviceActive,
+    ],
+    { timeout: 10_000, encoding: 'utf-8' }
+  ).trim();
+}
+
+describe('should_retry', () => {
+  // Fixed mid-afternoon PT timestamp, not Date.now(): a real-clock "now"
+  // near PT midnight would make "N hours ago" cross into the previous PT
+  // calendar day and make the same-day-count tests flaky.
+  const now = Math.floor(new Date('2026-06-15T20:00:00Z').getTime() / 1000);
+
+  it('retries on error: status with no prior marker and an inactive service', () => {
+    expect(runShouldRetry('error: claude -p exited 1', now, '', 'inactive')).toBe('retry');
+  });
+
+  it('retries on warn: status with no prior marker and an inactive service', () => {
+    expect(runShouldRetry('warn: over cadence, skipping', now, '', 'inactive')).toBe('retry');
+  });
+
+  it('does not retry on ok: status', () => {
+    expect(runShouldRetry('ok: within cadence', now, '', 'inactive')).toBe('none');
+  });
+
+  it('does not retry within 6h of the last retry', () => {
+    const lastRetry = now - 3600; // 1h ago
+    expect(runShouldRetry('error: claude -p exited 1', now, String(lastRetry), 'inactive')).toBe(
+      'none'
+    );
+  });
+
+  it('does not retry after 3 retries already logged today', () => {
+    const marker = [now - 9 * 3600, now - 8 * 3600, now - 7 * 3600].join('\n');
+    expect(runShouldRetry('warn: over cadence, skipping', now, marker, 'inactive')).toBe('none');
+  });
+
+  it('does not retry when the watchdog service is already active', () => {
+    expect(runShouldRetry('error: claude -p exited 1', now, '', 'active')).toBe('none');
   });
 });

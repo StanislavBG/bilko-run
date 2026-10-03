@@ -8,8 +8,8 @@ import { track } from '../hooks/usePageView.js';
 /**
  * Combined Projects + Packages hub.
  *
- * - Public visitors see only PUBLIC_CARDS (the 5 featured projects + flagship
- *   packages), ordered most-recently-committed first.
+ * - Public visitors see only PUBLIC_CARDS (the 6 featured projects + flagship
+ *   packages), ordered by commit-count (most-worked-on project first).
  * - The admin (Clerk email in ADMIN_EMAILS) gets a toggle that reveals every
  *   card in HUB_CARDS.
  * - Cards are full-width hero rows that expand inline on click with detail +

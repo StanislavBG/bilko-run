@@ -8,8 +8,10 @@
  *                        scripts/refresh-commit-order.ts; see that file for why)
  *
  * Public visitors see only PUBLIC_SLUGS. The admin (Clerk email in ADMIN_EMAILS)
- * gets a toggle that reveals every card. Cards are ordered most-recently-worked
- * first, so the list is a living "what's hot" leaderboard.
+ * gets a toggle that reveals every card. Cards are ordered by total commit count
+ * descending (src/data/commit-counts.json, most-worked-on project first), ties
+ * broken by last-commit date, so the list is a living "what's hot" leaderboard.
+ * The commit count itself is a sort key only — it is never rendered.
  *
  * Dedup rule: a slug present in BOTH a project and a package renders as a single
  * project card that also carries the package's npm/github/install links
@@ -18,17 +20,24 @@
 import { PROJECTS, projectHref, isReactRoute, type Project } from './projectsRegistry.js';
 import { PACKAGES, type Package } from './packages.js';
 import commitOrder from './commit-order.json' with { type: 'json' };
+import commitCounts from './commit-counts.json' with { type: 'json' };
 
 const COMMIT_ORDER = commitOrder as Record<string, string>;
+const COMMIT_COUNTS = commitCounts as Record<string, number>;
+
+function commitCount(slug: string): number {
+  return COMMIT_COUNTS[slug] ?? 0;
+}
 
 /** Cards everyone sees. Everything else is admin-only behind the toggle. */
 export const PUBLIC_SLUGS: ReadonlySet<string> = new Set([
-  // 5 named projects
+  // 6 named projects
   'session-manager',
   'social-signals-trader',
   'mcp-host',
   'outdoor-hours',
   'git-viewer',
+  'academy',
 ]);
 
 /** Display-name overrides for the hub only (keeps registry names stable for
@@ -158,7 +167,8 @@ function packageCard(pkg: Package): HubCard {
 }
 
 /**
- * Every hub card, deduped (project wins) and sorted most-recent-commit first.
+ * Every hub card, deduped (project wins) and sorted by total commit count
+ * descending (missing slug counts as 0), ties broken by last-commit date.
  * Complexity: O(n log n) for the sort over n≈30 cards — n is small/constant.
  */
 export const HUB_CARDS: readonly HubCard[] = (() => {
@@ -168,7 +178,7 @@ export const HUB_CARDS: readonly HubCard[] = (() => {
     // Internal-infra packages (e.g. host-kit) never appear in the hub.
     ...PACKAGES.filter(pkg => !pkg.internal && !projectSlugs.has(pkg.slug)).map(packageCard),
   ];
-  return cards.sort((a, b) => b.lastCommitAt - a.lastCommitAt);
+  return cards.sort((a, b) => commitCount(b.slug) - commitCount(a.slug) || b.lastCommitAt - a.lastCommitAt);
 })();
 
 export const PUBLIC_CARDS: readonly HubCard[] = HUB_CARDS.filter(c => c.isPublic);

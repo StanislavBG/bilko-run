@@ -25,6 +25,11 @@ grounding:                  # WHAT git/commit history is FOR in this pipeline �
                                           # it. A post that opens on an error code or spends its
                                           # middle on retry-suffix internals has confused "how I
                                           # picked this project" with "what this project is worth."
+  spotlight_mode_exception: >
+    cadence.no_new_work_fallback: spotlight picks its focus by LEDGER COVERAGE AGE (never-covered
+    first, then oldest-last-covered — see scripts/blog-cadence-watchdog.sh's spotlight_candidates),
+    not by git activity at all. git still supplies nothing about the post's body even then — the
+    spotlight is grounded in the candidate's live tile, README, and source.
   owner_correction: >
     2026-09-12, verbatim — "The blog is way too literal about the git. The git as grounding is
     meant to be about the figuring out the focus was the project. The blog is not to spell out
@@ -59,6 +64,15 @@ cadence:
   catchup_trigger_days: 10       # gap beyond this → catch-up mode (backfill queue)
   backdating: honest-only        # a backdated published_at must match when the WORK shipped;
                                  # never backdate a post about work that hadn't happened yet
+  no_new_work_fallback: spotlight # when a post is due and no rotation-eligible project has new
+                                 # work in the window, write an evergreen FEATURE SPOTLIGHT on the
+                                 # most-overdue tiled project instead of skipping (SEED_RESULT: noop
+                                 # / cooldown_blocked are reserved for when even that is exhausted —
+                                 # see scripts/blog-cadence-watchdog.sh's spotlight_candidates)
+  current_post_published_at: authored_at # portfolio/focused/spotlight posts are dated the moment
+                                 # they are authored, not the ship date of the work they describe;
+                                 # only catch-up mode's backfill posts are honestly backdated
+                                 # (backdating: honest-only above still governs those)
   pending_draft_alert_days: 2    # applies ONLY when autonomy.autonomous_publish is false: age
                                  # (whole days, by file mtime) at which a still-pending draft
                                  # escalates the watchdog heartbeat from ok: to warn:

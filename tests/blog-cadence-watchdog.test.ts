@@ -690,6 +690,111 @@ describe('blog-cadence-watchdog.sh', () => {
     }
   });
 
+  describe('spotlight_candidates (behavioral, fixture registry + ledger — no network, no claude -p)', () => {
+    function extractSpotlightCandidatesFn(): string {
+      const match = script.match(/spotlight_candidates\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function extractProjectInCooldownFnForSpotlight(): string {
+      const match = script.match(/project_in_cooldown\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function writeFixtureRegistry(slugs: string[]): string {
+      const content = JSON.stringify(slugs.map((slug) => ({ slug })));
+      const path = join(tmpdir(), `fixture-registry-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      writeFileSync(path, content, 'utf-8');
+      return path;
+    }
+
+    function writeSpotlightFixtureLedger(rows: Array<[string, string]>): string {
+      const header = ['# fixture ledger', '', '| Date | Slug | Project | On /projects? | Tone |', '|---|---|---|---|---|'];
+      const body = rows.map(([date, project]) => `| ${date} | some-slug | ${project} | ✅ | changelog |`);
+      const content = [...header, ...body].join('\n') + '\n';
+      const path = join(tmpdir(), `fixture-ledger-spotlight-${Date.now()}-${Math.random().toString(36).slice(2)}.md`);
+      writeFileSync(path, content, 'utf-8');
+      return path;
+    }
+
+    function runSpotlightCandidates(registryPath: string, ledgerPath: string, cooldownCsv: string): string[] {
+      const cooldownFn = extractProjectInCooldownFnForSpotlight();
+      const spotlightFn = extractSpotlightCandidatesFn();
+      const out = execFileSync(
+        'bash',
+        ['-c', `${cooldownFn}\n${spotlightFn}\nspotlight_candidates "${registryPath}" "${ledgerPath}" "${cooldownCsv}"`],
+        { encoding: 'utf-8' }
+      );
+      return out.trim().split('\n').filter(Boolean);
+    }
+
+    it('excludes cooldown slugs', () => {
+      const registryPath = writeFixtureRegistry(['a', 'b', 'c']);
+      const ledgerPath = writeSpotlightFixtureLedger([]);
+      const result = runSpotlightCandidates(registryPath, ledgerPath, 'b');
+      expect(result).toEqual(['a', 'c']);
+    });
+
+    it('puts a never-covered tiled slug before a covered one', () => {
+      const registryPath = writeFixtureRegistry(['x', 'y']);
+      const ledgerPath = writeSpotlightFixtureLedger([['2026-01-01', 'y']]);
+      const result = runSpotlightCandidates(registryPath, ledgerPath, '');
+      expect(result).toEqual(['x', 'y']);
+    });
+
+    it('orders covered candidates by oldest last ledger appearance (most overdue first)', () => {
+      const registryPath = writeFixtureRegistry(['e', 'f']);
+      const ledgerPath = writeSpotlightFixtureLedger([
+        ['2026-09-10', 'e'],
+        ['2026-09-01', 'f'],
+      ]);
+      const result = runSpotlightCandidates(registryPath, ledgerPath, '');
+      expect(result).toEqual(['f', 'e']);
+    });
+
+    it('prints nothing when every tiled slug is on cooldown', () => {
+      const registryPath = writeFixtureRegistry(['p', 'q']);
+      const ledgerPath = writeSpotlightFixtureLedger([]);
+      const result = runSpotlightCandidates(registryPath, ledgerPath, 'p,q');
+      expect(result).toEqual([]);
+    });
+
+    it('handles an empty ledger without erroring, treating every non-cooldown slug as never-covered', () => {
+      const registryPath = writeFixtureRegistry(['m', 'n']);
+      const ledgerPath = writeSpotlightFixtureLedger([]);
+      const result = runSpotlightCandidates(registryPath, ledgerPath, '');
+      expect(result).toEqual(['m', 'n']);
+    });
+
+    it('is wired into the main script after RECENT_PROJECTS_CSV is computed, feeding the portfolio and cooldown instructions', () => {
+      const registryIndex = script.indexOf('RECENT_PROJECTS_CSV="$(echo "$RECENT_PROJECTS" | paste -sd, -)"');
+      const spotlightCallIndex = script.indexOf('SPOTLIGHT_CANDIDATES_TOP3="$(spotlight_candidates');
+      expect(registryIndex).toBeGreaterThan(-1);
+      expect(spotlightCallIndex).toBeGreaterThan(registryIndex);
+      expect(script).toMatch(/\$\{SPOTLIGHT_CANDIDATES_TOP3\}/);
+    });
+
+    it('allows SEED_RESULT: noop/cooldown_blocked only when the spotlight candidate list is itself empty', () => {
+      expect(script).toMatch(/SEED_RESULT: noop \/ cooldown_blocked are allowed ONLY when this candidate list is itself empty/);
+      expect(script).toMatch(/SEED_RESULT: cooldown_blocked \/ SEED_RESULT: noop are allowed ONLY when no spotlight candidate exists either/);
+    });
+  });
+
+  describe('readability gate and non-catchup published_at rail (autonomous prompt)', () => {
+    it('requires the readability checker to exit 0 before committing, with a bounded rewrite-and-recheck loop', () => {
+      expect(script).toMatch(/npx tsx scripts\/blog-readability\.ts <draft-file>/);
+      expect(script).toMatch(/up to 2 rewrite-and-recheck cycles total/);
+      expect(script).toMatch(/SEED_RESULT: error note=\\"readability\\"/);
+    });
+
+    it('requires non-catchup posts to use published_at = AUTHORED_AT exactly, leaving catch-up backdating untouched', () => {
+      expect(script).toMatch(/for every post that is NOT a catch-up backfill post, set published_at to exactly \\\$AUTHORED_AT/);
+      expect(script).toMatch(/Catch-up mode backfill posts are the only exception: keep honest backdating/);
+    });
+  });
+
   describe('rotation-gate-blocked pending draft triggers a re-draft, not a stall (2026-09-12 incident)', () => {
     function extractConsumeExistingDraftsPrompt(): string {
       const start = script.indexOf('if [[ "$CONSUME_EXISTING_DRAFTS" -eq 1 ]]; then');

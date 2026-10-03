@@ -856,6 +856,72 @@ describe('blog-cadence-watchdog.sh', () => {
     });
   });
 
+  describe('keep_state_lock_for_seed_line (pure, behavioral — same-day lock after publish, PRD 1020)', () => {
+    function extractKeepStateLockFn(): string {
+      const match = script.match(/keep_state_lock_for_seed_line\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function runKeepStateLock(seedLine: string): string {
+      const fn = extractKeepStateLockFn();
+      const out = execFileSync('bash', ['-c', `${fn}\nkeep_state_lock_for_seed_line "$1"`, 'keep_state_lock_for_seed_line', seedLine], {
+        encoding: 'utf-8',
+      });
+      return out.trim();
+    }
+
+    it('published=1 => keep', () => {
+      expect(runKeepStateLock('SEED_RESULT: published=1 deferred=0 slugs="foo" note="ok"')).toBe('keep');
+    });
+
+    it('published=0 => clear', () => {
+      expect(runKeepStateLock('SEED_RESULT: published=0 deferred=0 slugs="" note="nothing seeded"')).toBe('clear');
+    });
+
+    it('noop => clear', () => {
+      expect(runKeepStateLock('SEED_RESULT: noop note="no publishable material"')).toBe('clear');
+    });
+
+    it('cooldown_blocked => clear', () => {
+      expect(runKeepStateLock('SEED_RESULT: cooldown_blocked note="every candidate on cooldown"')).toBe('clear');
+    });
+
+    it('error => clear', () => {
+      expect(runKeepStateLock('SEED_RESULT: error note="readability"')).toBe('clear');
+    });
+
+    it('empty/unparseable => clear', () => {
+      expect(runKeepStateLock('')).toBe('clear');
+      expect(runKeepStateLock('some unrelated output with no SEED_RESULT line')).toBe('clear');
+    });
+
+    it('published=N with N>=2 still keeps (not just N==1)', () => {
+      expect(runKeepStateLock('SEED_RESULT: published=3 deferred=1 slugs="a,b,c" note="ok"')).toBe('keep');
+    });
+
+    it('the non-zero claude -p exit path routes through the function rather than an unconditional rm', () => {
+      const rcBlockIndex = script.indexOf('if [[ $CLAUDE_RC -ne 0 ]]; then');
+      expect(rcBlockIndex).toBeGreaterThan(-1);
+      const rcBlock = script.slice(rcBlockIndex, rcBlockIndex + 700);
+      expect(rcBlock).toMatch(/keep_state_lock_for_seed_line ''/);
+      expect(rcBlock).toMatch(/rm -f "\$STATE_FILE"/);
+    });
+
+    it('the lock decision is made once from SEED_LINE, before the error/cooldown_blocked/noop/published branches run', () => {
+      const seedLineIndex = script.indexOf("SEED_LINE=\"$(echo \"$CLAUDE_OUTPUT\"");
+      const decisionIndex = script.indexOf('keep_state_lock_for_seed_line "$SEED_LINE"', seedLineIndex);
+      const errorBranchIndex = script.indexOf('SEED_LINE" == SEED_RESULT:\\ error*', seedLineIndex);
+      expect(seedLineIndex).toBeGreaterThan(-1);
+      expect(decisionIndex).toBeGreaterThan(seedLineIndex);
+      expect(errorBranchIndex).toBeGreaterThan(decisionIndex);
+    });
+
+    it('the pre-invocation state write before claude -p is unchanged', () => {
+      expect(script).toMatch(/echo "\$TODAY \$MODE \$GAP_DAYS" > "\$STATE_FILE"/);
+    });
+  });
+
   describe('readability gate and non-catchup published_at rail (autonomous prompt)', () => {
     it('requires the readability checker to exit 0 before committing, with a bounded rewrite-and-recheck loop', () => {
       expect(script).toMatch(/npx tsx scripts\/blog-readability\.ts <draft-file>/);

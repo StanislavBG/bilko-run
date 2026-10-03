@@ -123,6 +123,27 @@ publish_due_status() {
   fi
 }
 
+# Pure decision: does this run's SEED_RESULT line justify KEEPING the
+# same-day "ran today" lock ($STATE_FILE)? The lock's only job is to stop a
+# second PUBLISH on a day that already published one — so it is kept ONLY
+# when at least one post was actually seeded (published=N, N>=1, which
+# covers the "seed commit already present on origin/main" recovery path
+# too, since that path's SEED_LINE is still the same published=N report).
+# A noop, cooldown_blocked, error, or an unparseable/missing line must
+# clear it, so a same-day retry (the next scheduled run, or a manual
+# rerun) can still publish instead of being blocked by a run that never
+# actually seeded anything.
+keep_state_lock_for_seed_line() {
+  local seed_line="$1"
+  if [[ "$seed_line" =~ ^SEED_RESULT:\ published=([0-9]+) ]]; then
+    if (( ${BASH_REMATCH[1]} >= 1 )); then
+      echo "keep"
+      return
+    fi
+  fi
+  echo "clear"
+}
+
 # Extract the Project column (blog-ledger.md's table: | Date | Slug | Project |
 # On /projects? | Tone |) of the last N post rows, newest first — the ledger
 # is the declared rotation memory, not a heuristic reading of post titles.
@@ -649,7 +670,9 @@ if [[ $CLAUDE_RC -ne 0 ]]; then
   # from the next cron trigger or a human rerunning by hand after fixing
   # the underlying error — must not be blocked by the idempotent-per-day
   # check above thinking today's run already happened.
-  rm -f "$STATE_FILE"
+  if [[ "$(keep_state_lock_for_seed_line '')" != "keep" ]]; then
+    rm -f "$STATE_FILE"
+  fi
   echo "[blog-cadence-watchdog] claude -p exited $CLAUDE_RC (timed out or errored) — will retry next scheduled run" >&2
   write_heartbeat "error: claude -p exited $CLAUDE_RC mode=$MODE gap=${GAP_DAYS}d"
   exit "$CLAUDE_RC"
@@ -665,6 +688,16 @@ fi
 # SEED_RESULT line so this heartbeat can distinguish a real publish from a
 # no-op from an error, instead of assuming success from a zero exit code. ---
 SEED_LINE="$(echo "$CLAUDE_OUTPUT" | grep -o 'SEED_RESULT:.*' | tail -1)"
+
+# Decide the same-day lock's fate from the SEED_RESULT line alone, before
+# any of the branches below run — every exit path they take (success,
+# cooldown_blocked, noop, error, or no SEED_RESULT line at all) inherits
+# this one decision, so a run that didn't actually seed a post never
+# leaves today locked out of a same-day retry.
+if [[ "$(keep_state_lock_for_seed_line "$SEED_LINE")" != "keep" ]]; then
+  rm -f "$STATE_FILE"
+fi
+
 if [[ "$SEED_LINE" == SEED_RESULT:\ error* ]]; then
   echo "[blog-cadence-watchdog] $SEED_LINE" >&2
   write_heartbeat "error: ${SEED_LINE#SEED_RESULT: }"

@@ -15,6 +15,14 @@ Seeds are `INSERT OR IGNORE INTO blog_posts (...)` in `server/db.ts` initDb(). A
 `${`), category, `1`, published_at (explicit recent ISO string — **never `new Date()`**; stagger
 several so they order right). Categories: `build-log | lessons | deep-dive | market | product`.
 
+**`published_at` rule (`blog.config.yaml` `cadence.current_post_published_at: authored_at`):**
+portfolio, focused, and spotlight posts are dated to the moment they're authored — the time of
+the seed commit, not the ship date of the work they describe. Honest backdating
+(`cadence.backdating: honest-only`) only applies to catch-up mode's backfill posts, where
+`published_at` must match when the work actually shipped (`rotation.md` Part 0.5). The "never
+`new Date()`" rule above still holds for every mode — always an explicit ISO string, just one
+you compute from "now" for portfolio/focused/spotlight, and from the slot date for catch-up.
+
 ```bash
 cd ~/Projects/Bilko
 npx tsc --noEmit -p tsconfig.json 2>&1 | grep -i db.ts    # must be clean
@@ -31,7 +39,9 @@ Add a row to `blog-ledger.md` (newest at top: date · slug · project · on-`/pr
 rewrite its "Current rotation state" block (last project covered, what rotation debt is now owed,
 refreshed cooling-off and due lists). A post that isn't recorded in the ledger will get the
 rotation guard wrong next time. In catch-up mode, also move the seeded row out of the "Planned
-backfill queue" block.
+backfill queue" block. A spotlight post (`rotation.md` Part 0.25) still gets a ledger row like
+any other — add a `spotlight` mode note next to its tone so the next rotation pass knows it was
+picked by ledger coverage age, not by new git work.
 
 ## Series / multi-post seeding
 

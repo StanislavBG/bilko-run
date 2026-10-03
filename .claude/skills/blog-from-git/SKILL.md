@@ -1,6 +1,6 @@
 ---
 name: blog-from-git
-description: Draft a Bilko (bilko.run) blog post from a real scan of git activity since the last post. Default framing is a SHORT PRODUCT UPDATE — progress on a product the reader can go use — not a long build-log. GitHub is the source of truth — enumerate repos and pull diffs via `gh`, not local working trees. Before drafting, consult the rotation ledger (rotation.md): alternate projects and never run two consecutive posts about a project with no `/projects` tile. Three modes — portfolio (whole-workspace week-in-review), focused (one project/theme, framed as an ongoing-focus update; can emit a short series), and catch-up (backfill a 3-5 day cadence over a publishing gap). When focused on a project that exposes its own MCP or scorecard (e.g. Burrow's `burrow-brain` MCP + `coverage_scorecard.py`), query it during composing to ground value claims in live project state, not just diffs. Project-scoped to ~/Projects/Bilko. Use for "write a blog post from the git diff/history", "blog the last N days", "update on <project>", "what did I ship — write it up", or any product-update/week-in-review for bilko.run. NOT for marketing copy unrelated to shipped work.
+description: Draft a Bilko (bilko.run) blog post from a real scan of git activity since the last post. Default framing is a SHORT PRODUCT UPDATE — progress on a product the reader can go use — not a long build-log. GitHub is the source of truth — enumerate repos and pull diffs via `gh`, not local working trees. Before drafting, consult the rotation ledger (rotation.md): alternate projects and never run two consecutive posts about a project with no `/projects` tile. Four modes — portfolio (whole-workspace week-in-review), focused (one project/theme, framed as an ongoing-focus update; can emit a short series), catch-up (backfill a 3-5 day cadence over a publishing gap), and spotlight (a post is due but no project has new work — evergreen feature post on the most-overdue tiled project). When focused on a project that exposes its own MCP or scorecard (e.g. Burrow's `burrow-brain` MCP + `coverage_scorecard.py`), query it during composing to ground value claims in live project state, not just diffs. Project-scoped to ~/Projects/Bilko. Use for "write a blog post from the git diff/history", "blog the last N days", "update on <project>", "what did I ship — write it up", or any product-update/week-in-review for bilko.run. NOT for marketing copy unrelated to shipped work.
 ---
 
 # Blog from git (bilko.run only) — orchestrator
@@ -69,11 +69,18 @@ here — `drafts/` is gitignored.
 | **Portfolio** | "blog the last N days", "week in review", no project named | scan EVERY repo | one arc post spanning repos |
 | **Focused** | a project or theme is named ("update on Burrow", "blog the X work") | that project's repo(s), rest of portfolio as *context only* | one update post — or a short series (2-3), cross-linked |
 | **Catch-up** | gap since last post > ~10 days and no single project named | scan EVERY repo over the whole gap | a queue of backdated posts at 3–5 day cadence (`rotation.md` Part 0.5) |
+| **Spotlight** | a post is due (`cadence.target_gap_days`) and no rotation-eligible project has new work in the window — `cadence.no_new_work_fallback: spotlight` | the most-overdue tiled project not on cooldown; no git scan — grounded in its live `/projects` tile, README, and source only | one evergreen feature-spotlight post, plain-language and cool-side-first per `readability:`/`angle:` |
 
 **Focused mode is the default when the user names a project or theme.** Don't widen a focused ask
 into a portfolio sweep. A focused post is an *update on an ongoing focus*, not a launch
 announcement — name where the project was, what moved, where it's going (**was → now → next**).
 If emitting a series, each post covers one sub-theme and ends pointing at the next.
+
+**Spotlight mode replaces skipping, not scanning.** When phases 1-2 find a post due but nothing
+rotation-eligible shipped, don't skip the slot and don't backdate around the gap — pick the
+most-overdue tiled project (see `rotation.md`) and write it up from its live tile, README, and
+source, exactly as grounded as a normal post (`ground.md`), just without a commit diff driving
+the subject. It still gets a tone, a ledger row, and the full phase-5 self-check below.
 
 ## Final self-check (phase 4 gate — all must be YES before showing the draft)
 

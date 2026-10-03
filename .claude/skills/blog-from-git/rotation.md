@@ -39,6 +39,28 @@ context inside a wider post, never as a standalone post with an invented "how to
   override — don't silently break rotation.
 - After seeding, **append a ledger row and update the rotation-state block** (see `seed.md`).
 
+## Spotlight mode (Part 0.25) — a post is due but nothing new shipped
+
+`blog.config.yaml`'s `cadence.no_new_work_fallback: spotlight` fires when a post is due
+(`target_gap_days`) and the scan (`scan.md`) finds no rotation-eligible project with new work in
+the window. Instead of skipping the slot, write an evergreen feature spotlight:
+
+1. **Pick the subject by ledger coverage age, not git activity.** Never-covered tiled projects
+   (slug in `tile_registry` with no ledger row at all) go first; if every tiled project has been
+   covered at least once, pick whichever has the oldest last ledger row. The 3-post cooldown
+   above still applies — a project covered in any of the last 3 ledger rows is still ineligible,
+   even as a spotlight pick.
+2. **Ground it in the live tile, README, and source — never in commits.** This is the one mode
+   where git contributes nothing, not even focus/window (`grounding.spotlight_mode_exception` in
+   `blog.config.yaml`); the subject comes from ledger coverage age instead.
+3. **Write it like any other post.** One tone, the plain-language/cool-side-first rules
+   (`readability:` and `angle:` in `blog.config.yaml`), and the full phase-5 self-check.
+4. **Still write a ledger row on seed**, same as every mode, with a `spotlight` mode note next to
+   the tone so the next rotation pass can see it wasn't a diff-driven post.
+
+`SEED_RESULT: noop` / `cooldown_blocked` are reserved for when even spotlight is exhausted — see
+`scripts/blog-cadence-watchdog.sh`'s `spotlight_candidates`.
+
 ## Catch-up mode (Part 0.5) — gap > ~10 days since last post
 
 When the blog has gone quiet for weeks, don't write one mega "everything since June" post — backfill

@@ -18,6 +18,42 @@ identity:
     through from the post to try each project right now
   # binding; see grounding: below for what this means for git as a source
   post_is: a product update — what the reader can now DO, not the engineering it took
+  purpose: see distribution.objective below — every post is written to serve that objective
+
+distribution:
+  # owner direction 2026-10-03, verbatim: "I want to eventually make this blog even more public
+  # by double-publishing to linkedIN - make sure that objective is already baked into the
+  # grouding for it - talking about hte projects I work on will drive traffic. so the language
+  # can't be marketing but urls need be real and we let the landing page convert"
+  objective: >-
+    posts about the projects drive traffic to each project's landing page; the landing page
+    converts, the post does not sell
+  channels:
+    bilko.run/blog: live
+    linkedin: "planned — cross-post of the same text, not yet automated; this pipeline does not
+      post to LinkedIn today"
+  syndication_ready: true      # a post must stand alone off-site: no "last post", "see above", or
+                                # "on this blog" references; every link absolute; the first two
+                                # sentences carry the cool part, since LinkedIn shows no site chrome
+  primary_link: "project landing page per links: host-kind rules below"
+  no_marketing_language: true
+  marketing_blocklist:         # scripts/blog-readability.ts reads this exact key path
+    - sign up now
+    - don't miss
+    - game-changer
+    - game changer
+    - revolutionary
+    - unlock
+    - level up
+    - supercharge
+    - best-in-class
+    - world-class
+    - cutting-edge
+    - limited time
+    - act now
+    - buy now
+    - skyrocket
+    - must-have
 
 grounding:                  # WHAT git/commit history is FOR in this pipeline — read this before
                              # research.md or voice.md, both of which must agree with it
@@ -218,7 +254,8 @@ gates:                                  # a phase may not hand off until its gat
   5_draft: >-
     one tone held within its word range; bot-tell blocklist clean; spine present; readability
     checker exits 0 (npx tsx scripts/blog-readability.ts <draft.md> — plain-language gate, see
-    the readability block above)
+    the readability block above); marketing_blocklist clean and post stands alone off-site
+    (syndication_ready — see distribution: above)
   6_approve: autonomous gate — autonomy.autonomous_publish is true AND the phase-4/5 quality
     self-check (SKILL.md) passed; when autonomous_publish is false, this reverts to requiring an
     EXPLICIT USER OK, and peers/agents still cannot approve on the owner's behalf

@@ -105,6 +105,10 @@ the subject. It still gets a tone, a ledger row, and the full phase-5 self-check
       is a bug, an error code, or an internal refactor — git selected the focus and window
       (`grounding:` in `blog.config.yaml`), not the subject matter; engineering detail may only
       appear as supporting color for a value/use point, never as the thing the post is about.
+- [ ] Zero items from the `distribution.marketing_blocklist` (`blog.config.yaml`)?
+- [ ] **Reads complete if pasted into LinkedIn with no site context** — no "last post"/"see
+      above"/"on this blog" references, its one primary link points at the project's real landing
+      page (`voice.md` "Written to travel")?
 
 If any is NO, the post is not ready. Rewrite, don't ship.
 

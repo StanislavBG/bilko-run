@@ -47,6 +47,39 @@ audience is early college people so they need to click." Every link in a post mu
 Before: "You can check out [the project page](/projects/git-viewer/) — the project is open source."
 After: "Try it yourself at [bilko.run/projects/git-viewer](https://bilko.run/projects/git-viewer/). The code is open source — see it at [github.com/StanislavBG/git-viewer](https://github.com/StanislavBG/git-viewer)."
 
+## Written to travel (LinkedIn-ready, no selling)
+
+Owner direction, 2026-10-03, verbatim: "I want to eventually make this blog even more public by
+double-publishing to linkedIN - make sure that objective is already baked into the grouding for it
+- talking about hte projects I work on will drive traffic. so the language can't be marketing but
+urls need be real and we let the landing page convert." (`blog.config.yaml` `distribution:`.) This
+pipeline does not post to LinkedIn yet — no automation exists for it — but every post is written
+today so a human could paste it there unchanged.
+
+Stand-alone rules — a post must read as a complete thing with zero site context around it:
+
+- **No "last post," "see above," or "on this blog" references.** A LinkedIn reader never saw the
+  previous post and isn't on bilko.run — every sentence must make sense cold.
+- **Every link is a full, real, absolute `https://` URL** (`links.absolute_urls_only`) — never a
+  relative path, never a fake or placeholder link. The post does not sell; the landing page does
+  the converting, so the one real link to it is load-bearing, not decorative.
+- **The first two sentences carry the cool part.** LinkedIn (and most feeds) truncate after a line
+  or two — if the hook is buried in paragraph three, it never gets read.
+- **No marketing language.** The post states what the project does and how to try it, plainly; it
+  never pitches, hypes, or urges (`distribution.marketing_blocklist` in `blog.config.yaml`).
+- **No automation or pipeline disclosure.** A syndicated copy never mentions that it was drafted,
+  scanned, or scheduled by a pipeline — it reads as Bilko writing about Bilko's own work.
+
+Before (sells): "Don't miss this game-changer — sign up now and unlock the full power of
+AdScorer's new compare mode!"
+After (plain, real link, no selling): "AdScorer can now put two ad drafts side by side and tell you
+which one a platform's algorithm will favor. Try it at
+[bilko.run/projects/ad-scorer](https://bilko.run/projects/ad-scorer/)."
+
+Real, absolute, live URLs are mandatory here for the same reason they're mandatory for the
+early-college reader above: the post's job is to get someone to click, and the landing page — not
+the post — is what has to convert them.
+
 ## Feature-VALUE, not changelog (the thing that keeps going wrong)
 
 The robotic failure mode isn't just bad sentences — it's writing a **list of what changed** instead

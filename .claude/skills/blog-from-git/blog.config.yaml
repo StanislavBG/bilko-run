@@ -11,14 +11,13 @@ identity:
   stance: >-
     builder-to-builder, first person, witty, no corporate fluff, plain simple English (GED level
     — see readability block below)
+  # owner direction 2026-10-03: "the audience is early college people so they need to click" —
+  # see links: below for the absolute-URL rule this reader needs
   reader: >-
     an early-college student, new to these AI tools, who should be able to click straight
     through from the post to try each project right now
-                            # owner direction 2026-10-03: "the audience is early college people
-                            # so they need to click" — see links: below for the absolute-URL rule
-                            # this reader needs
+  # binding; see grounding: below for what this means for git as a source
   post_is: a product update — what the reader can now DO, not the engineering it took
-                            # binding; see grounding: below for what this means for git as a source
 
 grounding:                  # WHAT git/commit history is FOR in this pipeline — read this before
                              # research.md or voice.md, both of which must agree with it

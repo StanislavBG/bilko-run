@@ -111,6 +111,27 @@ describe('blog.config.yaml: absolute links and reader identity', () => {
     expect(reader).toMatch(/click/);
   });
 
+  it('identity.reader is one clean sentence with no stray comment markers or newlines', () => {
+    const reader = String(config.identity.reader);
+    expect(reader).not.toMatch(/#/);
+    expect(reader).not.toMatch(/\n/);
+  });
+
+  it('no parsed string value in the whole config contains a comment-marker line (the guard that would have caught the reader bug)', () => {
+    const offenders: string[] = [];
+    const walk = (value: unknown, path: string) => {
+      if (typeof value === 'string') {
+        if (/\n\s*# /.test(value)) offenders.push(path);
+      } else if (Array.isArray(value)) {
+        value.forEach((v, i) => walk(v, `${path}[${i}]`));
+      } else if (value && typeof value === 'object') {
+        for (const [k, v] of Object.entries(value)) walk(v, `${path}.${k}`);
+      }
+    };
+    walk(config, 'config');
+    expect(offenders).toEqual([]);
+  });
+
   it('links.static-path is absolute and bilko.run-rooted', () => {
     expect(config.links['static-path']).toMatch(/^https:\/\/bilko\.run\//);
     expect(config.links['react-route']).toMatch(/^https:\/\/bilko\.run\//);

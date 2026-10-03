@@ -6,7 +6,7 @@ export function registerBlogRoutes(app: FastifyInstance): void {
   // Public: list published posts
   app.get('/api/blog', async () => {
     return dbAll(
-      'SELECT id, slug, title, excerpt, category, cover_image, published_at FROM blog_posts WHERE published = 1 ORDER BY published_at DESC',
+      "SELECT id, slug, title, excerpt, category, cover_image, published_at FROM blog_posts WHERE published = 1 AND datetime(published_at) <= datetime('now') ORDER BY published_at DESC",
     );
   });
 
@@ -14,7 +14,7 @@ export function registerBlogRoutes(app: FastifyInstance): void {
   app.get('/api/blog/:slug', async (req, reply) => {
     const { slug } = req.params as { slug: string };
     const post = await dbGet(
-      'SELECT * FROM blog_posts WHERE slug = ? AND published = 1', slug,
+      "SELECT * FROM blog_posts WHERE slug = ? AND published = 1 AND datetime(published_at) <= datetime('now')", slug,
     );
     if (!post) { reply.status(404); return { error: 'Post not found' }; }
     return post;

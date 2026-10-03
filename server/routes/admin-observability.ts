@@ -341,7 +341,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
 
     const latest = await safeQuery(
       () => dbGet<{ published_at: string }>(
-        `SELECT published_at FROM blog_posts WHERE published = 1 ORDER BY published_at DESC LIMIT 1`,
+        `SELECT published_at FROM blog_posts WHERE published = 1 AND datetime(published_at) <= datetime('now') ORDER BY published_at DESC LIMIT 1`,
       ),
       undefined,
     );

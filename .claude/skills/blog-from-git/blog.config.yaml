@@ -11,7 +11,12 @@ identity:
   stance: >-
     builder-to-builder, first person, witty, no corporate fluff, plain simple English (GED level
     — see readability block below)
-  reader: someone deciding whether a product is worth their attention
+  reader: >-
+    an early-college student, new to these AI tools, who should be able to click straight
+    through from the post to try each project right now
+                            # owner direction 2026-10-03: "the audience is early college people
+                            # so they need to click" — see links: below for the absolute-URL rule
+                            # this reader needs
   post_is: a product update — what the reader can now DO, not the engineering it took
                             # binding; see grounding: below for what this means for git as a source
 
@@ -182,12 +187,22 @@ scan:
   unpushed_watchlist_lives_in: blog-ledger.md
 
 links:                                  # derive from tile_registry host.kind per project
-  static-path: "/projects/<slug>/"     # TRAILING slash
+  static-path: "https://bilko.run/projects/<slug>/"   # absolute, TRAILING slash
   external-url: "link the external/GitHub URL directly"
-  react-route: "/products/<slug>"
+  react-route: "https://bilko.run/products/<slug>"    # absolute
   untiled: "link GitHub only if the work is actually pushed; otherwise no code link"
-  cross-post: "/blog/<slug>"
+  cross-post: "https://bilko.run/blog/<slug>"         # absolute
   max_ctas_per_post: 1
+  absolute_urls_only: true             # owner direction 2026-10-03 — readers must be able to
+                                        # click straight through; the readability checker
+                                        # (scripts/blog-readability.ts findLinkIssues) FAILS the
+                                        # draft on any relative link (a bare /projects/<slug>/
+                                        # path or a markdown link whose target isn't https://)
+  source_repo: >-
+    Whenever a post says the code is open source, is on GitHub, or can be forked, link the real
+    repo: 'https://' + that project's tile_registry entry's host.sourceRepo (src/data/
+    standalone-projects.json). This repo link is required grounding for the claim, not a CTA —
+    it does NOT count against max_ctas_per_post above.
 
 gates:                                  # a phase may not hand off until its gate passes
   1_rotation: ledger permits the project (or user override)

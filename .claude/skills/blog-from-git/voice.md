@@ -30,6 +30,23 @@ comfortable hour' meant; now it's data, and you can see why any hour scored the 
 After: "This week I added a rule engine to OutdoorHours. Before, the app had one fixed idea of a
 'comfortable hour.' Now you can see exactly why each hour got its score."
 
+## Links readers can click
+
+Owner direction, 2026-10-03, verbatim: "you need to print the full links not a sudo-code ... the
+audience is early college people so they need to click." Every link in a post must be:
+
+- **A full `https://` URL.** Never a relative path like `/projects/<slug>/` — the readability
+  checker (`scripts/blog-readability.ts`) fails any relative link (`blog.config.yaml`
+  `links.absolute_urls_only`).
+- **Named by where it goes.** The link text says what the reader will land on ("try
+  gitoverview"), never "click here" or "the project page."
+- **Present whenever you say "open source."** If the post calls the code open source, says it's
+  on GitHub, or says it can be forked, link the real repo: `https://` + that project's
+  `host.sourceRepo` (`blog.config.yaml` `links.source_repo`).
+
+Before: "You can check out [the project page](/projects/git-viewer/) — the project is open source."
+After: "Try it yourself at [bilko.run/projects/git-viewer](https://bilko.run/projects/git-viewer/). The code is open source — see it at [github.com/StanislavBG/git-viewer](https://github.com/StanislavBG/git-viewer)."
+
 ## Feature-VALUE, not changelog (the thing that keeps going wrong)
 
 The robotic failure mode isn't just bad sentences — it's writing a **list of what changed** instead

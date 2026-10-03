@@ -104,6 +104,30 @@ describe('blog.config.yaml: gate and identity updates', () => {
   });
 });
 
+describe('blog.config.yaml: absolute links and reader identity', () => {
+  it('identity.reader mentions college and clicking through to try the project', () => {
+    const reader = String(config.identity.reader).toLowerCase();
+    expect(reader).toMatch(/college/);
+    expect(reader).toMatch(/click/);
+  });
+
+  it('links.static-path is absolute and bilko.run-rooted', () => {
+    expect(config.links['static-path']).toMatch(/^https:\/\/bilko\.run\//);
+    expect(config.links['react-route']).toMatch(/^https:\/\/bilko\.run\//);
+    expect(config.links['cross-post']).toMatch(/^https:\/\/bilko\.run\//);
+  });
+
+  it('declares absolute_urls_only: true', () => {
+    expect(config.links.absolute_urls_only).toBe(true);
+  });
+
+  it('declares a source_repo rule naming host.sourceRepo and exempting max_ctas_per_post', () => {
+    const rule = String(config.links.source_repo).toLowerCase();
+    expect(rule).toMatch(/sourcerepo/);
+    expect(rule).toMatch(/max_ctas_per_post/);
+  });
+});
+
 describe('voice.md: plain language section', () => {
   it('has a Plain language (GED level) section near the top', () => {
     const headingIndex = voiceMd.search(/##\s*Plain language \(GED level\)/i);
@@ -161,6 +185,45 @@ describe('voice.md: plain language section', () => {
       const report = analyzeReadability(text, thresholds);
       expect(report.jargonHits).toEqual([]);
     }
+  });
+});
+
+describe('voice.md: Links readers can click section', () => {
+  it('has a Links readers can click section', () => {
+    expect(voiceMd).toMatch(/##\s*Links readers can click/i);
+  });
+
+  it('states the full-URL, named-link-text, and open-source-links-the-repo rules', () => {
+    const section = voiceMd.match(/##\s*Links readers can click[\s\S]{0,2000}?(?=\n##)/i)![0];
+    expect(section.toLowerCase()).toMatch(/https:\/\//);
+    expect(section.toLowerCase()).toMatch(/relative path/);
+    expect(section.toLowerCase()).toMatch(/open source/);
+    expect(section.toLowerCase()).toMatch(/sourcerepo/);
+  });
+
+  it('includes a before/after example built from the git-viewer sentence, and the after passes with zero link issues', () => {
+    const section = voiceMd.match(/##\s*Links readers can click[\s\S]{0,2000}?(?=\n##)/i)![0];
+    const beforeMatch = section.match(/Before:\s*"([^"]+)"/);
+    const afterMatch = section.match(/After:\s*"([\s\S]+?)"/);
+    expect(beforeMatch).not.toBeNull();
+    expect(afterMatch).not.toBeNull();
+
+    expect(beforeMatch![1]).toMatch(/\(\/projects\/git-viewer\/\)/);
+    expect(beforeMatch![1]).toMatch(/open source/);
+
+    const after = afterMatch![1];
+    expect(after).toMatch(/https:\/\/bilko\.run\/projects\/git-viewer\//);
+    expect(after).toMatch(/https:\/\/github\.com\/StanislavBG\/git-viewer/);
+
+    const thresholds = {
+      maxFkGrade: config.readability.max_fk_grade,
+      maxAvgSentenceWords: config.readability.max_avg_sentence_words,
+      longSentenceWords: config.readability.long_sentence_words,
+      maxLongSentences: config.readability.max_long_sentences,
+      jargonBlocklist: config.readability.jargon_blocklist,
+    };
+    const report = analyzeReadability(after, thresholds);
+    expect(report.linkIssues).toEqual([]);
   });
 });
 

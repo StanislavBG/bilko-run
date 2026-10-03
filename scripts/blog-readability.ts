@@ -19,11 +19,17 @@ export interface ReadabilityThresholds {
   jargonBlocklist: JargonPair[];
 }
 
+export interface LinkIssue {
+  kind: 'relative-link' | 'unlinked-source-claim';
+  text: string;
+}
+
 export interface ReadabilityReport {
   fkGrade: number;
   avgSentenceWords: number;
   longSentences: string[];
   jargonHits: JargonPair[];
+  linkIssues: LinkIssue[];
   wordCount: number;
   pass: boolean;
 }
@@ -110,6 +116,43 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+const SOURCE_CLAIM_RE = /open[\s-]source|source code|on github|fork it/i;
+const GITHUB_LINK_RE = /https:\/\/github\.com\//i;
+const BARE_PROJECTS_PATH_RE = /(?<![A-Za-z0-9_./])\/projects\/[^\s)]*/g;
+const MARKDOWN_LINK_RE = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+
+// Runs on the raw markdown (before stripNonProse removes link targets) so link
+// destinations are still visible to check.
+export function findLinkIssues(markdown: string): LinkIssue[] {
+  const issues: LinkIssue[] = [];
+
+  let remainder = '';
+  let lastIndex = 0;
+  for (const match of markdown.matchAll(MARKDOWN_LINK_RE)) {
+    const target = match[1];
+    const isAbsolute = /^https?:\/\//i.test(target) || /^mailto:/i.test(target);
+    if (!isAbsolute) {
+      issues.push({ kind: 'relative-link', text: match[0] });
+    }
+    remainder += markdown.slice(lastIndex, match.index);
+    lastIndex = (match.index ?? 0) + match[0].length;
+  }
+  remainder += markdown.slice(lastIndex);
+
+  for (const match of remainder.matchAll(BARE_PROJECTS_PATH_RE)) {
+    issues.push({ kind: 'relative-link', text: match[0] });
+  }
+
+  const paragraphs = markdown.split(/\n\s*\n/);
+  for (const paragraph of paragraphs) {
+    if (SOURCE_CLAIM_RE.test(paragraph) && !GITHUB_LINK_RE.test(paragraph)) {
+      issues.push({ kind: 'unlinked-source-claim', text: paragraph.trim() });
+    }
+  }
+
+  return issues;
+}
+
 export function analyzeReadability(
   markdown: string,
   opts: Partial<ReadabilityThresholds> = {},
@@ -122,6 +165,7 @@ export function analyzeReadability(
     jargonBlocklist: opts.jargonBlocklist ?? DEFAULT_THRESHOLDS.jargonBlocklist,
   };
 
+  const linkIssues = findLinkIssues(markdown);
   const prose = stripNonProse(markdown);
   const sentences = splitSentences(prose);
   const allWords = wordsOf(prose);
@@ -146,9 +190,10 @@ export function analyzeReadability(
     fkGrade <= thresholds.maxFkGrade &&
     avgSentenceWords <= thresholds.maxAvgSentenceWords &&
     longSentences.length <= thresholds.maxLongSentences &&
-    jargonHits.length === 0;
+    jargonHits.length === 0 &&
+    linkIssues.length === 0;
 
-  return { fkGrade, avgSentenceWords, longSentences, jargonHits, wordCount, pass };
+  return { fkGrade, avgSentenceWords, longSentences, jargonHits, linkIssues, wordCount, pass };
 }
 
 function isJargonBlocklist(value: unknown): value is JargonPair[] {

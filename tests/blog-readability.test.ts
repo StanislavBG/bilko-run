@@ -6,6 +6,18 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyzeReadability, DEFAULT_THRESHOLDS } from '../scripts/blog-readability';
 
+const BROKEN_LINK_PARAGRAPH = [
+  'Check out [the project page](/projects/git-viewer/) for the full tour.',
+  'Best of all, the project is open source, so you can poke around the code.',
+].join(' ');
+
+const FIXED_LINK_PARAGRAPH = [
+  'Check out [the project page](https://bilko.run/projects/git-viewer/) for the full tour.',
+  'Best of all, the project is open source at https://github.com/StanislavBG/git-viewer, so you can poke around the code.',
+].join(' ');
+
+const MAILTO_PARAGRAPH = 'Questions? Email [the team](mailto:hello@bilko.run) any time.';
+
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const PLAIN_PARAGRAPH = [
@@ -63,6 +75,31 @@ describe('analyzeReadability', () => {
       jargonBlocklist: blocklist,
     });
     expect(miss.jargonHits).toEqual([]);
+  });
+});
+
+describe('analyzeReadability link checks', () => {
+  it('flags a relative link and an unlinked open-source claim, and fails', () => {
+    const report = analyzeReadability(BROKEN_LINK_PARAGRAPH);
+    expect(report.pass).toBe(false);
+    expect(report.linkIssues).toContainEqual({
+      kind: 'relative-link',
+      text: '[the project page](/projects/git-viewer/)',
+    });
+    expect(
+      report.linkIssues.some((issue) => issue.kind === 'unlinked-source-claim'),
+    ).toBe(true);
+  });
+
+  it('passes once the link is absolute and the source claim links to GitHub', () => {
+    const report = analyzeReadability(FIXED_LINK_PARAGRAPH);
+    expect(report.linkIssues).toEqual([]);
+    expect(report.pass).toBe(true);
+  });
+
+  it('allows mailto links', () => {
+    const report = analyzeReadability(MAILTO_PARAGRAPH);
+    expect(report.linkIssues).toEqual([]);
   });
 });
 

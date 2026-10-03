@@ -6,56 +6,47 @@ does — `/blog-from-git` only ever runs when a human types it. This doc is the 
 records the real, currently-installed schedule, because the script has previously had two
 schedulers and three different claimed times, none of which agreed with each other.
 
-## The two triggers (verified on this machine 2026-09-11)
+## The one trigger (verified on this machine 2026-09-11; crontab removed 2026-10-03)
 
 | Trigger | Definition | Fires (PT) | Log |
 |---|---|---|---|
-| **crontab** (redundant — see below) | `0 12 * * * /home/bilko/Projects/Bilko/scripts/blog-cadence-watchdog.sh >> /home/bilko/.claude/logs/blog-cadence-watchdog.log 2>&1 # bilko blog-cadence-watchdog` | daily, 12:00 | `~/.claude/logs/blog-cadence-watchdog.log` |
-| **systemd user timer** (authoritative) | `blog-cadence-watchdog.timer` — `OnCalendar=daily`, `Persistent=true`, `AccuracySec=15min`, running `blog-cadence-watchdog.service` (`WorkingDirectory=%h/Projects/Bilko`) | daily, ~00:00-00:15 | `.claude/skills/blog-from-git/drafts/.watchdog.log` |
+| **systemd user timer** (sole trigger) | `blog-cadence-watchdog.timer` — `OnCalendar=daily`, `Persistent=true`, `AccuracySec=15min`, running `blog-cadence-watchdog.service` (`WorkingDirectory=%h/Projects/Bilko`) | daily, ~00:00-00:15 | `.claude/skills/blog-from-git/drafts/.watchdog.log` |
 
-Both are real, both are currently installed, and both have been firing — that is why the two
-logs contain different, partially overlapping histories instead of one clean trail. Neither
-trigger matches "09:00 PT", which is what the script's header comment used to (incorrectly)
-claim before this doc existed.
+A duplicate crontab entry (`0 12 * * * .../blog-cadence-watchdog.sh # bilko blog-cadence-watchdog`)
+was removed on 2026-10-03 at 3:26 PM PDT at the owner's request (backup:
+`~/.claude/backups/crontab-20261003-152617.bak`). The systemd user timer above is now the only
+trigger for this script. **Do not re-add a crontab trigger for this script — one trigger only.**
 
 A separate, unrelated timer — `blog-watchdog-heartbeat-check.timer` — runs
 `scripts/check-blog-watchdog-heartbeat.sh` roughly twice daily to detect if the watchdog itself
 has gone dead or unhealthy. It doesn't invoke the watchdog; it only reads the heartbeat file the
 watchdog writes on every run.
 
-**The systemd timer is authoritative; the crontab entry is redundant.** Recommendation: drop the
-crontab entry and keep the systemd timer, because `Persistent=true` survives the laptop being
-closed at the timer's scheduled moment (it replays the missed run at next boot/wake), while plain
-cron does not — a run simply never happens if the machine is off or asleep at 12:00 PT. This is a
-recommendation for a human to act on (removing the crontab line is machine state outside this
-repo, out of scope for this doc/PRD) — it is not a change this repo can make.
+The single log this script writes to is `.claude/skills/blog-from-git/drafts/.watchdog.log`.
+`~/.claude/logs/blog-cadence-watchdog.log` is historical only — it was written by the now-removed
+crontab trigger and is no longer appended to.
 
-## Both triggers are LOCAL to this machine
+## The trigger is LOCAL to this machine
 
-Neither the crontab entry nor the systemd timer exists anywhere except this laptop. Both only
-fire while this machine is powered on and, for the crontab entry specifically, awake at the exact
-scheduled minute — there is no server-side or cloud equivalent keeping the cadence on days this
-machine is off. The `Persistent=true` systemd timer setting narrows but does not eliminate this
-gap: it replays a run that was missed while the machine was off, once the machine is next on, but
-a run genuinely cannot happen while the machine has no power at all.
+The systemd timer exists only on this laptop. It only fires while this machine is powered on —
+there is no server-side or cloud equivalent keeping the cadence on days this machine is off. The
+`Persistent=true` setting narrows but does not eliminate this gap: it replays a run that was
+missed while the machine was off, once the machine is next on, but a run genuinely cannot happen
+while the machine has no power at all.
 
-## Why the duplication is currently harmless, not dangerous
+## Why an overlapping run is harmless, not dangerous
 
-Two schedulers firing independently sounds like it should cause double-drafting or duplicate
-runs, but two safeguards make simultaneous/overlapping triggers a safe no-op:
+With only the systemd timer as a trigger, overlapping runs should be rare, but two safeguards
+still make a manual rerun or any accidental overlap a safe no-op:
 
-- **Concurrency lock**: `/tmp/bilko.blog-cadence-watchdog.lock` via `flock -n`. If the crontab
-  trigger and the systemd trigger ever overlapped, the second to acquire the lock exits
-  immediately with `"another instance running — skipping"` and still writes a heartbeat.
+- **Concurrency lock**: `/tmp/bilko.blog-cadence-watchdog.lock` via `flock -n`. If a manual rerun
+  ever overlapped the timer's run, the second to acquire the lock exits immediately with
+  `"another instance running — skipping"` and still writes a heartbeat.
 - **Same-day idempotency guards PUBLISHING, not scanning**: `.watchdog-state`
   (`.claude/skills/blog-from-git/drafts/.watchdog-state`) records the date of the last
-  draft/publish attempt. A second run later the same day — whether triggered by the other
-  scheduler or a manual rerun — never seeds a second post on the same day, but it still runs
-  today's scan (phases 1-2) rather than exiting outright; see "Scan vs publish cadence" below.
-
-So running the watchdog twice a day (once from cron at 12:00, once from systemd at ~00:00) wastes
-at most one skipped invocation's worth of a few seconds of shell/curl work on the lock, and never
-seeds two posts or diverges state — but both invocations still scan.
+  draft/publish attempt. A second run later the same day never seeds a second post on the same
+  day, but it still runs today's scan (phases 1-2) rather than exiting outright; see "Scan vs
+  publish cadence" below.
 
 ## Scan vs publish cadence
 

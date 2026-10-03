@@ -26,20 +26,19 @@
 # existing live-gap PUBLISH_DUE decision gets to invoke anything, and fails
 # CLOSED (scan-only, no publish) if the gate is unavailable.
 #
-# TRIGGERS — this script is currently wired to run from TWO independent
-# schedulers on this machine (full detail, recommendation, and log contents:
-# docs/blog-watchdog.md):
-#   1. crontab: `0 12 * * * .../blog-cadence-watchdog.sh` (daily, 12:00 PT)
-#      appends to ~/.claude/logs/blog-cadence-watchdog.log — REDUNDANT.
-#   2. systemd user timer `blog-cadence-watchdog.timer` (OnCalendar=daily,
-#      Persistent=true, fires ~00:00-00:15 PT) — AUTHORITATIVE, since
-#      Persistent=true replays a run missed while the machine was off/asleep,
-#      which plain cron cannot do. Its service appends to
-#      .claude/skills/blog-from-git/drafts/.watchdog.log.
-# Both are LOCAL to this machine only and only fire while it is powered on.
-# Overlapping/duplicate firings are a safe no-op: the /tmp/bilko.blog-cadence-
-# watchdog.lock flock below serializes concurrent runs, and the same-day
-# .watchdog-state check makes a second run on one day idempotent.
+# TRIGGER — this script runs from exactly ONE scheduler on this machine
+# (full detail and log contents: docs/blog-watchdog.md): the systemd user
+# timer `blog-cadence-watchdog.timer` (OnCalendar=daily, Persistent=true,
+# fires ~00:00-00:15 PT) — Persistent=true replays a run missed while the
+# machine was off/asleep. Its service appends to
+# .claude/skills/blog-from-git/drafts/.watchdog.log. A previously-installed
+# crontab entry was removed 2026-10-03 at the owner's request; do not re-add
+# a crontab trigger for this script — one trigger only.
+# This timer is LOCAL to this machine only and only fires while it is
+# powered on. The /tmp/bilko.blog-cadence-watchdog.lock flock below still
+# serializes any concurrent runs (e.g. a manual rerun overlapping the timer),
+# and the same-day .watchdog-state check makes a second run on one day
+# idempotent.
 #
 # AUTONOMOUS FLOW — Bilko is an autonomous agent, not a human-supervised
 # publishing workflow. When the live gap blows the target, this script shells
@@ -342,9 +341,9 @@ fi
 
 # scan_every_days declares that scanning is daily and independent of whether a
 # post is due — this script's own scan cadence is hard-wired to whatever
-# triggers it (the daily systemd timer / crontab entry, docs/blog-watchdog.md),
-# not to a value read here. Parse it anyway and FATAL if it ever drifts from
-# 1, so a future edit to this key does not silently stop meaning what it says.
+# triggers it (the daily systemd timer, docs/blog-watchdog.md), not to a
+# value read here. Parse it anyway and FATAL if it ever drifts from 1, so a
+# future edit to this key does not silently stop meaning what it says.
 SCAN_EVERY_DAYS="$(grep -m1 'scan_every_days:' "$CONFIG_FILE" | grep -oP 'scan_every_days:\s*\K\d+')"
 if [[ -z "$SCAN_EVERY_DAYS" ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not parse scan_every_days from $CONFIG_FILE" >&2

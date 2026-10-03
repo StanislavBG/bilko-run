@@ -93,6 +93,36 @@ describe('blog seed published_at values are frozen literals', () => {
   }, 60_000);
 });
 
+describe('loadSeededPosts env restoration', () => {
+  it('restores TURSO_DATABASE_URL, TURSO_AUTH_TOKEN and BILKO_SQLITE_PATH to their sentinel values', async () => {
+    const savedEnv = {
+      TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL,
+      TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN,
+      BILKO_SQLITE_PATH: process.env.BILKO_SQLITE_PATH,
+    };
+
+    process.env.TURSO_DATABASE_URL = 'sentinel-turso-url';
+    process.env.TURSO_AUTH_TOKEN = 'sentinel-turso-token';
+    process.env.BILKO_SQLITE_PATH = 'sentinel-sqlite-path';
+
+    try {
+      const posts = await loadSeededPosts();
+      expect(posts.length).toBeGreaterThan(0);
+      expect(process.env.TURSO_DATABASE_URL).toBe('sentinel-turso-url');
+      expect(process.env.TURSO_AUTH_TOKEN).toBe('sentinel-turso-token');
+      expect(process.env.BILKO_SQLITE_PATH).toBe('sentinel-sqlite-path');
+    } finally {
+      for (const [key, value] of Object.entries(savedEnv)) {
+        if (value === undefined) {
+          delete process.env[key as keyof typeof savedEnv];
+        } else {
+          process.env[key as keyof typeof savedEnv] = value;
+        }
+      }
+    }
+  }, 60_000);
+});
+
 describe('seeded posts obey the cadence gate', () => {
   it('has no spacing violations among seeded posts', async () => {
     const posts = await loadSeededPosts();

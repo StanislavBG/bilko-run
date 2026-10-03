@@ -64,28 +64,44 @@ export function nextAllowedSlot(posts: SeededPost[], minGapDays: number, now: Da
 }
 
 export async function loadSeededPosts(): Promise<SeededPost[]> {
-  delete process.env.TURSO_DATABASE_URL;
-  delete process.env.TURSO_AUTH_TOKEN;
+  const savedEnv = {
+    TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL,
+    TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN,
+    BILKO_SQLITE_PATH: process.env.BILKO_SQLITE_PATH,
+  };
 
-  const tmpDir = await mkdtemp(path.join(tmpdir(), 'blog-cadence-gate-'));
-  process.env.BILKO_SQLITE_PATH = path.join(tmpDir, 'cadence-check.db');
+  try {
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
 
-  const { initDb, dbAll } = await import('../server/db.js');
-  await initDb();
+    const tmpDir = await mkdtemp(path.join(tmpdir(), 'blog-cadence-gate-'));
+    process.env.BILKO_SQLITE_PATH = path.join(tmpDir, 'cadence-check.db');
 
-  const rows = await dbAll<{ slug: string; published_at: string | null }>(
-    'SELECT slug, published_at FROM blog_posts WHERE published = 1',
-  );
+    const { initDb, dbAll } = await import('../server/db.js');
+    await initDb();
 
-  const posts: SeededPost[] = [];
-  for (const row of rows) {
-    if (!row.published_at) continue;
-    const d = new Date(row.published_at);
-    if (Number.isNaN(d.getTime())) continue;
-    posts.push({ slug: row.slug, publishedAt: d.toISOString() });
+    const rows = await dbAll<{ slug: string; published_at: string | null }>(
+      'SELECT slug, published_at FROM blog_posts WHERE published = 1',
+    );
+
+    const posts: SeededPost[] = [];
+    for (const row of rows) {
+      if (!row.published_at) continue;
+      const d = new Date(row.published_at);
+      if (Number.isNaN(d.getTime())) continue;
+      posts.push({ slug: row.slug, publishedAt: d.toISOString() });
+    }
+
+    return posts;
+  } finally {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
   }
-
-  return posts;
 }
 
 interface CadenceConfig {

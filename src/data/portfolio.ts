@@ -31,12 +31,6 @@ export interface PortfolioProject {
 }
 
 
-export interface AcademyLevel {
-  n: number;
-  name: string;
-  desc: string;
-}
-
 export interface Workflow {
   id: string;
   name: string;
@@ -83,18 +77,8 @@ export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
-  { id: 'academy',   label: 'Academy',     path: '/academy',   href: '/projects/academy/', icon: '▲', desc: 'Four-module AI fundamentals. Free, ad-free, every claim cited.', tag: '4 modules' },
   { id: 'workflows', label: 'Workflows',   path: '/workflows', icon: '↯', desc: 'Background AI agents and automations running 24/7.', tag: 'running' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
-];
-
-
-export const ACADEMY_LEVELS: readonly AcademyLevel[] = [
-  { n: 1, name: 'Beginner',    desc: 'What an LLM actually is. No mystique.' },
-  { n: 2, name: 'Conversant',  desc: 'Prompting, context, and when to give up.' },
-  { n: 3, name: 'Builder',     desc: 'Wiring models into real apps. Typed outputs, retries, cost.' },
-  { n: 4, name: 'Operator',    desc: 'Background agents, n8n, observability.' },
-  { n: 5, name: 'Architect',   desc: 'Rules-first systems that scale to many flows.' },
 ];
 
 // Real pipelines orchestrated by Burrow (local-first agent at ~/Projects/burrow).

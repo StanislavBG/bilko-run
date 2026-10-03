@@ -18,7 +18,6 @@ function activeSectionPath(pathname: string): string {
   if (pathname.startsWith('/products')) return '/projects';
   if (pathname.startsWith('/studio') || pathname.startsWith('/games')) return '/projects';
   if (pathname.startsWith('/blog')) return '/blog';
-  if (pathname.startsWith('/academy')) return '/academy';
   if (pathname.startsWith('/workflows')) return '/workflows';
   if (pathname.startsWith('/contact')) return '/contact';
   return pathname;
@@ -162,13 +161,13 @@ export function Layout() {
         </div>
         <div className="pf-col">
           <h4>Sections</h4>
-          {SECTIONS.slice(0, 4).map(s => (
+          {SECTIONS.slice(0, 3).map(s => (
             <Link key={s.id} to={s.path}>{s.label}</Link>
           ))}
         </div>
         <div className="pf-col">
           <h4>More</h4>
-          {SECTIONS.slice(4).map(s => (
+          {SECTIONS.slice(3).map(s => (
             <Link key={s.id} to={s.path}>{s.label}</Link>
           ))}
         </div>

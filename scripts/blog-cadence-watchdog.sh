@@ -149,9 +149,18 @@ keep_state_lock_for_seed_line() {
 # is the declared rotation memory, not a heuristic reading of post titles.
 ledger_recent_projects() {
   local ledger_file="$1" n="$2"
-  awk -F'\\|' '
+  local all_projects
+  all_projects="$(awk -F'\\|' '
     $0 ~ /^\| *[0-9]{4}-[0-9]{2}-[0-9]{2} *\|/ { print $4 }
-  ' "$ledger_file" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | head -n "$n"
+  ' "$ledger_file" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  local lines=()
+  if [[ -n "$all_projects" ]]; then
+    mapfile -t lines <<< "$all_projects"
+  fi
+  local p
+  for p in "${lines[@]:0:$n}"; do
+    echo "$p"
+  done
 }
 
 # Pure decision: is $candidate blocked by the cooldown, given the recent
@@ -234,6 +243,27 @@ spotlight_candidates() {
       echo "${covered_dates[$i]}|${covered_slugs[$i]}"
     done | sort | cut -d'|' -f2
   fi
+}
+
+# Top-3 wrapper around spotlight_candidates, comma-separated. Captures the
+# full candidate list into a variable FIRST, then slices with bash array
+# ops — never pipes spotlight_candidates straight into `head`. With more
+# than 3 tiled candidates (the real registry has ~25), `head -n 3` closes
+# its read end once satisfied; spotlight_candidates (and the `sort`/`cut`
+# pipeline inside it) is still writing, gets SIGPIPE, and under this
+# script's `set -euo pipefail` that non-zero exit kills the whole run (see
+# the 2026-10-03 06:32 PDT production failure this function fixes).
+spotlight_top3() {
+  local registry_file="$1" ledger_file="$2" cooldown_csv="$3"
+  local all_candidates
+  all_candidates="$(spotlight_candidates "$registry_file" "$ledger_file" "$cooldown_csv")"
+  local lines=()
+  if [[ -n "$all_candidates" ]]; then
+    mapfile -t lines <<< "$all_candidates"
+  fi
+  local top3=("${lines[@]:0:3}")
+  local IFS=,
+  echo "${top3[*]}"
 }
 
 # Builds MODE_INSTRUCTIONS for either mode. Catch-up mode's backfill queue can
@@ -457,7 +487,7 @@ RECENT_PROJECTS_CSV="$(echo "$RECENT_PROJECTS" | paste -sd, -)"
 # publishable new work writes an evergreen feature spotlight instead of
 # skipping. ---
 REGISTRY_FILE="src/data/standalone-projects.json"
-SPOTLIGHT_CANDIDATES_TOP3="$(spotlight_candidates "$REGISTRY_FILE" "$LEDGER_FILE" "$RECENT_PROJECTS_CSV" | head -n 3 | paste -sd, -)"
+SPOTLIGHT_CANDIDATES_TOP3="$(spotlight_top3 "$REGISTRY_FILE" "$LEDGER_FILE" "$RECENT_PROJECTS_CSV")"
 
 # Scanning (phases 1-2 of the blog-from-git skill) runs every day, independent
 # of whether a post is due to publish — cadence.scan_every_days in

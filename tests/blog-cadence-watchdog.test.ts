@@ -770,7 +770,7 @@ describe('blog-cadence-watchdog.sh', () => {
 
     it('is wired into the main script after RECENT_PROJECTS_CSV is computed, feeding the portfolio and cooldown instructions', () => {
       const registryIndex = script.indexOf('RECENT_PROJECTS_CSV="$(echo "$RECENT_PROJECTS" | paste -sd, -)"');
-      const spotlightCallIndex = script.indexOf('SPOTLIGHT_CANDIDATES_TOP3="$(spotlight_candidates');
+      const spotlightCallIndex = script.indexOf('SPOTLIGHT_CANDIDATES_TOP3="$(spotlight_top3');
       expect(registryIndex).toBeGreaterThan(-1);
       expect(spotlightCallIndex).toBeGreaterThan(registryIndex);
       expect(script).toMatch(/\$\{SPOTLIGHT_CANDIDATES_TOP3\}/);
@@ -779,6 +779,129 @@ describe('blog-cadence-watchdog.sh', () => {
     it('allows SEED_RESULT: noop/cooldown_blocked only when the spotlight candidate list is itself empty', () => {
       expect(script).toMatch(/SEED_RESULT: noop \/ cooldown_blocked are allowed ONLY when this candidate list is itself empty/);
       expect(script).toMatch(/SEED_RESULT: cooldown_blocked \/ SEED_RESULT: noop are allowed ONLY when no spotlight candidate exists either/);
+    });
+  });
+
+  describe('spotlight_top3 (regression for the 2026-10-03 SIGPIPE production failure — PRD 1023)', () => {
+    function extractSpotlightTop3Fn(): string {
+      const match = script.match(/spotlight_top3\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function extractSpotlightCandidatesFn(): string {
+      const match = script.match(/spotlight_candidates\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function extractProjectInCooldownFn(): string {
+      const match = script.match(/project_in_cooldown\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    function writeFixtureRegistry(slugs: string[]): string {
+      const content = JSON.stringify(slugs.map((slug) => ({ slug })));
+      const path = join(tmpdir(), `fixture-registry-top3-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      writeFileSync(path, content, 'utf-8');
+      return path;
+    }
+
+    function writeEmptyFixtureLedger(): string {
+      const content = ['# fixture ledger', '', '| Date | Slug | Project | On /projects? | Tone |', '|---|---|---|---|---|', ''].join(
+        '\n'
+      );
+      const path = join(tmpdir(), `fixture-ledger-top3-${Date.now()}-${Math.random().toString(36).slice(2)}.md`);
+      writeFileSync(path, content, 'utf-8');
+      return path;
+    }
+
+    function runSpotlightTop3UnderPipefail(registryPath: string, ledgerPath: string, cooldownCsv: string): string {
+      const cooldownFn = extractProjectInCooldownFn();
+      const candidatesFn = extractSpotlightCandidatesFn();
+      const top3Fn = extractSpotlightTop3Fn();
+      return execFileSync(
+        'bash',
+        [
+          '-c',
+          `set -euo pipefail\n${cooldownFn}\n${candidatesFn}\n${top3Fn}\nspotlight_top3 "${registryPath}" "${ledgerPath}" "${cooldownCsv}"`,
+        ],
+        { encoding: 'utf-8' }
+      ).trim();
+    }
+
+    it('with 30 tiled candidates under set -euo pipefail, exits 0 and returns exactly 3 comma-separated slugs (the production SIGPIPE)', () => {
+      const slugs = Array.from({ length: 30 }, (_, i) => `slug-${String(i).padStart(2, '0')}`);
+      const registryPath = writeFixtureRegistry(slugs);
+      const ledgerPath = writeEmptyFixtureLedger();
+      const result = runSpotlightTop3UnderPipefail(registryPath, ledgerPath, '');
+      const parts = result.split(',');
+      expect(parts.length).toBe(3);
+      expect(parts.every((s) => s.length > 0)).toBe(true);
+    });
+
+    it('returns an empty string, not an error, when there are fewer than 3 candidates', () => {
+      const registryPath = writeFixtureRegistry(['only-one']);
+      const ledgerPath = writeEmptyFixtureLedger();
+      const result = runSpotlightTop3UnderPipefail(registryPath, ledgerPath, '');
+      expect(result).toBe('only-one');
+    });
+
+    it('returns an empty string, not an error, when every candidate is on cooldown', () => {
+      const registryPath = writeFixtureRegistry(['p', 'q']);
+      const ledgerPath = writeEmptyFixtureLedger();
+      const result = runSpotlightTop3UnderPipefail(registryPath, ledgerPath, 'p,q');
+      expect(result).toBe('');
+    });
+
+    it('runs the REAL registry and ledger files under set -euo pipefail and succeeds with a non-empty result', () => {
+      const cooldownFn = extractProjectInCooldownFn();
+      const candidatesFn = extractSpotlightCandidatesFn();
+      const top3Fn = extractSpotlightTop3Fn();
+      const registryPath = join(__dirname, '../src/data/standalone-projects.json');
+      const ledgerPath = join(__dirname, '../.claude/skills/blog-from-git/blog-ledger.md');
+      const result = execFileSync(
+        'bash',
+        [
+          '-c',
+          `set -euo pipefail\n${cooldownFn}\n${candidatesFn}\n${top3Fn}\nspotlight_top3 "${registryPath}" "${ledgerPath}" ""`,
+        ],
+        { encoding: 'utf-8' }
+      ).trim();
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('is called at the line 460 call site instead of a bare spotlight_candidates | head | paste pipeline', () => {
+      expect(script).toMatch(/SPOTLIGHT_CANDIDATES_TOP3="\$\(spotlight_top3 "\$REGISTRY_FILE" "\$LEDGER_FILE" "\$RECENT_PROJECTS_CSV"\)"/);
+      expect(script).not.toMatch(/spotlight_candidates "\$REGISTRY_FILE" "\$LEDGER_FILE" "\$RECENT_PROJECTS_CSV" \| head/);
+    });
+  });
+
+  describe('ledger_recent_projects under pipefail with more rows than N (the same SIGPIPE class as spotlight_top3)', () => {
+    function extractLedgerRecentProjectsFn(): string {
+      const match = script.match(/ledger_recent_projects\(\) \{[\s\S]*?\n\}/);
+      expect(match).not.toBeNull();
+      return match![0];
+    }
+
+    it('does not pipe its awk/sed output into a head that can close early', () => {
+      const fn = extractLedgerRecentProjectsFn();
+      expect(fn).not.toMatch(/\|\s*head\b/);
+    });
+
+    it('with more ledger rows than N, under set -euo pipefail, exits 0 and returns exactly N projects', () => {
+      const fn = extractLedgerRecentProjectsFn();
+      const header = ['# fixture ledger', '', '| Date | Slug | Project | On /projects? | Tone |', '|---|---|---|---|---|'];
+      const body = Array.from({ length: 30 }, (_, i) => `| 2026-01-${String((i % 28) + 1).padStart(2, '0')} | slug-${i} | project-${i} | ✅ | changelog |`);
+      const content = [...header, ...body].join('\n') + '\n';
+      const ledgerPath = join(tmpdir(), `fixture-ledger-many-${Date.now()}-${Math.random().toString(36).slice(2)}.md`);
+      writeFileSync(ledgerPath, content, 'utf-8');
+      const out = execFileSync('bash', ['-c', `set -euo pipefail\n${fn}\nledger_recent_projects "${ledgerPath}" 3`], {
+        encoding: 'utf-8',
+      }).trim();
+      const projects = out.split('\n').filter(Boolean);
+      expect(projects).toEqual(['project-0', 'project-1', 'project-2']);
     });
   });
 

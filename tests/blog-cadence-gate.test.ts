@@ -1,7 +1,4 @@
-import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   findSpacingViolations,
   loadSeededPosts,
@@ -74,32 +71,26 @@ describe('nextAllowedSlot', () => {
 });
 
 describe('blog seed published_at values are frozen literals', () => {
-  it('has no blog_posts INSERT block that stamps published_at with new Date()', () => {
-    const dbTsPath = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '..',
-      'server',
-      'db.ts',
-    );
-    const source = readFileSync(dbTsPath, 'utf-8');
-
-    const insertRegex = /`INSERT (?:OR IGNORE )?INTO blog_posts[^`]*published_at[^`]*`/g;
-    const matches = [...source.matchAll(insertRegex)];
-    expect(matches.length).toBeGreaterThan(0);
-
-    const offenders: number[] = [];
-    for (const match of matches) {
-      const start = match.index! + match[0].length;
-      const closeMatch = /\n\s*\);/.exec(source.slice(start));
-      expect(closeMatch).not.toBeNull();
-      const block = source.slice(start, start + closeMatch!.index!);
-      if (block.includes('new Date()')) {
-        offenders.push(source.slice(0, start).split('\n').length);
-      }
-    }
-
-    expect(offenders).toEqual([]);
+  afterEach(() => {
+    vi.useRealTimers();
   });
+
+  it('never seeds a published post whose published_at carries the current clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2099-01-01T00:00:00.000Z'));
+
+    try {
+      vi.resetModules();
+      const fresh = await import('../scripts/blog-cadence-gate.js');
+      const posts = await fresh.loadSeededPosts();
+      expect(posts.length).toBeGreaterThan(0);
+      for (const post of posts) {
+        expect(post.publishedAt.startsWith('2099-')).toBe(false);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 60_000);
 });
 
 describe('seeded posts obey the cadence gate', () => {

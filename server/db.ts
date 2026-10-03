@@ -834,7 +834,7 @@ It's calibrated against reference examples — a "Tips for Better Marketing" hea
 **What does it cost?**
 First roast is free. After that, $1 per credit or $5 for 7. Same credits work across all bilko.run tools. No subscriptions.`,
       'product',
-      new Date().toISOString(),
+      '2026-04-04T03:04:43.816Z',
     );
   }
 
@@ -905,7 +905,7 @@ No. Some tools are worth every penny. We flag what's wasteful, redundant, or has
 **How is this different from Zylo or Zluri?**
 They cost $10K+/year, require IT integration, and target enterprises with 300+ apps. StackAudit costs $1, runs in 30 seconds, and is built for small teams.`,
     'product',
-    new Date().toISOString(),
+    '2026-04-04T07:14:03.871Z',
   );
 
   // Seed LocalScore blog post
@@ -988,7 +988,7 @@ Not yet. WebGPU support on mobile browsers is still limited. Desktop Chrome and 
 **Can I use this for HIPAA-compliant workflows?**
 The tool itself doesn't store or transmit data, which removes the primary HIPAA concern. But consult your compliance team — HIPAA compliance involves more than just data transmission.`,
     'deep-dive',
-    new Date().toISOString(),
+    '2026-04-04T09:12:07.754Z',
   );
 
   // Seed "10 Tools, Solo" blog post
@@ -1076,7 +1076,7 @@ The core platform (10 tools + blog + payments + admin) shipped in one intensive 
 **Is it profitable?**
 Early. The credit model means every use generates revenue. No free-tier subsidization problem.`,
     'build-log',
-    new Date().toISOString(),
+    '2026-04-04T13:12:19.860Z',
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1167,7 +1167,7 @@ Open-Meteo's ERA5 historical reanalysis. Hourly resolution going back to 1996.
 **Why pre-generate the narratives instead of calling an LLM live?**
 Cost and latency. 121 months × N regions × every page view = a bill. Baking them into the bundle at export time means the tool is static JSON + a React page. Zero per-request cost.`,
     'build-log',
-    new Date().toISOString(),
+    '2026-04-20T07:27:07.878Z',
   );
 
   // Seed Burrow week-in-review post
@@ -1284,7 +1284,7 @@ Because every API path (X, LinkedIn, Reddit) is either rate-limited, stripped of
 **What's the reply success rate after the hardening?**
 Measurable after one more week of data. Before the hardening we literally didn't know — the logs lied. Now we do.`,
     'build-log',
-    new Date().toISOString(),
+    '2026-04-20T07:27:07.946Z',
   );
 
   // Seed npr-podcast week-in-review post
@@ -1382,7 +1382,7 @@ The RSS fetcher is NPR-flavored (handles their specific feed quirks). The classi
 **Will this be a bilko.run tool?**
 Probably not — it's not really monetizable as a one-shot AI analysis. But the eval harness pattern and the bilko-flow-based pipeline are both going to show up in other bilko.run tools.`,
     'build-log',
-    new Date().toISOString(),
+    '2026-04-20T07:27:07.970Z',
   );
 
   // Seed bilko-flow week-in-review post
@@ -1486,7 +1486,7 @@ Because "is this reproducible?" is the question every LLM pipeline eventually ha
 **Where do I read the full docs?**
 [bilko-flow on npm](https://www.npmjs.com/package/bilko-flow) — README is the canonical doc. Source is in the tarball (now) for anyone who wants to read the types directly.`,
     'deep-dive',
-    new Date().toISOString(),
+    '2026-04-20T07:27:07.994Z',
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1581,7 +1581,7 @@ Not directly — adding a region requires fetching ten years of hourly ERA5 data
 **Why precompute per-profile rollups instead of scoring at click time?**
 Because click latency is the difference between a tool that feels live and a tool that feels like it's loading. The custom-profile path falls back to client-side scoring when the rules are user-defined; built-in profiles read pre-computed columns and stay sub-50ms.`,
     'build-log',
-    new Date().toISOString(),
+    '2026-04-28T02:15:34.053Z',
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1705,7 +1705,7 @@ Only if the app calls the host API. Free apps like OutdoorHours and LocalScore d
 **What if I want to host my own app on bilko.run?**
 That's the long bet. The MCP is the API. Read \`docs/host-contract.md\`, build a Vite app with \`base: '/projects/<slug>/'\`, publish via \`bilko-host__publish_static_project\`. Right now the MCP is wired into my own siblings; opening it up to others is a plan-mode question for next quarter.`,
     'build-log',
-    new Date().toISOString(),
+    '2026-05-05T07:32:42.118Z',
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1831,7 +1831,7 @@ A lot, structured tightly. Each app had a PRD chain (research → bootstrap → 
 **Are the games actually finished?**
 The engines are. Each has solver verification, deterministic seeds, and a test suite. The polish is the next pass — sound design, theme variants, daily-streak persistence across the wallet. None of that is required for the contract; all of it is on the backlog.`,
     'build-log',
-    new Date().toISOString(),
+    '2026-05-11T06:30:47.649Z',
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1948,7 +1948,7 @@ Two things, both shipping next week. (1) The \`host-kit\` \`prepublish\` hook wi
 **Is this an indictment of AI-agent coding?**
 No. It's the opposite. The same week that produced three near-misses also produced thirty parallel agent invocations across five sibling repos in twelve hours, with zero broken siblings and a 50% drop in median bundle size for the games over v1. The lesson is not "agents are unreliable." The lesson is that an agent reporting "tests pass" is evidence, not proof — and proof is cheap when the proving agent is also an agent. Pair the work. Trust the pair.`,
     'lessons',
-    new Date().toISOString(),
+    '2026-05-16T22:14:32.466Z',
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -2063,7 +2063,7 @@ Read MCP endpoints: \`reddit_mcp.posts_for_ticker\`, \`reddit_mcp.recent_posts\`
 **Is the host repo going to stay boring?**
 For as long as the static-path contract holds, yes. The host's job is to provide brand chrome (Layout, HomePage, ProjectsPage, BlogPage, PricingPage, AdminPage), shared auth (Clerk), shared credits (Stripe), shared analytics, and the manifest/static-serve plumbing. None of those things should need to change just because a sibling shipped a new feature. The week the host stops being boring is the week a sibling needs something the contract doesn't cover — and that has not happened since the decomposition in early April.`,
     'lessons',
-    new Date().toISOString(),
+    '2026-05-23T04:04:09.966Z',
   );
 
   // ─────────────────────────────────────────────────────────────────────

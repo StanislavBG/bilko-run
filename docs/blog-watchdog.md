@@ -65,13 +65,47 @@ Scanning and publishing are governed independently (`.claude/skills/blog-from-gi
 - **Scan (phases 1-2 of blog-from-git) runs every day**, unconditionally
   (`cadence.scan_every_days: 1`) — the watchdog no longer exits before scanning just because the
   live gap is within cadence.
-- **Publish is gated on the LOWER bound of `cadence.target_gap_days` (`[3, 5]` → 3).** A post is
-  "due" once the live gap reaches 3 days, not 5 — the upper bound (5) is reserved for the
+- **Publish is gated on the LOWER bound of `cadence.target_gap_days` (`[3, 4]` → 3).** A post is
+  "due" once the live gap reaches 3 days, not 4 — the upper bound (4) is reserved for the
   over-cadence/stall heartbeat classification, not the publish trigger.
 - **A due post's subject is also gated by `rotation.project_cooldown_posts` (3).** A project
   covered in any of the last 3 `blog-ledger.md` rows is ineligible as the next subject. If a post
   is due but every candidate is on cooldown, the watchdog writes a `warn:` heartbeat and does not
   publish — it never invents a post to satisfy cadence.
+
+## The NEXT_SLOT gate — a hard minimum gap floor, fail-closed
+
+The `/api/blog` live-gap check above is necessary but not sufficient: it can't see a post that's
+already been seeded for a future date, so it can call a day "due" even when a future post is
+already queued close behind the last live one. `scripts/blog-cadence-watchdog.sh` closes that hole
+by calling `pnpm tsx scripts/blog-cadence-gate.ts next-slot` after the live-gap check (around the
+script's "hard minimum gap floor" block) and treating its answer as the real floor:
+
+- `next-slot` reads the actually-seeded rows (not `/api/blog`, which hides future-dated posts) and
+  returns the earliest ISO timestamp that is `cadence.min_gap_days` (3 days) clear of every seeded
+  post — i.e. the next slot a new post is allowed to publish at.
+- **Fail closed**: if the `next-slot` call errors, times out, or doesn't return a value that looks
+  like an ISO timestamp, the watchdog logs a FATAL line, writes an `error:` heartbeat, and exits
+  non-zero — it does not fall through to scanning or publishing on an unverified value.
+- If `next-slot`'s returned time is still in the future, the watchdog runs **scan-only** (phases
+  1-2: Rotation + Scan) even though the live `/api/blog` gap said a post was due — it does not
+  draft, seed, or touch `server/db.ts`/`blog-ledger.md`/git. Only once the current time reaches
+  `next-slot` does the watchdog proceed to drafting/publishing.
+- This is the same gate `seed.md` tells an interactive session to run by hand before committing a
+  seed (`pnpm tsx scripts/blog-cadence-gate.ts check`) — the watchdog's `next-slot` call and the
+  skill's pre-commit `check` call are the automated and manual halves of the same hard floor.
+
+This gate exists because of the 2026-10-03 double publication: a watchdog-seeded git-viewer post
+went live at 16:08Z, and an owner-requested OutdoorHours post was then seeded for the same day at
+17:26Z — about an hour later — because an interactive session read `rotation.override:
+user-explicit-only` as covering the gap, not just the rotation/cooldown rules. The OutdoorHours
+post was rescheduled to `2026-10-07T16:00:00Z` (9:00 AM PDT) to restore the 3-day gap. The
+NEXT_SLOT gate, plus `rotation.md`'s explicit statement that the gap is never override-able, are
+what closes this path going forward: an owner "publish now" request made inside the gap now gets
+seeded at `next-slot`, not at the moment of the request, whether it's driven by the watchdog or a
+manual session. Every seed — watchdog or manual — must also pass `pnpm tsx scripts/blog-cadence-gate.ts
+check` immediately before the `git commit` that lands it; a failing `check` means no commit, no
+push, full stop (see `seed.md`).
 
 ## Is publishing autonomous or gated?
 

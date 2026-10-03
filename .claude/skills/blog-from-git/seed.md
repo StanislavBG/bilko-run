@@ -16,17 +16,28 @@ Seeds are `INSERT OR IGNORE INTO blog_posts (...)` in `server/db.ts` initDb(). A
 several so they order right). Categories: `build-log | lessons | deep-dive | market | product`.
 
 **`published_at` rule (`blog.config.yaml` `cadence.current_post_published_at: authored_at`):**
-portfolio, focused, and spotlight posts are dated to the moment they're authored — the time of
-the seed commit, not the ship date of the work they describe. Honest backdating
-(`cadence.backdating: honest-only`) only applies to catch-up mode's backfill posts, where
-`published_at` must match when the work actually shipped (`rotation.md` Part 0.5). The "never
-`new Date()`" rule above still holds for every mode — always an explicit ISO string, just one
-you compute from "now" for portfolio/focused/spotlight, and from the slot date for catch-up.
+portfolio, focused, and spotlight posts are dated to `max(now, output of
+pnpm tsx scripts/blog-cadence-gate.ts next-slot)` — normally that's just "now" (the time of the
+seed commit, not the ship date of the work they describe), but `next-slot` is the code-enforced
+floor: if the last seeded post is less than `cadence.min_gap_days` (3) away, `next-slot` returns a
+future ISO timestamp and that's what you seed, not "now". This is a HARD rule — see `rotation.md`'s
+top section for what does and doesn't override it. Honest backdating (`cadence.backdating:
+honest-only`) only applies to catch-up mode's backfill posts, where `published_at` must match when
+the work actually shipped (`rotation.md` Part 0.5). The "never `new Date()`" rule above still holds
+for every mode — always an explicit ISO string, just one you compute from `max(now, next-slot)` for
+portfolio/focused/spotlight, and from the slot date for catch-up.
+
+A post seeded with a future `published_at` is **hidden from `/api/blog`** until that timestamp
+arrives (`datetime(published_at) <= datetime('now')` filter) — this is expected, not a bug. When
+verifying a scheduled post went live, wait for (or skip the check until) its `published_at` time
+has passed; don't treat "not showing up yet" as a failure before then.
 
 ```bash
 cd ~/Projects/Bilko
 npx tsc --noEmit -p tsconfig.json 2>&1 | grep -i db.ts    # must be clean
 pnpm test tests/db.test.ts
+timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check   # hard gap gate — must exit 0
+# if this fails: STOP — no commit, no push. Print SEED_RESULT: noop note="cadence gate check failed"
 git add server/db.ts && git commit
 git push origin main                                       # origin only — memory feedback_always_push
 ```

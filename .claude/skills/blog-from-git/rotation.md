@@ -4,6 +4,19 @@ Read FIRST, before any scan or drafting. `blog-ledger.md` (this folder) is the m
 been published and the source of truth for *what to cover next* — the git scan tells you what
 *changed*, the ledger tells you what you're *allowed* to write about.
 
+## The gap floor is HARD — no override reaches it
+
+`cadence.min_gap_days` (3 days between any two posts' `published_at`) is enforced by
+`scripts/blog-cadence-gate.ts`, code, not prose, and nothing in this skill can waive it.
+`blog.config.yaml`'s `rotation.override: user-explicit-only` covers the rotation rules below
+(cooldown, no-tile back-to-back) ONLY — it was never permission to publish inside the 3-day gap,
+and reading it that way caused the 2026-10-03 double publication (a watchdog post at 16:08Z, then
+an owner-requested post at 17:26Z the same day, ~1 hour apart). If the owner asks to "publish now"
+while inside the gap, the request is honored by seeding with `published_at` = the `next-slot`
+value from `pnpm tsx scripts/blog-cadence-gate.ts next-slot` (scheduled; it goes live automatically
+once that time arrives — see `seed.md`), never with today's date. Tell the owner the resulting
+go-live time in Pacific Time, not just the raw UTC/ISO value.
+
 ## Two hard rules
 
 1. **3-post cooldown (blog.config.yaml `rotation.project_cooldown_posts: 3`).** A project covered

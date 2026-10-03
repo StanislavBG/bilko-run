@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { findSpacingViolations, nextAllowedSlot, type SeededPost } from '../scripts/blog-cadence-gate.js';
+import {
+  findSpacingViolations,
+  loadSeededPosts,
+  nextAllowedSlot,
+  type SeededPost,
+} from '../scripts/blog-cadence-gate.js';
 
 const SINCE = '2026-10-01T00:00:00.000Z';
 
@@ -63,4 +68,19 @@ describe('nextAllowedSlot', () => {
     const posts: SeededPost[] = [{ slug: 'a', publishedAt: '2026-01-01T00:00:00.000Z' }];
     expect(nextAllowedSlot(posts, 3, now)).toBe(now.toISOString());
   });
+});
+
+describe('seeded posts obey the cadence gate', () => {
+  it('has no spacing violations among seeded posts', async () => {
+    const posts = await loadSeededPosts();
+    expect(findSpacingViolations(posts, 3, SINCE)).toEqual([]);
+  }, 60_000);
+
+  it('seeds the OutdoorHours post at the rescheduled date', async () => {
+    const posts = await loadSeededPosts();
+    const outdoorHours = posts.find(
+      p => p.slug === 'twelve-places-one-weather-rule-you-set-yourself',
+    );
+    expect(outdoorHours?.publishedAt).toBe('2026-10-07T16:00:00.000Z');
+  }, 60_000);
 });

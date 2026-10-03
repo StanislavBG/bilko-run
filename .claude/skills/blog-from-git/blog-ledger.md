@@ -9,7 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
-| 2026-10-03 | twelve-places-one-weather-rule-you-set-yourself | outdoor-hours | ✅ | problem-outcome (spotlight) |
+| 2026-10-07 | twelve-places-one-weather-rule-you-set-yourself | outdoor-hours | ✅ | problem-outcome (spotlight, scheduled) |
 | 2026-10-03 | turn-your-github-year-into-a-heatmap-and-badge-wall | git-viewer | ✅ | problem-outcome (spotlight) |
 | 2026-09-26 | a-space-shooter-shrank-66-percent-to-fit-in-your-browser | escape-velocity | ✅ | shipped-note |
 | 2026-09-22 | twelve-releases-in-four-days-for-the-scheduler-view | session-manager | ✅ | shipped-note |
@@ -43,12 +43,19 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** outdoor-hours (on-list, ✅ tile), spotlight post dated 2026-10-03.
-  Owner override, verbatim 2026-10-03: "publish, lets start getting new blogs" —
-  `rotation.override: user-explicit-only` invoked to publish one more post the same day as the
-  git-viewer spotlight below, ahead of the normal ~2026-10-06 cadence window. The override covers
-  cadence TIMING only; the 3-post project cooldown and every other rotation rule still applied
-  normally when picking the subject. Re-ran the GitHub scan since 2026-09-26: still only
+- **Last project covered:** outdoor-hours (on-list, ✅ tile), spotlight post rescheduled to
+  2026-10-07T16:00:00.000Z. Originally seeded for 2026-10-03T17:26:18Z under an owner override
+  ("publish, lets start getting new blogs") the same day as the git-viewer post
+  (2026-10-03T16:08:44Z) — that put two posts on one calendar day, violating the 3-day
+  `min_gap_days` rule. **Owner overrides cover cadence TIMING only; they never bypass
+  `min_gap_days`.** Rescheduled 2026-10-03 to the next slot that honours the gap
+  (git-viewer + 3 days, 9:00 AM PDT). A one-shot `applyDataMigrationOnce` in `server/db.ts`
+  moves any already-seeded prod row to the new date exactly once, idempotently, without touching
+  a row the owner has since edited to a different date. A repo-wide test
+  (`tests/blog-cadence-gate.test.ts`) now asserts every seeded post obeys `min_gap_days`, so this
+  can't recur silently. The override covers cadence TIMING only; the 3-post project cooldown and
+  every other rotation rule still applied normally when picking the subject. Re-ran the GitHub
+  scan since 2026-09-26: still only
   `bilko-run` (host, meta) and `claude-code-session-manager` (session-manager, on cooldown) had
   pushed — no rotation-eligible project had new work, so `cadence.no_new_work_fallback: spotlight`
   fired again. Candidate order (never-covered-first, registry slug order, cooldown projects

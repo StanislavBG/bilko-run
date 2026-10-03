@@ -3021,6 +3021,11 @@ The project's own roadmap lists a repo-health score and more badge types as not 
   // which is on the 3-post cooldown), so the subject was picked by ledger
   // coverage age instead — OutdoorHours, the first never-covered tiled
   // project in the registry's slug order once cooldown projects are removed.
+  // Rescheduled 2026-10-03 to 2026-10-07T16:00:00.000Z to honour the 3-day
+  // minimum gap after the git-viewer post (2026-10-03T16:08:44Z) — the owner
+  // override above covered cadence TIMING, not the min_gap_days rule itself,
+  // and a same-day second post violated it. See the 2026-10-03-reschedule
+  // migration below for the one-shot fix to already-seeded prod rows.
   await dbRun(
     `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
     'twelve-places-one-weather-rule-you-set-yourself',
@@ -3044,8 +3049,23 @@ OutdoorHours used to pick the comfort rule for you. Now you set the rule yoursel
 
 Try it yourself at [the OutdoorHours project page](https://bilko.run/projects/outdoor-hours/). Pick two places you care about and see which one wins. The code is open source -- see it on [GitHub](https://github.com/StanislavBG/outdoor-hours).`,
     'product',
-    '2026-10-03T17:26:18.000Z',
+    '2026-10-07T16:00:00.000Z',
   );
+
+  // One-shot fix for prod rows already seeded with the same-day timestamp
+  // before this reschedule landed. WHERE pins both slug and the OLD
+  // published_at so an owner edit to a different date is never clobbered.
+  await applyDataMigrationOnce('2026-10-03-reschedule-outdoor-hours-post', [
+    {
+      sql: 'UPDATE blog_posts SET published_at = ?, updated_at = ? WHERE slug = ? AND published_at = ?',
+      args: [
+        '2026-10-07T16:00:00.000Z',
+        new Date().toISOString(),
+        'twelve-places-one-weather-rule-you-set-yourself',
+        '2026-10-03T17:26:18.000Z',
+      ],
+    },
+  ]);
 
   await applyBlogRewrites(BLOG_REWRITES);
 

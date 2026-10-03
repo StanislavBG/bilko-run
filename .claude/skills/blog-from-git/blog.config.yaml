@@ -8,7 +8,9 @@
 identity:
   site: https://bilko.run/blog
   author: Bilko            # an AI agent, NOT a human — never invent a persona, backstory, or location
-  stance: builder-to-builder, first person, witty, no corporate fluff
+  stance: >-
+    builder-to-builder, first person, witty, no corporate fluff, plain simple English (GED level
+    — see readability block below)
   reader: someone deciding whether a product is worth their attention
   post_is: a product update — what the reader can now DO, not the engineering it took
                             # binding; see grounding: below for what this means for git as a source
@@ -99,6 +101,50 @@ tones:                                  # pick exactly ONE per post; record it i
     below's host-kind rules. This is prose plus the one correct link — `links.max_ctas_per_post: 1`
     still caps it, this is not licence for a pile of CTAs.
 
+readability:                           # owner direction, 2026-10-02, verbatim: "it used GED
+                                        # language or langeu that the govement uses - simple
+                                        # english." Enforced by scripts/blog-readability.ts
+                                        # (landed by the previous PRD) — keys below MUST match the
+                                        # names that script's loadThresholdsFromConfig() reads.
+  standard: 'US Federal Plain Language Guidelines (plainlanguage.gov)'
+  reading_level: 'GED / about 8th grade'
+  max_fk_grade: 8
+  max_avg_sentence_words: 18
+  long_sentence_words: 25
+  max_long_sentences: 2
+  jargon_blocklist:                    # at minimum the defaults in scripts/blog-readability.ts
+                                        # DEFAULT_THRESHOLDS — keep the two lists in sync
+    - { term: leverage, suggestion: use }
+    - { term: utilize, suggestion: use }
+    - { term: robust, suggestion: strong }
+    - { term: seamless, suggestion: smooth }
+    - { term: orchestrate, suggestion: run }
+    - { term: idempotent, suggestion: safe to repeat }
+    - { term: latency, suggestion: delay }
+    - { term: deprecate, suggestion: retire }
+    - { term: facilitate, suggestion: help }
+    - { term: synergy, suggestion: teamwork }
+    - { term: paradigm, suggestion: model }
+    - { term: bandwidth, suggestion: time }
+    - { term: holistic, suggestion: complete }
+    - { term: streamline, suggestion: simplify }
+    - { term: actionable, suggestion: useful }
+    - { term: scalable, suggestion: able to grow }
+    - { term: optimize, suggestion: improve }
+    - { term: mitigate, suggestion: reduce }
+  checker: 'npx tsx scripts/blog-readability.ts <draft.md>'
+
+angle:                                 # owner direction, 2026-10-02, verbatim: "Focus on cool
+                                        # side of the project and the features you are blogging
+                                        # about." This is the LEAD, not a late beat.
+  lead_with: >
+    The coolest thing a reader can do, see, or play with in the project — the fun or impressive
+    part — told as what it feels like to use it, not as a feature list.
+  engineering_detail_is_excluded_unless: >
+    Bugs, refactors, and internal plumbing are left OUT of the post. The only exception: one
+    sentence of it may stay IF that sentence makes the cool part more believable (a fact that
+    backs the claim), never as a story told for its own sake.
+
 categories: [build-log, lessons, deep-dive, market, product]
 
 truth:
@@ -110,7 +156,8 @@ truth:
   no_epilogue_knowledge: >
     Later verdicts on the covered work (e.g. a fix graded NO-EFFECT afterwards) stay out of a
     backdated post; the honest in-period hedge is allowed, the grade belongs to the next post.
-  show_the_mistake: true               # the best posts contain a thing that broke
+  show_the_mistake: false              # 2026-10-02: superseded by angle: above — lead with the
+                                        # cool part, not the break; see angle.lead_with
 
 scan:
   source_of_truth: github              # gh api, never local working trees, for pushed repos
@@ -133,7 +180,10 @@ gates:                                  # a phase may not hand off until its gat
   2_scan: window from db.ts seeds; all repos enumerated; local-only pass ran; cron noise filtered
   3_research: structured notes per story unit; slot dates re-verified vs commit dates; push status known
   4_ground: every number traced to a queried source
-  5_draft: one tone held within its word range; bot-tell blocklist clean; spine present
+  5_draft: >-
+    one tone held within its word range; bot-tell blocklist clean; spine present; readability
+    checker exits 0 (npx tsx scripts/blog-readability.ts <draft.md> — plain-language gate, see
+    the readability block above)
   6_approve: autonomous gate — autonomy.autonomous_publish is true AND the phase-4/5 quality
     self-check (SKILL.md) passed; when autonomous_publish is false, this reverts to requiring an
     EXPLICIT USER OK, and peers/agents still cannot approve on the owner's behalf

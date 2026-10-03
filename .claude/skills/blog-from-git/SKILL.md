@@ -85,8 +85,13 @@ If emitting a series, each post covers one sub-theme and ends pointing at the ne
 - [ ] Zero items from the `voice.md` bot-tell blocklist?
 - [ ] Every number traced to a source I actually queried (`ground.md`), with its source implied?
 - [ ] Spine is **was → now → next** (or, for a field note, one real story), not a launch pitch?
-- [ ] **Field note only:** a real mistake/surprise; "What I'd do differently" names a concrete
-      action; FAQ entries each add a new angle. (Skip for changelog/metric/shipped-note tones.)
+- [ ] `npx tsx scripts/blog-readability.ts <draft>` exits 0? (`blog.config.yaml` `readability:` —
+      GED / ~8th-grade plain language, no blocklisted jargon)
+- [ ] **The opening paragraph names the coolest thing a reader can do with the project** — the
+      fun or impressive part, not a bug, refactor, or setup (`blog.config.yaml` `angle:`)?
+- [ ] **Field note only, optional:** a real mistake/surprise, if one earns its place as supporting
+      color; "What I'd do differently" names a concrete action; FAQ entries each add a new angle.
+      (Skip for changelog/metric/shipped-note tones.)
 - [ ] **Does a reader who has never heard of this project finish the post knowing what it does for
       them and how to try it?** (`blog.config.yaml` `tones.required_value_use_payload`: what it's
       for, who it helps, how to start, with the correct link.) FAILS if the post's main narrative

@@ -2,6 +2,34 @@
 
 Read BEFORE drafting a word of the post body.
 
+## Plain language (GED level)
+
+Owner direction, 2026-10-02: write at a GED / about 8th-grade reading level — the US Federal
+Plain Language Guidelines (plainlanguage.gov), enforced by `scripts/blog-readability.ts`
+(`blog.config.yaml` `readability:`). Every draft must pass the checker before it ships. The rules,
+in short:
+
+- **Use "you."** Talk to the reader, not about "the user."
+- **Use active voice.** "The tool scores your ad," not "your ad is scored by the tool."
+- **Use short sentences.** One idea per sentence; most posts should read easily out loud.
+- **Use common words.** Say "use," not "leverage"; say "help," not "facilitate" (full swap list in
+  `readability.jargon_blocklist`).
+- **One idea per paragraph.** If a paragraph covers two things, split it.
+- **Explain any needed technical term in plain words the first time you use it.** If a reader
+  needs the word "coverage" to understand the post, define it in one plain clause the first time.
+
+Two before/after rewrites, pulled from this file's own tone micro-examples below:
+
+Before: "Burrow's coverage number is the thing that tells you whether the brain actually saw a
+subreddit before you ask it a question."
+After: "Coverage is the number that tells you if Burrow checked a subreddit before it answers
+your question."
+
+Before: "I gave OutdoorHours a rule engine this week. The old version hard-coded what 'a
+comfortable hour' meant; now it's data, and you can see why any hour scored the way it did."
+After: "This week I added a rule engine to OutdoorHours. Before, the app had one fixed idea of a
+'comfortable hour.' Now you can see exactly why each hour got its score."
+
 ## Feature-VALUE, not changelog (the thing that keeps going wrong)
 
 The robotic failure mode isn't just bad sentences — it's writing a **list of what changed** instead
@@ -40,13 +68,13 @@ ground-every-claim rule; they differ in shape, length, and stance.
 | 4 | **Field note** (the old build-log, trimmed) | One hard bug/decision used as PROOF of a value/use point (never as the subject itself), one lesson, one concrete artifact | 500–800 w | Deep infra weeks (Burrow, signal-builder) — when the story backs a real value/use point, not for its own sake |
 | 5 | **Metric update** | Lead with the number that moved, then the 1–2 changes that moved it | 300–550 w | Projects with a live KPI (Burrow coverage %, trader vs SPY) |
 
-**Tone micro-examples** (the opening move of each):
+**Tone micro-examples** (the opening move of each — cool part first, plain words, per `angle:`):
 
-1. **Changelog** — "AdScorer now grades LinkedIn copy, not just Facebook and Google. Paste an ad, pick the platform, get the platform-specific teardown. Also shipped: faster scores, a fixed share-card bug."
-2. **Shipped note** — "I gave OutdoorHours a rule engine this week. The old version hard-coded what 'a comfortable hour' meant; now it's data, and you can see why any hour scored the way it did."
-3. **Problem → outcome** — "Writing a cold email sequence means staring at a blank draft five times. EmailForge now writes all five at once — AIDA, PAS, or Hormozi — and you edit instead of start."
-4. **Field note** — "Burrow's coverage number is the thing that tells you whether the brain actually saw a subreddit before you ask it a question. It was quietly lying: subs got visited, then forgotten, never reaching the index. One sort fixed it, and coverage is climbing again — which is the number to check before you trust an answer from `burrow-brain`." (Note: the bug is in service of "here's the number that tells you whether to trust it," not the subject on its own.)
-5. **Metric update** — "Coverage is 80.4% this week, up from a number I didn't trust last week. Two changes moved it: a selector that picks subs by how overdue they are, and a metric that stopped lying at midnight."
+1. **Changelog** — "AdScorer now grades LinkedIn copy, not just Facebook and Google. Paste your ad, pick the platform, and get a teardown built for that one. Scores are faster too, and the share-card bug is gone."
+2. **Shipped note** — "OutdoorHours can now explain itself. Open any hour and you see exactly why it got that score. The old version just said 'comfortable' with no reason why; this week I gave it a rule engine instead."
+3. **Problem → outcome** — "Staring at a blank page five times to write one email sequence is no fun. EmailForge now writes all five emails at once. Pick AIDA, PAS, or Hormozi style, and edit instead of starting from zero."
+4. **Field note** — "Burrow's coverage number tells you if the brain actually checked a subreddit before it answers your question. Coverage is climbing again this week, so you can trust that number more. One bug had it stuck: subs got checked, then forgotten, before they reached the index. A single sort fixed it." (The bug gets one sentence, in service of the number you can now trust — not the subject on its own.)
+5. **Metric update** — "Coverage is 80.4% this week. Last week I did not trust that number at all. Two fixes moved it: a smarter pick for which subs to check next, and a fix for a count that reset itself at midnight."
 
 ### Length: shorter by default
 
@@ -110,10 +138,10 @@ Two real posts already in `server/db.ts` bracket the quality range:
 - **First person, builder-to-builder.** Direct, witty, no corporate fluff. **Bilko is an AI agent,
   not a human** (memory `project_bilko_is_ai_agent`) — describe the work and the system; never
   invent a human persona, backstory, or location.
-- **Lead with the most surprising real thing**, not setup.
-- **Show the mistake, but never as the subject.** The best posts contain a thing that broke and
-  what it taught — used as evidence for a value/use point, not narrated for its own sake. "All
-  green, shipped clean" is boring and usually a lie; so is a post whose only content is the bug.
+- **Lead with the coolest thing, not setup.** Open on the coolest thing a reader can do, see, or
+  play with — the fun or impressive part, told as what it feels like to use (`angle:` in
+  `blog.config.yaml`). A bug, refactor, or internal fix stays out of the post entirely unless one
+  sentence of it makes the cool part more believable; it never becomes the subject.
 - **One spine, not a changelog.** A flat list of "also I did X, also Y" is a commit log, not a
   post — bucket the small stuff under "Also shipped."
 - **Every post tells the reader how to use the thing.** Required regardless of tone: what the

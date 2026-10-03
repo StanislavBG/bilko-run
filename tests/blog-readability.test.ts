@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   analyzeReadability,
   findProjectLinkIssues,
+  checkLiveLinks,
   DEFAULT_THRESHOLDS,
   type ProjectRegistryEntry,
 } from '../scripts/blog-readability';
@@ -210,6 +211,63 @@ describe('findProjectLinkIssues', () => {
     expect(
       report.linkIssues.some((issue) => issue.kind === 'unknown-project-link'),
     ).toBe(true);
+  });
+});
+
+describe('checkLiveLinks', () => {
+  it('passes a 200 response', async () => {
+    const fake = async () => new Response('', { status: 200 });
+    const failures = await checkLiveLinks(['https://example.com/ok'], fake as unknown as typeof fetch);
+    expect(failures).toEqual([]);
+  });
+
+  it('fails a 404 response', async () => {
+    const fake = async () => new Response('', { status: 404 });
+    const failures = await checkLiveLinks(['https://example.com/missing'], fake as unknown as typeof fetch);
+    expect(failures).toEqual([{ url: 'https://example.com/missing', status: 404 }]);
+  });
+
+  it('fails when fetch throws', async () => {
+    const fake = async () => {
+      throw new Error('network down');
+    };
+    const failures = await checkLiveLinks(['https://example.com/boom'], fake as unknown as typeof fetch);
+    expect(failures).toEqual([{ url: 'https://example.com/boom', status: 'error' }]);
+  });
+
+  it('fails on an aborted/timed-out request', async () => {
+    const fake = async (_url: string, init?: { signal?: AbortSignal }) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    const failures = await checkLiveLinks(['https://example.com/slow'], fake as unknown as typeof fetch);
+    expect(failures).toEqual([{ url: 'https://example.com/slow', status: 'error' }]);
+  }, 20_000);
+
+  it('fetches a duplicate URL only once', async () => {
+    let calls = 0;
+    const fake = async () => {
+      calls += 1;
+      return new Response('', { status: 200 });
+    };
+    const failures = await checkLiveLinks(
+      ['https://example.com/dup', 'https://example.com/dup'],
+      fake as unknown as typeof fetch,
+    );
+    expect(calls).toBe(1);
+    expect(failures).toEqual([]);
+  });
+
+  it('reports too many links instead of fetching beyond the cap', async () => {
+    let calls = 0;
+    const fake = async () => {
+      calls += 1;
+      return new Response('', { status: 200 });
+    };
+    const urls = Array.from({ length: 21 }, (_, i) => `https://example.com/${i}`);
+    const failures = await checkLiveLinks(urls, fake as unknown as typeof fetch);
+    expect(calls).toBe(0);
+    expect(failures).toEqual([{ url: 'too many links', status: 'error' }]);
   });
 });
 

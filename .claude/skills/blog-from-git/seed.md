@@ -38,6 +38,9 @@ npx tsc --noEmit -p tsconfig.json 2>&1 | grep -i db.ts    # must be clean
 pnpm test tests/db.test.ts
 timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check   # hard gap gate — must exit 0
 # if this fails: STOP — no commit, no push. Print SEED_RESULT: noop note="cadence gate check failed"
+npx tsx scripts/blog-readability.ts <draft.md> --check-live  # every https link must actually load
+# if this fails: STOP — no commit, no push. A failing link is how the post converts readers
+# into visitors of the project landing page, so a dead link means the post can't do its job.
 git add server/db.ts && git commit
 git push origin main                                       # origin only — memory feedback_always_push
 ```

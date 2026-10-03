@@ -200,6 +200,60 @@ export function findProjectLinkIssues(markdown: string, registry: ProjectRegistr
   return issues;
 }
 
+export interface LiveLinkFailure {
+  url: string;
+  status: number | 'error';
+}
+
+const BARE_HTTPS_LINK_RE = /https:\/\/[^\s)<>"]+/g;
+
+// Collects every absolute https link a reader could click: markdown link
+// targets plus bare URLs in prose. Used by --check-live, separate from
+// findLinkIssues (which flags relative/malformed links, not liveness).
+export function collectHttpsLinks(markdown: string): string[] {
+  const urls = new Set<string>();
+  for (const match of markdown.matchAll(MARKDOWN_LINK_RE)) {
+    if (/^https:\/\//i.test(match[1])) urls.add(match[1]);
+  }
+  for (const match of markdown.matchAll(BARE_HTTPS_LINK_RE)) {
+    urls.add(match[0]);
+  }
+  return [...urls];
+}
+
+export async function checkLiveLinks(
+  urls: string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<LiveLinkFailure[]> {
+  const uniqueUrls = [...new Set(urls)];
+  const failures: LiveLinkFailure[] = [];
+
+  if (uniqueUrls.length > 20) {
+    return [{ url: 'too many links', status: 'error' }];
+  }
+
+  for (const url of uniqueUrls) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const res = await fetchImpl(url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+      if (res.status < 200 || res.status > 399) {
+        failures.push({ url, status: res.status });
+      }
+    } catch {
+      failures.push({ url, status: 'error' });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  return failures;
+}
+
 export function analyzeReadability(
   markdown: string,
   opts: Partial<ReadabilityThresholds> = {},
@@ -317,11 +371,13 @@ function loadThresholdsFromConfig(): ReadabilityThresholds {
   }
 }
 
-function main(): void {
-  const file = process.argv[2];
+async function main(): Promise<number> {
+  const args = process.argv.slice(2);
+  const checkLive = args.includes('--check-live');
+  const file = args.find((a) => a !== '--check-live');
   if (!file) {
-    process.stderr.write('Usage: blog-readability.ts <file.md>\n');
-    process.exit(2);
+    process.stderr.write('Usage: blog-readability.ts <file.md> [--check-live]\n');
+    return 2;
   }
 
   let markdown: string;
@@ -329,16 +385,29 @@ function main(): void {
     markdown = readFileSync(file, 'utf-8');
   } catch {
     process.stderr.write(`blog-readability: cannot read file: ${file}\n`);
-    process.exit(2);
+    return 2;
   }
 
   const thresholds = loadThresholdsFromConfig();
   const projectRegistry = loadProjectRegistry();
   const report = analyzeReadability(markdown, thresholds, projectRegistry);
   console.log(JSON.stringify(report, null, 2));
-  process.exit(report.pass ? 0 : 1);
+
+  if (!checkLive) {
+    return report.pass ? 0 : 1;
+  }
+
+  const liveFailures = await checkLiveLinks(collectHttpsLinks(markdown));
+  if (liveFailures.length > 0) {
+    process.stderr.write('blog-readability: live link check failed:\n');
+    for (const failure of liveFailures) {
+      process.stderr.write(`  ${failure.url} -> ${failure.status}\n`);
+    }
+  }
+
+  return report.pass && liveFailures.length === 0 ? 0 : 1;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main();
+  main().then((code) => process.exit(code));
 }

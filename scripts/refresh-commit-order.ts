@@ -1,13 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * Refreshes src/data/commit-order.json — a slug → last-commit-ISO map used by
- * the Projects hub to sort cards "most recently worked on" first.
+ * Refreshes src/data/commit-order.json — a slug → last-commit-ISO map — and
+ * src/data/commit-counts.json — a slug → total-commit-count map — used by
+ * the Projects hub to sort cards "most recently worked on" / "most worked on"
+ * first.
  *
  * Why a baked sidecar: bilko.run builds on Render straight from GitHub, where
  * the sibling repos under ~/Projects/ do not exist, so we can't run `git log`
  * at build/runtime there. Instead this script runs where the siblings DO live
- * (the dev machine / nightly cron), reads each repo's last commit, and commits
- * the resulting JSON. The page just imports the JSON.
+ * (the dev machine / nightly cron), reads each repo's last commit and total
+ * commit count, and commits the resulting JSON. The page just imports the JSON.
  *
  * Slugs come from two sources:
  *   - standalone-projects.json entries that carry a `localPath`
@@ -59,6 +61,20 @@ function lastCommitISO(src: Source): string | null {
   }
 }
 
+function commitCount(src: Source): number | null {
+  const repo = expandTilde(src.path);
+  if (!existsSync(join(repo, '.git'))) return null;
+  try {
+    const args = ['-C', repo, 'rev-list', '--count', 'HEAD'];
+    if (src.subdir) args.push('--', src.subdir);
+    const out = execFileSync('git', args, { encoding: 'utf-8' }).trim();
+    const n = parseInt(out, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 // 1. Collect sources from standalone-projects.json (those with a localPath).
 const standalone = JSON.parse(
   readFileSync(resolve(ROOT, 'src/data/standalone-projects.json'), 'utf-8'),
@@ -71,13 +87,19 @@ for (const p of standalone) {
 // 2. Layer the extras (packages + mcp-host). These win on slug collisions.
 for (const [slug, src] of Object.entries(EXTRA)) sources.set(slug, src);
 
-// 3. Resolve each to an ISO date; drop the ones we can't find.
+// 3. Resolve each to an ISO date and a commit count; drop the ones we can't find.
 const order: Record<string, string> = {};
+const counts: Record<string, number> = {};
 let missing = 0;
+let missingCounts = 0;
 for (const [slug, src] of sources) {
   const iso = lastCommitISO(src);
   if (iso) order[slug] = iso;
   else { missing++; console.warn(`[refresh-commit-order] no git date for "${slug}" (${src.path})`); }
+
+  const count = commitCount(src);
+  if (count) counts[slug] = count;
+  else { missingCounts++; console.warn(`[refresh-commit-order] no commit count for "${slug}" (${src.path})`); }
 }
 
 // Sort keys by date desc so the JSON is human-readable as a leaderboard.
@@ -85,6 +107,15 @@ const sorted = Object.fromEntries(
   Object.entries(order).sort((a, b) => (a[1] < b[1] ? 1 : -1)),
 );
 
+const sortedCounts = Object.fromEntries(
+  Object.entries(counts).sort((a, b) => b[1] - a[1]),
+);
+
 const outPath = resolve(ROOT, 'src/data/commit-order.json');
 writeFileSync(outPath, JSON.stringify(sorted, null, 2) + '\n');
+
+const countsOutPath = resolve(ROOT, 'src/data/commit-counts.json');
+writeFileSync(countsOutPath, JSON.stringify(sortedCounts, null, 2) + '\n');
+
 console.log(`[refresh-commit-order] wrote ${Object.keys(sorted).length} entries (${missing} missing) → ${outPath}`);
+console.log(`[refresh-commit-order] wrote ${Object.keys(sortedCounts).length} entries (${missingCounts} missing) → ${countsOutPath}`);

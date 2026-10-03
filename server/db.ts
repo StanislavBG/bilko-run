@@ -15,8 +15,8 @@ export function getClient(): Client {
       _client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
     } else {
       // Local dev — file-based SQLite via libsql
-      mkdirSync(resolve(__dirname, '../data'), { recursive: true });
-      const dbPath = resolve(__dirname, '../data/contentgrade.db');
+      const dbPath = process.env.BILKO_SQLITE_PATH ?? resolve(__dirname, '../data/contentgrade.db');
+      mkdirSync(dirname(dbPath), { recursive: true });
       _client = createClient({ url: `file:${dbPath}` });
     }
   }

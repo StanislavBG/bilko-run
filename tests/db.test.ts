@@ -85,10 +85,65 @@ describe('Database', () => {
     expect(after.content).toBe(edited.content);
 
     // Tests share the on-disk local database (server/db.ts ignores
-    // CONTENTGRADE_DB_PATH), so leave the post as a fresh boot seeds it.
+    // CONTENTGRADE_DB_PATH), so leave the post as a fresh boot seeds it. The
+    // reinserted row's seed text still has this post's one site-relative
+    // link ([Session Manager](/projects/session-manager/)), so also clear
+    // the absolute-links migration guard — otherwise, since that migration
+    // already ran once earlier in this file's boot, it would not get a
+    // second chance to fix the freshly-reinserted row.
+    await dbRun('DELETE FROM blog_posts WHERE slug = ?', SLUG);
+    await dbRun('DELETE FROM data_migrations WHERE id = ?', MIGRATION);
+    await dbRun('DELETE FROM data_migrations WHERE id = ?', '2026-10-03-blog-absolute-links');
+    await initDb();
+    expectCorrected(await post());
+  });
+
+  it('prints every live post\'s links as absolute, clickable bilko.run/github URLs', async () => {
+    const SLUG = 'turn-your-github-year-into-a-heatmap-and-badge-wall';
+    const MIGRATION = '2026-10-03-blog-absolute-links';
+
+    // No post's body still has a site-relative markdown link, and none has a
+    // protocol-relative one either (the REPLACE this migration runs would
+    // mangle '](//host/...' into '](https://bilko.run//host/...').
+    const allContent = await dbAll<{ content: string }>('SELECT content FROM blog_posts');
+    for (const { content } of allContent) {
+      expect(content).not.toContain('](/');
+      expect(content).not.toContain('](//');
+    }
+
+    const gitViewer = (await dbGet<{ content: string }>(
+      'SELECT content FROM blog_posts WHERE slug = ?',
+      SLUG,
+    ))!;
+    expect(gitViewer.content).toContain('https://bilko.run/projects/git-viewer/');
+    expect(gitViewer.content).toContain('https://github.com/StanislavBG/git-viewer');
+
+    // Production holds a row seeded before this fix (INSERT OR IGNORE never
+    // rewrites it) and has never run the migration: one boot corrects it, a
+    // second changes nothing.
+    await dbRun('DELETE FROM data_migrations WHERE id = ?', MIGRATION);
+    await dbRun(
+      'UPDATE blog_posts SET content = ? WHERE slug = ?',
+      'GitHub gives you one flat green grid and calls it a profile. [GitViewer](/projects/git-viewer/) turns that same data into something worth looking at.\n\nYou can try it first with Bilko\'s own data at [the project page](/projects/git-viewer/). If you want your own version, the project is open source.',
+      SLUG,
+    );
+    expect((await dbGet<{ content: string }>('SELECT content FROM blog_posts WHERE slug = ?', SLUG))!.content).toContain('](/projects/git-viewer/)');
+
+    await initDb();
+    const corrected = (await dbGet<{ content: string }>('SELECT content FROM blog_posts WHERE slug = ?', SLUG))!;
+    expect(corrected.content).toContain('https://bilko.run/projects/git-viewer/');
+    expect(corrected.content).toContain('https://github.com/StanislavBG/git-viewer');
+    expect(corrected.content).not.toContain('](/');
+
+    await initDb();
+    const secondBoot = (await dbGet<{ content: string }>('SELECT content FROM blog_posts WHERE slug = ?', SLUG))!;
+    expect(secondBoot.content).toBe(corrected.content);
+    expect(await dbGet('SELECT id FROM data_migrations WHERE id = ?', MIGRATION)).toBeDefined();
+
+    // Tests share the on-disk local database, so leave the post as a fresh
+    // boot seeds it.
     await dbRun('DELETE FROM blog_posts WHERE slug = ?', SLUG);
     await dbRun('DELETE FROM data_migrations WHERE id = ?', MIGRATION);
     await initDb();
-    expectCorrected(await post());
   });
 });

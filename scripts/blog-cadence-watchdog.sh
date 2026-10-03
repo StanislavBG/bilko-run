@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily watchdog for the bilko.run blog's declared 3-5 day cadence
+# Daily watchdog for the bilko.run blog's declared 3-4 day cadence
 # (.claude/skills/blog-from-git/blog.config.yaml cadence.target_gap_days).
 # Nothing else enforces that cadence — before this script existed a
 # publishing gap could grow indefinitely and silently (see PRD: gap reached
@@ -9,10 +9,22 @@
 # SCAN vs PUBLISH: scanning (phases 1-2 of blog-from-git) runs every day,
 # unconditionally (cadence.scan_every_days). Publishing is gated on the LOWER
 # bound of cadence.target_gap_days (3) — a post is "due" once the live gap
-# reaches 3 days, not 5. The upper bound (5) stays reserved for the
+# reaches 3 days, not 4. The upper bound (4) stays reserved for the
 # over-cadence/stall heartbeat classification. A due post's subject is also
 # gated by rotation.project_cooldown_posts: a project covered in any of the
 # last 3 ledger rows is ineligible, per blog-ledger.md's recorded rows.
+#
+# HARD MINIMUM GAP (code-enforced, no override): the live-gap check above
+# reads /api/blog, which is BLIND to a post that is seeded but scheduled for
+# the future — a future published_at never shows up in that endpoint's
+# result set. That blind spot let this script compute a live gap that still
+# read "due" on the same day a previously-rescheduled post was about to go
+# live, and publish a second post that day (see PRD: 2026-10-07 00:00 PDT
+# collision with the rescheduled OutdoorHours post). scripts/blog-cadence-
+# gate.ts next-slot reads the actual seeded rows (not /api/blog) and returns
+# the true next-allowed-slot; this script checks it on every run, BEFORE the
+# existing live-gap PUBLISH_DUE decision gets to invoke anything, and fails
+# CLOSED (scan-only, no publish) if the gate is unavailable.
 #
 # TRIGGERS — this script is currently wired to run from TWO independent
 # schedulers on this machine (full detail, recommendation, and log contents:
@@ -476,6 +488,22 @@ GAP_DAYS=$(( (NOW_EPOCH - PUB_EPOCH) / 86400 ))
 
 echo "[blog-cadence-watchdog] $TODAY (PT): newest live post=$NEWEST_PUBLISHED_AT gap_days=$GAP_DAYS target_lower=$LOWER_BOUND target_upper=$UPPER_BOUND catchup_trigger=$CATCHUP_TRIGGER"
 
+# --- hard minimum gap floor, from the code-enforced cadence gate, never
+# /api/blog (see header comment: future-scheduled seeded posts are invisible
+# there). Fail CLOSED: any failure here stops before any publish claude -p
+# call gets a chance to run — not even a scan-only decision is based on a
+# value this script could not validate. ---
+set +e
+NEXT_SLOT="$(timeout 180 pnpm tsx scripts/blog-cadence-gate.ts next-slot 2>&1)"
+NEXT_SLOT_RC=$?
+set -e
+if [[ $NEXT_SLOT_RC -ne 0 || ! "$NEXT_SLOT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]; then
+  echo "[blog-cadence-watchdog] FATAL: cadence gate next-slot unavailable or returned a non-ISO value (rc=$NEXT_SLOT_RC): $NEXT_SLOT" >&2
+  write_heartbeat "error: cadence gate unavailable"
+  exit 1
+fi
+echo "[blog-cadence-watchdog] next_slot=$NEXT_SLOT"
+
 LEDGER_FILE=".claude/skills/blog-from-git/blog-ledger.md"
 RECENT_PROJECTS="$(ledger_recent_projects "$LEDGER_FILE" "$PROJECT_COOLDOWN_POSTS")"
 RECENT_PROJECTS_CSV="$(echo "$RECENT_PROJECTS" | paste -sd, -)"
@@ -526,6 +554,16 @@ When done, print exactly one line summarizing what changed since the last scan (
 PUBLISH_DUE="$(publish_due_status "$GAP_DAYS" "$LOWER_BOUND")"
 if [[ "$PUBLISH_DUE" != "due" ]]; then
   run_scan_only "The bilko.run blog's live publishing gap is ${GAP_DAYS} day(s), within the ${LOWER_BOUND}-day cadence target (not yet due to publish)."
+fi
+
+# --- hard minimum gap floor: even when the live /api/blog gap says a post is
+# due, a post already seeded for a future date can push the true next-allowed
+# slot later than today — scan only until NEXT_SLOT actually arrives. This
+# check runs even though PUBLISH_DUE said "due" above; that live gap cannot
+# see a future-scheduled seeded post, so it is not authoritative on its own. ---
+NEXT_SLOT_EPOCH="$(date -d "$NEXT_SLOT" +%s)"
+if (( NOW_EPOCH < NEXT_SLOT_EPOCH )); then
+  run_scan_only "The cadence gate's hard minimum gap (scripts/blog-cadence-gate.ts) puts the next allowed publish slot at ${NEXT_SLOT}, which is still in the future."
 fi
 
 # --- idempotent per day: a second run on the same day never seeds a second
@@ -637,6 +675,7 @@ else
   REQUIREMENTS="Autonomy: blog.config.yaml's autonomy.autonomous_publish is true (the owner's master kill switch) — that plus the phase-4/5 quality self-check in SKILL.md passing IS your phase-6 approval; do not wait for a human. Run phase 7 (seed.md) yourself, honoring every rail below:
 - $COOLDOWN_INSTRUCTIONS
 - published_at (blog.config.yaml cadence.current_post_published_at: authored_at): for every post that is NOT a catch-up backfill post, set published_at to exactly \$AUTHORED_AT = $AUTHORED_AT — this run's own authored-at timestamp, never the ship date and never a value you compute yourself. Catch-up mode backfill posts are the only exception: keep honest backdating to when the work actually shipped (blog.config.yaml backdating: honest-only), unchanged.
+- Hard minimum gap (scripts/blog-cadence-gate.ts, code-enforced, no override): published_at for EVERY post you seed this run must be an explicit ISO timestamp >= ${NEXT_SLOT} (the cadence gate's computed next-allowed-slot). Before your git commit, run \`timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check\` and it must exit 0. If it does not, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: noop note=\"cadence gate check failed\"\`, and nothing else.
 - Readability gate (blog.config.yaml readability: checker, plain-language policy — GED/8th-grade level): before committing ANY draft, run \`npx tsx scripts/blog-readability.ts <draft-file>\` and it must exit 0. If it does not, rewrite the draft to fix what it flagged and re-run the checker — up to 2 rewrite-and-recheck cycles total. If it still does not exit 0 after 2 rewrites, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"readability\"\`, and nothing else.
 - Seed by editing server/db.ts (INSERT OR IGNORE per seed.md) and, in the SAME commit, append/update .claude/skills/blog-from-git/blog-ledger.md (a row per post + the rewritten \"Current rotation state\" block).
 - Before committing, run \`npx tsc --noEmit -p tsconfig.json\` and \`pnpm test tests/db.test.ts\`. If either fails, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"<the failing check>\"\`, and nothing else.
@@ -872,6 +911,20 @@ elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
     exit 1
   fi
   echo "[blog-cadence-watchdog] $SEED_LINE"
+
+  # --- re-run the hard minimum gap check now that a seed commit has landed —
+  # the claude -p subprocess was ALSO told to run this before its own commit
+  # (REQUIREMENTS above), but this script verifies mechanically rather than
+  # trusting the subprocess's self-report, same as every other audit above. ---
+  set +e
+  POST_SEED_CHECK_OUTPUT="$(timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check 2>&1)"
+  POST_SEED_CHECK_RC=$?
+  set -e
+  if [[ $POST_SEED_CHECK_RC -ne 0 ]]; then
+    echo "[blog-cadence-watchdog] cadence gate violation after seed: $POST_SEED_CHECK_OUTPUT" >&2
+    write_heartbeat "error: cadence gate violation after seed"
+    exit 1
+  fi
 
   # --- verify live pickup at /api/blog (gates.7_seed) — the push above is
   # already done and does NOT get reverted/re-pushed on a failure here; this

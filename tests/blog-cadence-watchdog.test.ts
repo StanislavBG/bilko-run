@@ -519,7 +519,7 @@ describe('blog-cadence-watchdog.sh', () => {
       const configPath = join(__dirname, '../.claude/skills/blog-from-git/blog.config.yaml');
       const configText = readFileSync(configPath, 'utf-8');
       const line = configText.match(/target_gap_days:.*/)![0];
-      expect(line).toMatch(/\[3,\s*5\]/);
+      expect(line).toMatch(/\[3,\s*4\]/);
     });
 
     it('the early "within cadence — no action" exit before scanning has been removed', () => {
@@ -1106,6 +1106,84 @@ describe('blog-cadence-watchdog.sh', () => {
       expect(block).toMatch(/fall through to the 'no publishable material' case/);
       // that shared case (in $REQUIREMENTS) still forbids inventing a post
       expect(script).toMatch(/do NOT invent a post to satisfy cadence/);
+    });
+  });
+
+  describe('wiring to the hard minimum gap (scripts/blog-cadence-gate.ts) — PRD 1042', () => {
+    it('computes NEXT_SLOT via blog-cadence-gate.ts next-slot after the /api/blog gap computation, fails closed on error or a non-ISO value', () => {
+      const invocationIndex = script.indexOf('pnpm tsx scripts/blog-cadence-gate.ts next-slot');
+      const gapComputationIndex = script.indexOf('GAP_DAYS=$(( (NOW_EPOCH - PUB_EPOCH)');
+      expect(invocationIndex).toBeGreaterThan(-1);
+      expect(gapComputationIndex).toBeGreaterThan(-1);
+      expect(invocationIndex).toBeGreaterThan(gapComputationIndex);
+
+      // must not run within the CLAUDE.md/publish claude -p invocation before it
+      const publishInvocationIndex = script.indexOf('claude -p "$PROMPT"');
+      expect(publishInvocationIndex).toBeGreaterThan(-1);
+      expect(invocationIndex).toBeLessThan(publishInvocationIndex);
+
+      const block = script.slice(invocationIndex - 20, invocationIndex + 600);
+      expect(block).toMatch(/timeout 180 pnpm tsx scripts\/blog-cadence-gate\.ts next-slot/);
+      expect(block).toMatch(/NEXT_SLOT_RC -ne 0 \|\| ! "\$NEXT_SLOT" =~ \^\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}T/);
+      expect(block).toMatch(/write_heartbeat "error: cadence gate unavailable"/);
+      expect(block).toMatch(/exit 1/);
+      // fail-closed: the fatal branch itself must not invoke any publishing claude -p
+      expect(block).not.toMatch(/claude -p/);
+    });
+
+    it('scans only (never publishes) when now is earlier than NEXT_SLOT, even if the live gap says a post is due', () => {
+      const publishDueIndex = script.indexOf('PUBLISH_DUE="$(publish_due_status');
+      const nextSlotCompareIndex = script.indexOf('NEXT_SLOT_EPOCH="$(date -d "$NEXT_SLOT" +%s)"');
+      const sameDayLockIndex = script.indexOf('idempotent per day');
+      const publishInvocationIndex = script.indexOf('claude -p "$PROMPT"');
+
+      expect(publishDueIndex).toBeGreaterThan(-1);
+      expect(nextSlotCompareIndex).toBeGreaterThan(-1);
+      expect(sameDayLockIndex).toBeGreaterThan(-1);
+      expect(publishInvocationIndex).toBeGreaterThan(-1);
+
+      // placed immediately after PUBLISH_DUE, and before both the same-day
+      // lock and the actual publish invocation — so it precedes every path
+      // to a publishing claude -p call
+      expect(nextSlotCompareIndex).toBeGreaterThan(publishDueIndex);
+      expect(nextSlotCompareIndex).toBeLessThan(sameDayLockIndex);
+      expect(nextSlotCompareIndex).toBeLessThan(publishInvocationIndex);
+
+      const block = script.slice(nextSlotCompareIndex, nextSlotCompareIndex + 500);
+      expect(block).toMatch(/if \(\( NOW_EPOCH < NEXT_SLOT_EPOCH \)\); then/);
+      expect(block).toMatch(/run_scan_only/);
+      expect(block).toMatch(/NEXT_SLOT/);
+    });
+
+    it('both publishing PROMPT strings require published_at >= NEXT_SLOT and a passing cadence-gate check before commit, else SEED_RESULT: noop', () => {
+      const consumeTemplateIndex = script.indexOf('${#EXISTING_DRAFTS[@]} draft(s) are already pending');
+      const fullPipelineTemplateIndex = script.indexOf('running PHASES 1-7');
+      expect(consumeTemplateIndex).toBeGreaterThan(-1);
+      expect(fullPipelineTemplateIndex).toBeGreaterThan(-1);
+
+      // both templates interpolate $REQUIREMENTS, which is where this text lives
+      const consumeTemplateBlock = script.slice(consumeTemplateIndex, consumeTemplateIndex + 3000);
+      const fullPipelineTemplateBlock = script.slice(fullPipelineTemplateIndex, fullPipelineTemplateIndex + 3000);
+      expect(consumeTemplateBlock).toMatch(/\$REQUIREMENTS/);
+      expect(fullPipelineTemplateBlock).toMatch(/\$REQUIREMENTS/);
+
+      expect(script).toMatch(/published_at for EVERY post you seed this run must be an explicit ISO timestamp >= \$\{NEXT_SLOT\}/);
+      expect(script).toMatch(/timeout 180 pnpm tsx scripts\/blog-cadence-gate\.ts check/);
+      expect(script).toMatch(/SEED_RESULT: noop note=\\"cadence gate check failed\\"/);
+    });
+
+    it('re-runs the cadence gate check after a SEED_RESULT: published run, writing a distinct error heartbeat and exiting 1 on violation', () => {
+      const publishedBranchIndex = script.indexOf('SEED_RESULT:\\ published=*');
+      const liveVerifyIndex = script.indexOf('verify live pickup at /api/blog');
+      expect(publishedBranchIndex).toBeGreaterThan(-1);
+      expect(liveVerifyIndex).toBeGreaterThan(-1);
+      expect(publishedBranchIndex).toBeLessThan(liveVerifyIndex);
+
+      const block = script.slice(publishedBranchIndex, liveVerifyIndex);
+      expect(block).toMatch(/timeout 180 pnpm tsx scripts\/blog-cadence-gate\.ts check/);
+      expect(block).toMatch(/POST_SEED_CHECK_RC -ne 0/);
+      expect(block).toMatch(/write_heartbeat "error: cadence gate violation after seed"/);
+      expect(block).toMatch(/exit 1/);
     });
   });
 });

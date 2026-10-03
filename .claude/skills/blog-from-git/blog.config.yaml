@@ -62,9 +62,10 @@ cadence:
                                    # the systemd/cron timers (docs/blog-watchdog.md), not this
                                    # value; blog-cadence-watchdog.sh FATALs if this ever drifts
                                    # from 1, so the two stay honest with each other.
-  target_gap_days: [3, 5]        # LOWER bound (3) gates "a post is due" for publishing; UPPER
-                                  # bound (5) stays the threshold for the over-cadence/stall
-                                  # heartbeat classification (heartbeat_status_for_outcome).
+  target_gap_days: [3, 4]        # owner policy: publish every 3-4 days. LOWER bound (3) gates "a
+                                  # post is due" for publishing; UPPER bound (4) is the stall
+                                  # threshold — the over-cadence/stall heartbeat classification
+                                  # (heartbeat_status_for_outcome).
   min_gap_days: 3                # HARD rule: no two posts may publish less than this many days
                                  # apart. This is code-enforced (scripts/blog-cadence-gate.ts) and
                                  # no override — including rotation.override — may bypass it.

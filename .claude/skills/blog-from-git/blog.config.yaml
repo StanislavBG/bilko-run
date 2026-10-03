@@ -65,6 +65,12 @@ cadence:
   target_gap_days: [3, 5]        # LOWER bound (3) gates "a post is due" for publishing; UPPER
                                   # bound (5) stays the threshold for the over-cadence/stall
                                   # heartbeat classification (heartbeat_status_for_outcome).
+  min_gap_days: 3                # HARD rule: no two posts may publish less than this many days
+                                 # apart. This is code-enforced (scripts/blog-cadence-gate.ts) and
+                                 # no override — including rotation.override — may bypass it.
+  min_gap_enforced_since: '2026-10-01T00:00:00.000Z' # only pairs whose LATER post is at/after this
+                                 # timestamp are checked; this is a HARD rule with no override,
+                                 # including rotation.override, from this date forward.
   catchup_trigger_days: 10       # gap beyond this → catch-up mode (backfill queue)
   backdating: honest-only        # a backdated published_at must match when the WORK shipped;
                                  # never backdate a post about work that hadn't happened yet

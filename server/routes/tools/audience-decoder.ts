@@ -1,16 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { askGemini } from '../../gemini.js';
-import { hasPurchased } from '../../services/stripe.js';
 import { PRODUCT_KEYS } from '../../../shared/product-catalog.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg, parseResult,
-  enforceCallLimits, isAdminEmail,
+  enforceCallLimits, isAdminEmail, entitlementEmail,
 } from './_shared.js';
-import { verifyClerkToken } from '../../clerk.js';
 
 export function registerAudienceDecoderRoutes(app: FastifyInstance): void {
   app.post('/api/demos/audience-decoder', async (req, reply) => {
-    const body = req.body as { content?: string; email?: string } | null;
+    const body = req.body as { content?: string } | null;
     const content = (body?.content ?? '').trim();
     if (!content || content.length < 50) {
       reply.status(400);
@@ -23,8 +21,8 @@ export function registerAudienceDecoderRoutes(app: FastifyInstance): void {
 
     // AudienceDecoder is a one-time purchase product — check hasPurchased instead of subscription
     const _adIpHash = hashIp(req.ip);
-    const _adEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const _adRate = await checkRateLimit(_adIpHash, 'audience-decoder', _adEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
+    const _adVerifiedEmail = await entitlementEmail(req);
+    const _adRate = await checkRateLimit(_adIpHash, 'audience-decoder', _adVerifiedEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
     if (!_adRate.allowed) {
       reply.status(429);
       return {
@@ -35,8 +33,7 @@ export function registerAudienceDecoderRoutes(app: FastifyInstance): void {
         message: _adRate.isPro ? paidGateMsg(_adRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const _adVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const _adCostLimit = await enforceCallLimits({ userEmail: _adVerifiedEmail, ipHash: _adIpHash, isAdmin: _adVerifiedEmail ? isAdminEmail(_adVerifiedEmail) : false, appSlug: 'audience-decoder' });
+    const _adCostLimit = await enforceCallLimits({ userEmail: _adVerifiedEmail ?? null, ipHash: _adIpHash, isAdmin: _adVerifiedEmail ? isAdminEmail(_adVerifiedEmail) : false, appSlug: 'audience-decoder' });
     if (!_adCostLimit.ok) { reply.status(_adCostLimit.status); return { error: _adCostLimit.reason }; }
 
     const systemPrompt = `You are an audience intelligence analyst. Analyze the creator's content portfolio and return a JSON object.
@@ -116,7 +113,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
   });
 
   app.post('/api/demos/audience-decoder/compare', async (req, reply) => {
-    const body = req.body as { content_a?: string; content_b?: string; email?: string } | null;
+    const body = req.body as { content_a?: string; content_b?: string } | null;
     const contentA = (body?.content_a ?? '').trim();
     const contentB = (body?.content_b ?? '').trim();
     if (!contentA || contentA.length < 50 || !contentB || contentB.length < 50) {
@@ -129,8 +126,8 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
     }
 
     const adcIpHash = hashIp(req.ip);
-    const adcEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const adcRate = await checkRateLimit(adcIpHash, 'audience-decoder', adcEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
+    const adcVerifiedEmail = await entitlementEmail(req);
+    const adcRate = await checkRateLimit(adcIpHash, 'audience-decoder', adcVerifiedEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
     if (!adcRate.allowed) {
       reply.status(429);
       return {
@@ -141,8 +138,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         message: adcRate.isPro ? paidGateMsg(adcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const adcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const adcCostLimit = await enforceCallLimits({ userEmail: adcVerifiedEmail, ipHash: adcIpHash, isAdmin: adcVerifiedEmail ? isAdminEmail(adcVerifiedEmail) : false, appSlug: 'audience-decoder' });
+    const adcCostLimit = await enforceCallLimits({ userEmail: adcVerifiedEmail ?? null, ipHash: adcIpHash, isAdmin: adcVerifiedEmail ? isAdminEmail(adcVerifiedEmail) : false, appSlug: 'audience-decoder' });
     if (!adcCostLimit.ok) { reply.status(adcCostLimit.status); return { error: adcCostLimit.reason }; }
 
     const analyzeSystemPrompt = `You are an audience intelligence analyst. Analyze the creator's content portfolio and return a JSON object.

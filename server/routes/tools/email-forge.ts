@@ -2,9 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  enforceCallLimits, isAdminEmail,
+  enforceCallLimits, isAdminEmail, entitlementEmail,
 } from './_shared.js';
-import { verifyClerkToken } from '../../clerk.js';
 
 export function registerEmailForgeRoutes(app: FastifyInstance): void {
   // ── Email Forge ──────────────────────────────────────
@@ -15,7 +14,6 @@ export function registerEmailForgeRoutes(app: FastifyInstance): void {
       audience?: string;
       goal?: string;
       tone?: string;
-      email?: string;
     } | null;
     const product = (body?.product ?? '').trim();
     const audience = (body?.audience ?? '').trim();
@@ -40,8 +38,8 @@ export function registerEmailForgeRoutes(app: FastifyInstance): void {
     }
 
     const _efIpHash = hashIp(req.ip);
-    const _efEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const _efRate = await checkRateLimit(_efIpHash, 'email-forge', _efEmail);
+    const _efVerifiedEmail = await entitlementEmail(req);
+    const _efRate = await checkRateLimit(_efIpHash, 'email-forge', _efVerifiedEmail);
     if (!_efRate.allowed) {
       reply.status(429);
       return {
@@ -52,8 +50,7 @@ export function registerEmailForgeRoutes(app: FastifyInstance): void {
         message: _efRate.isPro ? paidGateMsg(_efRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const _efVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const _efLimit = await enforceCallLimits({ userEmail: _efVerifiedEmail, ipHash: _efIpHash, isAdmin: _efVerifiedEmail ? isAdminEmail(_efVerifiedEmail) : false, appSlug: 'email-forge' });
+    const _efLimit = await enforceCallLimits({ userEmail: _efVerifiedEmail ?? null, ipHash: _efIpHash, isAdmin: _efVerifiedEmail ? isAdminEmail(_efVerifiedEmail) : false, appSlug: 'email-forge' });
     if (!_efLimit.ok) { reply.status(_efLimit.status); return { error: _efLimit.reason }; }
 
     const GOAL_LABELS: Record<string, string> = {
@@ -142,7 +139,6 @@ Make each email feel distinct — different frameworks, different emotional leve
     const body = req.body as {
       product_a?: string; audience_a?: string; goal_a?: string; tone_a?: string;
       product_b?: string; audience_b?: string; goal_b?: string; tone_b?: string;
-      email?: string;
     } | null;
 
     const productA = (body?.product_a ?? '').trim();
@@ -172,8 +168,8 @@ Make each email feel distinct — different frameworks, different emotional leve
     }
 
     const efcIpHash = hashIp(req.ip);
-    const efcEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const efcRate = await checkRateLimit(efcIpHash, 'email-forge', efcEmail);
+    const efcVerifiedEmail = await entitlementEmail(req);
+    const efcRate = await checkRateLimit(efcIpHash, 'email-forge', efcVerifiedEmail);
     if (!efcRate.allowed) {
       reply.status(429);
       return {
@@ -184,8 +180,7 @@ Make each email feel distinct — different frameworks, different emotional leve
         message: efcRate.isPro ? paidGateMsg(efcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const efcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const efcLimit = await enforceCallLimits({ userEmail: efcVerifiedEmail, ipHash: efcIpHash, isAdmin: efcVerifiedEmail ? isAdminEmail(efcVerifiedEmail) : false, appSlug: 'email-forge' });
+    const efcLimit = await enforceCallLimits({ userEmail: efcVerifiedEmail ?? null, ipHash: efcIpHash, isAdmin: efcVerifiedEmail ? isAdminEmail(efcVerifiedEmail) : false, appSlug: 'email-forge' });
     if (!efcLimit.ok) { reply.status(efcLimit.status); return { error: efcLimit.reason }; }
 
     const systemPrompt = `You are an elite email copywriter who has studied AIDA, PAS, Hormozi, Cialdini, and narrative frameworks deeply. You write high-converting email sequences for real businesses.

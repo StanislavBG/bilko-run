@@ -30,15 +30,17 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, rm, mkdir, stat } from 'node:fs/promises';
-import { existsSync, mkdirSync } from 'node:fs';
+import { readFile, writeFile, rm, mkdir, stat, cp, rename } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { ManifestSchema } from './manifest-schema.js';
 import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables } from './db.js';
 import { runGates, gateSummary, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
+import { withPublishCheckout, type PublishOutcome } from './publish-checkout.js';
 
 const exec = promisify(execFile);
 
@@ -49,6 +51,11 @@ const HOST_ROOT = resolve(__dirname, '..', '..');
 const REGISTRY_JSON = resolve(HOST_ROOT, 'src/data/standalone-projects.json');
 const HOST_CONTRACT = resolve(HOST_ROOT, 'docs/host-contract.md');
 const PUBLIC_PROJECTS = resolve(HOST_ROOT, 'public/projects');
+
+// Mirrors publish-checkout.ts's own default — that file isn't exported here
+// because status just inspects the checkout, it doesn't drive it.
+const PUBLISH_CHECKOUT_DIR =
+  process.env.BILKO_PUBLISH_CHECKOUT || resolve(homedir(), '.local/state/bilko-host/publish-checkout');
 
 // ── Manifest UPSERT ───────────────────────────────────────────────────────
 async function upsertManifest(manifest: ReturnType<typeof ManifestSchema.parse>): Promise<void> {
@@ -83,14 +90,14 @@ async function upsertManifest(manifest: ReturnType<typeof ManifestSchema.parse>)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
-async function readRegistry(): Promise<RegistryProject[]> {
-  const raw = await readFile(REGISTRY_JSON, 'utf8');
+async function readRegistry(root: string): Promise<RegistryProject[]> {
+  const raw = await readFile(resolve(root, 'src/data/standalone-projects.json'), 'utf8');
   return parseRegistry(raw);
 }
 
-async function writeRegistry(projects: RegistryProject[]): Promise<void> {
+async function writeRegistry(root: string, projects: RegistryProject[]): Promise<void> {
   const validated = RegistrySchema.parse(projects);
-  await writeFile(REGISTRY_JSON, JSON.stringify(validated, null, 2) + '\n', 'utf8');
+  await writeFile(resolve(root, 'src/data/standalone-projects.json'), JSON.stringify(validated, null, 2) + '\n', 'utf8');
 }
 
 async function gitInHost(...args: string[]): Promise<string> {
@@ -98,33 +105,17 @@ async function gitInHost(...args: string[]): Promise<string> {
   return stdout.trim();
 }
 
-async function commitAndPush(message: string, paths: string[]): Promise<{ committed: boolean; pushed: boolean; details: string }> {
-  // Stage only the paths we touched.
-  await exec('git', ['add', '--', ...paths], { cwd: HOST_ROOT });
-  // Anything to commit?
-  const { stdout: status } = await exec('git', ['status', '--porcelain', '--', ...paths], { cwd: HOST_ROOT });
-  if (!status.trim()) {
-    return { committed: false, pushed: false, details: 'no changes to commit' };
-  }
-  await exec('git', ['commit', '-m', message], { cwd: HOST_ROOT });
-  const lines: string[] = [`committed: ${message}`];
-  // Push to origin only. content-grade is a separate, unrelated project
-  // (histories diverged) — never push there, per the host's CLAUDE.md rule.
-  try {
-    const a = await exec('git', ['push', 'origin', 'main'], { cwd: HOST_ROOT });
-    lines.push(`origin: ${(a.stderr || a.stdout).trim().split('\n').slice(-1)[0]}`);
-  } catch (e: unknown) {
-    lines.push(`origin push FAILED: ${(e as Error).message}`);
-    return { committed: true, pushed: false, details: lines.join('\n') };
-  }
-  return { committed: true, pushed: true, details: lines.join('\n') };
-}
-
 function ok(text: string) {
   return { content: [{ type: 'text' as const, text }] };
 }
 function err(text: string) {
   return { content: [{ type: 'text' as const, text: `ERROR: ${text}` }], isError: true };
+}
+function checkoutErr<T>(outcome: PublishOutcome<T> & { ok: false }) {
+  return err(`publish checkout failed at stage "${outcome.stage}": ${outcome.error}`);
+}
+function pushedLine<T>(outcome: PublishOutcome<T> & { ok: true }): string {
+  return outcome.committed ? `pushed: ${outcome.sha}` : 'no changes to commit';
 }
 
 // ── Server ───────────────────────────────────────────────────────────────
@@ -163,7 +154,7 @@ server.registerTool(
   },
   async () => {
     try {
-      const standalone = await readRegistry();
+      const standalone = await readRegistry(HOST_ROOT);
       const counts = {
         standalone: standalone.length,
         public_projects_dirs: existsSync(PUBLIC_PROJECTS)
@@ -174,7 +165,8 @@ server.registerTool(
         standalone,
         notes: [
           `react-route apps live in src/config/tools.ts and aren't returned here.`,
-          `Sources: ${REGISTRY_JSON}`,
+          `Sources: ${REGISTRY_JSON} (this process's local host checkout).`,
+          `The authoritative copy lives on origin/main — this local copy can lag behind a publish made from another checkout.`,
         ],
         counts: { standalone: counts.standalone, public_projects_dirs: await counts.public_projects_dirs },
       };
@@ -191,7 +183,7 @@ server.registerTool(
   {
     title: 'Register a static-path app',
     description:
-      'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app shows up on /, /products, and ⌘K. Set autoCommit=true to also commit + push to origin so Render auto-deploys.',
+      'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app shows up on /, /products, and ⌘K. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
     inputSchema: {
       slug: SlugSchema.describe('URL slug, kebab-case. Example: "outdoor-hours". Path will be /projects/<slug>/.'),
       name: z.string().min(1).describe('Display name. Example: "OutdoorHours".'),
@@ -202,41 +194,41 @@ server.registerTool(
       sourceRepo: z.string().optional().describe('e.g. "github.com/StanislavBG/outdoor-hours"'),
       localPath: z.string().optional().describe('e.g. "~/Projects/Outdoor-Hours"'),
       tags: z.array(z.string()).optional().describe('Up to ~3 short tags, e.g. ["Free", "WebGPU"].'),
-      autoCommit: z.boolean().default(true).describe('Also commit + push to origin.'),
     },
   },
-  async ({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags, autoCommit }) => {
+  async ({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags }) => {
     try {
-      const projects = await readRegistry();
-      if (projects.some(p => p.slug === slug)) {
-        return err(`slug "${slug}" already registered. Use unregister_project first if you want to replace it.`);
-      }
-      const entry: RegistryProject = {
-        slug,
-        name,
-        tagline,
-        category,
-        status,
-        year,
-        host: {
-          kind: 'static-path',
-          path: `/projects/${slug}/`,
-          ...(sourceRepo ? { sourceRepo } : {}),
-          ...(localPath ? { localPath } : {}),
-        },
-        ...(tags && tags.length ? { tags } : {}),
-      };
-      projects.push(entry);
-      await writeRegistry(projects);
+      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
+        const projects = await readRegistry(root);
+        if (projects.some(p => p.slug === slug)) {
+          throw new Error(`slug "${slug}" already registered. Use unregister_project first if you want to replace it.`);
+        }
+        const entry: RegistryProject = {
+          slug,
+          name,
+          tagline,
+          category,
+          status,
+          year,
+          host: {
+            kind: 'static-path',
+            path: `/projects/${slug}/`,
+            ...(sourceRepo ? { sourceRepo } : {}),
+            ...(localPath ? { localPath } : {}),
+          },
+          ...(tags && tags.length ? { tags } : {}),
+        };
+        projects.push(entry);
+        await writeRegistry(root, projects);
+        return {
+          result: { slug },
+          paths: ['src/data/standalone-projects.json'],
+          message: `registry: add ${slug} (${name})`,
+        };
+      });
 
-      const lines = [`registered: ${slug} → /projects/${slug}/`];
-      if (autoCommit) {
-        const r = await commitAndPush(`registry: add ${slug} (${name})`, ['src/data/standalone-projects.json']);
-        lines.push(r.details);
-      } else {
-        lines.push('(not committed — pass autoCommit=true to ship)');
-      }
-      return ok(lines.join('\n'));
+      if (!outcome.ok) return checkoutErr(outcome);
+      return ok([`registered: ${slug} → /projects/${slug}/`, pushedLine(outcome)].join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);
     }
@@ -249,39 +241,40 @@ server.registerTool(
   {
     title: 'Unregister a static-path app',
     description:
-      'Removes a project from the host registry by slug. Does NOT delete the public/projects/<slug>/ directory — pass deleteAssets=true to also rm -rf those bytes. Use this when retiring an app or before re-registering with different metadata.',
+      'Removes a project from the host registry by slug. Does NOT delete the public/projects/<slug>/ directory — pass deleteAssets=true to also rm -rf those bytes. Use this when retiring an app or before re-registering with different metadata. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main.',
     inputSchema: {
       slug: SlugSchema,
       deleteAssets: z.boolean().default(false).describe('Also remove public/projects/<slug>/.'),
-      autoCommit: z.boolean().default(true).describe('Also commit + push.'),
     },
   },
-  async ({ slug, deleteAssets, autoCommit }) => {
+  async ({ slug, deleteAssets }) => {
     try {
-      const projects = await readRegistry();
-      const next = projects.filter(p => p.slug !== slug);
-      if (next.length === projects.length) {
-        return err(`slug "${slug}" not found in registry.`);
-      }
-      await writeRegistry(next);
-      const paths = ['src/data/standalone-projects.json'];
-      const lines = [`unregistered: ${slug}`];
-
-      if (deleteAssets) {
-        const dir = projectDir(PUBLIC_PROJECTS, slug);
-        if (existsSync(dir)) {
-          await rm(dir, { recursive: true, force: true });
-          lines.push(`removed: ${dir}`);
-          paths.push(`public/projects/${slug}`);
+      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
+        const projects = await readRegistry(root);
+        const next = projects.filter(p => p.slug !== slug);
+        if (next.length === projects.length) {
+          throw new Error(`slug "${slug}" not found in registry.`);
         }
-      }
+        await writeRegistry(root, next);
+        const paths = ['src/data/standalone-projects.json'];
+        const removed: string[] = [];
 
-      if (autoCommit) {
-        const r = await commitAndPush(`registry: remove ${slug}`, paths);
-        lines.push(r.details);
-      } else {
-        lines.push('(not committed — pass autoCommit=true to ship)');
-      }
+        if (deleteAssets) {
+          const dir = projectDir(resolve(root, 'public/projects'), slug);
+          if (existsSync(dir)) {
+            await rm(dir, { recursive: true, force: true });
+            removed.push(dir);
+            paths.push(`public/projects/${slug}`);
+          }
+        }
+
+        return { result: { removed }, paths, message: `registry: remove ${slug}` };
+      });
+
+      if (!outcome.ok) return checkoutErr(outcome);
+      const lines = [`unregistered: ${slug}`];
+      for (const dir of outcome.result.removed) lines.push(`removed: ${dir}`);
+      lines.push(pushedLine(outcome));
       return ok(lines.join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);
@@ -295,18 +288,17 @@ server.registerTool(
   {
     title: 'Publish a static-path app build',
     description:
-      'Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs five publish gates (manifest, budget, golden, a11y, audit) before copying. Any non-bypassed gate failure blocks the publish. Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged.',
+      'Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs five publish gates (manifest, budget, golden, a11y, audit) before copying. Any non-bypassed gate failure blocks the publish. Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
     inputSchema: {
       slug: SlugSchema,
       distPath: z.string().describe('Absolute path to the built dist/ directory in the sibling repo. Example: "/home/bilko/Projects/Outdoor-Hours/dist".'),
       sourceRepoPath: z.string().optional().describe('Absolute path to the sibling repo root (e.g. "/home/bilko/Projects/Stack-Audit"). Required for golden and audit gates.'),
       bypass: z.string().optional().describe('Comma-separated gate names to skip, e.g. "a11y" or "golden,audit". Each bypass is logged.'),
       bypassReason: z.string().optional().describe('Required justification when bypass is set. Logged to publish_overrides.'),
-      autoCommit: z.boolean().default(true),
       requireRegistered: z.boolean().default(true).describe('Refuse to publish a slug that isn\'t in the registry.'),
     },
   },
-  async ({ slug, distPath, sourceRepoPath, bypass, bypassReason, autoCommit, requireRegistered }) => {
+  async ({ slug, distPath, sourceRepoPath, bypass, bypassReason, requireRegistered }) => {
     try {
       // Sanity: dist exists and looks like a build.
       const distAbs = resolve(distPath);
@@ -317,15 +309,7 @@ server.registerTool(
         return err(`distPath has no index.html — not a Vite build? (${distAbs})`);
       }
 
-      // Sanity: slug registered (unless caller opts out).
-      if (requireRegistered) {
-        const projects = await readRegistry();
-        const p = projects.find(x => x.slug === slug);
-        if (!p) return err(`slug "${slug}" is not registered. Call register_static_project first.`);
-        if (p.host.kind !== 'static-path') return err(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
-      }
-
-      // Run publish gates.
+      // Run publish gates against distPath, outside the publish checkout/lock.
       const bypassResult = parseBypass(bypass, bypassReason);
       if ('error' in bypassResult) {
         return err(bypassResult.error);
@@ -371,11 +355,36 @@ server.registerTool(
         };
       }
 
-      // Gates passed — replace public/projects/<slug>/ atomically-ish (rm + cp -r).
-      const target = projectDir(PUBLIC_PROJECTS, slug);
-      await rm(target, { recursive: true, force: true });
-      await mkdir(dirname(target), { recursive: true });
-      await exec('cp', ['-r', distAbs, target]);
+      // Gates passed — copy + swap + commit + push, all inside the publish checkout.
+      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
+        if (requireRegistered) {
+          const projects = await readRegistry(root);
+          const p = projects.find(x => x.slug === slug);
+          if (!p) throw new Error(`slug "${slug}" is not registered. Call register_static_project first.`);
+          if (p.host.kind !== 'static-path') throw new Error(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
+        }
+
+        const publicProjects = resolve(root, 'public/projects');
+        const target = projectDir(publicProjects, slug);
+        const incoming = `${target}.incoming-${process.pid}`;
+        const oldAside = `${target}.old-${process.pid}`;
+
+        // Clean up any stale incoming dir from a previous failed attempt before
+        // copying — a failure here must never touch `target`.
+        await rm(incoming, { recursive: true, force: true });
+        await mkdir(dirname(incoming), { recursive: true });
+        await cp(distAbs, incoming, { recursive: true });
+
+        if (existsSync(target)) {
+          await rename(target, oldAside);
+        }
+        await rename(incoming, target);
+        await rm(oldAside, { recursive: true, force: true });
+
+        return { result: { target }, paths: [`public/projects/${slug}`], message: `publish: ${slug} build` };
+      });
+
+      if (!outcome.ok) return checkoutErr(outcome);
 
       // Write manifest row to host DB (best-effort — don't fail the publish if DB is down).
       if (ctx.manifest) {
@@ -388,14 +397,9 @@ server.registerTool(
 
       const lines = [
         `gates: ${results.map(r => `${r.name}=${r.status}`).join(', ')}`,
-        `published: ${distAbs} → ${target}`,
+        `published: ${distAbs} → public/projects/${slug}`,
+        pushedLine(outcome),
       ];
-      if (autoCommit) {
-        const r = await commitAndPush(`publish: ${slug} build`, [`public/projects/${slug}`]);
-        lines.push(r.details);
-      } else {
-        lines.push('(not committed — pass autoCommit=true to ship)');
-      }
       return ok(lines.join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);
@@ -409,7 +413,7 @@ server.registerTool(
   {
     title: 'Host status',
     description:
-      'Returns the host repo\'s current git status (uncommitted files), the last 5 commits, and the current branch. Use to verify a publish landed cleanly.',
+      'Returns the host repo\'s current git status (uncommitted files), the last 5 commits, and the current branch — plus the publish checkout\'s own HEAD sha and whether it matches origin/main. Use to verify a publish landed cleanly.',
     inputSchema: {},
   },
   async () => {
@@ -417,6 +421,25 @@ server.registerTool(
       const branch = await gitInHost('rev-parse', '--abbrev-ref', 'HEAD');
       const status = await gitInHost('status', '--short');
       const log = await gitInHost('log', '--oneline', '-5');
+
+      let checkoutLines: string[];
+      if (!existsSync(PUBLISH_CHECKOUT_DIR)) {
+        checkoutLines = ['publish checkout: not yet created (no publish has run from this host yet)'];
+      } else {
+        try {
+          const { stdout: headOut } = await exec('git', ['rev-parse', 'HEAD'], { cwd: PUBLISH_CHECKOUT_DIR });
+          const { stdout: originOut } = await exec('git', ['rev-parse', 'origin/main'], { cwd: PUBLISH_CHECKOUT_DIR });
+          const head = headOut.trim();
+          const origin = originOut.trim();
+          checkoutLines = [
+            `publish checkout HEAD: ${head}`,
+            `publish checkout == origin/main: ${head === origin}`,
+          ];
+        } catch (e: unknown) {
+          checkoutLines = [`publish checkout: failed to read git state: ${(e as Error).message}`];
+        }
+      }
+
       return ok([
         `branch: ${branch}`,
         '',
@@ -425,6 +448,8 @@ server.registerTool(
         '',
         'last 5 commits:',
         log,
+        '',
+        ...checkoutLines,
       ].join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);

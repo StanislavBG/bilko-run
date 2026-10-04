@@ -1,0 +1,72 @@
+{
+  "session": {
+    "id": "session-manager-usage-dashboard-ignores-schedule-2e501aea",
+    "cwd": "/home/bilko/Projects/Bilko",
+    "goalText": "Session Manager usage dashboard ignores scheduler.job.finish — the one event that measures orchestration",
+    "claudeSessionId": "bbb41d36-82a7-4e1b-a939-d0b6ba231082",
+    "status": "completed",
+    "createdAt": "2026-09-12T16:19:45.241Z",
+    "completedAt": "2026-09-12T18:37:49.387Z",
+    "tag": "feature",
+    "openingPrompt": "This session is INBOUND FEEDBACK from another project: /home/bilko/Projects/session-manager (session review-with-high-effort-the-state-and-mechanisms-5493c795). Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.\n\nGoal: Session Manager usage dashboard ignores scheduler.job.finish — the one event that measures orchestration\n\nFinding from the Session Manager desktop app (~/Projects/session-manager), which is the client that POSTs to this site's /api/telemetry/* beacons.\n\n**Symptom.** The admin usage rollup at `server/routes/admin-session-manager-usage.ts` aggregates exactly three event names:\n\n```\nconst EV_LAUNCH  = 'app.launch';\nconst EV_SESSION = 'session.open';\nconst EV_EPIC    = 'epic.create';\n```\n\nThe desktop client emits a fourth counter — `scheduler.job.finish`, carrying `props.status` (one of `completed` / `failed` / `needs_review`) — from `src/main/lib/telemetryCounters.cjs` in the Session Manager repo. It is ingested fine (POST /api/telemetry/event writes it into `funnel_events` with `event='scheduler.job.finish'`, `tool='session-manager'`), but nothing on this side ever reads it back out, so it is invisible in the dashboard.\n\n**Why it matters.** `scheduler.job.finish` is the only signal that measures whether the product's core loop — queueing PRDs and having headless jobs actually run them — works on other people's machines. Launches and epic creations tell you people opened the app; job finishes (and especially the failed/needs_review ratio) tell you whether the orchestration succeeds for them. A fleet where every install launches, creates epics, and never finishes a job looks healthy under the current query.\n\n**What we'd expect.** The `usageDaily` and `usageByVersion` queries extended with per-status job counts, e.g.:\n\n```sql\nSUM(CASE WHEN event = 'scheduler.job.finish' AND json_extract(metadata,'$.status') = 'completed' THEN 1 ELSE 0 END) AS jobsCompleted,\nSUM(CASE WHEN event = 'scheduler.job.finish' AND json_extract(metadata,'$.status') = 'failed'    THEN 1 ELSE 0 END) AS jobsFailed,\n...\n```\n\nplus a job success-rate line in the admin page that renders this payload. `props.status` is already stored in the `metadata` blob by the ingest route (`safeMeta(e.props, ...)`), so no client or ingest change is needed — this is a read-side-only change.\n\n**One caveat, so you don't act on bad numbers yet.** As of 2026-09-12 no real usage data has been delivered from our side at all — the client has never successfully flushed (no `telemetry-sent.json` on the dev machine, `lastDailyFlushAt` null), and the spooled records are dominated by test artefacts. That is being fixed in the Session Manager repo (PRDs 1166 and its follow-up). So build the query, but treat any currently-present `session-manager` rows in `funnel_events` as untrustworthy until that lands.\n\nSuspected file in your repo: `server/routes/admin-session-manager-usage.ts`, plus whichever admin page component consumes `/api/admin/session-manager/usage` (`src/pages/AdminPage.tsx` or a child under `src/pages/admin/`).\n\nReference: /home/bilko/Projects/Bilko/server/routes/admin-session-manager-usage.ts\nReference: /home/bilko/Projects/Bilko/server/routes/telemetry.ts\nReference: /home/bilko/Projects/session-manager/src/main/lib/telemetryCounters.cjs",
+    "sections": [
+      {
+        "kind": "input",
+        "label": "Input",
+        "text": "This session is INBOUND FEEDBACK from another project: /home/bilko/Projects/session-manager (session review-with-high-effort-the-state-and-mechanisms-5493c795). Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.",
+        "source": "/home/bilko/Projects/session-manager"
+      },
+      {
+        "kind": "goal",
+        "label": "Goal",
+        "text": "Goal: Session Manager usage dashboard ignores scheduler.job.finish — the one event that measures orchestration\n\nFinding from the Session Manager desktop app (~/Projects/session-manager), which is the client that POSTs to this site's /api/telemetry/* beacons.\n\n**Symptom.** The admin usage rollup at `server/routes/admin-session-manager-usage.ts` aggregates exactly three event names:\n\n```\nconst EV_LAUNCH  = 'app.launch';\nconst EV_SESSION = 'session.open';\nconst EV_EPIC    = 'epic.create';\n```\n\nThe desktop client emits a fourth counter — `scheduler.job.finish`, carrying `props.status` (one of `completed` / `failed` / `needs_review`) — from `src/main/lib/telemetryCounters.cjs` in the Session Manager repo. It is ingested fine (POST /api/telemetry/event writes it into `funnel_events` with `event='scheduler.job.finish'`, `tool='session-manager'`), but nothing on this side ever reads it back out, so it is invisible in the dashboard.\n\n**Why it matters.** `scheduler.job.finish` is the only signal that measures whether the product's core loop — queueing PRDs and having headless jobs actually run them — works on other people's machines. Launches and epic creations tell you people opened the app; job finishes (and especially the failed/needs_review ratio) tell you whether the orchestration succeeds for them. A fleet where every install launches, creates epics, and never finishes a job looks healthy under the current query.\n\n**What we'd expect.** The `usageDaily` and `usageByVersion` queries extended with per-status job counts, e.g.:\n\n```sql\nSUM(CASE WHEN event = 'scheduler.job.finish' AND json_extract(metadata,'$.status') = 'completed' THEN 1 ELSE 0 END) AS jobsCompleted,\nSUM(CASE WHEN event = 'scheduler.job.finish' AND json_extract(metadata,'$.status') = 'failed'    THEN 1 ELSE 0 END) AS jobsFailed,\n...\n```\n\nplus a job success-rate line in the admin page that renders this payload. `props.status` is already stored in the `metadata` blob by the ingest route (`safeMeta(e.props, ...)`), so no client or ingest change is needed — this is a read-side-only change.\n\n**One caveat, so you don't act on bad numbers yet.** As of 2026-09-12 no real usage data has been delivered from our side at all — the client has never successfully flushed (no `telemetry-sent.json` on the dev machine, `lastDailyFlushAt` null), and the spooled records are dominated by test artefacts. That is being fixed in the Session Manager repo (PRDs 1166 and its follow-up). So build the query, but treat any currently-present `session-manager` rows in `funnel_events` as untrustworthy until that lands.\n\nSuspected file in your repo: `server/routes/admin-session-manager-usage.ts`, plus whichever admin page component consumes `/api/admin/session-manager/usage` (`src/pages/AdminPage.tsx` or a child under `src/pages/admin/`)."
+      },
+      {
+        "kind": "reference",
+        "label": "Reference",
+        "text": "Reference: /home/bilko/Projects/Bilko/server/routes/admin-session-manager-usage.ts",
+        "source": "/home/bilko/Projects/Bilko/server/routes/admin-session-manager-usage.ts"
+      },
+      {
+        "kind": "reference",
+        "label": "Reference",
+        "text": "Reference: /home/bilko/Projects/Bilko/server/routes/telemetry.ts",
+        "source": "/home/bilko/Projects/Bilko/server/routes/telemetry.ts"
+      },
+      {
+        "kind": "reference",
+        "label": "Reference",
+        "text": "Reference: /home/bilko/Projects/session-manager/src/main/lib/telemetryCounters.cjs",
+        "source": "/home/bilko/Projects/session-manager/src/main/lib/telemetryCounters.cjs"
+      }
+    ],
+    "source": {
+      "producer": "cross-project-feedback",
+      "fromCwd": "/home/bilko/Projects/session-manager",
+      "fromEpicId": "review-with-high-effort-the-state-and-mechanisms-5493c795"
+    },
+    "agentType": "architect"
+  },
+  "events": [
+    {
+      "id": "d41858bc-a5c7-40c6-a67d-e00bbd021c54",
+      "promptSessionId": "session-manager-usage-dashboard-ignores-schedule-2e501aea",
+      "kind": "prompt",
+      "causedByEventId": null,
+      "at": "2026-09-12T16:19:45.241Z",
+      "text": "This session is INBOUND FEEDBACK from another project: /home/bilko/Projects/session-manager (session review-with-high-effort-the-state-and-mechanisms-5493c795). Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.\n\nGoal: Session Manager usage dashboard ignores scheduler.job.finish — the one event that measures orchestration\n\nFinding from the Session Manager desktop app (~/Projects/session-manager), which is the client that POSTs to this site's /api/telemetry/* beacons.\n\n**Symptom.** The admin usage rollup at `server/routes/admin-session-manager-usage.ts` aggregates exactly three event names:\n\n```\nconst EV_LAUNCH  = 'app.launch';\nconst EV_SESSION = 'session.open';\nconst EV_EPIC    = 'epic.create';\n```\n\nThe desktop client emits a fourth counter — `scheduler.job.finish`, carrying `props.status` (one of `completed` / `failed` / `needs_review`) — from `src/main/lib/telemetryCounters.cjs` in the Session Manager repo. It is ingested fine (POST /api/telemetry/event writes it into `funnel_events` with `event='scheduler.job.finish'`, `tool='session-manager'`), but nothing on this side ever reads it back out, so it is invisible in the dashboard.\n\n**Why it matters.** `scheduler.job.finish` is the only signal that measures whether the product's core loop — queueing PRDs and having headless jobs actually run them — works on other people's machines. Launches and epic creations tell you people opened the app; job finishes (and especially the failed/needs_review ratio) tell you whether the orchestration succeeds for them. A fleet where every install launches, creates epics, and never finishes a job looks healthy under the current query.\n\n**What we'd expect.** The `usageDaily` and `usageByVersion` queries extended with per-status job counts, e.g.:\n\n```sql\nSUM(CASE WHEN event = 'scheduler.job.finish' AND json_extract(metadata,'$.status') = 'completed' THEN 1 ELSE 0 END) AS jobsCompleted,\nSUM(CASE WHEN event = 'scheduler.job.finish' AND json_extract(metadata,'$.status') = 'failed'    THEN 1 ELSE 0 END) AS jobsFailed,\n...\n```\n\nplus a job success-rate line in the admin page that renders this payload. `props.status` is already stored in the `metadata` blob by the ingest route (`safeMeta(e.props, ...)`), so no client or ingest change is needed — this is a read-side-only change.\n\n**One caveat, so you don't act on bad numbers yet.** As of 2026-09-12 no real usage data has been delivered from our side at all — the client has never successfully flushed (no `telemetry-sent.json` on the dev machine, `lastDailyFlushAt` null), and the spooled records are dominated by test artefacts. That is being fixed in the Session Manager repo (PRDs 1166 and its follow-up). So build the query, but treat any currently-present `session-manager` rows in `funnel_events` as untrustworthy until that lands.\n\nSuspected file in your repo: `server/routes/admin-session-manager-usage.ts`, plus whichever admin page component consumes `/api/admin/session-manager/usage` (`src/pages/AdminPage.tsx` or a child under `src/pages/admin/`).\n\nReference: /home/bilko/Projects/Bilko/server/routes/admin-session-manager-usage.ts\nReference: /home/bilko/Projects/Bilko/server/routes/telemetry.ts\nReference: /home/bilko/Projects/session-manager/src/main/lib/telemetryCounters.cjs"
+    },
+    {
+      "kind": "closed",
+      "causedByEventId": "d41858bc-a5c7-40c6-a67d-e00bbd021c54",
+      "id": "pevt-mtyq9oeh-77",
+      "promptSessionId": "session-manager-usage-dashboard-ignores-schedule-2e501aea",
+      "at": "2026-09-12T18:37:49.385Z"
+    }
+  ],
+  "transcript": "",
+  "archivedAt": "2026-09-12T18:37:49.387Z",
+  "status": "completed",
+  "cwd": "/home/bilko/Projects/Bilko",
+  "indexedAt": "2026-09-12T18:37:49.387Z"
+}

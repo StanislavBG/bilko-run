@@ -56,16 +56,33 @@ Claude Code picks it up automatically when you open the repo.
 2.  Pick a slug, check it free:  bilko-host__list_projects
 3.  Build:                       pnpm build (in your repo)
 4.  First deploy only:           bilko-host__register_static_project { slug, name, ... }
-5.  Every deploy:                bilko-host__publish_static_project { slug, distPath: "/abs/path/dist" }
+5.  Every deploy:                bilko-host__publish_static_project {
+                                    slug,
+                                    distPath: "/abs/path/dist",
+                                    sourceRepoPath: "/abs/path/to/repo"
+                                  }
 6.  Verify:                      bilko-host__status
 ```
 
+`sourceRepoPath` is the sibling repo root (not `dist/`). The `golden` and `audit` publish gates shell out into it to run `tests/golden.spec.ts` and `pnpm audit`; omit it and both gates fail outright, which blocks the publish unless you explicitly bypass them.
+
 That's it. Render redeploys after step 4 and 5; bilko.run/projects/<slug>/ goes live within ~minute.
+
+## Environment variables
+
+| Var | Required | Effect |
+|---|---|---|
+| `BILKO_PUBLISH_CHECKOUT` | No | Absolute path to the dedicated git checkout the server uses for every mutating call (commit + push happen here, never in your working tree). Defaults to `~/.local/state/bilko-host/publish-checkout`. |
+| `TURSO_DATABASE_URL` | No | Turso database URL for manifest rows and publish-override audit logs. |
+| `TURSO_AUTH_TOKEN` | No | Auth token paired with `TURSO_DATABASE_URL`. |
+
+Without `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` set, the server's DB writes (manifest upserts, `publish_overrides` audit rows) fall back to a local SQLite file at `data/contentgrade.db` relative to the server's working directory — fine for a local/dev MCP session, but it means those writes aren't visible to the production host's `/admin` dashboards. Set both vars to write to the same Turso instance the deployed host uses.
 
 ## Safety notes
 
 - The server resolves the host repo from its own location: `<HOST_ROOT>/mcp-host-server/dist/server.js` → `<HOST_ROOT>`. Don't move the binary.
 - `register_static_project` refuses duplicate slugs — call `unregister_project` first if you want to replace.
 - `publish_static_project` requires the slug to already be registered (override with `requireRegistered: false`).
+- **One publisher per slug.** `publish_static_project` atomically swaps the new build in for `public/projects/<slug>/`. A second publisher targeting the same slug overwrites the first's bytes on its next publish — even if it ships only a sub-directory the first bundle doesn't contain. A slug's static prefix must have exactly one owning publisher; see "One publisher per `/projects/<slug>/` prefix" in the [host contract](../docs/host-contract.md).
 - All commits use the message format `registry: add <slug> (<name>)`, `registry: remove <slug>`, or `publish: <slug> build`.
 - Pushes go to `origin` (StanislavBG/bilko-run) only. `content-grade` (Content-Grade/Content-Grade) is a separate, unrelated project with diverged history — the server never pushes there, per the host's CLAUDE.md rule.

@@ -2,11 +2,11 @@
 
 bilko.run is a **host platform**, not a single product. It hosts many independent "apps" — each with its own product, its own scoring engine, its own UX. Some apps live in this repo; some live in their own repos and are dropped in as static assets; some live on other domains.
 
-This document defines the contract: what the host provides, what an app must implement, and how to add a new app.
+This document defines the contract: what the host provides, what an app must implement, and how to add a new app. Host-internal implementation detail (monitoring, QA gates, cost controls, caching, observability, security headers) lives in [`docs/host-internals.md`](host-internals.md) — read that only if you're changing the host itself, not when you're publishing an app.
 
 ## The three host kinds
 
-Every app declares one host kind in `src/data/projectsRegistry.ts`:
+Every app declares one host kind in `src/data/projectsRegistry.ts` (react-route) or `src/data/standalone-projects.json` (static-path / external-url):
 
 | Kind | When to use | Path | Coupling |
 |---|---|---|---|
@@ -23,7 +23,7 @@ These are the OS services. Apps use them; they should not reimplement.
 ### To every app, regardless of host kind
 
 - **Brand chrome.** Header, footer, blog, /pricing, /privacy, /terms, /admin, ⌘K command palette.
-- **Portfolio listing.** Anything in `projectsRegistry.ts` shows up on `/`, `/products`, and ⌘K automatically. No manual wiring.
+- **Portfolio listing.** Anything in the registry shows up on `/`, `/products`, and ⌘K automatically. No manual wiring.
 - **Domain.** `bilko.run/<your-path>`.
 
 ### To `react-route` apps additionally
@@ -46,18 +46,18 @@ These are the OS services. Apps use them; they should not reimplement.
 
 ### Every app
 
-A single entry in `src/data/projectsRegistry.ts`:
+A registry entry — a `static-path`/`external-url` entry in `src/data/standalone-projects.json` (validated by `mcp-host-server/src/contract/registry.ts`; see "Registry rules" below), or a `react-route` entry in `src/config/tools.ts`. Sibling repos add theirs via the [`bilko-host` MCP](../mcp-host-server/README.md) — never by hand-editing this repo.
 
-```ts
+```json
 {
-  slug: 'my-app',
-  name: 'MyApp',
-  tagline: 'One sentence: what is this and who is it for.',
-  category: 'AI Tool · Content', // or 'Game', 'Data', etc.
-  status: 'live', // | 'cooking' | 'archived'
-  year: 2026,
-  host: { kind: 'static-path', path: '/projects/my-app/' },
-  tags: ['Browser', 'Free'],
+  "slug": "my-app",
+  "name": "MyApp",
+  "tagline": "One sentence: what is this and who is it for.",
+  "category": "AI Tool · Content",
+  "status": "live",
+  "year": 2026,
+  "host": { "kind": "static-path", "path": "/projects/my-app/" },
+  "tags": ["Browser", "Free"]
 }
 ```
 
@@ -71,14 +71,24 @@ A single entry in `src/data/projectsRegistry.ts`:
 ### `static-path` apps additionally
 
 - A standalone build that emits to `dist/` in your own repo.
-- A sync step (manual or scripted) that copies `dist/` into `public/projects/<slug>/` of this repo.
+- Publish by calling the MCP's `publish_static_project` with `distPath` pointing at that `dist/` — it copies the bytes into `public/projects/<slug>/` of this repo directly. There is no separate manual sync step.
 - The build's `index.html` must use relative or `/projects/<slug>/`-prefixed asset paths (Vite: set `base: '/projects/<slug>/'`).
 - No assumption about parent-page layout — your bundle owns the entire page.
-- **A `manifest.json` at the bundle root** (`dist/manifest.json`) — see "Manifest contract" below. `publish_static_project` refuses bundles without one.
+- **A `manifest.json` at the bundle root** (`dist/manifest.json`) — see "Manifest contract" below. `publish_static_project`'s `manifest` gate refuses bundles without one, and that gate cannot be bypassed.
 
 ### `external-url` apps
 
 - Just the URL.
+
+## Registry rules
+
+The registry (`src/data/standalone-projects.json`) is validated by `mcp-host-server/src/contract/registry.ts` on every MCP write:
+
+- **Slug format:** 2–40 chars of `[a-z0-9-]`, no leading or trailing hyphen.
+- **Status:** one of `live`, `cooking`, `postponed`, `archived`.
+- **Slugs are unique** across the registry.
+- A `static-path` entry's `host.path` must equal `/projects/<slug>/` exactly.
+- An `external-url` entry's `host.url` must start with `https://`.
 
 ## URL canonicalization
 
@@ -106,9 +116,7 @@ Worked example — Session Manager owns everything under `/products/session-mana
 | `/manual`, `/my-manual` | Fastify 301 → the two paths above, **permanently** |
 
 The two legacy top-level paths can never be deleted: they are printed in Stripe
-receipt emails already in customers' inboxes (`server/routes/stripe.ts`). Chapter
-anchors (`#getting-started`, …) survive the hop for free — a fragment is never
-sent to the server, and the browser re-applies it to the redirect target.
+receipt emails already in customers' inboxes (`server/routes/stripe.ts`).
 
 ### What must NOT move under `/products/<slug>/`
 
@@ -116,22 +124,15 @@ A published `static-path` **bundle**. `public/projects/<slug>/` is the only
 prefix `publish_static_project` writes, and a bundle's own URL can be compiled
 into deployed clients. Session Manager's web-remote is the case in point: its
 relay URL is baked into already-paired phones, so `/products/session-manager/remote`
-is a **301 to the bundle**, not a second copy of it. One artifact, one canonical
-URL, discoverable from the product root.
-
-Migrating such a path is a three-step sequence, never a rename:
-
-1. Host serves the WS relay at **both** paths (`RELAY_WS_PATHS` in
-   `server/sm-relay/router.ts` — done; `/products/session-manager/relay` is live).
-2. The sibling publishes a new bundle pointing at the new path.
-3. Only then does the old path get retired.
+is a **301 to the bundle**, not a second copy of it.
 
 ### One publisher per `/projects/<slug>/` prefix
 
-`publish_static_project` does `rm -rf public/projects/<slug>` before copying, so
-two publishers targeting one slug silently delete each other's bytes — including
-when one writes only sub-directories (`/home/`, `/feature/`, `/architecture/`)
-that the other's bundle doesn't contain.
+`publish_static_project` stages the new build, then atomically swaps it in for
+`public/projects/<slug>/` (copy → rename-swap). That swap still means two
+publishers targeting one slug overwrite each other on their next publish —
+including when one writes only sub-directories (`/home/`, `/feature/`,
+`/architecture/`) that the other's bundle doesn't contain.
 
 **Rule: a slug's static prefix has exactly one publisher.** A project with a
 second static surface (project-home lenses, docs, a demo) either folds those
@@ -144,43 +145,34 @@ project-home lenses must not target that prefix.
 1. Decide the host kind. Default `static-path` unless you need shared auth/credits → `react-route`.
 2. Build it.
    - `react-route`: page + route entry + per-tool server file.
-   - `static-path`: standalone repo, `vite build`, copy `dist/` into `public/projects/<slug>/`.
-3. Register it in `src/data/standalone-projects.json` (`static-path`/`external-url`) or `src/config/tools.ts` (`react-route`). Sibling sessions should use the [`bilko-host` MCP](../mcp-host-server/README.md) — see below.
+   - `static-path`: standalone repo, `vite build`.
+3. Register and publish via the [`bilko-host` MCP](../mcp-host-server/README.md) — see below. `react-route` apps still register by hand in `src/config/tools.ts`.
 4. Run `pnpm test && pnpm exec tsc --noEmit && pnpm exec vite build` — all must pass.
 5. Commit and push to `origin`. Render auto-deploys. (Never push to `content-grade` — it's a separate, unrelated project with diverged history.)
 6. Verify the project shows up on `/`, `/products`, and in ⌘K.
 
 ## Adding from a sibling-repo Claude session (MCP)
 
-A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by hand. Wire up the [`bilko-host` MCP server](../mcp-host-server/README.md) in your sibling's `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "bilko-host": {
-      "command": "node",
-      "args": ["/home/bilko/Projects/Bilko/mcp-host-server/dist/server.js"]
-    }
-  }
-}
-```
-
-Then per session:
+A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by hand. Wire up the [`bilko-host` MCP server](../mcp-host-server/README.md) in your sibling's `.mcp.json`, then per session:
 
 ```
-1. bilko-host__get_host_contract                         # read this file
-2. bilko-host__list_projects                             # check slug isn't taken
+1. bilko-host__get_host_contract                          # read this file
+2. bilko-host__list_projects                              # check slug isn't taken
 3. (build your app: pnpm build → dist/)
-4. bilko-host__register_static_project { slug, name, … }   # first deploy only
-5. bilko-host__publish_static_project { slug, distPath }   # every deploy
-6. bilko-host__status                                    # verify
+4. bilko-host__register_static_project { slug, name, … }  # first deploy only
+5. bilko-host__publish_static_project { slug, distPath, sourceRepoPath }  # every deploy
+6. bilko-host__status                                     # verify
 ```
 
-The MCP commits + pushes to `origin` automatically; Render redeploys within ~minute.
+The MCP commits + pushes to `origin` automatically, from a dedicated clean
+checkout kept in sync with `origin/main` (never your own working tree); Render
+redeploys within ~minute. If the push fails (conflicting concurrent publish,
+network error), the tool call returns an error instead of silently dropping
+your publish — retry it.
 
 ## Removing an app
 
-1. Delete its entry from `src/data/standalone-projects.json` (or `src/config/tools.ts` if `react-route`). Sibling sessions: `bilko-host__unregister_project { slug, deleteAssets: true }` does both.
+1. Delete its entry from the registry. Sibling sessions: `bilko-host__unregister_project { slug, deleteAssets: true }` does both the registry edit and the asset removal.
 2. For `react-route`: also delete the page (`src/pages/<slug>Page.tsx`) and per-tool server file (`server/routes/tools/<slug>.ts`) and remove the call from `server/routes/tools/index.ts`.
 3. For `static-path`: `rm -rf public/projects/<slug>/` (or pass `deleteAssets: true` to the MCP).
 4. Add a redirect in `src/App.tsx` if the slug is still being linked from outside.
@@ -215,16 +207,13 @@ Server endpoints (all rate-limited per IP, append-only tables):
 `track()` works without `initTelemetry` (falls back to pre-0.3.0 direct-send).
 Apps that don't call `initTelemetry` get no structured logs or error capture.
 
-Out of scope for this contract version: source-map symbolication, log retention
-TTL, Node/CLI SDKs, real-time streaming, cross-app trace IDs.
-
 ## Manifest contract
 
-Every `static-path` sibling MUST emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool validates this file and refuses to publish if it's absent or invalid. The host stores the latest manifest per app in the `app_manifests` Turso table, visible at `/admin` → Manifests tab.
+Every `static-path` sibling MUST emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool's `manifest` gate validates this file and refuses to publish if it's absent or invalid — this is the one gate that cannot be bypassed. The host stores the latest manifest per app in the `app_manifests` Turso table, visible at `/admin` → Manifests tab.
 
 ### Schema
 
-Defined in `shared/manifest-schema.ts` (Zod). All fields required unless marked optional.
+Defined in `shared/manifest-schema.ts` (Zod) and mirrored in `mcp-host-server/src/manifest-schema.ts` (the MCP's own copy, used by the `manifest` gate at publish time — keep both in sync). All fields required unless marked optional.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -290,291 +279,58 @@ A `static-path` app is one registry slug pointing at one `dist/` tree
 requires that tree to contain only a single page. A sibling can ship any
 number of additional HTML documents alongside its root page, each reachable
 at `bilko.run/projects/<slug>/<subpath>/` for free, with no new host
-capability required (Academy already does this with its 15-chapter course
-tree; Session Manager's "Host on Bilko.run" cockpit generalizes the pattern
-to an explicit document list). Two things about the existing contract apply
-across the **whole bundle**, not per-document, and are easy to miss when
-building a multi-document `dist/`:
+capability required. Two things about the contract apply across the **whole
+bundle**, not per-document:
 
-- **`budget` gate is bundle-wide.** `bundle.sizeBytesGz` in the manifest —
-  and the 200 KB default limit it's checked against — is the gzip size of
-  *every* file under `dist/`, summed. Adding a second or third document
-  eats into the same budget as the root page, not a fresh allowance each.
-  Request a higher `app_budgets.max_size_gz_bytes` for the slug if a
-  multi-document bundle needs it.
+- **`budget` gate is bundle-wide.** The gzip budget — and the 200 KB default
+  limit it's checked against — covers *every* file under `dist/`, summed.
+  Adding a second or third document eats into the same budget as the root
+  page, not a fresh allowance each. Request a higher per-app budget in
+  `mcp-host-server/src/contract/app-budgets.ts` if a multi-document bundle
+  needs it.
 - **`golden` gate only covers the root document.** `manifest.golden.path`
-  is a single URL the synthetic monitor and publish gate check — point it
+  is a single URL the synthetic monitor and `golden` gate check — point it
   at the root (`/projects/<slug>/`) unless you deliberately want the
-  golden/synthetic check to watch a different document instead. There is
-  no per-document golden check; sub-path documents are not individually
-  monitored.
-
-## Synthetic monitoring
-
-Every 6h a headless Chromium opens each sibling's `manifest.golden.path` and
-asserts `manifest.golden.expect` text is present in the page body. Results
-land in the `synthetic_runs` table. Three consecutive failures open an alert
-(logged via `/api/telemetry/log` as a `synthetic.fail.streak` error event, and
-printed to stderr — email integration is a follow-up once an SMTP provider is
-chosen). Resolution = next passing run.
-
-The `/admin` → Synthetic tab shows a per-sibling 30-day grid (green = pass,
-red = fail, grey = no run), latency p50/p95, current failure streak, and any
-open alerts.
-
-Run manually:
-
-```bash
-cd /home/bilko/Projects/Bilko && pnpm synthetic
-```
-
-Schedule via the `schedule` skill at `0 */6 * * *` using the PRD at
-`~/.claude/session-manager/scheduled-plans/prds/90-platform-synthetic-cron.md`.
-
-Tune sensitivity via `STREAK_TO_ALERT` in `scripts/synthetic-monitor.ts`
-(default: 3 consecutive failures).
+  golden check to watch a different document instead. There is no
+  per-document golden check.
 
 ## Publish gate
 
-Every static-path publish runs five gates in order. All must pass (or be explicitly bypassed by an admin) before the bundle is moved into `public/projects/<slug>/`.
+Every static-path publish runs five gates in order, against `distPath` (and `sourceRepoPath`, where required). All must pass, or be explicitly bypassed, before the bundle is swapped into `public/projects/<slug>/`.
 
-| Gate | What it checks | Bypass name |
+| Gate | What it checks | Bypassable |
 |---|---|---|
-| `manifest` | `manifest.json` exists, parses, and validates against the Zod schema in `shared/manifest-schema.ts`; slug matches registered slug | `manifest` |
-| `budget` | Total gzipped bundle size ≤ `app_budgets.max_size_gz_bytes` (default 200 KB per app) | `budget` |
-| `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes when run via `pnpm exec playwright test` | `golden` |
-| `a11y` | axe-core scan of the golden path finds zero `serious` or `critical` violations | `a11y` |
-| `audit` | `pnpm audit --prod --audit-level=high` exits 0 (no high/critical CVEs in the prod dep tree) | `audit` |
+| `manifest` | `manifest.json` exists at the bundle root, parses, validates against the Zod schema, and its `slug` matches the registered slug | **No — never bypassable** |
+| `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz) | `budget` |
+| `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` | `golden` |
+| `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
+| `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath`; the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
 
-The `manifest` gate short-circuits the entire pipeline — if it fails, later gates are skipped (their results would be meaningless without a valid manifest).
+The `manifest` gate short-circuits the pipeline — if it fails, the other four are skipped (their results would be meaningless without a valid manifest).
 
-### Gate failure format
+### `sourceRepoPath` requirement
 
-A blocked publish returns a structured JSON error body:
-
-```json
-{
-  "error": "publish blocked by gate(s): budget, a11y",
-  "gates": [
-    { "name": "manifest", "status": "pass",   "details": "v1.0.0 / sha abc1234" },
-    { "name": "budget",   "status": "fail",   "details": "bundle 512.0 KB gz exceeds budget 200 KB" },
-    { "name": "golden",   "status": "pass",   "details": "golden.spec.ts green" },
-    { "name": "a11y",     "status": "fail",   "details": "2 serious/critical: color-contrast, label" },
-    { "name": "audit",    "status": "pass",   "details": "no high/critical CVEs" }
-  ]
-}
-```
+`sourceRepoPath` is the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`) and is needed by the `golden` and `audit` gates to locate `tests/golden.spec.ts` and run `pnpm audit`. Pass it on every publish call — without it, both gates fail outright (and both are in the default, non-bypassed set), so in practice a publish cannot clear the gate without it unless you explicitly bypass `golden` and `audit`.
 
 ### Bypassing a gate
 
-Pass `bypass` (comma-separated gate names) and `bypassReason` to `publish_static_project`:
+Pass `bypass` (comma-separated gate names) and `bypassReason` (at least 15 characters) to `publish_static_project`. Multiple gates can be bypassed in a single call — e.g. `bypass: "golden,audit"` with one shared `bypassReason` — each is logged as its own row:
 
 ```
 bilko-host__publish_static_project {
   slug: "stack-audit",
   distPath: "/home/bilko/Projects/Stack-Audit/dist",
+  sourceRepoPath: "/home/bilko/Projects/Stack-Audit",
   bypass: "a11y",
   bypassReason: "Known contrast issue tracked in issue #42, fix ships next build"
 }
 ```
 
-Every bypass use is logged to the `publish_overrides` table (slug, gate, reason, admin_email, timestamp). There is no bulk bypass — override one gate at a time.
+`manifest` is rejected as a bypass name — that gate cannot be skipped. An unknown gate name, or a reason under 15 characters, is also rejected before any gate runs. Every accepted bypass is logged to the `publish_overrides` table (slug, gate, reason, admin_email, timestamp).
 
 ### App budget table
 
-Default budget per app: **200 KB gzipped**. Adjust via direct SQL (admin UI out of scope):
-
-```sql
-INSERT OR REPLACE INTO app_budgets (slug, max_size_gz_bytes, updated_at)
-VALUES ('my-app', 300000, strftime('%s','now'));
-```
-
-A budget below what is **already live** for that slug is a dead gate: every
-future publish fails while the oversize bundle it was meant to stop stays
-served. `session-manager` sat in exactly that state (195 KB budget vs a live
-1,072,016-byte bundle). Seeds for apps that are oversize by design therefore
-use a raise-if-lower upsert (`OVERSIZE_BUDGETS` in `server/db.ts`) rather than
-`INSERT OR IGNORE`. When you tighten a budget, check the live manifest's
-`bundle.sizeBytesGz` first and pair the cut with a trim task in the sibling.
-
-### sourceRepoPath requirement
-
-The `golden` and `audit` gates require a `sourceRepoPath` argument pointing to the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`). Without it, both gates fail with a clear error. Pass it on every publish call.
-
-## Sanity QA gate
-
-`scripts/sanity-qa.ts` is an end-to-end QA gate that must pass before any publish PRD proceeds. Every publish PRD should start with:
-
-```bash
-cd ~/Projects/Bilko
-tsx scripts/sanity-qa.ts --targets=<slug> --fail-fast
-test $? -eq 0 || { echo "Sanity QA failed; HALT"; exit 1; }
-```
-
-### What it checks
-
-Five subagents run in parallel against every live static-path target:
-
-| Subagent | Checks |
-|---|---|
-| **Smoke** | Playwright golden-path; game-specific flows for sudoku/mindswiffer/game-academy; no console errors |
-| **Security** | CSP headers, HSTS, frame-ancestors, no leaked secrets (sk-/AIza/JWT patterns), SSRF probe on `/api/page-fetch` |
-| **Perf** | Lighthouse mobile audit — Performance ≥ 85, Accessibility ≥ 95, Best Practices ≥ 90, SEO ≥ 90; LCP ≤ 2.5s, CLS ≤ 0.1, TTI ≤ 3.5s |
-| **Size** | `manifest.bundle.sizeBytesGz` vs per-app budget (games: 250 KB, academy: 400 KB, others: 200 KB); fileCount ≤ 30; stale-manifest drift detection |
-| **A11y** | axe-core scan (WCAG 2.1 AA) in mobile + desktop viewports; zero serious/critical violations; reduced-motion honored |
-
-### CLI
-
-```bash
-# Full run (all live targets)
-pnpm sanity-qa
-
-# Single target
-tsx scripts/sanity-qa.ts --targets=sudoku
-
-# Multiple targets, fail-fast, custom report path
-tsx scripts/sanity-qa.ts --targets=sudoku,mindswiffer --fail-fast --write-report=/tmp/qa.md
-```
-
-Exit codes: `0` = PASS, `1` = FAIL, `2` = internal error.
-
-### Decision logic
-
-| Condition | Decision |
-|---|---|
-| Smoke fails for any target | FAIL |
-| Security critical/high finding | FAIL |
-| Any a11y serious/critical violation | FAIL |
-| Perf score < 80 for any target | FAIL |
-| Any warn-level issue (no FAIL) | WARN |
-| All clean | PASS |
-
-### Reports
-
-Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md`. The nightly cron (03:00 PDT) commits the report and opens a GitHub issue tagged `qa-failure` on FAIL.
-
-### Cron schedule
-
-```
-0 10 * * * cd /home/bilko/Projects/Bilko && bash scripts/sanity-qa-cron.sh >> /tmp/sanity-qa-cron.log 2>&1
-```
-
-`10:00 UTC = 03:00 PDT` (DST anchor; during PST it fires at 02:00 PST — acceptable).
-
-- On FAIL or ERROR: opens a GitHub issue on `StanislavBG/bilko-run` tagged `qa-failure` with the first 60 lines of the report (requires `gh` CLI; token sourced from `~/.env.cron`).
-- Report committed to `test-results/` and pushed to `origin`.
-- PRD: `~/.claude/session-manager/scheduled-plans/prds/93-sanity-qa-cron.md`.
-
-### Prompt files (AI-subagent mode)
-
-`scripts/sanity-qa-prompts/*.txt` — self-contained prompts for each subagent. These are the spec for `claude -p` invocations if you want AI-driven rather than deterministic runner execution.
-
-## Cost controls
-
-Three layers protect the platform from runaway Gemini spend:
-
-1. **Per-user daily Gemini call cap** (100 calls/day default, 1000 for admin). Returns 429 + friendly message when breached.
-2. **Per-app daily ceiling** (stored in `app_spend_ceilings` table, default 2000). Returns 503 + inserts a `cost_alerts` row when the app's total daily calls exceed the ceiling.
-3. **Daily cost-of-revenue monitor** (`pnpm cost-monitor`): alerts if Gemini COGS exceeds 25% of Stripe revenue, or if absolute spend exceeds $50/day.
-
-All paid `react-route` tools call `enforceCallLimits(ctx)` from `server/routes/tools/_shared.ts` before every Gemini invocation. Free tools (Outdoor-Hours, LocalScore) use the existing IP-only rate limiter and are exempt.
-
-Open alerts are visible at `/admin/cost`. Ceilings can be tuned per-app via the admin UI or directly in the `app_spend_ceilings` table.
-
-Scheduled cron: `91-platform-cost-monitor-daily.md` runs `pnpm cost-monitor` daily at 7am PT.
-
-## Static-asset caching
-
-Render bills origin egress, so the host caches everything it serves out of `dist/`. Apps get this for free — there is nothing to configure in a sibling repo — but the policy determines how fast a publish becomes visible, so know it before you publish.
-
-| File | `Cache-Control` | Effect |
-|---|---|---|
-| `*.html` (including `/projects/<slug>/index.html`) | `public, max-age=0, must-revalidate` | Revalidated on every view; a publish is visible immediately |
-| `assets/*-<hash>.<ext>` (Vite content-hashed) | `public, max-age=31536000, immutable` | Never re-fetched; the filename changes when the bytes do |
-| Images, fonts, audio, video | `public, max-age=86400` | One day |
-| Everything else — `app.jsx`, `styles.css`, generated `data-*.js` | `public, max-age=600` | Up to 10 minutes stale after a publish |
-| SPA fallback HTML (`setNotFoundHandler`) | `private, no-store` | Carries a per-request CSP nonce, so it can never be shared |
-
-Two consequences worth designing around:
-
-- **Unhashed assets can be up to 10 minutes stale.** If your app publishes on a cron and needs fresher data than that, serve the data from an API route (see `server/routes/project-data.ts`, `public, max-age=60`) rather than from a static file — that is what SocialSignalsTrader's snapshot endpoint does.
-- **Content-hash your bundles if you want immutable caching.** Emit them into an `assets/` directory with a Vite-style `-<hash>` suffix and they are cached for a year. A plain `app.js` gets the 10-minute tier.
-
-`server/static-cache.ts` also strips `Vary: Origin` and the `Access-Control-*` headers from same-origin requests for publicly cacheable assets. `@fastify/cors` runs with an allow-list, which makes it stamp `Vary: Origin` on everything, and most CDNs refuse to cache a response that varies on anything but `Accept-Encoding`. Cross-origin requests (which carry an `Origin` header) still get full CORS headers.
-
-**Note on the edge:** bilko.run's DNS is at Porkbun, pointing straight at Render. The `server: cloudflare` / `cf-cache-status: DYNAMIC` headers you'll see come from Render's own edge, not a Cloudflare zone we control — so `DYNAMIC` on a correctly-cached asset is not a bug in this repo. The caching above is browser-side and revalidation-side: repeat views serve from disk cache, and anything that does revalidate returns a 0-byte 304 instead of the full asset.
-
-Implementation lives in `server/static-cache.ts`. It also rewrites every file's mtime at boot to a value derived from that file's content hash, because `@fastify/send` derives its ETag from `size + mtime` and a deploy's git checkout stamps every file with a fresh mtime. Without that normalization, every deploy would invalidate every visitor's cached copy of every unchanged file — and with published projects republishing on a 30-minute cron, that is ~48 full cache resets a day. Do not "fix" a stale asset by touching mtimes; change the bytes.
-
-## Observability dashboard
-
-`/admin/observability` is the single ops view. It aggregates per-sibling:
-
-- 24h traffic, errors, log warnings/errors
-- Synthetic monitor pass rate + load times (p50/p95)
-- Manifest version + host-kit drift
-- Bundle size + git sha
-- Open cost / synthetic / manifest alerts
-
-It is a read-only page over existing tables — no new ingest. To add a column, add a JOIN in `server/routes/admin-observability.ts`. Auto-refresh defaults to 30s (configurable to 1m, 5m, off).
-
-Host-kit drift is computed against `BILKO_LATEST_HOST_KIT` env var (set via Render dashboard). Rows for siblings with no telemetry show `—` instead of `0` to avoid false "everything's broken" signals.
-
-When something feels wrong on bilko.run, this is the first place to look.
-
-## Security headers
-
-bilko.run sends a strict CSP plus the OWASP-recommended security header set on every response. All headers are applied at the Fastify hook level (`server/security-headers.ts`) so they cover both host SPA routes and `/projects/*` static-path siblings.
-
-### Headers sent on every response
-
-| Header | Value |
-|---|---|
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` |
-| `X-Content-Type-Options` | `nosniff` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | camera, mic, USB, geolocation capped to `self` or `()` |
-| `Cross-Origin-Opener-Policy` | `same-origin` |
-| `Content-Security-Policy[-Report-Only]` | Per-request nonce; see spec below |
-
-### CSP spec
-
-```
-default-src 'self';
-script-src  'self' 'nonce-{NONCE}' 'wasm-unsafe-eval' https://js.clerk.com https://js.stripe.com 'strict-dynamic';
-style-src   'self' 'nonce-{NONCE}';
-img-src     'self' data: https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com;
-font-src    'self' data:;
-connect-src 'self' https://*.clerk.com https://api.stripe.com;
-frame-src   https://*.clerk.com https://js.stripe.com https://hooks.stripe.com;
-object-src  'none';
-base-uri    'self';
-form-action 'self' https://*.stripe.com;
-frame-ancestors 'none';
-report-uri  /api/security/csp-report;
-upgrade-insecure-requests;
-```
-
-A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook auto-injects `nonce="…"` onto every `<script>` and `<style>` tag in HTML string payloads, plus a `<meta name="csp-nonce">` for host-kit runtime CSS. Static-file streams served by `@fastify/static` are not rewritten (streams pass through unchanged).
-
-`'wasm-unsafe-eval'` in `script-src` allows WebAssembly compilation (not JS `eval`) for Godot/WebAssembly apps like the escape-velocity game and LocalScore's WebGPU pipeline.
-
-### Mode toggle
-
-`BILKO_CSP_ENFORCE=1` → `Content-Security-Policy` (enforced).
-Default (unset) → `Content-Security-Policy-Report-Only` (report-only burn-in).
-
-### Violation reporting
-
-Browsers POST violations to `/api/security/csp-report`. Reports are persisted in the `csp_violations` table (columns: `blocked_uri`, `violated_dir`, `document_uri`, `source_file`, `line_number`, `user_agent`, `created_at`). The endpoint is rate-limited to 60 req/min/IP. Inspect violations with the admin SQL view or directly:
-
-```sql
-SELECT blocked_uri, violated_dir, document_uri, COUNT(*) as n
-FROM csp_violations
-GROUP BY 1, 2, 3
-ORDER BY n DESC
-LIMIT 50;
-```
+Default budget per app: **200 KB gzipped**, from `DEFAULT_BUDGET_GZ_BYTES` in `mcp-host-server/src/contract/app-budgets.ts`. Per-app overrides live in that same file's `APP_BUDGETS_GZ_BYTES` map — add an entry there (with a one-line comment explaining why) to raise a slug's limit; there's no DB/SQL path for this anymore.
 
 ## Game services
 
@@ -626,37 +382,18 @@ export interface GameConfig {
 
 Adding a new achievement key is a code change to `shared/game-config.ts`. Keys are stable — never rename a key after it has been unlocked by real users.
 
-### Hook examples (`@bilkobibitkov/host-kit`)
-
-```tsx
-import { useLeaderboard, useSaveState, useUnlocks } from '@bilkobibitkov/host-kit';
-
-// Top-10 all-time scores, with submit helper
-const { scores, submit, loading } = useLeaderboard('boat-shooter', { range: 'all', limit: 10 });
-
-// Cloud save (CAS-protected)
-const { blob, version, save, clear } = useSaveState<MyGameState>('boat-shooter');
-
-// Achievement unlocks + catalog
-const { unlocks, achievements, unlock } = useUnlocks('boat-shooter');
-
-// At game-over:
-await submit(finalScore, 'normal');
-if (isFirstKill) await unlock('first_kill');
-```
+Access all three from `@bilkobibitkov/host-kit`'s `useLeaderboard(slug, opts)`, `useSaveState<T>(slug)`, and `useUnlocks(slug)` hooks.
 
 ### Anti-cheat
 
-- Score submission is rate-limited to 60 per hour per (user × game) via an in-memory sliding window.
-- Scores above `maxPlausibleScore` are rejected with 400.
-- Optional HMAC: set `BILKO_GAME_HMAC_KEY` env var. Client signs `${slug}:${score}:${mode}:${ts}` with shared key; server validates `sig` field on POST.
+Score submission is rate-limited to 60/hour per (user × game) and scores above `maxPlausibleScore` are rejected with 400. Optional HMAC: set `BILKO_GAME_HMAC_KEY`; the client signs `${slug}:${score}:${mode}:${ts}` and the server validates the `sig` field on POST.
 
 ## Why this contract exists
 
-The 10 AI tools were originally built as one product with one codebase. They've grown into 10 independent products that happen to share a host. This contract makes that explicit, so:
+The AI tools were originally built as one product with one codebase. They've grown into independent products that happen to share a host. This contract makes that explicit, so:
 
-- Adding the 11th tool is a checklist, not an architectural decision.
+- Adding a new tool is a checklist, not an architectural decision.
 - A failing tool can't break the others (per-tool server files, code-split frontend bundles).
-- Any tool can be extracted to its own repo later by following the `static-path` migration: build standalone, drop into `public/projects/<slug>/`, switch the host kind. No URL change for users.
+- Any tool can be extracted to its own repo later by following the `static-path` migration: build standalone, publish into `public/projects/<slug>/` via the MCP, switch the host kind. No URL change for users.
 
-The OutdoorHours and Boat Shooter migrations are the reference implementations of the `static-path` lane.
+See [`docs/host-internals.md`](host-internals.md) for monitoring, QA, cost, caching, observability, and security-header detail.

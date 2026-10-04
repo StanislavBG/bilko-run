@@ -16,6 +16,8 @@ Bilko's workspace lives in `~/Projects/` with this structure:
 ~/Projects/
   Bilko/                    ← THIS REPO — host/framework for bilko.run
                                (git: StanislavBG/bilko-run · origin/main)
+    packages/host-kit/      ← `host-kit`: client SDK for static-path siblings
+                               (auth, games hooks, SiteHeader, manifest CLI)
   Outdoor-Hours/            ← static-path sibling — KOUT-7 weather report
   Local-Score/              ← static-path sibling — private doc analyzer
   Bilko-Game-Academy/       ← static-path sibling — Boat Shooter
@@ -48,7 +50,7 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 - **OutdoorHours** (`/projects/outdoor-hours/`) → `~/Projects/Outdoor-Hours/` — KOUT-7 weather report
 - **LocalScore** (`/projects/local-score/`) → `~/Projects/Local-Score/` — Gemma/WebGPU doc analyzer
 - **Boat Shooter** (`/projects/game-academy/`) → `~/Projects/Bilko-Game-Academy/` — browser arcade
-- **Bilko-Academy** (`/projects/academy/`) → `~/Projects/Bilko-Academy/` — Interactive AI fundamentals course (15 `.mdx` files total: 3 intro lessons — welcome + 2 demos — plus 12 chapters across 4 modules — Meet Claude, Working In Claude, Prompting, Trust And Next Steps). Pure static-path; consumes `host-kit` (workspace package at `~/Projects/Bilko-Host-Kit/`) for shared chrome, telemetry, and the publish CLI. No Bilko-host server route.
+- **Bilko-Academy** (`/projects/academy/`) → `~/Projects/Bilko-Academy/` — Interactive AI fundamentals course (15 `.mdx` files total: 3 intro lessons — welcome + 2 demos — plus 12 chapters across 4 modules — Meet Claude, Working In Claude, Prompting, Trust And Next Steps). Pure static-path; consumes `host-kit` (lives in this repo at `packages/host-kit/`) for shared chrome, telemetry, and the publish CLI. No Bilko-host server route.
 - **Stepproof** (`/projects/stepproof/`) → `~/Projects/Stepproof/` — YAML scenario regression tests for AI pipelines (marketing page; CLI lives at github.com/StanislavBG/stepproof)
 - **StackAudit** (`/projects/stack-audit/`) → `~/Projects/Stack-Audit/` — SaaS tool stack cost + waste finder
 - **LaunchGrader** (`/projects/launch-grader/`) → `~/Projects/Launch-Grader/` — 5-dimension go-to-market readiness audit
@@ -106,6 +108,16 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 - `Rewrites` — AI rewrite suggestions with copy buttons
 - `CrossPromo` — Contextual links to related tools
 - `colors.ts` — Shared grade/bar color utilities
+
+### host-kit (`packages/host-kit/`)
+This is the client SDK that static-path siblings use. It provides `authFetch`/`useAuth` (Clerk Bearer auth to the host's `/api`), the games hooks, `SiteHeader`, `GameShell`, and the `bilko-host-kit` manifest CLI. It is a pnpm workspace package with its own build and tests (`pnpm --filter host-kit build|test|typecheck`).
+
+All 14 sibling consumers depend on it locally with `"host-kit": "file:../Bilko/packages/host-kit"`. None of them use npm. Those consumers are the 8 AI-tool pages, Stepproof, Academy, Sudoku, Etch, Fizzpop and MindSwiffer.
+- **After changing it:** pnpm copies the untracked `dist/` into each app. Run `pnpm --filter host-kit build` here, then `pnpm install` in each app.
+- **Tailwind:** apps that render its components need `@source "<rel>/node_modules/host-kit/dist";` in their Tailwind CSS, because Tailwind skips `node_modules`.
+- **Changesets:** add a `.changeset/*.md` (root `.changeset/`) for each change.
+- **npm releases:** optional. Push a `host-kit-vX.Y.Z` tag to run `.github/workflows/host-kit-release.yml`. This needs an `NPM_AUTOMATION_TOKEN` repo secret.
+- **History:** merged in from `StanislavBG/bilko-host-kit` (now archived) on 2026-10-04, with its full history.
 
 ### Shared Hooks (`src/hooks/`)
 - `useAuth` — Clerk auth state

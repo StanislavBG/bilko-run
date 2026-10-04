@@ -186,6 +186,27 @@ describe('withPublishCheckout', () => {
     expect(statusAfter).toBe(statusBefore);
   });
 
+  it('creates a missing parent state directory before taking the lock', async () => {
+    const originDir = resolve(tmp, 'origin6.git');
+    const hostDir = resolve(tmp, 'host6');
+    const checkoutDir = resolve(tmp, 'missing-state', 'bilko-host', 'publish-checkout');
+
+    await makeBareOrigin(originDir);
+    await cloneAndSeed(originDir, hostDir);
+
+    const outcome = await withPublishCheckout(
+      { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main' },
+      async (root) => {
+        await writeFile(join(root, 'fileB.txt'), 'built output\n', 'utf8');
+        return { result: 'ok', paths: ['fileB.txt'], message: 'publish fileB' };
+      },
+    );
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error('unreachable');
+    expect(outcome.committed).toBe(true);
+  });
+
   it('serializes concurrent callers via the lock, returning stage "lock" when exhausted', async () => {
     const originDir = resolve(tmp, 'origin5.git');
     const hostDir = resolve(tmp, 'host5');

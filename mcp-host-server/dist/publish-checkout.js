@@ -103,6 +103,9 @@ export async function withPublishCheckout(opts, fn) {
     const branch = opts.branch ?? DEFAULT_BRANCH;
     const lockTimeoutMs = opts.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
     const lockDir = `${checkoutDir}.lock`;
+    // The lock sits beside the checkout, so its parent must exist before
+    // acquireLock's non-recursive mkdir (fresh machines have no state dir yet).
+    await mkdir(resolve(checkoutDir, '..'), { recursive: true });
     const gotLock = await acquireLock(lockDir, lockTimeoutMs);
     if (!gotLock) {
         return { ok: false, stage: 'lock', error: `timed out waiting for publish lock at ${lockDir}` };

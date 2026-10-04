@@ -49,6 +49,16 @@ In your app repo (e.g. `~/Projects/Outdoor-Hours/`), add a `.mcp.json`:
 
 Claude Code picks it up automatically when you open the repo.
 
+### Headless / scheduled runs (`claude -p`)
+
+A project-scoped `.mcp.json` server needs interactive approval, so a headless `claude -p` run (e.g. a scheduled PRD) may never load it. For headless publishing, register the server at user scope instead (this is how this machine is configured today):
+
+```bash
+claude mcp add -s user bilko-host -- node /home/bilko/Projects/Bilko/mcp-host-server/dist/server.js
+```
+
+Even when the server is connected, its tools may arrive as *deferred* tools: the executor must load them with `ToolSearch` (`select:mcp__bilko-host__publish_static_project`) before calling them. A headless prompt that expects `publish_static_project` should say so explicitly instead of assuming the tool is already in the tool list.
+
 ## Typical sibling-repo session flow
 
 ```
@@ -72,7 +82,7 @@ That's it. Render redeploys after step 4 and 5; bilko.run/projects/<slug>/ goes 
 
 | Var | Required | Effect |
 |---|---|---|
-| `BILKO_PUBLISH_CHECKOUT` | No | Absolute path to the dedicated git checkout the server uses for every mutating call (commit + push happen here, never in your working tree). Defaults to `~/.local/state/bilko-host/publish-checkout`. |
+| `BILKO_PUBLISH_CHECKOUT` | No | Absolute path to the dedicated git checkout the server uses for every mutating call (commit + push happen here, never in your working tree). Defaults to `~/.local/state/bilko-host/publish-checkout`; missing parent directories are created on first use. |
 | `TURSO_DATABASE_URL` | No | Turso database URL for manifest rows and publish-override audit logs. |
 | `TURSO_AUTH_TOKEN` | No | Auth token paired with `TURSO_DATABASE_URL`. |
 

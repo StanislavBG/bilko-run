@@ -518,9 +518,10 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     return reply.redirect(proLink, 302);
   });
 
-  // Coffee-tip redirect — a stable top-level URL other projects (e.g. the
-  // social-signals-trader dashboard, a static bundle with no auth/email UI)
-  // can point a plain <a href> at. Must never 404/5xx: when nothing is
+  // Coffee-tip redirect — the shared Bilko tip jar. A stable top-level URL
+  // other projects (the social-signals-trader dashboard, the
+  // claude-code-session-manager npm `funding` field) point a plain <a href>
+  // at, so the path must never change. Must never 404/5xx: when nothing is
   // configured yet, show a 200 "temporarily unavailable" page instead.
   app.get('/coffee', async (_req, reply) => {
     const paymentLink = process.env.STRIPE_PAYMENT_LINK_PUBLICTRADES_COFFEE;

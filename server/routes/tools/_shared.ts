@@ -94,6 +94,25 @@ export async function checkRateLimit(ipHash: string, endpoint: string, email?: s
 
 export const parseResult = parseJsonResponse;
 
+/**
+ * Resolves the entitlement email strictly from the verified Clerk token.
+ * Never reads req.body — callers must not let the client self-report entitlement.
+ */
+export async function entitlementEmail(req: FastifyRequest): Promise<string | undefined> {
+  const email = await verifyClerkToken(req.headers.authorization);
+  return email ? email.toLowerCase() : undefined;
+}
+
+export async function checkRateLimitForRequest(
+  req: FastifyRequest,
+  ipHash: string,
+  endpoint: string,
+  productKey?: string,
+): Promise<RateLimitResult> {
+  const email = await entitlementEmail(req);
+  return checkRateLimit(ipHash, endpoint, email, productKey);
+}
+
 // ── Platform-wide cost controls ──────────────────────────
 export const USER_DAILY_DEFAULT = 100;
 export const USER_DAILY_ADMIN   = 1000;
@@ -161,6 +180,7 @@ export async function handleGenerateEndpoint(
     endpoint: string;
     inputField: string;
     inputText: string;
+    /** @deprecated entitlement is resolved from the verified Clerk token, never from the request body. Kept so existing callers still compile. */
     bodyEmail?: string;
     systemPrompt: string;
     userPrompt: string;
@@ -178,7 +198,7 @@ export async function handleGenerateEndpoint(
     return { error: `Input must be under ${opts.maxInputLen ?? 2000} characters.` };
   }
 
-  const email = await verifyClerkToken(req.headers.authorization);
+  const email = await entitlementEmail(req);
   if (!email) {
     reply.status(401);
     return { error: 'Sign in required.', requiresEmail: true };

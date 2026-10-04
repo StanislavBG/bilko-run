@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { authFetch } from './auth.js';
 
 const HOST = 'https://bilko.run';
 
@@ -85,14 +86,13 @@ export function useLeaderboard(game: string, opts: LeaderboardOpts = {}): {
   }, [fetchScores]);
 
   const submit = useCallback(async (score: number, mode?: string, payload?: unknown): Promise<boolean> => {
-    const r = await fetch(`${HOST}/api/games/${game}/scores`, {
+    const r = await authFetch(`${HOST}/api/games/${game}/scores`, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ score, mode, payload }),
     });
-    if (r.ok) void fetchScores();
-    return r.ok;
+    if (r?.ok) void fetchScores();
+    return r?.ok ?? false;
   }, [game, fetchScores]);
 
   return { scores, loading, error, submit, refresh: fetchScores };
@@ -110,20 +110,19 @@ export function useSaveState<T = unknown>(game: string): SaveStateResult<T> {
 
   useEffect(() => {
     void (async () => {
-      const r = await fetch(`${HOST}/api/games/${game}/save`, { credentials: 'include' });
-      if (r.ok) setState(await r.json() as typeof state);
+      const r = await authFetch(`${HOST}/api/games/${game}/save`);
+      if (r?.ok) setState(await r.json() as typeof state);
       setLoading(false);
     })();
   }, [game]);
 
   const save = useCallback(async (blob: T): Promise<boolean> => {
-    const r = await fetch(`${HOST}/api/games/${game}/save`, {
+    const r = await authFetch(`${HOST}/api/games/${game}/save`, {
       method: 'PUT',
-      credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ blob, expectedVersion: stateRef.current.version }),
     });
-    if (r.ok) {
+    if (r?.ok) {
       const j = await r.json() as { version: number };
       setState({ blob, version: j.version, updated_at: Math.floor(Date.now() / 1000) });
       return true;
@@ -132,7 +131,7 @@ export function useSaveState<T = unknown>(game: string): SaveStateResult<T> {
   }, [game]);
 
   const clear = useCallback(async (): Promise<void> => {
-    await fetch(`${HOST}/api/games/${game}/save`, { method: 'DELETE', credentials: 'include' });
+    await authFetch(`${HOST}/api/games/${game}/save`, { method: 'DELETE' });
     setState({ blob: null, version: 0, updated_at: 0 });
   }, [game]);
 
@@ -154,8 +153,8 @@ export function useUnlocks(game: string): {
   useEffect(() => {
     void (async () => {
       const [u, a] = await Promise.all([
-        fetch(`${HOST}/api/games/${game}/unlocks`, { credentials: 'include' })
-          .then((r) => r.ok ? r.json() as Promise<{ unlocks: UnlockRow[] }> : { unlocks: [] }),
+        authFetch(`${HOST}/api/games/${game}/unlocks`)
+          .then((r) => r?.ok ? r.json() as Promise<{ unlocks: UnlockRow[] }> : { unlocks: [] }),
         fetch(`${HOST}/api/games/${game}/achievements`)
           .then((r) => r.ok ? r.json() as Promise<{ achievements: AchievementDef[] }> : { achievements: [] }),
       ]);
@@ -165,13 +164,12 @@ export function useUnlocks(game: string): {
   }, [game]);
 
   const unlock = useCallback(async (key: string): Promise<boolean> => {
-    const r = await fetch(`${HOST}/api/games/${game}/unlock`, {
+    const r = await authFetch(`${HOST}/api/games/${game}/unlock`, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ key }),
     });
-    if (r.ok) {
+    if (r?.ok) {
       const j = await r.json() as { unlocked_at: number; crossUnlock?: CrossUnlock };
       setUnlocks((prev) =>
         prev.some((u) => u.key === key) ? prev : [...prev, { key, unlocked_at: j.unlocked_at }],

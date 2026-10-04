@@ -27,6 +27,8 @@ export { initTelemetry, log, logError, track, flush } from './telemetry.js';
 // Game services — leaderboards, save state, achievements.
 
 export { useLeaderboard, useSaveState, useUnlocks } from './games.js';
+export { initAuth, useAuth, openSignIn, signOut, getAuthToken, authFetch, hasSignedInCookie } from './auth.js';
+export type { AuthState } from './auth.js';
 export type { ScoreRow, LeaderboardOpts, AchievementDef, UnlockRow, SaveStateResult, CrossUnlock } from './games.js';
 
 // ─────────────────────────────────────────────────────────────

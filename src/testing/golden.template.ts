@@ -9,7 +9,7 @@
  *   4. Signed-in user with credits can complete the golden path and ScoreCard renders
  *
  * Usage:
- *   cp node_modules/@bilkobibitkov/host-kit/dist/testing/golden.template.ts.txt \
+ *   cp node_modules/host-kit/dist/testing/golden.template.ts.txt \
  *      tests/golden.spec.ts
  *   # then fill in the three TODOs below
  */
@@ -19,7 +19,7 @@ import {
   expectChromeLoaded,
   submitPrimaryAction,
   expectScoreCard,
-} from '@bilkobibitkov/host-kit/testing';
+} from 'host-kit/testing';
 
 const SLUG     = 'TODO-slug';        // your sibling's slug
 const TITLE_RE = /TODO Title/;       // ToolHero h1 text regex

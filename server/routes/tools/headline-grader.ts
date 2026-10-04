@@ -4,9 +4,8 @@ import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
   parseResult, handleGenerateEndpoint, FREE_TIER_LIMIT, HEADLINE_GRADER_ENDPOINT, resetUsage,
-  enforceCallLimits, isAdminEmail,
+  enforceCallLimits, isAdminEmail, entitlementEmail,
 } from './_shared.js';
-import { verifyClerkToken } from '../../clerk.js';
 
 export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
   // ── Headline Grader ──────────────────────────────────────
@@ -32,7 +31,7 @@ export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
   });
 
   app.post('/api/demos/headline-grader', async (req, reply) => {
-    const body = req.body as { headline?: string; context?: string; email?: string } | null;
+    const body = req.body as { headline?: string; context?: string } | null;
     const headline = (body?.headline ?? '').trim();
     const context = (['email', 'ad', 'landing', 'blog', 'social'].includes((body?.context ?? '').toLowerCase())
       ? body!.context!.toLowerCase()
@@ -47,8 +46,8 @@ export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
     }
 
     const ipHash = hashIp(req.ip);
-    const email = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const rate = await checkRateLimit(ipHash, HEADLINE_GRADER_ENDPOINT, email);
+    const verifiedEmail = await entitlementEmail(req);
+    const rate = await checkRateLimit(ipHash, HEADLINE_GRADER_ENDPOINT, verifiedEmail);
     if (!rate.allowed) {
       reply.status(429);
       return {
@@ -59,8 +58,7 @@ export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
         message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const _hgVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const _hgLimit = await enforceCallLimits({ userEmail: _hgVerifiedEmail, ipHash, isAdmin: _hgVerifiedEmail ? isAdminEmail(_hgVerifiedEmail) : false, appSlug: 'headline-grader' });
+    const _hgLimit = await enforceCallLimits({ userEmail: verifiedEmail ?? null, ipHash, isAdmin: verifiedEmail ? isAdminEmail(verifiedEmail) : false, appSlug: 'headline-grader' });
     if (!_hgLimit.ok) { reply.status(_hgLimit.status); return { error: _hgLimit.reason }; }
 
     const wordCountByContext: Record<string, string> = {
@@ -171,7 +169,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
   });
 
   app.post('/api/demos/headline-grader/compare', async (req, reply) => {
-    const body = req.body as { headlineA?: string; headlineB?: string; email?: string } | null;
+    const body = req.body as { headlineA?: string; headlineB?: string } | null;
     const headlineA = (body?.headlineA ?? '').trim();
     const headlineB = (body?.headlineB ?? '').trim();
     if (!headlineA || headlineA.length < 3 || !headlineB || headlineB.length < 3) {
@@ -184,8 +182,8 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
     }
 
     const hgcIpHash = hashIp(req.ip);
-    const hgcEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const hgcRate = await checkRateLimit(hgcIpHash, HEADLINE_GRADER_ENDPOINT, hgcEmail);
+    const hgcVerifiedEmail = await entitlementEmail(req);
+    const hgcRate = await checkRateLimit(hgcIpHash, HEADLINE_GRADER_ENDPOINT, hgcVerifiedEmail);
     if (!hgcRate.allowed) {
       reply.status(429);
       return {
@@ -197,8 +195,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
           ? paidGateMsg(hgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const _hgcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const _hgcLimit = await enforceCallLimits({ userEmail: _hgcVerifiedEmail, ipHash: hgcIpHash, isAdmin: _hgcVerifiedEmail ? isAdminEmail(_hgcVerifiedEmail) : false, appSlug: 'headline-grader' });
+    const _hgcLimit = await enforceCallLimits({ userEmail: hgcVerifiedEmail ?? null, ipHash: hgcIpHash, isAdmin: hgcVerifiedEmail ? isAdminEmail(hgcVerifiedEmail) : false, appSlug: 'headline-grader' });
     if (!_hgcLimit.ok) { reply.status(_hgcLimit.status); return { error: _hgcLimit.reason }; }
 
     const scoringSystemPrompt = `You are a world-class direct response copywriting analyst. You evaluate headlines using four proven conversion frameworks.
@@ -320,7 +317,7 @@ Write the verdict and suggested hybrid.`;
 
   // ── Headline Generator (inverse mode) ──────────────────────────
   app.post('/api/demos/headline-grader/generate', async (req, reply) => {
-    const body = req.body as { description?: string; context?: string; count?: number; email?: string } | null;
+    const body = req.body as { description?: string; context?: string; count?: number } | null;
     const description = (body?.description ?? '').trim();
     const context = body?.context ?? 'landing';
     const count = Math.min(Math.max(body?.count ?? 5, 3), 10);
@@ -354,7 +351,6 @@ Respond ONLY with valid JSON:
       endpoint: HEADLINE_GRADER_ENDPOINT,
       inputField: 'product or page',
       inputText: description,
-      bodyEmail: body?.email,
       systemPrompt,
       userPrompt: `Generate ${count} high-converting headlines for this:\n\n${description}`,
       logTag: 'headline_generator',

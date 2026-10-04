@@ -2,14 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail,
+  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail, entitlementEmail,
 } from './_shared.js';
-import { verifyClerkToken } from '../../clerk.js';
 
 export function registerThreadGraderRoutes(app: FastifyInstance): void {
   // ── Thread Generator (inverse mode) ───────────────────────────
   app.post('/api/demos/thread-grader/generate', async (req, reply) => {
-    const body = req.body as { topic?: string; tweetCount?: number; email?: string } | null;
+    const body = req.body as { topic?: string; tweetCount?: number } | null;
     const topic = (body?.topic ?? '').trim();
     const tweetCount = Math.min(Math.max(body?.tweetCount ?? 7, 3), 15);
 
@@ -37,7 +36,6 @@ Respond ONLY with valid JSON:
       endpoint: 'thread-grader',
       inputField: 'topic',
       inputText: topic,
-      bodyEmail: body?.email,
       systemPrompt,
       userPrompt: `Write a ${tweetCount}-tweet viral thread about:\n\n${topic}`,
       logTag: 'thread_generator',
@@ -47,7 +45,7 @@ Respond ONLY with valid JSON:
   // ── Thread Grader ──────────────────────────────────────
 
   app.post('/api/demos/thread-grader', async (req, reply) => {
-    const body = req.body as { threadText?: string; email?: string } | null;
+    const body = req.body as { threadText?: string } | null;
     const threadText = (body?.threadText ?? '').trim();
     if (!threadText || threadText.length < 20) {
       reply.status(400);
@@ -59,8 +57,8 @@ Respond ONLY with valid JSON:
     }
 
     const _tgIpHash = hashIp(req.ip);
-    const _tgEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const _tgRate = await checkRateLimit(_tgIpHash, 'thread-grader', _tgEmail);
+    const _tgVerifiedEmail = await entitlementEmail(req);
+    const _tgRate = await checkRateLimit(_tgIpHash, 'thread-grader', _tgVerifiedEmail);
     if (!_tgRate.allowed) {
       reply.status(429);
       return {
@@ -71,8 +69,7 @@ Respond ONLY with valid JSON:
         message: _tgRate.isPro ? paidGateMsg(_tgRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const _tgVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const _tgLimit = await enforceCallLimits({ userEmail: _tgVerifiedEmail, ipHash: _tgIpHash, isAdmin: _tgVerifiedEmail ? isAdminEmail(_tgVerifiedEmail) : false, appSlug: 'thread-grader' });
+    const _tgLimit = await enforceCallLimits({ userEmail: _tgVerifiedEmail ?? null, ipHash: _tgIpHash, isAdmin: _tgVerifiedEmail ? isAdminEmail(_tgVerifiedEmail) : false, appSlug: 'thread-grader' });
     if (!_tgLimit.ok) { reply.status(_tgLimit.status); return { error: _tgLimit.reason }; }
 
     const systemPrompt = `You are a viral content analyst specializing in X/Twitter threads. Score this thread on 4 pillars:
@@ -154,7 +151,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
   });
 
   app.post('/api/demos/thread-grader/compare', async (req, reply) => {
-    const body = req.body as { threadA?: string; threadB?: string; email?: string } | null;
+    const body = req.body as { threadA?: string; threadB?: string } | null;
     const threadA = (body?.threadA ?? '').trim();
     const threadB = (body?.threadB ?? '').trim();
 
@@ -168,8 +165,8 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
     }
 
     const tgcIpHash = hashIp(req.ip);
-    const tgcEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const tgcRate = await checkRateLimit(tgcIpHash, 'thread-grader', tgcEmail);
+    const tgcVerifiedEmail = await entitlementEmail(req);
+    const tgcRate = await checkRateLimit(tgcIpHash, 'thread-grader', tgcVerifiedEmail);
     if (!tgcRate.allowed) {
       reply.status(429);
       return {
@@ -180,8 +177,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         message: tgcRate.isPro ? paidGateMsg(tgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const tgcVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const tgcLimit = await enforceCallLimits({ userEmail: tgcVerifiedEmail, ipHash: tgcIpHash, isAdmin: tgcVerifiedEmail ? isAdminEmail(tgcVerifiedEmail) : false, appSlug: 'thread-grader' });
+    const tgcLimit = await enforceCallLimits({ userEmail: tgcVerifiedEmail ?? null, ipHash: tgcIpHash, isAdmin: tgcVerifiedEmail ? isAdminEmail(tgcVerifiedEmail) : false, appSlug: 'thread-grader' });
     if (!tgcLimit.ok) { reply.status(tgcLimit.status); return { error: tgcLimit.reason }; }
 
     const scoringSystemPrompt = `You are a viral content analyst specializing in X/Twitter threads. Score this thread on 4 pillars:

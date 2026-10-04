@@ -2,14 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { askGemini } from '../../gemini.js';
 import {
   hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail,
+  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail, entitlementEmail,
 } from './_shared.js';
-import { verifyClerkToken } from '../../clerk.js';
 
 export function registerAdScorerRoutes(app: FastifyInstance): void {
   // ── Ad Copy Generator (inverse mode) ──────────────────────────
   app.post('/api/demos/ad-scorer/generate', async (req, reply) => {
-    const body = req.body as { description?: string; platform?: string; count?: number; email?: string } | null;
+    const body = req.body as { description?: string; platform?: string; count?: number } | null;
     const description = (body?.description ?? '').trim();
     const validPlatforms = ['facebook', 'google', 'linkedin'] as const;
     const platform = validPlatforms.includes(body?.platform as any) ? body!.platform! : 'facebook';
@@ -41,7 +40,6 @@ Respond ONLY with valid JSON:
       endpoint: 'ad-scorer',
       inputField: 'product',
       inputText: description,
-      bodyEmail: body?.email,
       systemPrompt,
       userPrompt: `Generate ${count} ${platform} ad variants for:\n\n${description}`,
       logTag: 'ad_generator',
@@ -51,7 +49,7 @@ Respond ONLY with valid JSON:
   // ── Ad Scorer ──────────────────────────────────────
 
   app.post('/api/demos/ad-scorer', async (req, reply) => {
-    const body = req.body as { adCopy?: string; platform?: string; email?: string } | null;
+    const body = req.body as { adCopy?: string; platform?: string } | null;
     const adCopy = (body?.adCopy ?? '').trim();
     const platform = (body?.platform ?? 'facebook').toLowerCase();
     if (!adCopy || adCopy.length < 10) {
@@ -64,8 +62,8 @@ Respond ONLY with valid JSON:
     }
 
     const _asIpHash = hashIp(req.ip);
-    const _asEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const _asRate = await checkRateLimit(_asIpHash, 'ad-scorer', _asEmail);
+    const _asVerifiedEmail = await entitlementEmail(req);
+    const _asRate = await checkRateLimit(_asIpHash, 'ad-scorer', _asVerifiedEmail);
     if (!_asRate.allowed) {
       reply.status(429);
       return {
@@ -76,8 +74,7 @@ Respond ONLY with valid JSON:
         message: _asRate.isPro ? paidGateMsg(_asRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const _asVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const _asLimit = await enforceCallLimits({ userEmail: _asVerifiedEmail, ipHash: _asIpHash, isAdmin: _asVerifiedEmail ? isAdminEmail(_asVerifiedEmail) : false, appSlug: 'ad-scorer' });
+    const _asLimit = await enforceCallLimits({ userEmail: _asVerifiedEmail ?? null, ipHash: _asIpHash, isAdmin: _asVerifiedEmail ? isAdminEmail(_asVerifiedEmail) : false, appSlug: 'ad-scorer' });
     if (!_asLimit.ok) { reply.status(_asLimit.status); return { error: _asLimit.reason }; }
 
     const systemPrompt = `You are a world-class performance ad copywriting analyst. You evaluate ad copy for paid platforms (Facebook, Google, LinkedIn) using proven direct response frameworks.
@@ -158,7 +155,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
   });
 
   app.post('/api/demos/ad-scorer/compare', async (req, reply) => {
-    const body = req.body as { adCopyA?: string; adCopyB?: string; platform?: string; email?: string } | null;
+    const body = req.body as { adCopyA?: string; adCopyB?: string; platform?: string } | null;
     const adCopyA = (body?.adCopyA ?? '').trim();
     const adCopyB = (body?.adCopyB ?? '').trim();
     const platform = (body?.platform ?? 'facebook').toLowerCase();
@@ -173,8 +170,8 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
     }
 
     const ascIpHash = hashIp(req.ip);
-    const ascEmail = (body?.email ?? '').trim().toLowerCase() || undefined;
-    const ascRate = await checkRateLimit(ascIpHash, 'ad-scorer', ascEmail);
+    const ascVerifiedEmail = await entitlementEmail(req);
+    const ascRate = await checkRateLimit(ascIpHash, 'ad-scorer', ascVerifiedEmail);
     if (!ascRate.allowed) {
       reply.status(429);
       return {
@@ -185,8 +182,7 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
         message: ascRate.isPro ? paidGateMsg(ascRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
       };
     }
-    const ascVerifiedEmail = await verifyClerkToken(req.headers.authorization);
-    const ascLimit = await enforceCallLimits({ userEmail: ascVerifiedEmail, ipHash: ascIpHash, isAdmin: ascVerifiedEmail ? isAdminEmail(ascVerifiedEmail) : false, appSlug: 'ad-scorer' });
+    const ascLimit = await enforceCallLimits({ userEmail: ascVerifiedEmail ?? null, ipHash: ascIpHash, isAdmin: ascVerifiedEmail ? isAdminEmail(ascVerifiedEmail) : false, appSlug: 'ad-scorer' });
     if (!ascLimit.ok) { reply.status(ascLimit.status); return { error: ascLimit.reason }; }
 
     const scoringSystemPrompt = `You are a world-class performance ad copywriting analyst. You evaluate ad copy for paid platforms (Facebook, Google, LinkedIn) using proven direct response frameworks.

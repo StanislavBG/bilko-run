@@ -84,7 +84,7 @@ function consumeRateLimit(bucket: LeakyBucket, now = Date.now()): boolean {
   return true;
 }
 
-function retryAfterMs(bucket: LeakyBucket, now = Date.now()): number {
+function retryAfterMs(bucket: LeakyBucket, _now = Date.now()): number {
   const excessTokens = bucket.tokens + 1 - bucket.capacity;
   return Math.ceil(Math.max(0, excessTokens) * bucket.drainRateMs);
 }

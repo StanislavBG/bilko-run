@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
-import { ADMIN_EMAILS } from '../constants.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 const COST_PER_CALL = 0.001;

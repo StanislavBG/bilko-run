@@ -101,7 +101,7 @@ function StatCard({ label, value, sub, priorValue, currentNumeric }: { label: st
   );
 }
 
-function BarChart({ data, label, color = 'bg-fire-400' }: { data: Array<{ key: string; value: number }>; label: string; color?: string }) {
+function BarChart({ data, label: _label, color = 'bg-fire-400' }: { data: Array<{ key: string; value: number }>; label: string; color?: string }) {
   if (data.length === 0) return <p className="text-sm text-warm-400">No data yet</p>;
   const max = Math.max(...data.map(x => x.value), 1);
   return (

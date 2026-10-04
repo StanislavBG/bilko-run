@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
 import { usePageView, track } from '../hooks/usePageView.js';
 import { ADMIN_EMAILS } from '../constants.js';
@@ -26,7 +26,6 @@ function activeSectionPath(pathname: string): string {
 export function Layout() {
   usePageView();
   const isAdmin = useIsAdmin();
-  const navigate = useNavigate();
   const location = useLocation();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);

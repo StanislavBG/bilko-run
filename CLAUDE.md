@@ -108,9 +108,8 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 - `colors.ts` — Shared grade/bar color utilities
 
 ### Shared Hooks (`src/hooks/`)
-- `useToolApi` — Auth, submit, compare, generate, error/loading/token state
+- `useAuth` — Clerk auth state
 - `usePageView` — Page view tracking with Clerk email
-- `useOgMeta` — OG/Twitter meta tag setter
 
 ### Backend Patterns (`server/`)
 - `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the inverse-mode generator helper. `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
@@ -120,6 +119,18 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 - `server/db.ts` — Turso client, async helpers (`dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`), migrations, seed data
 - `server/gemini.ts` — Gemini API client (key via header, not URL)
 - `server/utils.ts` — `parseJsonResponse` (shared Gemini output parser)
+
+### Sanctioned app-specific host code
+
+Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
+
+- AI-tool gateway routes — `server/routes/tools/`
+- Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/`
+- Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`
+- SocialSignalsTrader coffee checkout — in `server/routes/stripe.ts`
+- Game config — `shared/game-config.ts`
+
+Any new app-specific host code must be added to this list in the same commit, or live in the sibling repo instead.
 
 ## Voice & Tone
 
@@ -131,6 +142,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 - Each tool is independent — don't merge them or add cross-dependencies in the backend or frontend
 - **New apps default to `static-path` (own repo).** Use `react-route` only when an app genuinely needs to live in this bundle (rare); the trend is the other direction
 - **New npm packages follow [`docs/publishing-contract.md`](docs/publishing-contract.md).** LICENSE on disk (not just metadata), MIT, `--provenance` on publish, Changesets-managed CHANGELOG. Templates in `docs/templates/`.
+- **Publishing a sibling app follows [`docs/host-contract.md`](docs/host-contract.md).** The registry is schema-validated (`mcp-host-server/src/contract/registry.ts`); `mcp-host-server/dist/` must be rebuilt and committed with any `src/` change (`tests/mcp-dist-sync.test.ts` enforces this). Paid-tier entitlement is derived only from the verified Clerk token, never from the request body.
 - All paid tools share the same credit model (free tools — LocalScore, OutdoorHours — don't deduct credits)
 - All SQL uses parameterized statements via db helpers — never string interpolation
 - Auth: `requireAuth` for token-spending endpoints, rate limiting for free-tier endpoints
@@ -141,14 +153,21 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-27 tests across 4 files:
-- `tests/db.test.ts` — Table creation, seed data, blog posts
-- `tests/tokens.test.ts` — Grant, deduct, balance, credit, idempotency
-- `tests/page-fetch.test.ts` — SSRF protection, URL validation
-- `tests/auth.test.ts` — Clerk token verification
+48 files, 672 tests (counted via `pnpm vitest run`; recount at `tests/*.test.ts` whenever this drifts).
 
-Run: `pnpm test`
+Commands:
+- `pnpm test` — vitest run
+- `pnpm typecheck` — client (`tsc --noEmit`) + server (`tsc -p tsconfig.server.json --noEmit`)
+- `pnpm test:e2e` — Playwright
+
+### What a test must guard
+
+A test earns its place by exercising host behavior: security (SSRF, auth, egress), money (tokens, Stripe checkout/webhooks), the publish contract (registry schema, mcp-dist sync), or routing (static-path vs react-route canonicalization). Do not add tests that:
+- grep prose, docs, or skill files instead of exercising code
+- snapshot the registry or other generated data
+- test a sibling app's UI — that belongs in the sibling's own golden spec
+- call production bilko.run from vitest
 
 ## Blog
 
-4 posts, guidelines in `blogs.md`. Each post follows the structure: hook → context → meat (3-5 sections) → what we'd do differently → CTA. Blog content seeds are in `server/db.ts` initDb().
+Guidelines in `blogs.md`. Each post follows the structure: hook → context → meat (3-5 sections) → what we'd do differently → CTA. Blog posts are seeded in `server/db.ts` initDb().

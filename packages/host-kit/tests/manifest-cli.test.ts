@@ -34,6 +34,23 @@ describe('bilko-host-kit emit-manifest', () => {
     expect(manifest.builtAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it('reads the installed version for a bare `host-kit` file: dependency', () => {
+    const dir = join(tmpdir(), `manifest-cli-file-${Date.now()}`);
+    mkdirSync(join(dir, 'dist'), { recursive: true });
+    mkdirSync(join(dir, 'node_modules/host-kit'), { recursive: true });
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'my-game', version: '1.0.0', dependencies: { 'host-kit': 'file:../Bilko/packages/host-kit' } }),
+    );
+    writeFileSync(join(dir, 'node_modules/host-kit/package.json'), JSON.stringify({ name: 'host-kit', version: '0.8.0' }));
+    writeFileSync(join(dir, 'dist/index.js'), 'console.log("hi")');
+
+    const result = spawnSync('node', [CLI, '--slug', 'my-game'], { cwd: dir });
+    expect(result.status, result.stderr?.toString()).toBe(0);
+    const manifest = JSON.parse(readFileSync(join(dir, 'dist/manifest.json'), 'utf8'));
+    expect(manifest.hostKit.version).toBe('0.8.0');
+  });
+
   it('exits with code 2 when --slug is missing', () => {
     const result = spawnSync('node', [CLI], { cwd: tmpdir() });
     expect(result.status).toBe(2);

@@ -33,9 +33,12 @@ const files = walk('dist').filter(f => f !== values.out);
 const totalGz = files.reduce((acc, f) => acc + gzipSync(readFileSync(f)).length, 0);
 const sha = run('git rev-parse --short HEAD');
 const branch = run('git rev-parse --abbrev-ref HEAD');
-let kit = (pkg.dependencies?.['@bilkobibitkov/host-kit'] ?? '0.0.0').replace(/^[\^~]/, '');
+// Package was published as @bilkobibitkov/host-kit before the rename to bare `host-kit`.
+const KIT_NAMES = ['host-kit', '@bilkobibitkov/host-kit'];
+const kitName = KIT_NAMES.find(n => pkg.dependencies?.[n]) ?? KIT_NAMES[0];
+let kit = (pkg.dependencies?.[kitName] ?? '0.0.0').replace(/^[\^~]/, '');
 if (!kit.match(/^\d/)) {
-  try { kit = JSON.parse(readFileSync('node_modules/@bilkobibitkov/host-kit/package.json', 'utf8')).version ?? '0.0.0'; }
+  try { kit = JSON.parse(readFileSync(`node_modules/${kitName}/package.json`, 'utf8')).version ?? '0.0.0'; }
   catch { kit = '0.0.0'; }
 }
 

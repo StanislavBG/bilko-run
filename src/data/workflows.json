@@ -1,0 +1,398 @@
+{
+  "generatedAt": "2026-10-04T19:31:18.781Z",
+  "groups": [
+    {
+      "slug": "session-manager",
+      "name": "Session Manager",
+      "href": "/projects/session-manager/",
+      "mechanics": "A watchdog wakes the scheduler, which picks queued PRDs, runs each as a headless Claude executor in its own git worktree, then gates, validates, and lands the result. Most of this site was built that way.",
+      "jobs": [
+        {
+          "id": "sm-scheduler",
+          "name": "Scheduler watchdog",
+          "desc": "Keeps the PRD scheduler running: picks up queued work and launches headless executors.",
+          "cadence": [
+            "every 2 min"
+          ],
+          "source": "systemd",
+          "intervalMinutes": 2
+        }
+      ]
+    },
+    {
+      "slug": "social-signals-trader",
+      "name": "Social Signals Trader",
+      "href": "/projects/social-signals-trader/",
+      "mechanics": "On market days a tick wakes every 15 minutes, reads the signals Burrow gathered overnight, and manages the Alpaca account. Snapshots and audits publish the results to the public dashboard.",
+      "jobs": [
+        {
+          "id": "sst-tick",
+          "name": "Trader tick",
+          "desc": "Reads fresh signals, sizes positions, and places or manages orders. The first and last ticks of the day only manage open positions.",
+          "cadence": [
+            "at 6:30am, weekdays PT",
+            "at 6:45am, weekdays PT",
+            "every 15 min, 7:00am–12:45pm, weekdays PT",
+            "at 12:55pm, weekdays PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 15,
+          "output": {
+            "label": "Dashboard",
+            "href": "/projects/social-signals-trader/"
+          }
+        },
+        {
+          "id": "sst-snapshot",
+          "name": "Snapshot",
+          "desc": "Captures account value vs SPY, positions, and the trade log for the public dashboard.",
+          "cadence": [
+            "every 6h at :00 PT",
+            "hourly at :29, 6:29am–12:29pm, weekdays PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 60,
+          "output": {
+            "label": "Dashboard",
+            "href": "/projects/social-signals-trader/"
+          }
+        },
+        {
+          "id": "sst-audit",
+          "name": "Execution audit",
+          "desc": "Checks that every intended trade actually filled the way the strategy said it should.",
+          "cadence": [
+            "hourly at :20, 6:20am–1:20pm, weekdays PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 60
+        },
+        {
+          "id": "sst-options",
+          "name": "Options status",
+          "desc": "Refreshes the summary of open options positions.",
+          "cadence": [
+            "at 6:05am, weekdays PT",
+            "at 7:05am, 9:05am, 11:05am, weekdays PT",
+            "at 12:55pm, weekdays PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 120
+        },
+        {
+          "id": "sst-rotate",
+          "name": "Log rotation",
+          "desc": "Rolls over the day’s data logs after the close.",
+          "cadence": [
+            "at 1:30pm, weekdays PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 1440
+        },
+        {
+          "id": "sst-catchup",
+          "name": "Boot catch-up",
+          "desc": "If the machine restarts mid-session, runs any tick it missed.",
+          "cadence": [
+            "at boot"
+          ],
+          "source": "cron",
+          "intervalMinutes": null
+        }
+      ]
+    },
+    {
+      "slug": "git-viewer",
+      "name": "Git Viewer",
+      "href": "/projects/git-viewer/",
+      "mechanics": "A scheduled GitHub Actions run pulls every repo through the GitHub API, bakes the result into one data file, and redeploys the dashboard.",
+      "jobs": [
+        {
+          "id": "gv-sync",
+          "name": "Data sync + deploy",
+          "desc": "Fetches repo stats through the GitHub API, bakes them into the dashboard, and redeploys it.",
+          "cadence": [
+            "daily at 9:00am UTC"
+          ],
+          "source": "github-actions",
+          "intervalMinutes": 1440,
+          "output": {
+            "label": "Git Viewer",
+            "href": "/projects/git-viewer/"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "blog",
+      "name": "Blog",
+      "href": "/blog",
+      "mechanics": "A cadence watchdog checks how long it has been since the last post and drafts a catch-up when the gap gets too long. A second timer checks that the watchdog itself is still alive.",
+      "jobs": [
+        {
+          "id": "blog-heartbeat",
+          "name": "Watchdog heartbeat",
+          "desc": "A dead-man’s switch: confirms the cadence watchdog has run recently.",
+          "cadence": [
+            "every 6h"
+          ],
+          "source": "systemd",
+          "intervalMinutes": 360
+        },
+        {
+          "id": "blog-cadence",
+          "name": "Cadence watchdog",
+          "desc": "Measures the gap since the last live post and drafts a catch-up post when it is too long.",
+          "cadence": [
+            "daily at midnight PT"
+          ],
+          "source": "systemd",
+          "intervalMinutes": 1440,
+          "output": {
+            "label": "Blog",
+            "href": "/blog"
+          }
+        }
+      ]
+    },
+    {
+      "slug": "burrow",
+      "name": "Burrow — the agency engine",
+      "mechanics": "Burrow is the local agent under everything else. It drives a real browser through Reddit, X, LinkedIn, Discord, and Facebook at human speed, indexes what it reads into a searchable knowledge base, and gathers the ticker data that feeds Social Signals Trader. Each pipeline has its own cron line.",
+      "jobs": [
+        {
+          "id": "bw-keepalive",
+          "name": "Knowledge server keepalive",
+          "desc": "Restarts the knowledge-base server if it stops answering.",
+          "cadence": [
+            "every 2 min PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 2
+        },
+        {
+          "id": "bw-research",
+          "name": "Research worker",
+          "desc": "Works through queued research questions against the knowledge base.",
+          "cadence": [
+            "every 2 min PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 2
+        },
+        {
+          "id": "bw-ticker-targeted",
+          "name": "Targeted ticker gather",
+          "desc": "Pulls fresh discussion for the tickers the trader is watching right now.",
+          "cadence": [
+            "every 15 min PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 15
+        },
+        {
+          "id": "bw-health",
+          "name": "Health snapshot",
+          "desc": "Records whether every pipeline is running on time.",
+          "cadence": [
+            "every 30 min PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 30
+        },
+        {
+          "id": "bw-web-opinion",
+          "name": "Web opinion search",
+          "desc": "Searches the open web for opinions on watched tickers.",
+          "cadence": [
+            "every 30 min PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 30
+        },
+        {
+          "id": "bw-ticker-state",
+          "name": "Ticker data state",
+          "desc": "Tracks how fresh the data is for each watched ticker, so gathers go where they are needed.",
+          "cadence": [
+            "every 30 min PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 30
+        },
+        {
+          "id": "bw-ping",
+          "name": "bilko.run ping",
+          "desc": "Checks that this site is up.",
+          "cadence": [
+            "hourly at :25 PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 60
+        },
+        {
+          "id": "bw-ticker-search",
+          "name": "Ticker search gather",
+          "desc": "Broad search for ticker mentions across sources.",
+          "cadence": [
+            "hourly at :20 PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 60
+        },
+        {
+          "id": "bw-discord",
+          "name": "Discord session",
+          "desc": "Reads trading Discord channels and captures ticker discussion.",
+          "cadence": [
+            "every 4h at :45 PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 240
+        },
+        {
+          "id": "bw-distill",
+          "name": "Distill",
+          "desc": "Condenses new captures into short insights with Claude.",
+          "cadence": [
+            "5×/day, 7:25am–11:25pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 240
+        },
+        {
+          "id": "bw-index",
+          "name": "Knowledge indexer",
+          "desc": "Chunks and embeds new captures into the knowledge base.",
+          "cadence": [
+            "5×/day, 7:10am–11:10pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 240
+        },
+        {
+          "id": "bw-ticker-tag",
+          "name": "Ticker tagging",
+          "desc": "Tags indexed posts with the tickers they mention, for the trader’s signal scoring.",
+          "cadence": [
+            "5×/day, 7:40am–11:40pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 240
+        },
+        {
+          "id": "bw-stats",
+          "name": "Stats snapshot",
+          "desc": "Rolls up posts, replies, captures, and knowledge-base growth.",
+          "cadence": [
+            "daily at 7:45am, 1:45pm, 7:45pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 360
+        },
+        {
+          "id": "bw-fb-football",
+          "name": "FB Football news",
+          "desc": "Posts as European Football Daily: web-sourced news plus a generated image.",
+          "cadence": [
+            "daily at 7:30am, 3:30pm, 11:30pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 480,
+          "output": {
+            "label": "European Football Daily",
+            "href": "https://www.facebook.com/profile.php?id=61587170666602"
+          }
+        },
+        {
+          "id": "bw-fb-bilko",
+          "name": "FB Bilko post",
+          "desc": "Posts short AI-education essays with generated images as Bilko Bibitkov.",
+          "cadence": [
+            "daily at 9:00am, 9:00pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 720,
+          "output": {
+            "label": "Bilko Bibitkov",
+            "href": "https://www.facebook.com/profile.php?id=61586788196871"
+          }
+        },
+        {
+          "id": "bw-short-interest",
+          "name": "Short interest",
+          "desc": "Collects short-interest data for watched tickers.",
+          "cadence": [
+            "daily at 4:15am, 4:15pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 720
+        },
+        {
+          "id": "bw-retention",
+          "name": "Capture retention",
+          "desc": "Clears out old raw captures once they are indexed.",
+          "cadence": [
+            "daily at 3:17am PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 1440
+        },
+        {
+          "id": "bw-catalysts",
+          "name": "Catalyst calendar",
+          "desc": "Collects upcoming earnings and other catalyst dates.",
+          "cadence": [
+            "daily at 7:10pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 1440
+        },
+        {
+          "id": "bw-trends",
+          "name": "Google Trends",
+          "desc": "Collects search-interest trends for watched tickers.",
+          "cadence": [
+            "daily at 7:30pm PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 1440
+        },
+        {
+          "id": "bw-linkedin",
+          "name": "LinkedIn session",
+          "desc": "Reads the LinkedIn feed and captures posts into the knowledge base.",
+          "cadence": [
+            "daily at 6:00am PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 1440
+        },
+        {
+          "id": "bw-reddit",
+          "name": "Reddit session",
+          "desc": "Human-paced scroll through followed subreddits; captures posts for the knowledge base and the trader.",
+          "cadence": [
+            "daily at 4:30am PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 1440
+        },
+        {
+          "id": "bw-x",
+          "name": "X session",
+          "desc": "Scrolls X, captures posts, and drafts the day’s post and replies.",
+          "cadence": [
+            "daily at 1:30am PT"
+          ],
+          "source": "cron",
+          "intervalMinutes": 1440,
+          "output": {
+            "label": "@BilkoBibitkov",
+            "href": "https://x.com/BilkoBibitkov"
+          }
+        }
+      ]
+    }
+  ]
+}

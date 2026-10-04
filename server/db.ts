@@ -3,6 +3,7 @@ import { mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { BLOG_REWRITES, type BlogRewrite } from './blog-rewrites/index.js';
+import { DEFAULT_BUDGET_GZ_BYTES, APP_BUDGETS_GZ_BYTES } from '../mcp-host-server/src/contract/app-budgets.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -677,36 +678,20 @@ export async function initDb(): Promise<void> {
     try {
       await client.execute({
         sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
-        args: [slug, 200_000, Math.floor(Date.now() / 1000)],
+        args: [slug, DEFAULT_BUDGET_GZ_BYTES, Math.floor(Date.now() / 1000)],
       });
     } catch { /* ignore */ }
   }
 
-  // Academy ships the cl100k_base BPE table for the in-browser tokenizer demo (~500 KB gz alone).
-  // Bumped from default 200 KB to 700 KB; trim target tracked in Bilko-Academy/KNOWN-ISSUES.md.
-  try {
-    await client.execute({
-      sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
-      args: ['academy', 700_000, Math.floor(Date.now() / 1000)],
-    });
-  } catch { /* ignore */ }
-
-  // Oversize-by-design siblings. These use a raise-if-lower upsert, not
-  // INSERT OR IGNORE: an existing row that is BELOW the real bundle size makes
-  // the publish gate unpassable forever, which is exactly what happened to
-  // session-manager (budget 195 KB vs an already-live 1,072,016-byte bundle —
-  // the live bundle predates the budget row, so the gate could only ever block
-  // updates to a bundle it had already shipped). Raise-only: a budget that has
-  // been deliberately tightened below these defaults is left alone only if it
-  // is already above them.
-  const OVERSIZE_BUDGETS: Array<[string, number]> = [
-    // web-remote phone app: WebSocket client + terminal renderer. Trim target
-    // tracked in session-manager's repo; 1.3 MB admits what is already live.
-    ['session-manager', 1_300_000],
-    // Godot web game: ~10 MB gz wasm engine + game pck.
-    ['escape-velocity', 30_000_000],
-  ];
-  for (const [slug, limit] of OVERSIZE_BUDGETS) {
+  // Apps with a per-slug override in the budget contract (mcp-host-server/src/contract/app-budgets.ts),
+  // e.g. academy's cl100k_base BPE table or escape-velocity's Godot wasm export. These use a
+  // raise-if-lower upsert, not INSERT OR IGNORE: an existing row that is BELOW the real bundle
+  // size makes the publish gate unpassable forever, which is exactly what happened to
+  // session-manager (budget 195 KB vs an already-live 1,072,016-byte bundle — the live bundle
+  // predates the budget row, so the gate could only ever block updates to a bundle it had
+  // already shipped). Raise-only: a budget that has been deliberately tightened below these
+  // defaults is left alone only if it is already above them.
+  for (const [slug, limit] of Object.entries(APP_BUDGETS_GZ_BYTES)) {
     try {
       await client.execute({
         sql: 'INSERT INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?) '

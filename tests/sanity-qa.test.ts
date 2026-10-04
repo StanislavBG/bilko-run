@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import type { SubagentResult, TargetStatus } from '../scripts/sanity-qa-runners/types.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { SubagentResult, TargetStatus, SanityTarget } from '../scripts/sanity-qa-runners/types.js';
+import { runSize } from '../scripts/sanity-qa-runners/size.js';
+import { APP_BUDGETS_GZ_BYTES, budgetFor } from '../mcp-host-server/src/contract/app-budgets.js';
 
 // ── Pure helpers extracted from sanity-qa.ts for unit testing ───────────────
 
@@ -183,5 +188,61 @@ describe('report table', () => {
       makeResult('a11y',     'pass', { foo: 'pass' }),
     ];
     expect(targetOverall('foo', results)).toBe('fail');
+  });
+});
+
+// ── runSize — contract-driven budgets ────────────────────────────────────────
+
+describe('runSize', () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function makeTarget(slug: string, sizeBytesGz: number, fileCount: number): SanityTarget {
+    const localPublicPath = mkdtempSync(join(tmpdir(), `sanity-qa-size-${slug}-`));
+    dirs.push(localPublicPath);
+    mkdirSync(localPublicPath, { recursive: true });
+    writeFileSync(
+      join(localPublicPath, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        slug,
+        version: '1.0.0',
+        builtAt: new Date().toISOString(),
+        bundle: { sizeBytesGz, fileCount },
+      }),
+    );
+    for (let i = 0; i < fileCount; i++) {
+      writeFileSync(join(localPublicPath, `file-${i}.txt`), 'x');
+    }
+    return { slug, name: slug, url: '', category: 'ai-tool', localPublicPath };
+  }
+
+  it('uses the contract default budget for a slug with no override', async () => {
+    const target = makeTarget('some-default-tool', budgetFor('some-default-tool') + 1, 5);
+    const result = await runSize([target], false);
+    expect(result.perTarget['some-default-tool']).toBe('fail');
+  });
+
+  it('uses the contract override budget for a slug with one, e.g. academy', async () => {
+    const limit = APP_BUDGETS_GZ_BYTES['academy'];
+    const target = makeTarget('academy', limit - 1, 5);
+    const result = await runSize([target], false);
+    expect(result.perTarget['academy']).toBe('pass');
+  });
+
+  it('exempts slugs with a contract budget override from the file-count check', async () => {
+    const limit = APP_BUDGETS_GZ_BYTES['escape-velocity'];
+    const target = makeTarget('escape-velocity', limit - 1, 40);
+    const result = await runSize([target], false);
+    expect(result.perTarget['escape-velocity']).toBe('pass');
+  });
+
+  it('still enforces the file-count check for default-budget slugs', async () => {
+    const target = makeTarget('some-default-tool', 1_000, 40);
+    const result = await runSize([target], false);
+    expect(result.perTarget['some-default-tool']).toBe('warn');
   });
 });

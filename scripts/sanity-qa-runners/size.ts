@@ -3,19 +3,7 @@ import { execSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import type { SanityTarget, SubagentResult, TargetStatus } from './types.js';
-
-const BUDGETS_BYTES: Record<string, number> = {
-  // Games — 250 KB gz
-  sudoku:        250 * 1024,
-  mindswiffer:   250 * 1024,
-  'game-academy': 250 * 1024,
-  // escape-velocity — Godot web export (wasm engine), 30 MB gz budget
-  'escape-velocity': 30_000_000,
-  // Academy — 400 KB gz
-  academy:       400 * 1024,
-  // Default AI tools / others — 200 KB gz
-  _default:      200 * 1024,
-};
+import { budgetFor, APP_BUDGETS_GZ_BYTES } from '../../mcp-host-server/src/contract/app-budgets.js';
 
 const MAX_FILE_COUNT = 30;
 const STALE_DAYS = 14;
@@ -88,7 +76,7 @@ export async function runSize(targets: SanityTarget[], failFast = false): Promis
       continue;
     }
 
-    const budget = BUDGETS_BYTES[target.slug] ?? BUDGETS_BYTES._default;
+    const budget = budgetFor(target.slug);
     const { sizeBytesGz, fileCount } = manifest.bundle;
     const sizeKB = (sizeBytesGz / 1024).toFixed(1);
     const budgetKB = (budget / 1024).toFixed(0);
@@ -100,8 +88,10 @@ export async function runSize(targets: SanityTarget[], failFast = false): Promis
       issues.push(`${sizeKB} KB gz > ${budgetKB} KB budget`);
     }
 
-    // File count check
-    if (fileCount > MAX_FILE_COUNT) {
+    // File count check — exempt bundles with a contract budget override: a
+    // raised size budget (e.g. escape-velocity's Godot wasm export) implies
+    // the app legitimately ships more files than the default-budget apps.
+    if (!(target.slug in APP_BUDGETS_GZ_BYTES) && fileCount > MAX_FILE_COUNT) {
       issues.push(`${fileCount} files > ${MAX_FILE_COUNT} max`);
     }
 
@@ -139,8 +129,8 @@ export async function runSize(targets: SanityTarget[], failFast = false): Promis
     '|---|---|---|---|---|',
     ...rows,
     '',
-    'Budgets: games=250 KB, academy=400 KB, others=200 KB. Max files=30. ' +
-      'Exception: escape-velocity=30 MB (Godot wasm export).',
+    `Default budget=${(budgetFor('') / 1024).toFixed(0)} KB, overrides from mcp-host-server's budget ` +
+      'contract. Max files=30 (exempt for apps with a budget override).',
   ].join('\n');
 
   return {

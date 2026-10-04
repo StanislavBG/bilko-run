@@ -182,7 +182,7 @@ One-time, by the maintainer:
    gh secret set NPM_AUTOMATION_TOKEN \
      --org StanislavBG \
      --visibility selected \
-     --repos "bilko-host-kit,Preflight,sudoku-engine,minesweeper-engine,webgpu-gemma,ai-tool-kit,page-roast,headline-grader,ad-scorer,thread-grader,email-forge,audience-decoder,launch-grader,stack-audit,session-manager,bilko-flow"
+     --repos "bilko-run,Preflight,sudoku-engine,minesweeper-engine,webgpu-gemma,ai-tool-kit,page-roast,headline-grader,ad-scorer,thread-grader,email-forge,audience-decoder,launch-grader,stack-audit,session-manager,bilko-flow"
    # Paste the token when prompted.
    ```
 5. Verify: tag a no-op version, push tag, watch the workflow publish.
@@ -248,4 +248,4 @@ If you exceed the cap: audit `files`, strip test fixtures from the tarball, and 
 - [`host-contract.md`](./host-contract.md) — sibling app contract (separate concern).
 - [`templates/release.yml.tmpl`](./templates/release.yml.tmpl) — copy into each new package's `.github/workflows/release.yml`.
 - [`templates/README.npm.tmpl.md`](./templates/README.npm.tmpl.md) — copy into each new package's `README.md` and substitute `{{...}}` placeholders.
-- Reference packages: `~/Projects/Bilko-Host-Kit/package.json` (library), `~/Projects/Preflight/packages/agent-trace/package.json` (CLI).
+- Reference packages: `packages/host-kit/package.json` in this repo (library), `~/Projects/Preflight/packages/agent-trace/package.json` (CLI).

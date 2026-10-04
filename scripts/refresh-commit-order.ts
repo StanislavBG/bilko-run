@@ -40,10 +40,10 @@ interface Source {
 }
 
 // Slugs whose repo isn't a standalone-projects.json localPath: npm packages and
-// the MCP host server (which lives inside this very repo, under mcp-host-server/).
+// in-repo packages (mcp-host-server/, packages/host-kit/).
 const EXTRA: Record<string, Source> = {
   'mcp-host':   { path: ROOT, subdir: 'mcp-host-server' },
-  'host-kit':   { path: '~/Projects/Bilko-Host-Kit' },
+  'host-kit':   { path: ROOT, subdir: 'packages/host-kit' },
   'bilko-flow': { path: '~/Projects/bilko-flow' },
   'session-manager': { path: '~/Projects/session-manager' },
 };

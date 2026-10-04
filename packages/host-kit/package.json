@@ -1,7 +1,7 @@
 {
   "name": "host-kit",
   "version": "0.7.2",
-  "description": "Shared React component kit for bilko.run sibling apps — ToolHero, ScoreCard, GameShell, typed bus, game tokens, manifest CLI.",
+  "description": "Shared React component kit for bilko.run sibling apps \u2014 ToolHero, ScoreCard, GameShell, typed bus, game tokens, manifest CLI.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -63,7 +63,7 @@
     "react-dom": "^18.3.1",
     "tsup": "^8.0.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.0.0"
+    "vitest": "^3.2.4"
   },
   "publishConfig": {
     "access": "public",
@@ -74,11 +74,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/StanislavBG/bilko-host-kit.git"
+    "url": "https://github.com/StanislavBG/bilko-run.git",
+    "directory": "packages/host-kit"
   },
-  "homepage": "https://github.com/StanislavBG/bilko-host-kit#readme",
+  "homepage": "https://github.com/StanislavBG/bilko-run/tree/main/packages/host-kit#readme",
   "bugs": {
-    "url": "https://github.com/StanislavBG/bilko-host-kit/issues"
+    "url": "https://github.com/StanislavBG/bilko-run/issues"
   },
   "keywords": [
     "bilko",

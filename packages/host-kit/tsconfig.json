@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
@@ -12,7 +15,18 @@
     "noEmit": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "host-kit/testing": [
+        "./src/testing/index.ts"
+      ]
+    }
   },
-  "include": ["src", "tests", "vitest.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "vitest.config.ts"
+  ]
 }

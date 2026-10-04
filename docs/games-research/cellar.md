@@ -655,4 +655,4 @@ These are the calls a designer / Bilko need to make before PRDs are written.
 - [Apple Human Interface Guidelines — Games](https://developer.apple.com/design/human-interface-guidelines/games)
 - `docs/sudoku-research.md` — sibling design brief; Cellar mirrors its structure
 - `docs/mindswiffer-research.md` — sibling design brief; Cellar inherits the no-guess / Daily / streak shape
-- `~/Projects/Bilko-Host-Kit/styles/game-tokens.css` — token definitions Cellar consumes; new `--card-*` and `--suit-*` tokens added by a Cellar-set PRD
+- `~/Projects/Bilko/packages/host-kit/styles/game-tokens.css` — token definitions Cellar consumes; new `--card-*` and `--suit-*` tokens added by a Cellar-set PRD

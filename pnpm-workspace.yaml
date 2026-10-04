@@ -1,6 +1,7 @@
 packages:
   - '.'
   - mcp-host-server
+  - packages/host-kit
 
 # pnpm v10+ requires this here (not package.json) for workspace roots.
 # Without it, ERR_PNPM_IGNORED_BUILDS fails the install on Render.

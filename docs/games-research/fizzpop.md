@@ -767,4 +767,4 @@ Five things that need a designer-or-Bilko call before the v1 PRDs are finalized.
 - [Apple Human Interface Guidelines — Games](https://developer.apple.com/design/human-interface-guidelines/games)
 - `docs/sudoku-research.md` — sibling design brief; FizzPop mirrors its structure
 - `docs/mindswiffer-research.md` — sibling design brief; FizzPop's daily/streak/calendar pattern matches MindSwiffer's exactly
-- `~/Projects/Bilko-Host-Kit/styles/game-tokens.css` — token inventory FizzPop consumes (existing) and proposes 6 net-new `--bubble-N` tokens for
+- `~/Projects/Bilko/packages/host-kit/styles/game-tokens.css` — token inventory FizzPop consumes (existing) and proposes 6 net-new `--bubble-N` tokens for

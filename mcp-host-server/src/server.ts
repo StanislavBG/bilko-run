@@ -37,6 +37,8 @@ import { fileURLToPath } from 'node:url';
 import { ManifestSchema } from './manifest-schema.js';
 import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables } from './db.js';
 import { runGates, gateSummary, type GateContext } from './gates/index.js';
+import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
+import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 
 const exec = promisify(execFile);
 
@@ -80,37 +82,15 @@ async function upsertManifest(manifest: ReturnType<typeof ManifestSchema.parse>)
   });
 }
 
-// ── Types matching projectsRegistry.ts ───────────────────────────────────
-interface StaticHost {
-  kind: 'static-path';
-  path: string;
-  sourceRepo?: string;
-  localPath?: string;
-}
-interface ExternalHost {
-  kind: 'external-url';
-  url: string;
-}
-interface Project {
-  slug: string;
-  name: string;
-  tagline: string;
-  category: string;
-  status: 'live' | 'cooking' | 'archived';
-  year: number;
-  host: StaticHost | ExternalHost;
-  tags?: readonly string[];
-  thumbnail?: string;
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────
-async function readRegistry(): Promise<Project[]> {
+async function readRegistry(): Promise<RegistryProject[]> {
   const raw = await readFile(REGISTRY_JSON, 'utf8');
-  return JSON.parse(raw) as Project[];
+  return parseRegistry(raw);
 }
 
-async function writeRegistry(projects: Project[]): Promise<void> {
-  await writeFile(REGISTRY_JSON, JSON.stringify(projects, null, 2) + '\n', 'utf8');
+async function writeRegistry(projects: RegistryProject[]): Promise<void> {
+  const validated = RegistrySchema.parse(projects);
+  await writeFile(REGISTRY_JSON, JSON.stringify(validated, null, 2) + '\n', 'utf8');
 }
 
 async function gitInHost(...args: string[]): Promise<string> {
@@ -213,11 +193,11 @@ server.registerTool(
     description:
       'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app shows up on /, /products, and ⌘K. Set autoCommit=true to also commit + push to origin so Render auto-deploys.',
     inputSchema: {
-      slug: z.string().min(1).describe('URL slug, kebab-case. Example: "outdoor-hours". Path will be /projects/<slug>/.'),
+      slug: SlugSchema.describe('URL slug, kebab-case. Example: "outdoor-hours". Path will be /projects/<slug>/.'),
       name: z.string().min(1).describe('Display name. Example: "OutdoorHours".'),
       tagline: z.string().min(1).describe('One-sentence pitch shown on cards.'),
       category: z.string().describe('Display category. Common: "AI Tool · Productivity", "AI Tool · Content", "AI Tool · Dev", "Game", "Data".'),
-      status: z.enum(['live', 'cooking', 'archived']).default('live'),
+      status: ProjectStatusSchema.default('live'),
       year: z.number().int().describe('Year of the build, e.g. 2026.'),
       sourceRepo: z.string().optional().describe('e.g. "github.com/StanislavBG/outdoor-hours"'),
       localPath: z.string().optional().describe('e.g. "~/Projects/Outdoor-Hours"'),
@@ -231,7 +211,7 @@ server.registerTool(
       if (projects.some(p => p.slug === slug)) {
         return err(`slug "${slug}" already registered. Use unregister_project first if you want to replace it.`);
       }
-      const entry: Project = {
+      const entry: RegistryProject = {
         slug,
         name,
         tagline,
@@ -271,7 +251,7 @@ server.registerTool(
     description:
       'Removes a project from the host registry by slug. Does NOT delete the public/projects/<slug>/ directory — pass deleteAssets=true to also rm -rf those bytes. Use this when retiring an app or before re-registering with different metadata.',
     inputSchema: {
-      slug: z.string().min(1),
+      slug: SlugSchema,
       deleteAssets: z.boolean().default(false).describe('Also remove public/projects/<slug>/.'),
       autoCommit: z.boolean().default(true).describe('Also commit + push.'),
     },
@@ -288,7 +268,7 @@ server.registerTool(
       const lines = [`unregistered: ${slug}`];
 
       if (deleteAssets) {
-        const dir = resolve(PUBLIC_PROJECTS, slug);
+        const dir = projectDir(PUBLIC_PROJECTS, slug);
         if (existsSync(dir)) {
           await rm(dir, { recursive: true, force: true });
           lines.push(`removed: ${dir}`);
@@ -317,7 +297,7 @@ server.registerTool(
     description:
       'Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs five publish gates (manifest, budget, golden, a11y, audit) before copying. Any non-bypassed gate failure blocks the publish. Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged.',
     inputSchema: {
-      slug: z.string().min(1),
+      slug: SlugSchema,
       distPath: z.string().describe('Absolute path to the built dist/ directory in the sibling repo. Example: "/home/bilko/Projects/Outdoor-Hours/dist".'),
       sourceRepoPath: z.string().optional().describe('Absolute path to the sibling repo root (e.g. "/home/bilko/Projects/Stack-Audit"). Required for golden and audit gates.'),
       bypass: z.string().optional().describe('Comma-separated gate names to skip, e.g. "a11y" or "golden,audit". Each bypass is logged.'),
@@ -346,12 +326,15 @@ server.registerTool(
       }
 
       // Run publish gates.
-      const bypassSet = new Set((bypass ?? '').split(',').filter(Boolean));
+      const bypassResult = parseBypass(bypass, bypassReason);
+      if ('error' in bypassResult) {
+        return err(bypassResult.error);
+      }
       const ctx: GateContext = {
         slug,
         bundleDir: distAbs,
         sourceRepo: sourceRepoPath,
-        bypass: bypassSet,
+        bypass: bypassResult.gates,
         adminEmail: undefined,
       };
       const results = await runGates(ctx);
@@ -389,7 +372,7 @@ server.registerTool(
       }
 
       // Gates passed — replace public/projects/<slug>/ atomically-ish (rm + cp -r).
-      const target = resolve(PUBLIC_PROJECTS, slug);
+      const target = projectDir(PUBLIC_PROJECTS, slug);
       await rm(target, { recursive: true, force: true });
       await mkdir(dirname(target), { recursive: true });
       await exec('cp', ['-r', distAbs, target]);

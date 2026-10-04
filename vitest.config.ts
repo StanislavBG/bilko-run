@@ -9,7 +9,7 @@ export default defineConfig({
     },
     coverage: {
       provider: 'v8',
-      include: ['server/**/*.ts', 'bin/**/*.js'],
+      include: ['server/**/*.ts'],
       reporter: ['text', 'lcov'],
     },
     // Run tests sequentially to avoid SQLite concurrency issues

@@ -71,12 +71,11 @@ fi
 
 # Commit and push the report to origin only. content-grade is a separate,
 # unrelated project (histories diverged) — never push there.
-# test-results/ is gitignored (playwright traces etc.), so force-add ONLY the
-# dated markdown report — the rest of the dir stays ignored. Commit without -a
-# so we never sweep up the unrelated working-tree changes (outdoor-hours data).
+# test-results/ is gitignored (playwright traces etc.) and reports stay on
+# local disk only. Commit without -a so we never sweep up the unrelated
+# working-tree changes (outdoor-hours data).
 if [[ -f "$REPORT_FILE" ]]; then
-  git add -f "$REPORT_FILE"
-  # Also stage the refreshed commit-order sidecar if it changed (tracked file).
+  # Stage the refreshed commit-order sidecar if it changed (tracked file).
   git add src/data/commit-order.json 2>/dev/null || true
   if git commit -q -m "chore(qa): sanity-qa ${DECISION} ${TIMESTAMP}"; then
     git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"

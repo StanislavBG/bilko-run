@@ -10,6 +10,7 @@ import { runPerf } from './sanity-qa-runners/perf.js';
 import { runSize } from './sanity-qa-runners/size.js';
 import { runA11y } from './sanity-qa-runners/a11y.js';
 import type { SanityTarget, SubagentResult, TargetStatus } from './sanity-qa-runners/types.js';
+import type { RegistryProject } from '../mcp-host-server/src/contract/registry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BILKO_ROOT = resolve(__dirname, '..');
@@ -30,16 +31,13 @@ function expandTilde(p: string): string {
 
 function buildTargets(filterSlugs: string[]): SanityTarget[] {
   const rawPath = resolve(BILKO_ROOT, 'src/data/standalone-projects.json');
-  const standalone = JSON.parse(readFileSync(rawPath, 'utf-8')) as Array<{
-    slug: string;
-    name: string;
-    category: string;
-    status: string;
-    host: { kind: string; path?: string; localPath?: string };
-  }>;
+  const standalone = JSON.parse(readFileSync(rawPath, 'utf-8')) as RegistryProject[];
 
   return standalone
-    .filter(p => p.status === 'live' && p.host?.kind === 'static-path')
+    .filter(
+      (p): p is RegistryProject & { host: Extract<RegistryProject['host'], { kind: 'static-path' }> } =>
+        p.status === 'live' && p.host?.kind === 'static-path'
+    )
     .filter(p => filterSlugs.length === 0 || filterSlugs.includes(p.slug))
     .map(p => ({
       slug: p.slug,

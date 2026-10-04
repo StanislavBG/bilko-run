@@ -24,13 +24,14 @@
  */
 
 import { LISTING_TOOLS, type ToolDefinition } from '../config/tools.js';
+import type {
+  ProjectStatus,
+  RegistryProject,
+} from '../../mcp-host-server/src/contract/registry.js';
 
-export type ProjectStatus = 'live' | 'cooking' | 'postponed' | 'archived';
+export type { ProjectStatus };
 
-export type ProjectHost =
-  | { kind: 'react-route'; path: string }
-  | { kind: 'static-path'; path: string; sourceRepo?: string; localPath?: string }
-  | { kind: 'external-url'; url: string };
+export type ProjectHost = RegistryProject['host'] | { kind: 'react-route'; path: string };
 
 export interface Project {
   slug: string;
@@ -75,7 +76,7 @@ const TOOL_PROJECTS: readonly Project[] = LISTING_TOOLS.map(t => ({
 // safely from sibling-repo Claude sessions without touching TS source.
 // See mcp-host-server/ for the register/publish/unregister tools.
 import standaloneJson from './standalone-projects.json' with { type: 'json' };
-const STANDALONE_PROJECTS: readonly Project[] = standaloneJson as readonly Project[];
+const STANDALONE_PROJECTS: readonly RegistryProject[] = standaloneJson as readonly RegistryProject[];
 
 /**
  * Dedupe by slug, later entries winning. Needed because a project can be

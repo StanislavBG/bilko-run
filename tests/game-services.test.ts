@@ -94,6 +94,13 @@ describe('Save state', () => {
     expect(s.version).toBe(0);
   });
 
+  it('accepts a slug with no GAME_CONFIGS entry (non-game apps like academy store progress here)', async () => {
+    await putGameSave('academy', USER, { done: ['welcome'] });
+    const s = await getGameSave('academy', USER);
+    expect(s.blob).toEqual({ done: ['welcome'] });
+    expect(s.version).toBe(1);
+  });
+
   it('saves and retrieves blob', async () => {
     await putGameSave(GAME, USER, { level: 3, hp: 2 });
     const s = await getGameSave(GAME, USER);

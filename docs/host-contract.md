@@ -14,7 +14,7 @@ Every app declares one host kind in `src/data/projectsRegistry.ts` (react-route)
 | `static-path` | App is built in its own repo (often its own Claude session) and just needs a URL on bilko.run | `/projects/<slug>/` | Loose — host serves prebuilt static assets, no shared runtime |
 | `external-url` | App lives on another domain or subdomain | `https://<host>/...` | None — host only links to it |
 
-Default to `static-path` for new apps unless they need shared auth or credits. `react-route` is for the AI-tool family that already shares the kit.
+Default to `static-path` for new apps — including ones that need a signed-in user (see "Calling authenticated host APIs from a `static-path` app" below). `react-route` is for the AI-tool family that already shares the kit.
 
 ## What the host provides
 
@@ -40,7 +40,16 @@ These are the OS services. Apps use them; they should not reimplement.
 
 ### To `static-path` and `external-url` apps additionally
 
-- **Nothing.** That's the point. Bring your own runtime, your own auth (or none), your own everything. Host just serves the bytes.
+- **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page.
+
+### Calling authenticated host APIs from a `static-path` app
+
+A `static-path` app is same-origin with `/api`, so it *can* call authenticated host endpoints (`/api/games/*`, the AI-tool gateways, `/api/academy/*`). There is **one supported way to authenticate: send a Clerk session JWT in `Authorization: Bearer <token>`.** `requireAuth` / `requireAdmin` in `server/clerk.ts` read only that header.
+
+- **Cookies are not accepted.** Clerk's first-party `__session` cookie on bilko.run is **not** read by the host, and `credentials: 'include'` by itself always gets a 401. This is deliberate. That cookie is a 60-second token that only clerk-js refreshes. A static page that doesn't run clerk-js would get intermittent 401s about a minute after page load. Accepting it would also make every mutating `/api` route cookie-authenticated, which means CSRF exposure.
+- **How to get the token:** load clerk-js from the host's Clerk Frontend API (`https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js`, with the bilko.run publishable key as `data-clerk-publishable-key`). Call `await Clerk.load()`, then `await Clerk.session?.getToken()` before **each** request. Don't cache the token, because clerk-js already caches and refreshes it. The host CSP already allows `clerk.bilko.run` in `script-src`. Copy the CSP nonce from `<meta name="csp-nonce">` onto the script tag. Reference implementation: `Bilko-Academy/src/lib/auth.ts`.
+- **Gate the load cheaply:** a `__client_uat` cookie value > 0 means the user has signed in on bilko.run. If it is absent or `0`, treat the user as signed out without downloading clerk-js.
+- **Identity on the server** is always the email from the verified token. Never trust a user id or email in the request body.
 
 ## What an app must implement
 
@@ -338,7 +347,9 @@ For games hosted on bilko.run (current: Boat Shooter; upcoming: Sudoku), the hos
 
 ### Endpoints
 
-All endpoints live under `/api/games/:slug/` where `slug` matches a registered entry in `shared/game-config.ts`.
+All endpoints live under `/api/games/:slug/`. Endpoints marked *Required* need a Bearer token (see "Calling authenticated host APIs from a `static-path` app").
+
+Leaderboard and achievement endpoints require `slug` to be registered in `shared/game-config.ts`. **Save-state endpoints accept any slug** — they're a per-user, per-slug blob store (≤ 32 KB) with no `GAME_CONFIGS` entry needed. Non-game apps rely on this, e.g. Academy stores course progress at `/api/games/academy/save`. `tests/game-services.test.ts` guards that behavior.
 
 #### Leaderboard
 

@@ -40,7 +40,7 @@ export async function verifyClerkToken(authHeader: string | undefined): Promise<
     if (!clerk) return null;
 
     const user = await clerk.users.getUser(payload.sub);
-    const email = user.primaryEmailAddress?.emailAddress ?? null;
+    const email = user.primaryEmailAddress?.emailAddress?.toLowerCase() ?? null;
 
     // Cache for 60 seconds
     if (email) {

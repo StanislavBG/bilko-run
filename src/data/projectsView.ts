@@ -110,8 +110,8 @@ const ENRICH: Record<string, Enrich> = {
     detail: 'Describe a goal in plain language; bilko-flow compiles it into a typed, DAG-validated workflow that runs the same way every time. The engine behind the studio.',
   },
   'escape-velocity': {
-    metric: '9 planets', metricLabel: 'to conquer', lang: 'GDScript · Godot 4',
-    detail: 'Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all nine planets. Runs fully in the browser, no install, progress saves locally.',
+    metric: '8 planets', metricLabel: 'to conquer', lang: 'GDScript · Godot 4',
+    detail: 'Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally.',
   },
 };
 

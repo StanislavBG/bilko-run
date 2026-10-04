@@ -1,0 +1,94 @@
+{
+  "name": "host-kit",
+  "version": "0.7.2",
+  "description": "Shared React component kit for bilko.run sibling apps — ToolHero, ScoreCard, GameShell, typed bus, game tokens, manifest CLI.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "bilko-host-kit": "./bin/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "require": "./dist/testing/index.cjs"
+    },
+    "./styles/game-tokens.css": "./styles/game-tokens.css",
+    "./styles/sudoku-token-aliases.css": "./styles/sudoku-token-aliases.css"
+  },
+  "files": [
+    "dist",
+    "styles",
+    "bin",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run build",
+    "version-changesets": "changeset version",
+    "release": "changeset publish"
+  },
+  "peerDependencies": {
+    "@clerk/clerk-react": "^5.0.0",
+    "@playwright/test": ">=1.40",
+    "react": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0",
+    "@playwright/test": "^1.59.1",
+    "@testing-library/react": "^15.0.7",
+    "@types/node": "^25.6.2",
+    "@types/react": "^18.3.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "jsdom": "^25.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/StanislavBG/bilko-host-kit.git"
+  },
+  "homepage": "https://github.com/StanislavBG/bilko-host-kit#readme",
+  "bugs": {
+    "url": "https://github.com/StanislavBG/bilko-host-kit/issues"
+  },
+  "keywords": [
+    "bilko",
+    "react",
+    "ui",
+    "host-kit",
+    "components",
+    "telemetry",
+    "manifest"
+  ],
+  "license": "MIT",
+  "author": "Stanislav Bibitkov"
+}

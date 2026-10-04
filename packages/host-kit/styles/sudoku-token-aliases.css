@@ -1,0 +1,10 @@
+/* Back-compat shim for Sudoku v0.6 consumers. Removed in PRD 46-sudoku-host-kit-migration. */
+:root {
+  --digit-font: var(--mark-font);
+  --digit-given: var(--mark-given);
+  --digit-entered: var(--mark-entered);
+  --digit-note: var(--mark-note);
+  --digit-size: var(--mark-size);
+  --note-size: var(--mark-note-size);
+  --given: var(--ink);
+}

@@ -1,21 +1,40 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import type { Gate } from './index.js';
-import { mcpGet } from '../db.js';
+import { budgetFor } from '../contract/app-budgets.js';
+
+function measureGzBytes(dir: string): number {
+  let total = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      total += measureGzBytes(full);
+    } else if (entry.isFile()) {
+      total += gzipSync(readFileSync(full)).length;
+    }
+  }
+  return total;
+}
 
 export const budgetGate: Gate = async (ctx) => {
   if (!ctx.manifest) return { name: 'budget', status: 'fail', details: 'manifest not loaded' };
-  const row = await mcpGet<{ max_size_gz_bytes: number }>(
-    `SELECT max_size_gz_bytes FROM app_budgets WHERE slug = ?`, [ctx.slug],
-  );
-  const limit = row?.max_size_gz_bytes ?? 200_000;
-  const actual = ctx.manifest.bundle.sizeBytesGz;
-  if (actual > limit) {
+
+  const limit = budgetFor(ctx.slug);
+  const measured = measureGzBytes(ctx.bundleDir);
+  const reported = ctx.manifest.bundle.sizeBytesGz;
+  const measuredKb = (measured / 1024).toFixed(1);
+  const reportedKb = (reported / 1024).toFixed(1);
+  const limitKb = (limit / 1024).toFixed(0);
+
+  if (measured > limit) {
     return {
       name: 'budget', status: 'fail',
-      details: `bundle ${(actual / 1024).toFixed(1)} KB gz exceeds budget ${(limit / 1024).toFixed(0)} KB`,
+      details: `measured ${measuredKb} KB gz (manifest reported ${reportedKb} KB) exceeds budget ${limitKb} KB`,
     };
   }
   return {
     name: 'budget', status: 'pass',
-    details: `${(actual / 1024).toFixed(1)} KB gz / ${(limit / 1024).toFixed(0)} KB budget`,
+    details: `measured ${measuredKb} KB gz (manifest reported ${reportedKb} KB) / ${limitKb} KB budget`,
   };
 };

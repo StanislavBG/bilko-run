@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import type { GateContext } from '../mcp-host-server/src/gates/index.js';
 
 const FIXTURES = resolve(fileURLToPath(import.meta.url), '..', 'fixtures', 'bundles');
@@ -109,40 +112,48 @@ describe('manifestGate', () => {
 });
 
 // ── budget gate ──────────────────────────────────────────────────────────────
+// The gate measures real gzipped bytes under ctx.bundleDir (not the DB, not
+// the manifest's self-reported size), so these fixtures write real files
+// rather than mocking a size.
 
 describe('budgetGate', () => {
-  beforeEach(() => {
-    vi.mocked(mcpGet).mockResolvedValue(undefined); // no DB row → uses default 200 KB
-  });
-
   it('pass: bundle within default 200 KB budget', async () => {
+    // valid/ fixture is a couple hundred real bytes gzipped — far under 200 KB.
     const ctx = makeCtx({ manifest: VALID_MANIFEST });
     const result = await budgetGate(ctx);
     expect(result.status).toBe('pass');
-    expect(result.details).toContain('48.8 KB gz');
+    expect(result.details).toContain('KB budget');
   });
 
   it('fail: bundle exceeds default budget', async () => {
-    const oversizeManifest = { ...VALID_MANIFEST, bundle: { sizeBytesGz: 512_000, fileCount: 5 } };
-    const ctx = makeCtx({ manifest: oversizeManifest });
+    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-over-'));
+    writeFileSync(join(dir, 'blob.bin'), randomBytes(250_000)); // incompressible, >200 KB budget
+    const ctx = makeCtx({ bundleDir: dir, manifest: VALID_MANIFEST });
     const result = await budgetGate(ctx);
     expect(result.status).toBe('fail');
     expect(result.details).toContain('exceeds budget');
   });
 
-  it('fail: bundle exceeds custom DB budget', async () => {
-    vi.mocked(mcpGet).mockResolvedValue({ max_size_gz_bytes: 40_000 } as never);
-    const ctx = makeCtx({ manifest: VALID_MANIFEST }); // 50 KB > 40 KB limit
-    const result = await budgetGate(ctx);
-    expect(result.status).toBe('fail');
-    expect(result.details).toContain('exceeds budget');
-  });
-
-  it('pass: bundle within custom DB budget', async () => {
-    vi.mocked(mcpGet).mockResolvedValue({ max_size_gz_bytes: 100_000 } as never);
-    const ctx = makeCtx({ manifest: VALID_MANIFEST }); // 50 KB < 100 KB limit
+  it('pass: app-specific override applies', async () => {
+    // academy's 700 KB override admits a bundle that would fail the 200 KB default.
+    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-override-'));
+    writeFileSync(join(dir, 'blob.bin'), randomBytes(300_000));
+    const ctx = makeCtx({ slug: 'academy', bundleDir: dir, manifest: VALID_MANIFEST });
     const result = await budgetGate(ctx);
     expect(result.status).toBe('pass');
+  });
+
+  it('fail: manifest under-reports size but measured size still fails', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-underreport-'));
+    writeFileSync(join(dir, 'blob.bin'), randomBytes(250_000));
+    const underReportingManifest = { ...VALID_MANIFEST, bundle: { sizeBytesGz: 50_000, fileCount: 1 } };
+    const ctx = makeCtx({ bundleDir: dir, manifest: underReportingManifest });
+    const result = await budgetGate(ctx);
+    expect(result.status).toBe('fail');
+    expect(result.details).toContain('exceeds budget');
+    // mentions both the measured (actual) and manifest-reported numbers
+    expect(result.details).toContain('48.8 KB');
+    expect(result.details).toMatch(/2\d\d\.\d KB/);
   });
 
   it('fail: manifest not loaded', async () => {

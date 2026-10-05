@@ -508,7 +508,7 @@
   border: 2px solid var(--smlp-ink);
   border-radius: 14px;
   box-shadow: 6px 6px 0 var(--smlp-ink);
-  padding: 34px 20px 18px;
+  padding: 30px 18px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -538,13 +538,13 @@
   margin-top: 2px;
   font-family: var(--smlp-serif);
   font-weight: 700;
-  font-size: 64px;
+  font-size: 56px;
   line-height: 1;
   letter-spacing: -0.02em;
 }
 
 .smlp-tag__line {
-  margin-top: 4px;
+  margin-top: 2px;
   font-family: var(--smlp-serif);
   font-style: italic;
   font-size: 17px;
@@ -552,7 +552,7 @@
 }
 
 .smlp-tag__platforms {
-  margin-top: 6px;
+  margin-top: 4px;
   font-family: var(--smlp-mono);
   font-size: 11px;
   font-weight: 600;
@@ -562,10 +562,11 @@
 
 .smlp-tag__install {
   width: 100%;
-  margin-top: 14px;
+  margin-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 6px;
 }
 
 .smlp-cmd {
@@ -624,35 +625,74 @@
   font-size: 15px;
 }
 
-/* The stacked cell exists so the price tag never jumps. The end card's action
-   row wraps and centres, so a width change there is harmless: size that button
-   to its current label, as the design does, not to the longest one. */
+/* The end card's action row wraps and centres, so a width change there is
+   harmless: size that button to its current label, as the design does, not
+   to the longest one. */
 .smlp-film .smlp-end__copy .smlp-copy__label[data-on='false'] {
   display: none;
 }
 
-.smlp-root .smlp-tag__copy {
+.smlp-root .smlp-dl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   width: 100%;
-  min-height: 50px;
+  min-height: 42px;
   background: var(--smlp-rust);
   color: var(--smlp-paper);
   font-weight: 700;
   font-size: 16px;
-  padding: 13px 16px;
+  text-decoration: none;
+  padding: 9px 16px;
   border: 2px solid var(--smlp-ink);
   border-radius: 10px;
   box-shadow: 3px 3px 0 var(--smlp-ink);
+  transition: transform 0.08s, box-shadow 0.08s;
 }
 
-.smlp-root .smlp-tag__copy:active {
+.smlp-root .smlp-dl:active {
   transform: translate(3px, 3px);
   box-shadow: 0 0 0 var(--smlp-ink);
 }
 
-.smlp-tag__note {
-  font-size: 13px;
-  line-height: 1.45;
+.smlp-dl__glyph {
+  flex: none;
+}
+
+.smlp-root .smlp-dl__alt,
+.smlp-root .smlp-tag__releases {
+  font-weight: 600;
   color: var(--smlp-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.smlp-root .smlp-dl__alt {
+  font-size: 12px;
+}
+
+.smlp-root .smlp-tag__releases {
+  white-space: nowrap;
+}
+
+/* The Intel link belongs to the Mac button above it, not the gap below. */
+.smlp-root .smlp-dl__alt {
+  margin-top: -2px;
+  margin-bottom: 2px;
+}
+
+.smlp-tag__note {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--smlp-ink);
+}
+
+.smlp-tag__fineprint {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--smlp-body);
 }
 
 /* ── Parts Bin ──────────────────────────────────────────────────────────── */
@@ -984,10 +1024,6 @@
   padding: 16px 22px 16px 16px;
 }
 
-.smlp-root--canvas .smlp-tag__copy .smlp-copy__label {
-  white-space: nowrap;
-}
-
 /* ── Reflow mode (scrollable single column) ─────────────────────────────── */
 
 .smlp-root--reflow {
@@ -1297,7 +1333,7 @@
     padding: 10px 6px;
   }
 
-  .smlp-root--reflow .smlp-tag__copy {
+  .smlp-root--reflow .smlp-dl {
     padding: 13px 10px;
   }
 

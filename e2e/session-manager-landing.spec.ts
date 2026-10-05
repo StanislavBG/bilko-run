@@ -72,12 +72,17 @@ test.describe('Session Manager landing — layout modes', () => {
     // Body overflow is locked only while the canvas is mounted.
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
 
-    // Truthful copy: free app, macOS + Linux, live chapter count.
+    // Truthful copy: free app, macOS + Windows installers, live chapter count.
     const tag = page.getByRole('region', { name: COPY.priceTag.aria.region });
     await expect(tag).toContainText(COPY.priceTag.price);
     await expect(tag).toContainText(COPY.priceTag.line);
     await expect(tag).toContainText(COPY.priceTag.platforms);
-    await expect(tag).not.toContainText('WINDOWS');
+    const dl = COPY.priceTag.downloads;
+    for (const d of [dl.mac, dl.macIntel, dl.windows]) {
+      await expect(tag.getByRole('link', { name: d.label })).toHaveAttribute('href', d.href);
+    }
+    await expect(tag.getByRole('link', { name: dl.allReleases.label })).toHaveAttribute('href', dl.allReleases.href);
+    await expect(tag.locator('.smlp-cmd')).toHaveCount(0);
     await expect(page.locator('.smlp-cta--manual')).toContainText(`${toc.toc.chapters.length} chapters of tips & tricks`);
     await expect(page.locator('.smlp-cta--manual')).toHaveAttribute('href', COPY.meta.manualHref);
 
@@ -104,10 +109,10 @@ test.describe('Session Manager landing — layout modes', () => {
     await expect(page.getByRole('tablist')).toHaveAttribute('aria-orientation', 'horizontal');
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
 
-    // The install command and its button are reachable on a phone.
-    await page.locator('.smlp-tag__copy').scrollIntoViewIfNeeded();
-    await expect(page.locator('.smlp-tag__copy')).toBeVisible();
-    await expect(page.locator('.smlp-cmd code').first()).toHaveText(COPY.meta.installCommand);
+    // The download buttons are reachable on a phone.
+    const winLink = page.getByRole('link', { name: COPY.priceTag.downloads.windows.label });
+    await winLink.scrollIntoViewIfNeeded();
+    await expect(winLink).toBeVisible();
 
     const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
     expect(pageHeight).toBeGreaterThan(844);
@@ -348,44 +353,5 @@ test.describe('Session Manager landing — film', () => {
 
     await dialog.getByRole('button', { name: COPY.film.aria.close }).click();
     await expect(dialog).toBeHidden();
-  });
-});
-
-test.describe('Session Manager landing — copy button', () => {
-  test('shows "Copied" only after the clipboard write resolves', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await page.setViewportSize({ width: 1440, height: 860 });
-    await open(page);
-
-    const button = page.locator('.smlp-tag__copy');
-    await expect(button).toHaveAccessibleName(COPY.priceTag.copyLabel);
-    const before = await button.evaluate(el => (el as HTMLElement).offsetHeight);
-    await button.click();
-    await expect(button).toHaveAttribute('data-state', 'copied');
-    await expect(button).toHaveAccessibleName(COPY.priceTag.copiedLabel);
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(COPY.meta.installCommand);
-    await expect(page.locator('.smlp-root > [role="status"]')).toHaveText(COPY.priceTag.aria.copiedStatus);
-    // No layout jump when the label changes.
-    expect(await button.evaluate(el => (el as HTMLElement).offsetHeight)).toBe(before);
-    await expect(button).toHaveAttribute('data-state', 'copy', { timeout: 5_000 });
-  });
-
-  test('when the clipboard refuses, it selects the command and says so', async ({ page }) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'clipboard', {
-        configurable: true,
-        value: { writeText: () => Promise.reject(new Error('denied')), readText: () => Promise.reject(new Error('denied')) },
-      });
-      document.execCommand = () => false;
-    });
-    await page.setViewportSize({ width: 1440, height: 860 });
-    await open(page);
-
-    const button = page.locator('.smlp-tag__copy');
-    await button.click();
-    await expect(button).toHaveAttribute('data-state', 'failed');
-    await expect(button).toHaveAccessibleName(COPY.priceTag.copyFailedLabel);
-    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(COPY.meta.installCommand);
-    await expect(page.locator('.smlp-root > [role="status"]')).toHaveText(COPY.priceTag.aria.copyFailedStatus);
   });
 });

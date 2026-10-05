@@ -237,7 +237,7 @@ export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Pro
   const rateLabel = film.speedLabels[rateIndex];
   const pct = total > 0 ? Math.max(0, Math.min(100, (time / total) * 100)) : 0;
   const showBigPlay = !playing && !ended && !broken;
-  const endFailed = copier.status === 'failed' && copier.source === 'end';
+  const endFailed = copier.status === 'failed';
   useEffect(() => {
     if (endFailed) setKeepEndCmd(true);
   }, [endFailed]);
@@ -339,7 +339,6 @@ export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Pro
                 <div className="smlp-end__actions">
                   <CopyButton
                     copier={copier}
-                    from="end"
                     className="smlp-end__copy"
                     labels={{ copy: end.copyLabel, copied: end.copiedLabel, failed: end.copyFailedLabel }}
                   />

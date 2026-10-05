@@ -12,8 +12,9 @@
  * - the page reading as if the APP costs money, or will later ("free while
  *   we're in alpha", a struck-through price);
  * - a checkout creeping back onto the page;
- * - advertising surfaces the app doesn't ship, or a platform it can't install
- *   on (npm refuses win32: the package declares os [darwin, linux]).
+ * - advertising surfaces the app doesn't ship, or a platform it has no
+ *   installer for (the price tag links the Mac .dmg and Windows .exe release
+ *   assets; everything else sits behind "All releases").
  *
  * These are deliberately source-text assertions rather than DOM tests: the
  * claim being protected is editorial, and this repo has no renderer harness for
@@ -85,10 +86,16 @@ describe('open-core positioning: the app is free and stays free, and so is the m
     expect(pageProse()).toContain('free, and stays free.');
   });
 
-  it('shows the install command, and the copy button copies exactly that', () => {
+  it('the price tag offers installer downloads from the latest GitHub release', () => {
+    const base = 'https://github.com/StanislavBG/claude-code-session-manager/releases/latest';
+    const dl = COPY.priceTag.downloads;
+    expect(dl.mac.href).toBe(`${base}/download/Session-Manager-mac-arm64.dmg`);
+    expect(dl.macIntel.href).toBe(`${base}/download/Session-Manager-mac-x64.dmg`);
+    expect(dl.windows.href).toBe(`${base}/download/Session-Manager-win-x64.exe`);
+    expect(dl.allReleases.href).toBe(base);
+    // The price tag no longer shows the npx command; the film's end card still copies it.
+    expect(prose(read(MARKETING_PAGE))).not.toContain('CopyButton');
     expect(COPY.meta.installCommand).toBe('npx claude-code-session-manager@latest');
-    expect(COPY.priceTag.command).toBe(COPY.meta.installCommand);
-    expect(read(`${LANDING_DIR}/copy.ts`)).toContain('npx claude-code-session-manager@latest');
     expect(read(`${LANDING_DIR}/hooks.ts`)).toContain('COPY.meta.installCommand');
   });
 
@@ -172,10 +179,11 @@ describe('open-core positioning: the app is free and stays free, and so is the m
     expect(text).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
   });
 
-  it('claims only the platforms the package installs on', () => {
-    const text = pageProse();
-    expect(COPY.priceTag.platforms).toBe('MAC · LINUX');
-    expect(text).not.toMatch(/windows/i);
+  it('claims only the platforms there is an installer for', () => {
+    // Mac (.dmg) and Windows (.exe) installers ship on every GitHub release;
+    // Linux builds are reachable through the "All releases" link only.
+    expect(COPY.priceTag.platforms).toBe('MAC · WINDOWS');
+    expect(COPY.priceTag.aria.platforms).toBe('Runs on macOS and Windows');
   });
 
   it('does not advertise surfaces the app no longer ships', () => {

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { ManualToc } from '../../shared/manual-catalog.js';
 import '../styles/session-manager-landing.css';
 import { AccountChip, PageViewTracker } from './session-manager-landing/AccountChip.js';
-import { CopyButton } from './session-manager-landing/CopyButton.js';
 import { COPY, fill } from './session-manager-landing/copy.js';
 import { FilmDialog } from './session-manager-landing/FilmDialog.js';
 import {
@@ -11,7 +10,6 @@ import {
   useLayoutMode,
   useManualToc,
   usePageFonts,
-  type CopyInstall,
 } from './session-manager-landing/hooks.js';
 import type { LayoutModeName } from './session-manager-landing/layout.js';
 import { PartsBin } from './session-manager-landing/PartsBin.js';
@@ -130,8 +128,28 @@ function Hero({
   );
 }
 
-function PriceTag({ copier }: { copier: CopyInstall }) {
+function AppleGlyph() {
+  return (
+    <svg className="smlp-dl__glyph" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.27-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.78.74 2.99.72 1.24-.02 2.02-1.12 2.77-2.23.87-1.28 1.23-2.52 1.25-2.58-.03-.01-2.4-.92-2.42-3.66ZM14.1 5.85c.63-.77 1.06-1.83.94-2.89-.91.04-2.01.61-2.67 1.37-.58.67-1.09 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.28Z"
+      />
+    </svg>
+  );
+}
+
+function WindowsGlyph() {
+  return (
+    <svg className="smlp-dl__glyph" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M3 5.1 10.4 4v7.1H3V5.1Zm8.3-1.2L21 2.5v8.6h-9.7V3.9ZM3 12.9h7.4V20L3 18.9v-6Zm8.3 0H21v8.6l-9.7-1.4v-7.2Z" />
+    </svg>
+  );
+}
+
+function PriceTag() {
   const tag = COPY.priceTag;
+  const dl = tag.downloads;
   return (
     <div className="smlp-tagcol">
       <span className="smlp-tag__pin" aria-hidden="true" />
@@ -145,18 +163,25 @@ function PriceTag({ copier }: { copier: CopyInstall }) {
           <span aria-hidden="true">{tag.platforms}</span>
           <span className="smlp-sr">{tag.aria.platforms}</span>
         </p>
-        <div className="smlp-tag__install">
-          <div className="smlp-cmd" role="group" aria-label={tag.aria.commandBox}>
-            <span className="smlp-cmd__prompt" aria-hidden="true">{tag.commandPrompt}</span>
-            <code ref={copier.tagCodeRef}>{tag.command}</code>
-          </div>
-          <CopyButton
-            copier={copier}
-            from="tag"
-            className="smlp-tag__copy"
-            labels={{ copy: tag.copyLabel, copied: tag.copiedLabel, failed: tag.copyFailedLabel }}
-          />
+        <div className="smlp-tag__install" role="group" aria-label={tag.aria.downloads}>
+          <a className="smlp-dl" href={dl.mac.href} download>
+            <AppleGlyph />
+            <span>{dl.mac.label}</span>
+          </a>
+          <a className="smlp-dl__alt" href={dl.macIntel.href} download>
+            {dl.macIntel.label}
+          </a>
+          <a className="smlp-dl" href={dl.windows.href} download>
+            <WindowsGlyph />
+            <span>{dl.windows.label}</span>
+          </a>
           <p className="smlp-tag__note">{tag.note}</p>
+          <p className="smlp-tag__fineprint">
+            {tag.unsignedNote}{' '}
+            <a className="smlp-tag__releases" href={dl.allReleases.href}>
+              {dl.allReleases.label}
+            </a>
+          </p>
         </div>
       </section>
     </div>
@@ -215,12 +240,11 @@ export default function SessionManagerPage() {
         <main className="smlp-main">
           <div className="smlp-hero">
             <Hero mode={layout.mode} toc={toc} onWatch={openFilm} watchRef={watchRef} />
-            <PriceTag copier={copier} />
+            <PriceTag />
           </div>
           <PartsBin mode={layout.mode} toc={toc} />
         </main>
       </div>
-      <p role="status" className="smlp-sr">{filmOpen ? '' : statusMessage}</p>
       <FilmDialog
         open={filmOpen}
         onClose={closeFilm}

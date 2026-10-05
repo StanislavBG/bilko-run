@@ -103,7 +103,18 @@ describe('no stale top-level manual links survive in shipped source', () => {
     expect(hrefs.map(([k]) => k)).toEqual(expect.arrayContaining([
       'COPY.meta.manualHref', 'COPY.meta.chapterHrefTemplate', 'COPY.ctas.manual.href', 'COPY.endCard.manualHref',
     ]));
-    for (const [key, href] of hrefs) {
+    // The only off-site links are the price tag's installer downloads, and
+    // they must point at the app's own GitHub releases.
+    const RELEASES = 'https://github.com/StanislavBG/claude-code-session-manager/releases/latest';
+    const external = hrefs.filter(([, href]) => /^https?:/.test(href));
+    expect(external.map(([k]) => k).sort()).toEqual([
+      'COPY.priceTag.downloads.allReleases.href',
+      'COPY.priceTag.downloads.mac.href',
+      'COPY.priceTag.downloads.macIntel.href',
+      'COPY.priceTag.downloads.windows.href',
+    ]);
+    for (const [key, href] of external) expect(href === RELEASES || href.startsWith(`${RELEASES}/download/`), key).toBe(true);
+    for (const [key, href] of hrefs.filter(([, h]) => !/^https?:/.test(h))) {
       expect(href, key).toMatch(/^\/products\/session-manager\//);
       expect(href.split(/[#?]/)[0], key).not.toMatch(/^\/(manual|my-manual)$/);
     }

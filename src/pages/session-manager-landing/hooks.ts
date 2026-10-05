@@ -113,14 +113,9 @@ export function useManualToc(): ManualToc | null {
 }
 
 export type CopyStatus = 'idle' | 'copied' | 'failed';
-export type CopySource = 'tag' | 'end';
-
 export interface CopyInstall {
   status: CopyStatus;
-  /** Which button asked — the end card only shows its failure state for its own clicks. */
-  source: CopySource;
-  copy: (from: CopySource) => void;
-  tagCodeRef: RefObject<HTMLElement>;
+  copy: () => void;
   endCodeRef: RefObject<HTMLElement>;
 }
 
@@ -140,7 +135,8 @@ function selectContents(el: HTMLElement | null): boolean {
 }
 
 /**
- * One copy state per page, shared by the price tag and the film's end card.
+ * Copy state for the film end card's install-command button. (The price tag
+ * offers installer downloads instead, so it has no copy button.)
  *
  * Unlike the mock (which said "Copied" even when the Clipboard API was missing
  * or refused), "Copied" only shows after `writeText` resolves — or after the
@@ -149,8 +145,6 @@ function selectContents(el: HTMLElement | null): boolean {
  */
 export function useCopyInstall(): CopyInstall {
   const [status, setStatus] = useState<CopyStatus>('idle');
-  const [source, setSource] = useState<CopySource>('tag');
-  const tagCodeRef = useRef<HTMLElement>(null);
   const endCodeRef = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -162,20 +156,18 @@ export function useCopyInstall(): CopyInstall {
     timer.current = setTimeout(() => setStatus('idle'), ms);
   }, []);
 
-  const copy = useCallback((from: CopySource) => {
-    setSource(from);
+  const copy = useCallback(() => {
     const command = COPY.meta.installCommand;
     const fallback = () => {
       // The end card's command box only renders on failure: reveal it
-      // synchronously so there is something to select. The price tag's box is
-      // always on screen, so that path never flashes the failure label.
-      if (from === 'end' && !endCodeRef.current) {
+      // synchronously so there is something to select.
+      if (!endCodeRef.current) {
         flushSync(() => {
           clearTimeout(timer.current);
           setStatus('failed');
         });
       }
-      const target = from === 'end' ? endCodeRef.current : tagCodeRef.current;
+      const target = endCodeRef.current;
       let ok = false;
       if (selectContents(target)) {
         try {
@@ -198,7 +190,7 @@ export function useCopyInstall(): CopyInstall {
     );
   }, [settle]);
 
-  return { status, source, copy, tagCodeRef, endCodeRef };
+  return { status, copy, endCodeRef };
 }
 
 /** True when the visitor asked the OS for reduced motion. */

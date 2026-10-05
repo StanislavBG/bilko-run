@@ -1,26 +1,21 @@
-import type { CopyInstall, CopySource } from './hooks.js';
+import type { CopyInstall } from './hooks.js';
 
 interface Props {
   copier: CopyInstall;
-  from: CopySource;
   labels: { copy: string; copied: string; failed: string };
   className: string;
 }
 
 /**
- * Copy-the-install-command button.
+ * Copy-the-install-command button (the film's end card).
  *
- * All three labels are stacked in one grid cell and only the current one is
- * visible, so the button is always as tall as its longest label: switching to
- * "Copied — now paste it in your terminal" can never grow the price tag (the
- * mock's version jumped 20px). Hidden labels use `visibility:hidden`, which
- * also drops them from the accessible name. The film's end card, whose action
- * row wraps and centres, hides the inactive labels outright instead (see the
- * stylesheet), so its button is as wide as its current label, as designed.
+ * All three labels share one grid cell and only the current one is shown.
+ * The end card's action row wraps and centres, so the inactive labels are
+ * hidden outright (see the stylesheet) and the button is as wide as its
+ * current label, as designed.
  */
-export function CopyButton({ copier, from, labels, className }: Props) {
-  const state =
-    copier.status === 'copied' ? 'copied' : copier.status === 'failed' && copier.source === from ? 'failed' : 'copy';
+export function CopyButton({ copier, labels, className }: Props) {
+  const state = copier.status === 'copied' ? 'copied' : copier.status === 'failed' ? 'failed' : 'copy';
   return (
     <button
       type="button"
@@ -28,7 +23,7 @@ export function CopyButton({ copier, from, labels, className }: Props) {
       data-state={state}
       onClick={e => {
         e.stopPropagation();
-        copier.copy(from);
+        copier.copy();
       }}
     >
       <span className="smlp-copy__label" data-on={state === 'copy'}>{labels.copy}</span>

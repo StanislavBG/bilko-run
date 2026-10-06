@@ -5,7 +5,7 @@
  * The TOC is served from the newest local release bundle so the chapter count
  * and links are deterministic whatever the API is doing.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { readFileSync, readdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -51,6 +51,20 @@ async function open(page: Page) {
   return toc;
 }
 
+/** While windowsAvailable is false: an inert, aria-disabled element — never a link. */
+async function expectWindowsComingSoon(scope: Locator) {
+  const win = COPY.priceTag.downloads.windows;
+  const soon = scope.locator('.smlp-dl--soon');
+  await expect(soon).toHaveCount(1);
+  await expect(soon).toHaveAttribute('aria-disabled', 'true');
+  await expect(soon).not.toHaveAttribute('href', /.*/);
+  await expect(soon).toHaveText(win.comingSoonLabel);
+  await expect(soon).toHaveCSS('cursor', 'default');
+  expect(await soon.evaluate(el => el.tagName)).toBe('SPAN');
+  await expect(scope.getByRole('link', { name: win.label })).toHaveCount(0);
+  await expect(scope.locator(`a[href="${win.href}"]`)).toHaveCount(0);
+}
+
 async function noHorizontalScroll(page: Page) {
   const [scrollWidth, innerWidth] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
   expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
@@ -76,13 +90,19 @@ test.describe('Session Manager landing — layout modes', () => {
     const tag = page.getByRole('region', { name: COPY.priceTag.aria.region });
     await expect(tag).toContainText(COPY.priceTag.price);
     await expect(tag).toContainText(COPY.priceTag.line);
-    await expect(tag).toContainText(COPY.priceTag.platforms);
     const dl = COPY.priceTag.downloads;
-    for (const d of [dl.mac, dl.macIntel, dl.windows]) {
+    expect(dl.windows.windowsAvailable).toBe(false);
+    await expect(tag).toContainText(COPY.priceTag.platformsWindowsSoon);
+    await expect(tag.getByText(COPY.priceTag.aria.platformsWindowsSoon)).toHaveCount(1);
+    await expect(tag.getByRole('link', { name: dl.mac.label })).toHaveAttribute(
+      'href',
+      'https://github.com/StanislavBG/claude-code-session-manager/releases/latest/download/Session-Manager-mac-arm64.dmg',
+    );
+    for (const d of [dl.macIntel, dl.allReleases]) {
       await expect(tag.getByRole('link', { name: d.label })).toHaveAttribute('href', d.href);
     }
-    await expect(tag.getByRole('link', { name: dl.allReleases.label })).toHaveAttribute('href', dl.allReleases.href);
-    await expect(tag.locator('.smlp-cmd')).toHaveCount(0);
+    await expectWindowsComingSoon(tag);
+    await expect(page.locator('body')).not.toContainText('npx');
     await expect(page.locator('.smlp-cta--manual')).toContainText(`${toc.toc.chapters.length} chapters of tips & tricks`);
     await expect(page.locator('.smlp-cta--manual')).toHaveAttribute('href', COPY.meta.manualHref);
 
@@ -110,9 +130,12 @@ test.describe('Session Manager landing — layout modes', () => {
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
 
     // The download buttons are reachable on a phone.
-    const winLink = page.getByRole('link', { name: COPY.priceTag.downloads.windows.label });
-    await winLink.scrollIntoViewIfNeeded();
-    await expect(winLink).toBeVisible();
+    const macLink = page.getByRole('link', { name: COPY.priceTag.downloads.mac.label });
+    await macLink.scrollIntoViewIfNeeded();
+    await expect(macLink).toBeVisible();
+    const winSoon = page.locator('.smlp-tag .smlp-dl--soon');
+    await winSoon.scrollIntoViewIfNeeded();
+    await expect(winSoon).toBeVisible();
 
     const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
     expect(pageHeight).toBeGreaterThan(844);
@@ -348,6 +371,16 @@ test.describe('Session Manager landing — film', () => {
     });
     await expect(dialog.getByText(COPY.endCard.headline)).toBeVisible({ timeout: 10_000 });
     await expect(dialog.getByRole('link', { name: COPY.endCard.manualCta })).toHaveAttribute('href', COPY.endCard.manualHref);
+    // The end card offers the same downloads as the price tag, not an npx command.
+    const end = dialog.locator('.smlp-end');
+    await expect(end.getByRole('link', { name: COPY.priceTag.downloads.mac.label })).toHaveAttribute(
+      'href',
+      COPY.priceTag.downloads.mac.href,
+    );
+    await expectWindowsComingSoon(end);
+    await expect(end).not.toContainText('npx');
+    await expect(end.getByRole('button', { name: /install command/i })).toHaveCount(0);
+    if (process.env.SMLP_ENDCARD_SHOT) await dialog.screenshot({ path: process.env.SMLP_ENDCARD_SHOT });
     await dialog.getByRole('button', { name: COPY.endCard.replay }).click();
     await expect(dialog.getByText(COPY.endCard.headline)).toBeHidden();
 

@@ -15,8 +15,7 @@ export const COPY = {
   "meta": {
     "documentTitle": "Session Manager — bilko.run",
     "manualHref": "/products/session-manager/manual",
-    "chapterHrefTemplate": "/products/session-manager/manual#{slug}",
-    "installCommand": "npx claude-code-session-manager@latest"
+    "chapterHrefTemplate": "/products/session-manager/manual#{slug}"
   },
   "header": {
     "wordmark": "Session Manager",
@@ -58,7 +57,7 @@ export const COPY = {
     "price": "$0",
     "line": "free, and stays free.",
     "platforms": "MAC · WINDOWS",
-    "commandPrompt": "$",
+    "platformsWindowsSoon": "MAC · WINDOWS SOON",
     "downloads": {
       "mac": {
         "label": "Download for Mac",
@@ -69,7 +68,10 @@ export const COPY = {
         "href": "https://github.com/StanislavBG/claude-code-session-manager/releases/latest/download/Session-Manager-mac-x64.dmg"
       },
       "windows": {
+        // flip to true once the release has Session-Manager-win-x64.exe
+        "windowsAvailable": false,
         "label": "Download for Windows",
+        "comingSoonLabel": "Windows — coming soon",
         "href": "https://github.com/StanislavBG/claude-code-session-manager/releases/latest/download/Session-Manager-win-x64.exe"
       },
       "allReleases": {
@@ -82,10 +84,8 @@ export const COPY = {
     "aria": {
       "region": "Price and download",
       "platforms": "Runs on macOS and Windows",
-      "downloads": "Download the installer",
-      "commandBox": "Install command",
-      "copiedStatus": "Install command copied to your clipboard.",
-      "copyFailedStatus": "Couldn't copy automatically. Select the command and copy it yourself."
+      "platformsWindowsSoon": "Runs on macOS; Windows coming soon",
+      "downloads": "Download the installer"
     }
   },
   "partsBin": {
@@ -320,9 +320,6 @@ export const COPY = {
     "badge": "THE END (FOR NOW)",
     "headline": "That's the whole tour.",
     "body": "Want to take it for a spin? It's free, and it stays free.",
-    "copyLabel": "Copy the install command",
-    "copiedLabel": "Copied — now paste it in your terminal",
-    "copyFailedLabel": "Couldn't copy — select it below",
     "manualCta": "Read the Field Manual →",
     "manualHref": "/products/session-manager/manual",
     "replay": "Watch again"

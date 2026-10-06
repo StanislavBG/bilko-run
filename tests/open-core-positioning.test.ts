@@ -13,8 +13,9 @@
  *   we're in alpha", a struck-through price);
  * - a checkout creeping back onto the page;
  * - advertising surfaces the app doesn't ship, or a platform it has no
- *   installer for (the price tag links the Mac .dmg and Windows .exe release
- *   assets; everything else sits behind "All releases").
+ *   installer for (the price tag links the Mac .dmg release assets, and the
+ *   Windows .exe only once `windowsAvailable` is flipped; everything else
+ *   sits behind "All releases").
  *
  * These are deliberately source-text assertions rather than DOM tests: the
  * claim being protected is editorial, and this repo has no renderer harness for
@@ -93,10 +94,37 @@ describe('open-core positioning: the app is free and stays free, and so is the m
     expect(dl.macIntel.href).toBe(`${base}/download/Session-Manager-mac-x64.dmg`);
     expect(dl.windows.href).toBe(`${base}/download/Session-Manager-win-x64.exe`);
     expect(dl.allReleases.href).toBe(base);
-    // The price tag no longer shows the npx command; the film's end card still copies it.
-    expect(prose(read(MARKETING_PAGE))).not.toContain('CopyButton');
-    expect(COPY.meta.installCommand).toBe('npx claude-code-session-manager@latest');
-    expect(read(`${LANDING_DIR}/hooks.ts`)).toContain('COPY.meta.installCommand');
+  });
+
+  it('gates the Windows download behind windowsAvailable until the .exe ships', () => {
+    const win = COPY.priceTag.downloads.windows;
+    // Session-Manager-win-x64.exe is not on the release yet: the link would 404.
+    expect(win.windowsAvailable).toBe(false);
+    expect(win.comingSoonLabel).toBe('Windows — coming soon');
+    expect(COPY.priceTag.platformsWindowsSoon).toBe('MAC · WINDOWS SOON');
+    expect(COPY.priceTag.platforms).toBe('MAC · WINDOWS');
+    // The flag-off branch is an inert, aria-disabled <span> with no href.
+    const dl = prose(read(`${LANDING_DIR}/Downloads.tsx`));
+    const soon = dl.match(/if \(!windowsAvailable\) \{([\s\S]*?)\}\s*return/);
+    expect(soon, 'Downloads.tsx has no flag-off branch').not.toBeNull();
+    expect(soon![1]).toMatch(/<span className=\{`smlp-dl smlp-dl--soon/);
+    expect(soon![1]).toContain('aria-disabled="true"');
+    expect(soon![1]).toContain('dl.windows.comingSoonLabel');
+    expect(soon![1]).not.toContain('href');
+    expect(soon![1]).not.toContain('<a');
+    // The platforms line and its aria twin follow the same flag.
+    expect(prose(read(MARKETING_PAGE))).toContain('windowsAvailable ? tag.platforms : tag.platformsWindowsSoon');
+    expect(prose(read(MARKETING_PAGE))).toContain('windowsAvailable ? tag.aria.platforms : tag.aria.platformsWindowsSoon');
+  });
+
+  it('the price tag and the film end card offer the same downloads, and no npx command', () => {
+    for (const f of [MARKETING_PAGE, `${LANDING_DIR}/FilmDialog.tsx`]) {
+      const src = prose(read(f));
+      expect(src, f).toContain('<MacDownload');
+      expect(src, f).toContain('<WindowsDownload');
+    }
+    expect(pageProse()).not.toMatch(/npx|CopyButton|useCopyInstall|installCommand|commandPrompt/);
+    expect(JSON.stringify(COPY)).not.toContain('npx');
   });
 
   it('never prices the app or implies it will cost money later', () => {
@@ -180,10 +208,13 @@ describe('open-core positioning: the app is free and stays free, and so is the m
   });
 
   it('claims only the platforms there is an installer for', () => {
-    // Mac (.dmg) and Windows (.exe) installers ship on every GitHub release;
-    // Linux builds are reachable through the "All releases" link only.
+    // Mac (.dmg) installers ship on the GitHub release; Windows (.exe) is
+    // "soon" until `windowsAvailable` flips. Linux builds are reachable
+    // through the "All releases" link only.
     expect(COPY.priceTag.platforms).toBe('MAC · WINDOWS');
     expect(COPY.priceTag.aria.platforms).toBe('Runs on macOS and Windows');
+    expect(COPY.priceTag.platformsWindowsSoon).toBe('MAC · WINDOWS SOON');
+    expect(COPY.priceTag.aria.platformsWindowsSoon).toBe('Runs on macOS; Windows coming soon');
   });
 
   it('does not advertise surfaces the app no longer ships', () => {

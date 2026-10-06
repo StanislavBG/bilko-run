@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { COPY, fill } from './copy.js';
-import { CopyButton } from './CopyButton.js';
-import { prefersReducedMotion, type CopyInstall } from './hooks.js';
+import { MacDownload, WindowsDownload } from './Downloads.js';
+import { prefersReducedMotion } from './hooks.js';
 import { filmPanelCanvasStyle, formatTime, type LayoutMode } from './layout.js';
 
 const RATES = [1, 1.5, 2] as const;
@@ -13,9 +13,6 @@ interface Props {
   open: boolean;
   onClose: () => void;
   layout: LayoutMode;
-  copier: CopyInstall;
-  /** Copy-result announcement; the page's own status region is inert while this is modal. */
-  statusMessage: string;
 }
 
 type FsDocument = Document & {
@@ -50,7 +47,7 @@ function fullscreenElement(): Element | null {
  * The custom controls drive a real <video> and only ever reflect its events —
  * no simulated clock.
  */
-export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Props) {
+export function FilmDialog({ open, onClose, layout }: Props) {
   const film = COPY.film;
   const end = COPY.endCard;
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -67,9 +64,6 @@ export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Pro
   const [muted, setMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [broken, setBroken] = useState(false);
-  // Once a failed copy reveals the end card's command box, keep it (and the
-  // selection in it) until the end card goes away, not just for the 4 s label.
-  const [keepEndCmd, setKeepEndCmd] = useState(false);
   // The dialog is always mounted (it is closed, not absent), so the <video>
   // gets its src and poster only once the film is first opened: a page view
   // that never clicks "Watch it run" downloads neither the 1920x1080 poster
@@ -237,13 +231,6 @@ export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Pro
   const rateLabel = film.speedLabels[rateIndex];
   const pct = total > 0 ? Math.max(0, Math.min(100, (time / total) * 100)) : 0;
   const showBigPlay = !playing && !ended && !broken;
-  const endFailed = copier.status === 'failed';
-  useEffect(() => {
-    if (endFailed) setKeepEndCmd(true);
-  }, [endFailed]);
-  useEffect(() => {
-    if (!ended) setKeepEndCmd(false);
-  }, [ended]);
 
   const panelStyle = canvas ? filmPanelCanvasStyle(layout.scale) : undefined;
 
@@ -337,11 +324,10 @@ export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Pro
                 <p className="smlp-end__headline">{end.headline}</p>
                 <p className="smlp-end__body">{end.body}</p>
                 <div className="smlp-end__actions">
-                  <CopyButton
-                    copier={copier}
-                    className="smlp-end__copy"
-                    labels={{ copy: end.copyLabel, copied: end.copiedLabel, failed: end.copyFailedLabel }}
-                  />
+                  <div className="smlp-end__downloads" role="group" aria-label={COPY.priceTag.aria.downloads}>
+                    <MacDownload className="smlp-end__dl" />
+                    <WindowsDownload className="smlp-end__dl" />
+                  </div>
                   <a
                     className="smlp-end__manual"
                     href={end.manualHref}
@@ -353,12 +339,6 @@ export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Pro
                     {end.manualCta}
                   </a>
                 </div>
-                {(endFailed || keepEndCmd) && (
-                  <div className="smlp-cmd smlp-end__cmd" role="group" aria-label={COPY.priceTag.aria.commandBox}>
-                    <span className="smlp-cmd__prompt" aria-hidden="true">{COPY.priceTag.commandPrompt}</span>
-                    <code ref={copier.endCodeRef}>{COPY.meta.installCommand}</code>
-                  </div>
-                )}
                 <button type="button" className="smlp-end__replay" onClick={replay}>
                   {end.replay}
                 </button>
@@ -446,7 +426,6 @@ export function FilmDialog({ open, onClose, layout, copier, statusMessage }: Pro
           </div>
         </div>
       </div>
-      <p role="status" className="smlp-sr">{open ? statusMessage : ''}</p>
     </dialog>
   );
 

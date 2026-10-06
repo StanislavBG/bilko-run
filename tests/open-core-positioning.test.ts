@@ -13,9 +13,9 @@
  *   we're in alpha", a struck-through price);
  * - a checkout creeping back onto the page;
  * - advertising surfaces the app doesn't ship, or a platform it has no
- *   installer for (the price tag links the Mac .dmg release assets, and the
- *   Windows .exe only once `windowsAvailable` is flipped; everything else
- *   sits behind "All releases").
+ *   installer for (the price tag links the Mac .dmg and Windows .exe release
+ *   assets, the .exe gated by `windowsAvailable`; everything else sits behind
+ *   "All releases").
  *
  * These are deliberately source-text assertions rather than DOM tests: the
  * claim being protected is editorial, and this repo has no renderer harness for
@@ -96,10 +96,12 @@ describe('open-core positioning: the app is free and stays free, and so is the m
     expect(dl.allReleases.href).toBe(base);
   });
 
-  it('gates the Windows download behind windowsAvailable until the .exe ships', () => {
+  it('links the Windows installer now that the .exe ships, keeping the coming-soon fallback', () => {
     const win = COPY.priceTag.downloads.windows;
-    // Session-Manager-win-x64.exe is not on the release yet: the link would 404.
-    expect(win.windowsAvailable).toBe(false);
+    // Session-Manager-win-x64.exe is on the latest GitHub release.
+    expect(win.windowsAvailable).toBe(true);
+    expect(win.href).toMatch(/\/releases\/latest\/download\/Session-Manager-win-x64\.exe$/);
+    expect(win.label).toBe('Download for Windows');
     expect(win.comingSoonLabel).toBe('Windows — coming soon');
     expect(COPY.priceTag.platformsWindowsSoon).toBe('MAC · WINDOWS SOON');
     expect(COPY.priceTag.platforms).toBe('MAC · WINDOWS');
@@ -208,9 +210,9 @@ describe('open-core positioning: the app is free and stays free, and so is the m
   });
 
   it('claims only the platforms there is an installer for', () => {
-    // Mac (.dmg) installers ship on the GitHub release; Windows (.exe) is
-    // "soon" until `windowsAvailable` flips. Linux builds are reachable
-    // through the "All releases" link only.
+    // Mac (.dmg) and Windows (.exe) installers ship on the GitHub release.
+    // Linux builds are reachable through the "All releases" link only.
+    expect(COPY.priceTag.downloads.windows.windowsAvailable).toBe(true);
     expect(COPY.priceTag.platforms).toBe('MAC · WINDOWS');
     expect(COPY.priceTag.aria.platforms).toBe('Runs on macOS and Windows');
     expect(COPY.priceTag.platformsWindowsSoon).toBe('MAC · WINDOWS SOON');

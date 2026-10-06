@@ -69,7 +69,7 @@ export const COPY = {
       },
       "windows": {
         // flip to true once the release has Session-Manager-win-x64.exe
-        "windowsAvailable": false,
+        "windowsAvailable": true,
         "label": "Download for Windows",
         "comingSoonLabel": "Windows — coming soon",
         "href": "https://github.com/StanislavBG/claude-code-session-manager/releases/latest/download/Session-Manager-win-x64.exe"

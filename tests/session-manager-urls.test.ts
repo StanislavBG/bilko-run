@@ -115,9 +115,9 @@ describe('no stale top-level manual links survive in shipped source', () => {
     ]);
     for (const [key, href] of external) expect(href === RELEASES || href.startsWith(`${RELEASES}/download/`), key).toBe(true);
     expect(COPY.priceTag.downloads.mac.href).toBe(`${RELEASES}/download/Session-Manager-mac-arm64.dmg`);
-    // The Windows href is kept for when the .exe ships, but is not rendered
-    // as a link while windowsAvailable is false.
-    expect(COPY.priceTag.downloads.windows.windowsAvailable).toBe(false);
+    // The Windows .exe ships on the release and is rendered as a link.
+    expect(COPY.priceTag.downloads.windows.windowsAvailable).toBe(true);
+    expect(COPY.priceTag.downloads.windows.href).toBe(`${RELEASES}/download/Session-Manager-win-x64.exe`);
     for (const [key, href] of hrefs.filter(([, h]) => !/^https?:/.test(h))) {
       expect(href, key).toMatch(/^\/products\/session-manager\//);
       expect(href.split(/[#?]/)[0], key).not.toMatch(/^\/(manual|my-manual)$/);

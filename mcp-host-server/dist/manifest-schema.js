@@ -1,5 +1,5 @@
 // Manifest schema for the bilko-host MCP server.
-// Keep in sync with shared/manifest-schema.ts in the Bilko host repo.
+// Single source of truth: the Bilko host imports and re-exports this from shared/manifest-schema.ts.
 import { z } from 'zod';
 export const ManifestSchema = z.object({
     schemaVersion: z.literal(1),

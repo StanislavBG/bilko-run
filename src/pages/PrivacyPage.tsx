@@ -1,10 +1,7 @@
-import { useEffect } from 'react';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export function PrivacyPage() {
-  useEffect(() => {
-    document.title = 'Privacy Policy — bilko.run';
-    return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
-  }, []);
+  useDocumentTitle('Privacy Policy — bilko.run');
 
   return (
     <section className="max-w-3xl mx-auto px-6 py-16 md:py-24">

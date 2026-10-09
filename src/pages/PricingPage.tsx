@@ -1,11 +1,8 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export function PricingPage() {
-  useEffect(() => {
-    document.title = 'Pricing — bilko.run';
-    return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
-  }, []);
+  useDocumentTitle('Pricing — bilko.run');
 
   return (
     <>

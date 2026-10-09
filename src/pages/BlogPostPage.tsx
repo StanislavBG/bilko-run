@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { BlogVideoPlayer } from '../components/BlogVideoPlayer.js';
 import { parseFigure, splitInlineLinks } from '../lib/blogMarkdown.js';
+import { useDocumentTitle, DEFAULT_DOCUMENT_TITLE } from '../hooks/useDocumentTitle.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -34,15 +35,16 @@ export function BlogPostPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  useDocumentTitle(post ? `${post.title} — bilko.run` : DEFAULT_DOCUMENT_TITLE);
+
   useEffect(() => {
     if (!slug) return;
     fetch(`${API}/blog/${slug}`).then(r => {
       if (!r.ok) { setNotFound(true); setLoading(false); return null; }
       return r.json();
     }).then(d => {
-      if (d) { setPost(d); document.title = `${d.title} — bilko.run`; }
+      if (d) { setPost(d); }
     }).catch(() => setNotFound(true)).finally(() => setLoading(false));
-    return () => { document.title = 'Bilko.run — Tools for Makers Who Ship'; };
   }, [slug]);
 
   if (loading) return (

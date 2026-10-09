@@ -4,6 +4,7 @@ import { useUser } from '@clerk/clerk-react';
 import { ADMIN_EMAILS } from '../constants.js';
 import { HUB_CARDS, PUBLIC_CARDS, lastWorkedLabel, type HubCard } from '../data/projectsView.js';
 import { track } from '../hooks/usePageView.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 /**
  * Combined Projects + Packages hub.
@@ -132,14 +133,14 @@ export function ProjectsPage() {
   const [showAll, setShowAll] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  useDocumentTitle('Projects — Bilko Bibitkov');
+
   useEffect(() => {
-    document.title = 'Projects — Bilko Bibitkov';
     track('page_view', { tool: 'projects' });
     // Fit-to-viewport (no page scroll) is opt-in per route via this body class;
     // the matching rules live in portfolio.css.
     document.body.classList.add('hub-route');
     return () => {
-      document.title = 'Bilko — AI Advisory for Small Business';
       document.body.classList.remove('hub-route');
     };
   }, []);

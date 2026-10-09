@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ticker } from '../components/portfolio/Ticker.js';
 import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { SECTIONS, PORTFOLIO_PROJECTS, NOW_ITEMS } from '../data/portfolio.js';
 import { PUBLIC_SLUGS } from '../data/projectsView.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 // Only surface projects that are publicly listed on /projects (PUBLIC_SLUGS);
 // keeps the homepage in sync with the hub so we never tease a delisted tool.
@@ -12,9 +12,7 @@ const RECENT_BUILDS = PORTFOLIO_PROJECTS.filter(p => PUBLIC_SLUGS.has(p.id)).sli
 export function HomePage() {
   const navigate = useNavigate();
 
-  useEffect(() => {
-    document.title = 'Bilko Bibitkov — small AI tools';
-  }, []);
+  useDocumentTitle('Bilko Bibitkov — small AI tools');
 
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 

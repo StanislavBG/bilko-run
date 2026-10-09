@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import compress from '@fastify/compress';
 import staticPlugin from '@fastify/static';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
 import { initDb, dbAll } from './db.js';
@@ -117,7 +117,16 @@ registerEgressMeter(app);
 registerToolRoutes(app);
 registerStripeRoutes(app);
 registerLicenseRoutes(app);
-registerBlogRoutes(app);
+// Resolved here (before the blog routes) because they scan for videos at boot.
+const distCandidates = [
+  resolve(__dirname, '..', '..', 'dist'),  // dist-server/server/ → dist/
+  resolve(process.cwd(), 'dist'),           // cwd/dist/
+  resolve(__dirname, '..', 'dist'),         // one level up
+];
+const distPath = distCandidates.find(p => existsSync(p)) ?? distCandidates[0];
+registerBlogRoutes(app, {
+  videosRoot: isProd ? join(distPath, 'blog-videos') : join(process.cwd(), 'public', 'blog-videos'),
+});
 registerAnalyticsRoutes(app);
 registerTelemetryRoutes(app);
 registerManifestsRoutes(app);
@@ -158,14 +167,8 @@ app.get('/api/health', async () => ({
 
 // In production, serve the Vite build
 if (isProd) {
-  // Try multiple paths — __dirname varies between local and Render
-  const candidates = [
-    resolve(__dirname, '..', '..', 'dist'),  // dist-server/server/ → dist/
-    resolve(process.cwd(), 'dist'),           // cwd/dist/
-    resolve(__dirname, '..', 'dist'),         // one level up
-  ];
-  const distPath = candidates.find(p => existsSync(p)) ?? candidates[0];
-  console.log(`[Static] dist at: ${distPath} (exists: ${existsSync(distPath)}, tried: ${candidates.join(', ')})`);
+  // Candidates are tried in order — __dirname varies between local and Render
+  console.log(`[Static] dist at: ${distPath} (exists: ${existsSync(distPath)}, tried: ${distCandidates.join(', ')})`);
   if (existsSync(distPath)) {
     // Bounds static egress cardinality to the published apps in this dist —
     // see server/egress.ts setStaticKnownSlugs().
@@ -261,6 +264,10 @@ if (isProd) {
         return reply.status(404).send({ error: 'Not found' });
       }
       const path = req.url.split('?')[0];
+      // A missing blog video must 404, not fall through to the SPA shell.
+      if (path.startsWith('/blog-videos/')) {
+        return reply.status(404).type('text/plain').send('Not found');
+      }
       // Never cacheable: the onSend hook stamps a per-request CSP nonce into
       // this HTML, so a shared or reused copy would carry a nonce that no
       // longer matches the response's CSP header.

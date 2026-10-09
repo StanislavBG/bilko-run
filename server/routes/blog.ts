@@ -1,13 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun } from '../db.js';
 import { requireAdmin } from '../clerk.js';
+import { join } from 'node:path';
+import { blogVideoUrl, scanBlogVideos } from '../blog-videos.js';
 
-export function registerBlogRoutes(app: FastifyInstance): void {
+export function registerBlogRoutes(app: FastifyInstance, opts: { videosRoot?: string } = {}): void {
+  // Videos only change on deploy, so scan once at boot.
+  const videoSlugs = scanBlogVideos(opts.videosRoot ?? join(process.cwd(), 'public', 'blog-videos'));
+
   // Public: list published posts
   app.get('/api/blog', async () => {
-    return dbAll(
+    const rows = await dbAll<{ slug: string }>(
       "SELECT id, slug, title, excerpt, category, cover_image, published_at FROM blog_posts WHERE published = 1 AND datetime(published_at) <= datetime('now') ORDER BY published_at DESC",
     );
+    return rows.map(row => ({ ...row, video_url: blogVideoUrl(row.slug, videoSlugs) }));
   });
 
   // Public: get single post by slug
@@ -17,7 +23,7 @@ export function registerBlogRoutes(app: FastifyInstance): void {
       "SELECT * FROM blog_posts WHERE slug = ? AND published = 1 AND datetime(published_at) <= datetime('now')", slug,
     );
     if (!post) { reply.status(404); return { error: 'Post not found' }; }
-    return post;
+    return { ...post, video_url: blogVideoUrl(slug, videoSlugs) };
   });
 
   // Admin: list all posts (including drafts)

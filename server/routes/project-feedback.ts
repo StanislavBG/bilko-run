@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { dbAll, dbRun } from '../db.js';
 
 // Per-project user-feedback endpoint — the receiving half of a sibling app's
@@ -13,6 +14,25 @@ import { dbAll, dbRun } from '../db.js';
 //   POST /api/projects/:slug/feedback               PUBLIC → store one submission
 //   GET  /api/projects/:slug/feedback               authed → drain it for local analysis
 //   POST /api/projects/:slug/feedback/:id/moderate  authed → archive/delete a thread
+//   POST /api/projects/:slug/feedback/:id/status    authed → set work status
+//   POST /api/projects/:slug/feedback/status-lookup PUBLIC → status by receipt
+//
+// Moderation is visibility; status is work state (open | in_progress |
+// resolved | wontfix, NULL = open). The POST returns a one-time `receipt`
+// (32 random bytes, base64url) and stores only its sha256, so a submitter
+// with no account can later ask "what happened to my report?":
+//
+//   POST .../feedback          → 201 { id, parentId, receivedAt, receipt }
+//   POST .../:id/status        { status, note? } → { id, status, note, statusAt }
+//   POST .../status-lookup     { items: [{ id, receipt }] } (1..100)
+//                              → { items: [{ id, status, note, statusAt }] }
+//
+// The lookup returns ONLY rows whose receipt hash matches for that slug, and
+// silently omits everything else — it never reveals whether an id exists and
+// never returns title/description/client fields. Rows filed before receipts
+// existed have no hash and are simply never returned. GET items carry
+// `status: { value, note, at }`, and a status change re-surfaces a row through
+// the same `moderatedSince` cursor as moderation does.
 //
 // The POST is deliberately unauthenticated — anyone visiting the public page
 // may file feedback (a login is a later decision, not this one). That makes
@@ -39,6 +59,10 @@ const MODERATION_ACTIONS: Record<string, string | null> = {
 };
 const MAX_REASON = 500;
 
+const STATUSES = new Set(['open', 'in_progress', 'resolved', 'wontfix']);
+const MAX_STATUS_NOTE = 500;
+const MAX_LOOKUP_ITEMS = 100;
+
 const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 4_000;
 const MAX_LABEL = 200;
@@ -52,14 +76,25 @@ const BODY_LIMIT = 4 * 1024 * 1024;
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 10;
 const hits = new Map<string, number[]>();
+// Status lookups get their own bucket so a client polling for status can't
+// eat the same visitor's submit quota.
+const lookupHits = new Map<string, number[]>();
 
-function rateLimited(ip: string): boolean {
+function rateLimited(ip: string, bucket = hits): boolean {
   const now = Date.now();
-  const recent = (hits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  const recent = (bucket.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
   recent.push(now);
-  hits.set(ip, recent);
-  if (hits.size > 5_000) hits.clear(); // crude bound; never grows unbounded
+  bucket.set(ip, recent);
+  if (bucket.size > 5_000) bucket.clear(); // crude bound; never grows unbounded
   return recent.length > RATE_MAX;
+}
+
+function sha256Hex(s: string): string {
+  return createHash('sha256').update(s).digest('hex');
+}
+
+function isoOrNull(sec: number | null): string | null {
+  return sec ? new Date(sec * 1000).toISOString() : null;
 }
 
 function str(v: unknown, max: number): string | null {
@@ -99,6 +134,10 @@ interface FeedbackRow {
   moderation_action: string | null;
   moderation_at: number | null;
   moderation_reason: string | null;
+  status: string | null;
+  status_note: string | null;
+  status_at: number | null;
+  receipt_hash: string | null;
 }
 
 export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
@@ -157,21 +196,26 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     // The only thing enforced is a length bound, same as every other string.
     const parentId = str(body.parentId, MAX_ID);
 
+    // Bearer-style receipt for the public status lookup. Only the hash is
+    // stored; the plaintext exists once, in this response.
+    const receipt = randomBytes(32).toString('base64url');
+
     await dbRun(
       `INSERT INTO project_feedback
         (id, slug, target_kind, target_id, target_label, route, type, title, description,
-         image_mime, image_data, client_json, snapshot_generated_at, created_at, parent_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         image_mime, image_data, client_json, snapshot_generated_at, created_at, parent_id,
+         receipt_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id, slug, kind, targetId,
       str(target.label, MAX_LABEL), str(body.route, MAX_ROUTE),
       type, title, description,
       imageMime, imageData,
       body.client ? JSON.stringify(body.client).slice(0, 4_000) : null,
       typeof body.snapshotGeneratedAt === 'string' ? body.snapshotGeneratedAt : null,
-      now, parentId,
+      now, parentId, sha256Hex(receipt),
     );
 
-    return reply.code(201).send({ id, parentId, receivedAt: new Date(now * 1000).toISOString() });
+    return reply.code(201).send({ id, parentId, receivedAt: new Date(now * 1000).toISOString(), receipt });
   });
 
   // ── authed read ──────────────────────────────────────────────────────────
@@ -193,6 +237,7 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     // the caller's local mirror would silently disagree with the server.
     // `moderatedSince` re-admits already-pulled rows whose moderation state
     // changed after that instant; the caller replays it from nextModeratedSince.
+    // A status change rides the same cursor, so one replay covers both.
     const modSince = q.moderatedSince ? Math.floor(new Date(q.moderatedSince).getTime() / 1000) : null;
     if (q.moderatedSince && !Number.isFinite(modSince)) {
       return reply.code(400).send({ error: 'moderatedSince must be an ISO timestamp' });
@@ -208,10 +253,10 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
         )
       : await dbAll<FeedbackRow>(
           `SELECT * FROM project_feedback
-            WHERE slug = ? AND (created_at > ? OR moderation_at > ?)
+            WHERE slug = ? AND (created_at > ? OR moderation_at > ? OR status_at > ?)
             ORDER BY created_at ASC, id ASC
             LIMIT ?`,
-          slug, sinceSec, modSince, limit,
+          slug, sinceSec, modSince, modSince, limit,
         );
 
     // Screenshots are stored as inline base64 and can run to 2 MB each, so a
@@ -246,13 +291,17 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
             reason: r.moderation_reason,
           }
         : null,
+      status: { value: r.status || 'open', note: r.status_note, at: isoOrNull(r.status_at) },
     }));
 
     // Never let the cursor regress: a page made entirely of re-admitted
     // moderated rows has a max created_at below the cursor we were handed.
     const maxCreated = rows.reduce((m, r) => Math.max(m, r.created_at), sinceSec);
     const nextSince = rows.length || q.since ? new Date(maxCreated * 1000).toISOString() : null;
-    const maxModerated = rows.reduce((m, r) => Math.max(m, r.moderation_at || 0), modSince ?? 0);
+    const maxModerated = rows.reduce(
+      (m, r) => Math.max(m, r.moderation_at || 0, r.status_at || 0),
+      modSince ?? 0,
+    );
     const nextModeratedSince = maxModerated > 0 ? new Date(maxModerated * 1000).toISOString() : null;
     return reply.send({ items, nextSince, nextModeratedSince });
   });
@@ -295,5 +344,84 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     if (!res.changes) return reply.code(404).send({ error: 'unknown feedback id' });
 
     return reply.send({ id, action, moderatedAt: new Date(at * 1000).toISOString() });
+  });
+
+  // ── authed status ────────────────────────────────────────────────────────
+  // Owner-only work state. Same bearer, rate limit and slug scoping as
+  // moderation; independent of it (an archived row can still be resolved).
+  app.post('/api/projects/:slug/feedback/:id/status', async (req, reply) => {
+    const bad = checkBearer(req as never);
+    if (bad) return reply.code(bad.code).send({ error: bad.error });
+
+    const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+    if (rateLimited(ip)) return reply.code(429).send({ error: 'too many status calls, try again shortly' });
+
+    const { slug, id } = req.params as { slug: string; id: string };
+    if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
+
+    const body = req.body as Record<string, unknown> | undefined;
+    const status = typeof body?.status === 'string' ? body.status : '';
+    if (!STATUSES.has(status)) {
+      return reply.code(400).send({ error: `status must be one of ${[...STATUSES].join(', ')}` });
+    }
+    const note = body?.note == null ? null : str(body.note, MAX_STATUS_NOTE);
+    if (body?.note != null && note === null) {
+      return reply.code(400).send({ error: `note must be a non-empty string (max ${MAX_STATUS_NOTE} chars)` });
+    }
+
+    const at = Math.floor(Date.now() / 1000);
+    const res = await dbRun(
+      `UPDATE project_feedback
+          SET status = ?, status_note = ?, status_at = ?
+        WHERE id = ? AND slug = ?`,
+      status, note, at, id, slug,
+    );
+    if (!res.changes) return reply.code(404).send({ error: 'unknown feedback id' });
+
+    return reply.send({ id, status, note, statusAt: new Date(at * 1000).toISOString() });
+  });
+
+  // ── public status lookup ─────────────────────────────────────────────────
+  // Unauthenticated: possession of the receipt IS the credential. Anything
+  // that doesn't match — unknown id, wrong slug, wrong receipt, pre-receipt
+  // row — is dropped without a trace so the route can't be used to probe ids.
+  app.post('/api/projects/:slug/feedback/status-lookup', async (req, reply) => {
+    const slug = (req.params as { slug: string }).slug;
+    if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
+
+    const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+    if (rateLimited(ip, lookupHits)) return reply.code(429).send({ error: 'too many lookups, try again shortly' });
+
+    const body = req.body as Record<string, unknown> | undefined;
+    const raw = body?.items;
+    if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_LOOKUP_ITEMS) {
+      return reply.code(400).send({ error: `items must be an array of 1..${MAX_LOOKUP_ITEMS} { id, receipt }` });
+    }
+    const wanted = new Map<string, string>();
+    for (const it of raw) {
+      const id = str((it as Record<string, unknown> | null)?.id, MAX_ID);
+      const receipt = str((it as Record<string, unknown> | null)?.receipt, MAX_ID);
+      if (!id || !receipt) {
+        return reply.code(400).send({ error: `each item needs string id and receipt (max ${MAX_ID} chars)` });
+      }
+      wanted.set(id, sha256Hex(receipt));
+    }
+
+    const ids = [...wanted.keys()];
+    const rows = await dbAll<Pick<FeedbackRow, 'id' | 'receipt_hash' | 'status' | 'status_note' | 'status_at'>>(
+      `SELECT id, receipt_hash, status, status_note, status_at FROM project_feedback
+        WHERE slug = ? AND receipt_hash IS NOT NULL AND id IN (${ids.map(() => '?').join(', ')})`,
+      slug, ...ids,
+    );
+
+    const items = rows
+      .filter((r) => {
+        const want = Buffer.from(wanted.get(r.id)!, 'hex');
+        const have = Buffer.from(r.receipt_hash!, 'hex');
+        return want.length === have.length && timingSafeEqual(want, have);
+      })
+      .map((r) => ({ id: r.id, status: r.status || 'open', note: r.status_note, statusAt: isoOrNull(r.status_at) }));
+
+    return reply.send({ items });
   });
 }

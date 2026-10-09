@@ -1,0 +1,649 @@
+/*
+ * Field Manual reader (bilko.run/products/session-manager/manual) — page 3 of
+ * the landing book. Imported only by src/pages/ManualPage.tsx. Tokens, resets,
+ * paper background and the `.smlp-turn` / `.smlp-dot` look come from
+ * session-manager-landing.css; every class here is `.smlm-*` and every
+ * selector sits under `.smlm-root` so nothing leaks after SPA navigation.
+ */
+
+.smlm-root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.smlm-root .smlm-title-block {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 36px 40px 20px;
+}
+
+.smlm-root .smlm-eyebrow {
+  font-family: var(--smlp-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--smlp-rust);
+}
+
+.smlm-root .smlm-title {
+  margin-top: 8px;
+  font-family: var(--smlp-serif);
+  font-size: 52px;
+  line-height: 1.08;
+  font-weight: 700;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-summary {
+  margin-top: 12px;
+  max-width: 68ch;
+  font-family: var(--smlp-serif);
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--smlp-body);
+}
+
+.smlm-root .smlm-meta {
+  margin-top: 10px;
+  font-family: var(--smlp-mono);
+  font-size: 13px;
+  color: var(--smlp-muted);
+}
+
+.smlm-root .smlm-facts {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font-size: 14px;
+  color: var(--smlp-muted);
+}
+
+.smlm-root .smlm-facts__free {
+  color: var(--smlp-forest);
+  font-weight: 600;
+}
+
+.smlm-root .smlm-downloads {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.smlm-root .smlm-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 9px 16px;
+  background: var(--smlp-rust);
+  color: var(--smlp-paper);
+  font-weight: 700;
+  font-size: 16px;
+  text-decoration: none;
+  border: 2px solid var(--smlp-ink);
+  border-radius: 10px;
+  box-shadow: 3px 3px 0 var(--smlp-ink);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.smlm-root .smlm-download:hover {
+  color: var(--smlp-paper);
+}
+
+.smlm-root .smlm-download:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--smlp-ink);
+}
+
+.smlm-root .smlm-download__size {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.smlm-root .smlm-appnote {
+  margin-top: 14px;
+  max-width: 68ch;
+  font-size: 14px;
+  color: var(--smlp-muted);
+}
+
+.smlm-root .smlm-backrow {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.smlm-root .smlm-spread {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 40px 40px;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+
+/* ── Chapter rail ──────────────────────────────────────────────────────── */
+
+.smlm-root .smlm-rail {
+  position: sticky;
+  top: 70px;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px;
+}
+
+.smlm-root .smlm-rail__part {
+  margin-top: 14px;
+  padding: 0 4px;
+  font-family: var(--smlp-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--smlp-rust);
+}
+
+.smlm-root .smlm-rail__part:first-child {
+  margin-top: 0;
+}
+
+.smlm-root .smlm-rail__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 44px;
+  padding: 0 10px;
+  border: 1.5px solid transparent;
+  background: transparent;
+  color: var(--smlp-ink);
+  font-family: var(--smlp-serif);
+  font-size: 17px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.smlm-root .smlm-rail__row:hover {
+  border-color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-rail__row[aria-current='page'] {
+  background: var(--smlp-ink);
+  color: var(--smlp-paper);
+  border-color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-rail__num {
+  flex: none;
+  font-family: var(--smlp-mono);
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.smlm-root .smlm-rail__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smlm-root .smlm-picker {
+  display: block;
+}
+
+.smlm-root .smlm-picker__label {
+  font-family: var(--smlp-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--smlp-rust);
+}
+
+.smlm-root .smlm-picker__select {
+  margin-top: 4px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 2px solid var(--smlp-ink);
+  background: var(--smlp-card);
+  color: var(--smlp-ink);
+  font-family: var(--smlp-serif);
+  font-size: 17px;
+}
+
+/* ── Page card ─────────────────────────────────────────────────────────── */
+
+.smlm-root .smlm-card {
+  position: relative;
+  min-height: 320px;
+  padding: 48px 56px;
+  background: var(--smlp-card);
+  border: 2px solid var(--smlp-ink);
+  box-shadow: 4px 4px 0 var(--smlp-ink);
+}
+
+.smlm-root .smlm-card__tape {
+  position: absolute;
+  top: -13px;
+  left: 28px;
+  width: 92px;
+  height: 22px;
+  background: var(--smlp-rust);
+  border: 1.5px solid var(--smlp-ink);
+  transform: rotate(-4deg);
+}
+
+.smlm-root .smlm-card__ghost {
+  position: absolute;
+  top: 8px;
+  right: 28px;
+  font-family: var(--smlp-serif);
+  font-size: 200px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--smlp-ghost);
+  pointer-events: none;
+  user-select: none;
+}
+
+.smlm-root .smlm-card__body {
+  position: relative;
+}
+
+.smlm-root .smlm-card__count {
+  font-family: var(--smlp-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--smlp-muted);
+  margin-bottom: 16px;
+}
+
+.smlm-root .smlm-status {
+  font-family: var(--smlp-serif);
+  font-size: 19px;
+  color: var(--smlp-muted);
+}
+
+.smlm-root .smlm-unavailable__title {
+  font-family: var(--smlp-serif);
+  font-size: 28px;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-unavailable__blurb {
+  margin-top: 8px;
+  font-family: var(--smlp-serif);
+  font-size: 19px;
+  color: var(--smlp-body);
+}
+
+.smlm-root .smlm-focus:focus {
+  outline: none;
+}
+
+.smlm-root .smlm-pager {
+  position: relative;
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1.5px solid var(--smlp-rule);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.smlm-root .smlm-pager .smlp-turn {
+  flex-direction: row;
+  text-align: left;
+  max-width: 100%;
+}
+
+.smlm-root .smlm-pager__next {
+  margin-left: auto;
+  text-align: right;
+}
+
+/* ── Prose ─────────────────────────────────────────────────────────────── */
+
+.smlm-root .smlm-prose {
+  max-width: 68ch;
+  font-family: var(--smlp-serif);
+  font-size: 19px;
+  line-height: 1.65;
+  color: var(--smlp-body);
+  overflow-wrap: break-word;
+}
+
+.smlm-root .smlm-prose h1 {
+  margin: 0 0 0.5em;
+  font-family: var(--smlp-serif);
+  font-size: 44px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose h2 {
+  margin: 1.8em 0 0.5em;
+  font-family: var(--smlp-serif);
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose h3 {
+  margin: 1.5em 0 0.4em;
+  font-family: var(--smlp-serif);
+  font-size: 21px;
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose p {
+  margin: 0.9em 0;
+}
+
+.smlm-root .smlm-prose .lede {
+  font-size: 1.1em;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose strong {
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose a {
+  color: var(--smlp-rust);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.smlm-root .smlm-prose a:hover {
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose ul,
+.smlm-root .smlm-prose ol {
+  margin: 0.9em 0;
+  padding-left: 1.5em;
+}
+
+.smlm-root .smlm-prose ul {
+  list-style: disc;
+}
+
+.smlm-root .smlm-prose ol {
+  list-style: decimal;
+}
+
+.smlm-root .smlm-prose li {
+  margin: 0.45em 0;
+  padding: 0;
+}
+
+.smlm-root .smlm-prose code {
+  padding: 2px 5px;
+  background: var(--smlp-sand);
+  color: var(--smlp-ink);
+  font-family: var(--smlp-mono);
+  font-size: 0.9em;
+}
+
+.smlm-root .smlm-prose pre {
+  margin: 1.2em 0;
+  padding: 16px;
+  overflow-x: auto;
+  background: var(--smlp-card);
+  border: 1.5px solid var(--smlp-ink);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.smlm-root .smlm-prose pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.smlm-root .smlm-prose kbd {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  background: var(--smlp-card);
+  border: 1.5px solid var(--smlp-ink);
+  border-bottom-width: 3px;
+  font-family: var(--smlp-mono);
+  font-size: 0.85em;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose blockquote {
+  margin: 1.2em 0;
+  padding: 0.2em 0 0.2em 1.2em;
+  border-left: 4px solid var(--smlp-rust);
+  color: var(--smlp-muted);
+  font-style: italic;
+}
+
+.smlm-root .smlm-prose hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1.5px solid var(--smlp-rule);
+}
+
+.smlm-root .smlm-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.smlm-root .smlm-prose table {
+  width: 100%;
+  margin: 1.2em 0;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+
+.smlm-root .smlm-prose th,
+.smlm-root .smlm-prose td {
+  padding: 10px 12px;
+  border: 1.5px solid var(--smlp-ink);
+  text-align: left;
+  vertical-align: top;
+}
+
+.smlm-root .smlm-prose th {
+  background: var(--smlp-sand);
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose td {
+  color: var(--smlp-body);
+}
+
+.smlm-root .smlm-prose dt {
+  margin-top: 1em;
+  font-weight: 700;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose dd {
+  margin: 0.25em 0 0;
+}
+
+/* Chapter components from the release bundle (.manual-*): recoloured to the
+   paper/ink palette; the base shapes still come from src/index.css. */
+.smlm-root .smlm-prose .manual-analogy,
+.smlm-root .smlm-prose .manual-tip,
+.smlm-root .smlm-prose .manual-note,
+.smlm-root .smlm-prose .manual-warning {
+  margin: 1.2em 0;
+  padding: 12px 16px;
+  border-radius: 0;
+  border: 1.5px solid var(--smlp-ink);
+  border-left-width: 6px;
+  background: var(--smlp-paper);
+  color: var(--smlp-body);
+}
+
+.smlm-root .smlm-prose .manual-analogy { border-left-color: var(--smlp-forest); }
+.smlm-root .smlm-prose .manual-tip { border-left-color: var(--smlp-mustard); }
+.smlm-root .smlm-prose .manual-note { border-left-color: var(--smlp-muted); }
+.smlm-root .smlm-prose .manual-warning { border-left-color: var(--smlp-rust); }
+
+.smlm-root .smlm-prose .manual-analogy strong,
+.smlm-root .smlm-prose .manual-tip strong,
+.smlm-root .smlm-prose .manual-note strong,
+.smlm-root .smlm-prose .manual-warning strong {
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose .manual-steps li::marker {
+  color: var(--smlp-rust);
+}
+
+.smlm-root .smlm-prose .manual-flow {
+  list-style: none;
+  padding: 0;
+}
+
+.smlm-root .smlm-prose .manual-flow li {
+  background: var(--smlp-card);
+  border: 1.5px solid var(--smlp-ink);
+  border-radius: 0;
+  color: var(--smlp-body);
+}
+
+.smlm-root .smlm-prose .manual-flow li:not(:last-child)::after {
+  color: var(--smlp-rust);
+}
+
+.smlm-root .smlm-prose .manual-table th,
+.smlm-root .smlm-prose .manual-table td {
+  border: 1.5px solid var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose .manual-table th {
+  background: var(--smlp-sand);
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose .manual-takeaways {
+  background: var(--smlp-paper);
+  border: 1.5px solid var(--smlp-ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose .manual-takeaways h2 {
+  margin: 0 0 0.5em;
+  font-size: 21px;
+}
+
+.smlm-root .smlm-prose .manual-takeaways li,
+.smlm-root .smlm-prose .manual-next {
+  color: var(--smlp-body);
+}
+
+.smlm-root .smlm-prose .manual-next {
+  border-top-color: var(--smlp-rule);
+}
+
+.smlm-root .smlm-prose .manual-next a {
+  color: var(--smlp-rust);
+}
+
+.smlm-root .smlm-prose .manual-figure {
+  border: 1.5px solid var(--smlp-ink);
+  border-radius: 0;
+  background: var(--smlp-card);
+}
+
+.smlm-root .smlm-prose .manual-figure figcaption {
+  color: var(--smlp-muted);
+}
+
+.smlm-root .smlm-prose .manual-glossary dt {
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-prose .manual-glossary dd {
+  color: var(--smlp-body);
+}
+
+/* ── Dots (desktop only; the landing's .smlp-dots is canvas-positioned) ── */
+
+.smlm-root .smlm-dots {
+  position: fixed;
+  z-index: 3;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Reflow: single column, no shadow, tighter card ────────────────────── */
+
+.smlm-root--reflow .smlm-title-block {
+  padding: 24px 20px 12px;
+}
+
+.smlm-root--reflow .smlm-title {
+  font-size: 36px;
+}
+
+.smlm-root--reflow .smlm-spread {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0 20px 28px;
+  gap: 20px;
+}
+
+.smlm-root--reflow .smlm-card {
+  padding: 24px 20px;
+  box-shadow: none;
+}
+
+.smlm-root--reflow .smlm-card__ghost {
+  font-size: 120px;
+  right: 12px;
+}
+
+.smlm-root--reflow .smlm-prose {
+  font-size: 18px;
+  max-width: none;
+}
+
+.smlm-root--reflow .smlm-prose h1 {
+  font-size: 32px;
+}
+
+.smlm-root--reflow .smlm-prose h2 {
+  font-size: 24px;
+}
+
+.smlm-root--reflow .smlm-prose table {
+  display: block;
+  overflow-x: auto;
+}
+
+.smlm-root--reflow .smlm-pager .smlp-turn {
+  flex: 1 1 100%;
+}
+
+.smlm-root--reflow .smlm-pager__next {
+  margin-left: 0;
+}
+
+/* Chapter switches scroll the card to the top, under the sticky header. */
+.smlm-root .smlm-card {
+  scroll-margin-top: 72px;
+}

@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { usePageView } from '../hooks/usePageView.js';
 import {
@@ -20,7 +21,13 @@ import {
   type ManualChapterBody, type ManualChapterUnavailable, type TokenGetter,
 } from '../lib/manualClient.js';
 import '../styles/session-manager-landing.css';
+import '../styles/session-manager-manual.css';
 import { Header } from './session-manager-landing/Header.js';
+import { COPY, fill } from './session-manager-landing/copy.js';
+import {
+  bookNavigate, markBookPageReady, shouldInterceptClick, turnBook, waitForBookPageReady,
+  type BookDirection,
+} from './session-manager-landing/bookTurn.js';
 import { useLayoutMode, usePageFonts } from './session-manager-landing/hooks.js';
 import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../shared/manual-catalog.js';
 
@@ -42,6 +49,25 @@ function slugFromHash(toc: ManualToc | null): string | null {
   if (!toc) return null;
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, ''));
   return toc.chapters.some(c => c.slug === raw) ? raw : null;
+}
+
+const LANDING_HREF = '/products/session-manager';
+const PARTS_HREF = '/products/session-manager#parts';
+const BOOK_PAGE_COUNT = 3;
+
+function Chevron({ up }: { up?: boolean }) {
+  return (
+    <svg className="smlp-turn__chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        d={up ? 'M3 10.5 8 5.5l5 5' : 'M3 5.5 8 10.5l5-5'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export default function ManualPage() {
@@ -69,13 +95,18 @@ export default function ManualPage() {
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [chapter, setChapter] = useState<ManualChapterBody | ManualChapterUnavailable | null>(null);
   const [chapterLoading, setChapterLoading] = useState(false);
-  const articleRef = useRef<HTMLElement | null>(null);
+  // The slug whose fetch has settled (chapter, unavailable or error) — the
+  // book-turn ready signal fires once this matches the active chapter.
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   // The chapter currently on screen, so a re-fetch of the same one (sign-in
   // state settling after the first load) doesn't flash "Loading chapter…".
   const shownSlug = useRef<string | null>(null);
-  // First chapter render is the page load — scrolling then would jump a visitor
-  // past the header they haven't read yet.
-  const firstChapterRender = useRef(true);
+  // Set by a chapter switch (not the page load — focusing then would jump a
+  // visitor past the header they haven't read yet); consumed once it is shown.
+  const pendingFocus = useRef(false);
+  const canvas = mode === 'canvas';
+  const navigate = useNavigate();
 
   // The table of contents is public; nobody has to sign in to read.
   useEffect(() => {
@@ -101,19 +132,41 @@ export default function ManualPage() {
   useEffect(() => {
     const onHashChange = () => {
       const slug = slugFromHash(toc);
-      if (slug) setActiveSlug(slug);
+      if (slug && slug !== activeSlug) {
+        pendingFocus.current = true;
+        setActiveSlug(slug);
+      }
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, [toc]);
+  }, [toc, activeSlug]);
 
-  /** Single entry point for "show me this chapter" — keeps the URL in step. */
-  const openChapter = useCallback((slug: string) => {
-    setActiveSlug(slug);
-    if (window.location.hash !== `#${slug}`) {
-      window.history.pushState(null, '', `#${slug}`);
-    }
-  }, []);
+  /**
+   * Single entry point for "show me this chapter" — keeps the URL in step and
+   * turns the page forward or back by chapter order (animated on desktop only).
+   */
+  const openChapter = useCallback((slug: string, opts?: { animate?: boolean }) => {
+    if (slug === activeSlug) return Promise.resolve();
+    const chapters = toc?.chapters ?? [];
+    const dir: BookDirection =
+      chapters.findIndex(c => c.slug === slug) < chapters.findIndex(c => c.slug === activeSlug) ? 'back' : 'forward';
+    return turnBook(dir, async () => {
+      const ready = waitForBookPageReady();
+      pendingFocus.current = true;
+      setActiveSlug(slug);
+      if (window.location.hash !== `#${slug}`) {
+        window.history.pushState(null, '', `#${slug}`);
+      }
+      await ready;
+    }, { animate: opts?.animate ?? canvas });
+  }, [toc, activeSlug, canvas]);
+
+  /** Leave for the landing: a book turn back on desktop, instant otherwise. */
+  const leaveTo = useCallback((e: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>, href: string) => {
+    if (!shouldInterceptClick(e, (e.currentTarget as HTMLAnchorElement).target)) return;
+    e.preventDefault();
+    void bookNavigate(navigate, href, 'back', { animate: canvas });
+  }, [navigate, canvas]);
 
   // Whether a token could change what this chapter request returns. Only then
   // does signing in re-fetch the chapter already on screen.
@@ -131,18 +184,33 @@ export default function ManualPage() {
       // A failed refresh keeps the chapter that is already showing.
       if (!(refresh && c === null)) setChapter(c);
       shownSlug.current = activeSlug;
+      setLoadedSlug(activeSlug);
       setChapterLoading(false);
     })();
     return () => { cancelled = true; };
   }, [activeSlug, sendToken, currentToken]);
 
-  // Land at the top of the chapter you just chose, not halfway down the
-  // previous one's scroll position.
+  // Once the chapter you chose (or its unavailable / error state) is on screen:
+  // move focus to its heading, land at the card top, and tell an in-flight book
+  // turn the page is ready. Focus and scroll come first so the new page is
+  // snapshotted already in place.
   useEffect(() => {
-    if (!activeSlug) return;
-    if (firstChapterRender.current) { firstChapterRender.current = false; return; }
-    articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [activeSlug]);
+    if (loading) return;
+    if (!toc) { markBookPageReady(); return; }
+    if (!activeSlug || chapterLoading || loadedSlug !== activeSlug) return;
+    if (pendingFocus.current) {
+      pendingFocus.current = false;
+      const card = cardRef.current;
+      const heading = card?.querySelector<HTMLElement>('h1, h2, h3');
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.classList.add('smlm-focus');
+        heading.focus({ preventScroll: true });
+      }
+      card?.scrollIntoView({ block: 'start' });
+    }
+    markBookPageReady();
+  }, [loading, toc, activeSlug, chapterLoading, loadedSlug, chapter]);
 
   // Chapters cross-reference each other as `<a href="#other-chapter">`, which
   // is correct in the offline single-file edition but points at nothing here,
@@ -154,192 +222,227 @@ export default function ManualPage() {
     const slug = href.slice(1);
     if (!toc?.chapters.some(c => c.slug === slug)) return;
     e.preventDefault();
-    openChapter(slug);
+    void openChapter(slug);
   }, [toc, openChapter]);
 
-  const root = (allFree: boolean, body: ReactNode) => (
-    <div className="smlp-root smlm-root">
-      <Header compact={mode === 'reflow'} allFree={allFree} current="manual" />
-      {body}
+  const root = (allFree: boolean, children: ReactNode) => (
+    <div className={`smlp-root smlm-root ${canvas ? 'smlm-root--canvas' : 'smlm-root--reflow'}`}>
+      <Header
+        compact={!canvas}
+        allFree={allFree}
+        current="manual"
+        onLinkClick={e => leaveTo(e, PARTS_HREF)}
+      />
+      {children}
     </div>
   );
 
   if (loading) {
-    return root(true, <main className="mx-auto max-w-5xl px-6 py-20 text-warm-700">Loading the manual…</main>);
+    return root(true, <main className="smlm-title-block" aria-label={COPY.book.aria.manualPage}><p className="smlm-status">Loading the manual…</p></main>);
   }
 
   if (!toc) {
     return root(true, (
-      <main className="mx-auto max-w-3xl px-6 py-20">
-        <h1 className="text-3xl font-semibold text-warm-900">{MANUAL_TITLE}</h1>
-        <p className="mt-4 text-warm-700">
+      <main className="smlm-title-block" aria-label={COPY.book.aria.manualPage}>
+        <h1 className="smlm-title">{MANUAL_TITLE}</h1>
+        <p className="smlm-summary">
           The first release is still being cut. Check back shortly — or get the app free from the{' '}
-          <a href="/products/session-manager" className="text-emerald-700 underline hover:text-emerald-800">Session Manager page</a> — Mac and Windows installers, no terminal needed.
+          <a href="/products/session-manager">Session Manager page</a> — Mac and Windows installers, no terminal needed.
         </p>
       </main>
     ));
   }
 
   const allFree = toc.chapters.every(c => c.free);
+  const count = toc.chapters.length;
   const activeIndex = toc.chapters.findIndex(c => c.slug === activeSlug);
   const prev = activeIndex > 0 ? toc.chapters[activeIndex - 1] : null;
-  const next = activeIndex >= 0 && activeIndex < toc.chapters.length - 1 ? toc.chapters[activeIndex + 1] : null;
+  const next = activeIndex >= 0 && activeIndex < count - 1 ? toc.chapters[activeIndex + 1] : null;
+  const dotHrefs = [LANDING_HREF, PARTS_HREF];
 
   return root(allFree, (
-    <main className="mx-auto max-w-6xl px-6 py-12">
-      <header className="border-b border-warm-200 pb-8">
-        <p className="text-xs uppercase tracking-widest text-emerald-700">Digital guide</p>
-        <h1 className="mt-2 text-4xl font-semibold text-warm-900">{toc.title}</h1>
-        <p className="mt-3 max-w-2xl text-warm-700">{toc.summary}</p>
-        <p className="mt-2 text-sm text-warm-700">
+    <main aria-label={COPY.book.aria.manualPage}>
+      <header className="smlm-title-block">
+        <p className="smlm-eyebrow">Digital guide</p>
+        <h1 className="smlm-title">{toc.title}</h1>
+        <p className="smlm-summary">{toc.summary}</p>
+        <p className="smlm-meta">
           v{toc.version} · released {formatManualReleaseDate(toc.releasedAt)} · documents
           Session Manager v{toc.documentsAppVersion}
         </p>
 
         {/* What's in the box. Derived from the manifest, so it can't drift. */}
-        <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-sm text-warm-700">
-          <li>{toc.chapters.length} chapters</li>
-          {allFree && <li className="text-emerald-700">Free to read, no sign-in needed</li>}
+        <ul className="smlm-facts">
+          <li>{count} chapters</li>
+          {allFree && <li className="smlm-facts__free">Free to read, no sign-in needed</li>}
           {toc.assets.length > 0 && <li>{toc.assets.map(a => a.label).join(' + ')}, free to download</li>}
         </ul>
 
         {/* Plain links: downloads need no account, and the server sends
             Content-Disposition: attachment, so the browser saves the file. */}
         {toc.assets.length > 0 && (
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="smlm-downloads">
             {toc.assets.map(a => (
-              <a
-                key={a.id}
-                href={manualDownloadUrl(a.id)}
-                download
-                className="rounded-md border border-warm-200 px-4 py-2 text-sm text-warm-900 hover:border-emerald-600"
-              >
-                ↓ {a.label} <span className="text-warm-700">({formatBytes(a.bytes)})</span>
+              <a key={a.id} href={manualDownloadUrl(a.id)} download className="smlm-download">
+                ↓ {a.label} <span className="smlm-download__size">({formatBytes(a.bytes)})</span>
               </a>
             ))}
           </div>
         )}
 
-        <p className="mt-4 text-xs text-warm-700">
+        <p className="smlm-appnote">
           The app itself is free too — get it from the{' '}
-          <a href="/products/session-manager" className="text-emerald-700 underline hover:text-emerald-800">Session Manager page</a> — Mac and Windows installers, no terminal needed.
+          <a href="/products/session-manager">Session Manager page</a> — Mac and Windows installers, no terminal needed.
           This is the guide that teaches it.
         </p>
       </header>
 
-      <div className="mt-8 grid gap-8 md:grid-cols-[260px_1fr]">
-        {/* Below md the full chapter list is a wall of nav rows standing between
-            a phone visitor and the words they came for — collapse it to one control. */}
-        <label className="md:hidden">
-          <span className="text-xs uppercase tracking-widest text-warm-700">Chapter</span>
-          <select
-            value={activeSlug ?? ''}
-            onChange={e => openChapter(e.target.value)}
-            className="mt-1 w-full rounded-md border border-warm-300 bg-white px-3 py-2 text-warm-900"
-          >
+      {canvas && (
+        <div className="smlm-backrow">
+          <button type="button" className="smlp-turn" onClick={e => leaveTo(e, PARTS_HREF)}>
+            <Chevron up />
+            {COPY.book.toParts}
+          </button>
+        </div>
+      )}
+
+      <div className="smlm-spread">
+        {!canvas ? (
+          // On a phone the full chapter list is a wall of rows standing between
+          // the visitor and the words they came for — collapse it to one control.
+          <label className="smlm-picker">
+            <span className="smlm-picker__label">Chapter</span>
+            <select
+              value={activeSlug ?? ''}
+              onChange={e => { void openChapter(e.target.value, { animate: false }); }}
+              className="smlm-picker__select"
+            >
+              {(() => {
+                let lastPart: string | undefined;
+                const groups: Array<{ part: string | undefined; items: Array<{ c: (typeof toc.chapters)[number]; i: number }> }> = [];
+                toc.chapters.forEach((c, i) => {
+                  if (c.part !== lastPart || groups.length === 0) {
+                    groups.push({ part: c.part, items: [] });
+                    lastPart = c.part;
+                  }
+                  groups[groups.length - 1].items.push({ c, i });
+                });
+                return groups.map((g, gi) => {
+                  const options = g.items.map(({ c, i }) => (
+                    <option key={c.slug} value={c.slug}>
+                      {String(i + 1).padStart(2, '0')} · {c.title}
+                    </option>
+                  ));
+                  return g.part
+                    ? <optgroup key={`${g.part}-${gi}`} label={g.part}>{options}</optgroup>
+                    : options;
+                });
+              })()}
+            </select>
+          </label>
+        ) : (
+          <nav className="smlm-rail" aria-label="Chapters">
             {(() => {
               let lastPart: string | undefined;
-              const groups: Array<{ part: string | undefined; items: Array<{ c: (typeof toc.chapters)[number]; i: number }> }> = [];
-              toc.chapters.forEach((c, i) => {
-                if (c.part !== lastPart || groups.length === 0) {
-                  groups.push({ part: c.part, items: [] });
-                  lastPart = c.part;
-                }
-                groups[groups.length - 1].items.push({ c, i });
-              });
-              return groups.map((g, gi) => {
-                const options = g.items.map(({ c, i }) => (
-                  <option key={c.slug} value={c.slug}>
-                    {String(i + 1).padStart(2, '0')} · {c.title}
-                  </option>
-                ));
-                return g.part
-                  ? <optgroup key={`${g.part}-${gi}`} label={g.part}>{options}</optgroup>
-                  : options;
+              return toc.chapters.map((c, i) => {
+                const showHeading = c.part && c.part !== lastPart;
+                lastPart = c.part;
+                return (
+                  <div key={c.slug} className="smlm-rail__item">
+                    {showHeading && <div className="smlm-rail__part">{c.part}</div>}
+                    <button
+                      type="button"
+                      className="smlm-rail__row"
+                      onClick={() => { void openChapter(c.slug); }}
+                      title={c.blurb}
+                      aria-current={activeSlug === c.slug ? 'page' : undefined}
+                    >
+                      <span className="smlm-rail__num">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="smlm-rail__label">{c.title}</span>
+                    </button>
+                  </div>
+                );
               });
             })()}
-          </select>
-        </label>
+          </nav>
+        )}
 
-        <nav className="hidden space-y-1 md:block md:sticky md:top-6 md:max-h-[calc(100vh-3rem)] md:self-start md:overflow-y-auto">
-          {(() => {
-            let lastPart: string | undefined;
-            return toc.chapters.map((c, i) => {
-              const showHeading = c.part && c.part !== lastPart;
-              lastPart = c.part;
-              return (
-                <div key={c.slug}>
-                  {showHeading && (
-                    <div className="mt-4 mb-1 px-3 text-xs font-semibold uppercase tracking-widest text-warm-500 first:mt-0">
-                      {c.part}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => openChapter(c.slug)}
-                    title={c.blurb}
-                    aria-current={activeSlug === c.slug ? 'true' : undefined}
-                    className={`block w-full rounded px-3 py-2 text-left text-sm ${
-                      activeSlug === c.slug ? 'bg-warm-100 text-warm-900' : 'text-warm-700 hover:bg-warm-50'
-                    }`}
-                  >
-                    <span className="mr-2 text-warm-500">{String(i + 1).padStart(2, '0')}</span>
-                    {c.title}
+        <article ref={cardRef} onClick={handleArticleClick} className="smlm-card">
+          <span className="smlm-card__tape" aria-hidden="true" />
+          {activeIndex >= 0 && (
+            <>
+              <span className="smlm-card__ghost" aria-hidden="true">{String(activeIndex + 1).padStart(2, '0')}</span>
+              <p className="smlm-card__count smlm-card__body">
+                {fill(COPY.book.chapterOfTemplate, { n: activeIndex + 1, count })}
+              </p>
+            </>
+          )}
+
+          <div className="smlm-card__body">
+            {chapterLoading && <p className="smlm-status">Loading chapter…</p>}
+
+            {/* Only reachable if a release marks a chapter non-free again: the
+                server answers 402. Say so plainly — there is nothing to buy. */}
+            {!chapterLoading && isUnavailable(chapter) && (
+              <div className="smlm-unavailable">
+                <h2 className="smlm-unavailable__title">{chapter.title}</h2>
+                <p className="smlm-unavailable__blurb">{chapter.blurb}</p>
+                <p className="smlm-status">This chapter isn't available right now.</p>
+              </div>
+            )}
+
+            {!chapterLoading && chapter && !isUnavailable(chapter) && (
+              // Chapter HTML is first-party content authored in this repo's own
+              // release bundle — not user input — so rendering it directly is safe.
+              <div className="smlm-prose" dangerouslySetInnerHTML={{ __html: chapter.html }} />
+            )}
+
+            {!chapterLoading && !chapter && (
+              <p className="smlm-status">This chapter couldn't be loaded. Try another one.</p>
+            )}
+
+            {/* Reading straight through shouldn't mean going back to the rail
+                after every chapter. */}
+            {!chapterLoading && (prev || next) && (
+              <div className="smlm-pager">
+                {prev && (
+                  <button type="button" className="smlp-turn smlm-pager__prev" onClick={() => { void openChapter(prev.slug); }}>
+                    <Chevron up />
+                    {prev.title}
                   </button>
-                </div>
-              );
-            });
-          })()}
-        </nav>
-
-        <article ref={articleRef} onClick={handleArticleClick} className="min-h-[320px] scroll-mt-6">
-          {chapterLoading && <p className="text-warm-700">Loading chapter…</p>}
-
-          {/* Only reachable if a release marks a chapter non-free again: the
-              server answers 402. Say so plainly — there is nothing to buy. */}
-          {!chapterLoading && isUnavailable(chapter) && (
-            <div className="rounded-lg border border-warm-200 bg-white p-8">
-              <h2 className="text-2xl font-semibold text-warm-900">{chapter.title}</h2>
-              <p className="mt-2 text-warm-700">{chapter.blurb}</p>
-              <p className="mt-6 text-warm-700">This chapter isn't available right now.</p>
-            </div>
-          )}
-
-          {!chapterLoading && chapter && !isUnavailable(chapter) && (
-            // Chapter HTML is first-party content authored in this repo's own
-            // release bundle — not user input — so rendering it directly is safe.
-            <div className="manual-prose" dangerouslySetInnerHTML={{ __html: chapter.html }} />
-          )}
-
-          {!chapterLoading && !chapter && (
-            <p className="text-warm-700">This chapter couldn't be loaded. Try another one.</p>
-          )}
-
-          {/* Reading straight through shouldn't mean going back to the sidebar
-              after every chapter. */}
-          {!chapterLoading && (prev || next) && (
-            <nav className="mt-12 flex flex-wrap gap-3 border-t border-warm-200 pt-6 text-sm">
-              {prev && (
-                <button
-                  onClick={() => openChapter(prev.slug)}
-                  className="flex-1 min-w-[220px] rounded-md border border-warm-200 px-4 py-3 text-left text-warm-700 hover:border-fire-300"
-                >
-                  <span className="block text-xs text-warm-500">← Previous</span>
-                  {prev.title}
-                </button>
-              )}
-              {next && (
-                <button
-                  onClick={() => openChapter(next.slug)}
-                  className="flex-1 min-w-[220px] rounded-md border border-warm-200 px-4 py-3 text-right text-warm-700 hover:border-fire-300"
-                >
-                  <span className="block text-xs text-warm-500">Next →</span>
-                  {next.title}
-                </button>
-              )}
-            </nav>
-          )}
+                )}
+                {next && (
+                  <button type="button" className="smlp-turn smlm-pager__next" onClick={() => { void openChapter(next.slug); }}>
+                    {next.title}
+                    <Chevron />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </article>
       </div>
+
+      {canvas && (
+        <nav className="smlm-dots" aria-label={COPY.pages.aria.nav}>
+          {dotHrefs.map((href, i) => (
+            <a
+              key={href}
+              className="smlp-dot smlp-dot--manual"
+              href={href}
+              aria-label={fill(COPY.pages.aria.goToTemplate, { n: i + 1, count: BOOK_PAGE_COUNT })}
+              onClick={e => leaveTo(e, href)}
+            />
+          ))}
+          <a
+            className="smlp-dot smlp-dot--manual smlp-dot--on"
+            href={`${LANDING_HREF}/manual`}
+            aria-label={fill(COPY.pages.aria.goToTemplate, { n: 3, count: BOOK_PAGE_COUNT })}
+            aria-current="page"
+            onClick={e => e.preventDefault()}
+          />
+        </nav>
+      )}
     </main>
   ));
 }

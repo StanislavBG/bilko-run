@@ -12,13 +12,16 @@
  * on a `#slug` that isn't in the DOM, and every chapter ends with where to go next.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { usePageView } from '../hooks/usePageView.js';
 import {
   fetchManualToc, fetchManualChapter, manualDownloadUrl,
   type ManualChapterBody, type ManualChapterUnavailable, type TokenGetter,
 } from '../lib/manualClient.js';
+import '../styles/session-manager-landing.css';
+import { Header } from './session-manager-landing/Header.js';
+import { useLayoutMode, usePageFonts } from './session-manager-landing/hooks.js';
 import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../shared/manual-catalog.js';
 
 function formatBytes(n: number): string {
@@ -43,6 +46,8 @@ function slugFromHash(toc: ManualToc | null): string | null {
 
 export default function ManualPage() {
   usePageView();
+  usePageFonts();
+  const { mode } = useLayoutMode();
 
   // Only used to forward a token with a chapter the TOC marks non-free: a
   // release that still has one serves it to a pre-2.0.1 buyer
@@ -152,12 +157,19 @@ export default function ManualPage() {
     openChapter(slug);
   }, [toc, openChapter]);
 
+  const root = (allFree: boolean, body: ReactNode) => (
+    <div className="smlp-root smlm-root">
+      <Header compact={mode === 'reflow'} allFree={allFree} current="manual" />
+      {body}
+    </div>
+  );
+
   if (loading) {
-    return <main className="mx-auto max-w-5xl px-6 py-20 text-warm-700">Loading the manual…</main>;
+    return root(true, <main className="mx-auto max-w-5xl px-6 py-20 text-warm-700">Loading the manual…</main>);
   }
 
   if (!toc) {
-    return (
+    return root(true, (
       <main className="mx-auto max-w-3xl px-6 py-20">
         <h1 className="text-3xl font-semibold text-warm-900">{MANUAL_TITLE}</h1>
         <p className="mt-4 text-warm-700">
@@ -165,7 +177,7 @@ export default function ManualPage() {
           <a href="/products/session-manager" className="text-emerald-700 underline hover:text-emerald-800">Session Manager page</a> — Mac and Windows installers, no terminal needed.
         </p>
       </main>
-    );
+    ));
   }
 
   const allFree = toc.chapters.every(c => c.free);
@@ -173,7 +185,7 @@ export default function ManualPage() {
   const prev = activeIndex > 0 ? toc.chapters[activeIndex - 1] : null;
   const next = activeIndex >= 0 && activeIndex < toc.chapters.length - 1 ? toc.chapters[activeIndex + 1] : null;
 
-  return (
+  return root(allFree, (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <header className="border-b border-warm-200 pb-8">
         <p className="text-xs uppercase tracking-widest text-emerald-700">Digital guide</p>
@@ -329,5 +341,5 @@ export default function ManualPage() {
         </article>
       </div>
     </main>
-  );
+  ));
 }

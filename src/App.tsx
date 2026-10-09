@@ -151,14 +151,6 @@ function AppRoutes() {
             <Route path="/products" element={<Navigate to="/projects" replace />} />
             <Route path="/products/*">
               {toolRoutes()}
-              {/* The Field Manual lives under the Session Manager product
-                  root, not at top level — /manual implied "the bilko.run manual"
-                  on a host with ~25 projects. Declared before the splat so the
-                  static segments outrank MaybeStandaloneRedirect. */}
-              <Route
-                path="session-manager/manual"
-                element={<React.Suspense fallback={null}><ManualPage /></React.Suspense>}
-              />
               {/* unknown slug under /products/* — maybe a static-path project? */}
               <Route path="*" element={<MaybeStandaloneRedirect />} />
             </Route>
@@ -205,6 +197,16 @@ function AppRoutes() {
               (wraps <AppRoutes />, not Layout-scoped) and ClerkProvider, which
               its header account chip reads. */}
           <Route path="/products/session-manager" element={lazyRoute(TOOL_COMPONENTS['session-manager'])} />
+          {/* The Field Manual reader is the landing's next page, so it lives
+              outside <Layout /> too and wears the landing's chrome (own
+              Header, stylesheet, fonts). It lives under the Session Manager
+              product root, not at top level — /manual implied "the bilko.run
+              manual" on a host with ~25 projects. Static segments outrank the
+              /products/* splat, so declaration order is not load-bearing. */}
+          <Route
+            path="/products/session-manager/manual"
+            element={<React.Suspense fallback={null}><ManualPage /></React.Suspense>}
+          />
 
           {/* /app/* — legacy dashboard URLs redirect to canonical /products/* */}
           <Route path="/app" element={<RedirectAppToProducts />} />

@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import type { ManualToc } from '../../shared/manual-catalog.js';
 import '../styles/session-manager-landing.css';
 import { bookNavigate, markBookPageReady, shouldInterceptClick } from './session-manager-landing/bookTurn.js';
-import { AccountChip, PageViewTracker } from './session-manager-landing/AccountChip.js';
+import { PageViewTracker } from './session-manager-landing/AccountChip.js';
 import { COPY, fill } from './session-manager-landing/copy.js';
 import { MacDownload, WindowsDownload, windowsAvailable } from './session-manager-landing/Downloads.js';
+import { Header } from './session-manager-landing/Header.js';
 import { FilmDialog } from './session-manager-landing/FilmDialog.js';
 import {
   useBodyOverflowLock,
@@ -47,34 +48,6 @@ import { chapterHref, PartsBin, TABS } from './session-manager-landing/PartsBin.
  */
 
 const DEFAULT_TITLE_FALLBACK = 'Bilko.run — Tools for Makers Who Ship';
-
-function Header({
-  compact,
-  allFree,
-  onManualClick,
-}: {
-  compact: boolean;
-  allFree: boolean;
-  onManualClick: (e: MouseEvent<HTMLAnchorElement>) => void;
-}) {
-  const h = COPY.header;
-  return (
-    <header className="smlp-header">
-      <div className="smlp-header__brand">
-        <span className="smlp-logo" aria-hidden="true">S</span>
-        <span className="smlp-wordmark">{h.wordmark}</span>
-        <span className="smlp-badge">{h.badge}</span>
-        <span className="smlp-tagline">{h.tagline}</span>
-      </div>
-      <div className="smlp-header__right">
-        <a className="smlp-header__manual" href={COPY.meta.manualHref} onClick={onManualClick}>
-          {allFree ? h.manualLink : h.manualLinkNotFree}
-        </a>
-        <AccountChip compact={compact} />
-      </div>
-    </header>
-  );
-}
 
 function Hero({
   mode,
@@ -387,7 +360,7 @@ export default function SessionManagerPage() {
     <div ref={rootRef} className={`smlp-root smlp-root--${layout.mode}`} data-layout={layout.mode}>
       <PageViewTracker />
       <div className="smlp-canvas" style={canvasStyle}>
-        <Header compact={!canvas} allFree={allFree} onManualClick={e => onBookLinkClick(e, COPY.meta.manualHref)} />
+        <Header compact={!canvas} allFree={allFree} current="landing" onLinkClick={e => onBookLinkClick(e, COPY.meta.manualHref)} />
         <main className="smlp-main">
           <div ref={pagesRef} className="smlp-pages">
             <section

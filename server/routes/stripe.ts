@@ -127,8 +127,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 
       return { url: session.url };
     } catch (err: any) {
+      console.error('[checkout] session creation failed:', err.message);
       reply.status(500);
-      return { error: `Checkout failed: ${err.message}` };
+      return { error: 'Checkout failed. Please try again.' };
     }
   });
 
@@ -286,8 +287,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       });
       return { url: session.url };
     } catch (err: any) {
+      console.error('[billing-portal] session creation failed:', err.message);
       reply.status(500);
-      return { error: `Billing portal failed: ${err.message}` };
+      return { error: 'Billing portal failed. Please try again.' };
     }
   });
 

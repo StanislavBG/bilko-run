@@ -56,8 +56,6 @@ export const PROJECTS: readonly Project[] = STANDALONE_PROJECTS.map(p => {
   return path ? { ...p, host: { kind: 'react-route' as const, path } } : p;
 });
 
-export const LIVE_PROJECTS: readonly Project[] = PROJECTS.filter(p => p.status === 'live');
-export const COOKING_PROJECTS: readonly Project[] = PROJECTS.filter(p => p.status === 'cooking');
 
 /** Resolve a project's primary URL/path for navigation. */
 export function projectHref(p: Project): string {

@@ -32,9 +32,23 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_LINE_BYTES = 32_000; // one ndjson row; today's rows run ~200 bytes
 const KEEP_PER_SLUG = 5000; // trims on every write so a stuck publisher can't grow this forever
 
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 interface EventRow {
   event_id: number;
   line: string;
+}
+
+// Built ndjson body per slug. Repeat GETs (and Range polls) are served from
+// here without a DB query; the POST for a slug drops its entry, and entries
+// expire after CACHE_TTL_MS as a backstop for writes that bypass this route.
+const bodyCache = new Map<string, { buf: Buffer; builtAt: number }>();
+// Bumped on every write so a GET whose DB read raced a POST can't cache the
+// pre-write body after the POST already invalidated.
+const writeVersion = new Map<string, number>();
+
+export function clearProjectEventsCache(): void {
+  bodyCache.clear();
 }
 
 export function registerProjectEventsRoutes(app: FastifyInstance): void {
@@ -67,18 +81,30 @@ export function registerProjectEventsRoutes(app: FastifyInstance): void {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    // INSERT OR IGNORE — a retried POST (network hiccup) for an id already
-    // stored must not error or duplicate the row.
-    await dbRun(
-      'INSERT OR IGNORE INTO project_events (slug, event_id, line, created_at) VALUES (?, ?, ?, ?)',
-      slug, id, line, now,
-    );
-    await dbRun(
-      `DELETE FROM project_events WHERE slug = ? AND event_id NOT IN (
-         SELECT event_id FROM project_events WHERE slug = ? ORDER BY event_id DESC LIMIT ?
-       )`,
-      slug, slug, KEEP_PER_SLUG,
-    );
+    const invalidate = () => {
+      writeVersion.set(slug, (writeVersion.get(slug) ?? 0) + 1);
+      bodyCache.delete(slug);
+    };
+    // Invalidate before and after the writes: before so concurrent GETs don't
+    // keep serving the old body, after so a GET that read mid-write can't
+    // leave a partial body cached.
+    invalidate();
+    try {
+      // INSERT OR IGNORE — a retried POST (network hiccup) for an id already
+      // stored must not error or duplicate the row.
+      await dbRun(
+        'INSERT OR IGNORE INTO project_events (slug, event_id, line, created_at) VALUES (?, ?, ?, ?)',
+        slug, id, line, now,
+      );
+      await dbRun(
+        `DELETE FROM project_events WHERE slug = ? AND event_id NOT IN (
+           SELECT event_id FROM project_events WHERE slug = ? ORDER BY event_id DESC LIMIT ?
+         )`,
+        slug, slug, KEEP_PER_SLUG,
+      );
+    } finally {
+      invalidate();
+    }
     return reply.send({ ok: true, slug, id });
   });
 
@@ -87,12 +113,26 @@ export function registerProjectEventsRoutes(app: FastifyInstance): void {
     const slug = (req.params as { slug: string }).slug;
     if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
 
-    const rows = await dbAll<EventRow>(
-      'SELECT event_id, line FROM project_events WHERE slug = ? ORDER BY event_id ASC',
-      slug,
-    );
+    let body: Buffer | undefined;
+    const cached = bodyCache.get(slug);
+    if (cached && Date.now() - cached.builtAt < CACHE_TTL_MS) {
+      body = cached.buf;
+    } else {
+      bodyCache.delete(slug);
+      const version = writeVersion.get(slug) ?? 0;
+      const rows = await dbAll<EventRow>(
+        'SELECT event_id, line FROM project_events WHERE slug = ? ORDER BY event_id ASC',
+        slug,
+      );
+      if (rows.length > 0) {
+        body = Buffer.from(rows.map((r) => r.line).join('\n') + '\n', 'utf-8');
+        if ((writeVersion.get(slug) ?? 0) === version) {
+          bodyCache.set(slug, { buf: body, builtAt: Date.now() });
+        }
+      }
+    }
 
-    if (rows.length === 0) {
+    if (!body) {
       // Nothing synced server-side yet (fresh deploy, or a slug this route
       // has never received a POST for) — fall back to the committed
       // cold-start copy on disk, still Range-capable via @fastify/static.
@@ -103,7 +143,6 @@ export function registerProjectEventsRoutes(app: FastifyInstance): void {
       return reply.code(404).send({ error: 'no events yet' });
     }
 
-    const body = Buffer.from(rows.map((r) => r.line).join('\n') + '\n', 'utf-8');
     const total = body.length;
 
     reply.header('accept-ranges', 'bytes');

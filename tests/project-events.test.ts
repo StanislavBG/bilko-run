@@ -1,7 +1,16 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
-import { initDb, dbRun } from '../server/db.js';
-import { registerProjectEventsRoutes } from '../server/routes/project-events.js';
+
+vi.mock('../server/db.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../server/db.js')>();
+  return { ...actual, dbAll: vi.fn(actual.dbAll) };
+});
+
+import { initDb, dbRun, dbAll } from '../server/db.js';
+import {
+  registerProjectEventsRoutes,
+  clearProjectEventsCache,
+} from '../server/routes/project-events.js';
 
 const TOKEN = 'test-events-token';
 process.env.PROJECT_SNAPSHOT_TOKEN = TOKEN;
@@ -16,6 +25,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await dbRun('DELETE FROM project_events');
+  clearProjectEventsCache();
+  vi.mocked(dbAll).mockClear();
 });
 
 const SLUG = 'social-signals-trader';
@@ -124,6 +135,40 @@ describe('Project events — /api/projects/:slug/events + /projects/:slug/data-e
     const got = await app.inject({ method: 'GET', url: GET_URL });
     const lines = got.body.trim().split('\n');
     expect(lines.map((l) => JSON.parse(l).id)).toEqual([1, 2, 3]);
+  });
+
+  it('repeat GETs (incl. Range) skip the DB; a POST invalidates the cache', async () => {
+    await post({ id: 1, line: row(1) }, TOKEN);
+    const first = await app.inject({ method: 'GET', url: GET_URL });
+    expect(vi.mocked(dbAll)).toHaveBeenCalledTimes(1);
+
+    const second = await app.inject({ method: 'GET', url: GET_URL });
+    expect(vi.mocked(dbAll)).toHaveBeenCalledTimes(1);
+    expect(second.body).toBe(first.body);
+
+    const ranged = await app.inject({ method: 'GET', url: GET_URL, headers: { range: 'bytes=0-9' } });
+    expect(ranged.statusCode).toBe(206);
+    expect(vi.mocked(dbAll)).toHaveBeenCalledTimes(1);
+
+    await post({ id: 2, line: row(2) }, TOKEN);
+    const after = await app.inject({ method: 'GET', url: GET_URL });
+    expect(vi.mocked(dbAll)).toHaveBeenCalledTimes(2);
+    expect(after.body.trim().split('\n').map((l) => JSON.parse(l).id)).toEqual([1, 2]);
+  });
+
+  it('cache entries expire after 5 minutes', async () => {
+    await post({ id: 1, line: row(1) }, TOKEN);
+    const realNow = Date.now();
+    const spy = vi.spyOn(Date, 'now');
+    try {
+      spy.mockReturnValue(realNow);
+      await app.inject({ method: 'GET', url: GET_URL });
+      spy.mockReturnValue(realNow + 5 * 60 * 1000 + 1);
+      await app.inject({ method: 'GET', url: GET_URL });
+      expect(vi.mocked(dbAll)).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('bad slug → 400 on read', async () => {

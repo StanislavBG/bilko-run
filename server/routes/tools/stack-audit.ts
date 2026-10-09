@@ -97,7 +97,12 @@ Respond ONLY with valid JSON:
           email, 'stack-audit', parsed.total_score, parsed.grade, parsed.roast ?? '', JSON.stringify(parsed));
       } catch { /* best effort */ }
 
-      const balance = sub.isPro ? await getTokenBalance(email) : (await deductToken(email, 1, 'stack_audit')).balance;
+      let balance: number;
+      if (sub.isPro) { balance = await getTokenBalance(email); } else {
+        const deducted = await deductToken(email, 1, 'stack_audit');
+        if (!deducted.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deducted.balance }; }
+        balance = deducted.balance;
+      }
       return { ...parsed, usage: { balance, gated: false } };
     } catch (err: any) {
       console.error('stack_audit', err);

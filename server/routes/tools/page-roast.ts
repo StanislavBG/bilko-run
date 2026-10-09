@@ -85,7 +85,12 @@ export function registerPageRoastRoutes(app: FastifyInstance): void {
         );
       } catch { /* best effort */ }
 
-      const balance = sub.isPro ? await getTokenBalance(email) : (await deductToken(email, 1, 'page_roast')).balance;
+      let balance: number;
+      if (sub.isPro) { balance = await getTokenBalance(email); } else {
+        const deducted = await deductToken(email, 1, 'page_roast');
+        if (!deducted.success) { reply.status(402); return { error: 'No tokens remaining.', requiresTokens: true, balance: deducted.balance }; }
+        balance = deducted.balance;
+      }
       return { ...parsed, usage: { balance, gated: false } };
     } catch (err: any) {
       const status = err.code === 'SSRF' ? 400 : 500;
@@ -132,7 +137,12 @@ export function registerPageRoastRoutes(app: FastifyInstance): void {
         compareWith: rawUrlB,
       });
 
-      const balance = sub.isPro ? await getTokenBalance(email) : (await deductToken(email, 2, 'page_roast_compare')).balance;
+      let balance: number;
+      if (sub.isPro) { balance = await getTokenBalance(email); } else {
+        const deducted = await deductToken(email, 2, 'page_roast_compare');
+        if (!deducted.success) { reply.status(402); return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance: deducted.balance }; }
+        balance = deducted.balance;
+      }
       return { score_a: result.scoreA, score_b: result.scoreB, comparison: result.comparison, usage: { balance, gated: false } };
     } catch (err: any) {
       const status = err.code === 'SSRF' ? 400 : 500;

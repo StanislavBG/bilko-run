@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import {
   analyzeReadability,
@@ -41,6 +42,7 @@ const CLAIM_WITH_NO_LINK_ANYWHERE_MARKDOWN = [
 ].join('\n');
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const TSX_CLI = createRequire(import.meta.url).resolve('tsx/cli');
 
 const PLAIN_PARAGRAPH = [
   'The new tool is easy to use. You can score a blog post in one click.',
@@ -240,9 +242,15 @@ describe('checkLiveLinks', () => {
       new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
       });
-    const failures = await checkLiveLinks(['https://example.com/slow'], fake as unknown as typeof fetch);
-    expect(failures).toEqual([{ url: 'https://example.com/slow', status: 'error' }]);
-  }, 20_000);
+    vi.useFakeTimers();
+    try {
+      const pending = checkLiveLinks(['https://example.com/slow'], fake as unknown as typeof fetch);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(await pending).toEqual([{ url: 'https://example.com/slow', status: 'error' }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('fetches a duplicate URL only once', async () => {
     let calls = 0;
@@ -279,7 +287,7 @@ describe('blog-readability CLI', () => {
 
     let status: number | null = null;
     try {
-      execFileSync('npx', ['tsx', 'scripts/blog-readability.ts', file], {
+      execFileSync(process.execPath, [TSX_CLI, 'scripts/blog-readability.ts', file], {
         cwd: REPO_ROOT,
         timeout: 60_000,
         stdio: 'pipe',
@@ -295,7 +303,7 @@ describe('blog-readability CLI', () => {
     const file = join(dir, 'pass.md');
     writeFileSync(file, PLAIN_PARAGRAPH, 'utf-8');
 
-    const output = execFileSync('npx', ['tsx', 'scripts/blog-readability.ts', file], {
+    const output = execFileSync(process.execPath, [TSX_CLI, 'scripts/blog-readability.ts', file], {
       cwd: REPO_ROOT,
       timeout: 60_000,
       stdio: 'pipe',

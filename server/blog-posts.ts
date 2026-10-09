@@ -80,7 +80,7 @@ function parsePost(file: string, raw: string): SeedBlogPost {
 export function loadBlogPosts(dir: string = blogRoot()): SeedBlogPost[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
-    .filter(f => f.endsWith('.md'))
+    .filter(f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md')
     .sort()
     .map(f => parsePost(f, readFileSync(join(dir, f), 'utf8')))
     .sort((a, b) => a.order - b.order);

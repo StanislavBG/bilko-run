@@ -22,9 +22,12 @@ vi.mock('../server/db.js', () => ({
 }));
 
 vi.mock('../server/routes/tools/_shared.js', () => ({
-  hashIp: vi.fn().mockReturnValue('iphash'),
-  isAdminEmail: vi.fn().mockReturnValue(false),
-  enforceCallLimits: vi.fn().mockResolvedValue({ ok: true }),
+  creditGate: vi.fn().mockResolvedValue({ email: 'payer@test.com', ipHash: 'iphash', isPro: false }),
+  askGeminiJson: vi.fn().mockResolvedValue({ total_score: 80, grade: 'B', roast: 'ok' }),
+  toolErrorReply: vi.fn((reply: any, _err: unknown, label: string) => {
+    reply.status(500);
+    return { error: `${label} failed. Please try again.` };
+  }),
 }));
 
 vi.mock('../server/services/page-fetch.js', () => ({
@@ -45,11 +48,14 @@ vi.mock('../server/services/tokens.js', () => ({
   grantFreeTokens: vi.fn().mockResolvedValue(undefined),
   hasTokenAccount: vi.fn().mockResolvedValue(true),
   deductToken: vi.fn().mockResolvedValue({ success: false, balance: 0 }),
+  refundTokens: vi.fn().mockResolvedValue(undefined),
 }));
 
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
-import { deductToken } from '../server/services/tokens.js';
+import { deductToken, refundTokens } from '../server/services/tokens.js';
+import { askGeminiJson } from '../server/routes/tools/_shared.js';
+import { roastPage } from '@bilkobibitkov/page-roast';
 import { registerStackAuditRoutes } from '../server/routes/tools/stack-audit.js';
 import { registerLaunchGraderRoutes } from '../server/routes/tools/launch-grader.js';
 import { registerPageRoastRoutes } from '../server/routes/tools/page-roast.js';
@@ -66,6 +72,9 @@ describe('credit-gated tool routes when deduction fails after the balance check'
 
   beforeEach(async () => {
     vi.mocked(deductToken).mockClear();
+    vi.mocked(refundTokens).mockClear();
+    vi.mocked(askGeminiJson).mockClear();
+    vi.mocked(roastPage).mockClear();
     app = Fastify();
     registerStackAuditRoutes(app);
     registerLaunchGraderRoutes(app);
@@ -85,6 +94,37 @@ describe('credit-gated tool routes when deduction fails after the balance check'
       expect(body.usage).toBeUndefined();
       expect(body.score_a).toBeUndefined();
       expect(deductToken).toHaveBeenCalledTimes(1);
+      expect(askGeminiJson).not.toHaveBeenCalled();
+      expect(roastPage).not.toHaveBeenCalled();
+      expect(refundTokens).not.toHaveBeenCalled();
+    });
+  }
+});
+
+describe('credit-gated tool routes when Gemini fails after a successful deduction', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    vi.mocked(deductToken).mockReset().mockResolvedValue({ success: true, balance: 4 });
+    vi.mocked(refundTokens).mockClear();
+    vi.mocked(askGeminiJson).mockReset().mockRejectedValue(new Error('secret upstream detail'));
+    vi.mocked(roastPage).mockReset().mockRejectedValue(new Error('secret upstream detail'));
+    app = Fastify();
+    registerStackAuditRoutes(app);
+    registerLaunchGraderRoutes(app);
+    registerPageRoastRoutes(app);
+    await app.ready();
+  });
+
+  for (const c of cases) {
+    it(`${c.name} refunds the deducted tokens and leaks no error text`, async () => {
+      const res = await app.inject({ method: 'POST', url: c.url, payload: c.payload });
+      expect(res.statusCode).toBe(500);
+      expect(res.body).not.toContain('secret upstream detail');
+      const cost = vi.mocked(deductToken).mock.calls[0][1];
+      expect(deductToken).toHaveBeenCalledTimes(1);
+      expect(refundTokens).toHaveBeenCalledTimes(1);
+      expect(refundTokens).toHaveBeenCalledWith('payer@test.com', cost, expect.stringContaining('refund'));
     });
   }
 });

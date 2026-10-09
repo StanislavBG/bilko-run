@@ -1,12 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dbRun } from '../../db.js';
-import { askGemini } from '../../gemini.js';
-import { getActiveSubscriptionLive } from '../../services/stripe.js';
-import {
-  getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount,
-} from '../../services/tokens.js';
-import { requireAuth } from '../../clerk.js';
-import { hashIp, enforceCallLimits, isAdminEmail } from './_shared.js';
+import { deductToken, refundTokens, getTokenBalance } from '../../services/tokens.js';
+import { creditGate, askGeminiJson, toolErrorReply } from './_shared.js';
 
 export function registerStackAuditRoutes(app: FastifyInstance): void {
   // ── Stack Audit ────────────────────────────────────
@@ -16,18 +11,9 @@ export function registerStackAuditRoutes(app: FastifyInstance): void {
     if (!tools || tools.length < 10) { reply.status(400); return { error: 'List your tools (at least 10 characters).' }; }
     if (tools.length > 5000) { reply.status(400); return { error: 'Input must be under 5000 characters.' }; }
 
-    const email = await requireAuth(req, reply);
-    if (!email) return;
-
-    const costLimit = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'stack-audit' });
-    if (!costLimit.ok) { reply.status(costLimit.status); return { error: costLimit.reason }; }
-
-    if (!(await hasTokenAccount(email))) { await grantFreeTokens(email); }
-    const sub = await getActiveSubscriptionLive(email);
-    if (!sub.isPro) {
-      const balance = await getTokenBalance(email);
-      if (balance < 1) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance }; }
-    }
+    const gate = await creditGate(req, reply, { endpoint: 'stack-audit', cost: 1 });
+    if (!gate) return;
+    const { email, isPro } = gate;
 
     const teamSize = Math.max(1, Math.min(200, Math.floor(Number(body?.teamSize) || 5)));
 
@@ -83,31 +69,25 @@ Respond ONLY with valid JSON:
   "roast": "<One savage sentence about this stack's spending habits>"
 }`;
 
+    let balance: number;
+    if (isPro) { balance = await getTokenBalance(email); } else {
+      const deducted = await deductToken(email, 1, 'stack_audit');
+      if (!deducted.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deducted.balance }; }
+      balance = deducted.balance;
+    }
+
     try {
-      const raw = await askGemini(`Audit this SaaS stack for a team of ${teamSize}:\n\n${tools}`, { systemPrompt });
-      let parsed: any;
-      try { parsed = JSON.parse(raw); } catch {
-        const m = raw.match(/\{[\s\S]*\}/);
-        if (!m) throw new Error('Could not parse response.');
-        parsed = JSON.parse(m[0]);
-      }
+      const parsed = await askGeminiJson(`Audit this SaaS stack for a team of ${teamSize}:\n\n${tools}`, { systemPrompt });
 
       try {
         await dbRun('INSERT INTO user_roasts (email, url, score, grade, roast, result_json) VALUES (?, ?, ?, ?, ?, ?)',
           email, 'stack-audit', parsed.total_score, parsed.grade, parsed.roast ?? '', JSON.stringify(parsed));
       } catch { /* best effort */ }
 
-      let balance: number;
-      if (sub.isPro) { balance = await getTokenBalance(email); } else {
-        const deducted = await deductToken(email, 1, 'stack_audit');
-        if (!deducted.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deducted.balance }; }
-        balance = deducted.balance;
-      }
       return { ...parsed, usage: { balance, gated: false } };
-    } catch (err: any) {
-      console.error('stack_audit', err);
-      reply.status(500);
-      return { error: `Audit failed: ${err.message}` };
+    } catch (err) {
+      if (!isPro) await refundTokens(email, 1, 'stack_audit_refund').catch((e) => console.error('refund_failed', e));
+      return toolErrorReply(reply, err, 'stack_audit');
     }
   });
 

@@ -1,19 +1,22 @@
 import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun } from '../../db.js';
-import { getActiveSubscriptionLive } from '../../services/stripe.js';
-import {
-  getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount,
-} from '../../services/tokens.js';
+import { getTokenBalance, deductToken, refundTokens } from '../../services/tokens.js';
 import { requireAuth } from '../../clerk.js';
-import { hashIp, enforceCallLimits, isAdminEmail } from './_shared.js';
+import { creditGate, toolErrorReply } from './_shared.js';
 import { roastPage } from '@bilkobibitkov/page-roast';
+
+const STATS_TTL_MS = 60_000;
 
 export function registerPageRoastRoutes(app: FastifyInstance): void {
   // ── Public stats (for social proof) ─────────────────────────────
+  let statsMemo: { value: { totalRoasts: number; totalUsers: number }; expires: number } | null = null;
   app.get('/api/roasts/stats', async () => {
+    if (statsMemo && statsMemo.expires > Date.now()) return statsMemo.value;
     const total = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history');
     const users = await dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances');
-    return { totalRoasts: total?.n ?? 0, totalUsers: users?.n ?? 0 };
+    const value = { totalRoasts: total?.n ?? 0, totalUsers: users?.n ?? 0 };
+    statsMemo = { value, expires: Date.now() + STATS_TTL_MS };
+    return value;
   });
 
   // ── Recent roasts feed (public) ─────────────────────────────────
@@ -48,23 +51,15 @@ export function registerPageRoastRoutes(app: FastifyInstance): void {
       return { error: 'URL is required.' };
     }
 
-    const email = await requireAuth(req, reply);
-    if (!email) return;
+    const gate = await creditGate(req, reply, { endpoint: 'page-roast', cost: 1 });
+    if (!gate) return;
+    const { email, isPro } = gate;
 
-    const costLimit = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'page-roast' });
-    if (!costLimit.ok) { reply.status(costLimit.status); return { error: costLimit.reason }; }
-
-    if (!(await hasTokenAccount(email))) {
-      await grantFreeTokens(email);
-    }
-
-    const sub = await getActiveSubscriptionLive(email);
-    if (!sub.isPro) {
-      const balance = await getTokenBalance(email);
-      if (balance < 1) {
-        reply.status(402);
-        return { error: 'No tokens remaining.', requiresTokens: true, balance };
-      }
+    let balance: number;
+    if (isPro) { balance = await getTokenBalance(email); } else {
+      const deducted = await deductToken(email, 1, 'page_roast');
+      if (!deducted.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deducted.balance }; }
+      balance = deducted.balance;
     }
 
     try {
@@ -85,19 +80,11 @@ export function registerPageRoastRoutes(app: FastifyInstance): void {
         );
       } catch { /* best effort */ }
 
-      let balance: number;
-      if (sub.isPro) { balance = await getTokenBalance(email); } else {
-        const deducted = await deductToken(email, 1, 'page_roast');
-        if (!deducted.success) { reply.status(402); return { error: 'No tokens remaining.', requiresTokens: true, balance: deducted.balance }; }
-        balance = deducted.balance;
-      }
       return { ...parsed, usage: { balance, gated: false } };
     } catch (err: any) {
-      const status = err.code === 'SSRF' ? 400 : 500;
-      const prefix = err.code === 'SSRF' ? 'Invalid URL' : 'Roast failed';
-      console.error('page_roast_demo', err);
-      reply.status(status);
-      return { error: `${prefix}: ${err.message}` };
+      if (!isPro) await refundTokens(email, 1, 'page_roast_refund').catch((e) => console.error('refund_failed', e));
+      if (err?.code === 'SSRF') { reply.status(400); return { error: 'Invalid URL.' }; }
+      return toolErrorReply(reply, err, 'page_roast');
     }
   });
 
@@ -110,23 +97,15 @@ export function registerPageRoastRoutes(app: FastifyInstance): void {
       return { error: 'Both URLs are required.' };
     }
 
-    const email = await requireAuth(req, reply);
-    if (!email) return;
+    const gate = await creditGate(req, reply, { endpoint: 'page-roast', cost: 2 });
+    if (!gate) return;
+    const { email, isPro } = gate;
 
-    const costLimitCmp = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'page-roast' });
-    if (!costLimitCmp.ok) { reply.status(costLimitCmp.status); return { error: costLimitCmp.reason }; }
-
-    if (!(await hasTokenAccount(email))) {
-      await grantFreeTokens(email);
-    }
-
-    const sub = await getActiveSubscriptionLive(email);
-    if (!sub.isPro) {
-      const balance = await getTokenBalance(email);
-      if (balance < 2) {
-        reply.status(402);
-        return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance };
-      }
+    let balance: number;
+    if (isPro) { balance = await getTokenBalance(email); } else {
+      const deducted = await deductToken(email, 2, 'page_roast_compare');
+      if (!deducted.success) { reply.status(402); return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance: deducted.balance }; }
+      balance = deducted.balance;
     }
 
     try {
@@ -137,19 +116,11 @@ export function registerPageRoastRoutes(app: FastifyInstance): void {
         compareWith: rawUrlB,
       });
 
-      let balance: number;
-      if (sub.isPro) { balance = await getTokenBalance(email); } else {
-        const deducted = await deductToken(email, 2, 'page_roast_compare');
-        if (!deducted.success) { reply.status(402); return { error: 'A/B Compare costs 2 credits. Buy credits to unlock.', requiresTokens: true, balance: deducted.balance }; }
-        balance = deducted.balance;
-      }
       return { score_a: result.scoreA, score_b: result.scoreB, comparison: result.comparison, usage: { balance, gated: false } };
     } catch (err: any) {
-      const status = err.code === 'SSRF' ? 400 : 500;
-      const prefix = err.code === 'SSRF' ? 'Invalid URL' : 'Comparison failed';
-      console.error('page_roast_compare', err);
-      reply.status(status);
-      return { error: `${prefix}: ${err.message}` };
+      if (!isPro) await refundTokens(email, 2, 'page_roast_compare_refund').catch((e) => console.error('refund_failed', e));
+      if (err?.code === 'SSRF') { reply.status(400); return { error: 'Invalid URL.' }; }
+      return toolErrorReply(reply, err, 'page_roast_compare');
     }
   });
 }

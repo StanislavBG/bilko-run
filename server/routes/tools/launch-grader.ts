@@ -1,13 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { dbRun } from '../../db.js';
-import { askGemini } from '../../gemini.js';
-import { getActiveSubscriptionLive } from '../../services/stripe.js';
-import {
-  getTokenBalance, grantFreeTokens, deductToken, hasTokenAccount,
-} from '../../services/tokens.js';
-import { requireAuth } from '../../clerk.js';
+import { deductToken, refundTokens, getTokenBalance } from '../../services/tokens.js';
 import { validatePublicUrl, fetchPageBounded } from '../../services/page-fetch.js';
-import { hashIp, enforceCallLimits, isAdminEmail } from './_shared.js';
+import { creditGate, askGeminiJson, toolErrorReply } from './_shared.js';
 
 export function registerLaunchGraderRoutes(app: FastifyInstance): void {
   // ── Launch Grader ──────────────────────────────────
@@ -20,24 +15,15 @@ export function registerLaunchGraderRoutes(app: FastifyInstance): void {
     if (description.length > 2000) { reply.status(400); return { error: 'Description must be under 2000 characters.' }; }
     if (rawUrl.length > 2000) { reply.status(400); return { error: 'URL must be under 2000 characters.' }; }
 
-    const email = await requireAuth(req, reply);
-    if (!email) return;
-
-    const costLimit = await enforceCallLimits({ userEmail: email, ipHash: hashIp(req.ip), isAdmin: isAdminEmail(email), appSlug: 'launch-grader' });
-    if (!costLimit.ok) { reply.status(costLimit.status); return { error: costLimit.reason }; }
+    const gate = await creditGate(req, reply, { endpoint: 'launch-grader', cost: 1 });
+    if (!gate) return;
+    const { email, isPro } = gate;
 
     let parsedUrl: URL;
-    try { parsedUrl = validatePublicUrl(rawUrl); } catch (err: any) { reply.status(400); return { error: err.message || 'Invalid URL.' }; }
-
-    if (!(await hasTokenAccount(email))) { await grantFreeTokens(email); }
-    const sub = await getActiveSubscriptionLive(email);
-    if (!sub.isPro) {
-      const balance = await getTokenBalance(email);
-      if (balance < 1) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance }; }
-    }
+    try { parsedUrl = validatePublicUrl(rawUrl); } catch { reply.status(400); return { error: 'Invalid URL.' }; }
 
     let pageText: string;
-    try { pageText = await fetchPageBounded(parsedUrl); } catch (err: any) { reply.status(400); return { error: `Could not fetch page: ${err.message}` }; }
+    try { pageText = await fetchPageBounded(parsedUrl); } catch (err) { console.error('launch_grader fetch', err); reply.status(400); return { error: 'Could not fetch that page.' }; }
     if (pageText.length < 50) { reply.status(400); return { error: 'Page has too little content to audit.' }; }
 
     const systemPrompt = `You are a brutally honest SaaS launch advisor. You audit products for launch readiness using 5 proven frameworks.
@@ -93,15 +79,15 @@ Respond ONLY with valid JSON:
   "roast": "<One savage sentence about this product's launch readiness>"
 }`;
 
-    try {
-      const raw = await askGemini(`Audit this product for launch readiness:\n\nURL: ${parsedUrl.toString()}\nDescription: ${description}\n\nPage content:\n${pageText.slice(0, 8000)}`, { systemPrompt });
-      let parsed: any;
-      try { parsed = JSON.parse(raw); } catch {
-        const m = raw.match(/\{[\s\S]*\}/);
-        if (!m) throw new Error('Could not parse response.');
-        parsed = JSON.parse(m[0]);
-      }
+    let balance: number;
+    if (isPro) { balance = await getTokenBalance(email); } else {
+      const deducted = await deductToken(email, 1, 'launch_grader');
+      if (!deducted.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deducted.balance }; }
+      balance = deducted.balance;
+    }
 
+    try {
+      const parsed = await askGeminiJson(`Audit this product for launch readiness:\n\nURL: ${parsedUrl.toString()}\nDescription: ${description}\n\nPage content:\n${pageText.slice(0, 8000)}`, { systemPrompt });
       // Save to user_roasts for tracking
       try {
         const domain = parsedUrl.hostname.replace(/^www\./, '');
@@ -109,19 +95,10 @@ Respond ONLY with valid JSON:
         await dbRun('INSERT INTO user_roasts (email, url, score, grade, roast, result_json) VALUES (?, ?, ?, ?, ?, ?)',
           email, parsedUrl.toString(), parsed.total_score, parsed.grade, parsed.roast ?? '', JSON.stringify(parsed));
       } catch { /* best effort */ }
-
-      let balance: number;
-      if (sub.isPro) { balance = await getTokenBalance(email); } else {
-        const deducted = await deductToken(email, 1, 'launch_grader');
-        if (!deducted.success) { reply.status(402); return { error: 'No credits remaining.', requiresTokens: true, balance: deducted.balance }; }
-        balance = deducted.balance;
-      }
       return { ...parsed, usage: { balance, gated: false } };
-    } catch (err: any) {
-      console.error('launch_grader', err);
-      reply.status(500);
-      return { error: `Audit failed: ${err.message}` };
+    } catch (err) {
+      if (!isPro) await refundTokens(email, 1, 'launch_grader_refund').catch((e) => console.error('refund_failed', e));
+      return toolErrorReply(reply, err, 'launch_grader');
     }
   });
-
 }

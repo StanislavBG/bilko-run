@@ -52,6 +52,20 @@ export async function deductToken(email: string, cost: number = 1, reason: strin
   });
 }
 
+/** Refund tokens after a failed paid call. Adds to the balance and logs the same ledger deductToken writes to. */
+export async function refundTokens(email: string, amount: number, reason: string): Promise<void> {
+  await dbTransaction(async (tx) => {
+    await txRun(tx,
+      'UPDATE token_balances SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE email = ?',
+      amount, email,
+    );
+    await txRun(tx,
+      'INSERT INTO token_transactions (email, amount, reason) VALUES (?, ?, ?)',
+      email, amount, reason,
+    );
+  });
+}
+
 /** Credit tokens from a Stripe purchase. Idempotent on stripe_payment_intent_id. */
 export async function creditTokens(email: string, amount: number, stripePaymentIntentId: string): Promise<void> {
   await dbTransaction(async (tx) => {

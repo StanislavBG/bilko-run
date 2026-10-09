@@ -340,6 +340,38 @@ describe('images=none', () => {
     await submit({});
     expect(pullItems(await pull('?images=none'))[0].image).toBeNull();
   });
+
+  it('returns the exact item shape for an image row and a no-image row', async () => {
+    const withImg = await submit({ title: 'With image', image: { dataUrl, mime: 'image/png' } });
+    const noImg = await submit({ title: 'No image' });
+    const items = pullItems(await pull('?images=none'));
+    const byId = (id: string) => items.find((i) => i.id === id);
+    const base = {
+      route: null,
+      type: 'feedback',
+      description: 'Test description',
+      target: { kind: 'component', id: 'equity-curve', label: null },
+      client: null,
+      snapshotGeneratedAt: null,
+      parentId: null,
+      moderation: null,
+      status: { value: 'open', note: null, at: null },
+    };
+    expect(byId(withImg.json().id)).toEqual({
+      ...base,
+      id: withImg.json().id,
+      receivedAt: expect.any(String),
+      title: 'With image',
+      image: { dataUrl: null, mime: 'image/png', bytes: dataUrl.length },
+    });
+    expect(byId(noImg.json().id)).toEqual({
+      ...base,
+      id: noImg.json().id,
+      receivedAt: expect.any(String),
+      title: 'No image',
+      image: null,
+    });
+  });
 });
 
 interface Item {

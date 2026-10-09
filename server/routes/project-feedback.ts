@@ -127,6 +127,7 @@ interface FeedbackRow {
   description: string;
   image_mime: string | null;
   image_data: string | null;
+  image_len: number | null;
   client_json: string | null;
   snapshot_generated_at: string | null;
   created_at: number;
@@ -243,28 +244,35 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: 'moderatedSince must be an ISO timestamp' });
     }
 
+    // Screenshots are stored as inline base64 and can run to 2 MB each, so a
+    // full page can be three orders of magnitude larger than the same page
+    // without them. That is pure waste on a moderation-replay pull, where the
+    // caller already has every blob on disk and only wants the changed flags.
+    // `images=none` returns the metadata (mime, bytes) and drops the payload,
+    // and never reads image_data out of the database: size comes from SQL.
+    const withImages = q.images !== 'none';
+    const imageCols = withImages
+      ? 'image_data, length(image_data) AS image_len'
+      : 'NULL AS image_data, length(image_data) AS image_len';
+    const cols = `id, target_kind, target_id, target_label, route, type, title, description,
+            image_mime, ${imageCols}, client_json, snapshot_generated_at, created_at, parent_id,
+            moderation_action, moderation_at, moderation_reason, status, status_note, status_at`;
+
     const rows = modSince === null
       ? await dbAll<FeedbackRow>(
-          `SELECT * FROM project_feedback
+          `SELECT ${cols} FROM project_feedback
             WHERE slug = ? AND created_at > ?
             ORDER BY created_at ASC, id ASC
             LIMIT ?`,
           slug, sinceSec, limit,
         )
       : await dbAll<FeedbackRow>(
-          `SELECT * FROM project_feedback
+          `SELECT ${cols} FROM project_feedback
             WHERE slug = ? AND (created_at > ? OR moderation_at > ? OR status_at > ?)
             ORDER BY created_at ASC, id ASC
             LIMIT ?`,
           slug, sinceSec, modSince, modSince, limit,
         );
-
-    // Screenshots are stored as inline base64 and can run to 2 MB each, so a
-    // full page can be three orders of magnitude larger than the same page
-    // without them. That is pure waste on a moderation-replay pull, where the
-    // caller already has every blob on disk and only wants the changed flags.
-    // `images=none` returns the metadata (mime, bytes) and drops the payload.
-    const withImages = q.images !== 'none';
 
     const items = rows.map((r) => ({
       id: r.id,
@@ -274,11 +282,11 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
       type: r.type,
       title: r.title,
       description: r.description,
-      image: r.image_data
+      image: r.image_len
         ? {
             dataUrl: withImages ? r.image_data : null,
             mime: r.image_mime,
-            bytes: r.image_data.length,
+            bytes: r.image_len,
           }
         : null,
       client: r.client_json ? JSON.parse(r.client_json) : null,

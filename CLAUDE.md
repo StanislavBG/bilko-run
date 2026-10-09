@@ -135,7 +135,7 @@ Host code is framework by default — it should not know about one specific app.
 - Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
 - SocialSignalsTrader coffee checkout — in `server/routes/stripe.ts`
 - Game config — `shared/game-config.ts`
-- Legacy ContentGrade license code — `server/routes/license.ts`, `server/services/license.ts` (not part of the framework; pending an owner decision to move or delete)
+- ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
 
 Any new app-specific host code must be added to this list in the same commit, or live in the sibling repo instead.
 

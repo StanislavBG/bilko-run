@@ -518,6 +518,20 @@ const MIGRATIONS = [
     created_at INTEGER NOT NULL,
     PRIMARY KEY (slug, event_id)
   )`,
+  // Session Manager relay paired devices (see server/sm-relay/tokens.ts). Long-lived
+  // device tokens live here, not in-process, so a redeploy doesn't force every
+  // desktop to re-pair. Only the SHA-256 of the token is stored; revocation deletes
+  // the row. Times are epoch milliseconds.
+  `CREATE TABLE IF NOT EXISTS sm_relay_devices (
+    device_id      TEXT PRIMARY KEY,
+    token_hash     TEXT NOT NULL UNIQUE,
+    user_id        TEXT NOT NULL,
+    email          TEXT NOT NULL,
+    issued_at      INTEGER NOT NULL,
+    expires_at     INTEGER NOT NULL,
+    device_pub_key TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_sm_relay_devices_user ON sm_relay_devices(user_id)`,
   // One row per one-shot data migration that has run (see
   // applyDataMigrationOnce). Schema changes stay in this array and the
   // additive ALTER list; this is for fixes to seeded rows that an admin may

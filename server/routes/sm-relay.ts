@@ -13,7 +13,7 @@ import {
   revokeDevice,
   revokeAllDevicesForUser,
   getDevicesForUser,
-  deviceByIdStore,
+  getDevice,
   purgeExpired,
 } from '../sm-relay/tokens.js';
 import {
@@ -114,7 +114,7 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
     if (!checkRate(deviceTicketRateStore, rawToken.slice(0, 16), DEVICE_TICKET_RATE_MAX, DEVICE_TICKET_RATE_WINDOW_MS)) {
       return reply.status(429).send({ error: 'rate_limited' });
     }
-    const device = verifyDeviceToken(rawToken);
+    const device = await verifyDeviceToken(rawToken);
     if (!device) return reply.status(401).send({ error: 'invalid_token' });
     if (!emailAllowed(device.email)) return reply.status(403).send({ error: 'not_allowed' });
 
@@ -143,7 +143,7 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
       const result = verifyOtp(code);
       if ('error' in result) return reply.status(result.status).send({ error: result.error });
 
-      const deviceToken = issueDeviceToken(deviceId, result.userId, result.email, devicePubKey);
+      const deviceToken = await issueDeviceToken(deviceId, result.userId, result.email, devicePubKey);
       reply.send({ deviceToken, deviceId }); // token returned to agent; never logged
     },
   );
@@ -152,7 +152,7 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
   app.get('/api/sm-relay/devices', async (req, reply) => {
     const auth = await requireRelayUser(req, reply);
     if (!auth) return;
-    const devices = getDevicesForUser(auth.userId).map((d) => ({
+    const devices = (await getDevicesForUser(auth.userId)).map((d) => ({
       deviceId: d.deviceId,
       email: d.email,
       issuedAt: d.issuedAt,
@@ -167,9 +167,9 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
   app.delete<{ Params: { deviceId: string } }>('/api/sm-relay/devices/:deviceId', async (req, reply) => {
     const auth = await requireRelayUser(req, reply);
     if (!auth) return;
-    const entry = deviceByIdStore.get(req.params.deviceId);
+    const entry = await getDevice(req.params.deviceId);
     if (!entry || entry.userId !== auth.userId) return reply.status(404).send({ error: 'device_not_found' });
-    revokeDevice(req.params.deviceId);
+    await revokeDevice(req.params.deviceId);
     notifyDeviceRevoked(req.params.deviceId);
     reply.send({ ok: true });
   });
@@ -178,13 +178,15 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
   app.delete('/api/sm-relay/devices', async (req, reply) => {
     const auth = await requireRelayUser(req, reply);
     if (!auth) return;
-    const revokedIds = revokeAllDevicesForUser(auth.userId);
+    const revokedIds = await revokeAllDevicesForUser(auth.userId);
     for (const deviceId of revokedIds) notifyDeviceRevoked(deviceId);
     closeSessionsForUser(auth.userId);
     reply.send({ ok: true, revokedCount: revokedIds.length });
   });
 
-  // Periodic housekeeping (in-process stores)
-  const timer = setInterval(() => purgeExpired(), 5 * 60 * 1000);
+  // Periodic housekeeping (in-process stores + expired device rows)
+  const timer = setInterval(() => {
+    purgeExpired().catch((err) => app.log.warn({ err }, 'sm-relay purgeExpired failed'));
+  }, 5 * 60 * 1000);
   if (typeof timer.unref === 'function') timer.unref();
 }

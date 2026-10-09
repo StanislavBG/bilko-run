@@ -1,8 +1,11 @@
-// Session Manager web-remote relay — in-process token stores.
-// Ported near-verbatim from session-manager web-remote/relay/src/tokens.ts.
+// Session Manager web-remote relay — token stores.
+// Ported from session-manager web-remote/relay/src/tokens.ts.
 // Auth-mechanism-agnostic: `userId` is the Clerk user's email (see routes.ts).
-// Stores are in-process and lost on redeploy — acceptable (devices re-pair / browsers re-ticket).
+// Long-lived device tokens persist in the `sm_relay_devices` table so paired desktops
+// survive a redeploy. Short-lived OTPs, WS tickets and rate counters stay in-process —
+// losing them on redeploy only means re-requesting a code or ticket.
 import crypto from 'node:crypto';
+import { dbGet, dbAll, dbRun } from '../db.js';
 
 export interface OtpEntry {
   code: string;
@@ -12,14 +15,12 @@ export interface OtpEntry {
   attempts: number;
 }
 
-export interface DeviceTokenEntry {
-  token: string;
+export interface DeviceRecord {
   deviceId: string;
   userId: string;
   email: string;
   issuedAt: number;
   expiresAt: number;
-  revoked: boolean;
   devicePubKey: string;
 }
 
@@ -42,8 +43,6 @@ const DEVICE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const OTP_CHARSET = 'ACDEFGHJKLMNPQRTUVWXY234679';
 
 export const otpStore = new Map<string, OtpEntry>();
-export const deviceTokenStore = new Map<string, DeviceTokenEntry>();
-export const deviceByIdStore = new Map<string, DeviceTokenEntry>();
 export const wsTicketStore = new Map<string, WsTicketEntry>();
 export const otpRateStore = new Map<string, { count: number; resetAt: number }>();
 
@@ -110,75 +109,97 @@ export function recordOtpFailure(userId: string, now = Date.now()): boolean {
   return false;
 }
 
-export function issueDeviceToken(
+/** Device tokens are stored hashed: a DB read never yields a usable bearer token. */
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+interface DeviceRow {
+  device_id: string;
+  user_id: string;
+  email: string;
+  issued_at: number;
+  expires_at: number;
+  device_pub_key: string;
+}
+
+function toDevice(row: DeviceRow): DeviceRecord {
+  return {
+    deviceId: row.device_id,
+    userId: row.user_id,
+    email: row.email,
+    issuedAt: Number(row.issued_at),
+    expiresAt: Number(row.expires_at),
+    devicePubKey: row.device_pub_key,
+  };
+}
+
+const DEVICE_COLS = 'device_id, user_id, email, issued_at, expires_at, device_pub_key';
+
+/** Re-pairing a deviceId replaces its row, which invalidates the previous token. */
+export async function issueDeviceToken(
   deviceId: string,
   userId: string,
   email: string,
   devicePubKey: string,
   now = Date.now(),
-): string {
-  const existing = deviceByIdStore.get(deviceId);
-  if (existing) deviceTokenStore.delete(existing.token);
-
+): Promise<string> {
   const token = crypto.randomBytes(32).toString('base64url');
-  const entry: DeviceTokenEntry = {
-    token, deviceId, userId, email, issuedAt: now,
-    expiresAt: now + DEVICE_TOKEN_TTL_MS,
-    revoked: false,
-    devicePubKey,
-  };
-  deviceTokenStore.set(token, entry);
-  deviceByIdStore.set(deviceId, entry);
+  await dbRun(
+    `INSERT INTO sm_relay_devices (device_id, token_hash, user_id, email, issued_at, expires_at, device_pub_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(device_id) DO UPDATE SET
+       token_hash = excluded.token_hash, user_id = excluded.user_id, email = excluded.email,
+       issued_at = excluded.issued_at, expires_at = excluded.expires_at, device_pub_key = excluded.device_pub_key`,
+    deviceId, hashToken(token), userId, email, now, now + DEVICE_TOKEN_TTL_MS, devicePubKey,
+  );
   return token;
 }
 
-export function verifyDeviceToken(token: string, now = Date.now()): DeviceTokenEntry | null {
-  const entry = deviceTokenStore.get(token);
-  if (!entry || entry.revoked) return null;
-  if (now > entry.expiresAt) {
-    deviceTokenStore.delete(token);
-    deviceByIdStore.delete(entry.deviceId);
+export async function verifyDeviceToken(token: string, now = Date.now()): Promise<DeviceRecord | null> {
+  const row = await dbGet<DeviceRow>(
+    `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE token_hash = ?`,
+    hashToken(token),
+  );
+  if (!row) return null;
+  if (now > Number(row.expires_at)) {
+    await dbRun('DELETE FROM sm_relay_devices WHERE device_id = ?', row.device_id);
     return null;
   }
-  return entry;
+  return toDevice(row);
 }
 
-export function revokeDevice(deviceId: string): boolean {
-  const entry = deviceByIdStore.get(deviceId);
-  if (!entry) return false;
-  entry.revoked = true;
-  deviceTokenStore.delete(entry.token);
-  deviceByIdStore.delete(deviceId);
-  return true;
+export async function getDevice(deviceId: string, now = Date.now()): Promise<DeviceRecord | null> {
+  const row = await dbGet<DeviceRow>(
+    `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE device_id = ? AND expires_at >= ?`,
+    deviceId, now,
+  );
+  return row ? toDevice(row) : null;
 }
 
-export function getDevicesForUser(userId: string, now = Date.now()): Array<{ deviceId: string; email: string; issuedAt: number; expiresAt: number; devicePubKey: string }> {
-  const result: Array<{ deviceId: string; email: string; issuedAt: number; expiresAt: number; devicePubKey: string }> = [];
-  for (const entry of deviceByIdStore.values()) {
-    if (entry.userId === userId && !entry.revoked && now <= entry.expiresAt) {
-      result.push({
-        deviceId: entry.deviceId,
-        email: entry.email,
-        issuedAt: entry.issuedAt,
-        expiresAt: entry.expiresAt,
-        devicePubKey: entry.devicePubKey,
-      });
-    }
-  }
-  return result;
+/** Revocation deletes the row, so the next verifyDeviceToken fails on every instance. */
+export async function revokeDevice(deviceId: string): Promise<boolean> {
+  const { changes } = await dbRun('DELETE FROM sm_relay_devices WHERE device_id = ?', deviceId);
+  return changes > 0;
 }
 
-export function revokeAllDevicesForUser(userId: string): string[] {
-  const revoked: string[] = [];
-  for (const entry of Array.from(deviceByIdStore.values())) {
-    if (entry.userId === userId && !entry.revoked) {
-      entry.revoked = true;
-      deviceTokenStore.delete(entry.token);
-      deviceByIdStore.delete(entry.deviceId);
-      revoked.push(entry.deviceId);
-    }
-  }
-  return revoked;
+export async function getDevicesForUser(userId: string, now = Date.now()): Promise<Array<Omit<DeviceRecord, 'userId'>>> {
+  const rows = await dbAll<DeviceRow>(
+    `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE user_id = ? AND expires_at >= ? ORDER BY issued_at`,
+    userId, now,
+  );
+  return rows.map((r) => {
+    const { userId: _u, ...rest } = toDevice(r);
+    return rest;
+  });
+}
+
+export async function revokeAllDevicesForUser(userId: string): Promise<string[]> {
+  const rows = await dbAll<{ device_id: string }>(
+    'DELETE FROM sm_relay_devices WHERE user_id = ? RETURNING device_id',
+    userId,
+  );
+  return rows.map((r) => r.device_id);
 }
 
 export function issueWsTicket(
@@ -198,7 +219,7 @@ export function consumeWsTicket(ticket: string, now = Date.now()): WsTicketEntry
   return entry;
 }
 
-export function purgeExpired(now = Date.now()): void {
+export async function purgeExpired(now = Date.now()): Promise<void> {
   for (const [code, entry] of otpStore) {
     if (now > entry.expiresAt) otpStore.delete(code);
   }
@@ -208,10 +229,5 @@ export function purgeExpired(now = Date.now()): void {
   for (const [userId, rate] of otpRateStore) {
     if (now > rate.resetAt) otpRateStore.delete(userId);
   }
-  for (const [token, entry] of deviceTokenStore) {
-    if (now > entry.expiresAt) {
-      deviceTokenStore.delete(token);
-      deviceByIdStore.delete(entry.deviceId);
-    }
-  }
+  await dbRun('DELETE FROM sm_relay_devices WHERE expires_at < ?', now);
 }

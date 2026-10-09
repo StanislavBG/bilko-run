@@ -1,9 +1,63 @@
 import type { FastifyInstance } from 'fastify';
-import { askGemini } from '../../gemini.js';
 import {
-  hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail, entitlementEmail,
+  incrementUsage, handleGenerateEndpoint, freeTierGate, askGeminiJson, toolErrorReply,
 } from './_shared.js';
+
+const compareScoringSystemPrompt = (platform: string): string => `You are a world-class performance ad copywriting analyst. You evaluate ad copy for paid platforms (Facebook, Google, LinkedIn) using proven direct response frameworks.
+
+SCORING SYSTEM (total 100 points):
+
+**Pillar 1: Hook Strength (25 points)**
+- Pattern interrupt — does the opening line break the scroll? (0–8)
+- Curiosity gap — does it create an open loop the reader must close? (0–7)
+- Audience callout — does it immediately qualify who this is for? (0–5)
+- First-line readability — under 12 words, punchy, no jargon? (0–5)
+
+**Pillar 2: Value Proposition (25 points)**
+- Specificity — concrete numbers, timeframes, outcomes vs vague promises? (0–8)
+- Hormozi Value Equation — dream outcome high, perceived likelihood high, time delay low, effort/sacrifice low? (0–7)
+- Differentiation — what makes this different from every other ad? (0–5)
+- Proof element — testimonial, case study, credential, or social proof embedded? (0–5)
+
+**Pillar 3: Emotional Architecture (25 points)**
+- Pain/desire identification — does it name a specific pain or desire the reader recognizes? (0–8)
+- Story element — micro-narrative, transformation arc, or before/after? (0–7)
+- Tone match — does the voice match the target audience (formal for B2B, casual for D2C, etc)? (0–5)
+- Objection handling — does it preempt the top reason someone would scroll past? (0–5)
+
+**Pillar 4: CTA & Conversion (25 points)**
+- CTA clarity — one clear action, no ambiguity about what happens next? (0–8)
+- Urgency/scarcity — legitimate reason to act now? (0–7)
+- Risk reversal — free trial, guarantee, or low-commitment entry point? (0–5)
+- Platform compliance — no flagged terms, follows ${platform} ad policies? (0–5)
+
+GRADING SCALE:
+90–100: A+ | 85–89: A | 80–84: A- | 75–79: B+ | 70–74: B | 65–69: B- | 60–64: C+ | 55–59: C | 50–54: C- | 40–49: D | 0–39: F
+
+Respond ONLY with valid JSON matching this exact schema — no markdown, no extra text:
+{
+  "total_score": <number 0-100>,
+  "grade": <"A+"|"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"C-"|"D"|"F">,
+  "pillar_scores": {
+    "hook": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
+    "value_prop": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
+    "emotional": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
+    "cta_conversion": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" }
+  },
+  "verdict": "<One sharp sentence: the single biggest weakness or strength>"
+}`;
+
+const COMPARE_VERDICT_SYSTEM_PROMPT = `You are a world-class direct response ad copywriting analyst. You will be given two scored ad copies with their pillar breakdowns. Your job is to:
+1. Write a sharp 2-sentence verdict explaining WHY the winner is stronger — reference the specific pillar scores and gaps (e.g. "Copy A's Hook score (22/25 vs 10/25) shows a pattern interrupt that stops the scroll...")
+2. Write a suggested hybrid ad copy that steals the best element from each — be specific about what was borrowed from each
+3. Write a one-sentence strategic analysis: what this result means for the advertiser's next test
+
+Respond ONLY with valid JSON — no markdown, no extra text:
+{
+  "verdict": "<2 sentences citing specific pillar score gaps — name the pillars and numbers>",
+  "suggested_hybrid": "<full rewritten ad copy combining best elements> | <one sentence: what was taken from A and what was taken from B>",
+  "strategic_analysis": "<one sentence tactical recommendation for the next iteration>"
+}`;
 
 export function registerAdScorerRoutes(app: FastifyInstance): void {
   // ── Ad Copy Generator (inverse mode) ──────────────────────────
@@ -61,21 +115,8 @@ Respond ONLY with valid JSON:
       return { error: 'Ad copy must be under 2000 characters.' };
     }
 
-    const _asIpHash = hashIp(req.ip);
-    const _asVerifiedEmail = await entitlementEmail(req);
-    const _asRate = await checkRateLimit(_asIpHash, 'ad-scorer', _asVerifiedEmail);
-    if (!_asRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: _asRate.isPro,
-        remaining: 0,
-        limit: _asRate.limit,
-        message: _asRate.isPro ? paidGateMsg(_asRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const _asLimit = await enforceCallLimits({ userEmail: _asVerifiedEmail ?? null, ipHash: _asIpHash, isAdmin: _asVerifiedEmail ? isAdminEmail(_asVerifiedEmail) : false, appSlug: 'ad-scorer' });
-    if (!_asLimit.ok) { reply.status(_asLimit.status); return { error: _asLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: 'ad-scorer' });
+    if (!gate) return reply;
 
     const systemPrompt = `You are a world-class performance ad copywriting analyst. You evaluate ad copy for paid platforms (Facebook, Google, LinkedIn) using proven direct response frameworks.
 
@@ -128,29 +169,13 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
 }`;
 
     try {
-      const raw = await askGemini(
-        `Score this ${platform} ad copy:\n\n"${adCopy}"`,
-        {
-          systemPrompt,
-        },
-      );
+      const parsed = await askGeminiJson(`Score this ${platform} ad copy:\n\n"${adCopy}"`, { systemPrompt });
 
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Could not parse scoring response.');
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-
-      const _asNewCount = await incrementUsage(_asIpHash, 'ad-scorer');
-      const _asRemaining = Math.max(0, _asRate.limit - _asNewCount);
-      return { ...parsed, usage: { remaining: _asRemaining, limit: _asRate.limit, isPro: _asRate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('ad_scorer_demo', err);
-      reply.status(500);
-      return { error: `Scoring failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, 'ad-scorer');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { ...parsed, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'ad_scorer_demo');
     }
   });
 
@@ -169,91 +194,18 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Ad copies must be under 2000 characters each.' };
     }
 
-    const ascIpHash = hashIp(req.ip);
-    const ascVerifiedEmail = await entitlementEmail(req);
-    const ascRate = await checkRateLimit(ascIpHash, 'ad-scorer', ascVerifiedEmail);
-    if (!ascRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: ascRate.isPro,
-        remaining: 0,
-        limit: ascRate.limit,
-        message: ascRate.isPro ? paidGateMsg(ascRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const ascLimit = await enforceCallLimits({ userEmail: ascVerifiedEmail ?? null, ipHash: ascIpHash, isAdmin: ascVerifiedEmail ? isAdminEmail(ascVerifiedEmail) : false, appSlug: 'ad-scorer' });
-    if (!ascLimit.ok) { reply.status(ascLimit.status); return { error: ascLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: 'ad-scorer', calls: 3 });
+    if (!gate) return reply;
 
-    const scoringSystemPrompt = `You are a world-class performance ad copywriting analyst. You evaluate ad copy for paid platforms (Facebook, Google, LinkedIn) using proven direct response frameworks.
 
-SCORING SYSTEM (total 100 points):
-
-**Pillar 1: Hook Strength (25 points)**
-- Pattern interrupt — does the opening line break the scroll? (0–8)
-- Curiosity gap — does it create an open loop the reader must close? (0–7)
-- Audience callout — does it immediately qualify who this is for? (0–5)
-- First-line readability — under 12 words, punchy, no jargon? (0–5)
-
-**Pillar 2: Value Proposition (25 points)**
-- Specificity — concrete numbers, timeframes, outcomes vs vague promises? (0–8)
-- Hormozi Value Equation — dream outcome high, perceived likelihood high, time delay low, effort/sacrifice low? (0–7)
-- Differentiation — what makes this different from every other ad? (0–5)
-- Proof element — testimonial, case study, credential, or social proof embedded? (0–5)
-
-**Pillar 3: Emotional Architecture (25 points)**
-- Pain/desire identification — does it name a specific pain or desire the reader recognizes? (0–8)
-- Story element — micro-narrative, transformation arc, or before/after? (0–7)
-- Tone match — does the voice match the target audience (formal for B2B, casual for D2C, etc)? (0–5)
-- Objection handling — does it preempt the top reason someone would scroll past? (0–5)
-
-**Pillar 4: CTA & Conversion (25 points)**
-- CTA clarity — one clear action, no ambiguity about what happens next? (0–8)
-- Urgency/scarcity — legitimate reason to act now? (0–7)
-- Risk reversal — free trial, guarantee, or low-commitment entry point? (0–5)
-- Platform compliance — no flagged terms, follows ${platform} ad policies? (0–5)
-
-GRADING SCALE:
-90–100: A+ | 85–89: A | 80–84: A- | 75–79: B+ | 70–74: B | 65–69: B- | 60–64: C+ | 55–59: C | 50–54: C- | 40–49: D | 0–39: F
-
-Respond ONLY with valid JSON matching this exact schema — no markdown, no extra text:
-{
-  "total_score": <number 0-100>,
-  "grade": <"A+"|"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"C-"|"D"|"F">,
-  "pillar_scores": {
-    "hook": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
-    "value_prop": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
-    "emotional": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
-    "cta_conversion": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" }
-  },
-  "verdict": "<One sharp sentence: the single biggest weakness or strength>"
-}`;
-
-    const compareSystemPrompt = `You are a world-class direct response ad copywriting analyst. You will be given two scored ad copies with their pillar breakdowns. Your job is to:
-1. Write a sharp 2-sentence verdict explaining WHY the winner is stronger — reference the specific pillar scores and gaps (e.g. "Copy A's Hook score (22/25 vs 10/25) shows a pattern interrupt that stops the scroll...")
-2. Write a suggested hybrid ad copy that steals the best element from each — be specific about what was borrowed from each
-3. Write a one-sentence strategic analysis: what this result means for the advertiser's next test
-
-Respond ONLY with valid JSON — no markdown, no extra text:
-{
-  "verdict": "<2 sentences citing specific pillar score gaps — name the pillars and numbers>",
-  "suggested_hybrid": "<full rewritten ad copy combining best elements> | <one sentence: what was taken from A and what was taken from B>",
-  "strategic_analysis": "<one sentence tactical recommendation for the next iteration>"
-}`;
 
 
     try {
-      const [rawA, rawB] = await Promise.all([
-        askGemini(`Score this ${platform} ad copy:\n\n"${adCopyA}"`, {
-          systemPrompt: scoringSystemPrompt,
-        }),
-        askGemini(`Score this ${platform} ad copy:\n\n"${adCopyB}"`, {
-          systemPrompt: scoringSystemPrompt,
-        }),
+      const scoringSystemPrompt = compareScoringSystemPrompt(platform);
+      const [scoreA, scoreB] = await Promise.all([
+        askGeminiJson(`Score this ${platform} ad copy:\n\n"${adCopyA}"`, { systemPrompt: scoringSystemPrompt }),
+        askGeminiJson(`Score this ${platform} ad copy:\n\n"${adCopyB}"`, { systemPrompt: scoringSystemPrompt }),
       ]);
-
-      const scoreA = parseResult(rawA);
-      const scoreB = parseResult(rawB);
 
       const pA = scoreA.pillar_scores;
       const pB = scoreB.pillar_scores;
@@ -281,11 +233,7 @@ Pillar winners: Hook → ${computedPillarWinners.hook} | Value Prop → ${comput
 
 Write the verdict, suggested hybrid, and strategic analysis.`;
 
-      const rawComp = await askGemini(comparisonPrompt, {
-        systemPrompt: compareSystemPrompt,
-      });
-
-      const compParsed = parseResult(rawComp);
+      const compParsed = await askGeminiJson(comparisonPrompt, { systemPrompt: COMPARE_VERDICT_SYSTEM_PROMPT });
       const comparison = {
         winner: computedWinner,
         margin: computedMargin,
@@ -295,13 +243,11 @@ Write the verdict, suggested hybrid, and strategic analysis.`;
         strategic_analysis: compParsed.strategic_analysis ?? '',
       };
 
-      const ascNewCount = await incrementUsage(ascIpHash, 'ad-scorer');
-      const ascRemaining = Math.max(0, ascRate.limit - ascNewCount);
-      return { adCopyA: scoreA, adCopyB: scoreB, comparison, usage: { remaining: ascRemaining, limit: ascRate.limit, isPro: ascRate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('ad_scorer_compare', err);
-      reply.status(500);
-      return { error: `Comparison failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, 'ad-scorer');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { adCopyA: scoreA, adCopyB: scoreB, comparison, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'ad_scorer_compare');
     }
   });
 

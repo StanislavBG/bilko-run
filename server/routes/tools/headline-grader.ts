@@ -1,11 +1,62 @@
 import type { FastifyInstance } from 'fastify';
 import { dbRun } from '../../db.js';
-import { askGemini } from '../../gemini.js';
 import {
-  hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  parseResult, handleGenerateEndpoint, FREE_TIER_LIMIT, HEADLINE_GRADER_ENDPOINT, resetUsage,
-  enforceCallLimits, isAdminEmail, entitlementEmail,
+  hashIp, incrementUsage, handleGenerateEndpoint, FREE_TIER_LIMIT, HEADLINE_GRADER_ENDPOINT, resetUsage,
+  freeTierGate, askGeminiJson, toolErrorReply,
 } from './_shared.js';
+
+const COMPARE_SCORING_SYSTEM_PROMPT = `You are a world-class direct response copywriting analyst. You evaluate headlines using four proven conversion frameworks.
+
+SCORING SYSTEM (total 100 points):
+
+**Pillar 1: Masterson's Rule of One + 4 U's (30 points)**
+- Single dominant idea — one big promise, not multiple competing claims (scores 0–7.5)
+- Urgent: time pressure or implied scarcity (0–7.5)
+- Unique: novel angle or differentiated claim (0–7.5)
+- Ultra-Specific: concrete numbers, timeframes, named methods (0–7.5)
+
+**Pillar 2: Hormozi's Value Equation (30 points)**
+Formula: Value = (Dream Outcome × Perceived Likelihood) / (Time Delay × Effort & Sacrifice)
+- Dream Outcome communicated: what is the big prize? (0–10)
+- Perceived Likelihood: believable? proof elements present? (0–10)
+- Low Time Delay implied: speed of result suggested? (0–5)
+- Low Effort/Sacrifice implied: ease suggested? (0–5)
+
+**Pillar 3: Readability & Clarity (20 points)**
+- Flesch-Kincaid grade level — target 5th grade or lower (0–10)
+- Word count: 6–12 words ideal for web headlines (0–5)
+- No passive voice, no jargon, no corporate speak (0–5)
+
+**Pillar 4: Proof + Promise + Plan (20 points)**
+- Proof element: number, credential, named source, social proof signal (0–7)
+- Clear promise: specific outcome or benefit stated (0–7)
+- Plan hint: method, framework, or "how" implied (0–6)
+
+GRADING SCALE:
+90–100: A+ | 85–89: A | 80–84: A- | 75–79: B+ | 70–74: B | 65–69: B- | 60–64: C+ | 55–59: C | 50–54: C- | 40–49: D | 0–39: F
+
+Respond ONLY with valid JSON matching this exact schema — no markdown, no extra text:
+{
+  "total_score": <number 0-100>,
+  "grade": <"A+"|"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"C-"|"D"|"F">,
+  "framework_scores": {
+    "rule_of_one": { "score": <0-30>, "max": 30, "feedback": "<1-2 sentences>" },
+    "value_equation": { "score": <0-30>, "max": 30, "feedback": "<1-2 sentences>" },
+    "readability": { "score": <0-20>, "max": 20, "feedback": "<1-2 sentences>" },
+    "proof_promise_plan": { "score": <0-20>, "max": 20, "feedback": "<1-2 sentences>" }
+  },
+  "diagnosis": "<One sharp sentence: the single biggest weakness or strength>"
+}`;
+
+const COMPARE_VERDICT_SYSTEM_PROMPT = `You are a world-class direct response copywriting analyst. You will be given two scored headlines with their framework breakdowns. Your job is to:
+1. Write a sharp 2-sentence verdict explaining WHY the winner is stronger — reference the specific framework scores and gaps (e.g. "Headline A's Rule of One score (24/30 vs 12/30) shows a single dominant promise...")
+2. Write a suggested hybrid headline that steals the best element from each — be specific about what was borrowed
+
+Respond ONLY with valid JSON — no markdown, no extra text:
+{
+  "verdict": "<2 sentences citing specific framework score gaps — name the frameworks and numbers>",
+  "suggested_hybrid": "<the rewritten headline itself — punchy, direct, no quotes> | <one sentence: what was taken from A and what was taken from B>"
+}`;
 
 export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
   // ── Headline Grader ──────────────────────────────────────
@@ -45,21 +96,8 @@ export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
       return { error: 'Headline must be under 500 characters.' };
     }
 
-    const ipHash = hashIp(req.ip);
-    const verifiedEmail = await entitlementEmail(req);
-    const rate = await checkRateLimit(ipHash, HEADLINE_GRADER_ENDPOINT, verifiedEmail);
-    if (!rate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: rate.isPro,
-        remaining: 0,
-        limit: rate.limit,
-        message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const _hgLimit = await enforceCallLimits({ userEmail: verifiedEmail ?? null, ipHash, isAdmin: verifiedEmail ? isAdminEmail(verifiedEmail) : false, appSlug: 'headline-grader' });
-    if (!_hgLimit.ok) { reply.status(_hgLimit.status); return { error: _hgLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: HEADLINE_GRADER_ENDPOINT });
+    if (!gate) return reply;
 
     const wordCountByContext: Record<string, string> = {
       email: '4–9 words ideal (penalize beyond 12)',
@@ -145,26 +183,13 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
 }`;
 
     try {
-      const raw = await askGemini(`Grade this headline: "${headline}"`, {
-        systemPrompt,
-      });
+      const parsed = await askGeminiJson(`Grade this headline: "${headline}"`, { systemPrompt });
 
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Could not parse scoring response.');
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-
-      const newCount = await incrementUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
-      const remaining = Math.max(0, rate.limit - newCount);
-      return { ...parsed, usage: { remaining, limit: rate.limit, isPro: rate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('headline_grader_demo', err);
-      reply.status(500);
-      return { error: `Scoring failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, HEADLINE_GRADER_ENDPOINT);
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { ...parsed, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'headline_grader_demo');
     }
   });
 
@@ -181,89 +206,17 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Headlines must be under 500 characters each.' };
     }
 
-    const hgcIpHash = hashIp(req.ip);
-    const hgcVerifiedEmail = await entitlementEmail(req);
-    const hgcRate = await checkRateLimit(hgcIpHash, HEADLINE_GRADER_ENDPOINT, hgcVerifiedEmail);
-    if (!hgcRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: hgcRate.isPro,
-        remaining: 0,
-        limit: hgcRate.limit,
-        message: hgcRate.isPro
-          ? paidGateMsg(hgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const _hgcLimit = await enforceCallLimits({ userEmail: hgcVerifiedEmail ?? null, ipHash: hgcIpHash, isAdmin: hgcVerifiedEmail ? isAdminEmail(hgcVerifiedEmail) : false, appSlug: 'headline-grader' });
-    if (!_hgcLimit.ok) { reply.status(_hgcLimit.status); return { error: _hgcLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: HEADLINE_GRADER_ENDPOINT, calls: 3 });
+    if (!gate) return reply;
 
-    const scoringSystemPrompt = `You are a world-class direct response copywriting analyst. You evaluate headlines using four proven conversion frameworks.
 
-SCORING SYSTEM (total 100 points):
-
-**Pillar 1: Masterson's Rule of One + 4 U's (30 points)**
-- Single dominant idea — one big promise, not multiple competing claims (scores 0–7.5)
-- Urgent: time pressure or implied scarcity (0–7.5)
-- Unique: novel angle or differentiated claim (0–7.5)
-- Ultra-Specific: concrete numbers, timeframes, named methods (0–7.5)
-
-**Pillar 2: Hormozi's Value Equation (30 points)**
-Formula: Value = (Dream Outcome × Perceived Likelihood) / (Time Delay × Effort & Sacrifice)
-- Dream Outcome communicated: what is the big prize? (0–10)
-- Perceived Likelihood: believable? proof elements present? (0–10)
-- Low Time Delay implied: speed of result suggested? (0–5)
-- Low Effort/Sacrifice implied: ease suggested? (0–5)
-
-**Pillar 3: Readability & Clarity (20 points)**
-- Flesch-Kincaid grade level — target 5th grade or lower (0–10)
-- Word count: 6–12 words ideal for web headlines (0–5)
-- No passive voice, no jargon, no corporate speak (0–5)
-
-**Pillar 4: Proof + Promise + Plan (20 points)**
-- Proof element: number, credential, named source, social proof signal (0–7)
-- Clear promise: specific outcome or benefit stated (0–7)
-- Plan hint: method, framework, or "how" implied (0–6)
-
-GRADING SCALE:
-90–100: A+ | 85–89: A | 80–84: A- | 75–79: B+ | 70–74: B | 65–69: B- | 60–64: C+ | 55–59: C | 50–54: C- | 40–49: D | 0–39: F
-
-Respond ONLY with valid JSON matching this exact schema — no markdown, no extra text:
-{
-  "total_score": <number 0-100>,
-  "grade": <"A+"|"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"C-"|"D"|"F">,
-  "framework_scores": {
-    "rule_of_one": { "score": <0-30>, "max": 30, "feedback": "<1-2 sentences>" },
-    "value_equation": { "score": <0-30>, "max": 30, "feedback": "<1-2 sentences>" },
-    "readability": { "score": <0-20>, "max": 20, "feedback": "<1-2 sentences>" },
-    "proof_promise_plan": { "score": <0-20>, "max": 20, "feedback": "<1-2 sentences>" }
-  },
-  "diagnosis": "<One sharp sentence: the single biggest weakness or strength>"
-}`;
-
-    const compareSystemPrompt = `You are a world-class direct response copywriting analyst. You will be given two scored headlines with their framework breakdowns. Your job is to:
-1. Write a sharp 2-sentence verdict explaining WHY the winner is stronger — reference the specific framework scores and gaps (e.g. "Headline A's Rule of One score (24/30 vs 12/30) shows a single dominant promise...")
-2. Write a suggested hybrid headline that steals the best element from each — be specific about what was borrowed
-
-Respond ONLY with valid JSON — no markdown, no extra text:
-{
-  "verdict": "<2 sentences citing specific framework score gaps — name the frameworks and numbers>",
-  "suggested_hybrid": "<the rewritten headline itself — punchy, direct, no quotes> | <one sentence: what was taken from A and what was taken from B>"
-}`;
 
 
     try {
-      const [rawA, rawB] = await Promise.all([
-        askGemini(`Grade this headline: "${headlineA}"`, {
-          systemPrompt: scoringSystemPrompt,
-        }),
-        askGemini(`Grade this headline: "${headlineB}"`, {
-          systemPrompt: scoringSystemPrompt,
-        }),
+      const [scoreA, scoreB] = await Promise.all([
+        askGeminiJson(`Grade this headline: "${headlineA}"`, { systemPrompt: COMPARE_SCORING_SYSTEM_PROMPT }),
+        askGeminiJson(`Grade this headline: "${headlineB}"`, { systemPrompt: COMPARE_SCORING_SYSTEM_PROMPT }),
       ]);
-
-      const scoreA = parseResult(rawA);
-      const scoreB = parseResult(rawB);
 
       // Compute winner/margin/framework_winners deterministically — never trust the model for arithmetic
       const fA = scoreA.framework_scores;
@@ -292,11 +245,7 @@ Framework winners: Rule of One → ${computedFwWinners.rule_of_one} | Value Equa
 
 Write the verdict and suggested hybrid.`;
 
-      const rawComp = await askGemini(comparisonPrompt, {
-        systemPrompt: compareSystemPrompt,
-      });
-
-      const compParsed = parseResult(rawComp);
+      const compParsed = await askGeminiJson(comparisonPrompt, { systemPrompt: COMPARE_VERDICT_SYSTEM_PROMPT });
       const comparison = {
         winner: computedWinner,
         margin: computedMargin,
@@ -305,13 +254,11 @@ Write the verdict and suggested hybrid.`;
         suggested_hybrid: compParsed.suggested_hybrid ?? '',
       };
 
-      const hgcNewCount = await incrementUsage(hgcIpHash, HEADLINE_GRADER_ENDPOINT);
-      const hgcRemaining = Math.max(0, hgcRate.limit - hgcNewCount);
-      return { headlineA: scoreA, headlineB: scoreB, comparison, usage: { remaining: hgcRemaining, limit: hgcRate.limit, isPro: hgcRate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('headline_grader_compare', err);
-      reply.status(500);
-      return { error: `Comparison failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, HEADLINE_GRADER_ENDPOINT);
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { headlineA: scoreA, headlineB: scoreB, comparison, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'headline_grader_compare');
     }
   });
 

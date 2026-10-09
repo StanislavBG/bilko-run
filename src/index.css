@@ -114,25 +114,11 @@ body {
   font-weight: 900;
 }
 
-.text-display-lg {
-  font-size: clamp(2rem, 4vw, 3rem);
-  line-height: 1.1;
-  letter-spacing: -0.035em;
-  font-weight: 900;
-}
-
 .text-display-md {
   font-size: clamp(1.5rem, 3vw, 2.25rem);
   line-height: 1.15;
   letter-spacing: -0.03em;
   font-weight: 800;
-}
-
-.text-display-sm {
-  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
-  line-height: 1.2;
-  letter-spacing: -0.025em;
-  font-weight: 700;
 }
 
 /* Label / overline style — consistent across all pages */
@@ -153,189 +139,9 @@ body {
     0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.shadow-elevation-2 {
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.04),
-    0 2px 4px rgba(0, 0, 0, 0.04),
-    0 8px 16px rgba(0, 0, 0, 0.06);
-}
-
 .shadow-elevation-3 {
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.04),
     0 4px 8px rgba(0, 0, 0, 0.04),
     0 16px 32px rgba(0, 0, 0, 0.08);
 }
-
-/* Fire-tinted shadow for CTAs and hover states */
-.shadow-fire-glow {
-  box-shadow:
-    0 0 0 1px rgba(255, 107, 26, 0.12),
-    0 4px 12px rgba(255, 107, 26, 0.15),
-    0 12px 24px rgba(255, 107, 26, 0.08);
-}
-
-/* Shadow-as-border pattern (Vercel-style) */
-.border-shadow {
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
-  border: none;
-}
-
-/* Dark surface elevation (for dark cards/heroes) */
-.shadow-dark-elevation {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(0, 0, 0, 0.3),
-    0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-/* ── Card Styles ───────────────────────────────────────────── */
-
-.card-base {
-  background: white;
-  border-radius: 1rem;
-  border: 1px solid rgba(224, 213, 197, 0.5);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.card-base:hover {
-  border-color: rgba(224, 213, 197, 0.8);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.04),
-    0 4px 8px rgba(0, 0, 0, 0.04),
-    0 16px 32px rgba(0, 0, 0, 0.06);
-}
-
-.card-interactive {
-  background: white;
-  border-radius: 1rem;
-  border: 1px solid rgba(224, 213, 197, 0.5);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.card-interactive:hover {
-  border-color: #ffb380;
-  transform: translateY(-2px);
-  box-shadow:
-    0 0 0 1px rgba(255, 107, 26, 0.08),
-    0 4px 12px rgba(255, 107, 26, 0.1),
-    0 16px 32px rgba(255, 107, 26, 0.06);
-}
-
-/* ── Score animation ───────────────────────────────────────── */
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(255, 107, 26, 0.2); }
-  50% { box-shadow: 0 0 40px rgba(255, 107, 26, 0.4); }
-}
-
-/* Subtle shimmer for premium feel */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.animate-slide-up { animation: slide-up 0.5s ease-out both; }
-.animate-fade-in { animation: fade-in 0.4s ease-out both; }
-.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-
-/* Stagger children */
-.stagger-children > * {
-  animation: slide-up 0.5s ease-out both;
-}
-.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 80ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 160ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 320ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 400ms; }
-
-
-/* ── Session Manager Field Manual reader (/manual) ────────────────────────────
-   Styles the first-party chapter HTML served by /api/manual/chapter/:slug.
-   The same rule set is inlined into the offline HTML edition by
-   session-manager's scripts/build-manual.mjs — keep the two in sync when
-   either changes. Light theme — palette matches the warm/fire tokens used
-   across the rest of the site (see SessionManagerPage.tsx); every text
-   color below is verified >= 4.5:1 against the warm-50/white page backgrounds
-   it sits on. Component classes match session-manager-operations/manual/STYLE.md. */
-/* Analogy / tip / note / warning asides — shared shape, distinct accent per kind. */
-.manual-analogy, .manual-tip, .manual-note, .manual-warning {
-  padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 1.2em 0; color: #6b5a49;
-}
-.manual-analogy { border-left: 3px solid #14b8a6; background: #f0fdfa; }
-.manual-analogy strong { color: #0f766e; }
-.manual-tip { border-left: 3px solid #10b981; background: #ecfdf5; }
-.manual-tip strong { color: #047857; }
-.manual-note { border-left: 3px solid #0ea5e9; background: #f0f9ff; }
-.manual-note strong { color: #0369a1; }
-.manual-warning { border-left: 3px solid #ff6b1a; background: #fff7f0; }
-.manual-warning strong { color: #993a0a; }
-
-/* Numbered how-to. */
-.manual-steps { padding-left: 1.6em; margin: 1.2em 0; }
-.manual-steps li { margin: .6em 0; }
-.manual-steps li::marker { color: #c04808; font-weight: 700; }
-
-/* Conceptual box-and-arrow diagram — row of boxes on desktop, stacked column
-   with a downward arrow below 640px so it never gets squeezed illegibly. */
-.manual-flow { display: flex; flex-wrap: wrap; list-style: none; gap: 1.75em; margin: 1.4em 0; padding: 0; }
-.manual-flow li {
-  position: relative; flex: 1 1 160px; background: #fff; border: 1px solid #f0e9df;
-  border-radius: 8px; padding: 14px 16px; color: #6b5a49;
-}
-.manual-flow li:not(:last-child)::after {
-  content: "→"; position: absolute; top: 50%; right: -1.35em; transform: translateY(-50%);
-  color: #c04808; font-weight: 700;
-}
-@media (max-width: 640px) {
-  .manual-flow { flex-direction: column; gap: 2.25em; }
-  .manual-flow li:not(:last-child)::after {
-    content: "↓"; top: auto; right: 50%; bottom: -1.75em; transform: translateX(50%);
-  }
-}
-
-.manual-table { width: 100%; border-collapse: collapse; margin: 1.2em 0; font-size: .94em; }
-.manual-table th, .manual-table td { border: 1px solid #f0e9df; padding: 10px 12px; text-align: left; vertical-align: top; }
-.manual-table th { background: #faf7f2; color: #2d2520; }
-.manual-table td { color: #6b5a49; }
-
-/* Glossary chapter only. */
-.manual-glossary dt { color: #2d2520; font-weight: 700; margin-top: 1em; }
-.manual-glossary dd { color: #6b5a49; margin: .25em 0 0; }
-
-.manual-takeaways {
-  background: #fff; border: 1px solid #f0e9df; border-radius: 10px; padding: 18px 20px; margin: 2em 0 1.4em;
-}
-.manual-takeaways h2 { font-size: 1.05rem; color: #2d2520; margin: 0 0 .5em; }
-.manual-takeaways ul { padding-left: 1.2em; margin: 0; }
-.manual-takeaways li { color: #6b5a49; margin: .4em 0; }
-
-.manual-next {
-  margin-top: 2em; padding-top: 1.2em; border-top: 1px solid #f0e9df; font-size: .95em; color: #6b5a49;
-}
-.manual-next a { color: #c04808; }
-.manual-next a:hover { color: #993a0a; }
-
-.manual-figure { margin: 1.6em 0; border: 1px solid #f0e9df; border-radius: 8px; overflow: hidden; background: #fff; }
-.manual-figure img { display: block; width: 100%; }
-/* An uncaptured figure slot is production notes, not content: a paying reader
-   should see no figure at all rather than a hatched "pending capture" box, and
-   the caption is pure annotation of the image that isn't there yet. The rule
-   goes inert the moment `npm run manual:figures` replaces the frame with an
-   <img>. Keep in sync with OFFLINE_CSS in session-manager's build-manual.mjs. */
-.manual-figure:has(.manual-figure__frame) { display: none; }
-.manual-figure__frame { display: none; }
-.manual-figure figcaption { padding: 12px 16px; color: #6b5a49; font-size: .88em; display: flex; flex-wrap: wrap; gap: 14px; }
-.manual-figure .callout { display: inline-flex; align-items: center; justify-content: center;
-  width: 1.5em; height: 1.5em; border-radius: 50%; background: #c04808; color: #fff;
-  font-weight: 700; font-size: .8em; margin-right: .4em; }

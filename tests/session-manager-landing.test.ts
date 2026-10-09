@@ -16,7 +16,19 @@ import { resolve } from 'path';
 import { latestManualVersion, isValidManualVersion, type ManualManifest, type ManualToc } from '../shared/manual-catalog.js';
 import { COPY, fill } from '../src/pages/session-manager-landing/copy.js';
 import { TABS, chapterHref } from '../src/pages/session-manager-landing/PartsBin.js';
-import { filmPanelCanvasStyle, formatTime, layoutMode, nextTabIndex, partNumber } from '../src/pages/session-manager-landing/layout.js';
+import {
+  PAGE_COUNT,
+  createWheelTurner,
+  filmPanelCanvasStyle,
+  formatTime,
+  hashForPage,
+  layoutMode,
+  nextTabIndex,
+  pageForKey,
+  pageFromHash,
+  partNumber,
+  swipeDirection,
+} from '../src/pages/session-manager-landing/layout.js';
 
 const RELEASES = resolve(__dirname, '..', 'data', 'manual', 'releases');
 
@@ -164,5 +176,71 @@ describe('Parts Bin keyboard', () => {
     expect(nextTabIndex('Home', 5, 9)).toBe(0);
     expect(nextTabIndex('End', 2, 9)).toBe(8);
     expect(nextTabIndex('Enter', 2, 9)).toBeNull();
+  });
+});
+
+describe('page-turn helpers', () => {
+  it('has two pages', () => expect(PAGE_COUNT).toBe(2));
+
+  it('pageForKey maps every turning key and clamps', () => {
+    expect(pageForKey('PageDown', false, 0)).toBe(1);
+    expect(pageForKey('ArrowDown', false, 0)).toBe(1);
+    expect(pageForKey(' ', false, 0)).toBe(1);
+    expect(pageForKey('PageUp', false, 1)).toBe(0);
+    expect(pageForKey('ArrowUp', false, 1)).toBe(0);
+    expect(pageForKey(' ', true, 1)).toBe(0);
+    expect(pageForKey('Home', false, 1)).toBe(0);
+    expect(pageForKey('End', false, 0)).toBe(1);
+    expect(pageForKey('PageDown', false, 1)).toBe(1);
+    expect(pageForKey('ArrowUp', false, 0)).toBe(0);
+    expect(pageForKey('a', false, 0)).toBeNull();
+    expect(pageForKey('Enter', false, 1)).toBeNull();
+  });
+
+  it('createWheelTurner honours threshold, deltaMode, one turn per gesture and 450ms re-arm', () => {
+    const w = createWheelTurner();
+    expect(w(40, 0, 0)).toBe(0);
+    expect(w(39, 0, 10)).toBe(0);
+    expect(w(1, 0, 20)).toBe(1);
+    expect(w(500, 0, 30)).toBe(0);
+    expect(w(500, 0, 400)).toBe(0); // gap 370 < 450
+    expect(w(500, 0, 849)).toBe(0); // gap 449 < 450
+    expect(w(-100, 0, 1299)).toBe(-1); // gap 450 re-arms and turns
+    const lines = createWheelTurner();
+    expect(lines(5, 1, 0)).toBe(1); // 5 * 16 = 80
+    const pages = createWheelTurner();
+    expect(pages(-1, 2, 0)).toBe(-1); // 860
+    const custom = createWheelTurner({ threshold: 10, quietMs: 100 });
+    expect(custom(10, 0, 0)).toBe(1);
+    expect(custom(10, 0, 50)).toBe(0);
+    expect(custom(10, 0, 150)).toBe(1);
+  });
+
+  it('swipeDirection needs a dominant vertical swipe of 60px', () => {
+    expect(swipeDirection(0, -60)).toBe(1);
+    expect(swipeDirection(0, 60)).toBe(-1);
+    expect(swipeDirection(0, -59)).toBe(0);
+    expect(swipeDirection(80, -70)).toBe(0);
+    expect(swipeDirection(70, -70)).toBe(0);
+    expect(swipeDirection(10, 120)).toBe(-1);
+  });
+
+  it('hash helpers round-trip', () => {
+    expect(pageFromHash('#parts')).toBe(1);
+    expect(pageFromHash('')).toBe(0);
+    expect(pageFromHash('#other')).toBe(0);
+    expect(hashForPage(1)).toBe('#parts');
+    expect(hashForPage(0)).toBe('');
+    for (let p = 0; p < PAGE_COUNT; p++) expect(pageFromHash(hashForPage(p))).toBe(p);
+  });
+
+  it('pages copy has no empty strings and a usable goToTemplate', () => {
+    const walk = (o: unknown): string[] =>
+      typeof o === 'string' ? [o] : o && typeof o === 'object' ? Object.values(o).flatMap(walk) : [];
+    const strings = walk(COPY.pages);
+    expect(strings.length).toBeGreaterThan(0);
+    for (const s of strings) expect(s.trim()).not.toBe('');
+    expect(COPY.pages.aria.goToTemplate).toContain('{n}');
+    expect(COPY.pages.aria.goToTemplate).toContain('{count}');
   });
 });

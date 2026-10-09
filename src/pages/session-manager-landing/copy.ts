@@ -286,6 +286,16 @@ export const COPY = {
       }
     }
   ],
+  "pages": {
+    "next": "Turn the page — the parts bin",
+    "prev": "Back to the cover",
+    "aria": {
+      "nav": "Pages",
+      "cover": "Page 1 of 2: Session Manager",
+      "parts": "Page 2 of 2: The parts bin",
+      "goToTemplate": "Go to page {n} of {count}"
+    }
+  },
   "film": {
     "nowShowing": "NOW SHOWING",
     "title": "Pip and the Paper Moon",
@@ -327,6 +337,7 @@ export const COPY = {
 } as const;
 
 export type LandingTab = (typeof COPY.tabs)[number];
+export type LandingPages = typeof COPY.pages;
 
 /** Fills `{name}` slots in a copy template. Unknown slots are left as-is. */
 export function fill(template: string, values: Record<string, string | number>): string {

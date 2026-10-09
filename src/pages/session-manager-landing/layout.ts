@@ -94,3 +94,77 @@ export function nextTabIndex(key: string, current: number, count: number): numbe
       return null;
   }
 }
+
+/** The landing is two pages that flip vertically: the cover, then the Parts Bin. */
+export const PAGE_COUNT = 2;
+
+/** Target page for a key press (clamped to the page range), or null if the key doesn't turn. */
+export function pageForKey(key: string, shift: boolean, current: number): number | null {
+  const last = PAGE_COUNT - 1;
+  switch (key) {
+    case 'PageDown':
+    case 'ArrowDown':
+      return Math.min(last, current + 1);
+    case ' ':
+      return shift ? Math.max(0, current - 1) : Math.min(last, current + 1);
+    case 'PageUp':
+    case 'ArrowUp':
+      return Math.max(0, current - 1);
+    case 'Home':
+      return 0;
+    case 'End':
+      return last;
+    default:
+      return null;
+  }
+}
+
+/** Wheel `deltaMode` multipliers: lines → px, pages → px. */
+const WHEEL_LINE_PX = 16;
+const WHEEL_PAGE_PX = 860;
+
+/**
+ * Stateful wheel gesture detector. Accumulates deltaY until |sum| reaches the
+ * threshold, returns +1/-1 once, then returns 0 for every call until one arrives
+ * `quietMs` or more after the previous call (absorbs trackpad inertia), which
+ * re-arms it with a fresh sum.
+ */
+export function createWheelTurner(
+  opts: { threshold?: number; quietMs?: number } = {},
+): (deltaY: number, deltaMode: number, now: number) => -1 | 0 | 1 {
+  const threshold = opts.threshold ?? 80;
+  const quietMs = opts.quietMs ?? 450;
+  let sum = 0;
+  let spent = false;
+  let last = -Infinity;
+  return (deltaY, deltaMode, now) => {
+    if (now - last >= quietMs) {
+      sum = 0;
+      spent = false;
+    }
+    last = now;
+    if (spent) return 0;
+    sum += deltaY * (deltaMode === 1 ? WHEEL_LINE_PX : deltaMode === 2 ? WHEEL_PAGE_PX : 1);
+    if (Math.abs(sum) < threshold) return 0;
+    spent = true;
+    return sum > 0 ? 1 : -1;
+  };
+}
+
+/** Vertical swipe on touchend: swipe up (dy < 0) → next (1), down → previous (-1), else 0. */
+export function swipeDirection(dx: number, dy: number): -1 | 0 | 1 {
+  if (Math.abs(dy) < 60 || Math.abs(dy) <= Math.abs(dx)) return 0;
+  return dy < 0 ? 1 : -1;
+}
+
+const PARTS_HASH = '#parts';
+
+/** `#parts` is page 2; anything else is the cover. */
+export function pageFromHash(hash: string): number {
+  return hash === PARTS_HASH ? 1 : 0;
+}
+
+/** Inverse of pageFromHash: `#parts` for page 2, '' for the cover. */
+export function hashForPage(page: number): string {
+  return page === 1 ? PARTS_HASH : '';
+}

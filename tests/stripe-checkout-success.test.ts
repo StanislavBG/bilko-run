@@ -6,7 +6,6 @@ const listLineItems = vi.fn();
 const sessionsRetrieve = vi.fn();
 const sessionsCreate = vi.fn(async () => ({ url: 'https://checkout.stripe.test/c/pay/cs_test_new' }));
 const customersCreate = vi.fn(async () => ({ id: 'cus_new' }));
-const upsertLicenseKey = vi.fn(async (_email: string, _customerId: string | undefined, productKey: string) => `KEY-FOR-${productKey}`);
 
 vi.mock('../server/services/stripe.js', () => ({
   getStripe: () => ({
@@ -31,12 +30,6 @@ vi.mock('../server/services/stripe.js', () => ({
   saveOneTimePurchase: async () => {},
   priceToPlanTier: () => 'pro',
   hasActiveSubscriptionLive: async () => false,
-}));
-
-vi.mock('../server/services/license.js', () => ({
-  upsertLicenseKey,
-  getLicenseKeysForEmail: async () => [],
-  validateLicenseKey: async () => ({ valid: false }),
 }));
 
 vi.mock('../server/services/tokens.js', () => ({
@@ -146,7 +139,6 @@ describe('/checkout/success product resolution', () => {
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
     expect(res.statusCode).toBe(200);
-    expect(upsertLicenseKey).not.toHaveBeenCalled();
     expect(res.body).toContain('Thanks for your support');
     // The manual is free as of 2.0.1: a late payment is thanked and sent to the
     // free reader, not told it "unlocked" anything or sent to a purchase lookup.
@@ -164,7 +156,6 @@ describe('/checkout/success product resolution', () => {
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
     expect(res.statusCode).toBe(200);
-    expect(upsertLicenseKey).not.toHaveBeenCalled();
     expect(res.body).toContain('Thanks for your support');
     expect(res.body).not.toMatch(/license key/i);
     expect(errSpy).toHaveBeenCalledTimes(1);
@@ -181,7 +172,6 @@ describe('/checkout/success product resolution', () => {
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
     expect(res.statusCode).toBe(200);
-    expect(upsertLicenseKey).not.toHaveBeenCalled();
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
     await app.close();
@@ -200,7 +190,6 @@ describe('/checkout/success product resolution', () => {
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
     expect(res.statusCode).toBe(200);
-    expect(upsertLicenseKey).not.toHaveBeenCalled();
     expect(errSpy).toHaveBeenCalledTimes(1);
     expect(String(errSpy.mock.calls[0][0])).toContain(SESSION_ID);
     errSpy.mockRestore();

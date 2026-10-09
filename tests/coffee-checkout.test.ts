@@ -5,7 +5,6 @@ import { entryForPriceType, entryForPriceId, PRODUCT_KEYS } from '../shared/prod
 const listLineItems = vi.fn();
 const sessionsRetrieve = vi.fn();
 const sessionsCreate = vi.fn();
-const upsertLicenseKey = vi.fn(async (_email: string, _customerId: string | undefined, productKey: string) => `KEY-FOR-${productKey}`);
 const saveOneTimePurchase = vi.fn(async () => {});
 
 vi.mock('../server/services/stripe.js', () => ({
@@ -30,12 +29,6 @@ vi.mock('../server/services/stripe.js', () => ({
   saveOneTimePurchase,
   priceToPlanTier: () => 'pro',
   hasActiveSubscriptionLive: async () => false,
-}));
-
-vi.mock('../server/services/license.js', () => ({
-  upsertLicenseKey,
-  getLicenseKeysForEmail: async () => [],
-  validateLicenseKey: async () => ({ valid: false }),
 }));
 
 vi.mock('../server/services/tokens.js', () => ({

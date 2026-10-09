@@ -18,8 +18,7 @@ import { PRODUCT_KEYS, type ProductKey } from './product-catalog.js';
  * one-time purchase (`STRIPE_PRICE_SESSION_MANAGER`). Nothing is sold any
  * more, but it stays wired: existing buyers keep their rows, the chapter
  * route still honours them for any chapter a release marks non-free, and
- * checkout-success resolves a late or in-flight payment to this key instead
- * of falling through to its contentgrade_pro fallback.
+ * checkout-success resolves a late or in-flight payment to this key.
  */
 export const MANUAL_PRODUCT_KEY: ProductKey = PRODUCT_KEYS.SESSION_MANAGER;
 

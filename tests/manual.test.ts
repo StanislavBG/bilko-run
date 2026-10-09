@@ -6,7 +6,7 @@
  *   1. the live release is free end to end: every chapter and every download
  *      opens for an anonymous visitor, and no response quotes a price;
  *   2. the Stripe wiring that used to sell it still resolves, so a late payment
- *      never falls through to the contentgrade_pro fallback;
+ *      always lands on this SKU;
  *   3. the chapter route's free-flag guard still behaves for a release that
  *      marks a chapter non-free: a neutral 402, and a past buyer still gets in.
  */
@@ -71,8 +71,7 @@ const PRICE_RE = /\$\s?\d|priceLabel/;
 describe('manual catalog', () => {
   it('keeps the session_manager SKU resolvable so a late payment still lands on it', () => {
     // Nothing sells the manual any more, but a payment already in flight must
-    // resolve to session_manager at checkout success — never to the
-    // contentgrade_pro fallback that hands out a Pro license key.
+    // resolve to session_manager at checkout success.
     expect(MANUAL_PRODUCT_KEY).toBe('session_manager');
     const entry = entryForPriceType('session_manager');
     expect(entry).toBeDefined();

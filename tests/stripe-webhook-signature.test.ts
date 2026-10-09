@@ -36,12 +36,6 @@ vi.mock('../server/services/stripe.js', () => ({
   hasActiveSubscriptionLive: async () => false,
 }));
 
-vi.mock('../server/services/license.js', () => ({
-  upsertLicenseKey: async (_email: string, _customerId: string | undefined, productKey: string) => `KEY-FOR-${productKey}`,
-  getLicenseKeysForEmail: async () => [],
-  validateLicenseKey: async () => ({ valid: false }),
-}));
-
 vi.mock('../server/services/tokens.js', () => ({
   creditTokens,
   grantFreeTokens: async () => {},

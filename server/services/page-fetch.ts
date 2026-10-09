@@ -22,7 +22,7 @@ export function fetchPageBounded(parsedUrl: URL): Promise<string> {
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
     const req = protocol.get(
       parsedUrl.toString(),
-      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PageRoast/1.0)' }, timeout: 15000 } as any,
+      { headers: { 'User-Agent': 'BilkoBot/1.0 (+https://bilko.run)' }, timeout: 15000 } as any,
       (res) => {
         if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           const redirectUrl = new URL(res.headers.location, parsedUrl.toString());
@@ -31,7 +31,7 @@ export function fetchPageBounded(parsedUrl: URL): Promise<string> {
             return;
           }
           const rProtocol = redirectUrl.protocol === 'https:' ? https : http;
-          const rReq = rProtocol.get(redirectUrl.toString(), { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PageRoast/1.0)' } } as any, (rRes) => {
+          const rReq = rProtocol.get(redirectUrl.toString(), { headers: { 'User-Agent': 'BilkoBot/1.0 (+https://bilko.run)' } } as any, (rRes) => {
             let data = '';
             let bytes = 0;
             rRes.on('data', (c: Buffer) => {

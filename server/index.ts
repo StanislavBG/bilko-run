@@ -51,6 +51,17 @@ const app = Fastify({
   trustProxy: true,
 });
 
+// Global error handler: 4xx keeps its status with a safe message; anything else
+// is logged server-side and returns a generic 500 so internals never leak.
+app.setErrorHandler((err: any, req, reply) => {
+  const status = typeof err?.statusCode === 'number' ? err.statusCode : 500;
+  if (status >= 400 && status < 500) {
+    return reply.status(status).send({ error: err.validation ? 'Invalid request.' : (err.message || 'Bad request.') });
+  }
+  console.error(`[error] ${req.method} ${req.url}:`, err);
+  return reply.status(500).send({ error: 'Something went wrong. Please try again.' });
+});
+
 // Raw body for Stripe webhook signature verification
 app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
   (req as any).rawBody = body;

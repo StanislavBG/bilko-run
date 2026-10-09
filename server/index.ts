@@ -210,61 +210,14 @@ if (isProd) {
     // Route-specific OG meta tags for social sharing (crawlers don't run JS)
     const indexHtml = readFileSync(resolve(distPath, 'index.html'), 'utf-8');
 
+    // Only paths the SPA fallback can actually serve. /projects/<slug> is
+    // deliberately absent: static serving 301s it to the app bundle's own
+    // index.html, so it never reaches the not-found handler.
     const OG_OVERRIDES: Record<string, { title: string; description: string; url: string }> = {
-      '/projects/page-roast': {
-        title: 'PageRoast — Get Your Landing Page Roasted by AI 🔥',
-        description: 'Paste a URL. AI scores your page across 4 CRO frameworks and delivers a savage one-liner you\'ll want to screenshot. Free.',
-        url: 'https://bilko.run/projects/page-roast',
-      },
       '/projects': {
         title: 'Projects — bilko.run',
         description: 'AI-powered tools for makers, marketers, and founders. PageRoast, HeadlineGrader, AdScorer, and more.',
         url: 'https://bilko.run/projects',
-      },
-      '/projects/headline-grader': {
-        title: 'HeadlineGrader — Score Headlines Like a Pro Copywriter',
-        description: 'AI grades your headlines against 4 proven frameworks. Get a score, diagnosis, and AI rewrites. Free.',
-        url: 'https://bilko.run/projects/headline-grader',
-      },
-      '/projects/ad-scorer': {
-        title: 'AdScorer — Grade Ad Copy Before You Spend the Budget',
-        description: 'Platform-specific ad copy grading for Google, Meta, and LinkedIn. Score hook, value prop, emotion, and CTA.',
-        url: 'https://bilko.run/projects/ad-scorer',
-      },
-      '/projects/thread-grader': {
-        title: 'ThreadGrader — Score Your X/Twitter Threads',
-        description: 'AI scores hook strength, tension chain, payoff, and share triggers. Plus tweet-by-tweet breakdown.',
-        url: 'https://bilko.run/projects/thread-grader',
-      },
-      '/projects/email-forge': {
-        title: 'EmailForge — AI Email Sequence Generator',
-        description: 'Generate 5-email sequences using AIDA, PAS, Hormozi, Cialdini, and Storytelling frameworks. Free.',
-        url: 'https://bilko.run/projects/email-forge',
-      },
-      '/projects/audience-decoder': {
-        title: 'AudienceDecoder — Decode Who Actually Follows You',
-        description: 'Paste your social content. AI identifies audience archetypes, engagement patterns, and growth opportunities.',
-        url: 'https://bilko.run/projects/audience-decoder',
-      },
-      '/projects/local-score': {
-        title: 'LocalScore — Private Document Analyzer (Runs in Your Browser)',
-        description: 'AI analyzes your documents locally via WebGPU. Your data never leaves your device. Contracts, financials, meeting notes. Free. Powered by Gemma.',
-        url: 'https://bilko.run/projects/local-score',
-      },
-      '/projects/stack-audit': {
-        title: 'StackAudit — Find Waste in Your SaaS Stack',
-        description: 'AI analyzes your tool stack for overlap, cheaper alternatives, and savings. Enterprise-grade audit for $1. No integration required.',
-        url: 'https://bilko.run/projects/stack-audit',
-      },
-      '/projects/launch-grader': {
-        title: 'LaunchGrader — Is Your Product Ready to Launch?',
-        description: 'AI audits your go-to-market readiness across 5 dimensions. Score, blockers, and a verdict. $1 vs $100/mo competitors.',
-        url: 'https://bilko.run/projects/launch-grader',
-      },
-      '/projects/stepproof': {
-        title: 'Stepproof — Regression Tests for AI Pipelines',
-        description: 'Write a scenario. Run it N times. See if your LLM can follow instructions. Like unit tests, but for AI.',
-        url: 'https://bilko.run/projects/stepproof',
       },
       '/blog': {
         title: 'Blog — bilko.run',
@@ -273,22 +226,20 @@ if (isProd) {
       },
       '/pricing': {
         title: 'Pricing — bilko.run',
-        description: '1 free roast on sign-up. Then $1 per credit or 7 for $5. No subscriptions.',
+        description: 'Free to start. Then $1 per credit or 7 for $5. No subscriptions.',
         url: 'https://bilko.run/pricing',
       },
     };
 
-    function serveWithOg(path: string): string {
-      const override = OG_OVERRIDES[path];
-      if (!override) return indexHtml;
+    // Computed once at boot; the handler only does a Map lookup.
+    const ogHtmlByPath = new Map<string, string>();
+    for (const [path, override] of Object.entries(OG_OVERRIDES)) {
       let html = indexHtml;
-      // Replace title
       html = html.replace(/<title>[^<]*<\/title>/, `<title>${override.title}</title>`);
-      // Replace all OG/Twitter title, description, url content attributes
       html = html.replace(/(<meta\s+(?:property="og:title"|name="twitter:title")\s+content=")[^"]*(")/g, `$1${override.title}$2`);
       html = html.replace(/(<meta\s+(?:property="og:description"|name="twitter:description"|name="description")\s+content=")[^"]*(")/g, `$1${override.description}$2`);
       html = html.replace(/(<meta\s+property="og:url"\s+content=")[^"]*(")/g, `$1${override.url}$2`);
-      return html;
+      ogHtmlByPath.set(path, html);
     }
 
     // SPA fallback — inject route-specific OG tags for social crawlers
@@ -314,7 +265,7 @@ if (isProd) {
       // this HTML, so a shared or reused copy would carry a nonce that no
       // longer matches the response's CSP header.
       reply.header('cache-control', 'private, no-store');
-      return reply.type('text/html').send(serveWithOg(path));
+      return reply.type('text/html').send(ogHtmlByPath.get(path) ?? indexHtml);
     });
   }
 }
@@ -332,6 +283,20 @@ try {
     }
   });
   console.log(`Bilko.run server running on http://0.0.0.0:${PORT}`);
+
+  // Graceful shutdown: app.close() runs onClose hooks (egress meter flush).
+  // Render sends SIGTERM when stopping the old instance on deploy.
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[Shutdown] ${signal} received, closing server`);
+    const killer = setTimeout(() => process.exit(1), 10_000);
+    killer.unref();
+    app.close().then(() => process.exit(0), () => process.exit(1));
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 } catch (err) {
   console.error('Failed to start server:', err);
   process.exit(1);

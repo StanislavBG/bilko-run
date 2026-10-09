@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { dbGet, dbAll, dbRun } from '../db.js';
-import { requireAdmin, ADMIN_EMAILS } from '../clerk.js';
+import { dbGet, dbAll, dbRun, getClient } from '../db.js';
+import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBot } from '../services/analytics.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
@@ -38,9 +38,15 @@ function bumpAndCheck(key: string, limit: number): boolean {
   return entry.count <= limit;
 }
 
-function checkEventRate(visitorId: string | null, ip: string | null): boolean {
-  const ipOk = ip ? bumpAndCheck(`ip:${ip}`, EVENT_RATE_LIMIT_IP) : true;
-  const vOk = visitorId ? bumpAndCheck(`v:${visitorId}`, EVENT_RATE_LIMIT_VISITOR) : true;
+function checkEventRate(
+  visitorId: string | null,
+  ip: string | null,
+  visitorLimit = EVENT_RATE_LIMIT_VISITOR,
+  ipLimit = EVENT_RATE_LIMIT_IP,
+  scope = 'ev',
+): boolean {
+  const ipOk = ip ? bumpAndCheck(`${scope}:ip:${ip}`, ipLimit) : true;
+  const vOk = visitorId ? bumpAndCheck(`${scope}:v:${visitorId}`, visitorLimit) : true;
   return ipOk && vOk;
 }
 
@@ -67,7 +73,7 @@ function parseRefHost(raw: string | null): string | null {
 
 export function registerAnalyticsRoutes(app: FastifyInstance): void {
   // Fire-and-forget page view tracking — no cookies, no PII
-  app.post('/api/analytics/pageview', async (req) => {
+  app.post('/api/analytics/pageview', async (req, reply) => {
     try {
       const body = req.body as {
         path?: string; referrer?: string; screen?: string; email?: string;
@@ -90,6 +96,12 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const visitorId = (body?.visitor_id ?? '').slice(0, 64) || null;
       const sessionId = (body?.session_id ?? '').slice(0, 64) || null;
 
+      // Same dual-key limiter as /event, with a more generous per-visitor cap.
+      if (!checkEventRate(visitorId, (req.ip as string | undefined) ?? null, EVENT_RATE_LIMIT_VISITOR * 2, EVENT_RATE_LIMIT_IP * 2, 'pv')) {
+        reply.status(429);
+        return { ok: false, error: 'Too many requests' };
+      }
+
       // Capture bot traffic too — admin needs to be able to see what's hitting
       // the site (random internet traffic, scrapers, link-unfurlers). Reports
       // filter is_bot = 0 by default so the visible numbers don't shift.
@@ -98,32 +110,30 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const refHost = parseRefHost(referrer);
       const { bucket: sourceBucket } = await classifyReferrer(refHost);
       const { device, browser, os } = parseUa(ua);
-      const isAdmin = email && ADMIN_EMAILS.includes(email) ? 1 : 0;
+      // Admin flag comes only from a verified Clerk token — never from body.email.
+      const verified = await verifyClerkToken(req.headers.authorization);
+      const isAdmin = verified && ADMIN_EMAILS.includes(verified.toLowerCase()) ? 1 : 0;
 
-      // Check if visitor is new (before insert)
-      let isNewVisitor = 0;
-      if (visitorId) {
-        const existing = await dbGet<{ x: number }>('SELECT 1 as x FROM page_views WHERE visitor_id = ? LIMIT 1', visitorId);
-        isNewVisitor = existing ? 0 : 1;
-      }
-
-      await dbRun(
-        `INSERT INTO page_views (
+      // One round-trip: page view (is_new_visitor computed in-statement) + session upsert.
+      const stmts: { sql: string; args: any[] }[] = [{
+        sql: `INSERT INTO page_views (
           path, referrer, country, ua, screen, email, date,
           utm_source, utm_medium, utm_campaign, utm_term, utm_content,
           visitor_id, session_id, is_new_visitor, referrer_host, source_bucket,
           device, browser, os, is_bot, is_admin, created_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        path, referrer, country, ua || null, screen, email, date,
-        utmSource, utmMedium, utmCampaign, utmTerm, utmContent,
-        visitorId, sessionId, isNewVisitor, refHost, sourceBucket,
-        device, browser, os, bot, isAdmin, nowMs,
-      );
-
-      // Upsert session
+        ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM page_views WHERE visitor_id = ?) THEN 1 ELSE 0 END,
+          ?, ?, ?, ?, ?, ?, ?, ?`,
+        args: [
+          path, referrer, country, ua || null, screen, email, date,
+          utmSource, utmMedium, utmCampaign, utmTerm, utmContent,
+          visitorId, sessionId, visitorId, visitorId, refHost, sourceBucket,
+          device, browser, os, bot, isAdmin, nowMs,
+        ],
+      }];
       if (sessionId && visitorId) {
-        await dbRun(
-          `INSERT INTO sessions (
+        stmts.push({
+          sql: `INSERT INTO sessions (
             session_id, visitor_id, started_at, ended_at, landing_path, exit_path, page_count,
             utm_source, utm_medium, utm_campaign, source_bucket, referrer_host, country, device, email
           ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -132,10 +142,13 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
             exit_path = excluded.exit_path,
             page_count = sessions.page_count + 1,
             email = COALESCE(sessions.email, excluded.email)`,
-          sessionId, visitorId, nowMs, nowMs, path, path,
-          utmSource, utmMedium, utmCampaign, sourceBucket, refHost, country, device, email,
-        );
+          args: [
+            sessionId, visitorId, nowMs, nowMs, path, path,
+            utmSource, utmMedium, utmCampaign, sourceBucket, refHost, country, device, email,
+          ],
+        });
       }
+      await getClient().batch(stmts, 'write');
     } catch { /* never fail */ }
 
     return { ok: true };
@@ -188,7 +201,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
   // Dashboard stats — admin only
   app.get('/api/analytics/stats', async (req, reply) => {
     if (!await requireAdmin(req, reply)) return;
-    const days = parseInt(((req.query as any)?.days ?? '7'), 10);
+    const rawDays = parseInt(String((req.query as any)?.days ?? ''), 10);
+    const days = Number.isFinite(rawDays) ? Math.min(365, Math.max(1, rawDays)) : 7;
     const { excludeAdmins, adminArgs } = buildAdminExclusion(req);
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
     const priorSince = new Date(Date.now() - days * 2 * 86400000).toISOString().slice(0, 10);

@@ -12,7 +12,8 @@
  * manifest, never by a guessed static URL.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { existsSync } from 'fs';
+import { access, readFile, readdir, stat } from 'fs/promises';
 import { resolve, join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -49,46 +50,73 @@ function releasesDir(): string {
   return join(manualRoot(), 'releases');
 }
 
-/** Every valid release version present on disk, oldest → newest. */
-export function listManualVersions(): string[] {
-  const dir = releasesDir();
-  if (!existsSync(dir)) return [];
+async function exists(path: string): Promise<boolean> {
   try {
-    return readdirSync(dir)
-      .filter(isValidManualVersion)
-      .filter(v => existsSync(join(dir, v, 'manifest.json')))
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every valid release version present on disk, oldest → newest. */
+export async function listManualVersions(): Promise<string[]> {
+  const dir = releasesDir();
+  try {
+    const names = (await readdir(dir)).filter(isValidManualVersion);
+    const withManifest = await Promise.all(
+      names.map(async v => ((await exists(join(dir, v, 'manifest.json'))) ? v : null)),
+    );
+    return withManifest
+      .filter((v): v is string => v !== null)
       .sort((a, b) => (a === b ? 0 : latestManualVersion([a, b]) === b ? -1 : 1));
   } catch {
     return [];
   }
 }
 
+// The bundle only changes on deploy, so the latest release is resolved once per
+// process. A miss (no bundle yet) is not memoized, so a later publish is seen.
+let _latestVersion: Promise<string | null> | null = null;
+
+function latestVersion(): Promise<string | null> {
+  if (!_latestVersion) {
+    _latestVersion = listManualVersions().then(vs => {
+      const v = latestManualVersion(vs);
+      if (!v) _latestVersion = null;
+      return v;
+    });
+  }
+  return _latestVersion;
+}
+
 // Manifests are immutable once a release is cut, so cache by version forever.
 const _manifestCache = new Map<string, ManualManifest>();
 
-export function readManifest(version: string): ManualManifest | null {
+export async function readManifest(version: string): Promise<ManualManifest | null> {
   if (!isValidManualVersion(version)) return null;
   const cached = _manifestCache.get(version);
   if (cached) return cached;
 
   const file = join(releasesDir(), version, 'manifest.json');
-  if (!existsSync(file)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as ManualManifest;
+    const parsed = JSON.parse(await readFile(file, 'utf-8')) as ManualManifest;
     // A manifest that disagrees with its own directory name would let a release
     // masquerade as another; trust the directory, which is what the URL names.
     parsed.version = version;
     _manifestCache.set(version, parsed);
     return parsed;
   } catch (err: any) {
-    console.error(`[manual] manifest for ${version} is unreadable:`, err.message);
+    if (err?.code !== 'ENOENT') {
+      console.error(`[manual] manifest for ${version} is unreadable:`, err.message);
+    }
     return null;
   }
 }
 
 /** The release every reader gets today. Null when no bundle has been published yet. */
-export function latestManifest(): ManualManifest | null {
-  const v = latestManualVersion(listManualVersions());
+export async function latestManifest(): Promise<ManualManifest | null> {
+  const v = await latestVersion();
   return v ? readManifest(v) : null;
 }
 
@@ -107,20 +135,41 @@ export function findAsset(m: ManualManifest, id: string): ManualAsset | null {
  * directory. `file` always comes from the manifest (never a user path), but the
  * containment check is cheap and makes a bad manifest non-exploitable.
  */
-export function resolveReleaseFile(version: string, file: string): string | null {
+export async function resolveReleaseFile(version: string, file: string): Promise<string | null> {
   if (!isValidManualVersion(version)) return null;
   const base = join(releasesDir(), version);
   const full = resolve(base, file);
   if (!full.startsWith(resolve(base) + '/')) return null;
-  if (!existsSync(full) || !statSync(full).isFile()) return null;
+  try {
+    if (!(await stat(full)).isFile()) return null;
+  } catch {
+    return null;
+  }
   return full;
 }
 
-export function readChapterHtml(version: string, chapter: ManualChapter): string | null {
-  const full = resolveReleaseFile(version, chapter.file);
+// Release files are immutable, so chapter bodies are kept in memory. Total size
+// is capped; past the cap a file is read straight from disk without caching.
+const FILE_CACHE_MAX_BYTES = 20 * 1024 * 1024;
+const _fileCache = new Map<string, Buffer>();
+let _fileCacheBytes = 0;
+
+async function readCached(full: string): Promise<Buffer> {
+  const hit = _fileCache.get(full);
+  if (hit) return hit;
+  const buf = await readFile(full);
+  if (_fileCacheBytes + buf.length <= FILE_CACHE_MAX_BYTES && !_fileCache.has(full)) {
+    _fileCache.set(full, buf);
+    _fileCacheBytes += buf.length;
+  }
+  return buf;
+}
+
+export async function readChapterHtml(version: string, chapter: ManualChapter): Promise<string | null> {
+  const full = await resolveReleaseFile(version, chapter.file);
   if (!full) return null;
   try {
-    return readFileSync(full, 'utf-8');
+    return (await readCached(full)).toString('utf-8');
   } catch {
     return null;
   }

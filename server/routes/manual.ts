@@ -53,7 +53,7 @@ function ifNoneMatchHits(header: string | string[] | undefined, etag: string): b
 export function registerManualRoutes(app: FastifyInstance): void {
   // ── Public: what's in the manual ───────────────────────────────────────────
   app.get('/api/manual/toc', async (_req, reply) => {
-    const m = latestManifest();
+    const m = await latestManifest();
     if (!m) {
       reply.status(503);
       return NOT_PUBLISHED;
@@ -69,7 +69,7 @@ export function registerManualRoutes(app: FastifyInstance): void {
       return { error: 'Invalid chapter.' };
     }
 
-    const m = latestManifest();
+    const m = await latestManifest();
     if (!m) {
       reply.status(503);
       return NOT_PUBLISHED;
@@ -101,7 +101,7 @@ export function registerManualRoutes(app: FastifyInstance): void {
       }
     }
 
-    const html = readChapterHtml(m.version, chapter);
+    const html = await readChapterHtml(m.version, chapter);
     if (html === null) {
       console.error(`[manual] chapter ${slug} listed in manifest ${m.version} but its file is missing`);
       reply.status(500);
@@ -122,7 +122,7 @@ export function registerManualRoutes(app: FastifyInstance): void {
       return { error: 'Invalid download.' };
     }
 
-    const m = latestManifest();
+    const m = await latestManifest();
     if (!m) {
       reply.status(503);
       return NOT_PUBLISHED;
@@ -134,7 +134,7 @@ export function registerManualRoutes(app: FastifyInstance): void {
       return { error: 'Unknown download.' };
     }
 
-    const full = resolveReleaseFile(m.version, asset.file);
+    const full = await resolveReleaseFile(m.version, asset.file);
     if (!full) {
       console.error(`[manual] asset ${assetId} listed in manifest ${m.version} but its file is missing`);
       reply.status(500);

@@ -45,7 +45,7 @@ vi.mock('../server/services/manual.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../server/services/manual.js')>();
   return {
     ...actual,
-    latestManifest: () => (pinnedVersion ? actual.readManifest(pinnedVersion) : actual.latestManifest()),
+    latestManifest: async () => (pinnedVersion ? actual.readManifest(pinnedVersion) : actual.latestManifest()),
   };
 });
 
@@ -127,19 +127,19 @@ describe('release bundle on disk', () => {
     const { listManualVersions, latestManifest, findChapter, readChapterHtml, resolveReleaseFile } =
       await import('../server/services/manual.js');
 
-    const versions = listManualVersions();
+    const versions = await listManualVersions();
     expect(versions.length).toBeGreaterThan(0);
 
-    const m = latestManifest();
+    const m = await latestManifest();
     expect(m).not.toBeNull();
 
     // Every chapter and asset the manifest advertises must actually exist —
     // a manifest that over-promises hands readers a broken page.
     for (const c of m!.chapters) {
-      expect(readChapterHtml(m!.version, c), `chapter ${c.slug}`).toBeTruthy();
+      expect(await readChapterHtml(m!.version, c), `chapter ${c.slug}`).toBeTruthy();
     }
     for (const a of m!.assets) {
-      expect(resolveReleaseFile(m!.version, a.file), `asset ${a.id}`).toBeTruthy();
+      expect(await resolveReleaseFile(m!.version, a.file), `asset ${a.id}`).toBeTruthy();
     }
 
     expect(findChapter(m!, 'no-such-chapter')).toBeNull();
@@ -151,17 +151,35 @@ describe('release bundle on disk', () => {
     // The manual went free in 2.0.1. The server only ever serves the newest
     // release, so this is the assertion that the live manual is free.
     const { latestManifest } = await import('../server/services/manual.js');
-    const m = latestManifest()!;
+    const m = (await latestManifest())!;
     expect(compareManualVersions(m.version, '2.0.1')).toBeGreaterThanOrEqual(0);
     const nonFree = m.chapters.filter(c => !c.free).map(c => c.slug);
     expect(nonFree, 'chapters still marked non-free').toEqual([]);
   });
 
+  it('reads a chapter from disk once, then serves repeat reads from memory', async () => {
+    vi.resetModules();
+    const fsp = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+    const spy = vi.fn((...args: Parameters<typeof fsp.readFile>) => fsp.readFile(...args));
+    vi.doMock('fs/promises', () => ({ ...fsp, readFile: spy, default: { ...fsp, readFile: spy } }));
+    const svc = await vi.importActual<typeof import('../server/services/manual.js')>('../server/services/manual.js');
+    const m = (await svc.latestManifest())!;
+    const chapter = m.chapters[0];
+    const full = (await svc.resolveReleaseFile(m.version, chapter.file))!;
+    spy.mockClear();
+
+    const first = await svc.readChapterHtml(m.version, chapter);
+    const second = await svc.readChapterHtml(m.version, chapter);
+    expect(second).toBe(first);
+    expect(spy.mock.calls.filter(c => c[0] === full)).toHaveLength(1);
+    vi.doUnmock('fs/promises');
+  });
+
   it('refuses to resolve a file outside the release directory', async () => {
     const { resolveReleaseFile, latestManifest } = await import('../server/services/manual.js');
-    const m = latestManifest()!;
-    expect(resolveReleaseFile(m.version, '../../../../etc/passwd')).toBeNull();
-    expect(resolveReleaseFile('../..', 'manifest.json')).toBeNull();
+    const m = (await latestManifest())!;
+    expect(await resolveReleaseFile(m.version, '../../../../etc/passwd')).toBeNull();
+    expect(await resolveReleaseFile('../..', 'manifest.json')).toBeNull();
   });
 });
 
@@ -235,7 +253,7 @@ describe('free manual (route-level, latest release)', () => {
     registerManualRoutes(app);
     await app.ready();
 
-    const m = latestManifest()!;
+    const m = (await latestManifest())!;
     const html = m.assets.find(a => a.mime.startsWith('text/html'));
     expect(html, 'the latest release ships an offline HTML edition').toBeDefined();
     for (const a of m.assets) {
@@ -243,7 +261,7 @@ describe('free manual (route-level, latest release)', () => {
       expect(res.statusCode, `asset ${a.id}`).toBe(200);
       expect(res.headers['cache-control'], `asset ${a.id}`).toBe('no-cache');
       expect(res.rawPayload.length, `asset ${a.id}`).toBe(a.bytes);
-      expect(res.rawPayload.equals(readFileSync(resolveReleaseFile(m.version, a.file)!)), `asset ${a.id} bytes`).toBe(true);
+      expect(res.rawPayload.equals(readFileSync((await resolveReleaseFile(m.version, a.file))!)), `asset ${a.id} bytes`).toBe(true);
       expect(res.rawPayload.toString('latin1')).not.toContain('csp-nonce');
     }
 
@@ -267,7 +285,7 @@ describe('free manual (route-level, latest release)', () => {
     registerManualRoutes(app);
     await app.ready();
 
-    const m = latestManifest()!;
+    const m = (await latestManifest())!;
     for (const a of m.assets) {
       const url = `/api/manual/download/${a.id}`;
       const first = await app.inject({ method: 'GET', url });

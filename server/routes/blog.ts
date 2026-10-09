@@ -8,12 +8,34 @@ export function registerBlogRoutes(app: FastifyInstance, opts: { videosRoot?: st
   // Videos only change on deploy, so scan once at boot.
   const videoSlugs = scanBlogVideos(opts.videosRoot ?? join(process.cwd(), 'public', 'blog-videos'));
 
+  // Public list memo: key = normalized query string. Entries expire after 60 s or at the
+  // next scheduled post's publish time, whichever is sooner. Admin writes clear it.
+  const LIST_TTL_MS = 60_000;
+  const listMemo = new Map<string, { expiresAt: number; body: unknown }>();
+  let memoGeneration = 0;
+  const invalidateListMemo = (): void => { memoGeneration++; listMemo.clear(); };
+
   // Public: list published posts
-  app.get('/api/blog', async () => {
+  app.get('/api/blog', async (req, reply) => {
+    const key = (req.url.split('?')[1] ?? '').split('&').filter(Boolean).sort().join('&');
+    reply.header('Cache-Control', 'public, max-age=60');
+    const hit = listMemo.get(key);
+    if (hit && hit.expiresAt > Date.now()) return hit.body;
+
+    const generation = memoGeneration;
     const rows = await dbAll<{ slug: string }>(
       "SELECT id, slug, title, excerpt, category, cover_image, published_at FROM blog_posts WHERE published = 1 AND datetime(published_at) <= datetime('now') ORDER BY published_at DESC",
     );
-    return rows.map(row => ({ ...row, video_url: blogVideoUrl(row.slug, videoSlugs) }));
+    const next = await dbGet<{ next_at: string | null }>(
+      "SELECT MIN(published_at) AS next_at FROM blog_posts WHERE published = 1 AND datetime(published_at) > datetime('now')",
+    );
+    const body = rows.map(row => ({ ...row, video_url: blogVideoUrl(row.slug, videoSlugs) }));
+
+    let expiresAt = Date.now() + LIST_TTL_MS;
+    const nextAt = next?.next_at ? Date.parse(next.next_at) : NaN;
+    if (Number.isFinite(nextAt)) expiresAt = Math.min(expiresAt, nextAt);
+    if (generation === memoGeneration) listMemo.set(key, { expiresAt, body });
+    return body;
   });
 
   // Public: get single post by slug
@@ -47,6 +69,7 @@ export function registerBlogRoutes(app: FastifyInstance, opts: { videosRoot?: st
       slug, title, excerpt ?? '', content, category ?? 'build-log', cover_image ?? null,
       published ? 1 : 0, published ? new Date().toISOString() : null,
     );
+    invalidateListMemo();
     return { id: result.lastInsertRowid, slug };
   });
 
@@ -69,6 +92,7 @@ export function registerBlogRoutes(app: FastifyInstance, opts: { videosRoot?: st
       published ? 1 : 0, published ? 1 : 0, new Date().toISOString(),
       new Date().toISOString(), numericId,
     );
+    invalidateListMemo();
     return { ok: true };
   });
 }

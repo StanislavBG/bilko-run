@@ -31,7 +31,7 @@ export interface PortfolioProject {
 }
 
 
-export interface Channel {
+interface Channel {
   id: string;
   label: string;
   handle: string;

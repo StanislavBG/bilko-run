@@ -11,7 +11,15 @@ import {
   useManualToc,
   usePageFonts,
 } from './session-manager-landing/hooks.js';
-import { hashForPage, PAGE_COUNT, pageFromHash, type LayoutModeName } from './session-manager-landing/layout.js';
+import {
+  createWheelTurner,
+  hashForPage,
+  PAGE_COUNT,
+  pageForKey,
+  pageFromHash,
+  swipeDirection,
+  type LayoutModeName,
+} from './session-manager-landing/layout.js';
 import { PartsBin } from './session-manager-landing/PartsBin.js';
 
 /**
@@ -163,10 +171,16 @@ function PriceTag() {
   );
 }
 
-function pageClass(canvas: boolean, active: boolean): string {
+/** The cover carries `--flipped` once page 2 is active; the parts page never rotates. */
+function pageClass(canvas: boolean, active: boolean, cover: boolean): string {
   if (!canvas) return 'smlp-page';
-  return active ? 'smlp-page smlp-page--active' : 'smlp-page smlp-page--inactive';
+  const base = active ? 'smlp-page smlp-page--active' : 'smlp-page smlp-page--inactive';
+  return cover && !active ? `${base} smlp-page--flipped` : base;
 }
+
+/** Longest a flip may hold the turn lock if `transitionend` never fires. */
+const FLIP_FALLBACK_MS = 900;
+const KEY_SKIP_TARGETS = 'input, textarea, select, [contenteditable], [role="tablist"]';
 
 function Chevron({ up }: { up?: boolean }) {
   return (
@@ -194,24 +208,99 @@ export default function SessionManagerPage() {
   const [page, setPage] = useState(() => pageFromHash(window.location.hash));
   const coverRef = useRef<HTMLElement>(null);
   const partsRef = useRef<HTMLElement>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const focusAfterTurn = useRef(false);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const turning = useRef(false);
+  const turnTimer = useRef<number | undefined>(undefined);
+
+  const endTurn = useCallback(() => {
+    turning.current = false;
+    window.clearTimeout(turnTimer.current);
+  }, []);
 
   const turnTo = useCallback((n: number, opts?: { focus?: boolean }) => {
-    if (n < 0 || n >= PAGE_COUNT) return;
+    if (n < 0 || n >= PAGE_COUNT || n === pageRef.current || turning.current) return;
+    turning.current = true;
+    window.clearTimeout(turnTimer.current);
+    turnTimer.current = window.setTimeout(endTurn, FLIP_FALLBACK_MS);
     focusAfterTurn.current = !!opts?.focus;
+    pageRef.current = n;
     setPage(n);
     const { pathname, search } = window.location;
     window.history.replaceState(window.history.state, '', `${pathname}${search}${hashForPage(n)}`);
-  }, []);
+  }, [endTurn]);
+
+  useEffect(() => () => window.clearTimeout(turnTimer.current), []);
 
   useEffect(() => {
     const onHash = () => {
       focusAfterTurn.current = false;
-      setPage(pageFromHash(window.location.hash));
+      const next = pageFromHash(window.location.hash);
+      if (next === pageRef.current) return;
+      // Applied without animation: suppress the transition for two frames.
+      const pages = pagesRef.current;
+      pages?.classList.add('smlp-pages--instant');
+      endTurn();
+      pageRef.current = next;
+      setPage(next);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => pages?.classList.remove('smlp-pages--instant')),
+      );
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
-  }, []);
+  }, [endTurn]);
+
+  // Canvas-only turn inputs: wheel, keys, touch swipes. Reflow keeps normal scroll.
+  useEffect(() => {
+    if (!canvas) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const wheelTurner = createWheelTurner();
+    const onWheel = (e: WheelEvent) => {
+      if (filmOpen) return;
+      e.preventDefault();
+      const dir = wheelTurner(e.deltaY, e.deltaMode, performance.now());
+      if (dir !== 0) turnTo(pageRef.current + dir);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (filmOpen || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest(KEY_SKIP_TARGETS)) return;
+      if (e.key === ' ' && target?.closest('button, a')) return;
+      const next = pageForKey(e.key, e.shiftKey, pageRef.current);
+      if (next === null) return;
+      e.preventDefault();
+      turnTo(next, { focus: true });
+    };
+    let startX = 0;
+    let startY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      startX = t.clientX;
+      startY = t.clientY;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      const t = e.changedTouches[0];
+      if (filmOpen || !t) return;
+      const dir = swipeDirection(t.clientX - startX, t.clientY - startY);
+      if (dir !== 0) turnTo(pageRef.current + dir);
+    };
+    root.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('keydown', onKey);
+    root.addEventListener('touchstart', onTouchStart, { passive: true });
+    root.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      root.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKey);
+      root.removeEventListener('touchstart', onTouchStart);
+      root.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [canvas, filmOpen, turnTo]);
 
   // React 18's types have no `inert` prop, so it is set on the element directly.
   useEffect(() => {
@@ -252,16 +341,20 @@ export default function SessionManagerPage() {
     : undefined;
 
   return (
-    <div className={`smlp-root smlp-root--${layout.mode}`} data-layout={layout.mode}>
+    <div ref={rootRef} className={`smlp-root smlp-root--${layout.mode}`} data-layout={layout.mode}>
       <PageViewTracker />
       <div className="smlp-canvas" style={canvasStyle}>
         <Header compact={!canvas} allFree={allFree} />
         <main className="smlp-main">
-          <div className="smlp-pages">
+          <div ref={pagesRef} className="smlp-pages">
             <section
               ref={coverRef}
-             
-              className={pageClass(canvas, page === 0)}
+              className={pageClass(canvas, page === 0, true)}
+              onTransitionEnd={e => {
+                if (e.target === e.currentTarget && (e.propertyName === 'transform' || e.propertyName === 'opacity')) {
+                  endTurn();
+                }
+              }}
               aria-label={COPY.pages.aria.cover}
               aria-hidden={canvas && page !== 0 ? true : undefined}
             >
@@ -285,7 +378,7 @@ export default function SessionManagerPage() {
             <section
               ref={partsRef}
               id="parts"
-              className={pageClass(canvas, page === 1)}
+              className={pageClass(canvas, page === 1, false)}
               aria-label={COPY.pages.aria.parts}
               aria-hidden={canvas && page !== 1 ? true : undefined}
             >

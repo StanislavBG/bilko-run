@@ -957,8 +957,65 @@
   inset: 0;
 }
 
-.smlp-root--canvas .smlp-page--inactive {
-  visibility: hidden;
+/* Flip (DESIGN_SPEC 2026-10-08): the parts page sits underneath, the cover on top
+   rotates up around its top edge. Both pages stay visible while it runs. */
+.smlp-root--canvas .smlp-pages {
+  perspective: 2400px;
+}
+
+.smlp-root--canvas .smlp-page:not(:last-child) {
+  z-index: 2;
+  background: var(--smlp-paper);
+  transform-origin: 50% 0;
+  transform: rotateX(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.smlp-root--canvas .smlp-page:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: var(--smlp-ink);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.smlp-root--canvas .smlp-page:last-child {
+  z-index: 1;
+}
+
+.smlp-root--canvas .smlp-page--flipped {
+  transform: rotateX(-100deg);
+  pointer-events: none;
+}
+
+.smlp-root--canvas .smlp-page--flipped::after {
+  opacity: 0.35;
+}
+
+/* Deep link / hashchange: apply the page with no animation. */
+.smlp-root--canvas .smlp-pages--instant .smlp-page,
+.smlp-root--canvas .smlp-pages--instant .smlp-page::after {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smlp-root--canvas .smlp-page:not(:last-child) {
+    transition: opacity 150ms linear;
+  }
+
+  .smlp-root--canvas .smlp-page:not(:last-child)::after {
+    display: none;
+  }
+
+  .smlp-root--canvas .smlp-page--flipped {
+    transform: none;
+    opacity: 0;
+  }
 }
 
 .smlp-root--canvas .smlp-hero {

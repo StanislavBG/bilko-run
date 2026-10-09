@@ -3,7 +3,8 @@ import { createHash } from 'crypto';
 import { dbGet, dbRun } from '../../db.js';
 import { askGemini } from '../../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../../services/stripe.js';
-import { verifyClerkToken, ADMIN_EMAILS } from '../../clerk.js';
+import { verifyClerkToken, requireAuth, ADMIN_EMAILS } from '../../clerk.js';
+import { getTokenBalance, grantFreeTokens, hasTokenAccount } from '../../services/tokens.js';
 import { parseJsonResponse } from '../../utils.js';
 
 // ── Tier limits ──────────────────────────────────────
@@ -19,7 +20,8 @@ export const TIER_LIMITS: Record<string, number> = {
   team: PAID_TIER_LIMIT,
 };
 
-export function freeGateMsg(_what: string): string {
+/** `_legacyContext` is ignored; kept optional only so tool routes that still pass a label keep compiling until the wire PRDs adopt `freeTierGate`. */
+export function freeGateMsg(_legacyContext?: string): string {
   return `Free limit reached (${FREE_TIER_LIMIT} per session). Upgrade to Pro for unlimited: ${UPGRADE_URL}`;
 }
 export function paidGateMsg(limit: number): string {
@@ -124,19 +126,47 @@ export interface CostCtx {
   appSlug: string;
 }
 
+const CEILING_TTL_MS = 60_000;
+let ceilingTtlMs = process.env.VITEST ? 0 : CEILING_TTL_MS;
+const ceilingCache = new Map<string, { value: number | null; expires: number }>();
+
+/** Drops memoized spend-ceiling rows (call after editing app_spend_ceilings). */
+export function clearCeilingCache(): void {
+  ceilingCache.clear();
+}
+
+/** Test hook: override the ceiling memo TTL (0 disables it). Defaults to 60 s, and 0 under vitest. */
+export function setCeilingCacheTtl(ms: number): void {
+  ceilingTtlMs = ms;
+  ceilingCache.clear();
+}
+
+async function getCeiling(appSlug: string): Promise<number | null> {
+  const hit = ceilingCache.get(appSlug);
+  if (hit && hit.expires > Date.now()) return hit.value;
+  const row = await dbGet<{ max_calls_per_day: number }>(
+    `SELECT max_calls_per_day FROM app_spend_ceilings WHERE app_slug = ?`, appSlug,
+  );
+  const value = row?.max_calls_per_day ?? null;
+  if (ceilingTtlMs > 0) ceilingCache.set(appSlug, { value, expires: Date.now() + ceilingTtlMs });
+  return value;
+}
+
+/** Counts `calls` (default 1) Gemini calls against the user cap and the app's daily ceiling. */
 export async function enforceCallLimits(
   ctx: CostCtx,
+  calls = 1,
 ): Promise<{ ok: true } | { ok: false; status: number; reason: string }> {
   const today = new Date().toISOString().slice(0, 10);
   const userKey = ctx.userEmail ?? `anon:${ctx.ipHash}`;
   const userCap = ctx.isAdmin ? USER_DAILY_ADMIN : USER_DAILY_DEFAULT;
 
   const userRow = await dbGet<{ calls: number }>(
-    `INSERT INTO usage_daily (user_email, app_slug, date, calls) VALUES (?, ?, ?, 1)
-     ON CONFLICT(user_email, app_slug, date) DO UPDATE SET calls = calls + 1 RETURNING calls`,
-    userKey, ctx.appSlug, today,
+    `INSERT INTO usage_daily (user_email, app_slug, date, calls) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_email, app_slug, date) DO UPDATE SET calls = calls + excluded.calls RETURNING calls`,
+    userKey, ctx.appSlug, today, calls,
   );
-  const userCalls = userRow?.calls ?? 1;
+  const userCalls = userRow?.calls ?? calls;
 
   if (userCalls > userCap) {
     await dbRun(
@@ -147,19 +177,17 @@ export async function enforceCallLimits(
     return { ok: false, status: 429, reason: `Daily limit reached (${userCap} calls/day). Resets at midnight UTC.` };
   }
 
-  const ceiling = await dbGet<{ max_calls_per_day: number }>(
-    `SELECT max_calls_per_day FROM app_spend_ceilings WHERE app_slug = ?`, ctx.appSlug,
-  );
-  if (ceiling) {
+  const ceiling = await getCeiling(ctx.appSlug);
+  if (ceiling !== null) {
     const total = await dbGet<{ total: number }>(
       `SELECT SUM(calls) AS total FROM usage_daily WHERE app_slug = ? AND date = ?`,
       ctx.appSlug, today,
     );
-    if ((total?.total ?? 0) > ceiling.max_calls_per_day) {
+    if ((total?.total ?? 0) > ceiling) {
       await dbRun(
         `INSERT INTO cost_alerts (alert_kind, app_slug, details_json, created_at)
          VALUES ('app_ceiling', ?, ?, ?)`,
-        ctx.appSlug, JSON.stringify({ total: total?.total, ceiling: ceiling.max_calls_per_day, date: today }), Math.floor(Date.now() / 1000),
+        ctx.appSlug, JSON.stringify({ total: total?.total, ceiling, date: today }), Math.floor(Date.now() / 1000),
       );
       return { ok: false, status: 503, reason: `Tool temporarily unavailable — daily call ceiling reached. Try again tomorrow.` };
     }
@@ -172,6 +200,98 @@ export function isAdminEmail(email: string): boolean {
   return ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
+// ── Shared gateway helpers ───────────────────────────────
+
+/**
+ * Free-tier gate: hashIp → verified entitlement email → rate limit (429) → cost limits.
+ * Replies itself and returns null when the request is blocked.
+ * `calls` is how many Gemini calls the request will make (compare routes make 3).
+ */
+export async function freeTierGate(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  opts: { endpoint: string; calls?: number },
+): Promise<{ ipHash: string; email?: string; rate: RateLimitResult } | null> {
+  const ipHash = hashIp(req.ip);
+  const email = await entitlementEmail(req);
+  const rate = await checkRateLimit(ipHash, opts.endpoint, email);
+  if (!rate.allowed) {
+    reply.status(429).send({
+      gated: true,
+      isPro: rate.isPro,
+      remaining: 0,
+      limit: rate.limit,
+      message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg(),
+    });
+    return null;
+  }
+  const costLimit = await enforceCallLimits(
+    { userEmail: email ?? null, ipHash, isAdmin: email ? isAdminEmail(email) : false, appSlug: opts.endpoint },
+    opts.calls ?? 1,
+  );
+  if (!costLimit.ok) {
+    reply.status(costLimit.status).send({ error: costLimit.reason });
+    return null;
+  }
+  return { ipHash, email, rate };
+}
+
+/**
+ * Credit gate: signed in → cost limits → token account → subscription → balance (402).
+ * Replies itself and returns null when the request is blocked.
+ */
+export async function creditGate(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  opts: { endpoint: string; cost: number; calls?: number },
+): Promise<{ email: string; ipHash: string; isPro: boolean } | null> {
+  const email = await requireAuth(req, reply);
+  if (!email) return null;
+  const ipHash = hashIp(req.ip);
+
+  const costLimit = await enforceCallLimits(
+    { userEmail: email, ipHash, isAdmin: isAdminEmail(email), appSlug: opts.endpoint },
+    opts.calls ?? 1,
+  );
+  if (!costLimit.ok) {
+    reply.status(costLimit.status).send({ error: costLimit.reason });
+    return null;
+  }
+
+  if (!(await hasTokenAccount(email))) await grantFreeTokens(email);
+  const sub = await getActiveSubscriptionLive(email);
+  if (!sub.isPro) {
+    const balance = await getTokenBalance(email);
+    if (balance < opts.cost) {
+      reply.status(402).send({ error: 'No credits remaining.', requiresTokens: true, balance });
+      return null;
+    }
+  }
+  return { email, ipHash, isPro: sub.isPro };
+}
+
+/** Calls Gemini and parses the reply as JSON, falling back to the first {...} block in the text. */
+export async function askGeminiJson<T = any>(
+  prompt: string,
+  opts?: { systemPrompt?: string },
+): Promise<T> {
+  const raw = await askGemini(prompt, opts);
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('Could not parse scoring response.');
+    return parseResult(match[0]) as T;
+  }
+}
+
+/** Logs the real error server-side and replies a generic 500 — never leaks err.message. */
+export function toolErrorReply(reply: FastifyReply, err: unknown, label: string): { error: string } {
+  console.error(label, err);
+  reply.status(500);
+  return { error: `${label} failed. Please try again.` };
+}
+
 // Shared "generate" inverse-mode helper used by Headline/Ad/Thread generators.
 export async function handleGenerateEndpoint(
   req: FastifyRequest,
@@ -180,8 +300,6 @@ export async function handleGenerateEndpoint(
     endpoint: string;
     inputField: string;
     inputText: string;
-    /** @deprecated entitlement is resolved from the verified Clerk token, never from the request body. Kept so existing callers still compile. */
-    bodyEmail?: string;
     systemPrompt: string;
     userPrompt: string;
     logTag: string;
@@ -213,7 +331,7 @@ export async function handleGenerateEndpoint(
       remaining: 0,
       limit: rate.limit,
       isPro: rate.isPro,
-      message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg(`${opts.inputField} generation`),
+      message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg(),
     };
   }
 

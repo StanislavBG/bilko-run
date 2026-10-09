@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 import { usePageView, track } from '../hooks/usePageView.js';
-import { ADMIN_EMAILS } from '../constants.js';
+import { useIsAdmin } from '../hooks/useAdmin.js';
 import { SECTIONS } from '../data/portfolio.js';
 import { CommandPalette } from './portfolio/CommandPalette.js';
-
-function useIsAdmin(): boolean {
-  const { user } = useUser();
-  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? '';
-  return ADMIN_EMAILS.includes(email);
-}
 
 function activeSectionPath(pathname: string): string {
   if (pathname === '/' || pathname === '/home') return '/';

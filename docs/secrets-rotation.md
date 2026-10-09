@@ -8,12 +8,14 @@ the team is one person, but the principle stands).
 
 | Name | Vendor | Where used | Failure mode if leaked |
 |---|---|---|---|
-| `STRIPE_API_KEY` | Stripe | server: charge/refund | $$$ exfiltrated |
+| `STRIPE_SECRET_KEY` | Stripe | server: charge/refund (`scripts/cost-monitor.ts` reads it as `STRIPE_API_KEY`) | $$$ exfiltrated |
 | `STRIPE_WEBHOOK_SECRET` | Stripe | server: webhook signature verification | spoofed payment events |
 | `GEMINI_API_KEY` | Google | server: every AI call | API quota burned |
 | `CLERK_SECRET_KEY` | Clerk | server: token verification | impersonation |
-| `CLERK_WEBHOOK_SECRET` | Clerk | server: user-event webhook | spoofed user events |
 | `TURSO_AUTH_TOKEN` | Turso | server: DB connection | full DB read/write |
+| `ANTHROPIC_API_KEY_ACADEMY` | Anthropic | server: Academy proxy (`/api/academy/ask`) | API quota burned |
+| `PROJECT_SNAPSHOT_TOKEN` | Bilko | server: bearer for project snapshot/event endpoints | forged project data |
+| `BILKO_GAME_HMAC_KEY` | Bilko | server: signs game scores | forged leaderboard scores |
 
 ## General principles
 
@@ -27,14 +29,14 @@ the team is one person, but the principle stands).
 
 ## Per-secret procedures
 
-### `STRIPE_API_KEY`
+### `STRIPE_SECRET_KEY`
 
 1. Stripe dashboard → Developers → API keys → Roll secret key. Copy the new key.
-2. Render dashboard → bilko-run service → Environment → set `STRIPE_API_KEY` to the new value. Save.
+2. Render dashboard → bilko-run service → Environment → set `STRIPE_SECRET_KEY` to the new value (and `STRIPE_API_KEY` if you run `scripts/cost-monitor.ts`). Save.
 3. Render redeploys (~2–3 min). Watch logs for `Stripe initialized` line.
 4. Verify: in admin SQL view, run `SELECT created_at FROM token_purchases ORDER BY id DESC LIMIT 1;` then make a $1 test charge. Row appears.
 5. Stripe dashboard → revoke old key.
-6. Run `POST /api/admin/secrets/STRIPE_API_KEY/rotated`.
+6. Run `POST /api/admin/secrets/STRIPE_SECRET_KEY/rotated`.
 
 ### `STRIPE_WEBHOOK_SECRET`
 
@@ -51,11 +53,11 @@ the team is one person, but the principle stands).
 4. Delete old key from Google AI Studio.
 5. Mark rotated.
 
-### `CLERK_SECRET_KEY` and `CLERK_WEBHOOK_SECRET`
+### `CLERK_SECRET_KEY`
 
-1. Clerk dashboard → API keys / Webhooks → Roll.
+1. Clerk dashboard → API keys → Roll.
 2. Render env update + redeploy.
-3. Verify: log in via Clerk widget; user.email appears in `/admin`. Send a test webhook.
+3. Verify: log in via Clerk widget; user.email appears in `/admin`.
 4. Mark rotated.
 
 ### `TURSO_AUTH_TOKEN`
@@ -66,3 +68,24 @@ the team is one person, but the principle stands).
 4. Revoke old token: `turso db tokens revoke <id>`.
 5. Mark rotated.
 
+
+### `ANTHROPIC_API_KEY_ACADEMY`
+
+1. Anthropic console → API keys → create a new key dedicated to Academy.
+2. Render env update + redeploy (production refuses to start without it).
+3. Verify: ask a question in the Academy; get a non-empty answer.
+4. Revoke the old key. Mark rotated.
+
+### `PROJECT_SNAPSHOT_TOKEN`
+
+1. Generate a new random token (`openssl rand -hex 32`).
+2. Update it in Render env and in every sibling that posts snapshots/events; redeploy.
+3. Verify: a sibling snapshot upload returns 2xx, not 401.
+4. Mark rotated.
+
+### `BILKO_GAME_HMAC_KEY`
+
+1. Generate a new random key (`openssl rand -hex 32`).
+2. Render env update + redeploy. Scores signed with the old key stop validating, so in-flight games may be rejected once.
+3. Verify: finish a game and submit a score.
+4. Mark rotated.

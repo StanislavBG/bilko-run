@@ -593,6 +593,26 @@
 
 /* ── Reflow: single column, no shadow, tighter card ────────────────────── */
 
+/* The landing's reflow header rules are keyed to .smlp-root--reflow, which the
+   manual root does not wear: without these the nowrap tagline pushes a phone
+   past its width. */
+.smlm-root--reflow .smlp-header__brand {
+  gap: 8px;
+}
+
+.smlm-root--reflow .smlp-tagline {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 759px) {
+  .smlm-root--reflow .smlp-tagline {
+    display: none;
+  }
+}
+
 .smlm-root--reflow .smlm-title-block {
   padding: 24px 20px 12px;
 }

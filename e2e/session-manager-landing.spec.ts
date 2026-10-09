@@ -297,7 +297,8 @@ test.describe('Session Manager landing — two pages', () => {
       return !top?.closest('[role="tablist"]');
     });
     expect(covered).toBe(true);
-    await expect(page.locator('.smlp-dot')).toHaveCount(2);
+    // Two page buttons plus the manual link.
+    await expect(page.locator('.smlp-dot')).toHaveCount(3);
     await expect(page.locator('.smlp-dot--on')).toHaveAttribute('aria-current', 'page');
   });
 

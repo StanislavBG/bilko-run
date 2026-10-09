@@ -110,6 +110,76 @@ describe('clerk.ts (real functions, @clerk/backend mocked)', () => {
     });
   });
 
+  describe('real onSend hooks (ERR_HTTP_HEADERS_SENT regression)', () => {
+    async function buildHookedApp(
+      guard: (req: any, reply: any) => Promise<string | null>,
+      path: string,
+    ) {
+      const { registerSecurityHeaders } = await import('../server/security-headers.js');
+      const { registerEgressMeter } = await import('../server/egress.js');
+      const { registerStaticCorsTrim } = await import('../server/static-cache.js');
+      const app = Fastify({ logger: false });
+      registerSecurityHeaders(app);
+      registerStaticCorsTrim(app);
+      registerEgressMeter(app);
+      // Bare `return;` after the guard, exactly like the ~45 production call sites.
+      app.get(path, async (req, reply) => {
+        const email = await guard(req, reply);
+        if (!email) return;
+        return { email };
+      });
+      await app.ready();
+      return app;
+    }
+
+    async function fireAndWatch(app: Awaited<ReturnType<typeof buildHookedApp>>, url: string, headers?: Record<string, string>) {
+      const errors: unknown[] = [];
+      const onErr = (e: unknown) => errors.push(e);
+      process.on('unhandledRejection', onErr);
+      process.on('uncaughtException', onErr);
+      try {
+        const results = await Promise.all(
+          Array.from({ length: 50 }, () => app.inject({ method: 'GET', url, headers })),
+        );
+        // Let any late async hook rejections surface.
+        await new Promise((r) => setTimeout(r, 50));
+        return { results, errors };
+      } finally {
+        process.off('unhandledRejection', onErr);
+        process.off('uncaughtException', onErr);
+        await app.close();
+      }
+    }
+
+    it('requireAuth: 50 unauthenticated requests each get exactly one 401, no crash', async () => {
+      const { requireAuth } = await import('../server/clerk.js');
+      const app = await buildHookedApp(requireAuth, '/protected');
+      const { results, errors } = await fireAndWatch(app, '/protected');
+      expect(results).toHaveLength(50);
+      for (const res of results) {
+        expect(res.statusCode).toBe(401);
+        expect(res.json()).toEqual({ error: 'Sign in required.' });
+      }
+      expect(errors.map(String).join('\n')).not.toContain('ERR_HTTP_HEADERS_SENT');
+      expect(errors).toEqual([]);
+    });
+
+    it('requireAdmin: 50 non-admin requests each get exactly one 403, no crash', async () => {
+      verifyTokenMock.mockResolvedValue({ sub: 'user_456' });
+      getUserMock.mockResolvedValue({ primaryEmailAddress: { emailAddress: 'nobody@example.com' } });
+      const { requireAdmin } = await import('../server/clerk.js');
+      const app = await buildHookedApp(requireAdmin, '/admin');
+      const { results, errors } = await fireAndWatch(app, '/admin', { authorization: 'Bearer nonadmintoken' });
+      expect(results).toHaveLength(50);
+      for (const res of results) {
+        expect(res.statusCode).toBe(403);
+        expect(res.json()).toEqual({ error: 'Admin access required.' });
+      }
+      expect(errors.map(String).join('\n')).not.toContain('ERR_HTTP_HEADERS_SENT');
+      expect(errors).toEqual([]);
+    });
+  });
+
   describe('requireAdmin', () => {
     function buildApp(handler: (req: any, reply: any) => Promise<unknown>) {
       const app = Fastify({ logger: false });

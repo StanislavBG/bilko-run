@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { createClient } from '@libsql/client';
 import { dbRun, initDb } from '../server/db.js';
 import {
-  submitScore, getTopScores, checkScoreRateLimit, resetScoreRateLimit,
+  submitScore, getTopScores, buildTopScoresQuery, checkScoreRateLimit, resetScoreRateLimit,
   getGameSave, putGameSave, deleteGameSave,
   unlockAchievement, getUnlocks,
   SAVE_BLOB_MAX,
@@ -26,6 +27,29 @@ beforeEach(async () => {
 // ── Leaderboard ──────────────────────────────────────────────────────────────
 
 describe('Leaderboard', () => {
+  it.each([undefined, 'hard'])('query plan uses idx_scores_game_score (mode=%s)', async (mode) => {
+    const { sql, args } = buildTopScoresQuery(GAME, 'all', mode, 10);
+    // Separate short-lived connection: an EXPLAIN on the shared client leaves the
+    // file locked for the transaction tests that follow.
+    const client = createClient({ url: `file:${process.env.BILKO_SQLITE_PATH}` });
+    let detail: string;
+    try {
+      const plan = await client.execute({ sql: `EXPLAIN QUERY PLAN ${sql}`, args });
+      detail = plan.rows.map((r) => String(r.detail)).join('\n');
+    } finally {
+      client.close();
+    }
+    expect(detail).toContain('idx_scores_game_score');
+    expect(detail).not.toMatch(/SCAN (game_scores|scores)\b/);
+  });
+
+  it('omitted mode returns scores from every mode', async () => {
+    await submitScore(GAME, USER, 10, '', null);
+    await submitScore(GAME, USER, 20, 'hard', null);
+    const rows = await getTopScores(GAME, 'all', undefined, 10);
+    expect(rows.map((r) => r.score)).toEqual([20, 10]);
+  });
+
   it('submits score and appears at top of board', async () => {
     const r = await submitScore(GAME, USER, 100, '', null);
     expect(r.ok).toBe(true);

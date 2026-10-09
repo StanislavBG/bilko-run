@@ -88,23 +88,41 @@ export interface ScoreRow {
   created_at: number;
 }
 
+/**
+ * Build the leaderboard query. idx_scores_game_score is (game, mode, score, created_at),
+ * so the mode predicate is always present: an explicit mode is an equality match, and when
+ * the caller gives none we use `mode >= ''` (true for every row, incl. the '' default mode).
+ * That keeps the plan a SEARCH on the index (game=? AND mode>?) rather than a table scan.
+ * Results are identical to omitting the predicate.
+ */
+export function buildTopScoresQuery(
+  game: string,
+  range: string,
+  mode: string | undefined,
+  limit: number,
+): { sql: string; args: Array<string | number> } {
+  const order = GAME_CONFIGS[game]?.scoreOrder === 'asc' ? 'ASC' : 'DESC';
+  const since =
+    range === 'today' ? Math.floor(Date.now() / 1000) - 86_400 :
+    range === 'week'  ? Math.floor(Date.now() / 1000) - 7 * 86_400 : 0;
+  return {
+    sql: `SELECT user_email, score, mode, created_at
+     FROM game_scores
+     WHERE game = ? AND ${mode ? 'mode = ?' : "mode >= ''"} AND created_at >= ?
+     ORDER BY score ${order} LIMIT ?`,
+    args: mode ? [game, mode, since, limit] : [game, since, limit],
+  };
+}
+
 export async function getTopScores(
   game: string,
   range: string,
   mode: string | undefined,
   limit: number,
 ): Promise<ScoreRow[]> {
-  const config = GAME_CONFIGS[game];
-  const order = config?.scoreOrder === 'asc' ? 'ASC' : 'DESC';
-  const since =
-    range === 'today' ? Math.floor(Date.now() / 1000) - 86_400 :
-    range === 'week'  ? Math.floor(Date.now() / 1000) - 7 * 86_400 : 0;
+  const { sql, args } = buildTopScoresQuery(game, range, mode, limit);
   const rows = await dbAll<{ user_email: string; score: number; mode: string; created_at: number }>(
-    `SELECT user_email, score, mode, created_at
-     FROM game_scores
-     WHERE game = ? AND created_at >= ? ${mode ? 'AND mode = ?' : ''}
-     ORDER BY score ${order} LIMIT ?`,
-    ...(mode ? [game, since, mode, limit] : [game, since, limit]),
+    sql, ...args,
   );
   return rows.map((r) => ({ ...r, display_name: r.user_email.split('@')[0]! }));
 }

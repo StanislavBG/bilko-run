@@ -1,10 +1,39 @@
 import type { FastifyInstance } from 'fastify';
-import { askGemini } from '../../gemini.js';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PRODUCT_KEYS } from '../../../shared/product-catalog.js';
 import {
-  hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg, parseResult,
-  enforceCallLimits, isAdminEmail, entitlementEmail,
+  hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
+  enforceCallLimits, isAdminEmail, entitlementEmail, askGeminiJson, toolErrorReply,
 } from './_shared.js';
+
+/**
+ * AudienceDecoder is a one-time-purchase product: same gate as freeTierGate, but the rate check
+ * honours hasPurchased(PRODUCT_KEYS.AUDIENCEDECODER_REPORT). freeTierGate has no productKey option.
+ */
+async function audienceDecoderGate(req: FastifyRequest, reply: FastifyReply, calls = 1) {
+  const ipHash = hashIp(req.ip);
+  const email = await entitlementEmail(req);
+  const rate = await checkRateLimit(ipHash, 'audience-decoder', email, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
+  if (!rate.allowed) {
+    reply.status(429).send({
+      gated: true,
+      isPro: rate.isPro,
+      remaining: 0,
+      limit: rate.limit,
+      message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg(),
+    });
+    return null;
+  }
+  const costLimit = await enforceCallLimits(
+    { userEmail: email ?? null, ipHash, isAdmin: email ? isAdminEmail(email) : false, appSlug: 'audience-decoder' },
+    calls,
+  );
+  if (!costLimit.ok) {
+    reply.status(costLimit.status).send({ error: costLimit.reason });
+    return null;
+  }
+  return { ipHash, rate };
+}
 
 export function registerAudienceDecoderRoutes(app: FastifyInstance): void {
   app.post('/api/demos/audience-decoder', async (req, reply) => {
@@ -19,22 +48,8 @@ export function registerAudienceDecoderRoutes(app: FastifyInstance): void {
       return { error: 'Content must be under 15000 characters.' };
     }
 
-    // AudienceDecoder is a one-time purchase product — check hasPurchased instead of subscription
-    const _adIpHash = hashIp(req.ip);
-    const _adVerifiedEmail = await entitlementEmail(req);
-    const _adRate = await checkRateLimit(_adIpHash, 'audience-decoder', _adVerifiedEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
-    if (!_adRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: _adRate.isPro,
-        remaining: 0,
-        limit: _adRate.limit,
-        message: _adRate.isPro ? paidGateMsg(_adRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const _adCostLimit = await enforceCallLimits({ userEmail: _adVerifiedEmail ?? null, ipHash: _adIpHash, isAdmin: _adVerifiedEmail ? isAdminEmail(_adVerifiedEmail) : false, appSlug: 'audience-decoder' });
-    if (!_adCostLimit.ok) { reply.status(_adCostLimit.status); return { error: _adCostLimit.reason }; }
+    const gate = await audienceDecoderGate(req, reply);
+    if (!gate) return;
 
     const systemPrompt = `You are an audience intelligence analyst. Analyze the creator's content portfolio and return a JSON object.
 
@@ -86,29 +101,13 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
 }`;
 
     try {
-      const raw = await askGemini(
-        `Analyze this creator's content portfolio:\n\n${content}`,
-        {
-          systemPrompt,
-        },
-      );
+      const parsed = await askGeminiJson(`Analyze this creator's content portfolio:\n\n${content}`, { systemPrompt });
 
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Could not parse analysis response.');
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-
-      const _adNewCount = await incrementUsage(_adIpHash, 'audience-decoder');
-      const _adRemaining = Math.max(0, _adRate.limit - _adNewCount);
-      return { ...parsed, usage: { remaining: _adRemaining, limit: _adRate.limit, isPro: _adRate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('audience_decoder_demo', err);
-      reply.status(500);
-      return { error: `Analysis failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, 'audience-decoder');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { ...parsed, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'audience_decoder_demo');
     }
   });
 
@@ -125,21 +124,8 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Content must be under 15000 characters each.' };
     }
 
-    const adcIpHash = hashIp(req.ip);
-    const adcVerifiedEmail = await entitlementEmail(req);
-    const adcRate = await checkRateLimit(adcIpHash, 'audience-decoder', adcVerifiedEmail, PRODUCT_KEYS.AUDIENCEDECODER_REPORT);
-    if (!adcRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: adcRate.isPro,
-        remaining: 0,
-        limit: adcRate.limit,
-        message: adcRate.isPro ? paidGateMsg(adcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const adcCostLimit = await enforceCallLimits({ userEmail: adcVerifiedEmail ?? null, ipHash: adcIpHash, isAdmin: adcVerifiedEmail ? isAdminEmail(adcVerifiedEmail) : false, appSlug: 'audience-decoder' });
-    if (!adcCostLimit.ok) { reply.status(adcCostLimit.status); return { error: adcCostLimit.reason }; }
+    const gate = await audienceDecoderGate(req, reply, 3);
+    if (!gate) return;
 
     const analyzeSystemPrompt = `You are an audience intelligence analyst. Analyze the creator's content portfolio and return a JSON object.
 
@@ -194,17 +180,10 @@ Respond ONLY with valid JSON — no markdown, no extra text:
 }`;
 
     try {
-      const [rawA, rawB] = await Promise.all([
-        askGemini(`Analyze this creator's content portfolio:\n\n${contentA}`, {
-          systemPrompt: analyzeSystemPrompt,
-        }),
-        askGemini(`Analyze this creator's content portfolio:\n\n${contentB}`, {
-          systemPrompt: analyzeSystemPrompt,
-        }),
+      const [analysisA, analysisB] = await Promise.all([
+        askGeminiJson(`Analyze this creator's content portfolio:\n\n${contentA}`, { systemPrompt: analyzeSystemPrompt }),
+        askGeminiJson(`Analyze this creator's content portfolio:\n\n${contentB}`, { systemPrompt: analyzeSystemPrompt }),
       ]);
-
-      const analysisA = parseResult(rawA);
-      const analysisB = parseResult(rawB);
 
       const comparisonPrompt = `Creator A: "${analysisA.headline}"
 Score: ${analysisA.overall_score}/100 | Grade: ${analysisA.grade}
@@ -220,24 +199,18 @@ Shareability: ${analysisB.engagement_model?.shareability_score ?? '?'}/100
 
 Compare these two creators and identify collaboration potential, audience overlap, and what each should learn from the other.`;
 
-      const rawComp = await askGemini(comparisonPrompt, {
-        systemPrompt: compareSystemPrompt,
-      });
+      const comparison = await askGeminiJson(comparisonPrompt, { systemPrompt: compareSystemPrompt });
 
-      const comparison = parseResult(rawComp);
-
-      const adcNewCount = await incrementUsage(adcIpHash, 'audience-decoder');
-      const adcRemaining = Math.max(0, adcRate.limit - adcNewCount);
+      const newCount = await incrementUsage(gate.ipHash, 'audience-decoder');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
       return {
         analysis_a: analysisA,
         analysis_b: analysisB,
         comparison,
-        usage: { remaining: adcRemaining, limit: adcRate.limit, isPro: adcRate.isPro, gated: false },
+        usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false },
       };
-    } catch (err: any) {
-      console.error('audience_decoder_compare', err);
-      reply.status(500);
-      return { error: `Comparison failed: ${err.message}` };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'audience_decoder_compare');
     }
   });
 }

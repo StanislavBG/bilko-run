@@ -1,9 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { askGemini } from '../../gemini.js';
-import {
-  hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  enforceCallLimits, isAdminEmail, entitlementEmail,
-} from './_shared.js';
+import { incrementUsage, freeTierGate, askGeminiJson, toolErrorReply } from './_shared.js';
 
 export function registerEmailForgeRoutes(app: FastifyInstance): void {
   // ── Email Forge ──────────────────────────────────────
@@ -37,21 +33,8 @@ export function registerEmailForgeRoutes(app: FastifyInstance): void {
       return { error: 'Audience must be under 500 characters.' };
     }
 
-    const _efIpHash = hashIp(req.ip);
-    const _efVerifiedEmail = await entitlementEmail(req);
-    const _efRate = await checkRateLimit(_efIpHash, 'email-forge', _efVerifiedEmail);
-    if (!_efRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: _efRate.isPro,
-        remaining: 0,
-        limit: _efRate.limit,
-        message: _efRate.isPro ? paidGateMsg(_efRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const _efLimit = await enforceCallLimits({ userEmail: _efVerifiedEmail ?? null, ipHash: _efIpHash, isAdmin: _efVerifiedEmail ? isAdminEmail(_efVerifiedEmail) : false, appSlug: 'email-forge' });
-    if (!_efLimit.ok) { reply.status(_efLimit.status); return { error: _efLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: 'email-forge' });
+    if (!gate) return;
 
     const GOAL_LABELS: Record<string, string> = {
       cold_outreach: 'Cold Outreach',
@@ -112,26 +95,13 @@ Tone: ${TONE_LABELS[tone] ?? tone}
 Make each email feel distinct — different frameworks, different emotional levers, different angles. The sequence should feel like a progression, not five versions of the same pitch.`;
 
     try {
-      const raw = await askGemini(userPrompt, {
-        systemPrompt,
-      });
+      const parsed = await askGeminiJson(userPrompt, { systemPrompt });
 
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Could not parse email sequence response.');
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-
-      const _efNewCount = await incrementUsage(_efIpHash, 'email-forge');
-      const _efRemaining = Math.max(0, _efRate.limit - _efNewCount);
-      return { ...parsed, usage: { remaining: _efRemaining, limit: _efRate.limit, isPro: _efRate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('email_forge_demo', err);
-      reply.status(500);
-      return { error: `Generation failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, 'email-forge');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { ...parsed, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'email_forge_demo');
     }
   });
 
@@ -167,21 +137,8 @@ Make each email feel distinct — different frameworks, different emotional leve
       return { error: 'Audience fields must be under 500 characters each.' };
     }
 
-    const efcIpHash = hashIp(req.ip);
-    const efcVerifiedEmail = await entitlementEmail(req);
-    const efcRate = await checkRateLimit(efcIpHash, 'email-forge', efcVerifiedEmail);
-    if (!efcRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: efcRate.isPro,
-        remaining: 0,
-        limit: efcRate.limit,
-        message: efcRate.isPro ? paidGateMsg(efcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const efcLimit = await enforceCallLimits({ userEmail: efcVerifiedEmail ?? null, ipHash: efcIpHash, isAdmin: efcVerifiedEmail ? isAdminEmail(efcVerifiedEmail) : false, appSlug: 'email-forge' });
-    if (!efcLimit.ok) { reply.status(efcLimit.status); return { error: efcLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: 'email-forge', calls: 3 });
+    if (!gate) return;
 
     const systemPrompt = `You are an elite email copywriter who has studied AIDA, PAS, Hormozi, Cialdini, and narrative frameworks deeply. You write high-converting email sequences for real businesses.
 
@@ -224,25 +181,11 @@ Respond ONLY with valid JSON — no markdown, no extra text:
       return `Generate a 5-email sequence for:\n\nProduct: ${product}\nTarget Audience: ${audience}\nGoal: ${GOAL_LABELS[goal] ?? goal}\nTone: ${TONE_LABELS[tone] ?? tone}`;
     }
 
-    function parseSeq(raw: string): any {
-      try { return JSON.parse(raw); } catch {}
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error('Could not parse sequence response.');
-      return JSON.parse(m[0]);
-    }
-
     try {
-      const [rawA, rawB] = await Promise.all([
-        askGemini(buildPrompt(productA, audienceA, goalA, toneA), {
-          systemPrompt,
-        }),
-        askGemini(buildPrompt(productB, audienceB, goalB, toneB), {
-          systemPrompt,
-        }),
+      const [seqA, seqB] = await Promise.all([
+        askGeminiJson(buildPrompt(productA, audienceA, goalA, toneA), { systemPrompt }),
+        askGeminiJson(buildPrompt(productB, audienceB, goalB, toneB), { systemPrompt }),
       ]);
-
-      const seqA = parseSeq(rawA);
-      const seqB = parseSeq(rawB);
 
       const margin = Math.abs(seqA.overall_score - seqB.overall_score);
       const winner: 'A' | 'B' = seqA.overall_score >= seqB.overall_score ? 'A' : 'B';
@@ -275,14 +218,10 @@ Frameworks: ${(seqB.emails ?? []).map((e: any) => `Email ${e.position}: ${e.fram
 
 Overall winner: Sequence ${winner} by ${margin} points.`;
 
-      const rawComp = await askGemini(comparePrompt, {
-        systemPrompt: compareSystemPrompt,
-      });
+      const compParsed = await askGeminiJson(comparePrompt, { systemPrompt: compareSystemPrompt });
 
-      const compParsed = parseSeq(rawComp);
-
-      const efcNewCount = await incrementUsage(efcIpHash, 'email-forge');
-      const efcRemaining = Math.max(0, efcRate.limit - efcNewCount);
+      const newCount = await incrementUsage(gate.ipHash, 'email-forge');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
       return {
         sequence_a: seqA,
         sequence_b: seqB,
@@ -292,12 +231,10 @@ Overall winner: Sequence ${winner} by ${margin} points.`;
           reasoning: compParsed.reasoning ?? '',
           per_email_comparison: compParsed.per_email_comparison ?? [],
         },
-        usage: { remaining: efcRemaining, limit: efcRate.limit, isPro: efcRate.isPro, gated: false },
+        usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false },
       };
-    } catch (err: any) {
-      console.error('email_forge_compare', err);
-      reply.status(500);
-      return { error: `Comparison failed: ${err.message}` };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'email_forge_compare');
     }
   });
 

@@ -193,3 +193,49 @@ describe('Achievements', () => {
     expect(unlocks).toHaveLength(0);
   });
 });
+
+// ── GET /api/games/:slug/scores limit clamping ───────────────────────────────
+
+describe('GET scores limit parsing', () => {
+  async function fetchScores(limit: string): Promise<{ status: number; count: number }> {
+    const { default: Fastify } = await import('fastify');
+    const { registerGameRoutes } = await import('../server/routes/games.js');
+    const app = Fastify();
+    registerGameRoutes(app);
+    const res = await app.inject({ method: 'GET', url: `/api/games/${GAME}/scores?limit=${limit}` });
+    await app.close();
+    return { status: res.statusCode, count: (res.json() as { scores: unknown[] }).scores.length };
+  }
+
+  async function seed(n: number) {
+    for (let i = 0; i < n; i++) {
+      await dbRun(
+        `INSERT INTO game_scores (game, user_email, score, mode, created_at) VALUES (?, ?, ?, '', ?)`,
+        GAME, `u${i}@example.com`, i + 1, Date.now(),
+      );
+    }
+  }
+
+  it('limit=10 returns at most 10 rows', async () => {
+    await seed(15);
+    const r = await fetchScores('10');
+    expect(r.status).toBe(200);
+    expect(r.count).toBeLessThanOrEqual(10);
+    expect(r.count).toBeGreaterThan(0);
+  });
+
+  it.each(['-1', 'abc', '0', '1.5'])('limit=%s falls back to default (<=100 rows)', async (v) => {
+    await seed(120);
+    const r = await fetchScores(v);
+    expect(r.status).toBe(200);
+    expect(r.count).toBeGreaterThan(0);
+    expect(r.count).toBeLessThanOrEqual(100);
+  });
+
+  it('limit=100000 is clamped to 500', async () => {
+    await seed(520);
+    const r = await fetchScores('100000');
+    expect(r.status).toBe(200);
+    expect(r.count).toBeLessThanOrEqual(500);
+  });
+});

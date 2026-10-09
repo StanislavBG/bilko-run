@@ -38,7 +38,8 @@ export function registerGameRoutes(app: FastifyInstance): void {
     if (!GAME_CONFIGS[slug]) return reply.code(400).send({ error: `unknown game: ${slug}` });
 
     const q = req.query as { range?: string; mode?: string; limit?: string };
-    const limit = Math.min(Number(q.limit ?? 100), 500);
+    const parsed = Number(q.limit);
+    const limit = Number.isInteger(parsed) && parsed >= 1 ? Math.min(parsed, 500) : 100;
     const scores = await getTopScores(slug, q.range ?? 'all', q.mode, limit);
     return { scores };
   });

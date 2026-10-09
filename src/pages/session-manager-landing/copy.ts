@@ -273,7 +273,7 @@ export const COPY = {
       "bullets": [
         "One app instead of a dozen terminals and hidden files",
         "Runs on your machine; telemetry is anonymous and opt-out",
-        "Free, and stays free — one command to install"
+        "Free, and stays free — download, double-click, done"
       ],
       "chapter": {
         "slug": "welcome",

@@ -173,7 +173,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   // dedupes PROJECTS by slug so the two merge into a single hub card, with this
   // react-route entry's href winning.
   //
-  // Open-core: the APP is free and stays free (npx claude-code-session-manager@latest).
+  // Open-core: the APP is free and stays free (Mac/Windows/Linux installers on GitHub Releases).
   // The Field Manual that teaches it is free too since its 2.0.1 release (read
   // at /products/session-manager/manual) — nothing on this page is for sale. A
   // card that reads like the app costs money is the failure mode.

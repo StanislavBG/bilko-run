@@ -271,8 +271,11 @@ describe('open-core positioning: the app is free and stays free, and so is the m
 
   it('the manual page repeats that the app itself is free', () => {
     const src = read(MANUAL_PAGE);
-    expect(src).toContain('npx claude-code-session-manager@latest');
     expect(src).toMatch(/The app itself is free/i);
+    // Install guidance points beginners at the product page's installer buttons — no terminal.
+    expect(src).toContain('href="/products/session-manager"');
+    expect(src).toMatch(/no terminal needed/i);
+    expect(src).not.toContain('npx claude-code-session-manager');
   });
 
   it('the manual page sells nothing: no checkout, no price, no lock, no sign-in to read', () => {
@@ -312,6 +315,10 @@ describe('open-core positioning: the app is free and stays free, and so is the m
       const entry = registryEntry(file);
       expect(entry, `${file} still calls the manual paid`).not.toMatch(/paid|\$\d|sold separately/i);
     }
+  });
+
+  it('the hub card offers no terminal install command for the app (installers only)', () => {
+    expect(registryEntry(PACKAGES_REGISTRY)).not.toMatch(/install:\s*'/);
   });
 
   it('the registry card does not advertise retired surfaces', () => {

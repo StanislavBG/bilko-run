@@ -3,7 +3,9 @@ export interface Package {
   name: string;
   npmName: string;
   description: string;
-  install: string;
+  /** Terminal install command shown (with a copy button) on the /projects hub.
+   *  Omit it for apps that ship downloadable installers instead. */
+  install?: string;
   github: string;
   npm: string;
   category: 'CLI' | 'Library' | 'Kit' | 'App';
@@ -53,7 +55,8 @@ export const PACKAGES: readonly Package[] = [
     name: 'Session Manager',
     npmName: 'claude-code-session-manager',
     description: 'Electron desktop cockpit for Claude Code CLI — terminal + 11 config screens. Free, and so is the Field Manual that teaches it.',
-    install: 'npm install -g claude-code-session-manager',
+    // No `install` command: the app ships Mac/Windows/Linux installers (download,
+    // double-click), linked from its product page — the hub card's Open button.
     github: 'https://github.com/StanislavBG/session-manager',
     npm: 'https://www.npmjs.com/package/claude-code-session-manager',
     category: 'App',

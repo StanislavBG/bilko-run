@@ -161,8 +161,8 @@ export default function ManualPage() {
       <main className="mx-auto max-w-3xl px-6 py-20">
         <h1 className="text-3xl font-semibold text-warm-900">{MANUAL_TITLE}</h1>
         <p className="mt-4 text-warm-700">
-          The first release is still being cut. Check back shortly — or grab the app free with{' '}
-          <code className="rounded bg-warm-100 px-1.5 py-0.5">npx claude-code-session-manager@latest</code>.
+          The first release is still being cut. Check back shortly — or get the app free from the{' '}
+          <a href="/products/session-manager" className="text-emerald-700 underline hover:text-emerald-800">Session Manager page</a> — Mac and Windows installers, no terminal needed.
         </p>
       </main>
     );
@@ -209,8 +209,8 @@ export default function ManualPage() {
         )}
 
         <p className="mt-4 text-xs text-warm-700">
-          The app itself is free too —{' '}
-          <code className="rounded bg-warm-100 px-1.5 py-0.5">npx claude-code-session-manager@latest</code>.
+          The app itself is free too — get it from the{' '}
+          <a href="/products/session-manager" className="text-emerald-700 underline hover:text-emerald-800">Session Manager page</a> — Mac and Windows installers, no terminal needed.
           This is the guide that teaches it.
         </p>
       </header>

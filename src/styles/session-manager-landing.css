@@ -1049,6 +1049,14 @@
   cursor: pointer;
 }
 
+.smlp-root--canvas .smlp-turn--manual {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+}
+
 .smlp-root--canvas .smlp-turn--next {
   position: absolute;
   z-index: 1;
@@ -1073,7 +1081,7 @@
 .smlp-root--canvas .smlp-bin {
   flex: 1;
   min-height: 0;
-  margin: 0 40px 28px;
+  margin: 0 40px 64px;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr) 300px;
   gap: 30px;
@@ -1116,6 +1124,11 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+}
+
+.smlp-root .smlp-dot--manual {
+  display: block;
+  text-decoration: none;
 }
 
 .smlp-dot::before {

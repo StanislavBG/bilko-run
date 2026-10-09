@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ManualToc } from '../../../shared/manual-catalog.js';
 import { COPY, fill, type LandingTab } from './copy.js';
+import { bookNavigate, shouldInterceptClick } from '../session-manager-landing/bookTurn.js';
 import { nextTabIndex, partNumber, type LayoutModeName } from './layout.js';
 
 export const TABS: readonly LandingTab[] = COPY.tabs;
@@ -24,13 +26,15 @@ export function chapterHref(slug: string, toc: ManualToc | null): string {
   return fill(COPY.meta.chapterHrefTemplate, { slug });
 }
 
-function ChapterCard({ tab, toc }: { tab: LandingTab; toc: ManualToc | null }) {
+function ChapterCard({ tab, toc, mode }: { tab: LandingTab; toc: ManualToc | null; mode: LayoutModeName }) {
+  const navigate = useNavigate();
   const live: TocChapter | undefined = toc?.chapters.find(c => c.slug === tab.chapter.slug);
   const title = live?.title ?? tab.chapter.title;
   // No TOC (loading or failed) renders the free wording — true under the ship
   // gate. Only an explicit `free: false` from the live manual turns it off.
   const free = live ? live.free : true;
   const aside = COPY.partsBin.aside;
+  const href = chapterHref(tab.chapter.slug, toc);
   const label = fill(free ? COPY.partsBin.aria.chapterLinkTemplate : COPY.partsBin.aria.chapterLinkNotFreeTemplate, { title });
   return (
     <aside className="smlp-chapter" aria-labelledby="smlp-chapter-label">
@@ -49,7 +53,16 @@ function ChapterCard({ tab, toc }: { tab: LandingTab; toc: ManualToc | null }) {
           </li>
         ))}
       </ul>
-      <a className="smlp-chapter__link" href={chapterHref(tab.chapter.slug, toc)} aria-label={label}>
+      <a
+        className="smlp-chapter__link"
+        href={href}
+        aria-label={label}
+        onClick={e => {
+          if (!shouldInterceptClick(e, e.currentTarget.target)) return;
+          e.preventDefault();
+          void bookNavigate(navigate, href, 'forward', { animate: mode === 'canvas' });
+        }}
+      >
         {free ? aside.link : aside.linkNotFree}
       </a>
     </aside>
@@ -62,7 +75,15 @@ function ChapterCard({ tab, toc }: { tab: LandingTab; toc: ManualToc | null }) {
  * A real ARIA tablist (the mock had none): roving tabindex, arrow keys on both
  * axes in both layouts (wrapping), Home/End, automatic activation.
  */
-export function PartsBin({ mode, toc }: { mode: LayoutModeName; toc: ManualToc | null }) {
+export function PartsBin({
+  mode,
+  toc,
+  onTabChange,
+}: {
+  mode: LayoutModeName;
+  toc: ManualToc | null;
+  onTabChange?: (index: number) => void;
+}) {
   const [index, setIndex] = useState(0);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -102,6 +123,7 @@ export function PartsBin({ mode, toc }: { mode: LayoutModeName; toc: ManualToc |
 
   const select = (i: number, focus: boolean) => {
     setIndex(i);
+    onTabChange?.(i);
     const el = tabRefs.current[i];
     if (!el) return;
     const reflow = mode === 'reflow';
@@ -190,7 +212,7 @@ export function PartsBin({ mode, toc }: { mode: LayoutModeName; toc: ManualToc |
         </ul>
       </div>
 
-      <ChapterCard tab={tab} toc={toc} />
+      <ChapterCard tab={tab} toc={toc} mode={mode} />
     </section>
   );
 }

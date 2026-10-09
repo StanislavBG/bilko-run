@@ -296,6 +296,16 @@ export const COPY = {
       "goToTemplate": "Go to page {n} of {count}"
     }
   },
+  "book": {
+    "toManual": "Turn the page — the Field Manual",
+    "toParts": "Back to the parts bin",
+    "backToApp": "← Session Manager",
+    "chapterOfTemplate": "Chapter {n} of {count}",
+    "aria": {
+      "manualDot": "Go to the Field Manual",
+      "manualPage": "The Field Manual"
+    }
+  },
   "film": {
     "nowShowing": "NOW SHOWING",
     "title": "Pip and the Paper Moon",

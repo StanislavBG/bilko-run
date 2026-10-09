@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ManualToc } from '../../shared/manual-catalog.js';
 import '../styles/session-manager-landing.css';
+import { bookNavigate, markBookPageReady, shouldInterceptClick } from './session-manager-landing/bookTurn.js';
 import { AccountChip, PageViewTracker } from './session-manager-landing/AccountChip.js';
 import { COPY, fill } from './session-manager-landing/copy.js';
 import { MacDownload, WindowsDownload, windowsAvailable } from './session-manager-landing/Downloads.js';
@@ -20,7 +22,7 @@ import {
   swipeDirection,
   type LayoutModeName,
 } from './session-manager-landing/layout.js';
-import { PartsBin } from './session-manager-landing/PartsBin.js';
+import { chapterHref, PartsBin, TABS } from './session-manager-landing/PartsBin.js';
 
 /**
  * bilko.run/products/session-manager — the Session Manager landing page (v2).
@@ -46,7 +48,15 @@ import { PartsBin } from './session-manager-landing/PartsBin.js';
 
 const DEFAULT_TITLE_FALLBACK = 'Bilko.run — Tools for Makers Who Ship';
 
-function Header({ compact, allFree }: { compact: boolean; allFree: boolean }) {
+function Header({
+  compact,
+  allFree,
+  onManualClick,
+}: {
+  compact: boolean;
+  allFree: boolean;
+  onManualClick: (e: MouseEvent<HTMLAnchorElement>) => void;
+}) {
   const h = COPY.header;
   return (
     <header className="smlp-header">
@@ -57,7 +67,7 @@ function Header({ compact, allFree }: { compact: boolean; allFree: boolean }) {
         <span className="smlp-tagline">{h.tagline}</span>
       </div>
       <div className="smlp-header__right">
-        <a className="smlp-header__manual" href={COPY.meta.manualHref}>
+        <a className="smlp-header__manual" href={COPY.meta.manualHref} onClick={onManualClick}>
           {allFree ? h.manualLink : h.manualLinkNotFree}
         </a>
         <AccountChip compact={compact} />
@@ -214,6 +224,8 @@ export default function SessionManagerPage() {
   const pageRef = useRef(page);
   pageRef.current = page;
   const turning = useRef(false);
+  const activeTab = useRef(0);
+  const navigate = useNavigate();
   const turnTimer = useRef<number | undefined>(undefined);
 
   const endTurn = useCallback(() => {
@@ -234,6 +246,28 @@ export default function SessionManagerPage() {
   }, [endTurn]);
 
   useEffect(() => () => window.clearTimeout(turnTimer.current), []);
+
+  useEffect(() => {
+    markBookPageReady();
+  }, []);
+
+  const turnToManual = useCallback(() => {
+    if (turning.current) return;
+    turning.current = true;
+    const href = chapterHref(TABS[activeTab.current].chapter.slug, toc);
+    void bookNavigate(navigate, href, 'forward', { animate: canvas }).finally(() => {
+      turning.current = false;
+    });
+  }, [navigate, toc, canvas]);
+
+  const onBookLinkClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>, href: string) => {
+      if (!shouldInterceptClick(e, e.currentTarget.target)) return;
+      e.preventDefault();
+      void bookNavigate(navigate, href, 'forward', { animate: canvas });
+    },
+    [navigate, canvas],
+  );
 
   useEffect(() => {
     const onHash = () => {
@@ -264,7 +298,9 @@ export default function SessionManagerPage() {
       if (filmOpen) return;
       e.preventDefault();
       const dir = wheelTurner(e.deltaY, e.deltaMode, performance.now());
-      if (dir !== 0) turnTo(pageRef.current + dir);
+      if (dir === 0) return;
+      if (dir > 0 && pageRef.current === PAGE_COUNT - 1) turnToManual();
+      else turnTo(pageRef.current + dir);
     };
     const onKey = (e: KeyboardEvent) => {
       if (filmOpen || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -274,6 +310,11 @@ export default function SessionManagerPage() {
       const next = pageForKey(e.key, e.shiftKey, pageRef.current);
       if (next === null) return;
       e.preventDefault();
+      const forward = e.key === 'PageDown' || e.key === 'ArrowDown' || (e.key === ' ' && !e.shiftKey);
+      if (forward && pageRef.current === PAGE_COUNT - 1) {
+        turnToManual();
+        return;
+      }
       turnTo(next, { focus: true });
     };
     let startX = 0;
@@ -288,7 +329,9 @@ export default function SessionManagerPage() {
       const t = e.changedTouches[0];
       if (filmOpen || !t) return;
       const dir = swipeDirection(t.clientX - startX, t.clientY - startY);
-      if (dir !== 0) turnTo(pageRef.current + dir);
+      if (dir === 0) return;
+      if (dir > 0 && pageRef.current === PAGE_COUNT - 1) turnToManual();
+      else turnTo(pageRef.current + dir);
     };
     root.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKey);
@@ -300,7 +343,7 @@ export default function SessionManagerPage() {
       root.removeEventListener('touchstart', onTouchStart);
       root.removeEventListener('touchend', onTouchEnd);
     };
-  }, [canvas, filmOpen, turnTo]);
+  }, [canvas, filmOpen, turnTo, turnToManual]);
 
   // React 18's types have no `inert` prop, so it is set on the element directly.
   useEffect(() => {
@@ -344,7 +387,7 @@ export default function SessionManagerPage() {
     <div ref={rootRef} className={`smlp-root smlp-root--${layout.mode}`} data-layout={layout.mode}>
       <PageViewTracker />
       <div className="smlp-canvas" style={canvasStyle}>
-        <Header compact={!canvas} allFree={allFree} />
+        <Header compact={!canvas} allFree={allFree} onManualClick={e => onBookLinkClick(e, COPY.meta.manualHref)} />
         <main className="smlp-main">
           <div ref={pagesRef} className="smlp-pages">
             <section
@@ -390,7 +433,13 @@ export default function SessionManagerPage() {
                   </button>
                 </div>
               )}
-              <PartsBin mode={layout.mode} toc={toc} />
+              <PartsBin mode={layout.mode} toc={toc} onTabChange={i => { activeTab.current = i; }} />
+              {canvas && (
+                <button type="button" className="smlp-turn smlp-turn--manual" onClick={turnToManual}>
+                  {COPY.book.toManual}
+                  <Chevron />
+                </button>
+              )}
             </section>
           </div>
         </main>
@@ -406,6 +455,12 @@ export default function SessionManagerPage() {
                 onClick={() => turnTo(i, { focus: true })}
               />
             ))}
+            <a
+              className="smlp-dot smlp-dot--manual"
+              href={chapterHref(TABS[activeTab.current].chapter.slug, toc)}
+              aria-label={COPY.book.aria.manualDot}
+              onClick={e => onBookLinkClick(e, chapterHref(TABS[activeTab.current].chapter.slug, toc))}
+            />
           </nav>
         )}
       </div>

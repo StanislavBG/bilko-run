@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { COPY, fill } from './copy.js';
 import { MacDownload, WindowsDownload } from './Downloads.js';
@@ -34,85 +34,48 @@ function fullscreenElement(): Element | null {
   return d.fullscreenElement ?? d.webkitFullscreenElement ?? null;
 }
 
+interface ScrubberProps {
+  videoRef: RefObject<HTMLVideoElement | null>;
+  open: boolean;
+  playing: boolean;
+  duration: number | null;
+  total: number;
+}
+
 /**
- * "Pip and the Paper Moon" — the 57-second film, in a native modal <dialog>
- * portalled onto <body>.
- *
- * Being in the top layer, its ::backdrop covers the whole real viewport
- * (including the canvas letterbox bars the mock's in-canvas backdrop missed),
- * and showModal() makes the page inert and traps focus. In canvas mode the
- * panel is scaled by the same factor as the page; in reflow it fills the
- * viewport unscaled.
- *
- * The custom controls drive a real <video> and only ever reflect its events —
- * no simulated clock.
+ * Time readout, seek track and duration. Owns the per-frame `time` state so the
+ * ~60 fps updates while playing re-render only this small subtree, not the dialog.
  */
-export function FilmDialog({ open, onClose, layout }: Props) {
+function FilmScrubber({ videoRef, open, playing, duration, total }: ScrubberProps) {
   const film = COPY.film;
-  const end = COPY.endCard;
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const playRef = useRef<HTMLButtonElement>(null);
   const dragging = useRef(false);
-
-  const [playing, setPlaying] = useState(false);
-  const [ended, setEnded] = useState(false);
   const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState<number | null>(null);
-  const [rate, setRate] = useState<number>(1);
-  const [muted, setMuted] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [broken, setBroken] = useState(false);
-  // The dialog is always mounted (it is closed, not absent), so the <video>
-  // gets its src and poster only once the film is first opened: a page view
-  // that never clicks "Watch it run" downloads neither the 1920x1080 poster
-  // nor the MP4's first range. Set during render, so the commit that opens the
-  // dialog already carries the src and the open effect's play() still runs
-  // inside the click's user gesture. Once armed it stays armed.
-  const [armed, setArmed] = useState(false);
-  if (open && !armed) setArmed(true);
 
-  const total = duration ?? FALLBACK_DURATION;
-  const canvas = layout.mode === 'canvas';
-
-  // Open / close the native dialog in step with `open`.
+  // A seek drag never outlives a close/open: Escape can close the dialog
+  // while the button is still held on the track, and the pointerup that
+  // would end the drag then never reaches it.
   useEffect(() => {
-    const dialog = dialogRef.current;
-    const video = videoRef.current;
-    if (!dialog) return;
-    // A seek drag never outlives a close/open: Escape can close the dialog
-    // while the button is still held on the track, and the pointerup that
-    // would end the drag then never reaches it.
     dragging.current = false;
-    if (open) {
-      if (!dialog.open) {
-        try {
-          dialog.showModal();
-        } catch {
-          dialog.setAttribute('open', '');
-        }
-      }
-      setEnded(false);
-      if (video) {
-        try {
-          video.currentTime = 0;
-        } catch { /* metadata not loaded yet — it starts at 0 anyway */ }
-        setTime(0);
-        // The click that opened us is the user gesture, so sound is allowed.
-        // Reduced motion never autoplays: open paused on the poster.
-        if (!prefersReducedMotion()) video.play().catch(() => { /* stays paused, big play shows */ });
-      }
-      playRef.current?.focus();
-    } else {
-      video?.pause();
-      if (stageRef.current && fullscreenElement() === stageRef.current) {
-        const d = document as FsDocument;
-        exitFullscreen(d);
-      }
-      if (dialog.open) dialog.close();
-    }
+    if (open) setTime(0);
   }, [open]);
+
+  // Reflect the video's own events; seeks made elsewhere (replay, restart) land here too.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onTimeUpdate = () => {
+      if (!dragging.current) setTime(v.currentTime);
+    };
+    const onEnded = () => setTime(Number.isFinite(v.duration) ? v.duration : total);
+    v.addEventListener('timeupdate', onTimeUpdate);
+    v.addEventListener('seeking', onTimeUpdate);
+    v.addEventListener('ended', onEnded);
+    return () => {
+      v.removeEventListener('timeupdate', onTimeUpdate);
+      v.removeEventListener('seeking', onTimeUpdate);
+      v.removeEventListener('ended', onEnded);
+    };
+  }, [videoRef, total]);
 
   // Smooth knob while playing; `timeupdate` alone only fires ~4x a second.
   useEffect(() => {
@@ -125,36 +88,7 @@ export function FilmDialog({ open, onClose, layout }: Props) {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing]);
-
-  useEffect(() => {
-    const onChange = () => setIsFullscreen(!!stageRef.current && fullscreenElement() === stageRef.current);
-    document.addEventListener('fullscreenchange', onChange);
-    document.addEventListener('webkitfullscreenchange', onChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', onChange);
-      document.removeEventListener('webkitfullscreenchange', onChange);
-    };
-  }, []);
-
-  const togglePlay = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.ended || ended) {
-      v.currentTime = 0;
-      v.play().catch(() => {});
-      return;
-    }
-    if (v.paused) v.play().catch(() => {});
-    else v.pause();
-  }, [ended]);
-
-  const replay = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = 0;
-    v.play().catch(() => {});
-  };
+  }, [playing, videoRef]);
 
   const seekTo = (seconds: number) => {
     const v = videoRef.current;
@@ -185,6 +119,158 @@ export function FilmDialog({ open, onClose, layout }: Props) {
       e.preventDefault();
       seekTo(total);
     }
+  };
+
+  const pct = total > 0 ? Math.max(0, Math.min(100, (time / total) * 100)) : 0;
+
+  return (
+    <>
+      <span className="smlp-film__time" aria-hidden="true">{formatTime(time)}</span>
+      <div
+        role="slider"
+        tabIndex={0}
+        className="smlp-film__track"
+        aria-label={film.aria.seek}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(total)}
+        aria-valuenow={Math.round(time)}
+        aria-valuetext={fill(film.aria.seekValueTemplate, { now: formatTime(time), total: formatTime(total) })}
+        onKeyDown={onTrackKey}
+        onPointerDown={e => {
+          // Primary button / touch / pen only: a right-click opens the
+          // context menu, and its pointerup never reaches the track.
+          if (e.button !== 0) return;
+          dragging.current = true;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch { /* synthetic pointer */ }
+          seekToPointer(e);
+        }}
+        onPointerMove={e => {
+          if (dragging.current) seekToPointer(e);
+        }}
+        onPointerUp={e => {
+          dragging.current = false;
+          try {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          } catch { /* already released */ }
+        }}
+        onPointerCancel={() => { dragging.current = false; }}
+        // Capture can be lost without a pointerup on the track (the
+        // dialog closing mid-drag, the tab hiding); without this the
+        // knob and time readout would freeze while the film plays.
+        onLostPointerCapture={() => { dragging.current = false; }}
+      >
+        <span className="smlp-film__fill" style={{ width: `${pct}%` }} />
+        <span className="smlp-film__knob" style={{ left: `${pct}%` }} />
+      </div>
+      <span className="smlp-film__dur" aria-hidden="true">
+        {duration ? formatTime(duration) : film.durationFallback}
+      </span>
+    </>
+  );
+}
+
+/**
+ * "Pip and the Paper Moon" — the 57-second film, in a native modal <dialog>
+ * portalled onto <body>.
+ *
+ * Being in the top layer, its ::backdrop covers the whole real viewport
+ * (including the canvas letterbox bars the mock's in-canvas backdrop missed),
+ * and showModal() makes the page inert and traps focus. In canvas mode the
+ * panel is scaled by the same factor as the page; in reflow it fills the
+ * viewport unscaled.
+ *
+ * The custom controls drive a real <video> and only ever reflect its events —
+ * no simulated clock.
+ */
+export function FilmDialog({ open, onClose, layout }: Props) {
+  const film = COPY.film;
+  const end = COPY.endCard;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const playRef = useRef<HTMLButtonElement>(null);
+
+  const [playing, setPlaying] = useState(false);
+  const [ended, setEnded] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [rate, setRate] = useState<number>(1);
+  const [muted, setMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [broken, setBroken] = useState(false);
+  // The dialog is always mounted (it is closed, not absent), so the <video>
+  // gets its src and poster only once the film is first opened: a page view
+  // that never clicks "Watch it run" downloads neither the 1920x1080 poster
+  // nor the MP4's first range. Set during render, so the commit that opens the
+  // dialog already carries the src and the open effect's play() still runs
+  // inside the click's user gesture. Once armed it stays armed.
+  const [armed, setArmed] = useState(false);
+  if (open && !armed) setArmed(true);
+
+  const total = duration ?? FALLBACK_DURATION;
+  const canvas = layout.mode === 'canvas';
+
+  // Open / close the native dialog in step with `open`.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const video = videoRef.current;
+    if (!dialog) return;
+    if (open) {
+      if (!dialog.open) {
+        try {
+          dialog.showModal();
+        } catch {
+          dialog.setAttribute('open', '');
+        }
+      }
+      setEnded(false);
+      if (video) {
+        try {
+          video.currentTime = 0;
+        } catch { /* metadata not loaded yet — it starts at 0 anyway */ }
+        // The click that opened us is the user gesture, so sound is allowed.
+        // Reduced motion never autoplays: open paused on the poster.
+        if (!prefersReducedMotion()) video.play().catch(() => { /* stays paused, big play shows */ });
+      }
+      playRef.current?.focus();
+    } else {
+      video?.pause();
+      if (stageRef.current && fullscreenElement() === stageRef.current) {
+        const d = document as FsDocument;
+        exitFullscreen(d);
+      }
+      if (dialog.open) dialog.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!stageRef.current && fullscreenElement() === stageRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.ended || ended) {
+      v.currentTime = 0;
+      v.play().catch(() => {});
+      return;
+    }
+    if (v.paused) v.play().catch(() => {});
+    else v.pause();
+  }, [ended]);
+
+  const replay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = 0;
+    v.play().catch(() => {});
   };
 
   const cycleRate = () => {
@@ -229,7 +315,6 @@ export function FilmDialog({ open, onClose, layout }: Props) {
 
   const rateIndex = Math.max(0, RATES.indexOf(rate as (typeof RATES)[number]));
   const rateLabel = film.speedLabels[rateIndex];
-  const pct = total > 0 ? Math.max(0, Math.min(100, (time / total) * 100)) : 0;
   const showBigPlay = !playing && !ended && !broken;
 
   const panelStyle = canvas ? filmPanelCanvasStyle(layout.scale) : undefined;
@@ -282,10 +367,6 @@ export function FilmDialog({ open, onClose, layout }: Props) {
               onEnded={() => {
                 setPlaying(false);
                 setEnded(true);
-                setTime(videoRef.current?.duration ?? total);
-              }}
-              onTimeUpdate={() => {
-                if (!dragging.current && videoRef.current) setTime(videoRef.current.currentTime);
               }}
               onSeeking={() => {
                 const v = videoRef.current;
@@ -364,48 +445,7 @@ export function FilmDialog({ open, onClose, layout }: Props) {
                   <span className="smlp-film__playtri" aria-hidden="true" />
                 )}
               </button>
-              <span className="smlp-film__time" aria-hidden="true">{formatTime(time)}</span>
-              <div
-                role="slider"
-                tabIndex={0}
-                className="smlp-film__track"
-                aria-label={film.aria.seek}
-                aria-valuemin={0}
-                aria-valuemax={Math.round(total)}
-                aria-valuenow={Math.round(time)}
-                aria-valuetext={fill(film.aria.seekValueTemplate, { now: formatTime(time), total: formatTime(total) })}
-                onKeyDown={onTrackKey}
-                onPointerDown={e => {
-                  // Primary button / touch / pen only: a right-click opens the
-                  // context menu, and its pointerup never reaches the track.
-                  if (e.button !== 0) return;
-                  dragging.current = true;
-                  try {
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                  } catch { /* synthetic pointer */ }
-                  seekToPointer(e);
-                }}
-                onPointerMove={e => {
-                  if (dragging.current) seekToPointer(e);
-                }}
-                onPointerUp={e => {
-                  dragging.current = false;
-                  try {
-                    e.currentTarget.releasePointerCapture(e.pointerId);
-                  } catch { /* already released */ }
-                }}
-                onPointerCancel={() => { dragging.current = false; }}
-                // Capture can be lost without a pointerup on the track (the
-                // dialog closing mid-drag, the tab hiding); without this the
-                // knob and time readout would freeze while the film plays.
-                onLostPointerCapture={() => { dragging.current = false; }}
-              >
-                <span className="smlp-film__fill" style={{ width: `${pct}%` }} />
-                <span className="smlp-film__knob" style={{ left: `${pct}%` }} />
-              </div>
-              <span className="smlp-film__dur" aria-hidden="true">
-                {duration ? formatTime(duration) : film.durationFallback}
-              </span>
+              <FilmScrubber videoRef={videoRef} open={open} playing={playing} duration={duration} total={total} />
             </div>
             <div className="smlp-film__options">
               <button

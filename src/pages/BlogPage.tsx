@@ -12,6 +12,7 @@ interface BlogPost {
   category: string;
   cover_image: string | null;
   published_at: string;
+  video_url?: string | null;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -68,7 +69,17 @@ export function BlogPage() {
                 {post.title}
                 <span className="pf-arrow">→</span>
               </div>
-              <div className="pf-tag">{CATEGORY_LABELS[post.category] ?? post.category}</div>
+              <div className="pf-tag">
+                {CATEGORY_LABELS[post.category] ?? post.category}
+                {post.video_url && (
+                  <span
+                    className="pf-mono"
+                    style={{ marginLeft: 8, padding: '1px 6px', borderRadius: 999, border: '1px solid currentColor', fontSize: 10 }}
+                  >
+                    ▶ Video
+                  </span>
+                )}
+              </div>
               <div className="pf-read">{estimateReadTime(post.excerpt)}</div>
             </div>
           ))}

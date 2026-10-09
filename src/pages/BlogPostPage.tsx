@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { BlogVideoPlayer } from '../components/BlogVideoPlayer.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -11,6 +12,7 @@ interface FullPost {
   content: string;
   category: string;
   published_at: string;
+  video_url?: string | null;
 }
 
 const CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
@@ -129,6 +131,8 @@ export function BlogPostPage() {
         </h1>
         <p className="mt-3 text-warm-500 leading-relaxed">{post.excerpt}</p>
       </header>
+
+      {post.video_url && <BlogVideoPlayer src={post.video_url} title={post.title} />}
 
       {/* Content */}
       <div className="pt-8">

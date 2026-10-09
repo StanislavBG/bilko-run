@@ -95,7 +95,7 @@ test.describe('Session Manager manual — book page 3 (1440x860)', () => {
     await openManual(page);
     await expect(page.locator('.smlp-header')).toBeVisible();
     await expect(page.locator('.pf-topbar')).toHaveCount(0);
-    await expect(page.locator('.smlm-rail')).toBeVisible();
+    await expect(page.locator('.smlm-rail')).toHaveCount(0);
     await expect(page.locator('.smlp-dot')).toHaveCount(3);
     await expect(page.locator('.smlp-dot--on')).toHaveAttribute('aria-current', 'page');
   });
@@ -118,7 +118,7 @@ test.describe('Session Manager manual — book page 3 (1440x860)', () => {
     await page.mouse.wheel(0, 200);
     await expect(page).toHaveURL(new RegExp(`${MANUAL}#${tab.chapter.slug}$`));
     await expect(page.locator('.smlm-card')).toBeVisible();
-    await expect(page.locator('.smlm-rail__row[aria-current="page"]')).toBeVisible();
+    await expect(page.locator(`#${tab.chapter.slug}`)).toBeInViewport();
   });
 
   test('PageDown on page 2 turns to the manual at the selected tab\'s chapter', async ({ page }) => {
@@ -132,6 +132,7 @@ test.describe('Session Manager manual — book page 3 (1440x860)', () => {
     await page.keyboard.press('PageDown');
     await expect(page).toHaveURL(new RegExp(`${MANUAL}#${tab.chapter.slug}$`));
     await expect(page.locator('.smlm-card')).toBeVisible();
+    await expect(page.locator(`#${tab.chapter.slug}`)).toBeInViewport();
   });
 
   test('the chapter card link reaches its chapter', async ({ page }) => {
@@ -142,6 +143,7 @@ test.describe('Session Manager manual — book page 3 (1440x860)', () => {
     await expect(page).toHaveURL(new RegExp(`${MANUAL}#${tab.chapter.slug}$`));
     await expect(page.locator('.smlm-card')).toBeVisible();
     await expect(page.locator('.smlp-header')).toBeVisible();
+    await expect(page.locator(`#${tab.chapter.slug}`)).toBeInViewport();
   });
 
   test('ctrl-click on the chapter card link is not intercepted', async ({ page }) => {
@@ -172,20 +174,35 @@ test.describe('Session Manager manual — book page 3 (1440x860)', () => {
     await expect(page.locator('.smlp-dot--on')).toHaveAttribute('aria-label', /^Go to page 2 of/);
   });
 
-  test('the rail and the next button switch chapters and update the hash', async ({ page }) => {
+  test('every chapter renders in order on one page: no rail, no turn buttons', async ({ page }) => {
     const toc = await openManual(page);
-    const [first, second, third] = toc.toc.chapters as Chapter[];
-    await expect(page.locator('.smlm-rail__row[aria-current="page"] .smlm-rail__label')).toHaveText(first.title);
+    const slugs = (toc.toc.chapters as Chapter[]).map(c => c.slug);
+    await expect(page.locator('.smlm-chapter')).toHaveCount(slugs.length);
+    expect(await page.locator('.smlm-chapter').evaluateAll(els => els.map(e => e.id))).toEqual(slugs);
+    await expect(page.locator('.smlm-rail')).toHaveCount(0);
+    await expect(page.locator('.smlm-pager')).toHaveCount(0);
+    await expect(page.locator('.smlm-picker__select')).toHaveCount(0);
+    await expect(page.locator(`#${slugs[slugs.length - 1]} .smlm-prose`)).toContainText(`Body of ${slugs[slugs.length - 1]}`);
+  });
 
-    await page.locator('.smlm-rail__row', { hasText: second.title }).first().click();
-    await expect(page).toHaveURL(new RegExp(`#${second.slug}$`));
-    await expect(page.locator('.smlm-prose')).toContainText(`Body of ${second.slug}`);
-    await expect(page.locator('.smlm-rail__row[aria-current="page"] .smlm-rail__label')).toHaveText(second.title);
+  test('a contents link scrolls its section into view without leaving the page', async ({ page }) => {
+    const toc = await openManual(page);
+    const second = (toc.toc.chapters as Chapter[])[1];
+    await expect(page.locator('.smlm-chapter')).toHaveCount(toc.toc.chapters.length);
+    await page.locator('nav.smlm-toc a', { hasText: second.title }).first().click();
+    await expect(page.locator(`#${second.slug}`)).toBeInViewport();
+    expect(new URL(page.url()).pathname).toBe(MANUAL);
+  });
 
-    await page.locator('.smlm-pager__next').click();
-    await expect(page).toHaveURL(new RegExp(`#${third.slug}$`));
-    await expect(page.locator('.smlm-prose')).toContainText(`Body of ${third.slug}`);
-    await expect(page.locator('.smlm-rail__row[aria-current="page"] .smlm-rail__label')).toHaveText(third.title);
+  test('a /manual#slug deep link shows that section at the top', async ({ page }) => {
+    const toc = await stub(page);
+    const third = (toc.toc.chapters as Chapter[])[2];
+    await page.goto(`${MANUAL}#${third.slug}`);
+    await expect(page.locator(`#${third.slug}`)).toBeInViewport();
+    await expect.poll(async () => {
+      const top = await page.locator(`#${third.slug}`).evaluate(el => el.getBoundingClientRect().top);
+      return top >= 0 && top < 200;
+    }).toBe(true);
   });
 });
 
@@ -197,13 +214,8 @@ test.describe('Session Manager manual — reflow (390x844)', () => {
     await expect(page.locator('.pf-topbar')).toHaveCount(0);
     await expect(page.locator('.smlp-dot')).toHaveCount(0);
     await expect(page.locator('.smlm-rail')).toHaveCount(0);
-    await expect(page.locator('.smlm-picker__select')).toBeVisible();
-    const [railLeft, cardLeft] = await page.evaluate(() => {
-      const spread = document.querySelector('.smlm-spread')!;
-      const kids = [...spread.children].map(el => el.getBoundingClientRect().left);
-      return [kids[0], kids[kids.length - 1]];
-    });
-    expect(Math.abs(railLeft - cardLeft)).toBeLessThan(2);
+    await expect(page.locator('.smlm-picker__select')).toHaveCount(0);
+    await expect(page.locator('nav.smlm-toc')).toBeVisible();
     await noHorizontalScroll(page);
   });
 });

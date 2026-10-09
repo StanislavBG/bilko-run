@@ -11,7 +11,7 @@
   min-height: 100dvh;
 }
 
-/* Pinned: the rail (top: 70px) and card (scroll-margin-top) offsets assume it. */
+/* Pinned: the chapter scroll-margin-top offset assumes it. */
 .smlm-root .smlp-header {
   position: sticky;
   top: 0;
@@ -127,27 +127,22 @@
   max-width: 1360px;
   margin: 0 auto;
   padding: 0 40px 40px;
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 30px;
-  align-items: start;
 }
 
-/* ── Chapter rail ──────────────────────────────────────────────────────── */
+/* ── Contents ──────────────────────────────────────────────────────────── */
 
-.smlm-root .smlm-rail {
-  position: sticky;
-  top: 70px;
-  max-height: calc(100vh - 90px);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 2px;
+.smlm-root .smlm-toc {
+  margin-top: 22px;
+  columns: 2;
+  column-gap: 40px;
 }
 
-.smlm-root .smlm-rail__part {
-  margin-top: 14px;
+.smlm-root .smlm-toc__group {
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+
+.smlm-root .smlm-toc__part {
   padding: 0 4px;
   font-family: var(--smlp-mono);
   font-size: 11px;
@@ -156,78 +151,35 @@
   color: var(--smlp-rust);
 }
 
-.smlm-root .smlm-rail__part:first-child {
-  margin-top: 0;
-}
-
-.smlm-root .smlm-rail__row {
+.smlm-root .smlm-toc__row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
-  width: 100%;
-  height: 44px;
-  padding: 0 10px;
-  border: 1.5px solid transparent;
-  background: transparent;
+  padding: 3px 4px;
   color: var(--smlp-ink);
   font-family: var(--smlp-serif);
   font-size: 17px;
-  text-align: left;
-  cursor: pointer;
+  text-decoration: none;
 }
 
-.smlm-root .smlm-rail__row:hover {
-  border-color: var(--smlp-ink);
+.smlm-root .smlm-toc__row:hover .smlm-toc__label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.smlm-root .smlm-rail__row[aria-current='page'] {
-  background: var(--smlp-ink);
-  color: var(--smlp-paper);
-  border-color: var(--smlp-ink);
-}
-
-.smlm-root .smlm-rail__num {
+.smlm-root .smlm-toc__num {
   flex: none;
   font-family: var(--smlp-mono);
   font-size: 13px;
   opacity: 0.7;
 }
 
-.smlm-root .smlm-rail__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.smlm-root .smlm-picker {
-  display: block;
-}
-
-.smlm-root .smlm-picker__label {
-  font-family: var(--smlp-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--smlp-rust);
-}
-
-.smlm-root .smlm-picker__select {
-  margin-top: 4px;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 2px solid var(--smlp-ink);
-  background: var(--smlp-card);
-  color: var(--smlp-ink);
-  font-family: var(--smlp-serif);
-  font-size: 17px;
-}
-
 /* ── Page card ─────────────────────────────────────────────────────────── */
 
 .smlm-root .smlm-card {
   position: relative;
+  max-width: 960px;
+  margin: 0 auto;
   min-height: 320px;
   padding: 48px 56px;
   background: var(--smlp-card);
@@ -248,8 +200,8 @@
 
 .smlm-root .smlm-card__ghost {
   position: absolute;
-  top: 8px;
-  right: 28px;
+  top: 0;
+  right: 0;
   font-family: var(--smlp-serif);
   font-size: 200px;
   line-height: 1;
@@ -291,30 +243,38 @@
   color: var(--smlp-body);
 }
 
-.smlm-root .smlm-focus:focus {
-  outline: none;
-}
-
-.smlm-root .smlm-pager {
+/* One long page: chapters are stacked, a rule between them. */
+.smlm-root .smlm-chapter {
   position: relative;
-  margin-top: 48px;
-  padding-top: 20px;
+  scroll-margin-top: 72px;
+  margin-top: 64px;
+  padding-top: 64px;
   border-top: 1.5px solid var(--smlp-rule);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
 }
 
-.smlm-root .smlm-pager .smlp-turn {
-  flex-direction: row;
-  text-align: left;
-  max-width: 100%;
+.smlm-root .smlm-card > div:first-of-type > .smlm-chapter:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
-.smlm-root .smlm-pager__next {
-  margin-left: auto;
-  text-align: right;
+.smlm-root .smlm-part {
+  margin-top: 64px;
+  font-family: var(--smlp-mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--smlp-rust);
+}
+
+.smlm-root .smlm-card > div:first-of-type > .smlm-part {
+  margin-top: 0;
+}
+
+.smlm-root .smlm-part + .smlm-chapter {
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 /* ── Prose ─────────────────────────────────────────────────────────────── */
@@ -629,9 +589,11 @@
 }
 
 .smlm-root--reflow .smlm-spread {
-  grid-template-columns: minmax(0, 1fr);
   padding: 0 20px 28px;
-  gap: 20px;
+}
+
+.smlm-root--reflow .smlm-toc {
+  columns: 1;
 }
 
 .smlm-root--reflow .smlm-card {
@@ -641,7 +603,7 @@
 
 .smlm-root--reflow .smlm-card__ghost {
   font-size: 120px;
-  right: 12px;
+  right: 0;
 }
 
 .smlm-root--reflow .smlm-prose {
@@ -660,17 +622,4 @@
 .smlm-root--reflow .smlm-prose table {
   display: block;
   overflow-x: auto;
-}
-
-.smlm-root--reflow .smlm-pager .smlp-turn {
-  flex: 1 1 100%;
-}
-
-.smlm-root--reflow .smlm-pager__next {
-  margin-left: 0;
-}
-
-/* Chapter switches scroll the card to the top, under the sticky header. */
-.smlm-root .smlm-card {
-  scroll-margin-top: 72px;
 }

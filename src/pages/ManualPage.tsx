@@ -6,10 +6,10 @@
  * buy flow on this page any more — the Stripe wiring that sold it stays on the
  * server only so a late or in-flight payment still resolves (routes/stripe.ts).
  *
- * The reader is written for a first-time visitor who has never used the app:
- * the chapter is deep-linkable (`/products/session-manager/manual#plans-and-scheduler`),
- * cross-references inside a chapter body switch chapters instead of dead-ending
- * on a `#slug` that isn't in the DOM, and every chapter ends with where to go next.
+ * The manual is page 3 of a 3-page book and is ONE long scrolling page: every
+ * chapter renders in TOC order inside one card, a contents list jumps natively
+ * to `#slug`, and `/products/session-manager/manual#plans-and-scheduler` scrolls
+ * straight to its chapter once they have all rendered.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -25,8 +25,7 @@ import '../styles/session-manager-manual.css';
 import { Header } from './session-manager-landing/Header.js';
 import { COPY, fill } from './session-manager-landing/copy.js';
 import {
-  bookNavigate, markBookPageReady, shouldInterceptClick, turnBook, waitForBookPageReady,
-  type BookDirection,
+  bookNavigate, markBookPageReady, shouldInterceptClick,
 } from './session-manager-landing/bookTurn.js';
 import { useLayoutMode, usePageFonts } from './session-manager-landing/hooks.js';
 import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../shared/manual-catalog.js';
@@ -45,10 +44,22 @@ function isUnavailable(c: ManualChapterBody | ManualChapterUnavailable | null): 
 }
 
 /** The chapter named by `#slug`, if it is one this release actually has. */
-function slugFromHash(toc: ManualToc | null): string | null {
-  if (!toc) return null;
-  const raw = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+function slugFromHash(toc: ManualToc): string | null {
+  let raw = window.location.hash.replace(/^#/, '');
+  try { raw = decodeURIComponent(raw); } catch { /* malformed escape: match as-is */ }
   return toc.chapters.some(c => c.slug === raw) ? raw : null;
+}
+
+type Chapters = ManualToc['chapters'];
+
+/** Consecutive chapters sharing a `part`, in TOC order, with each chapter's 1-based number. */
+function groupByPart(chapters: Chapters) {
+  const groups: Array<{ part: string | undefined; items: Array<{ c: Chapters[number]; n: number }> }> = [];
+  chapters.forEach((c, i) => {
+    if (groups.length === 0 || groups[groups.length - 1].part !== c.part) groups.push({ part: c.part, items: [] });
+    groups[groups.length - 1].items.push({ c, n: i + 1 });
+  });
+  return groups;
 }
 
 const LANDING_HREF = '/products/session-manager';
@@ -92,19 +103,12 @@ export default function ManualPage() {
 
   const [toc, setToc] = useState<ManualToc | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeSlug, setActiveSlug] = useState<string | null>(null);
-  const [chapter, setChapter] = useState<ManualChapterBody | ManualChapterUnavailable | null>(null);
-  const [chapterLoading, setChapterLoading] = useState(false);
-  // The slug whose fetch has settled (chapter, unavailable or error) — the
-  // book-turn ready signal fires once this matches the active chapter.
-  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  // The chapter currently on screen, so a re-fetch of the same one (sign-in
-  // state settling after the first load) doesn't flash "Loading chapter…".
-  const shownSlug = useRef<string | null>(null);
-  // Set by a chapter switch (not the page load — focusing then would jump a
-  // visitor past the header they haven't read yet); consumed once it is shown.
-  const pendingFocus = useRef(false);
+  // undefined = still loading, null = failed to load.
+  const [chapters, setChapters] = useState<Record<string, ManualChapterBody | ManualChapterUnavailable | null>>({});
+  // Every chapter fetch has settled — the deep-link scroll and the book-turn
+  // ready signal wait for this so nothing above the target shifts afterwards.
+  const [allSettled, setAllSettled] = useState(false);
+  const scrolled = useRef(false);
   const canvas = mode === 'canvas';
   const navigate = useNavigate();
 
@@ -120,47 +124,6 @@ export default function ManualPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Open the chapter the URL asks for, else the first one — the page is never
-  // an empty shell, and a shared `/products/session-manager/manual#plans-and-scheduler`
-  // link lands where it says.
-  useEffect(() => {
-    if (activeSlug || !toc?.chapters.length) return;
-    setActiveSlug(slugFromHash(toc) ?? toc.chapters[0].slug);
-  }, [toc, activeSlug]);
-
-  // Back/forward and hand-edited hashes move the reader too.
-  useEffect(() => {
-    const onHashChange = () => {
-      const slug = slugFromHash(toc);
-      if (slug && slug !== activeSlug) {
-        pendingFocus.current = true;
-        setActiveSlug(slug);
-      }
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, [toc, activeSlug]);
-
-  /**
-   * Single entry point for "show me this chapter" — keeps the URL in step and
-   * turns the page forward or back by chapter order (animated on desktop only).
-   */
-  const openChapter = useCallback((slug: string, opts?: { animate?: boolean }) => {
-    if (slug === activeSlug) return Promise.resolve();
-    const chapters = toc?.chapters ?? [];
-    const dir: BookDirection =
-      chapters.findIndex(c => c.slug === slug) < chapters.findIndex(c => c.slug === activeSlug) ? 'back' : 'forward';
-    return turnBook(dir, async () => {
-      const ready = waitForBookPageReady();
-      pendingFocus.current = true;
-      setActiveSlug(slug);
-      if (window.location.hash !== `#${slug}`) {
-        window.history.pushState(null, '', `#${slug}`);
-      }
-      await ready;
-    }, { animate: opts?.animate ?? canvas });
-  }, [toc, activeSlug, canvas]);
-
   /** Leave for the landing: a book turn back on desktop, instant otherwise. */
   const leaveTo = useCallback((e: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>, href: string) => {
     if (!shouldInterceptClick(e, (e.currentTarget as HTMLAnchorElement).target)) return;
@@ -168,62 +131,42 @@ export default function ManualPage() {
     void bookNavigate(navigate, href, 'back', { animate: canvas });
   }, [navigate, canvas]);
 
-  // Whether a token could change what this chapter request returns. Only then
-  // does signing in re-fetch the chapter already on screen.
-  const activeFree = toc?.chapters.find(c => c.slug === activeSlug)?.free ?? true;
-  const sendToken = signedIn && !activeFree;
+  // A token can only change what a non-free chapter returns; free chapters are
+  // always fetched without one, so signing in re-fetches only when one exists.
+  const anyNonFree = toc?.chapters.some(c => !c.free) ?? false;
+  const sendTokenAny = signedIn && anyNonFree;
 
   useEffect(() => {
-    if (!activeSlug) return;
+    if (!toc) return;
     let cancelled = false;
-    const refresh = shownSlug.current === activeSlug;
-    if (!refresh) setChapterLoading(true);
     (async () => {
-      const c = await fetchManualChapter(activeSlug, sendToken ? currentToken : NO_TOKEN);
-      if (cancelled) return;
-      // A failed refresh keeps the chapter that is already showing.
-      if (!(refresh && c === null)) setChapter(c);
-      shownSlug.current = activeSlug;
-      setLoadedSlug(activeSlug);
-      setChapterLoading(false);
+      await Promise.all(toc.chapters.map(async c => {
+        const getter = signedIn && !c.free ? currentToken : NO_TOKEN;
+        let body: ManualChapterBody | ManualChapterUnavailable | null = null;
+        try { body = await fetchManualChapter(c.slug, getter); } catch { body = null; }
+        if (cancelled) return;
+        // A failed refresh keeps the chapter that is already showing.
+        setChapters(prev => (body === null && prev[c.slug] ? prev : { ...prev, [c.slug]: body }));
+      }));
+      if (!cancelled) setAllSettled(true);
     })();
     return () => { cancelled = true; };
-  }, [activeSlug, sendToken, currentToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sendTokenAny stands in for signedIn: free chapters never need a re-fetch
+  }, [toc, sendTokenAny, currentToken]);
 
-  // Once the chapter you chose (or its unavailable / error state) is on screen:
-  // move focus to its heading, land at the card top, and tell an in-flight book
-  // turn the page is ready. Focus and scroll come first so the new page is
-  // snapshotted already in place.
+  // Once every chapter is on screen: scroll the deep-linked section (else stay
+  // at the top) and tell an in-flight book turn the page is ready.
   useEffect(() => {
     if (loading) return;
     if (!toc) { markBookPageReady(); return; }
-    if (!activeSlug || chapterLoading || loadedSlug !== activeSlug) return;
-    if (pendingFocus.current) {
-      pendingFocus.current = false;
-      const card = cardRef.current;
-      const heading = card?.querySelector<HTMLElement>('h1, h2, h3');
-      if (heading) {
-        heading.tabIndex = -1;
-        heading.classList.add('smlm-focus');
-        heading.focus({ preventScroll: true });
-      }
-      card?.scrollIntoView({ block: 'start' });
+    if (!allSettled || scrolled.current) return;
+    scrolled.current = true;
+    const slug = slugFromHash(toc);
+    if (slug) {
+      document.getElementById(slug)?.scrollIntoView({ block: 'start', behavior: 'instant' as ScrollBehavior });
     }
     markBookPageReady();
-  }, [loading, toc, activeSlug, chapterLoading, loadedSlug, chapter]);
-
-  // Chapters cross-reference each other as `<a href="#other-chapter">`, which
-  // is correct in the offline single-file edition but points at nothing here,
-  // where one chapter renders at a time. Resolve those to a chapter switch.
-  const handleArticleClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
-    const anchor = (e.target as HTMLElement).closest('a');
-    const href = anchor?.getAttribute('href');
-    if (!href?.startsWith('#')) return;
-    const slug = href.slice(1);
-    if (!toc?.chapters.some(c => c.slug === slug)) return;
-    e.preventDefault();
-    void openChapter(slug);
-  }, [toc, openChapter]);
+  }, [loading, toc, allSettled]);
 
   const root = (allFree: boolean, children: ReactNode) => (
     <div className={`smlp-root smlm-root ${canvas ? 'smlm-root--canvas' : 'smlm-root--reflow'}`}>
@@ -255,9 +198,7 @@ export default function ManualPage() {
 
   const allFree = toc.chapters.every(c => c.free);
   const count = toc.chapters.length;
-  const activeIndex = toc.chapters.findIndex(c => c.slug === activeSlug);
-  const prev = activeIndex > 0 ? toc.chapters[activeIndex - 1] : null;
-  const next = activeIndex >= 0 && activeIndex < count - 1 ? toc.chapters[activeIndex + 1] : null;
+  const groups = groupByPart(toc.chapters);
   const dotHrefs = [LANDING_HREF, PARTS_HREF];
 
   return root(allFree, (
@@ -295,6 +236,20 @@ export default function ManualPage() {
           <a href="/products/session-manager">Session Manager page</a> — Mac and Windows installers, no terminal needed.
           This is the guide that teaches it.
         </p>
+
+        <nav aria-label="Contents" className="smlm-toc">
+          {groups.map((g, gi) => (
+            <div key={`${g.part ?? ''}-${gi}`} className="smlm-toc__group">
+              {g.part && <div className="smlm-toc__part">{g.part}</div>}
+              {g.items.map(({ c, n }) => (
+                <a key={c.slug} href={`#${c.slug}`} className="smlm-toc__row" title={c.blurb}>
+                  <span className="smlm-toc__num">{String(n).padStart(2, '0')}</span>
+                  <span className="smlm-toc__label">{c.title}</span>
+                </a>
+              ))}
+            </div>
+          ))}
+        </nav>
       </header>
 
       {canvas && (
@@ -307,119 +262,50 @@ export default function ManualPage() {
       )}
 
       <div className="smlm-spread">
-        {!canvas ? (
-          // On a phone the full chapter list is a wall of rows standing between
-          // the visitor and the words they came for — collapse it to one control.
-          <label className="smlm-picker">
-            <span className="smlm-picker__label">Chapter</span>
-            <select
-              value={activeSlug ?? ''}
-              onChange={e => { void openChapter(e.target.value, { animate: false }); }}
-              className="smlm-picker__select"
-            >
-              {(() => {
-                let lastPart: string | undefined;
-                const groups: Array<{ part: string | undefined; items: Array<{ c: (typeof toc.chapters)[number]; i: number }> }> = [];
-                toc.chapters.forEach((c, i) => {
-                  if (c.part !== lastPart || groups.length === 0) {
-                    groups.push({ part: c.part, items: [] });
-                    lastPart = c.part;
-                  }
-                  groups[groups.length - 1].items.push({ c, i });
-                });
-                return groups.map((g, gi) => {
-                  const options = g.items.map(({ c, i }) => (
-                    <option key={c.slug} value={c.slug}>
-                      {String(i + 1).padStart(2, '0')} · {c.title}
-                    </option>
-                  ));
-                  return g.part
-                    ? <optgroup key={`${g.part}-${gi}`} label={g.part}>{options}</optgroup>
-                    : options;
-                });
-              })()}
-            </select>
-          </label>
-        ) : (
-          <nav className="smlm-rail" aria-label="Chapters">
-            {(() => {
-              let lastPart: string | undefined;
-              return toc.chapters.map((c, i) => {
-                const showHeading = c.part && c.part !== lastPart;
-                lastPart = c.part;
-                return (
-                  <div key={c.slug} className="smlm-rail__item">
-                    {showHeading && <div className="smlm-rail__part">{c.part}</div>}
-                    <button
-                      type="button"
-                      className="smlm-rail__row"
-                      onClick={() => { void openChapter(c.slug); }}
-                      title={c.blurb}
-                      aria-current={activeSlug === c.slug ? 'page' : undefined}
-                    >
-                      <span className="smlm-rail__num">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="smlm-rail__label">{c.title}</span>
-                    </button>
-                  </div>
-                );
-              });
-            })()}
-          </nav>
-        )}
-
-        <article ref={cardRef} onClick={handleArticleClick} className="smlm-card">
+        <article className="smlm-card">
           <span className="smlm-card__tape" aria-hidden="true" />
-          {activeIndex >= 0 && (
-            <>
-              <span className="smlm-card__ghost" aria-hidden="true">{String(activeIndex + 1).padStart(2, '0')}</span>
-              <p className="smlm-card__count smlm-card__body">
-                {fill(COPY.book.chapterOfTemplate, { n: activeIndex + 1, count })}
-              </p>
-            </>
-          )}
+          {groups.map((g, gi) => (
+            <div key={`${g.part ?? ''}-${gi}`}>
+              {g.part && <h2 className="smlm-part">{g.part}</h2>}
+              {g.items.map(({ c, n }) => {
+                const body = chapters[c.slug];
+                return (
+                  <section key={c.slug} id={c.slug} className="smlm-chapter">
+                    <span className="smlm-card__ghost" aria-hidden="true">{String(n).padStart(2, '0')}</span>
+                    <p className="smlm-card__count smlm-card__body">
+                      {fill(COPY.book.chapterOfTemplate, { n, count })}
+                    </p>
+                    <div className="smlm-card__body">
+                      {body === undefined && <p className="smlm-status">Loading chapter…</p>}
 
-          <div className="smlm-card__body">
-            {chapterLoading && <p className="smlm-status">Loading chapter…</p>}
+                      {/* Only reachable if a release marks a chapter non-free again: the
+                          server answers 402. Say so plainly — there is nothing to buy. */}
+                      {isUnavailable(body) && (
+                        <div className="smlm-unavailable">
+                          <h2 className="smlm-unavailable__title">{body.title}</h2>
+                          <p className="smlm-unavailable__blurb">{body.blurb}</p>
+                          <p className="smlm-status">This chapter isn't available right now.</p>
+                        </div>
+                      )}
 
-            {/* Only reachable if a release marks a chapter non-free again: the
-                server answers 402. Say so plainly — there is nothing to buy. */}
-            {!chapterLoading && isUnavailable(chapter) && (
-              <div className="smlm-unavailable">
-                <h2 className="smlm-unavailable__title">{chapter.title}</h2>
-                <p className="smlm-unavailable__blurb">{chapter.blurb}</p>
-                <p className="smlm-status">This chapter isn't available right now.</p>
-              </div>
-            )}
+                      {body && !isUnavailable(body) && (
+                        // Chapter HTML is first-party content authored in this repo's own
+                        // release bundle — not user input — so rendering it directly is safe.
+                        <div className="smlm-prose" dangerouslySetInnerHTML={{ __html: body.html }} />
+                      )}
 
-            {!chapterLoading && chapter && !isUnavailable(chapter) && (
-              // Chapter HTML is first-party content authored in this repo's own
-              // release bundle — not user input — so rendering it directly is safe.
-              <div className="smlm-prose" dangerouslySetInnerHTML={{ __html: chapter.html }} />
-            )}
-
-            {!chapterLoading && !chapter && (
-              <p className="smlm-status">This chapter couldn't be loaded. Try another one.</p>
-            )}
-
-            {/* Reading straight through shouldn't mean going back to the rail
-                after every chapter. */}
-            {!chapterLoading && (prev || next) && (
-              <div className="smlm-pager">
-                {prev && (
-                  <button type="button" className="smlp-turn smlm-pager__prev" onClick={() => { void openChapter(prev.slug); }}>
-                    <Chevron up />
-                    {prev.title}
-                  </button>
-                )}
-                {next && (
-                  <button type="button" className="smlp-turn smlm-pager__next" onClick={() => { void openChapter(next.slug); }}>
-                    {next.title}
-                    <Chevron />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+                      {body === null && (
+                        <div className="smlm-unavailable">
+                          <h2 className="smlm-unavailable__title">{c.title}</h2>
+                          <p className="smlm-status">This chapter couldn't be loaded right now.</p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          ))}
         </article>
       </div>
 

@@ -100,6 +100,14 @@ test.describe('Session Manager manual — book page 3 (1440x860)', () => {
     await expect(page.locator('.smlp-dot--on')).toHaveAttribute('aria-current', 'page');
   });
 
+  test('the header stays pinned to the top after scrolling the window', async ({ page }) => {
+    await openManual(page);
+    await page.evaluate(() => window.scrollTo(0, 1500));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    const box = await page.locator('.smlp-header').boundingBox();
+    expect(box!.y).toBe(0);
+  });
+
   test('the wheel on page 2 turns to the manual at the selected tab\'s chapter', async ({ page }) => {
     await openParts(page);
     const tab = COPY.tabs[1];

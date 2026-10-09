@@ -11,6 +11,13 @@
   min-height: 100dvh;
 }
 
+/* Pinned: the rail (top: 70px) and card (scroll-margin-top) offsets assume it. */
+.smlm-root .smlp-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
 .smlm-root .smlm-title-block {
   max-width: 1360px;
   margin: 0 auto;

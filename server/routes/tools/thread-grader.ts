@@ -1,9 +1,51 @@
 import type { FastifyInstance } from 'fastify';
-import { askGemini } from '../../gemini.js';
 import {
-  hashIp, checkRateLimit, incrementUsage, paidGateMsg, freeGateMsg,
-  parseResult, handleGenerateEndpoint, enforceCallLimits, isAdminEmail, entitlementEmail,
+  incrementUsage, handleGenerateEndpoint, freeTierGate, askGeminiJson, toolErrorReply,
 } from './_shared.js';
+
+const COMPARE_SCORING_SYSTEM_PROMPT = `You are a viral content analyst specializing in X/Twitter threads. Score this thread on 4 pillars:
+
+SCORING SYSTEM (total 100 points):
+
+**Pillar 1: Hook Strength (30 points)**
+Does tweet 1 stop the scroll? Curiosity gap, specificity, controversy, bold claim?
+
+**Pillar 2: Tension Chain (25 points)**
+Does each tweet pull you to the next? Does the reader NEED to keep reading?
+
+**Pillar 3: Payoff (25 points)**
+Does the thread deliver real value? Surprise, actionable insight, or earned conclusion?
+
+**Pillar 4: Share Trigger (20 points)**
+Is there a moment worth screenshotting or quoting?
+
+GRADING SCALE:
+90–100: A+ | 85–89: A | 80–84: A- | 75–79: B+ | 70–74: B | 65–69: B- | 60–64: C+ | 55–59: C | 50–54: C- | 40–49: D | 0–39: F
+
+Respond ONLY with valid JSON — no markdown, no extra text:
+{
+  "total_score": <number 0-100>,
+  "grade": <"A+"|"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"C-"|"D"|"F">,
+  "pillar_scores": {
+    "hook": { "score": <0-30>, "max": 30, "feedback": "<1-2 sentences>" },
+    "tension": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
+    "payoff": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
+    "share_trigger": { "score": <0-20>, "max": 20, "feedback": "<1-2 sentences>" }
+  },
+  "verdict": "<One sharp sentence: the single biggest strength or weakness>"
+}`;
+
+const COMPARE_VERDICT_SYSTEM_PROMPT = `You are a viral content analyst specializing in X/Twitter threads. You will be given two scored threads with their pillar breakdowns. Your job is to:
+1. Write a sharp 2-sentence verdict explaining WHY the winner is stronger — reference the specific pillar scores and gaps
+2. Write a suggested hybrid thread hook that steals the best element from each — be specific about what was borrowed
+3. Write a one-sentence strategic analysis: what this result means for the creator's next thread
+
+Respond ONLY with valid JSON — no markdown, no extra text:
+{
+  "verdict": "<2 sentences citing specific pillar score gaps>",
+  "suggested_hybrid": "<rewritten hook tweet combining best elements> | <one sentence: what was taken from A and what was taken from B>",
+  "strategic_analysis": "<one sentence tactical recommendation for the next thread>"
+}`;
 
 export function registerThreadGraderRoutes(app: FastifyInstance): void {
   // ── Thread Generator (inverse mode) ───────────────────────────
@@ -56,21 +98,8 @@ Respond ONLY with valid JSON:
       return { error: 'Thread must be under 5000 characters.' };
     }
 
-    const _tgIpHash = hashIp(req.ip);
-    const _tgVerifiedEmail = await entitlementEmail(req);
-    const _tgRate = await checkRateLimit(_tgIpHash, 'thread-grader', _tgVerifiedEmail);
-    if (!_tgRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: _tgRate.isPro,
-        remaining: 0,
-        limit: _tgRate.limit,
-        message: _tgRate.isPro ? paidGateMsg(_tgRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const _tgLimit = await enforceCallLimits({ userEmail: _tgVerifiedEmail ?? null, ipHash: _tgIpHash, isAdmin: _tgVerifiedEmail ? isAdminEmail(_tgVerifiedEmail) : false, appSlug: 'thread-grader' });
-    if (!_tgLimit.ok) { reply.status(_tgLimit.status); return { error: _tgLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: 'thread-grader' });
+    if (!gate) return reply;
 
     const systemPrompt = `You are a viral content analyst specializing in X/Twitter threads. Score this thread on 4 pillars:
 
@@ -124,29 +153,13 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
 }`;
 
     try {
-      const raw = await askGemini(
-        `Score this X/Twitter thread:\n\n${threadText}`,
-        {
-          systemPrompt,
-        },
-      );
+      const parsed = await askGeminiJson(`Score this X/Twitter thread:\n\n${threadText}`, { systemPrompt });
 
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Could not parse scoring response.');
-        parsed = JSON.parse(jsonMatch[0]);
-      }
-
-      const _tgNewCount = await incrementUsage(_tgIpHash, 'thread-grader');
-      const _tgRemaining = Math.max(0, _tgRate.limit - _tgNewCount);
-      return { ...parsed, usage: { remaining: _tgRemaining, limit: _tgRate.limit, isPro: _tgRate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('thread_grader_demo', err);
-      reply.status(500);
-      return { error: `Scoring failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, 'thread-grader');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { ...parsed, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'thread_grader_demo');
     }
   });
 
@@ -164,79 +177,17 @@ Respond ONLY with valid JSON matching this exact schema — no markdown, no extr
       return { error: 'Threads must be under 5000 characters each.' };
     }
 
-    const tgcIpHash = hashIp(req.ip);
-    const tgcVerifiedEmail = await entitlementEmail(req);
-    const tgcRate = await checkRateLimit(tgcIpHash, 'thread-grader', tgcVerifiedEmail);
-    if (!tgcRate.allowed) {
-      reply.status(429);
-      return {
-        gated: true,
-        isPro: tgcRate.isPro,
-        remaining: 0,
-        limit: tgcRate.limit,
-        message: tgcRate.isPro ? paidGateMsg(tgcRate.limit) : freeGateMsg('Upgrade for more at bilko.run/pricing'),
-      };
-    }
-    const tgcLimit = await enforceCallLimits({ userEmail: tgcVerifiedEmail ?? null, ipHash: tgcIpHash, isAdmin: tgcVerifiedEmail ? isAdminEmail(tgcVerifiedEmail) : false, appSlug: 'thread-grader' });
-    if (!tgcLimit.ok) { reply.status(tgcLimit.status); return { error: tgcLimit.reason }; }
+    const gate = await freeTierGate(req, reply, { endpoint: 'thread-grader', calls: 3 });
+    if (!gate) return reply;
 
-    const scoringSystemPrompt = `You are a viral content analyst specializing in X/Twitter threads. Score this thread on 4 pillars:
 
-SCORING SYSTEM (total 100 points):
-
-**Pillar 1: Hook Strength (30 points)**
-Does tweet 1 stop the scroll? Curiosity gap, specificity, controversy, bold claim?
-
-**Pillar 2: Tension Chain (25 points)**
-Does each tweet pull you to the next? Does the reader NEED to keep reading?
-
-**Pillar 3: Payoff (25 points)**
-Does the thread deliver real value? Surprise, actionable insight, or earned conclusion?
-
-**Pillar 4: Share Trigger (20 points)**
-Is there a moment worth screenshotting or quoting?
-
-GRADING SCALE:
-90–100: A+ | 85–89: A | 80–84: A- | 75–79: B+ | 70–74: B | 65–69: B- | 60–64: C+ | 55–59: C | 50–54: C- | 40–49: D | 0–39: F
-
-Respond ONLY with valid JSON — no markdown, no extra text:
-{
-  "total_score": <number 0-100>,
-  "grade": <"A+"|"A"|"A-"|"B+"|"B"|"B-"|"C+"|"C"|"C-"|"D"|"F">,
-  "pillar_scores": {
-    "hook": { "score": <0-30>, "max": 30, "feedback": "<1-2 sentences>" },
-    "tension": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
-    "payoff": { "score": <0-25>, "max": 25, "feedback": "<1-2 sentences>" },
-    "share_trigger": { "score": <0-20>, "max": 20, "feedback": "<1-2 sentences>" }
-  },
-  "verdict": "<One sharp sentence: the single biggest strength or weakness>"
-}`;
-
-    const compareSystemPrompt = `You are a viral content analyst specializing in X/Twitter threads. You will be given two scored threads with their pillar breakdowns. Your job is to:
-1. Write a sharp 2-sentence verdict explaining WHY the winner is stronger — reference the specific pillar scores and gaps
-2. Write a suggested hybrid thread hook that steals the best element from each — be specific about what was borrowed
-3. Write a one-sentence strategic analysis: what this result means for the creator's next thread
-
-Respond ONLY with valid JSON — no markdown, no extra text:
-{
-  "verdict": "<2 sentences citing specific pillar score gaps>",
-  "suggested_hybrid": "<rewritten hook tweet combining best elements> | <one sentence: what was taken from A and what was taken from B>",
-  "strategic_analysis": "<one sentence tactical recommendation for the next thread>"
-}`;
 
 
     try {
-      const [rawA, rawB] = await Promise.all([
-        askGemini(`Score this X/Twitter thread:\n\n${threadA}`, {
-          systemPrompt: scoringSystemPrompt,
-        }),
-        askGemini(`Score this X/Twitter thread:\n\n${threadB}`, {
-          systemPrompt: scoringSystemPrompt,
-        }),
+      const [scoreA, scoreB] = await Promise.all([
+        askGeminiJson(`Score this X/Twitter thread:\n\n${threadA}`, { systemPrompt: COMPARE_SCORING_SYSTEM_PROMPT }),
+        askGeminiJson(`Score this X/Twitter thread:\n\n${threadB}`, { systemPrompt: COMPARE_SCORING_SYSTEM_PROMPT }),
       ]);
-
-      const scoreA = parseResult(rawA);
-      const scoreB = parseResult(rawB);
 
       const pA = scoreA.pillar_scores;
       const pB = scoreB.pillar_scores;
@@ -266,11 +217,7 @@ Pillar winners: Hook → ${computedPillarWinners.hook} | Tension → ${computedP
 
 Write the verdict, suggested hybrid hook, and strategic analysis.`;
 
-      const rawComp = await askGemini(comparisonPrompt, {
-        systemPrompt: compareSystemPrompt,
-      });
-
-      const compParsed = parseResult(rawComp);
+      const compParsed = await askGeminiJson(comparisonPrompt, { systemPrompt: COMPARE_VERDICT_SYSTEM_PROMPT });
       const comparison = {
         winner: computedWinner,
         margin: computedMargin,
@@ -280,13 +227,11 @@ Write the verdict, suggested hybrid hook, and strategic analysis.`;
         strategic_analysis: compParsed.strategic_analysis ?? '',
       };
 
-      const tgcNewCount = await incrementUsage(tgcIpHash, 'thread-grader');
-      const tgcRemaining = Math.max(0, tgcRate.limit - tgcNewCount);
-      return { threadA: scoreA, threadB: scoreB, comparison, usage: { remaining: tgcRemaining, limit: tgcRate.limit, isPro: tgcRate.isPro, gated: false } };
-    } catch (err: any) {
-      console.error('thread_grader_compare', err);
-      reply.status(500);
-      return { error: `Comparison failed: ${err.message}` };
+      const newCount = await incrementUsage(gate.ipHash, 'thread-grader');
+      const remaining = Math.max(0, gate.rate.limit - newCount);
+      return { threadA: scoreA, threadB: scoreB, comparison, usage: { remaining, limit: gate.rate.limit, isPro: gate.rate.isPro, gated: false } };
+    } catch (err) {
+      return toolErrorReply(reply, err, 'thread_grader_compare');
     }
   });
 

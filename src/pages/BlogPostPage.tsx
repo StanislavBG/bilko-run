@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { BlogVideoPlayer } from '../components/BlogVideoPlayer.js';
+import { parseFigure, splitInlineLinks } from '../lib/blogMarkdown.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -88,6 +89,17 @@ export function BlogPostPage() {
         );
       }
 
+      // Figures (image + optional caption)
+      const figure = parseFigure(trimmed);
+      if (figure) {
+        return (
+          <figure key={i} className="my-6">
+            <img src={figure.src} alt={figure.alt} loading="lazy" className="w-full rounded-xl border border-warm-200/60" />
+            {figure.caption && <figcaption className="mt-2 text-xs text-warm-500 leading-relaxed">{figure.caption}</figcaption>}
+          </figure>
+        );
+      }
+
       // Regular paragraph
       return <p key={i} className="text-warm-600 leading-relaxed text-[15px] my-3">{renderInline(trimmed)}</p>;
     });
@@ -106,7 +118,20 @@ export function BlogPostPage() {
         if (cp.startsWith('`') && cp.endsWith('`')) {
           return <code key={`${i}-${j}`} className="bg-warm-100 text-fire-700 px-1.5 py-0.5 rounded text-sm font-mono">{cp.slice(1, -1)}</code>;
         }
-        return cp;
+        return splitInlineLinks(cp).map((p, k) => {
+          if (p.type === 'text') return p.value;
+          const external = p.href.startsWith('https://');
+          return (
+            <a
+              key={`${i}-${j}-${k}`}
+              href={p.href}
+              {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              className="text-fire-600 underline hover:text-fire-700"
+            >
+              {p.text}
+            </a>
+          );
+        });
       });
     });
   }

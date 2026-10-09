@@ -1,91 +1,37 @@
 # Deployment — bilko.run on Render
 
-bilko.run is hosted on Render, auto-deploying from the **`Content-Grade/Content-Grade` `master`** branch (NOT `origin/main`). Every git push must therefore also be pushed to `content-grade master`. See [CLAUDE.md](../CLAUDE.md) "Rules" for the dual-push contract.
+## Where it deploys from
 
-## Topology
+bilko.run auto-deploys from `origin` = `StanislavBG/bilko-run`, branch `main`. Push to `origin main` and Render picks it up. The deploy source is set in the Render dashboard; there is no `render.yaml` in this repo.
 
-```
-StanislavBG/bilko-run (origin)  ──┐
-                                  ├── git push    Render
-Content-Grade/Content-Grade (cg)  ──┘─── webhook ──▶ build ──▶ deploy
-                                              ▲
-                                              │
-                            (manual Deploy Hook bypasses webhook)
-```
+## What Render runs
 
-## Failure mode: "deploy never fires"
+- Build: `pnpm install && pnpm build` (`build` in package.json is `vite build && tsc -p tsconfig.server.json`)
+- Start: `pnpm start` (`node dist-server/server/index.js`)
 
-Symptom: the latest commit lands in `content-grade/master` but `bilko.run/api/health` reports a multi-day uptime and new static assets return the SPA fallback HTML instead of their own bundle.
+These come from `package.json`. Confirm the exact commands in the Render dashboard (service → Settings → Build & Deploy), since the dashboard is what actually runs.
 
-Root cause every time so far: **Render's GitHub App is disconnected** from `Content-Grade/Content-Grade`. Verify with:
+## Env vars
 
-```bash
-gh api repos/Content-Grade/Content-Grade/hooks | jq 'length'   # expected: ≥1; if 0, webhook is gone
-curl -s https://bilko.run/api/health | jq .uptime              # expected: ≲ build-duration; if days, no deploy
-curl -sI https://bilko.run/projects/<latest-game>/manifest.json | grep -i content-type
-                                                                # expected: application/json; if text/html, stale
-```
+Env vars live in the Render dashboard (service → Environment). They are not committed to the repo. Rotation steps are in [secrets-rotation.md](secrets-rotation.md).
 
-This has recurred four times (Sudoku, MindSwiffer, Academy, wave-2 games). The webhook silently disappears after GitHub OAuth re-auth or org-permission changes. Reconnecting it is the only permanent fix.
+## Checking a deploy
 
-## Triggering a deploy
-
-### Option A — Deploy Hook (autonomous, preferred)
-
-One-time setup:
-
-1. Render dashboard → `bilko-run` service → **Settings** → **Build & Deploy**
-2. Scroll to **Deploy Hook**, copy the URL (`https://api.render.com/deploy/srv-XXX?key=YYY`)
-3. Add to `.env.local` (gitignored) at the repo root:
-   ```
-   RENDER_DEPLOY_HOOK=https://api.render.com/deploy/srv-XXX?key=YYY
-   ```
-
-Then any session — including unattended PRDs — can trigger a deploy with:
+Compare the server uptime with the time you pushed. A fresh deploy resets uptime to seconds or minutes:
 
 ```bash
-./scripts/render-deploy.sh
+curl -s https://bilko.run/api/health | jq .uptime
 ```
 
-### Option B — Dashboard Manual Deploy (fallback)
+If uptime is still days old well after the build time (about 3–5 minutes), the deploy has not landed. Open the Render dashboard, check the service's Events tab, and use **Manual Deploy → Deploy latest commit** if needed.
 
-1. Render dashboard → `bilko-run` service
-2. Top right → **Manual Deploy** → **Deploy latest commit**
-3. Wait ~3–5 min, then verify with the three curl checks above
-
-### Option C — Reconnect GitHub App (permanent fix)
-
-1. Render dashboard → service → **Settings** → **Build & Deploy** → **Auto-Deploy**
-2. **Connect a repository** → re-authorize the Render GitHub App for `Content-Grade/Content-Grade`
-3. Confirm branch is `master`
-4. Test by pushing an empty commit:
-   ```bash
-   git commit --allow-empty -m "test: trigger Render deploy" && git push content-grade main:master
-   ```
-
-## Verifying a deploy landed
+To confirm a newly published static app is live, fetch its page and check that it returns its own title, not the host app's:
 
 ```bash
-# uptime should drop to seconds, not days
-curl -s https://bilko.run/api/health | jq .
-
-# any newly-shipped static-path app should return its own title, not the host SPA
-for slug in fizzpop etch cellar sudoku mindswiffer academy; do
-  echo "=== $slug ==="
-  curl -s "https://bilko.run/projects/$slug/" | grep -oE "<title>[^<]+</title>"
-done
-
-# manifests must be JSON, not text/html
-curl -sI https://bilko.run/projects/cellar/manifest.json | grep -i content-type
+curl -s "https://bilko.run/projects/<slug>/" | grep -oE "<title>[^<]+</title>"
 ```
 
-## Push contract
+## Never do
 
-Both pushes are required:
-
-```bash
-git push origin main
-git push content-grade main:master    # this is the one Render watches
-```
-
-If you forget the `content-grade` push, Render never sees the commit and the deploy never fires regardless of webhook state.
+- Never push Bilko to the `content-grade` remote. It is a separate, unrelated project and its history has diverged.
+- Never add secrets to the repo; set them in the Render dashboard.

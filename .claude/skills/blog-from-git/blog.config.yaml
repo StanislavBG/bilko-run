@@ -138,6 +138,19 @@ rotation:
   tile_registry: src/data/standalone-projects.json   # host repo, the ONLY tile authority
   memory: blog-ledger.md               # append a row per post, same commit as the seed
   override: user-explicit-only         # violating a rule requires the user saying so
+  retired_subjects:                    # NEVER a post's subject in any mode (focused, portfolio,
+                                        # catch-up, spotlight) — not even with rotation.override.
+                                        # Existing posts about them stay published, unedited.
+                                        # scripts/blog-cadence-watchdog.sh parses the `- slug:`
+                                        # lines below and drops them from spotlight candidates.
+    - slug: mcp-host
+      what: >-
+        The Python MCP-Host gateway ("the iStore for MCPs", github.com/StanislavBG/MCP-Host),
+        plus the demo providers it hosted (edgar-rag, social-trader as MCP-Host providers).
+        Decommissioned 2026-10-09 — Replit VM taken down. NOT the same thing as bilko.run's own
+        TypeScript publishing server, which is tiled as `bilko-host` and stays eligible.
+        edgar-rag and social-signals-trader as standalone projects are unaffected.
+      retired: 2026-10-09
 
 tones:                                  # pick exactly ONE per post; record it in the ledger
   changelog:        { words: [250, 450], shape: "1 hero change + 'Also shipped' bullets", payload: required_value_use_payload }

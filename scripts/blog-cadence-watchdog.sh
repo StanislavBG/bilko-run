@@ -198,9 +198,11 @@ project_in_cooldown() {
 # substring-match semantics), ordered never-covered-first (never a Project
 # value in any ledger row), then by oldest last ledger appearance (most
 # overdue first) — never by git activity, per grounding: spotlight mode picks
-# its focus by coverage age, not git.
+# its focus by coverage age, not git. Slugs in the optional 4th arg
+# (comma-separated rotation.retired_subjects) are dropped outright — exact
+# match, not substring, so retiring "mcp-host" can't knock out "bilko-host".
 spotlight_candidates() {
-  local registry_file="$1" ledger_file="$2" cooldown_csv="$3"
+  local registry_file="$1" ledger_file="$2" cooldown_csv="$3" retired_csv="${4:-}"
   local cooldown_lines
   cooldown_lines="$(echo "$cooldown_csv" | tr ',' '\n')"
 
@@ -219,6 +221,9 @@ spotlight_candidates() {
   local slug
   while IFS= read -r slug; do
     [[ -z "$slug" ]] && continue
+    if [[ ",$retired_csv," == *",$slug,"* ]]; then
+      continue
+    fi
     if project_in_cooldown "$slug" "$cooldown_lines"; then
       continue
     fi
@@ -265,9 +270,9 @@ spotlight_candidates() {
 # script's `set -euo pipefail` that non-zero exit kills the whole run (see
 # the 2026-10-03 06:32 PDT production failure this function fixes).
 spotlight_top3() {
-  local registry_file="$1" ledger_file="$2" cooldown_csv="$3"
+  local registry_file="$1" ledger_file="$2" cooldown_csv="$3" retired_csv="${4:-}"
   local all_candidates
-  all_candidates="$(spotlight_candidates "$registry_file" "$ledger_file" "$cooldown_csv")"
+  all_candidates="$(spotlight_candidates "$registry_file" "$ledger_file" "$cooldown_csv" "$retired_csv")"
   local lines=()
   if [[ -n "$all_candidates" ]]; then
     mapfile -t lines <<< "$all_candidates"
@@ -514,7 +519,18 @@ RECENT_PROJECTS_CSV="$(echo "$RECENT_PROJECTS" | paste -sd, -)"
 # publishable new work writes an evergreen feature spotlight instead of
 # skipping. ---
 REGISTRY_FILE="src/data/standalone-projects.json"
-SPOTLIGHT_CANDIDATES_TOP3="$(spotlight_top3 "$REGISTRY_FILE" "$LEDGER_FILE" "$RECENT_PROJECTS_CSV")"
+# blog.config.yaml rotation.retired_subjects: never a subject in any mode.
+# Only `- slug:` list items under that key are read.
+RETIRED_SUBJECTS_AWK='
+  /^[[:space:]]*retired_subjects:/ { flag=1; next }
+  flag && /^[[:space:]]*$/ { next }
+  flag && /^[[:space:]]*#/ { next }
+  flag && /^[[:space:]]*-[[:space:]]*slug:/ { sub(/^[[:space:]]*-[[:space:]]*slug:[[:space:]]*/, ""); print; next }
+  flag && /^[[:space:]]{4,}/ { next }
+  flag { exit }
+'
+RETIRED_SUBJECTS_CSV="$(awk "$RETIRED_SUBJECTS_AWK" "$CONFIG_FILE" | paste -sd, -)"
+SPOTLIGHT_CANDIDATES_TOP3="$(spotlight_top3 "$REGISTRY_FILE" "$LEDGER_FILE" "$RECENT_PROJECTS_CSV" "$RETIRED_SUBJECTS_CSV")"
 
 # Scanning (phases 1-2 of the blog-from-git skill) runs every day, independent
 # of whether a post is due to publish — cadence.scan_every_days in
@@ -641,6 +657,10 @@ AUTHORED_AT="$(TZ=America/Los_Angeles date -Iseconds)"
 # of the last N ledger rows is INELIGIBLE as the next post's subject. Computed
 # from blog-ledger.md's recorded rows (RECENT_PROJECTS/RECENT_PROJECTS_CSV,
 # set earlier), not a heuristic reading of post titles.
+RETIRED_INSTRUCTIONS=""
+if [[ -n "$RETIRED_SUBJECTS_CSV" ]]; then
+  RETIRED_INSTRUCTIONS=" Retired subjects (blog.config.yaml rotation.retired_subjects): ${RETIRED_SUBJECTS_CSV}. These are NEVER a post's subject in any mode, no override; treat commits in their repos as scan noise. Existing posts about them stay as they are — do not edit them."
+fi
 if [[ -z "$RECENT_PROJECTS_CSV" ]]; then
   COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the ledger has no prior rows yet, so no project is on cooldown."
 elif [[ -n "$SPOTLIGHT_CANDIDATES_TOP3" ]]; then
@@ -648,6 +668,7 @@ elif [[ -n "$SPOTLIGHT_CANDIDATES_TOP3" ]]; then
 else
   COOLDOWN_INSTRUCTIONS="Rotation cooldown (blog.config.yaml rotation.project_cooldown_posts=${PROJECT_COOLDOWN_POSTS}): the last ${PROJECT_COOLDOWN_POSTS} ledger row(s) covered these projects, in this exact form: ${RECENT_PROJECTS_CSV}. None of these may be the next post's primary subject (never_repeat_previous_project is the degenerate N=1 case of this same rule). If EVERY candidate project you would otherwise cover is on this cooldown list, do NOT invent a post to satisfy cadence (blog.config.yaml truth rules still bind) — finish by printing exactly one line, \`SEED_RESULT: cooldown_blocked note=\"<which projects were due but on cooldown>\"\`, and nothing else."
 fi
+COOLDOWN_INSTRUCTIONS="${COOLDOWN_INSTRUCTIONS}${RETIRED_INSTRUCTIONS}"
 
 if [[ "$AUTONOMOUS_PUBLISH" != "true" ]]; then
   # --- non-autonomous path: the original human-gated behavior, verbatim ---

@@ -93,7 +93,7 @@ export const TICKER_ITEMS: readonly string[] = [
   'Social Signals Trader — reading Reddit, trading in public',
   'Git Viewer — live dashboard of everything on GitHub',
   'Session Manager — schedules the whole studio',
-  'MCP Host — the plumbing under bilko.run',
+  'Bilko Host MCP — the plumbing under bilko.run',
   'Open to collaborations',
   'Listening to: Aphex Twin',
 ];

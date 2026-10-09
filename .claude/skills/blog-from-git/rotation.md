@@ -43,6 +43,13 @@ nothing at all a reader could go try is INELIGIBLE as a post's sole subject (`bl
 a different eligible project instead, or — with explicit user override — mention it as portfolio
 context inside a wider post, never as a standalone post with an invented "how to use it."
 
+**Fourth rule — retired subjects are never covered.** Anything listed under
+`blog.config.yaml` `rotation.retired_subjects` (today: the Python MCP-Host gateway and the demo
+providers it hosted) is INELIGIBLE as a subject in every mode, including spotlight, and no
+override reaches it. Commits in a retired project's repo are scan noise — skip them. Existing
+posts about it stay published and unedited. Don't confuse retired `mcp-host` with `bilko-host`,
+bilko.run's own TypeScript publishing server, which is live and eligible.
+
 ## Procedure
 
 - Read the ledger's "Current rotation state" block. If it says rotation debt is owed to an on-list

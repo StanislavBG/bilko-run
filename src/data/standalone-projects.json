@@ -467,8 +467,8 @@
     ]
   },
   {
-    "slug": "mcp-host",
-    "name": "MCP Host",
+    "slug": "bilko-host",
+    "name": "Bilko Host MCP",
     "tagline": "MCP server that lets sibling-repo Claude sessions register, publish, and inspect apps on bilko.run.",
     "category": "Dev Tool · MCP",
     "status": "live",

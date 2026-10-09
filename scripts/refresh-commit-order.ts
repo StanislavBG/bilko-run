@@ -42,7 +42,7 @@ interface Source {
 // Slugs whose repo isn't a standalone-projects.json localPath: npm packages and
 // in-repo packages (mcp-host-server/, packages/host-kit/).
 const EXTRA: Record<string, Source> = {
-  'mcp-host':   { path: ROOT, subdir: 'mcp-host-server' },
+  'bilko-host': { path: ROOT, subdir: 'mcp-host-server' },
   'host-kit':   { path: ROOT, subdir: 'packages/host-kit' },
   'bilko-flow': { path: '~/Projects/bilko-flow' },
   'session-manager': { path: '~/Projects/session-manager' },
@@ -84,7 +84,7 @@ const sources = new Map<string, Source>();
 for (const p of standalone) {
   if (p.host?.localPath) sources.set(p.slug, { path: p.host.localPath });
 }
-// 2. Layer the extras (packages + mcp-host). These win on slug collisions.
+// 2. Layer the extras (packages + bilko-host). These win on slug collisions.
 for (const [slug, src] of Object.entries(EXTRA)) sources.set(slug, src);
 
 // 3. Resolve each to an ISO date and a commit count; drop the ones we can't find.

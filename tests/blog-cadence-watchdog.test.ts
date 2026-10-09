@@ -754,6 +754,27 @@ describe('blog-cadence-watchdog.sh', () => {
       expect(result).toEqual(['f', 'e']);
     });
 
+    it('drops retired slugs by exact match, leaving look-alike slugs eligible', () => {
+      const cooldownFn = extractProjectInCooldownFnForSpotlight();
+      const spotlightFn = extractSpotlightCandidatesFn();
+      const registryPath = writeFixtureRegistry(['mcp-host', 'bilko-host', 'z']);
+      const ledgerPath = writeSpotlightFixtureLedger([]);
+      const out = execFileSync(
+        'bash',
+        ['-c', `${cooldownFn}\n${spotlightFn}\nspotlight_candidates "${registryPath}" "${ledgerPath}" "" "mcp-host"`],
+        { encoding: 'utf-8' }
+      );
+      expect(out.trim().split('\n').filter(Boolean)).toEqual(['bilko-host', 'z']);
+    });
+
+    it('parses rotation.retired_subjects slugs from the real blog.config.yaml', () => {
+      const match = script.match(/RETIRED_SUBJECTS_AWK='([\s\S]*?)'\n/);
+      expect(match).not.toBeNull();
+      const configPath = join(__dirname, '../.claude/skills/blog-from-git/blog.config.yaml');
+      const out = execFileSync('awk', [match![1], configPath], { encoding: 'utf-8' });
+      expect(out.trim().split('\n').filter(Boolean)).toEqual(['mcp-host']);
+    });
+
     it('prints nothing when every tiled slug is on cooldown', () => {
       const registryPath = writeFixtureRegistry(['p', 'q']);
       const ledgerPath = writeSpotlightFixtureLedger([]);
@@ -873,7 +894,7 @@ describe('blog-cadence-watchdog.sh', () => {
     });
 
     it('is called at the line 460 call site instead of a bare spotlight_candidates | head | paste pipeline', () => {
-      expect(script).toMatch(/SPOTLIGHT_CANDIDATES_TOP3="\$\(spotlight_top3 "\$REGISTRY_FILE" "\$LEDGER_FILE" "\$RECENT_PROJECTS_CSV"\)"/);
+      expect(script).toMatch(/SPOTLIGHT_CANDIDATES_TOP3="\$\(spotlight_top3 "\$REGISTRY_FILE" "\$LEDGER_FILE" "\$RECENT_PROJECTS_CSV" "\$RETIRED_SUBJECTS_CSV"\)"/);
       expect(script).not.toMatch(/spotlight_candidates "\$REGISTRY_FILE" "\$LEDGER_FILE" "\$RECENT_PROJECTS_CSV" \| head/);
     });
   });

@@ -17,7 +17,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 | 2026-09-02 | the-book-didnt-know-what-it-already-held | social-signals-trader | ✅ | field-note |
 | 2026-08-27 | a-new-game-a-week-old-and-already-playable | starry-night-ships | ❌ no tile | shipped-note |
 | 2026-08-23 | epics-stopped-sharing-one-working-directory | session-manager | ✅ | shipped-note |
-| 2026-08-19 | siblings-can-now-see-their-own-bandwidth-bill | mcp-host | ✅ | changelog |
+| 2026-08-19 | siblings-can-now-see-their-own-bandwidth-bill | bilko-host | ✅ | changelog |
 | 2026-08-15 | the-bug-that-silently-killed-every-post | burrow | ❌ no tile | field-note |
 | 2026-08-11 | the-app-stays-free-the-manual-is-19-99 | session-manager | ✅ | problem→outcome |
 | 2026-08-08 | a-bad-quote-almost-cost-14000-on-paper | social-signals-trader | ✅ | field-note |
@@ -35,7 +35,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 | 2026-06-21 | coverage-got-burrow-to-the-post-recall-reads-it | burrow | ❌ no tile | build-log (field-note) |
 | 2026-06-18 | coverage-debt-making-burrow-visit-what-it-skips | burrow | ❌ no tile | build-log (field-note) |
 | 2026-06-13 | hardening-the-trading-stack-before-the-mcp | burrow / trading-stack | ❌ no tile | build-log (field-note) |
-| 2026-06-03 | mcp-host-istore-for-mcps | mcp-host | ✅ | build-log |
+| 2026-06-03 | mcp-host-istore-for-mcps | mcp-host (retired 2026-10-09) | ✅ | build-log |
 | 2026-06-03 | trader-extract-and-reclaim | social-signals-trader | ✅ | build-log |
 | 2026-06-03 | signal-builder-m0-to-m9 | signal-builder | ✅ | build-log |
 | 2026-06-03 | how-pageroast-went-from-frustration-to-product | page-roast | ✅ | product |

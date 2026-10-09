@@ -34,7 +34,7 @@ export const PUBLIC_SLUGS: ReadonlySet<string> = new Set([
   // 7 named projects
   'session-manager',
   'social-signals-trader',
-  'mcp-host',
+  'bilko-host',
   'outdoor-hours',
   'git-viewer',
   'academy',
@@ -97,9 +97,9 @@ const ENRICH: Record<string, Enrich> = {
     metric: '10', metricLabel: 'subreddits', lang: 'Python',
     detail: 'Agents read sentiment across ten subreddits, place trades, and publish every position live. Wins and losses both — radical transparency as a feature.',
   },
-  'mcp-host': {
+  'bilko-host': {
     metric: 'live', metricLabel: 'registry', lang: 'TypeScript',
-    detail: 'A Model Context Protocol host so Claude sessions across sibling repos can discover and call one another. Shared tools, shared memory, no copy-paste.',
+    detail: 'The MCP server behind bilko.run: Claude sessions in sibling repos use it to register, publish, and inspect their apps here — and to read their own usage bill.',
   },
   'outdoor-hours': {
     metric: '10 yrs', metricLabel: 'of data', lang: 'Python',

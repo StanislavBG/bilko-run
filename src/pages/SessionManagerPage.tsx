@@ -11,7 +11,7 @@ import {
   useManualToc,
   usePageFonts,
 } from './session-manager-landing/hooks.js';
-import type { LayoutModeName } from './session-manager-landing/layout.js';
+import { hashForPage, PAGE_COUNT, pageFromHash, type LayoutModeName } from './session-manager-landing/layout.js';
 import { PartsBin } from './session-manager-landing/PartsBin.js';
 
 /**
@@ -163,6 +163,26 @@ function PriceTag() {
   );
 }
 
+function pageClass(canvas: boolean, active: boolean): string {
+  if (!canvas) return 'smlp-page';
+  return active ? 'smlp-page smlp-page--active' : 'smlp-page smlp-page--inactive';
+}
+
+function Chevron({ up }: { up?: boolean }) {
+  return (
+    <svg className="smlp-turn__chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        d={up ? 'M3 10.5 8 5.5l5 5' : 'M3 5.5 8 10.5l5-5'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function SessionManagerPage() {
   const layout = useLayoutMode();
   const canvas = layout.mode === 'canvas';
@@ -171,6 +191,43 @@ export default function SessionManagerPage() {
   const toc = useManualToc();
   const [filmOpen, setFilmOpen] = useState(false);
   const watchRef = useRef<HTMLButtonElement>(null);
+  const [page, setPage] = useState(() => pageFromHash(window.location.hash));
+  const coverRef = useRef<HTMLElement>(null);
+  const partsRef = useRef<HTMLElement>(null);
+  const focusAfterTurn = useRef(false);
+
+  const turnTo = useCallback((n: number, opts?: { focus?: boolean }) => {
+    if (n < 0 || n >= PAGE_COUNT) return;
+    focusAfterTurn.current = !!opts?.focus;
+    setPage(n);
+    const { pathname, search } = window.location;
+    window.history.replaceState(window.history.state, '', `${pathname}${search}${hashForPage(n)}`);
+  }, []);
+
+  useEffect(() => {
+    const onHash = () => {
+      focusAfterTurn.current = false;
+      setPage(pageFromHash(window.location.hash));
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  // React 18's types have no `inert` prop, so it is set on the element directly.
+  useEffect(() => {
+    coverRef.current?.toggleAttribute('inert', canvas && page !== 0);
+    partsRef.current?.toggleAttribute('inert', canvas && page !== 1);
+  }, [canvas, page]);
+
+  // After a click-turn, focus the new page's first heading (the inert one is no longer inert by now).
+  useEffect(() => {
+    if (!focusAfterTurn.current) return;
+    focusAfterTurn.current = false;
+    const heading = (page === 0 ? coverRef : partsRef).current?.querySelector<HTMLElement>('h1, h2');
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  }, [page]);
 
   useEffect(() => {
     const previous = document.title;
@@ -198,20 +255,66 @@ export default function SessionManagerPage() {
     <div className={`smlp-root smlp-root--${layout.mode}`} data-layout={layout.mode}>
       <PageViewTracker />
       <div className="smlp-canvas" style={canvasStyle}>
-        {canvas && (
-          <>
-            <span className="smlp-stripe smlp-stripe--a" aria-hidden="true" />
-            <span className="smlp-stripe smlp-stripe--b" aria-hidden="true" />
-          </>
-        )}
         <Header compact={!canvas} allFree={allFree} />
         <main className="smlp-main">
-          <div className="smlp-hero">
-            <Hero mode={layout.mode} toc={toc} onWatch={openFilm} watchRef={watchRef} />
-            <PriceTag />
+          <div className="smlp-pages">
+            <section
+              ref={coverRef}
+             
+              className={pageClass(canvas, page === 0)}
+              aria-label={COPY.pages.aria.cover}
+              aria-hidden={canvas && page !== 0 ? true : undefined}
+            >
+              {canvas && (
+                <>
+                  <span className="smlp-stripe smlp-stripe--a" aria-hidden="true" />
+                  <span className="smlp-stripe smlp-stripe--b" aria-hidden="true" />
+                </>
+              )}
+              <div className="smlp-hero">
+                <Hero mode={layout.mode} toc={toc} onWatch={openFilm} watchRef={watchRef} />
+                <PriceTag />
+              </div>
+              {canvas && (
+                <button type="button" className="smlp-turn smlp-turn--next" onClick={() => turnTo(1, { focus: true })}>
+                  {COPY.pages.next}
+                  <Chevron />
+                </button>
+              )}
+            </section>
+            <section
+              ref={partsRef}
+              id="parts"
+              className={pageClass(canvas, page === 1)}
+              aria-label={COPY.pages.aria.parts}
+              aria-hidden={canvas && page !== 1 ? true : undefined}
+            >
+              {canvas && (
+                <div className="smlp-backrow">
+                  <button type="button" className="smlp-turn smlp-turn--back" onClick={() => turnTo(0, { focus: true })}>
+                    <Chevron up />
+                    {COPY.pages.prev}
+                  </button>
+                </div>
+              )}
+              <PartsBin mode={layout.mode} toc={toc} />
+            </section>
           </div>
-          <PartsBin mode={layout.mode} toc={toc} />
         </main>
+        {canvas && (
+          <nav className="smlp-dots" aria-label={COPY.pages.aria.nav}>
+            {Array.from({ length: PAGE_COUNT }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                className={page === i ? 'smlp-dot smlp-dot--on' : 'smlp-dot'}
+                aria-label={fill(COPY.pages.aria.goToTemplate, { n: i + 1, count: PAGE_COUNT })}
+                aria-current={page === i ? 'page' : undefined}
+                onClick={() => turnTo(i, { focus: true })}
+              />
+            ))}
+          </nav>
+        )}
       </div>
       <FilmDialog
         open={filmOpen}

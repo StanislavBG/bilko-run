@@ -49,7 +49,7 @@ const MARKETING_PAGE = 'src/pages/SessionManagerPage.tsx';
 const LANDING_DIR = 'src/pages/session-manager-landing';
 const LANDING_CSS = 'src/styles/session-manager-landing.css';
 const MANUAL_PAGE = 'src/pages/ManualPage.tsx';
-const TOOLS_REGISTRY = 'src/config/tools.ts';
+const PROJECTS_JSON = 'src/data/standalone-projects.json';
 const PACKAGES_REGISTRY = 'src/data/packages.ts';
 const PROJECTS_PAGE = 'src/pages/ProjectsPage.tsx';
 const PROJECTS_VIEW = 'src/data/projectsView.ts';
@@ -65,6 +65,11 @@ const pageProse = () => PAGE_FILES.map(f => prose(read(f))).join(' \n ');
 
 /** The session-manager entry of a registry file, comments stripped. */
 function registryEntry(file: string): string {
+  if (file.endsWith('.json')) {
+    const entry = (JSON.parse(read(file)) as { slug: string }[]).find(p => p.slug === 'session-manager');
+    expect(entry, `${file} has no session-manager entry`).toBeDefined();
+    return JSON.stringify(entry);
+  }
   const src = stripComments(read(file));
   const idx = src.indexOf("slug: 'session-manager'");
   expect(idx, `${file} has no session-manager entry`).toBeGreaterThan(-1);
@@ -305,13 +310,13 @@ describe('open-core positioning: the app is free and stays free, and so is the m
   });
 
   it('both project registries describe the app as free', () => {
-    for (const file of [TOOLS_REGISTRY, PACKAGES_REGISTRY]) {
+    for (const file of [PROJECTS_JSON, PACKAGES_REGISTRY]) {
       expect(registryEntry(file), `${file} must call the app free`).toMatch(/free/i);
     }
   });
 
   it('the registry card never implies the app or the manual costs money', () => {
-    for (const file of [TOOLS_REGISTRY, PACKAGES_REGISTRY]) {
+    for (const file of [PROJECTS_JSON, PACKAGES_REGISTRY]) {
       const entry = registryEntry(file);
       expect(entry, `${file} still calls the manual paid`).not.toMatch(/paid|\$\d|sold separately/i);
     }
@@ -322,9 +327,9 @@ describe('open-core positioning: the app is free and stays free, and so is the m
   });
 
   it('the registry card does not advertise retired surfaces', () => {
-    const entry = registryEntry(TOOLS_REGISTRY);
+    const entry = registryEntry(PROJECTS_JSON);
     for (const retired of ['Web Remote', 'web remote', 'Subagents', 'Hive', 'hive', 'Browser', 'browser']) {
-      expect(entry, `tools.ts session-manager card still advertises "${retired}"`).not.toContain(retired);
+      expect(entry, `standalone-projects.json session-manager card still advertises "${retired}"`).not.toContain(retired);
     }
   });
 

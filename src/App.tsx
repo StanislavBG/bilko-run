@@ -7,7 +7,6 @@ import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
-import { ROUTABLE_TOOLS } from './config/tools.js';
 import { PROJECTS } from './data/projectsRegistry.js';
 
 // One full reload per tab session when a lazy chunk fails to load (typically a
@@ -33,8 +32,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(factory: () => Promis
   });
 }
 
-// Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
-// only non-tool landing pages are declared here.
+// Lazy-loaded pages. Declared here with lazyWithRetry so each page is its own chunk.
 const PricingPage = lazyWithRetry(() => import('./pages/PricingPage.js').then(m => ({ default: m.PricingPage })));
 const PrivacyPage = lazyWithRetry(() => import('./pages/PrivacyPage.js').then(m => ({ default: m.PrivacyPage })));
 const TermsPage = lazyWithRetry(() => import('./pages/TermsPage.js').then(m => ({ default: m.TermsPage })));
@@ -49,11 +47,7 @@ const BlogPostPage = lazyWithRetry(() => import('./pages/BlogPostPage.js').then(
 // The Session Manager Field Manual reader — lazy because its bundle is only
 // needed by the slice of visitors who open the manual.
 const ManualPage = lazyWithRetry(() => import('./pages/ManualPage.js'));
-
-// Build one lazy component per registered tool so code-splitting still works.
-const TOOL_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentType>> = Object.fromEntries(
-  ROUTABLE_TOOLS.map(t => [t.slug, lazyWithRetry(t.loader)]),
-);
+const SessionManagerPage = lazyWithRetry(() => import('./pages/SessionManagerPage.js'));
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
 
@@ -153,15 +147,10 @@ function lazyRoute(El: React.ComponentType) {
   );
 }
 
-/** Tool routes shared between /projects/* and /products/* — excludes
- * session-manager, which renders outside Layout (own standalone chrome,
- * no Bilko nav) and is routed separately below. */
+/** Legacy tool routes under /products/*. */
 function toolRoutes() {
   return (
     <>
-      {ROUTABLE_TOOLS.filter(t => t.slug !== 'session-manager').map(t => (
-        <Route key={t.slug} path={t.slug} element={lazyRoute(TOOL_COMPONENTS[t.slug])} />
-      ))}
       {/* Old /content-tools route (HeadlineGrader/AdScorer/ThreadGrader/EmailForge/AudienceDecoder
           tabbed dashboard) — all 5 tools are now sibling apps. Old links forward to /projects. */}
       <Route path="content-tools" element={<Navigate to="/products" replace />} />
@@ -228,7 +217,7 @@ function AppRoutes() {
               its own header instead. Still shares this repo's
               ClerkProvider, which
               its header account chip reads. */}
-          <Route path="/products/session-manager" element={lazyRoute(TOOL_COMPONENTS['session-manager'])} />
+          <Route path="/products/session-manager" element={lazyRoute(SessionManagerPage)} />
           {/* The Field Manual reader is the landing's next page, so it lives
               outside <Layout /> too and wears the landing's chrome (own
               Header, stylesheet, fonts). It lives under the Session Manager

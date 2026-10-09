@@ -1,29 +1,16 @@
 /**
- * Single source of truth for ALL projects shown on bilko.run
- * (portfolio listing, homepage "Recent builds", ⌘K command palette).
+ * Every project shown on bilko.run (/projects, homepage, ⌘K palette).
  *
- * A "project" can live in three places:
+ * Where to edit what:
+ *   - Add / change / remove a project: use the bilko-host MCP, which edits
+ *     src/data/standalone-projects.json. Don't hand-edit it from a sibling repo.
+ *   - Adjust how a project is displayed (public visibility, display names,
+ *     enrichment): src/data/projectsView.ts — PUBLIC_SLUGS, DISPLAY_NAME, ENRICH.
+ *   - Host kinds (static-path / external-url / react-route): docs/host-contract.md.
  *
- *   1. In-repo React route — the project is a React page in this monorepo,
- *      sharing auth/DB/Stripe. Used for the AI tools.
- *      host: { kind: 'react-route', path: '/products/<slug>' }
- *
- *   2. Static path — the project is built in its OWN git repo (often via a
- *      separate Claude session) and dropped into `public/projects/<slug>/`
- *      of this repo. The static files are served directly; no React route.
- *      host: { kind: 'static-path', path: '/projects/<slug>/' }
- *
- *   3. External URL — the project is hosted on a different domain or
- *      subdomain. Used for things like docs sites or marketing pages.
- *      host: { kind: 'external-url', url: 'https://...' }
- *
- * Adding a new standalone project:
- *   - Build it in its own repo (its own Claude session, its own git).
- *   - Output static assets and copy/sync them into `public/projects/<slug>/`.
- *   - Add one entry to PROJECTS below with kind: 'static-path'.
+ * The only code-level exception is SPA_ROUTE_OVERRIDES below.
  */
 
-import { LISTING_TOOLS, type ToolDefinition } from '../config/tools.js';
 import type {
   ProjectStatus,
   RegistryProject,
@@ -47,30 +34,6 @@ export interface Project {
   thumbnail?: string;
 }
 
-const TOOL_CATEGORY_LABEL: Record<ToolDefinition['category'], string> = {
-  business: 'AI Tool · Productivity',
-  content: 'AI Tool · Content',
-  devtools: 'AI Tool · Dev',
-};
-
-function statusOf(t: ToolDefinition): ProjectStatus {
-  if (t.status === 'live') return 'live';
-  if (t.status === 'beta') return 'live';
-  return 'cooking';
-}
-
-/* ── Tools registered in this monorepo (React routes) ─────────────── */
-const TOOL_PROJECTS: readonly Project[] = LISTING_TOOLS.map(t => ({
-  slug: t.slug,
-  name: t.name,
-  tagline: t.tagline,
-  category: TOOL_CATEGORY_LABEL[t.category] ?? 'AI Tool',
-  status: statusOf(t),
-  year: t.status === 'coming-soon' ? 2026 : 2025,
-  host: { kind: 'react-route' as const, path: `/products/${t.slug}` },
-  tags: t.features?.slice(0, 2) ?? [],
-}));
-
 /* ── Standalone projects (static-path or external) ────────────────── */
 // Sourced from a JSON sidecar so the bilko-host MCP server can edit it
 // safely from sibling-repo Claude sessions without touching TS source.
@@ -79,26 +42,19 @@ import standaloneJson from './standalone-projects.json' with { type: 'json' };
 const STANDALONE_PROJECTS: readonly RegistryProject[] = standaloneJson as readonly RegistryProject[];
 
 /**
- * Dedupe by slug, later entries winning. Needed because a project can be
- * registered twice under one slug — e.g. session-manager has both a
- * static-path sibling entry (the desktop app) and a react-route entry (its
- * marketing/checkout page); TOOL_PROJECTS is spread last so the react-route
- * entry (and its /products href) wins the hub card. projectsView.ts's
- * project+package merge only handles PROJECTS vs. PACKAGES, not two
- * PROJECTS entries sharing a slug — this is what prevents that from
- * rendering as two separate hub cards.
+ * Slugs whose card opens an in-repo React page instead of the JSON entry's
+ * host. session-manager's app is a static-path sibling, but its landing page
+ * is the react-route /products/session-manager.
  */
-function dedupeBySlug(projects: readonly Project[]): readonly Project[] {
-  const bySlug = new Map<string, Project>();
-  for (const p of projects) bySlug.set(p.slug, p);
-  return Array.from(bySlug.values());
-}
+const SPA_ROUTE_OVERRIDES: Readonly<Record<string, string>> = {
+  'session-manager': '/products/session-manager',
+};
 
 /** Every project on bilko.run, regardless of where it's hosted. */
-export const PROJECTS: readonly Project[] = dedupeBySlug([
-  ...STANDALONE_PROJECTS,
-  ...TOOL_PROJECTS,
-]);
+export const PROJECTS: readonly Project[] = STANDALONE_PROJECTS.map(p => {
+  const path = SPA_ROUTE_OVERRIDES[p.slug];
+  return path ? { ...p, host: { kind: 'react-route' as const, path } } : p;
+});
 
 export const LIVE_PROJECTS: readonly Project[] = PROJECTS.filter(p => p.status === 'live');
 export const COOKING_PROJECTS: readonly Project[] = PROJECTS.filter(p => p.status === 'cooking');

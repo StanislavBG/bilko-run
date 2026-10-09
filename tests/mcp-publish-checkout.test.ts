@@ -217,7 +217,7 @@ describe('withPublishCheckout', () => {
     await mkdir(`${checkoutDir}.lock`, { recursive: true });
 
     const outcome = await withPublishCheckout(
-      { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main', lockTimeoutMs: 10 * 60 * 1000 },
+      { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main', lockTimeoutMs: 10 * 60 * 1000, lockWaitMs: 500 },
       async (root) => {
         await writeFile(join(root, 'fileB.txt'), 'built output\n', 'utf8');
         return { result: 'ok', paths: ['fileB.txt'], message: 'publish fileB' };
@@ -227,5 +227,32 @@ describe('withPublishCheckout', () => {
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error('unreachable');
     expect(outcome.stage).toBe('lock');
-  }, 70_000);
+  });
+
+  it('acquires a lock that another holder releases mid-wait', async () => {
+    const originDir = resolve(tmp, 'origin6.git');
+    const hostDir = resolve(tmp, 'host6');
+    const checkoutDir = resolve(tmp, 'checkout6');
+
+    await makeBareOrigin(originDir);
+    await cloneAndSeed(originDir, hostDir);
+    await mkdir(`${checkoutDir}.lock`, { recursive: true });
+    const release = setTimeout(() => {
+      void rm(`${checkoutDir}.lock`, { recursive: true, force: true });
+    }, 200);
+
+    try {
+      const outcome = await withPublishCheckout(
+        { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main', lockTimeoutMs: 10 * 60 * 1000, lockWaitMs: 2000 },
+        async (root) => {
+          await writeFile(join(root, 'fileB.txt'), 'built output\n', 'utf8');
+          return { result: 'ok', paths: ['fileB.txt'], message: 'publish fileB' };
+        },
+      );
+
+      expect(outcome.ok).toBe(true);
+    } finally {
+      clearTimeout(release);
+    }
+  });
 });

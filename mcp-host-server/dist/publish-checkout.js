@@ -52,8 +52,8 @@ async function git(cwd, args, opts = {}) {
 async function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
-async function acquireLock(lockDir, lockTimeoutMs) {
-    const deadline = Date.now() + LOCK_WAIT_TIMEOUT_MS;
+async function acquireLock(lockDir, lockTimeoutMs, lockWaitMs) {
+    const deadline = Date.now() + lockWaitMs;
     for (;;) {
         try {
             await mkdir(lockDir);
@@ -106,7 +106,7 @@ export async function withPublishCheckout(opts, fn) {
     // The lock sits beside the checkout, so its parent must exist before
     // acquireLock's non-recursive mkdir (fresh machines have no state dir yet).
     await mkdir(resolve(checkoutDir, '..'), { recursive: true });
-    const gotLock = await acquireLock(lockDir, lockTimeoutMs);
+    const gotLock = await acquireLock(lockDir, lockTimeoutMs, opts.lockWaitMs ?? LOCK_WAIT_TIMEOUT_MS);
     if (!gotLock) {
         return { ok: false, stage: 'lock', error: `timed out waiting for publish lock at ${lockDir}` };
     }

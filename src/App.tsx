@@ -6,44 +6,77 @@ import { ToolErrorBoundary } from './components/ErrorBoundary.js';
 import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
-import { PricingPage } from './pages/PricingPage.js';
-import { PrivacyPage } from './pages/PrivacyPage.js';
-import { TermsPage } from './pages/TermsPage.js';
-import { AdminPage } from './pages/AdminPage.js';
-import { AdminCostPage } from './pages/AdminCostPage.js';
-import { ObservabilityPage } from './pages/admin/ObservabilityPage.js';
-import { SecretsPage } from './pages/admin/SecretsPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
-import { WorkflowsPage } from './pages/WorkflowsPage.js';
-import { ContactPage } from './pages/ContactPage.js';
-import { PortfolioProjectDetailPage } from './pages/PortfolioProjectDetailPage.js';
 import { ROUTABLE_TOOLS } from './config/tools.js';
 import { PROJECTS } from './data/projectsRegistry.js';
 
+// One full reload per tab session when a lazy chunk fails to load (typically a
+// 404 after a deploy replaced the hashed filenames). The sessionStorage flag
+// stops a reload loop: a second failure propagates to the ErrorBoundary.
+const CHUNK_RELOAD_FLAG = 'chunk-reload-attempted';
+
+function lazyWithRetry<T extends React.ComponentType<any>>(factory: () => Promise<{ default: T }>) {
+  return React.lazy(async () => {
+    try {
+      const mod = await factory();
+      sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
+      return mod;
+    } catch (err) {
+      if (sessionStorage.getItem(CHUNK_RELOAD_FLAG) !== '1') {
+        sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1');
+        window.location.reload();
+        // Keep Suspense pending while the page reloads.
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw err;
+    }
+  });
+}
+
 // Lazy-loaded pages. Tool page loaders live in the registry (src/config/tools.ts);
 // only non-tool landing pages are declared here.
-const BlogPostPage = React.lazy(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
+const PricingPage = lazyWithRetry(() => import('./pages/PricingPage.js').then(m => ({ default: m.PricingPage })));
+const PrivacyPage = lazyWithRetry(() => import('./pages/PrivacyPage.js').then(m => ({ default: m.PrivacyPage })));
+const TermsPage = lazyWithRetry(() => import('./pages/TermsPage.js').then(m => ({ default: m.TermsPage })));
+const AdminPage = lazyWithRetry(() => import('./pages/AdminPage.js').then(m => ({ default: m.AdminPage })));
+const AdminCostPage = lazyWithRetry(() => import('./pages/AdminCostPage.js').then(m => ({ default: m.AdminCostPage })));
+const ObservabilityPage = lazyWithRetry(() => import('./pages/admin/ObservabilityPage.js').then(m => ({ default: m.ObservabilityPage })));
+const SecretsPage = lazyWithRetry(() => import('./pages/admin/SecretsPage.js').then(m => ({ default: m.SecretsPage })));
+const WorkflowsPage = lazyWithRetry(() => import('./pages/WorkflowsPage.js').then(m => ({ default: m.WorkflowsPage })));
+const ContactPage = lazyWithRetry(() => import('./pages/ContactPage.js').then(m => ({ default: m.ContactPage })));
+const PortfolioProjectDetailPage = lazyWithRetry(() => import('./pages/PortfolioProjectDetailPage.js').then(m => ({ default: m.PortfolioProjectDetailPage })));
+const BlogPostPage = lazyWithRetry(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
 // The Session Manager Field Manual reader — lazy because its bundle is only
 // needed by the slice of visitors who open the manual.
-const ManualPage = React.lazy(() => import('./pages/ManualPage.js'));
+const ManualPage = lazyWithRetry(() => import('./pages/ManualPage.js'));
 
-// Build one React.lazy component per registered tool so code-splitting still works.
+// Build one lazy component per registered tool so code-splitting still works.
 const TOOL_COMPONENTS: Record<string, React.LazyExoticComponent<React.ComponentType>> = Object.fromEntries(
-  ROUTABLE_TOOLS.map(t => [t.slug, React.lazy(t.loader)]),
+  ROUTABLE_TOOLS.map(t => [t.slug, lazyWithRetry(t.loader)]),
 );
-
-import { AuthProvider } from './hooks/useAuth.js';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
 
-// Error boundary — renders children without auth if Clerk fails
-class ClerkErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
+// Error boundary — if Clerk fails to initialise, show a static message instead
+// of re-rendering the routes without ClerkProvider (auth hooks would throw).
+class ClerkErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
   static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(err: Error) { console.error('[Clerk init failed, running without auth]', err.message); }
+  componentDidCatch(err: Error) { console.error('[Clerk init failed]', err.message); }
   render() {
-    if (this.state.hasError) return this.props.fallback;
-    return this.props.children;
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="max-w-xl mx-auto px-6 py-24 text-center">
+        <h2 className="text-2xl font-extrabold text-warm-900 mb-2">Something went wrong loading the site</h2>
+        <p className="text-warm-600 mb-6">Sign-in could not start. Reloading usually fixes it.</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-5 py-2.5 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-lg transition-colors"
+        >
+          Reload
+        </button>
+      </div>
+    );
   }
 }
 // Single-source-of-truth path canonicalization. Both /projects/<slug> and
@@ -138,8 +171,7 @@ function toolRoutes() {
 
 function AppRoutes() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <BrowserRouter>
         <Routes>
           {/* ── bilko.run public pages ── */}
           <Route element={<Layout />}>
@@ -166,21 +198,21 @@ function AppRoutes() {
             {/* /packages merged into the hub */}
             <Route path="/packages" element={<Navigate to="/projects" replace />} />
             <Route path="/blog" element={<BlogPage />} />
-            <Route path="/blog/:slug" element={<React.Suspense fallback={null}><BlogPostPage /></React.Suspense>} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/admin/cost" element={<AdminCostPage />} />
-            <Route path="/admin/observability" element={<ObservabilityPage />} />
-            <Route path="/admin/secrets" element={<SecretsPage />} />
+            <Route path="/blog/:slug" element={lazyRoute(BlogPostPage)} />
+            <Route path="/pricing" element={lazyRoute(PricingPage)} />
+            <Route path="/privacy" element={lazyRoute(PrivacyPage)} />
+            <Route path="/terms" element={lazyRoute(TermsPage)} />
+            <Route path="/admin" element={lazyRoute(AdminPage)} />
+            <Route path="/admin/cost" element={lazyRoute(AdminCostPage)} />
+            <Route path="/admin/observability" element={lazyRoute(ObservabilityPage)} />
+            <Route path="/admin/secrets" element={lazyRoute(SecretsPage)} />
 
             {/* ── Portfolio sections ── */}
             <Route path="/academy" element={<RedirectAcademyToCourse />} />
             <Route path="/academy/*" element={<RedirectAcademyToCourse />} />
-            <Route path="/workflows" element={<WorkflowsPage />} />
-            <Route path="/contact" element={<ContactPage />} />
-            <Route path="/work/:id" element={<PortfolioProjectDetailPage />} />
+            <Route path="/workflows" element={lazyRoute(WorkflowsPage)} />
+            <Route path="/contact" element={lazyRoute(ContactPage)} />
+            <Route path="/work/:id" element={lazyRoute(PortfolioProjectDetailPage)} />
 
             {/* ── Legacy manual URLs ── */}
             {/* Canonical path is /products/session-manager/manual (see above).
@@ -193,8 +225,8 @@ function AppRoutes() {
               sold there: the app and the Field Manual are both free).
               Deliberately OUTSIDE <Layout /> so it renders zero Bilko site
               chrome (no pf-topbar, no Bilko nav, no Cmd-K palette); it ships
-              its own header instead. Still shares this repo's AuthProvider
-              (wraps <AppRoutes />, not Layout-scoped) and ClerkProvider, which
+              its own header instead. Still shares this repo's
+              ClerkProvider, which
               its header account chip reads. */}
           <Route path="/products/session-manager" element={lazyRoute(TOOL_COMPONENTS['session-manager'])} />
           {/* The Field Manual reader is the landing's next page, so it lives
@@ -205,7 +237,7 @@ function AppRoutes() {
               /products/* splat, so declaration order is not load-bearing. */}
           <Route
             path="/products/session-manager/manual"
-            element={<React.Suspense fallback={null}><ManualPage /></React.Suspense>}
+            element={lazyRoute(ManualPage)}
           />
 
           {/* /app/* — legacy dashboard URLs redirect to canonical /products/* */}
@@ -217,14 +249,13 @@ function AppRoutes() {
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    </BrowserRouter>
   );
 }
 
 export default function App() {
   return (
-    <ClerkErrorBoundary fallback={<AppRoutes />}>
+    <ClerkErrorBoundary>
       <ClerkProvider
         publishableKey={CLERK_KEY}
         afterSignInUrl={window.location.pathname + window.location.search}

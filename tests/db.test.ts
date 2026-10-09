@@ -84,8 +84,9 @@ describe('Database', () => {
     expect(after.excerpt).toBe(edited.excerpt);
     expect(after.content).toBe(edited.content);
 
-    // Tests share the on-disk local database (server/db.ts ignores
-    // CONTENTGRADE_DB_PATH), so leave the post as a fresh boot seeds it. The
+    // Tests run against a throwaway tmpdir database (BILKO_SQLITE_PATH in
+    // vitest.config.ts), so nothing here touches the real local DB. Restore
+    // the post as a fresh boot seeds it. The
     // reinserted row's seed text still has this post's one site-relative
     // link ([Session Manager](/projects/session-manager/)), so also clear
     // the absolute-links migration guard — otherwise, since that migration

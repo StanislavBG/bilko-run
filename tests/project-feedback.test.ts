@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { createHash } from 'node:crypto';
 import Fastify from 'fastify';
 import { initDb, dbRun, dbGet } from '../server/db.js';
 import { registerProjectFeedbackRoutes } from '../server/routes/project-feedback.js';
@@ -180,6 +181,144 @@ describe('moderatedSince cursor', () => {
   });
 });
 
+function setStatus(id: string, body: unknown, token: string | null = TOKEN, slug = SLUG) {
+  ipSeq += 1;
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-forwarded-for': `10.3.0.${ipSeq}`,
+  };
+  if (token) headers['authorization'] = `Bearer ${token}`;
+  return app.inject({
+    method: 'POST',
+    url: `/api/projects/${slug}/feedback/${id}/status`,
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+function lookup(body: unknown, slug = SLUG) {
+  ipSeq += 1;
+  return app.inject({
+    method: 'POST',
+    url: `/api/projects/${slug}/feedback/status-lookup`,
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': `10.4.0.${ipSeq}` },
+    body: JSON.stringify(body),
+  });
+}
+
+describe('submit receipt', () => {
+  it('returns a 32-byte base64url receipt and stores only its sha256', async () => {
+    const res = await submit({});
+    expect(res.statusCode).toBe(201);
+    const { id, receipt } = res.json() as { id: string; receipt: string };
+    expect(receipt).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(Buffer.from(receipt, 'base64url')).toHaveLength(32);
+
+    const row = (await dbGet('SELECT * FROM project_feedback WHERE id = ?', id)) as Record<string, unknown>;
+    expect(row.receipt_hash).toBe(createHash('sha256').update(receipt).digest('hex'));
+    expect(Object.values(row)).not.toContain(receipt);
+  });
+});
+
+describe('status route', () => {
+  it('requires a bearer token', async () => {
+    const id = (await submit({})).json().id as string;
+    expect((await setStatus(id, { status: 'resolved' }, null)).statusCode).toBe(401);
+    expect((await setStatus(id, { status: 'resolved' }, 'wrong')).statusCode).toBe(401);
+  });
+
+  it('rejects a bad status or note', async () => {
+    const id = (await submit({})).json().id as string;
+    expect((await setStatus(id, { status: 'done' })).statusCode).toBe(400);
+    expect((await setStatus(id, {})).statusCode).toBe(400);
+    expect((await setStatus(id, { status: 'resolved', note: 'x'.repeat(501) })).statusCode).toBe(400);
+    expect((await setStatus(id, { status: 'resolved', note: 42 })).statusCode).toBe(400);
+  });
+
+  it('404s on an unknown id and on another project\'s row', async () => {
+    expect((await setStatus('fb_nope', { status: 'resolved' })).statusCode).toBe(404);
+    const id = (await submit({})).json().id as string;
+    expect((await setStatus(id, { status: 'resolved' }, TOKEN, 'other-project')).statusCode).toBe(404);
+  });
+
+  it('sets status and surfaces it through GET; default is open', async () => {
+    const id = (await submit({})).json().id as string;
+    expect(pullItems(await pull())[0].status).toEqual({ value: 'open', note: null, at: null });
+
+    const res = await setStatus(id, { status: 'in_progress', note: 'on it' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id, status: 'in_progress', note: 'on it' });
+    expect(new Date(res.json().statusAt).toISOString()).toBe(res.json().statusAt);
+
+    const item = pullItems(await pull())[0];
+    expect(item.status.value).toBe('in_progress');
+    expect(item.status.note).toBe('on it');
+    expect(item.status.at).toBe(res.json().statusAt);
+  });
+});
+
+describe('status lookup', () => {
+  it('returns status only for matching receipts and never content', async () => {
+    const a = (await submit({})).json() as { id: string; receipt: string };
+    const b = (await submit({})).json() as { id: string; receipt: string };
+    await setStatus(a.id, { status: 'resolved', note: 'fixed in 1.2' });
+
+    const res = await lookup({
+      items: [
+        a,
+        { id: b.id, receipt: a.receipt }, // wrong receipt for b
+        { id: 'fb_nope', receipt: a.receipt }, // unknown id
+      ],
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().items as Record<string, unknown>[];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({ id: a.id, status: 'resolved', note: 'fixed in 1.2', statusAt: expect.any(String) });
+    expect(res.payload).not.toContain('Test title');
+    expect(res.payload).not.toContain('Test description');
+
+    const open = (await lookup({ items: [b] })).json().items;
+    expect(open).toEqual([{ id: b.id, status: 'open', note: null, statusAt: null }]);
+  });
+
+  it('is slug-scoped', async () => {
+    const a = (await submit({})).json() as { id: string; receipt: string };
+    expect((await lookup({ items: [a] }, 'other-project')).json().items).toEqual([]);
+  });
+
+  it('never returns pre-receipt rows', async () => {
+    const id = (await submit({})).json().id as string;
+    await dbRun('UPDATE project_feedback SET receipt_hash = NULL WHERE id = ?', id);
+    expect((await lookup({ items: [{ id, receipt: 'anything' }] })).json().items).toEqual([]);
+  });
+
+  it('validates the item list', async () => {
+    expect((await lookup({})).statusCode).toBe(400);
+    expect((await lookup({ items: [] })).statusCode).toBe(400);
+    const tooMany = Array.from({ length: 101 }, (_, i) => ({ id: `fb_${i}`, receipt: 'r' }));
+    expect((await lookup({ items: tooMany })).statusCode).toBe(400);
+    expect((await lookup({ items: [{ id: 'fb_1' }] })).statusCode).toBe(400);
+    expect((await lookup({ items: [{ id: 'fb_1', receipt: 'r'.repeat(201) }] })).statusCode).toBe(400);
+  });
+});
+
+describe('status rides the moderatedSince cursor', () => {
+  it('re-admits an already-pulled row whose status changed', async () => {
+    const id = (await submit({})).json().id as string;
+    const first = (await pull()).json();
+    const nextSince = first.nextSince as string;
+    const q = `?since=${encodeURIComponent(nextSince)}&moderatedSince=1970-01-01T00:00:00Z`;
+    expect(pullItems(await pull(q))).toHaveLength(0);
+
+    const statusAt = (await setStatus(id, { status: 'wontfix' })).json().statusAt as string;
+
+    const res = await pull(q);
+    expect(pullItems(res)).toHaveLength(1);
+    expect(pullItems(res)[0].status.value).toBe('wontfix');
+    expect(res.json().nextModeratedSince).toBe(statusAt);
+  });
+});
+
 describe('images=none', () => {
   const dataUrl = `data:image/png;base64,${'A'.repeat(20_000)}`;
 
@@ -208,6 +347,7 @@ interface Item {
   parentId: string | null;
   image: { dataUrl: string | null; mime: string | null; bytes: number } | null;
   moderation: { action: string; reason: string | null } | null;
+  status: { value: string; note: string | null; at: string | null };
 }
 function pullItems(res: { json: () => unknown }): Item[] {
   return (res.json() as { items: Item[] }).items;

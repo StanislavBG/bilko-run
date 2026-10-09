@@ -649,6 +649,14 @@ export async function initDb(): Promise<void> {
     'ALTER TABLE project_feedback ADD COLUMN moderation_at INTEGER',
     'ALTER TABLE project_feedback ADD COLUMN moderation_reason TEXT',
     'CREATE INDEX IF NOT EXISTS idx_project_feedback_moderated ON project_feedback (slug, moderation_at)',
+    // Work-state lifecycle, separate from moderation (visibility). status NULL
+    // means 'open'. receipt_hash is sha256 of the one-time receipt handed to
+    // the submitter, so they can look up status without any account.
+    'ALTER TABLE project_feedback ADD COLUMN status TEXT',
+    'ALTER TABLE project_feedback ADD COLUMN status_note TEXT',
+    'ALTER TABLE project_feedback ADD COLUMN status_at INTEGER',
+    'ALTER TABLE project_feedback ADD COLUMN receipt_hash TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_project_feedback_status ON project_feedback (slug, status_at)',
     // The install beacon collects no PII at all — the anonymous install UUID is
     // the entire identity model — so this column can only ever hold NULL. Dropped
     // rather than left in place: a column that can only be NULL invites someone

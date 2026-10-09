@@ -10,11 +10,11 @@ Every app declares one host kind in `src/data/projectsRegistry.ts` (react-route)
 
 | Kind | When to use | Path | Coupling |
 |---|---|---|---|
-| `react-route` | App needs the shared auth/credit/component kit and is small enough to live alongside the others | `/products/<slug>` | Tight — same Vite build, same Fastify server |
+| `react-route` | App must live in this bundle (today only Session Manager) | `/products/<slug>` | Tight — same Vite build, same Fastify server |
 | `static-path` | App is built in its own repo (often its own Claude session) and just needs a URL on bilko.run | `/projects/<slug>/` | Loose — host serves prebuilt static assets, no shared runtime |
 | `external-url` | App lives on another domain or subdomain | `https://<host>/...` | None — host only links to it |
 
-Default to `static-path` for new apps — including ones that need a signed-in user (see "Calling authenticated host APIs from a `static-path` app" below). `react-route` is for the AI-tool family that already shares the kit.
+Default to `static-path` for new apps — including ones that need a signed-in user (see "Calling authenticated host APIs from a `static-path` app" below). `react-route` is rare: today only Session Manager (`/products/session-manager`) uses it. The AI tools are `static-path` siblings whose Gemini endpoints stay in the host as gateway routes under `server/routes/tools/`.
 
 ## What the host provides
 
@@ -23,7 +23,7 @@ These are the OS services. Apps use them; they should not reimplement.
 ### To every app, regardless of host kind
 
 - **Brand chrome.** Header, footer, blog, /pricing, /privacy, /terms, /admin, ⌘K command palette.
-- **Portfolio listing.** Anything in the registry shows up on `/`, `/products`, and ⌘K automatically. No manual wiring.
+- **Portfolio listing.** Anything in the registry shows up on `/`, `/projects`, and ⌘K automatically. No manual wiring.
 - **Domain.** `bilko.run/<your-path>`.
 
 ### To `react-route` apps additionally
@@ -33,8 +33,7 @@ These are the OS services. Apps use them; they should not reimplement.
 - **Payments: Stripe.** Subscription state via `getActiveSubscriptionLive(email)`; one-time purchases via `hasPurchased(email, productKey)`. Both from `server/services/stripe.ts`.
 - **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
 - **Page-view analytics.** `usePageView()` hook fires once per route mount.
-- **Component kit.** `src/components/tool-page/` — `ToolHero`, `ScoreCard`, `SectionBreakdown`, `CompareLayout`, `Rewrites`, `CrossPromo`, `colors.ts`. Use these instead of building custom UI for grade/score displays.
-- **Tool API hook.** `useToolApi()` in `src/hooks/` wraps auth, submit, compare, generate, error/loading/token state.
+- **Shared UI for siblings** lives in `host-kit` (`packages/host-kit/`), not in this bundle; the old in-repo `tool-page` kit and `useToolApi` hook are gone.
 - **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
 - **Database.** Turso/libSQL via `dbGet/dbAll/dbRun/dbTransaction` from `server/db.ts`. Falls back to local SQLite in dev. All SQL parameterized.
 
@@ -55,7 +54,7 @@ A `static-path` app is same-origin with `/api`, so it *can* call authenticated h
 
 ### Every app
 
-A registry entry — a `static-path`/`external-url` entry in `src/data/standalone-projects.json` (validated by `mcp-host-server/src/contract/registry.ts`; see "Registry rules" below), or a `react-route` entry in `src/config/tools.ts`. Sibling repos add theirs via the [`bilko-host` MCP](../mcp-host-server/README.md) — never by hand-editing this repo.
+A registry entry — a `static-path`/`external-url` entry in `src/data/standalone-projects.json` (validated by `mcp-host-server/src/contract/registry.ts`; see "Registry rules" below), or a `react-route` entry in `src/data/projectsRegistry.ts`. Sibling repos add theirs via the [`bilko-host` MCP](../mcp-host-server/README.md) — never by hand-editing this repo.
 
 ```json
 {
@@ -73,7 +72,7 @@ A registry entry — a `static-path`/`external-url` entry in `src/data/standalon
 ### `react-route` apps additionally
 
 - A `<MyAppPage />` React component in `src/pages/MyAppPage.tsx`.
-- An entry in `src/config/tools.ts` (`LISTING_TOOLS`) with the slug, tagline, category, and a `loader` (the React.lazy import).
+- A registry mapping in `src/data/projectsRegistry.ts` (see the react-route path map there) and a route in `src/App.tsx`.
 - Backend routes in `server/routes/tools/<my-app>.ts` exporting `registerMyAppRoutes(app)`, registered in `server/routes/tools/index.ts`.
 - For paid features, deduct credits via `deductToken(email)` after a successful response; for free-tier, gate via `checkRateLimit()` and increment via `incrementUsage()`.
 
@@ -151,14 +150,14 @@ project-home lenses must not target that prefix.
 
 ## Adding a new app — checklist
 
-1. Decide the host kind. Default `static-path` unless you need shared auth/credits → `react-route`.
+1. Decide the host kind. Default `static-path`; a signed-in app still uses `static-path` (see above). `react-route` only if it truly cannot live outside this bundle.
 2. Build it.
    - `react-route`: page + route entry + per-tool server file.
    - `static-path`: standalone repo, `vite build`.
-3. Register and publish via the [`bilko-host` MCP](../mcp-host-server/README.md) — see below. `react-route` apps still register by hand in `src/config/tools.ts`.
+3. Register and publish via the [`bilko-host` MCP](../mcp-host-server/README.md) — see below. `react-route` apps still register by hand in `src/data/projectsRegistry.ts`.
 4. Run `pnpm test && pnpm exec tsc --noEmit && pnpm exec vite build` — all must pass.
 5. Commit and push to `origin`. Render auto-deploys. (Never push to `content-grade` — it's a separate, unrelated project with diverged history.)
-6. Verify the project shows up on `/`, `/products`, and in ⌘K.
+6. Verify the project shows up on `/`, `/projects`, and in ⌘K.
 
 ## Adding from a sibling-repo Claude session (MCP)
 

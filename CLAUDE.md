@@ -4,6 +4,8 @@
 
 **Git repo:** this is **`StanislavBG/bilko-run`**, remote `origin`, branch `main`. That is the one and only repo for the Bilko platform — commit and push here. The `content-grade` remote (`Content-Grade/Content-Grade`) is a **separate, unrelated project**; its history has diverged and you must **never push Bilko to it**. (Older docs/scripts that say "push to both remotes" or "deploy from Content-Grade master" are obsolete — see [Deploy](#tech-stack) and [Rules](#rules).)
 
+**Repo map:** see README.md → "Where things live" for the folder-by-folder layout.
+
 **Authoritative spec:** [`docs/host-contract.md`](docs/host-contract.md) — read it before adding, removing, or migrating any app.
 
 **For Claude sessions working on a sibling app repo (not this one):** Use the [`bilko-host` MCP](mcp-host-server/README.md) to register, publish, and inspect apps. You don't need to edit this repo by hand.
@@ -28,7 +30,7 @@ Bilko's workspace lives in `~/Projects/` with this structure:
   Preflight/                ← Monorepo: stepproof, agent-comply, agent-gate,
                                agent-shift, agent-trace, license, site
   Archive/                  ← Bilko-Archive, AIQA, Content-Grade, experiments
-  Bilko-Academy/            ← sibling — non-technical AI fundamentals (see [docs/academy-research.md](docs/academy-research.md))
+  Bilko-Academy/            ← sibling — non-technical AI fundamentals (see [docs/archive/academy-research.md](docs/archive/academy-research.md))
 ```
 
 ## Main URLs
@@ -43,7 +45,7 @@ bilko.run is Bilko's personal brand site and host platform. Apps share a common 
 
 ### Current apps
 
-**In-repo (react-route, canonical URL `/products/<slug>`):** _none_ — all 9 AI tools have been extracted to sibling repos. The host repo now ships only brand chrome (Layout, HomePage, ProjectsPage, BlogPage, PricingPage, AdminPage).
+**In-repo (react-route, canonical URL `/products/<slug>`):** **Session Manager** is the one react-route app (`/products/session-manager`, plus its Field Manual at `/products/session-manager/manual`). All 9 AI tools have been extracted to sibling repos. Beyond that the host repo ships only brand chrome (Layout, HomePage, ProjectsPage, BlogPage, PricingPage, AdminPage).
 
 **Sibling repos (static-path, canonical URL `/projects/<slug>/`)** — fully independent, built in their own Claude sessions. The **authoritative list is the registry** (`src/data/standalone-projects.json`, ~25 entries, MCP-managed); the list below is a curated subset and will drift — check the registry, not this doc, for the live set:
 
@@ -84,7 +86,7 @@ Three host kinds, declared in `src/data/projectsRegistry.ts`. Full spec in [`doc
 
 **Adding a new app from another Claude session:** read [`docs/host-contract.md`](docs/host-contract.md) and use the [`bilko-host` MCP](mcp-host-server/README.md). Don't edit `projectsRegistry.ts` by hand from a sibling repo.
 
-The portfolio (`/`, `/products`, `⌘K`) reads from `projectsRegistry.ts`, so once registered the app shows up everywhere. Static-path and external apps trigger a full page load on click (so Fastify serves the static bundle); React routes use SPA navigation.
+The portfolio (`/`, `/projects`, `⌘K`) reads from `projectsRegistry.ts`, so once registered the app shows up everywhere. (`/products` itself redirects to `/projects`; only `/products/<slug>` paths stay live.) Static-path and external apps trigger a full page load on click (so Fastify serves the static bundle); React routes use SPA navigation.
 
 ## Tech Stack
 
@@ -100,15 +102,6 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 
 ## Key Architecture
 
-### Shared Component Kit (`src/components/tool-page/`)
-- `ToolHero` — Dark hero section with title, tagline, optional tab toggle
-- `ScoreCard` — Big score + grade + verdict + share/download buttons
-- `SectionBreakdown` — Per-pillar score bars with feedback
-- `CompareLayout` — Side-by-side A/B comparison with winner banner
-- `Rewrites` — AI rewrite suggestions with copy buttons
-- `CrossPromo` — Contextual links to related tools
-- `colors.ts` — Shared grade/bar color utilities
-
 ### host-kit (`packages/host-kit/`)
 This is the client SDK that static-path siblings use. It provides `authFetch`/`useAuth` (Clerk Bearer auth to the host's `/api`), the games hooks, `SiteHeader`, `GameShell`, and the `bilko-host-kit` manifest CLI. It is a pnpm workspace package with its own build and tests (`pnpm --filter host-kit build|test|typecheck`).
 
@@ -120,8 +113,9 @@ All 14 sibling consumers depend on it locally with `"host-kit": "file:../Bilko/p
 - **History:** merged in from `StanislavBG/bilko-host-kit` (now archived) on 2026-10-04, with its full history.
 
 ### Shared Hooks (`src/hooks/`)
-- `useAuth` — Clerk auth state
 - `usePageView` — Page view tracking with Clerk email
+
+Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAuth()`); there is no host-side `useAuth` wrapper.
 
 ### Backend Patterns (`server/`)
 - `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the inverse-mode generator helper. `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
@@ -137,10 +131,11 @@ All 14 sibling consumers depend on it locally with `"host-kit": "file:../Bilko/p
 Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
 
 - AI-tool gateway routes — `server/routes/tools/`
-- Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/`
-- Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`
+- Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/`, `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/pages/SessionManagerPage.tsx`, `src/pages/ManualPage.tsx`, `src/styles/session-manager-*.css`, `data/manual/`
+- Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
 - SocialSignalsTrader coffee checkout — in `server/routes/stripe.ts`
 - Game config — `shared/game-config.ts`
+- Legacy ContentGrade license code — `server/routes/license.ts`, `server/services/license.ts` (not part of the framework; pending an owner decision to move or delete)
 
 Any new app-specific host code must be added to this list in the same commit, or live in the sibling repo instead.
 
@@ -165,7 +160,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-48 files, 672 tests (counted via `pnpm vitest run`; recount at `tests/*.test.ts` whenever this drifts).
+54 files, 754 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

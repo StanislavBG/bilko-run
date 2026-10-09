@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { track } from '../hooks/usePageView.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 // All AI tools live as static-path siblings now; cross-promo to them needs a full
 // page load (Fastify serves the static bundle), so use <a href> not <Link to>.
@@ -13,6 +14,7 @@ const TOOL_LINKS = [
 ];
 
 export function NotFoundPage() {
+  useDocumentTitle('Page not found — bilko.run');
   useEffect(() => { track('not_found'); }, []);
   return (
     <section className="max-w-2xl mx-auto px-6 py-20 text-center">

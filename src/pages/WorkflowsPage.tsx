@@ -1,18 +1,16 @@
-import { useEffect } from 'react';
 import { PageHeader } from '../components/portfolio/PageHeader.js';
 import { CHANNELS } from '../data/portfolio.js';
 import {
   WORKFLOW_GROUPS, WORKFLOW_STATS, WORKFLOWS_GENERATED_AT, ON_DEMAND_PROJECTS,
 } from '../data/workflowsView.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 function isLocal(href: string): boolean {
   return href.startsWith('/');
 }
 
 export function WorkflowsPage() {
-  useEffect(() => {
-    document.title = 'Workflows — Bilko';
-  }, []);
+  useDocumentTitle('Workflows — Bilko');
 
   const updated = new Date(WORKFLOWS_GENERATED_AT).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Los_Angeles',

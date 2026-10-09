@@ -1,10 +1,8 @@
-import { useEffect } from 'react';
 import { PageHeader } from '../components/portfolio/PageHeader.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export function ContactPage() {
-  useEffect(() => {
-    document.title = 'Contact — Bilko';
-  }, []);
+  useDocumentTitle('Contact — Bilko');
 
   return (
     <div className="pf-page">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/portfolio/PageHeader.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -38,8 +39,9 @@ export function BlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
 
+  useDocumentTitle('Blog — Bilko Bibitkov');
+
   useEffect(() => {
-    document.title = 'Blog — Bilko Bibitkov';
     fetch(`${API}/blog`)
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setPosts(d); })

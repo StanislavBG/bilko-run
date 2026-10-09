@@ -25,6 +25,27 @@ const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com';
 const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com';
 const CLERK_FAPI_ORIGIN = 'https://clerk.bilko.run';
 
+// Blog videos are inline-script HTML documents served from /blog-videos/<slug>/
+// and framed by the post page. They run under their own always-enforced,
+// sandboxed policy (opaque origin, no network) instead of the site's nonce policy.
+export const BLOG_VIDEO_CSP = [
+  `default-src 'none'`,
+  `script-src 'unsafe-inline'`,
+  `style-src 'unsafe-inline'`,
+  `img-src data: blob:`,
+  `media-src data: blob:`,
+  `font-src data:`,
+  `connect-src 'none'`,
+  `frame-ancestors 'self'`,
+  `base-uri 'none'`,
+  `form-action 'none'`,
+  `sandbox allow-scripts`,
+].join('; ');
+
+export function isBlogVideoPath(url: string): boolean {
+  return url.split('?')[0].startsWith('/blog-videos/');
+}
+
 function buildCsp(nonce: string): string {
   const directives = [
     `default-src 'self'`,
@@ -41,7 +62,7 @@ function buildCsp(nonce: string): string {
     `img-src 'self' data: https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com`,
     `font-src 'self' data: ${FONT_FILE_ORIGIN}`,
     `connect-src 'self' https://*.clerk.com ${CLERK_FAPI_ORIGIN} https://api.stripe.com`,
-    `frame-src https://*.clerk.com https://js.stripe.com https://hooks.stripe.com`,
+    `frame-src 'self' https://*.clerk.com https://js.stripe.com https://hooks.stripe.com`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self' https://*.stripe.com`,
@@ -118,6 +139,10 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
     reply.header('Permissions-Policy', PERMISSIONS);
     reply.header('Cross-Origin-Opener-Policy', 'same-origin');
+    if (isBlogVideoPath(req.url)) {
+      reply.header('Content-Security-Policy', BLOG_VIDEO_CSP);
+      return;
+    }
     const cspHeader = ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only';
     reply.header(cspHeader, buildCsp(nonce));
   });
@@ -137,6 +162,7 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
   // Manual's offline edition) is saved, never rendered under this policy, so
   // it must reach the visitor byte-for-byte, with its route's own caching.
   app.addHook('onSend', async (req, reply, payload) => {
+    if (isBlogVideoPath(req.url)) return payload;
     const ctype = String(reply.getHeader('content-type') ?? '');
     if (!ctype.startsWith('text/html')) return payload;
     if (/^\s*attachment\b/i.test(String(reply.getHeader('content-disposition') ?? ''))) return payload;

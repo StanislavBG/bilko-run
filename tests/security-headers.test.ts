@@ -21,6 +21,7 @@ beforeAll(async () => {
   registerSecurityHeaders(app);
   app.get('/test-html', async (_req, reply) => reply.type('text/html').send(TEST_HTML));
   app.get('/api/test', async () => ({ ok: true }));
+  app.get('/blog-videos/x/', async (_req, reply) => reply.type('text/html').send('<html><head></head><body><script>1</script></body></html>'));
   await app.ready();
 });
 
@@ -152,5 +153,24 @@ describe('CSP violation report endpoint', () => {
       last = res.statusCode;
     }
     expect(last).toBe(429);
+  });
+});
+
+describe('Security headers — blog video fence', () => {
+  it('serves /blog-videos/ HTML under the enforced sandbox CSP only', async () => {
+    const res = await app.inject({ method: 'GET', url: '/blog-videos/x/?t=1' });
+    const csp = res.headers['content-security-policy'] as string;
+    expect(csp).toContain('sandbox allow-scripts');
+    expect(csp).toContain(`frame-ancestors 'self'`);
+    expect(csp).toContain(`connect-src 'none'`);
+    expect(res.headers['content-security-policy-report-only']).toBeUndefined();
+    expect(res.payload).not.toContain('nonce=');
+    expect(res.payload).toBe('<html><head></head><body><script>1</script></body></html>');
+  });
+
+  it('normal HTML CSP frame-src allows self', async () => {
+    const res = await app.inject({ method: 'GET', url: '/test-html' });
+    const frameSrc = getCsp(res.headers).split(';').map((d) => d.trim()).find((d) => d.startsWith('frame-src'));
+    expect(frameSrc!.split(/\s+/)).toContain(`'self'`);
   });
 });

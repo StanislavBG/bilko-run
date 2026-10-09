@@ -139,14 +139,14 @@ describe('/checkout/success product resolution', () => {
     });
   });
 
-  it('issues a session_manager-keyed license when the line item matches the Session Manager price', async () => {
+  it('thanks the buyer without minting a license when the line item matches the Session Manager price', async () => {
     listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_session_manager_123' } }] });
     const app = await buildApp();
 
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
     expect(res.statusCode).toBe(200);
-    expect(upsertLicenseKey).toHaveBeenCalledWith('buyer@test.com', 'cus_123', PRODUCT_KEYS.SESSION_MANAGER);
+    expect(upsertLicenseKey).not.toHaveBeenCalled();
     expect(res.body).toContain('Thanks for your support');
     // The manual is free as of 2.0.1: a late payment is thanked and sent to the
     // free reader, not told it "unlocked" anything or sent to a purchase lookup.
@@ -156,35 +156,95 @@ describe('/checkout/success product resolution', () => {
     await app.close();
   });
 
-  it('falls back to contentgrade_pro only when the price cannot be resolved', async () => {
+  it('shows the generic thank-you and mints no license when the price cannot be resolved', async () => {
     listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_unknown_999' } }] });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const app = await buildApp();
 
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
     expect(res.statusCode).toBe(200);
-    expect(upsertLicenseKey).toHaveBeenCalledWith('buyer@test.com', 'cus_123', PRODUCT_KEYS.CONTENTGRADE_PRO);
+    expect(upsertLicenseKey).not.toHaveBeenCalled();
+    expect(res.body).toContain('Thanks for your support');
+    expect(res.body).not.toMatch(/license key/i);
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(String(errSpy.mock.calls[0][0])).toContain('price_unknown_999');
+    errSpy.mockRestore();
     await app.close();
   });
 
-  it('falls back to contentgrade_pro when line item resolution throws', async () => {
+  it('shows the generic thank-you and mints no license when line item resolution throws', async () => {
     listLineItems.mockRejectedValue(new Error('Stripe API error'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const app = await buildApp();
 
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
     expect(res.statusCode).toBe(200);
-    expect(upsertLicenseKey).toHaveBeenCalledWith('buyer@test.com', 'cus_123', PRODUCT_KEYS.CONTENTGRADE_PRO);
+    expect(upsertLicenseKey).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
     await app.close();
   });
 
-  it('does not mis-issue contentgrade_pro when a different one-time product resolves', async () => {
-    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_session_manager_123' } }] });
+  it('shows the generic thank-you for a subscription-mode session without minting a license', async () => {
+    sessionsRetrieve.mockResolvedValue({
+      payment_status: 'paid',
+      mode: 'subscription',
+      client_reference_id: 'buyer@test.com',
+      customer: 'cus_123',
+    });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const app = await buildApp();
 
-    await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
 
-    expect(upsertLicenseKey).not.toHaveBeenCalledWith('buyer@test.com', 'cus_123', PRODUCT_KEYS.CONTENTGRADE_PRO);
+    expect(res.statusCode).toBe(200);
+    expect(upsertLicenseKey).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(String(errSpy.mock.calls[0][0])).toContain(SESSION_ID);
+    errSpy.mockRestore();
+    await app.close();
+  });
+});
+
+describe('retired ContentGrade surfaces', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...process.env, STRIPE_PRICE_PUBLICTRADES_COFFEE: 'price_coffee_123' };
+  });
+
+  it('redirects /upgrade to / with a 302', async () => {
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/upgrade' });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('/');
+    await app.close();
+  });
+
+  it('no longer serves /my-license, license-key or validate-license', async () => {
+    const app = await buildApp();
+    expect((await app.inject({ method: 'GET', url: '/my-license' })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/stripe/license-key?email=a@b.co' })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/api/stripe/validate-license', payload: { key: 'CG-x' } })).statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('rejects create-checkout-session with no priceType (400) and creates nothing', async () => {
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/stripe/create-checkout-session', payload: { email: 'a@b.co' } });
+    expect(res.statusCode).toBe(400);
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('rejects contentgrade_* priceTypes with 400', async () => {
+    const app = await buildApp();
+    for (const priceType of ['contentgrade_pro', 'contentgrade_business', 'contentgrade_team']) {
+      const res = await app.inject({ method: 'POST', url: '/api/stripe/create-checkout-session', payload: { email: 'a@b.co', priceType } });
+      expect(res.statusCode).toBe(400);
+    }
+    expect(sessionsCreate).not.toHaveBeenCalled();
     await app.close();
   });
 });

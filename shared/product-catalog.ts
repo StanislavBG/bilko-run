@@ -12,9 +12,6 @@ export const PRODUCT_KEYS = {
   PAGEROAST_TOKENS: 'pageroast_tokens',
   PAGEROAST_TOKEN_SINGLE: 'pageroast_token_single',
   AUDIENCEDECODER_REPORT: 'audiencedecoder_report',
-  CONTENTGRADE_PRO: 'contentgrade_pro',
-  CONTENTGRADE_BUSINESS: 'contentgrade_business',
-  CONTENTGRADE_TEAM: 'contentgrade_team',
   SESSION_MANAGER: 'session_manager',
   PUBLICTRADES_COFFEE: 'publictrades_coffee',
 } as const;
@@ -23,9 +20,6 @@ export type ProductKey = typeof PRODUCT_KEYS[keyof typeof PRODUCT_KEYS];
 
 /** User-selectable checkout price types (drives the Stripe create-checkout flow). */
 export type PriceType =
-  | 'contentgrade_pro'
-  | 'contentgrade_business'
-  | 'contentgrade_team'
   | 'pageroast_tokens'
   | 'pageroast_token_single'
   | 'audiencedecoder_report'
@@ -49,9 +43,6 @@ export interface PriceCatalogEntry {
 }
 
 export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
-  { priceType: 'contentgrade_pro',       envVar: 'STRIPE_PRICE_CONTENTGRADE_PRO',      productKey: PRODUCT_KEYS.CONTENTGRADE_PRO,       mode: 'subscription' },
-  { priceType: 'contentgrade_business',  envVar: 'STRIPE_PRICE_CONTENTGRADE_BUSINESS', productKey: PRODUCT_KEYS.CONTENTGRADE_BUSINESS,  mode: 'subscription' },
-  { priceType: 'contentgrade_team',      envVar: 'STRIPE_PRICE_CONTENTGRADE_TEAM',     productKey: PRODUCT_KEYS.CONTENTGRADE_TEAM,      mode: 'subscription' },
   { priceType: 'pageroast_tokens',       envVar: 'STRIPE_PRICE_TOKENS',                productKey: PRODUCT_KEYS.PAGEROAST_TOKENS,       mode: 'payment', tokenAmount: TOKENS_PER_BUNDLE },
   { priceType: 'pageroast_token_single', envVar: 'STRIPE_PRICE_TOKEN_SINGLE',          productKey: PRODUCT_KEYS.PAGEROAST_TOKENS,       mode: 'payment', tokenAmount: TOKENS_PER_SINGLE },
   { priceType: 'audiencedecoder_report', envVar: 'STRIPE_PRICE_AUDIENCEDECODER',       productKey: PRODUCT_KEYS.AUDIENCEDECODER_REPORT, mode: 'payment' },

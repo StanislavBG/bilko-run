@@ -12,7 +12,7 @@ export function getStripe(): Stripe | null {
 }
 
 export function isStripeConfigured(): boolean {
-  return !!stripeKey && !!process.env.STRIPE_PRICE_CONTENTGRADE_PRO;
+  return !!stripeKey;
 }
 
 export function isAudienceDecoderConfigured(): boolean {

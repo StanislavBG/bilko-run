@@ -4,9 +4,8 @@ import {
   hasActiveSubscription, hasPurchased,
   getCustomerStripeId, upsertCustomer,
   saveSubscription, updateSubscriptionStatus, updateSubscriptionPeriod,
-  saveOneTimePurchase, priceToPlanTier, hasActiveSubscriptionLive,
+  saveOneTimePurchase, priceToPlanTier,
 } from '../services/stripe.js';
-import { upsertLicenseKey, getLicenseKeysForEmail, validateLicenseKey } from '../services/license.js';
 import { creditTokens, grantFreeTokens, hasTokenAccount } from '../services/tokens.js';
 import { dbRun } from '../db.js';
 import {
@@ -69,18 +68,17 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       return { error: 'Valid email required.' };
     }
 
-    const priceType = body?.priceType ?? 'contentgrade_pro';
-    const catalogEntry = entryForPriceType(priceType);
-    const stripe = getStripe();
+    const priceType = body?.priceType;
+    const catalogEntry = priceType ? entryForPriceType(priceType) : undefined;
+    if (!priceType || !catalogEntry) {
+      reply.status(400);
+      return { error: 'Valid priceType required.' };
+    }
 
+    const stripe = getStripe();
     if (!stripe) {
       reply.status(503);
       return { error: 'Stripe not configured' };
-    }
-
-    if (!catalogEntry) {
-      reply.status(400);
-      return { error: 'Unknown priceType' };
     }
 
     const priceId = process.env[catalogEntry.envVar];
@@ -171,7 +169,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         const stripeCustomerId = data.customer as string;
 
         if (!email) {
-          console.error('[stripe_webhook] checkout.session.completed missing customer email — session:', data.id, '— license key NOT generated');
+          console.error('[stripe_webhook] checkout.session.completed missing customer email — session:', data.id);
         }
 
         if (email && stripeCustomerId) {
@@ -194,8 +192,6 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             status: 'active',
             current_period_end: 0,
           });
-          const licenseKey = await upsertLicenseKey(email, stripeCustomerId, 'contentgrade_pro');
-          console.log(`[stripe] License key issued for ${email}: ${licenseKey.slice(0, 10)}...`);
         } else if (data.mode === 'payment' && email && stripeCustomerId) {
           let productKey: string = PRODUCT_KEYS.AUDIENCEDECODER_REPORT;
           let tokenAmount = 0;
@@ -295,46 +291,6 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     }
   });
 
-  // Returns the license key for a Pro subscriber — used by CLI activate flow
-  app.get('/api/stripe/license-key', async (req, reply) => {
-    const query = req.query as { email?: string };
-    const email = (query.email ?? '').trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      reply.status(400);
-      return { error: 'Valid email required.' };
-    }
-
-    const isActive = await hasActiveSubscriptionLive(email);
-    if (!isActive) {
-      reply.status(403);
-      return { error: 'No active Bilko.run Pro subscription found for this email.' };
-    }
-
-    // Retroactively generate a key for subscribers who paid before this feature existed
-    const customerId = await getCustomerStripeId(email);
-    const licenseKey = await upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
-
-    return { licenseKey, email };
-  });
-
-  // Validates a license key — used by CLI to confirm key is genuine
-  app.post('/api/stripe/validate-license', async (req, reply) => {
-    const body = req.body as { key?: string } | null;
-    const key = (body?.key ?? '').trim();
-    if (!key) {
-      reply.status(400);
-      return { error: 'key required' };
-    }
-
-    const result = await validateLicenseKey(key);
-    if (!result.valid) {
-      reply.status(403);
-      return { valid: false, error: 'Invalid or revoked license key.' };
-    }
-
-    return { valid: true, email: result.email, productKey: result.productKey };
-  });
-
   // Post-checkout success page — Stripe redirects here after payment.
   // Retrieves the session, looks up (or generates) the license key, and presents it to the customer.
   app.get('/checkout/success', async (req, reply) => {
@@ -366,51 +322,34 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         return successHtml('Email not found', '<p>We couldn\'t identify your account. Please contact support with your Stripe receipt.</p>');
       }
 
-      const customerId = typeof session.customer === 'string' ? session.customer : undefined;
-
       // Resolve the actually-purchased product from the session's line item, same
       // pattern as the webhook handler above — do NOT hardcode a product key here.
-      let productKey: string = PRODUCT_KEYS.CONTENTGRADE_PRO;
-      try {
-        const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 1 });
-        const seenPriceId = lineItems.data[0]?.price?.id;
-        const matched = entryForPriceId(seenPriceId, process.env);
-        if (matched) productKey = matched.productKey;
-        // else: no catalog entry resolves for this price — fall back to contentgrade_pro
-        // as a last resort so any purchase path that doesn't cleanly resolve still gets
-        // a license rather than an error page. That fallback hands a Pro LICENSE KEY to
-        // whoever paid, so an unmatched price is never routine — a $5 tip bought through
-        // a payment link whose STRIPE_PRICE_* var is unset lands here. Log it loudly.
-        else {
-          console.error(
-            `[checkout_success] price ${seenPriceId} matches no STRIPE_PRICE_* env var — ` +
-            `issuing a ${productKey} license by fallback. Set the product's STRIPE_PRICE_* ` +
-            `var (payment-link products need it too) to stop mis-issuing licenses.`,
-          );
+      // No license key is ever minted: subscription sessions (legacy ContentGrade)
+      // and unresolved prices both get the generic thank-you page.
+      let productKey: string | null = null;
+      if (session.mode === 'subscription') {
+        console.error(`[checkout_success] subscription-mode session ${sessionId} — showing generic thank-you`);
+      } else {
+        try {
+          const lineItems = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 1 });
+          const seenPriceId = lineItems.data[0]?.price?.id;
+          const matched = entryForPriceId(seenPriceId, process.env);
+          if (matched) productKey = matched.productKey;
+          else {
+            console.error(
+              `[checkout_success] price ${seenPriceId} (session ${sessionId}) matches no STRIPE_PRICE_* env var — ` +
+              `showing generic thank-you. Payment-link products need their STRIPE_PRICE_* var set too.`,
+            );
+          }
+        } catch (err: any) {
+          console.error('[checkout_success] line item resolution failed for session', sessionId, ':', err.message);
         }
-      } catch (err: any) {
-        console.error('[checkout_success] line item resolution failed, falling back to contentgrade_pro:', err.message, 'session:', sessionId);
       }
 
-      const licenseKey = await upsertLicenseKey(email, customerId, productKey);
-
-      // Products in this set are one-time support/tip purchases with no license
-      // gate — a "your license key, activate it" body reads as Pro-subscription
-      // copy for what's really a thank-you. Route them all through the same
-      // no-license branch instead of adding a parallel `if` per product.
-      const NO_LICENSE_SUPPORT_PRODUCTS = new Set<string>([
-        PRODUCT_KEYS.SESSION_MANAGER,
-        PRODUCT_KEYS.PUBLICTRADES_COFFEE,
-      ]);
-      const isSupportPurchase = NO_LICENSE_SUPPORT_PRODUCTS.has(productKey);
-      const title = isSupportPurchase ? 'Thanks for your support 🎉' : 'You\'re now Pro 🎉';
-      const intro = isSupportPurchase
-        ? `<p>Your support purchase is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>`
-        : `<p>Payment confirmed for <strong>${escHtml(email)}</strong>.</p>`;
+      const title = 'Thanks for your support 🎉';
 
       // The Field Manual is free as of 2.0.1, so nothing sells it any more. A
-      // session_manager payment reaching this page is a late or in-flight one
-      // (the catalog entry stays so it resolves here, not to contentgrade_pro):
+      // session_manager payment reaching this page is a late or in-flight one:
       // thank the buyer and send them to the free reader.
       const body = productKey === PRODUCT_KEYS.SESSION_MANAGER
         ? `
@@ -419,19 +358,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         <p><a href="/products/session-manager/manual" style="display:inline-block;background:#7fff7f;color:#000;padding:12px 20px;border-radius:6px;font-weight:600;text-decoration:none">Read the manual →</a></p>
         <p style="font-size:0.9em;color:#888">The app itself is free too — launch it any time with:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em">npx claude-code-session-manager@latest</pre>`
-        : isSupportPurchase
-        ? `
-        ${intro}
-        <p style="font-size:0.9em;color:#888">Receipt on file for <strong>${escHtml(email)}</strong>.</p>`
         : `
-        ${intro}
-        <p>Your license key:</p>
-        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${escHtml(licenseKey)}</pre>
-        <p>Activate it in your terminal:</p>
-        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${escHtml(licenseKey)}</pre>
-        <p style="font-size:0.9em;color:#888">
-          Retrieve it any time: <a href="/my-license?email=${encodeURIComponent(email)}">/my-license?email=${encodeURIComponent(email)}</a>
-        </p>`;
+        <p>Your payment is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>
+        <p style="font-size:0.9em;color:#888">Receipt on file for <strong>${escHtml(email)}</strong>.</p>`;
 
       reply.type('text/html');
       return successHtml(title, body);
@@ -442,81 +371,8 @@ export function registerStripeRoutes(app: FastifyInstance): void {
     }
   });
 
-  // Self-service license key retrieval page — for users who paid via static Stripe link
-  // and weren't redirected to /checkout/success, or who lost their key.
-  app.get('/my-license', async (req, reply) => {
-    const query = req.query as { email?: string };
-    const email = (query.email ?? '').trim().toLowerCase();
-
-    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      // Email provided — look up their key
-      const isActive = await hasActiveSubscriptionLive(email);
-      if (!isActive) {
-        reply.type('text/html');
-        return successHtml('No active subscription found', `
-          <p>No active Bilko.run Pro subscription was found for <strong>${escHtml(email)}</strong>.</p>
-          <p>If you just paid, it can take up to a minute for the webhook to process. Try again shortly.</p>
-          <p>If you believe this is an error, contact support with your Stripe receipt.</p>
-          <p><a href="/my-license">Try a different email</a></p>
-        `);
-      }
-      const customerId = await getCustomerStripeId(email);
-      const licenseKey = await upsertLicenseKey(email, customerId ?? undefined, 'contentgrade_pro');
-      reply.type('text/html');
-      return successHtml('Your Bilko.run Pro License', `
-        <p>Active Pro subscription confirmed for <strong>${escHtml(email)}</strong>.</p>
-        <p>Your license key:</p>
-        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em;letter-spacing:0.05em">${escHtml(licenseKey)}</pre>
-        <p>Activate it in your terminal:</p>
-        <pre style="background:#111;color:#ccc;padding:12px;border-radius:6px">${escHtml(licenseKey)}</pre>
-        <p style="font-size:0.9em;color:#888">
-          Bookmark this page to retrieve your key any time.<br>
-          Replace the email in the URL: <code>/my-license?email=${encodeURIComponent(email)}</code>
-        </p>
-      `);
-    }
-
-    // No email — show the form
-    reply.type('text/html');
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Retrieve License Key — Bilko.run</title>
-  <style>
-    body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#e8e8e8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
-    .card{max-width:480px;width:90%;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:40px}
-    h1{margin-top:0;font-size:1.5em}
-    input{width:100%;box-sizing:border-box;padding:10px 14px;background:#111;border:1px solid #444;border-radius:6px;color:#e8e8e8;font-size:1em;margin:8px 0 16px}
-    button{width:100%;padding:12px;background:#7fff7f;color:#000;border:none;border-radius:6px;font-size:1em;font-weight:600;cursor:pointer}
-    button:hover{background:#5fdf5f}
-    p{color:#aaa;font-size:0.9em}
-    a{color:#7fc4ff}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Retrieve Your License Key</h1>
-    <p>Enter the email address you used when purchasing Bilko.run Pro.</p>
-    <form method="GET" action="/my-license">
-      <input type="email" name="email" placeholder="you@example.com" required autofocus/>
-      <button type="submit">Get My License Key</button>
-    </form>
-    <p style="margin-top:24px">
-      Don't have Pro yet? <a href="/upgrade">Upgrade for $9/mo →</a>
-    </p>
-  </div>
-</body>
-</html>`;
-  });
-
-  // Upgrade redirect — CLI rate-limit messages point here for a clean, stable URL
-  app.get('/upgrade', async (_req, reply) => {
-    const proLink = process.env.STRIPE_PAYMENT_LINK_CONTENTGRADE_PRO
-      ?? 'https://buy.stripe.com/4gM14p87GeCh9vn9ks8k80a'; // Pro $9/mo direct checkout
-    return reply.redirect(proLink, 302);
-  });
+  // Retired: old CLI messages still link here, so keep the path and send it home.
+  app.get('/upgrade', async (_req, reply) => reply.redirect('/', 302));
 
   // Coffee-tip redirect — the shared Bilko tip jar. A stable top-level URL
   // other projects (the social-signals-trader dashboard, the
@@ -560,15 +416,12 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       return { error: 'email required' };
     }
 
-    const keys = await getLicenseKeysForEmail(email);
-    const activeLicenseKey = keys.find(k => k.status === 'active')?.key ?? null;
     const active = await hasActiveSubscription(email);
 
     return {
       active,
       audiencedecoder: await hasPurchased(email, PRODUCT_KEYS.AUDIENCEDECODER_REPORT),
-      plan: active ? 'contentgrade_pro' : null,
-      licenseKey: activeLicenseKey,
+      plan: active ? 'pro' : null,
       configured: isStripeConfigured(),
       audienceDecoderConfigured: isAudienceDecoderConfigured(),
     };

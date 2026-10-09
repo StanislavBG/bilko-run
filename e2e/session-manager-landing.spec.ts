@@ -64,6 +64,19 @@ async function expectWindowsDownloadLink(scope: Locator) {
   await expect(scope.getByText(win.comingSoonLabel)).toHaveCount(0);
 }
 
+/** Canvas mode only: the Parts Bin is on page 2, so turn there with the page's own button. */
+async function showParts(page: Page) {
+  if ((await page.locator('.smlp-root').getAttribute('data-layout')) !== 'canvas') return;
+  await page.getByRole('button', { name: new RegExp(COPY.pages.next) }).click();
+  await expect(page.getByRole('tablist')).toBeVisible();
+  // Let the 700ms flip settle so the next input is not swallowed by the turn lock.
+  await page.waitForTimeout(800);
+}
+
+const partsPage = (page: Page) => page.locator('#parts');
+// CSS locator: the inactive page is aria-hidden, so a role query would not find it.
+const coverPage = (page: Page) => page.locator(`section[aria-label="${COPY.pages.aria.cover}"]`);
+
 async function noHorizontalScroll(page: Page) {
   const [scrollWidth, innerWidth] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
   expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
@@ -79,7 +92,8 @@ test.describe('Session Manager landing — layout modes', () => {
     await expect(page.locator('.smlp-canvas')).toHaveCSS('width', '1440px');
     await expect(page.locator('.smlp-canvas')).toHaveCSS('height', '860px');
     await expect(page.locator('.smlp-stripe')).toHaveCount(2);
-    await expect(page.getByRole('tablist')).toHaveAttribute('aria-orientation', 'vertical');
+    // The Parts Bin is on page 2, so on the cover its tablist is out of the accessibility tree.
+    await expect(page.locator('[role="tablist"]')).toHaveAttribute('aria-orientation', 'vertical');
     // The in-h1 audience pill is aria-hidden: the heading's name is the headline alone.
     await expect(page.getByRole('heading', { level: 1 })).toHaveAccessibleName(/^Claude Code,\s*supercharged\.$/);
     // Body overflow is locked only while the canvas is mounted.
@@ -185,6 +199,7 @@ test.describe('Session Manager landing — Parts Bin', () => {
     test(`tab switching updates the panel and the chapter link (${viewport.width}px)`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await open(page);
+      await showParts(page);
       const panel = page.getByRole('tabpanel');
       const link = page.locator('.smlp-chapter__link');
 
@@ -263,6 +278,112 @@ test.describe('Session Manager landing — Parts Bin', () => {
       await expect(rail).toHaveAttribute('data-more', 'true');
     });
   }
+});
+
+test.describe('Session Manager landing — two pages', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 860 });
+  });
+
+  test('the cover shows the hero and price tag and no visible Parts Bin tablist', async ({ page }) => {
+    await open(page);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('region', { name: COPY.priceTag.aria.region })).toBeVisible();
+    await expect(page.getByRole('tablist')).toHaveCount(0);
+    // The parts page sits under the opaque cover: whatever is on top at the tablist is not the tablist.
+    const covered = await page.evaluate(() => {
+      const r = document.querySelector('[role="tablist"]')!.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !top?.closest('[role="tablist"]');
+    });
+    expect(covered).toBe(true);
+    await expect(page.locator('.smlp-dot')).toHaveCount(2);
+    await expect(page.locator('.smlp-dot--on')).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('the wheel turns to page 2 and back', async ({ page }) => {
+    await open(page);
+    await page.mouse.move(720, 430);
+    await page.mouse.wheel(0, 200);
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await expect(page).toHaveURL(/#parts$/);
+    // Past the wheel's quiet period and the 700ms flip, which holds a turn lock.
+    await page.waitForTimeout(800);
+    await page.mouse.wheel(0, -200);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('tablist')).toHaveCount(0);
+    expect(new URL(page.url()).hash).not.toBe('#parts');
+  });
+
+  test('PageDown and the turn button turn to page 2; the back button and a dot return', async ({ page }) => {
+    await open(page);
+    await page.keyboard.press('PageDown');
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await expect(page).toHaveURL(/#parts$/);
+    await page.waitForTimeout(800);
+
+    await page.getByRole('button', { name: new RegExp(COPY.pages.prev) }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('tablist')).toHaveCount(0);
+    await page.waitForTimeout(800);
+
+    await page.getByRole('button', { name: new RegExp(COPY.pages.next) }).click();
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await page.waitForTimeout(800);
+
+    await page.getByRole('button', { name: 'Go to page 1 of 2' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('tablist')).toHaveCount(0);
+  });
+
+  test('/products/session-manager#parts opens on page 2 and the inactive page is inert', async ({ page }) => {
+    const toc = latestToc();
+    await page.route('**/api/manual/toc', route => route.fulfill({ json: toc }));
+    await page.goto(`${PATH}#parts`);
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await expect(coverPage(page)).toHaveAttribute('inert', '');
+    await expect(partsPage(page)).not.toHaveAttribute('inert', /.*/);
+
+    await page.getByRole('button', { name: 'Go to page 1 of 2' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(partsPage(page)).toHaveAttribute('inert', '');
+    await expect(coverPage(page)).not.toHaveAttribute('inert', /.*/);
+  });
+
+  test('ArrowDown inside the tablist moves the tab and does not turn the page', async ({ page }) => {
+    await open(page);
+    await showParts(page);
+    await page.getByRole('tab', { name: COPY.tabs[0].label }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('tab', { name: COPY.tabs[1].label })).toHaveAttribute('aria-selected', 'true');
+    await page.waitForTimeout(900);
+    await expect(page).toHaveURL(/#parts$/);
+    await expect(page.getByRole('tablist')).toBeVisible();
+    await expect(coverPage(page)).toHaveAttribute('inert', '');
+  });
+
+  test('with reduced motion the turn completes within 400ms', async ({ browser }) => {
+    const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 860 } });
+    const page = await context.newPage();
+    await open(page);
+    await page.getByRole('button', { name: new RegExp(COPY.pages.next) }).click();
+    await expect(page.getByRole('tablist')).toBeVisible({ timeout: 400 });
+    await expect
+      .poll(() => coverPage(page).evaluate(el => getComputedStyle(el).opacity), { timeout: 400 })
+      .toBe('0');
+    await context.close();
+  });
+
+  test('at 390x844 both sections are in the document, #parts exists, no dots, no overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page);
+    await expect(page.getByRole('region', { name: COPY.pages.aria.cover })).toBeAttached();
+    await expect(page.getByRole('region', { name: COPY.pages.aria.parts })).toBeAttached();
+    await expect(page.locator('#parts')).toHaveCount(1);
+    await expect(page.locator('.smlp-dot')).toHaveCount(0);
+    await expect(page.locator('[inert]')).toHaveCount(0);
+    await noHorizontalScroll(page);
+  });
 });
 
 test.describe('Session Manager landing — film', () => {

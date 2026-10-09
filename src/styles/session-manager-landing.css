@@ -988,12 +988,12 @@
   z-index: 1;
 }
 
-.smlp-root--canvas .smlp-page--flipped {
+.smlp-root--canvas .smlp-page--flipped:not(:last-child) {
   transform: rotateX(-100deg);
   pointer-events: none;
 }
 
-.smlp-root--canvas .smlp-page--flipped::after {
+.smlp-root--canvas .smlp-page--flipped:not(:last-child)::after {
   opacity: 0.35;
 }
 
@@ -1012,7 +1012,7 @@
     display: none;
   }
 
-  .smlp-root--canvas .smlp-page--flipped {
+  .smlp-root--canvas .smlp-page--flipped:not(:last-child) {
     transform: none;
     opacity: 0;
   }

@@ -82,6 +82,29 @@ describe('RegistryProjectSchema optional fields', () => {
   it('allows an entry with none of the optional fields', () => {
     expect(RegistryProjectSchema.safeParse(BASE_ENTRY).success).toBe(true);
   });
+
+  it('accepts public:true with a displayName', () => {
+    const result = RegistryProjectSchema.safeParse({
+      ...BASE_ENTRY,
+      public: true,
+      displayName: 'Foo Bar Pro',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an empty displayName', () => {
+    expect(RegistryProjectSchema.safeParse({ ...BASE_ENTRY, displayName: '' }).success).toBe(false);
+  });
+
+  it('rejects a displayName longer than 60 chars', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, displayName: 'x'.repeat(61) }).success
+    ).toBe(false);
+  });
+
+  it('rejects a non-boolean public', () => {
+    expect(RegistryProjectSchema.safeParse({ ...BASE_ENTRY, public: 'yes' }).success).toBe(false);
+  });
 });
 
 describe('RegistrySchema rejection cases', () => {

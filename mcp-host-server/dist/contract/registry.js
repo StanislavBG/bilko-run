@@ -35,6 +35,8 @@ export const RegistryProjectSchema = z
     tags: z.array(z.string()).optional(),
     thumbnail: z.string().optional(),
     launchedAt: z.string().optional(),
+    public: z.boolean().optional(),
+    displayName: z.string().min(1).max(60).optional(),
 })
     .strict();
 export const RegistrySchema = z.array(RegistryProjectSchema).superRefine((entries, ctx) => {

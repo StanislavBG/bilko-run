@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readdirSync } from 'fs';
 import { join } from 'path';
-import { dbRun, dbAll } from './db.js';
+import type { InStatement } from '@libsql/client';
+import { getClient, dbAll } from './db.js';
 
 // Per-route egress accounting.
 //
@@ -28,6 +29,21 @@ import { dbRun, dbAll } from './db.js';
 //     socket, not skipped.
 
 const FLUSH_MS = 60_000;
+// One Turso round-trip costs 20-60 ms, so flushes send statements in batches
+// rather than one await per key. Chunked so a huge backlog never becomes one
+// unbounded request.
+const BATCH_CHUNK = 100;
+
+async function batchWrite(stmts: InStatement[]): Promise<void> {
+  for (let i = 0; i < stmts.length; i += BATCH_CHUNK) {
+    try {
+      await getClient().batch(stmts.slice(i, i + BATCH_CHUNK), 'write');
+    } catch {
+      // Don't re-queue: a persistently failing write would grow the pending
+      // maps without bound. A dropped minute is an acceptable loss here.
+    }
+  }
+}
 
 interface Bucket { requests: number; bytes: number }
 
@@ -70,22 +86,17 @@ async function flushRoutes(): Promise<void> {
   if (!pending.size) return;
   const batch = [...pending.entries()];
   pending.clear();
-  for (const [key, b] of batch) {
+  await batchWrite(batch.map(([key, b]) => {
     const [date, method, route] = key.split('\0');
-    try {
-      await dbRun(
-        `INSERT INTO api_egress_daily (date, method, route, requests, bytes)
+    return {
+      sql: `INSERT INTO api_egress_daily (date, method, route, requests, bytes)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (date, method, route) DO UPDATE SET
            requests = requests + excluded.requests,
            bytes    = bytes    + excluded.bytes`,
-        date, method, route, b.requests, b.bytes,
-      );
-    } catch {
-      // Don't re-queue: a persistently failing write would grow `pending`
-      // without bound. A dropped minute is an acceptable loss here.
-    }
-  }
+      args: [date, method, route, b.requests, b.bytes],
+    };
+  }));
 }
 
 // Byte count of whatever Fastify is about to write. Strings are measured in
@@ -206,28 +217,23 @@ function recordAsset(date: string, slug: string, path: string, bytes: number): v
   else pendingAssets.set(key, { requests: 1, bytes });
 }
 
+const ASSET_UPSERT_SQL = `INSERT INTO static_asset_daily (date, slug, path, requests, bytes)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (date, slug, path) DO UPDATE SET
+           requests = requests + excluded.requests,
+           bytes    = bytes    + excluded.bytes`;
+
 async function flushAssets(): Promise<void> {
   if (!pendingAssets.size) return;
   const batch = [...pendingAssets.entries()];
   pendingAssets.clear();
 
   const touched = new Set<string>(); // `${date}\0${slug}`
-  for (const [key, b] of batch) {
+  await batchWrite(batch.map(([key, b]) => {
     const [date, slug, path] = key.split('\0');
     touched.add(`${date}\0${slug}`);
-    try {
-      await dbRun(
-        `INSERT INTO static_asset_daily (date, slug, path, requests, bytes)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (date, slug, path) DO UPDATE SET
-           requests = requests + excluded.requests,
-           bytes    = bytes    + excluded.bytes`,
-        date, slug, path, b.requests, b.bytes,
-      );
-    } catch {
-      // Same tradeoff as flushRoutes: don't re-queue, don't grow unbounded.
-    }
-  }
+    return { sql: ASSET_UPSERT_SQL, args: [date, slug, path, b.requests, b.bytes] };
+  }));
 
   for (const pair of touched) {
     const [date, slug] = pair.split('\0');
@@ -255,20 +261,16 @@ async function pruneAssetOverflow(date: string, slug: string): Promise<void> {
   const overflowBytes = overflow.reduce((n, r) => n + r.bytes, 0);
   const overflowRequests = overflow.reduce((n, r) => n + r.requests, 0);
 
-  await dbRun(
-    `INSERT INTO static_asset_daily (date, slug, path, requests, bytes)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (date, slug, path) DO UPDATE SET
-       requests = requests + excluded.requests,
-       bytes    = bytes    + excluded.bytes`,
-    date, slug, ASSET_REST_PATH, overflowRequests, overflowBytes,
-  );
-  for (const r of overflow) {
-    await dbRun(
-      `DELETE FROM static_asset_daily WHERE date = ? AND slug = ? AND path = ?`,
-      date, slug, r.path,
-    );
-  }
+  // One batch: fold the overflow into `_rest` and delete it atomically, so a
+  // failure can't double-count the fold on the next flush's retry.
+  const placeholders = overflow.map(() => '?').join(', ');
+  await getClient().batch([
+    { sql: ASSET_UPSERT_SQL, args: [date, slug, ASSET_REST_PATH, overflowRequests, overflowBytes] },
+    {
+      sql: `DELETE FROM static_asset_daily WHERE date = ? AND slug = ? AND path IN (${placeholders})`,
+      args: [date, slug, ...overflow.map((r) => r.path)],
+    },
+  ], 'write');
 }
 
 export interface AssetRow { slug: string; path: string; requests: number; bytes: number }

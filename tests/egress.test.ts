@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import staticPlugin from '@fastify/static';
 import { Readable } from 'stream';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { initDb, dbRun, dbGet, dbAll } from '../server/db.js';
+import { initDb, dbRun, dbGet, dbAll, getClient } from '../server/db.js';
 import {
   registerEgressMeter, setStaticKnownSlugs, flushEgress, topEgress, topStaticAssets,
   topEgressBySlug, earliestEgressDate,
@@ -132,6 +132,36 @@ describe('egress meter', () => {
     );
     // 1000 two-byte chars → ~2000 bytes, not ~1000.
     expect(row!.bytes).toBeGreaterThan(1_900);
+  });
+});
+
+describe('egress flush batching', () => {
+  beforeEach(async () => {
+    await dbRun('DELETE FROM api_egress_daily');
+  });
+
+  it('writes 3 pending keys in at most one batch call with the same stored totals', async () => {
+    await app.inject({ method: 'GET', url: '/api/tiny' });
+    await app.inject({ method: 'GET', url: '/api/tiny' });
+    await app.inject({ method: 'GET', url: '/api/fat/a' });
+    await app.inject({ method: 'GET', url: '/api/stream/a' });
+
+    const spy = vi.spyOn(getClient(), 'batch');
+    try {
+      await flushEgress();
+      expect(spy.mock.calls.length).toBeLessThanOrEqual(1);
+      expect(spy.mock.calls[0]?.[1]).toBe('write');
+    } finally {
+      spy.mockRestore();
+    }
+
+    const rows = await dbAll<{ route: string; requests: number; bytes: number }>(
+      'SELECT route, requests, bytes FROM api_egress_daily WHERE date = ? ORDER BY route', today,
+    );
+    expect(rows.map((r) => r.route)).toEqual(['/api/fat/:id', '/api/stream/:id', '/api/tiny']);
+    expect(rows.map((r) => Number(r.requests))).toEqual([1, 1, 2]);
+    expect(Number(rows[1].bytes)).toBe(Buffer.byteLength(STREAM_BODY));
+    expect(Number(rows[0].bytes)).toBeGreaterThan(50_000);
   });
 });
 

@@ -1665,7 +1665,7 @@ Sibling-repo Claude sessions wire it via \`.mcp.json\`:
 }}}
 \`\`\`
 
-The sibling never opens the host repo. It calls \`bilko-host__register_static_project\` once, \`bilko-host__publish_static_project\` after every build. The MCP commits to the host's \`origin\` and \`content-grade\` remotes in parallel — failure on one doesn't block the other — and Render auto-deploys within a minute.
+The sibling never opens the host repo. It calls \`bilko-host__register_static_project\` once, \`bilko-host__publish_static_project\` after every build. The MCP commits to the host repo's \`origin\` remote, and Render auto-deploys within a minute.
 
 This is the part that turns a process into a system. Two extractions by hand was bearable. Nine extractions by hand would be a slog. Nine extractions where each one is "register, build, publish, done" is a Saturday afternoon.
 
@@ -1807,7 +1807,7 @@ Three things.
 
 **One.** Extract the sibling-bootstrap script earlier. We re-created the same \`vite.config.ts\`, \`tailwind.config.ts\`, \`tsup\` setup, \`manifest.json\` emitter, and Playwright harness for nine apps before realizing we had a template. We finally built the \`bilko-host\` MCP server on day six. It would have saved two days if it existed on day one.
 
-**Two.** Wire Render's deploy webhook before pushing to the master branch the first time. Render auto-deploys from \`Content-Grade/master\`, not \`main\`, and the webhook had been quietly broken for three days. We discovered it the way you usually discover broken webhooks: by waiting for a deploy that never came. A \`RENDER_DEPLOY_HOOK\` env var, curl-able from a PRD, would have unblocked the autonomous overnight build chain.
+**Two.** Wire Render's deploy webhook before pushing to the master branch the first time. Render was auto-deploying from a different branch than we assumed, and the webhook had been quietly broken for three days. We discovered it the way you usually discover broken webhooks: by waiting for a deploy that never came. A \`RENDER_DEPLOY_HOOK\` env var, curl-able from a PRD, would have unblocked the autonomous overnight build chain.
 
 **Three.** Trust the contract sooner. The first three extractions all had moments of "should this thing live in the host?" The fourth one was friction-free. By the seventh, the question stopped occurring. The host stopped being a product and became a platform somewhere around extraction #5, but I didn't notice until the first game shipped.
 
@@ -3073,6 +3073,28 @@ Try it yourself at [the OutdoorHours project page](https://bilko.run/projects/ou
       ],
     },
   ]);
+
+  // ContentGrade is retired: drop it from two seeded posts. The exact old
+  // sentence is replaced, so an owner edit elsewhere in the post survives.
+  const dropContentGrade: Array<[string, string, string]> = [
+    [
+      'from-saas-to-host-decomposing-bilko-in-one-week',
+      "The MCP commits to the host's `origin` and `content-grade` remotes in parallel — failure on one doesn't block the other — and Render auto-deploys within a minute.",
+      "The MCP commits to the host repo's `origin` remote, and Render auto-deploys within a minute.",
+    ],
+    [
+      'week-of-six-games',
+      'Render auto-deploys from `Content-Grade/master`, not `main`, and the webhook',
+      'Render was auto-deploying from a different branch than we assumed, and the webhook',
+    ],
+  ];
+  await applyDataMigrationOnce(
+    '2026-10-09-blog-drop-content-grade',
+    dropContentGrade.map(([slug, oldText, newText]) => ({
+      sql: 'UPDATE blog_posts SET content = replace(content, ?, ?), updated_at = ? WHERE slug = ?',
+      args: [oldText, newText, new Date().toISOString(), slug],
+    })),
+  );
 
   await applyBlogRewrites(BLOG_REWRITES);
 

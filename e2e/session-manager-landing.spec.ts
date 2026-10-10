@@ -117,9 +117,22 @@ test.describe('Session Manager landing — layout modes', () => {
       await expect(tag.getByRole('link', { name: d.label })).toHaveAttribute('href', d.href);
     }
     await expectWindowsDownloadLink(tag);
-    await expect(page.locator('body')).not.toContainText('npx');
+    await expect(tag).toContainText(COPY.priceTag.command);
+    await expect(tag.getByRole('button', { name: COPY.priceTag.copyLabel })).toBeVisible();
     await expect(page.locator('.smlp-cta--manual')).toContainText(`${toc.toc.chapters.length} chapters of tips & tricks`);
     await expect(page.locator('.smlp-cta--manual')).toHaveAttribute('href', COPY.meta.manualHref);
+
+    // The tag sits inside the canvas and clears the page-turn button.
+    const tagBox = (await page.locator('.smlp-tag').boundingBox())!;
+    const canvasBox = (await page.locator('.smlp-canvas').boundingBox())!;
+    const nextBox = (await page.locator('.smlp-turn--next').boundingBox())!;
+    expect(tagBox.y + tagBox.height).toBeLessThanOrEqual(canvasBox.y + canvasBox.height);
+    const overlaps =
+      tagBox.x < nextBox.x + nextBox.width &&
+      nextBox.x < tagBox.x + tagBox.width &&
+      tagBox.y < nextBox.y + nextBox.height &&
+      nextBox.y < tagBox.y + tagBox.height;
+    expect(overlaps).toBe(false);
 
     await noHorizontalScroll(page);
     await page.screenshot({ path: 'test-results/session-manager-landing-1440x860.png' });
@@ -154,8 +167,32 @@ test.describe('Session Manager landing — layout modes', () => {
 
     const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
     expect(pageHeight).toBeGreaterThan(844);
+    const copyBtn = page.locator('.smlp-tag').getByRole('button', { name: COPY.priceTag.copyLabel });
+    await copyBtn.scrollIntoViewIfNeeded();
+    await expect(copyBtn).toBeVisible();
+    await expect(page.locator('.smlp-tag').getByText(COPY.priceTag.command)).toBeVisible();
     await noHorizontalScroll(page);
     await page.screenshot({ path: 'test-results/session-manager-landing-390x844.png', fullPage: true });
+  });
+
+  test('price tag Copy button is keyboard-accessible and copies the npx command', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:3002' });
+    await page.setViewportSize({ width: 1440, height: 860 });
+    await open(page);
+
+    const tag = page.getByRole('region', { name: COPY.priceTag.aria.region });
+    const button = tag.getByRole('button', { name: COPY.priceTag.copyLabel });
+    const before = (await page.locator('.smlp-tag').boundingBox())!;
+
+    await button.focus();
+    await expect(button).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(button).toContainText(COPY.priceTag.copiedLabel);
+    await expect(tag.getByRole('status')).toContainText(COPY.priceTag.aria.copiedStatus);
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(COPY.priceTag.command);
+    const after = (await page.locator('.smlp-tag').boundingBox())!;
+    expect(after.height).toBe(before.height);
   });
 
   for (const viewport of [{ width: 1024, height: 768 }, { width: 1280, height: 640 }, { width: 844, height: 390 }]) {

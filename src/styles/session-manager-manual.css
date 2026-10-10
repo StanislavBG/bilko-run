@@ -1,6 +1,6 @@
 /*
  * Field Manual reader (bilko.run/products/session-manager/manual) — page 3 of
- * the landing book. Imported only by src/pages/ManualPage.tsx. Tokens, resets,
+ * the landing book. Imported only by src/pages/session-manager-landing/ManualPage.tsx. Tokens, resets,
  * paper background and the `.smlp-turn` / `.smlp-dot` look come from
  * session-manager-landing.css; every class here is `.smlm-*` and every
  * selector sits under `.smlm-root` so nothing leaks after SPA navigation.
@@ -629,7 +629,7 @@
    The same rule set is inlined into the offline HTML edition by
    session-manager's scripts/build-manual.mjs — keep the two in sync when
    either changes. Light theme — palette matches the warm/fire tokens used
-   across the rest of the site (see SessionManagerPage.tsx); every text
+   across the rest of the site (see session-manager-landing/SessionManagerPage.tsx); every text
    color below is verified >= 4.5:1 against the warm-50/white page backgrounds
    it sits on. Component classes match session-manager-operations/manual/STYLE.md. */
 /* Analogy / tip / note / warning asides — shared shape, distinct accent per kind. */

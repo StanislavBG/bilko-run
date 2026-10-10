@@ -1,7 +1,7 @@
 /*
  * Session Manager landing page (bilko.run/products/session-manager).
  *
- * Imported only by src/pages/SessionManagerPage.tsx, so Vite ships it with the
+ * Imported only by src/pages/session-manager-landing/SessionManagerPage.tsx, so Vite ships it with the
  * page's lazy chunk as a same-origin <link rel="stylesheet"> — allowed by the
  * CSP, unlike a runtime <style> element (nonce-gated).
  *

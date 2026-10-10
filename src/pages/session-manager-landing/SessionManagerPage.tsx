@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ManualToc } from '../../shared/manual-catalog.js';
-import '../styles/session-manager-landing.css';
-import { bookNavigate, markBookPageReady, shouldInterceptClick } from './session-manager-landing/bookTurn.js';
-import { PageViewTracker } from './session-manager-landing/AccountChip.js';
-import { COPY, fill } from './session-manager-landing/copy.js';
-import { MacDownload, WindowsDownload, windowsAvailable } from './session-manager-landing/Downloads.js';
-import { Header } from './session-manager-landing/Header.js';
-import { FilmDialog } from './session-manager-landing/FilmDialog.js';
-import { Chevron } from './session-manager-landing/Chevron.js';
+import type { ManualToc } from '../../../shared/manual-catalog.js';
+import '../../styles/session-manager-landing.css';
+import { bookNavigate, markBookPageReady, shouldInterceptClick } from './bookTurn.js';
+import { PageViewTracker } from './AccountChip.js';
+import { COPY, fill } from './copy.js';
+import { MacDownload, WindowsDownload, windowsAvailable } from './Downloads.js';
+import { Header } from './Header.js';
+import { FilmDialog } from './FilmDialog.js';
+import { Chevron } from './Chevron.js';
 import {
   useBodyOverflowLock,
   useBookPages,
@@ -16,9 +16,9 @@ import {
   useLayoutMode,
   useManualToc,
   usePageFonts,
-} from './session-manager-landing/hooks.js';
-import { PAGE_COUNT, type LayoutModeName } from './session-manager-landing/layout.js';
-import { chapterHref, PartsBin, TABS } from './session-manager-landing/PartsBin.js';
+} from './hooks.js';
+import { PAGE_COUNT, type LayoutModeName } from './layout.js';
+import { chapterHref, PartsBin, TABS } from './PartsBin.js';
 
 /**
  * bilko.run/products/session-manager — the Session Manager landing page (v2).

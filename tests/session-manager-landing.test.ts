@@ -1,6 +1,6 @@
 /**
  * Data + pure-logic guards for the Session Manager landing page
- * (src/pages/SessionManagerPage.tsx and src/pages/session-manager-landing/).
+ * (src/pages/session-manager-landing/SessionManagerPage.tsx and src/pages/session-manager-landing/).
  *
  * The chapter checks are the important ones: each Parts Bin tab deep-links to
  * /products/session-manager/manual#<slug>, and the reader silently opens

@@ -101,7 +101,7 @@ export function bookNavigate(
   return turnBook(
     dir,
     async () => {
-      if (/\/manual\b/.test(href)) await import('../ManualPage.js');
+      if (/\/manual\b/.test(href)) await import('./ManualPage.js');
       const ready = waitForBookPageReady();
       flushSync(() => navigate(href));
       await ready;

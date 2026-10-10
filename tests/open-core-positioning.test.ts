@@ -45,10 +45,10 @@ const stripComments = (src: string) =>
     .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 const prose = (src: string) => stripComments(src).replace(/\s+/g, ' ');
 
-const MARKETING_PAGE = 'src/pages/SessionManagerPage.tsx';
+const MARKETING_PAGE = 'src/pages/session-manager-landing/SessionManagerPage.tsx';
 const LANDING_DIR = 'src/pages/session-manager-landing';
 const LANDING_CSS = 'src/styles/session-manager-landing.css';
-const MANUAL_PAGE = 'src/pages/ManualPage.tsx';
+const MANUAL_PAGE = 'src/pages/session-manager-landing/ManualPage.tsx';
 const PROJECTS_JSON = 'src/data/standalone-projects.json';
 const PACKAGES_REGISTRY = 'src/data/packages.ts';
 const PROJECTS_PAGE = 'src/pages/ProjectsPage.tsx';
@@ -59,7 +59,8 @@ const PAGE_FILES = [
   MARKETING_PAGE,
   ...readdirSync(resolve(ROOT, LANDING_DIR))
     .filter(f => /\.(ts|tsx)$/.test(f))
-    .map(f => `${LANDING_DIR}/${f}`),
+    .map(f => `${LANDING_DIR}/${f}`)
+    .filter(f => f !== MARKETING_PAGE && f !== MANUAL_PAGE),
 ];
 const pageProse = () => PAGE_FILES.map(f => prose(read(f))).join(' \n ');
 

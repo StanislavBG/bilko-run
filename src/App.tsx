@@ -46,8 +46,8 @@ const PortfolioProjectDetailPage = lazyWithRetry(() => import('./pages/Portfolio
 const BlogPostPage = lazyWithRetry(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
 // The Session Manager Field Manual reader — lazy because its bundle is only
 // needed by the slice of visitors who open the manual.
-const ManualPage = lazyWithRetry(() => import('./pages/ManualPage.js'));
-const SessionManagerPage = lazyWithRetry(() => import('./pages/SessionManagerPage.js'));
+const ManualPage = lazyWithRetry(() => import('./pages/session-manager-landing/ManualPage.js'));
+const SessionManagerPage = lazyWithRetry(() => import('./pages/session-manager-landing/SessionManagerPage.js'));
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
 

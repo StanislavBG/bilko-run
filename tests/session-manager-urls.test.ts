@@ -72,8 +72,8 @@ describe('web-remote relay path migration', () => {
 describe('no stale top-level manual links survive in shipped source', () => {
   const LANDING_DIR = 'src/pages/session-manager-landing';
   const files = [
-    'src/pages/SessionManagerPage.tsx',
-    'src/pages/ManualPage.tsx',
+    'src/pages/session-manager-landing/SessionManagerPage.tsx',
+    'src/pages/session-manager-landing/ManualPage.tsx',
     'server/routes/stripe.ts',
     ...readdirSync(resolve(root, LANDING_DIR))
       .filter(f => /\.(ts|tsx)$/.test(f))

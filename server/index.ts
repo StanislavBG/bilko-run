@@ -26,6 +26,9 @@ import { registerManualRoutes } from './routes/manual.js';
 import { registerCompGrantRoutes } from './routes/admin-comp-grants.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
+import { registerOgRoutes } from './og-routes.js';
+import { loadOgProjects, type OgProject } from './og-meta.js';
+import { loadBlogPosts } from './blog-posts.js';
 import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 
@@ -82,6 +85,22 @@ await app.register(cors, {
 
 // Security headers (CSP + HSTS + COOP + Permissions-Policy)
 registerSecurityHeaders(app);
+
+// Social-card routes + per-page OG meta injection. Must come right after the
+// security-headers hook so it sees buffered, nonce-stamped HTML (and runs
+// before compression). Registry/blog data is read once at boot.
+{
+  let projects: OgProject[] = [];
+  try {
+    projects = loadOgProjects();
+  } catch (err) {
+    app.log.error({ err }, 'og: failed to load project registry; using site default cards');
+  }
+  const blogPosts = loadBlogPosts()
+    .filter(p => p.published)
+    .map(p => ({ slug: p.slug, title: p.title, excerpt: p.excerpt }));
+  registerOgRoutes(app, { projects, blogPosts });
+}
 
 // Registered after CORS so its onSend hook can drop the `Vary: Origin` that
 // @fastify/cors stamps on every response — Cloudflare won't edge-cache
@@ -214,42 +233,9 @@ if (isProd) {
       redirect: true,
     });
 
-    // Route-specific OG meta tags for social sharing (crawlers don't run JS)
     const indexHtml = readFileSync(resolve(distPath, 'index.html'), 'utf-8');
 
-    // Only paths the SPA fallback can actually serve. /projects/<slug> is
-    // deliberately absent: static serving 301s it to the app bundle's own
-    // index.html, so it never reaches the not-found handler.
-    const OG_OVERRIDES: Record<string, { title: string; description: string; url: string }> = {
-      '/projects': {
-        title: 'Projects — bilko.run',
-        description: 'Every project Bilko is building: live apps, games and tools, each in its own repo.',
-        url: 'https://bilko.run/projects',
-      },
-      '/blog': {
-        title: 'Blog — bilko.run',
-        description: 'Lessons from building AI tools solo. Build logs, technical deep dives, and honest takes on shipping software in 2026.',
-        url: 'https://bilko.run/blog',
-      },
-      '/pricing': {
-        title: 'Pricing — bilko.run',
-        description: 'Free to start. Then $1 per credit or 7 for $5. No subscriptions.',
-        url: 'https://bilko.run/pricing',
-      },
-    };
-
-    // Computed once at boot; the handler only does a Map lookup.
-    const ogHtmlByPath = new Map<string, string>();
-    for (const [path, override] of Object.entries(OG_OVERRIDES)) {
-      let html = indexHtml;
-      html = html.replace(/<title>[^<]*<\/title>/, `<title>${override.title}</title>`);
-      html = html.replace(/(<meta\s+(?:property="og:title"|name="twitter:title")\s+content=")[^"]*(")/g, `$1${override.title}$2`);
-      html = html.replace(/(<meta\s+(?:property="og:description"|name="twitter:description"|name="description")\s+content=")[^"]*(")/g, `$1${override.description}$2`);
-      html = html.replace(/(<meta\s+property="og:url"\s+content=")[^"]*(")/g, `$1${override.url}$2`);
-      ogHtmlByPath.set(path, html);
-    }
-
-    // SPA fallback — inject route-specific OG tags for social crawlers
+    // SPA fallback — the OG onSend hook (registerOgRoutes) injects route-specific tags
     //
     // MUST `return reply.send(...)`, not a bare `reply.send(...)`. This handler
     // is async, and Fastify's wrapThenable resolves an async handler's promise
@@ -276,7 +262,7 @@ if (isProd) {
       // this HTML, so a shared or reused copy would carry a nonce that no
       // longer matches the response's CSP header.
       reply.header('cache-control', 'private, no-store');
-      return reply.type('text/html').send(ogHtmlByPath.get(path) ?? indexHtml);
+      return reply.type('text/html').send(indexHtml);
     });
   }
 }

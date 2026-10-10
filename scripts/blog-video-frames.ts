@@ -5,6 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const BOUNDARY_PAD = 0.25;
 const EDGE_PAD = 0.5;
+// The runtime fades the first scene in from nothing, so frames sampled before this are never flagged blank.
+const FADE_IN_GRACE = EDGE_PAD;
 const FALLBACK_STEP = 2;
 const MIN_STDDEV = 8;
 const MIN_EDGE_DENSITY = 0.01;
@@ -130,7 +132,7 @@ async function main(): Promise<void> {
         }
         return { stddev: Math.sqrt(sq / g.length), edgeDensity: edges / g.length };
       }, shot.toString('base64'));
-      frames.push({ t, file, ...stats, blank: isBlankFrame(stats) });
+      frames.push({ t, file, ...stats, blank: t >= FADE_IN_GRACE && isBlankFrame(stats) });
     }
 
     const cells = frames

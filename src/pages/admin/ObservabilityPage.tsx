@@ -5,8 +5,7 @@ import { useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 import { formatBytes } from '../../lib/format.js';
 import { BandwidthPanel } from './BandwidthPanel.js';
 import { BlogCadencePanel } from './BlogCadencePanel.js';
-
-type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
+import { DriftBadge, type DriftStatus } from './DriftBadge.js';
 
 interface Row {
   slug: string;
@@ -100,16 +99,6 @@ function fmtMs(ms: number | null): string {
 function fmtCount(n: number, hasData: boolean): string {
   if (!hasData && n === 0) return '—';
   return n.toLocaleString();
-}
-
-function DriftBadge({ drift }: { drift: DriftStatus }) {
-  if (drift === 'current')
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">current</span>;
-  if (drift === 'minor_behind')
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-700">-1 minor</span>;
-  if (drift === 'major_behind')
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">outdated</span>;
-  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-warm-100 text-warm-500">unknown</span>;
 }
 
 export function ObservabilityPage() {

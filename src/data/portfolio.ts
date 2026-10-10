@@ -68,7 +68,6 @@ export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
-  { id: 'workflows', label: 'Workflows',   path: '/workflows', icon: '↯', desc: 'Background AI agents and automations running 24/7.', tag: 'running' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
 ];
 

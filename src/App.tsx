@@ -40,7 +40,6 @@ const AdminPage = lazyWithRetry(() => import('./pages/AdminPage.js').then(m => (
 const AdminCostPage = lazyWithRetry(() => import('./pages/AdminCostPage.js').then(m => ({ default: m.AdminCostPage })));
 const ObservabilityPage = lazyWithRetry(() => import('./pages/admin/ObservabilityPage.js').then(m => ({ default: m.ObservabilityPage })));
 const SecretsPage = lazyWithRetry(() => import('./pages/admin/SecretsPage.js').then(m => ({ default: m.SecretsPage })));
-const WorkflowsPage = lazyWithRetry(() => import('./pages/WorkflowsPage.js').then(m => ({ default: m.WorkflowsPage })));
 const ContactPage = lazyWithRetry(() => import('./pages/ContactPage.js').then(m => ({ default: m.ContactPage })));
 const PortfolioProjectDetailPage = lazyWithRetry(() => import('./pages/PortfolioProjectDetailPage.js').then(m => ({ default: m.PortfolioProjectDetailPage })));
 const BlogPostPage = lazyWithRetry(() => import('./pages/BlogPostPage.js').then(m => ({ default: m.BlogPostPage })));
@@ -186,6 +185,8 @@ function AppRoutes() {
             <Route path="/studio" element={<Navigate to="/projects" replace />} />
             {/* /packages merged into the hub */}
             <Route path="/packages" element={<Navigate to="/projects" replace />} />
+            {/* /workflows retired 2026-10-10 — fold into the projects hub */}
+            <Route path="/workflows" element={<Navigate to="/projects" replace />} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={lazyRoute(BlogPostPage)} />
             <Route path="/pricing" element={lazyRoute(PricingPage)} />
@@ -199,7 +200,6 @@ function AppRoutes() {
             {/* ── Portfolio sections ── */}
             <Route path="/academy" element={<RedirectAcademyToCourse />} />
             <Route path="/academy/*" element={<RedirectAcademyToCourse />} />
-            <Route path="/workflows" element={lazyRoute(WorkflowsPage)} />
             <Route path="/contact" element={lazyRoute(ContactPage)} />
             <Route path="/work/:id" element={lazyRoute(PortfolioProjectDetailPage)} />
 

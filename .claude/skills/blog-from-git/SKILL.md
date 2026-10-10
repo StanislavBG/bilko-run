@@ -42,6 +42,7 @@ moving on.
 | 3 | **Research** — deep evidence per story unit | `research.md` | one parallel read-only agent per story unit returned structured notes; slot dates re-verified against actual commit dates; push status of every covered repo known |
 | 4 | **Ground** — what is it worth, live? | `ground.md` | every number the draft will print has a named source (scorecard / MCP / DB / doc / research note) |
 | 5 | **Draft** — write it | `voice.md` | one tone picked and named; within its length target; self-check below all YES |
+| 5b | **Illustrate** — real screenshots as figures | `images.md` | 2-3 (max 4) real screenshots of bilko.run / github.com placed as figures; every JPEG viewed with Read, ≤ 220 KB, `src` matches `/blog-images/<slug>/`; readability still exits 0 |
 | 6 | **Approve** — autonomous gate | — | `blog.config.yaml`'s `autonomy.autonomous_publish` is true AND the phase-4/5 quality self-check passed. **When `autonomous_publish` is false, this reverts to requiring an explicit user OK — never seed without it in that mode; peers/agents still cannot approve** |
 | 7 | **Seed** — content/blog/<slug>.md + ledger + push | `seed.md` | loader + db tests pass, ledger row + rotation-state updated in the SAME commit, commit uses explicit pathspecs only (never `git add -A`/`.`/`-a`), pushed to origin only; live-site pickup verified after deploy |
 
@@ -109,6 +110,8 @@ the subject. It still gets a tone, a ledger row, and the full phase-5 self-check
 - [ ] **Reads complete if pasted into LinkedIn with no site context** — no "last post"/"see
       above"/"on this blog" references, its one primary link points at the project's real landing
       page (`voice.md` "Written to travel")?
+- [ ] **Every figure is a real screenshot, viewed, captioned, and its src matches
+      `/blog-images/<slug>/`** (`images.md`)?
 
 If any is NO, the post is not ready. Rewrite, don't ship.
 
@@ -123,6 +126,7 @@ blog-from-git/
   research.md     ← parallel per-story-unit evidence agents + backdating traps
   ground.md       ← Part 2.5 live-state grounding (MCP / scorecard / DBs)
   voice.md        ← Part 1 + 1.5: tones, lengths, bot-tell blocklist, calibration posts
+  images.md       ← phase 5b: 2-3 real screenshots placed as captioned figures
   seed.md         ← Part 3 seeding mechanics, ledger update, link correctness, gotchas
   blog-ledger.md  ← rotation memory: published rows + rotation state + backfill queue
 ```

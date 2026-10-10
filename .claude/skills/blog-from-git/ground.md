@@ -52,3 +52,19 @@ trading-sub coverage). When a focused post is about Burrow, ground the value lik
 **Rule:** every feature-value number in a post must trace to a scorecard, an MCP read, a DB query,
 or a KPI doc. If you can't source it, don't print it (bot-tell #6). State where each number came
 from, the same way the `signal-builder` post sources its 337 test count.
+
+## Community signal (burrow-brain), high-quality only
+
+Optional. Use the `burrow-brain` MCP to find real reader pain or real praise that backs **who the
+project helps**. It never supplies the post's subject; git and the story unit do that.
+
+- `search_distilled` with `filters.min_upvotes` set to `pipeline.community.min_upvotes` (default 25).
+- `search_adhoc` with `min_quality` set to `pipeline.community.min_quality` (default 0.7).
+- Record `upvotes` (distilled) or `quality` (ad hoc) on the evidence item, with `source_kind: "community"`
+  (shape in `research.md` step 3b; checked by `scripts/blog-pipeline-check.ts`).
+
+Rules:
+
+1. Below-floor results are discarded, never cited.
+2. Community evidence is used only to back a value or who claim.
+3. If the MCP is not connected, the post skips community evidence and does not substitute anything for it.

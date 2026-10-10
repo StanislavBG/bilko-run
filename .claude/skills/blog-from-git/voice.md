@@ -1,4 +1,4 @@
-# Sub-skill: voice — tones, length, and how to not write like a bot
+# Sub-skill: voice — tones, dynamic length budgets, and how to not write like a bot
 
 Read BEFORE drafting a word of the post body.
 
@@ -110,13 +110,13 @@ Pick one tone per post, name it in the ledger row, and commit to it — don't bl
 several posts, vary the tone so we can compare. All five obey the bot-tell blocklist and the
 ground-every-claim rule; they differ in shape, length, and stance.
 
-| # | Tone | Shape | Length | Best for |
+| # | Tone | Shape | Max sections | Best for |
 |---|---|---|---|---|
-| 1 | **Changelog** | 1 hero change told in 2–3 short paras + an "Also shipped" bullet bucket | 250–450 w | Tools with frequent small releases (the grader tools, sigma) |
-| 2 | **Shipped note** | First-person, informal: what I shipped, the one decision behind it, what's next | 350–600 w | Build-in-public cadence; honest in-progress work |
-| 3 | **Problem → outcome** | Open on the user's pain, land on what they can now do; benefit-led | 400–600 w | A feature with a clear user job (AdScorer mode, PageRoast) |
-| 4 | **Field note** (the old build-log, trimmed) | One hard bug/decision used as PROOF of a value/use point (never as the subject itself), one lesson, one concrete artifact | 500–800 w | Deep infra weeks (Burrow, signal-builder) — when the story backs a real value/use point, not for its own sake |
-| 5 | **Metric update** | Lead with the number that moved, then the 1–2 changes that moved it | 300–550 w | Projects with a live KPI (Burrow coverage %, trader vs SPY) |
+| 1 | **Changelog** | 1 hero change told in 2–3 short paras + an "Also shipped" bullet bucket | 2 | Tools with frequent small releases (the grader tools, sigma) |
+| 2 | **Shipped note** | First-person, informal: what I shipped, the one decision behind it, what's next | 3 | Build-in-public cadence; honest in-progress work |
+| 3 | **Problem → outcome** | Open on the user's pain, land on what they can now do; benefit-led | 3 | A feature with a clear user job (AdScorer mode, PageRoast) |
+| 4 | **Field note** (the old build-log, trimmed) | One hard bug/decision used as PROOF of a value/use point (never as the subject itself), one lesson, one concrete artifact | 5 | Deep infra weeks (Burrow, signal-builder) — when the story backs a real value/use point, not for its own sake |
+| 5 | **Metric update** | Lead with the number that moved, then the 1–2 changes that moved it | 3 | Projects with a live KPI (Burrow coverage %, trader vs SPY) |
 
 **Tone micro-examples** (the opening move of each — cool part first, plain words, per `angle:`):
 
@@ -126,12 +126,20 @@ ground-every-claim rule; they differ in shape, length, and stance.
 4. **Field note** — "Burrow's coverage number tells you if the brain actually checked a subreddit before it answers your question. Coverage is climbing again this week, so you can trust that number more. One bug had it stuck: subs got checked, then forgotten, before they reached the index. A single sort fixed it." (The bug gets one sentence, in service of the number you can now trust — not the subject on its own.)
 5. **Metric update** — "Coverage is 80.4% this week. Last week I did not trust that number at all. Two fixes moved it: a smarter pick for which subs to check next, and a fix for a count that reset itself at midnight."
 
-### Length: shorter by default
+### Length: a dynamic budget, not a fixed range
 
-Old posts ran 1,200–2,000 words and that's most of why they read as heavy. **Default is the
-per-tone target above** — most posts should land **under ~600 words**. Reserve 800+ only for a
-genuine field note with a real story. Cut ruthlessly (Graham): if a paragraph states a capability
-but adds no value, no number, and no stance, delete it. One change told well beats five listed.
+Length is computed per post from the outline (`dag.md` defines the steps; `scripts/blog-pipeline-check.ts`
+enforces them). Defaults live in `DEFAULT_PIPELINE_CONFIG` and are overridden by the `pipeline:` block
+in `blog.config.yaml`.
+
+- **Blog:** target = hook 50 + 140 per outline section + close 60 words. The allowed range is the
+  target ±20%, clamped to 200–1000 words (blog max 1000). Example: 3 sections → target 530, range 424–636.
+  The tone's **Max sections** column caps how many sections the outline may have.
+- **LinkedIn rendition:** 120–250 words, with one real `https://` link.
+- **X rendition:** 280 characters or fewer.
+
+Cut ruthlessly (Graham): if a paragraph states a capability but adds no value, no number, and no
+stance, delete it. One change told well beats five listed.
 
 ### Product-update spine
 

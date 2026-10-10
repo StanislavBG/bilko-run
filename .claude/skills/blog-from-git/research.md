@@ -1,8 +1,36 @@
-# Sub-skill: research — parallel evidence agents (between scan and draft)
+# Sub-skill: research — steps 3a Decompose and 3b Gather (between scan and draft)
 
 The scan (`scan.md`) produces story units: "project X, date range, these commits." Before drafting,
 each story unit needs deep evidence — actual diffs read, actual numbers pulled. Doing that inline
 for several posts burns the composing session's context on raw diff dumps. Delegate it.
+
+The six DAG steps are defined in `.claude/skills/blog-from-git/dag.md`; this file covers 3a and 3b.
+Artifacts live in `drafts/<slug>/` and are validated by `scripts/blog-pipeline-check.ts`.
+
+## Step 3a — Decompose: write `drafts/<slug>/questions.json`
+
+Turn the story unit into 3-7 questions (`pipeline.min_questions` / `max_questions`). Shape:
+
+```json
+{ "story_unit": "project X, 2026-10-01..2026-10-07",
+  "questions": [ { "id": "q1", "question": "What can a reader now do?", "kind": "value" } ] }
+```
+
+`id` is unique. `kind` is one of `value`, `who`, `how-it-works`, `proof`, `next`, `start`, `other`.
+`value`, `who` and `start` are required (`pipeline.required_question_kinds`). The template below maps
+onto kinds like this:
+
+| Template item | Question kind |
+|---|---|
+| 1. What the project IS and WHO it's for | `who` |
+| 2. Before → after | `value` |
+| 3. How a reader starts using it | `start` |
+| 4. Countable specifics | `proof` |
+| 5. Supporting color | `how-it-works` |
+| (where it is heading) | `next` |
+| 6. Remote/push status | not a question; report it in the agent notes |
+
+## Step 3b — Gather: write `drafts/<slug>/evidence.json`
 
 **Pattern (validated on the 2026-07-24 backfill, 6 agents / 7 posts):** spawn one read-only
 research agent (Explore type) per story unit, all in a single parallel batch. Each agent gets the
@@ -33,7 +61,21 @@ No item below licenses making a bug, an error code, or an internal refactor the 
    thin for a post, not licence to lead with the detail anyway.
 6. **Remote/push status** — is this work actually on GitHub? (See trap below.)
 
-Tell each agent explicitly: return structured notes, do NOT write the blog post.
+Tell each agent explicitly: return evidence items, do NOT write the blog post. Each agent returns
+items in the exact `evidence.json` item shape, and the composer merges them into `{ "items": [...] }`:
+
+```json
+{ "id": "e1", "question_ids": ["q1"], "source_kind": "diff",
+  "source": "abc1234 / src/foo.ts", "claim": "One plain sentence this source backs.",
+  "upvotes": 40, "quality": 0.8 }
+```
+
+- `id` is unique; `question_ids` lists at least one id from `questions.json`.
+- `source_kind` is one of `diff`, `readme`, `live-app`, `scorecard`, `mcp`, `db`, `doc`, `community`.
+- `source` and `claim` are non-empty. `upvotes` / `quality` appear only on `community` items
+  (see `ground.md`, "Community signal").
+- Gather at least `pipeline.min_evidence_per_section` (2) items for every section you expect to outline.
+- Push status (item 6) still goes in the agent's notes, not in `evidence.json`.
 
 ## Traps this pattern has already caught (keep checking for them)
 

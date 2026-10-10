@@ -26,9 +26,6 @@ echo "[sanity-qa-cron] Starting — $(TZ=America/Los_Angeles date '+%Y-%m-%d %H:
 # (non-fatal: a stale order is better than aborting the QA run). Committed below
 # alongside the report so Render picks up the new ordering on next deploy.
 pnpm exec tsx scripts/refresh-commit-order.ts || echo "[sanity-qa-cron] commit-order refresh failed (non-fatal)"
-# Same for /workflows: re-read the crontab + timers into the allowlisted
-# src/data/workflows.json (the script leaves the file alone on failure).
-pnpm exec tsx scripts/refresh-workflows.ts || echo "[sanity-qa-cron] workflows refresh failed (non-fatal)"
 
 # Run the gate; capture exit code without aborting the script
 set +e
@@ -79,7 +76,7 @@ fi
 # working-tree changes (outdoor-hours data).
 if [[ -f "$REPORT_FILE" ]]; then
   # Stage the refreshed sidecars if they changed (tracked files).
-  git add src/data/commit-order.json src/data/commit-counts.json src/data/workflows.json 2>/dev/null || true
+  git add src/data/commit-order.json src/data/commit-counts.json 2>/dev/null || true
   if git commit -q -m "chore(qa): sanity-qa ${DECISION} ${TIMESTAMP}"; then
     git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"
   else

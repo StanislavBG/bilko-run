@@ -1,11 +1,11 @@
-# Sub-skill: images (phase 5b) — 2-3 real screenshots as captioned figures
+# Sub-skill: images (phase 5d) — 2-3 real screenshots as captioned figures
 
 The post page renders `![alt](src "caption")` blocks as captioned figures (`parseFigure` in
 `src/lib/blogMarkdown.ts`). Use them to show the reader the real product, not to decorate.
 
 ## 1. When and how many
 
-Run after Draft (5), before Approve (6). Add 2-3 figures; never more than 4. A post with nothing
+Run after Compose (5c), before Approve (6). Choose figures from the `figure` field of the `outline.json` sections (`dag.md`), so each figure illustrates a specific section. Add 2-3 figures; never more than 4. A post with nothing
 worth showing gets none — don't pad.
 
 ## 2. Real screenshots only

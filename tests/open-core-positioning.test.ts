@@ -125,14 +125,16 @@ describe('open-core positioning: the app is free and stays free, and so is the m
     expect(prose(read(MARKETING_PAGE))).toContain('windowsAvailable ? tag.aria.platforms : tag.aria.platformsWindowsSoon');
   });
 
-  it('the price tag and the film end card offer the same downloads, and no npx command', () => {
-    for (const f of [MARKETING_PAGE, `${LANDING_DIR}/FilmDialog.tsx`]) {
-      const src = prose(read(f));
-      expect(src, f).toContain('<MacDownload');
-      expect(src, f).toContain('<WindowsDownload');
+  it('the price tag offers Mac + Windows downloads AND the npx one-liner; the film end card offers downloads only', () => {
+    const page = prose(read(MARKETING_PAGE));
+    for (const token of ['<MacDownload', '<WindowsDownload', '<CopyButton', 'useCopyInstall', 'tag.command']) {
+      expect(page, token).toContain(token);
     }
-    expect(pageProse()).not.toMatch(/npx|CopyButton|useCopyInstall|installCommand|commandPrompt/);
-    expect(JSON.stringify(COPY)).not.toContain('npx');
+    expect(COPY.priceTag.command).toBe('npx claude-code-session-manager@latest');
+    const film = prose(read(`${LANDING_DIR}/FilmDialog.tsx`));
+    expect(film).toContain('<MacDownload');
+    expect(film).toContain('<WindowsDownload');
+    expect(film).not.toMatch(/npx|CopyButton|useCopyInstall|commandPrompt/);
   });
 
   it('never prices the app or implies it will cost money later', () => {

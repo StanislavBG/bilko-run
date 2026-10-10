@@ -5,6 +5,7 @@ import '../../styles/session-manager-landing.css';
 import { bookNavigate, markBookPageReady, shouldInterceptClick } from './bookTurn.js';
 import { PageViewTracker } from './AccountChip.js';
 import { COPY, fill } from './copy.js';
+import { CopyButton } from './CopyButton.js';
 import { MacDownload, WindowsDownload, windowsAvailable } from './Downloads.js';
 import { Header } from './Header.js';
 import { FilmDialog } from './FilmDialog.js';
@@ -14,6 +15,7 @@ import {
   useBookPages,
   useCanvasTurnInputs,
   useLayoutMode,
+  useCopyInstall,
   useManualToc,
   usePageFonts,
 } from './hooks.js';
@@ -117,6 +119,9 @@ function Hero({
 function PriceTag() {
   const tag = COPY.priceTag;
   const dl = tag.downloads;
+  const copier = useCopyInstall();
+  const status =
+    copier.status === 'copied' ? tag.aria.copiedStatus : copier.status === 'failed' ? tag.aria.copyFailedStatus : '';
   return (
     <div className="smlp-tagcol">
       <span className="smlp-tag__pin" aria-hidden="true" />
@@ -136,6 +141,19 @@ function PriceTag() {
             {dl.macIntel.label}
           </a>
           <WindowsDownload />
+          <div className="smlp-npx">
+            <div className="smlp-cmd" role="group" aria-label={tag.aria.commandBox}>
+              <span className="smlp-cmd__prompt" aria-hidden="true">{tag.commandPrompt}</span>
+              <code ref={copier.codeRef}>{tag.command}</code>
+            </div>
+            <CopyButton
+              copier={copier}
+              className="smlp-tag__copy"
+              labels={{ copy: tag.copyLabel, copied: tag.copiedLabel, failed: tag.copyFailedLabel }}
+            />
+            <p className="smlp-npx__note">{tag.commandNote}</p>
+            <p role="status" className="smlp-sr">{status}</p>
+          </div>
           <p className="smlp-tag__note">{tag.note}</p>
           <p className="smlp-tag__fineprint">
             {tag.unsignedNote}{' '}

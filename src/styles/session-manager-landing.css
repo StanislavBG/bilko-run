@@ -633,6 +633,90 @@
   margin-bottom: 2px;
 }
 
+.smlp-npx {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.smlp-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--smlp-ink);
+  border: 2px solid var(--smlp-ink);
+  border-radius: 8px;
+  font-family: var(--smlp-mono);
+  font-size: 11.5px;
+  color: var(--smlp-paper);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.smlp-cmd code {
+  user-select: all;
+  -webkit-user-select: all;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smlp-cmd code::selection {
+  background: var(--smlp-mustard);
+  color: var(--smlp-ink);
+}
+
+.smlp-cmd__prompt {
+  flex: none;
+  color: var(--smlp-mustard);
+}
+
+/* Every label shares one grid cell, so the tallest label sets the height and a
+   state change can never move the layout. */
+.smlp-copy {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.smlp-copy__label {
+  grid-area: 1 / 1;
+}
+
+.smlp-copy__label[data-on='false'] {
+  visibility: hidden;
+}
+
+.smlp-root .smlp-tag__copy {
+  width: 100%;
+  min-height: 34px;
+  background: var(--smlp-paper);
+  color: var(--smlp-ink);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 6px 12px;
+  border: 2px solid var(--smlp-ink);
+  border-radius: 8px;
+  box-shadow: 2px 2px 0 var(--smlp-ink);
+}
+
+.smlp-root .smlp-tag__copy:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--smlp-ink);
+}
+
+.smlp-npx__note {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--smlp-body);
+}
+
 .smlp-tag__note {
   margin-top: 2px;
   font-size: 13px;

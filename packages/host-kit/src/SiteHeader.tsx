@@ -42,7 +42,6 @@ export const DEFAULT_SECTIONS: readonly SiteSection[] = [
   { label: 'Projects', href: 'https://bilko.run/projects' },
   { label: 'Blog', href: 'https://bilko.run/blog' },
   { label: 'Academy', href: 'https://bilko.run/projects/academy/' },
-  { label: 'Workflows', href: 'https://bilko.run/workflows' },
   { label: 'Contact', href: 'https://bilko.run/contact' },
 ];
 

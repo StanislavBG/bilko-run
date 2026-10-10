@@ -15,22 +15,22 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { formatBytes } from '../lib/format.js';
-import { usePageView } from '../hooks/usePageView.js';
+import { formatBytes } from '../../lib/format.js';
+import { usePageView } from '../../hooks/usePageView.js';
 import {
   fetchManualToc, fetchManualChapter, manualDownloadUrl,
   type ManualChapterBody, type ManualChapterUnavailable, type TokenGetter,
-} from '../lib/manualClient.js';
-import '../styles/session-manager-landing.css';
-import '../styles/session-manager-manual.css';
-import { Chevron } from './session-manager-landing/Chevron.js';
-import { Header } from './session-manager-landing/Header.js';
-import { COPY, fill } from './session-manager-landing/copy.js';
+} from '../../lib/manualClient.js';
+import '../../styles/session-manager-landing.css';
+import '../../styles/session-manager-manual.css';
+import { Chevron } from './Chevron.js';
+import { Header } from './Header.js';
+import { COPY, fill } from './copy.js';
 import {
   bookNavigate, markBookPageReady, shouldInterceptClick,
-} from './session-manager-landing/bookTurn.js';
-import { useLayoutMode, usePageFonts } from './session-manager-landing/hooks.js';
-import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../shared/manual-catalog.js';
+} from './bookTurn.js';
+import { useLayoutMode, usePageFonts } from './hooks.js';
+import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../../shared/manual-catalog.js';
 
 /** Chapter requests from a visitor who isn't (or isn't yet known to be) signed in. */
 const NO_TOKEN: TokenGetter = async () => null;

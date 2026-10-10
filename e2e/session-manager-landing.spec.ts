@@ -188,8 +188,24 @@ test.describe('Session Manager landing — layout modes', () => {
     await expect(button).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(button).toContainText(COPY.priceTag.copiedLabel);
-    await expect(tag.getByRole('status')).toContainText(COPY.priceTag.aria.copiedStatus);
+    // The copied state only lasts ~2.2s and the page can be busy, so a backed-off expect() poll can
+    // miss it. Poll every frame in-page instead and read state + status in the same frame.
+    const copied = await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('.smlp-tag__copy');
+        const status = document.querySelector('.smlp-tag [role="status"]');
+        return btn?.getAttribute('data-state') === 'copied' && status?.textContent
+          ? { state: btn.getAttribute('data-state'), status: status.textContent, label: btn.querySelector('[data-on="true"]')?.textContent }
+          : false;
+      },
+      undefined,
+      { polling: 'raf' },
+    );
+    expect(await copied.jsonValue()).toEqual({
+      state: 'copied',
+      status: COPY.priceTag.aria.copiedStatus,
+      label: COPY.priceTag.copiedLabel,
+    });
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(COPY.priceTag.command);
     const after = (await page.locator('.smlp-tag').boundingBox())!;
     expect(after.height).toBe(before.height);

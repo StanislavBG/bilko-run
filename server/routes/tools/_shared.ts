@@ -322,24 +322,9 @@ export async function handleGenerateEndpoint(
     return { error: 'Sign in required.', requiresEmail: true };
   }
 
-  const ipHash = hashIp(req.ip);
-  const rate = await checkRateLimit(ipHash, opts.endpoint, email);
-  if (!rate.allowed) {
-    reply.status(429);
-    return {
-      gated: true,
-      remaining: 0,
-      limit: rate.limit,
-      isPro: rate.isPro,
-      message: rate.isPro ? paidGateMsg(rate.limit) : freeGateMsg(),
-    };
-  }
-
-  const costLimit = await enforceCallLimits({ userEmail: email, ipHash, isAdmin: isAdminEmail(email), appSlug: opts.endpoint });
-  if (!costLimit.ok) {
-    reply.status(costLimit.status);
-    return { error: costLimit.reason };
-  }
+  const gate = await freeTierGate(req, reply, { endpoint: opts.endpoint });
+  if (!gate) return reply;
+  const { ipHash, rate } = gate;
 
   try {
     const raw = await askGemini(opts.userPrompt, { systemPrompt: opts.systemPrompt });
@@ -347,8 +332,6 @@ export async function handleGenerateEndpoint(
     await incrementUsage(ipHash, opts.endpoint);
     return { ...parsed, usage: { remaining: Math.max(0, rate.limit - 1), limit: rate.limit, isPro: rate.isPro } };
   } catch (err: any) {
-    console.error(opts.logTag, err);
-    reply.status(500);
-    return { error: `Generation failed: ${err.message}` };
+    return toolErrorReply(reply, err, 'Generation');
   }
 }

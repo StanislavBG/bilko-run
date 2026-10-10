@@ -177,7 +177,7 @@ const render = (t) => {
     const dur = s.end - s.start;
     el.style.opacity = t < s.start ? 0 : (i === 0 ? 1 : clamp((t - s.start) / FADE));
     el.querySelectorAll(".in").forEach((n) => {
-      const q = ease((lt - Number(n.dataset.d)) / 0.6);
+      const q = i === 0 ? 1 : ease((lt - Number(n.dataset.d)) / 0.6);
       n.style.opacity = q;
       n.style.transform = "translateY(" + ((1 - q) * 18) + "px)";
     });

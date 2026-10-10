@@ -1,27 +1,33 @@
 ---
 slug: "twelve-places-one-weather-rule-you-set-yourself"
-title: "Twelve Places, One Weather Rule You Set Yourself"
-excerpt: "Weather apps tell you the temperature. OutdoorHours tells you if it was actually nice enough to go outside -- across twelve places, your own comfort rule, and ten years of data."
+title: "Rank 12 places by weather you define yourself"
+excerpt: "OutdoorHours counts the hours you could have been outside, in twelve places, using a comfort rule you pick or build. Ten years of hourly data."
 category: "product"
 published: true
 published_at: "2026-10-07T16:00:00.000Z"
 order: 43
 ---
 
-Every weather app tells you the temperature. None of them tell you if it was actually nice enough to go outside. [OutdoorHours](https://bilko.run/projects/outdoor-hours/) does.
+You decide what a nice day is, then watch twelve places get ranked by your rule. [OutdoorHours](https://bilko.run/projects/outdoor-hours/) counts every hour of the last ten years that passed your test for "good to go outside."
 
-Open it and compare twelve real places — from Santa Clara County, California, to Sofia, Bulgaria. See how many hours were comfortable enough to go outside, in each one. The data goes back to 2016.
+Most weather apps give you a temperature and stop there. A temperature does not tell you if you could have sat on a patio. Is 75 degrees nice with thick smoke in the air? Is it nice at noon with a strong sun? You each have an answer, and the answer is rarely the same one your neighbor has.
 
-You do not have to trust someone else's idea of "nice." Pick from five ready-made weather moods: Sun Seeker, Goldilocks, Classic, Cool & Cloudy, and All-Weather. Or build your own rule instead. A custom rule has seven dials. They set how warm, how cool, how much sun, how much rain, how much cloud, how humid, and how clean the air must be. Move a dial, and every chart on the page updates right away.
+So OutdoorHours starts with a question: was it comfortable to be outside? It asks that question of each hour. An hour counts when it is daytime, the temperature is mild, the sun is not too strong, it is dry, the sky is not overcast, the air is not muggy, and the air is clean.
 
-This is for anyone who has ever wondered if somewhere else has better weather than home. Maybe you are planning a trip. Maybe you are weighing a move, or picking a spot for a second home. Maybe you just want to know how your city stacks up against Maui County or Miami-Dade. Pick your places, set your own idea of "comfortable," and the tool ranks them for you, best hours first. Compare a county in Florida against one in Washington, or a city in Virginia against one in Hawaii — whatever pair you actually care about.
+With the default "Goldilocks" rule, Santa Clara County in California has 20,114 good hours over ten years. Eastside King County in Washington has 12,361. The page shows those counts as soon as you open it.
 
-The tool also writes the comparison in plain English. It turns the chart into one sentence: which place wins, which one comes in last, and by how much. You do not have to read a chart to get the point.
+![OutdoorHours page showing 20,114 comfortable hours for Santa Clara County against 12,361 for Eastside King County over ten years](/blog-images/twelve-places-one-weather-rule-you-set-yourself/ten-year-leaderboard.jpg "Two counties, one rule, ten years of hours: Santa Clara County leads under the default Goldilocks rule.")
 
-The tool does the math for you, too. It shows the percent gap between your best pick and your worst. That gap becomes something real: extra outdoor-friendly days in the better spot, each year.
+Now change the rule. There are five ready-made moods: Sun Seeker, Goldilocks, Classic, Cool & Cloudy, and All-Weather. Sun Seeker is strict beach-day weather, with clear skies, mild temperatures, low humidity, and clean air. Switch to it and the same two counties drop to 8,807 hours and 3,637. The gap between them gets wider, because the strict rule hits Eastside King County harder.
 
-Click any point on the chart and it opens that month. Click again and you land on one single day, down to the exact hour: temperature, rain, cloud cover, sun strength, all of it. You can also turn on year-over-year mode. See if this summer was really worse than last summer, or if it only felt that way.
+![OutdoorHours with the Sun Seeker rule selected, showing 8,807 good hours for Santa Clara County and 3,637 for Eastside King County](/blog-images/twelve-places-one-weather-rule-you-set-yourself/sun-seeker-ranking.jpg "Switching to Sun Seeker cuts both counts, and Eastside King County falls much further.")
 
-OutdoorHours used to pick the comfort rule for you. Now you set the rule yourself, and you can run it across any of the twelve places at once. Next: more places join the list, so the comparison keeps growing.
+Or skip the presets. The Custom button opens sliders for the temperature range, UV, rain, cloud cover, humidity, and air quality. Your browser re-counts ten years of hourly data against your numbers. The tour on the page says air quality data only starts in August 2022, so older hours are not held to the air rule.
 
-Try it yourself at [the OutdoorHours project page](https://bilko.run/projects/outdoor-hours/). Pick two places you care about and see which one wins. The code is open source -- see it on [GitHub](https://github.com/StanislavBG/outdoor-hours).
+The twelve places run from Bay Area and Seattle-area counties to the Florida coasts, New York City, Maui, Sofia in Bulgaria, and Gabrovo in Bulgaria. Pick the ones you care about and add them to the chart. Click a point to open that month, then a day, then the hourly detail. A year-over-year switch lets you check if this summer was worse than the last one, or if it only felt that way.
+
+This helps if you are planning a trip, weighing a move, or just settling a debate with a friend about whose city has better weather. The data refreshes, and the page said it was last updated on October 9, 2026 when I loaded it.
+
+Before, a weather app decided what "nice" meant. Now you set the rule and the ranking follows it. Your rule lives in the page link, so you can send a friend your exact view.
+
+Try it at [bilko.run/projects/outdoor-hours](https://bilko.run/projects/outdoor-hours/). Set a rule, pick two places, and see which one wins. The code is open source at [github.com/StanislavBG/outdoor-hours](https://github.com/StanislavBG/outdoor-hours).

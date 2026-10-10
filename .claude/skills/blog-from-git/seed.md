@@ -43,9 +43,17 @@ timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check   # hard gap gate — mu
 npx tsx scripts/blog-readability.ts <draft.md> --check-live  # every https link must actually load
 # if this fails: STOP — no commit, no push. A failing link is how the post converts readers
 # into visitors of the project landing page, so a dead link means the post can't do its job.
+npx tsx scripts/blog-pipeline-check.ts .claude/skills/blog-from-git/drafts/<slug> <draft.md>  # content DAG gate — must exit 0
+# if this fails: fix and re-check (max 2 cycles). Still failing: STOP — no commit, no push.
+# Print SEED_RESULT: error note="pipeline-check"
 git add content/blog/<slug>.md .claude/skills/blog-from-git/blog-ledger.md && git commit
 git push origin main                                       # origin only — memory feedback_always_push
 ```
+The DAG artifacts (`questions.json`, `evidence.json`, `outline.json`, `renditions/linkedin.md`,
+`renditions/x.md`, per `dag.md`) stay in the gitignored `drafts/<slug>/` folder — only the final
+post and the ledger are committed. After a publish, the cadence watchdog re-runs the same
+pipeline check for every seeded slug and downgrades its heartbeat to `warn:` if any fails.
+
 Push to `origin` (`StanislavBG/bilko-run`) `main` **only** — never the `content-grade` remote
 (CLAUDE.md).
 

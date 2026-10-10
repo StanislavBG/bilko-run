@@ -1208,3 +1208,58 @@ describe('blog-cadence-watchdog.sh', () => {
     });
   });
 });
+
+describe('blog-cadence-watchdog.sh content DAG wiring', () => {
+  let src: string;
+  beforeAll(() => {
+    src = readFileSync(join(__dirname, '../scripts/blog-cadence-watchdog.sh'), 'utf-8');
+  });
+
+  it('defines DAG_INSTRUCTIONS naming dag.md, every artifact, the drafts folder, and the never-commit rule', () => {
+    const def = src.match(/DAG_INSTRUCTIONS="[\s\S]*?"\n/);
+    expect(def).not.toBeNull();
+    const text = def![0];
+    expect(text).toMatch(/\.claude\/skills\/blog-from-git\/dag\.md/);
+    for (const f of ['questions.json', 'evidence.json', 'outline.json', 'renditions/linkedin.md', 'renditions/x.md']) {
+      expect(text).toContain(f);
+    }
+    expect(text).toMatch(/\.claude\/skills\/blog-from-git\/drafts\/<slug>\//);
+    expect(text).toMatch(/never commit/i);
+  });
+
+  it('interpolates DAG_INSTRUCTIONS into both the non-autonomous prompt and the autonomous requirements', () => {
+    const nonAutoStart = src.indexOf('run PHASES 1-5 ONLY');
+    const nonAutoEnd = src.indexOf('CLAUDE_TIMEOUT=2400');
+    expect(src.slice(nonAutoStart, nonAutoEnd)).toMatch(/\$DAG_INSTRUCTIONS/);
+    const reqStart = src.indexOf('REQUIREMENTS="Autonomy:');
+    const reqEnd = src.indexOf('if [[ "$CONSUME_EXISTING_DRAFTS" -eq 1 ]]');
+    expect(reqStart).toBeGreaterThan(-1);
+    expect(src.slice(reqStart, reqEnd)).toMatch(/\$DAG_INSTRUCTIONS/);
+  });
+
+  it('autonomous prompt has the pipeline gate with 2 fix cycles and the note="pipeline-check" abort', () => {
+    const reqStart = src.indexOf('REQUIREMENTS="Autonomy:');
+    const reqEnd = src.indexOf('if [[ "$CONSUME_EXISTING_DRAFTS" -eq 1 ]]');
+    const req = src.slice(reqStart, reqEnd);
+    expect(req).toMatch(/npx tsx scripts\/blog-pipeline-check\.ts \.claude\/skills\/blog-from-git\/drafts\/<slug> <draft-file>/);
+    expect(req).toMatch(/up to 2 fix-and-recheck cycles/);
+    expect(req).toMatch(/SEED_RESULT: error note=\\"pipeline-check\\"/);
+    expect(req.indexOf('Readability gate')).toBeLessThan(req.indexOf('Pipeline gate'));
+  });
+
+  it('keeps drafts/<slug>/ artifact dirs out of the *.md drafts glob as pending drafts', () => {
+    expect(src).toMatch(/EXISTING_DRAFTS=\("\$DRAFTS_DIR"\/\*\.md\)/);
+    expect(src).toMatch(/\[\[ -f "\$_d" \]\]/);
+  });
+
+  it('published branch audits each seeded slug with a timeout-wrapped check and downgrades to warn: on failure, never reverting', () => {
+    expect(src).toMatch(/run_pipeline_audit\(\)/);
+    const fn = src.slice(src.indexOf('run_pipeline_audit()'));
+    expect(fn).toMatch(/timeout 120 npx tsx scripts\/blog-pipeline-check\.ts "\$DRAFTS_DIR\/\$slug" "content\/blog\/\$slug\.md"/);
+    const published = src.slice(src.indexOf('SEED_RESULT:\\ published=*'));
+    expect(published).toMatch(/run_pipeline_audit/);
+    expect(published).toMatch(/warn: \$\{SEED_LINE#SEED_RESULT: \} .*pipeline-check failed slugs=/);
+    const auditFn = src.slice(src.indexOf('run_pipeline_audit()'), src.indexOf('run_pipeline_audit()') + 900);
+    expect(auditFn).not.toMatch(/git (revert|reset|push|commit)/);
+  });
+});

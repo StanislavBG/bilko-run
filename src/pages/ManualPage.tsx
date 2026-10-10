@@ -12,9 +12,10 @@
  * straight to its chapter once they have all rendered.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
+import { formatBytes } from '../lib/format.js';
 import { usePageView } from '../hooks/usePageView.js';
 import {
   fetchManualToc, fetchManualChapter, manualDownloadUrl,
@@ -29,12 +30,6 @@ import {
 } from './session-manager-landing/bookTurn.js';
 import { useLayoutMode, usePageFonts } from './session-manager-landing/hooks.js';
 import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../shared/manual-catalog.js';
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /** Chapter requests from a visitor who isn't (or isn't yet known to be) signed in. */
 const NO_TOKEN: TokenGetter = async () => null;
@@ -61,6 +56,86 @@ function groupByPart(chapters: Chapters) {
   });
   return groups;
 }
+
+type ChapterEntry = ManualChapterBody | ManualChapterUnavailable | null;
+
+/**
+ * Loads every chapter in parallel and commits them in ONE state update, so the
+ * page renders once rather than once per chapter. `chapters[slug]` is
+ * undefined until the batch lands, null if that chapter failed.
+ */
+function useManualChapters(toc: ManualToc | null, sendToken: boolean, currentToken: TokenGetter) {
+  const [chapters, setChapters] = useState<Record<string, ChapterEntry>>({});
+  // Every chapter fetch has settled — the deep-link scroll and the book-turn
+  // ready signal wait for this so nothing above the target shifts afterwards.
+  const [allSettled, setAllSettled] = useState(false);
+
+  useEffect(() => {
+    if (!toc) return;
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.all(toc.chapters.map(async c => {
+        const getter = sendToken && !c.free ? currentToken : NO_TOKEN;
+        let body: ChapterEntry = null;
+        try { body = await fetchManualChapter(c.slug, getter); } catch { body = null; }
+        return [c.slug, body] as const;
+      }));
+      if (cancelled) return;
+      setChapters(prev => {
+        const next = { ...prev };
+        for (const [slug, body] of results) {
+          // A failed refresh keeps the chapter that is already showing.
+          if (body === null && prev[slug]) continue;
+          next[slug] = body;
+        }
+        return next;
+      });
+      setAllSettled(true);
+    })();
+    return () => { cancelled = true; };
+  }, [toc, sendToken, currentToken]);
+
+  return { chapters, allSettled };
+}
+
+const Chapter = memo(function Chapter({ c, n, count, body }: {
+  c: Chapters[number]; n: number; count: number; body: ChapterEntry | undefined;
+}) {
+  return (
+    <section id={c.slug} className="smlm-chapter">
+      <span className="smlm-card__ghost" aria-hidden="true">{String(n).padStart(2, '0')}</span>
+      <p className="smlm-card__count smlm-card__body">
+        {fill(COPY.book.chapterOfTemplate, { n, count })}
+      </p>
+      <div className="smlm-card__body">
+        {body === undefined && <p className="smlm-status">Loading chapter…</p>}
+
+        {/* Only reachable if a release marks a chapter non-free again: the
+            server answers 402. Say so plainly — there is nothing to buy. */}
+        {isUnavailable(body ?? null) && (
+          <div className="smlm-unavailable">
+            <h2 className="smlm-unavailable__title">{(body as ManualChapterUnavailable).title}</h2>
+            <p className="smlm-unavailable__blurb">{(body as ManualChapterUnavailable).blurb}</p>
+            <p className="smlm-status">This chapter isn't available right now.</p>
+          </div>
+        )}
+
+        {body && !isUnavailable(body) && (
+          // Chapter HTML is first-party content authored in this repo's own
+          // release bundle — not user input — so rendering it directly is safe.
+          <div className="smlm-prose" dangerouslySetInnerHTML={{ __html: body.html }} />
+        )}
+
+        {body === null && (
+          <div className="smlm-unavailable">
+            <h2 className="smlm-unavailable__title">{c.title}</h2>
+            <p className="smlm-status">This chapter couldn't be loaded right now.</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+});
 
 const LANDING_HREF = '/products/session-manager';
 const PARTS_HREF = '/products/session-manager#parts';
@@ -103,11 +178,6 @@ export default function ManualPage() {
 
   const [toc, setToc] = useState<ManualToc | null>(null);
   const [loading, setLoading] = useState(true);
-  // undefined = still loading, null = failed to load.
-  const [chapters, setChapters] = useState<Record<string, ManualChapterBody | ManualChapterUnavailable | null>>({});
-  // Every chapter fetch has settled — the deep-link scroll and the book-turn
-  // ready signal wait for this so nothing above the target shifts afterwards.
-  const [allSettled, setAllSettled] = useState(false);
   const scrolled = useRef(false);
   const canvas = mode === 'canvas';
   const navigate = useNavigate();
@@ -136,23 +206,7 @@ export default function ManualPage() {
   const anyNonFree = toc?.chapters.some(c => !c.free) ?? false;
   const sendTokenAny = signedIn && anyNonFree;
 
-  useEffect(() => {
-    if (!toc) return;
-    let cancelled = false;
-    (async () => {
-      await Promise.all(toc.chapters.map(async c => {
-        const getter = signedIn && !c.free ? currentToken : NO_TOKEN;
-        let body: ManualChapterBody | ManualChapterUnavailable | null = null;
-        try { body = await fetchManualChapter(c.slug, getter); } catch { body = null; }
-        if (cancelled) return;
-        // A failed refresh keeps the chapter that is already showing.
-        setChapters(prev => (body === null && prev[c.slug] ? prev : { ...prev, [c.slug]: body }));
-      }));
-      if (!cancelled) setAllSettled(true);
-    })();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- sendTokenAny stands in for signedIn: free chapters never need a re-fetch
-  }, [toc, sendTokenAny, currentToken]);
+  const { chapters, allSettled } = useManualChapters(toc, sendTokenAny, currentToken);
 
   // Once every chapter is on screen: scroll the deep-linked section (else stay
   // at the top) and tell an in-flight book turn the page is ready.
@@ -267,43 +321,9 @@ export default function ManualPage() {
           {groups.map((g, gi) => (
             <div key={`${g.part ?? ''}-${gi}`}>
               {g.part && <h2 className="smlm-part">{g.part}</h2>}
-              {g.items.map(({ c, n }) => {
-                const body = chapters[c.slug];
-                return (
-                  <section key={c.slug} id={c.slug} className="smlm-chapter">
-                    <span className="smlm-card__ghost" aria-hidden="true">{String(n).padStart(2, '0')}</span>
-                    <p className="smlm-card__count smlm-card__body">
-                      {fill(COPY.book.chapterOfTemplate, { n, count })}
-                    </p>
-                    <div className="smlm-card__body">
-                      {body === undefined && <p className="smlm-status">Loading chapter…</p>}
-
-                      {/* Only reachable if a release marks a chapter non-free again: the
-                          server answers 402. Say so plainly — there is nothing to buy. */}
-                      {isUnavailable(body) && (
-                        <div className="smlm-unavailable">
-                          <h2 className="smlm-unavailable__title">{body.title}</h2>
-                          <p className="smlm-unavailable__blurb">{body.blurb}</p>
-                          <p className="smlm-status">This chapter isn't available right now.</p>
-                        </div>
-                      )}
-
-                      {body && !isUnavailable(body) && (
-                        // Chapter HTML is first-party content authored in this repo's own
-                        // release bundle — not user input — so rendering it directly is safe.
-                        <div className="smlm-prose" dangerouslySetInnerHTML={{ __html: body.html }} />
-                      )}
-
-                      {body === null && (
-                        <div className="smlm-unavailable">
-                          <h2 className="smlm-unavailable__title">{c.title}</h2>
-                          <p className="smlm-status">This chapter couldn't be loaded right now.</p>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                );
-              })}
+              {g.items.map(({ c, n }) => (
+                <Chapter key={c.slug} c={c} n={n} count={count} body={chapters[c.slug]} />
+              ))}
             </div>
           ))}
         </article>

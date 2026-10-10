@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 import { useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
+import { formatBytes } from '../../lib/format.js';
 import { BandwidthPanel } from './BandwidthPanel.js';
 import { BlogCadencePanel } from './BlogCadencePanel.js';
 
@@ -88,9 +89,7 @@ function fmtBytes(bytes: number | null): string {
 // unoptimized sprite sheet) — a fixed KB unit makes the big ones unreadable.
 function fmtBytesOut(bytes: number, hasData: boolean): string {
   if (!hasData && bytes === 0) return '—';
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
+  return formatBytes(bytes);
 }
 
 function fmtMs(ms: number | null): string {

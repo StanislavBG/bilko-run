@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { formatBytes } from '../../lib/format.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -15,13 +16,6 @@ interface EgressResponse {
   earliestDate: string | null;
   days: number;
   generatedAt: number;
-}
-
-function fmtBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
 }
 
 // This view answers "where are the bytes going" over the egress tables
@@ -161,8 +155,8 @@ export function BandwidthPanel() {
                   >
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-warm-800">{row.slug}</td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{row.requests.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{fmtBytes(row.bytes)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-500">{fmtBytes(row.bytesPerRequest)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{formatBytes(row.bytes)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-500">{formatBytes(row.bytesPerRequest)}</td>
                   </tr>
                 ))}
                 {data.bySlug.length === 0 && (
@@ -196,7 +190,7 @@ export function BandwidthPanel() {
                         {a.path === '_rest' ? 'everything else (folded, not top 50)' : a.path}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{a.requests.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{fmtBytes(a.bytes)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{formatBytes(a.bytes)}</td>
                     </tr>
                   ))}
                   {assets !== null && assets.length === 0 && (
@@ -228,8 +222,8 @@ export function BandwidthPanel() {
                     <td className="px-4 py-3 font-mono text-xs text-warm-500">{row.method}</td>
                     <td className="px-4 py-3 font-mono text-xs text-warm-800">{row.route}</td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{row.requests.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{fmtBytes(row.bytes)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-500">{fmtBytes(row.bytesPerRequest)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-700">{formatBytes(row.bytes)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-warm-500">{formatBytes(row.bytesPerRequest)}</td>
                   </tr>
                 ))}
                 {data.rows.length === 0 && (

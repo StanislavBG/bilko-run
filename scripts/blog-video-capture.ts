@@ -1,7 +1,10 @@
 // Blog Video capture primitive: drive headless Chromium against the live product pages a post
 // links to and save compressed 1280x720 JPEG screenshots the Blog Video skill embeds as data: URIs.
-// Usage: pnpm tsx scripts/blog-video-capture.ts --shots <file.json> --out <dir> [--max-bytes 220000]
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+// A shot with `record` also saves a short H.264 mp4 clip of its actions (needs ffmpeg on PATH).
+// Usage: pnpm tsx scripts/blog-video-capture.ts --shots <file.json> --out <dir> [--max-bytes 220000] [--max-clip-bytes 450000]
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +16,7 @@ export interface Shot {
   scrollY?: number;
   waitMs?: number;
   actions?: ShotAction[];
+  record?: { seconds: number };
 }
 
 const MAX_SHOTS = 6;
@@ -24,6 +28,10 @@ const QUALITY_LADDER = [80, 70, 60, 50, 40];
 const DEFAULT_MAX_BYTES = 220_000;
 const GOTO_TIMEOUT_MS = 30_000;
 const ACTION_TIMEOUT_MS = 10_000;
+const MIN_RECORD_SECONDS = 1;
+const MAX_RECORD_SECONDS = 6;
+const CRF_LADDER = [30, 34, 38];
+const DEFAULT_MAX_CLIP_BYTES = 450_000;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -73,6 +81,16 @@ function parseAction(raw: unknown, label: string): ShotAction {
   }
 }
 
+// Navigations (documents, redirects, clicks) must stay on the allow-list; subresources may come from anywhere.
+export function isAllowedNavigation(url: string, isNavigation: boolean): boolean {
+  if (!isNavigation) return true;
+  try {
+    return ALLOWED_ORIGINS.has(new URL(url).origin);
+  } catch {
+    return false;
+  }
+}
+
 export function parseShotList(json: unknown): Shot[] {
   if (!Array.isArray(json)) throw new Error('shot list must be an array');
   if (json.length > MAX_SHOTS) throw new Error(`at most ${MAX_SHOTS} shots allowed, got ${json.length}`);
@@ -97,23 +115,52 @@ export function parseShotList(json: unknown): Shot[] {
       }
       shot.actions = raw.actions.map((a) => parseAction(a, `shot ${name}`));
     }
+    if (raw.record !== undefined) {
+      const sec = isObject(raw.record) ? raw.record.seconds : undefined;
+      if (typeof sec !== 'number' || !Number.isFinite(sec) || sec < MIN_RECORD_SECONDS || sec > MAX_RECORD_SECONDS) {
+        throw new Error(`shot ${name}: record.seconds must be a number between ${MIN_RECORD_SECONDS} and ${MAX_RECORD_SECONDS}`);
+      }
+      shot.record = { seconds: sec };
+    }
     return shot;
   });
 }
 
 // Bounded JPEG quality ladder; the CLI walks it until a shot fits in maxBytes.
-export function qualitySteps(_maxBytes: number): number[] {
+export function qualitySteps(): number[] {
   return [...QUALITY_LADDER];
 }
 
 interface ManifestEntry {
   name: string;
   url: string;
+  kind: 'image' | 'video';
   bytes: number;
   quality: number;
+  seconds?: number;
+  clipBytes?: number;
+  crf?: number;
 }
 
-function parseArgs(argv: string[]): { shots: string; out: string; maxBytes: number } {
+// Trim the recorded webm to the action window and encode it, stepping crf up until it fits.
+function encodeClip(webm: string, offsetSec: number, seconds: number, outFile: string, maxClipBytes: number): { bytes: number; crf: number } | string {
+  let last = 0;
+  for (const crf of CRF_LADDER) {
+    const r = spawnSync(
+      'ffmpeg',
+      ['-y', '-loglevel', 'error', '-ss', offsetSec.toFixed(2), '-t', String(seconds), '-i', webm,
+        '-vf', 'scale=1280:720', '-r', '24', '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf),
+        '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', outFile],
+      { encoding: 'utf8' },
+    );
+    if (r.error || r.status !== 0) return `ffmpeg failed: ${r.error?.message ?? r.stderr}`;
+    last = statSync(outFile).size;
+    if (last <= maxClipBytes) return { bytes: last, crf };
+  }
+  return `clip is ${last} bytes at crf ${CRF_LADDER[CRF_LADDER.length - 1]}, over ${maxClipBytes}`;
+}
+
+function parseArgs(argv: string[]): { shots: string; out: string; maxBytes: number; maxClipBytes: number } {
   const get = (flag: string): string | undefined => {
     const i = argv.indexOf(flag);
     return i >= 0 ? argv[i + 1] : undefined;
@@ -121,15 +168,16 @@ function parseArgs(argv: string[]): { shots: string; out: string; maxBytes: numb
   const shots = get('--shots');
   const out = get('--out');
   const maxBytes = Number(get('--max-bytes') ?? DEFAULT_MAX_BYTES);
-  if (!shots || !out || !Number.isFinite(maxBytes) || maxBytes <= 0) {
-    console.error('usage: blog-video-capture.ts --shots <file.json> --out <dir> [--max-bytes 220000]');
+  const maxClipBytes = Number(get('--max-clip-bytes') ?? DEFAULT_MAX_CLIP_BYTES);
+  if (!shots || !out || !Number.isFinite(maxBytes) || maxBytes <= 0 || !Number.isFinite(maxClipBytes) || maxClipBytes <= 0) {
+    console.error('usage: blog-video-capture.ts --shots <file.json> --out <dir> [--max-bytes 220000] [--max-clip-bytes 450000]');
     process.exit(2);
   }
-  return { shots, out, maxBytes };
+  return { shots, out, maxBytes, maxClipBytes };
 }
 
 async function main(): Promise<void> {
-  const { shots: shotsFile, out, maxBytes } = parseArgs(process.argv.slice(2));
+  const { shots: shotsFile, out, maxBytes, maxClipBytes } = parseArgs(process.argv.slice(2));
   let shots: Shot[];
   try {
     shots = parseShotList(JSON.parse(readFileSync(shotsFile, 'utf8')));
@@ -154,53 +202,102 @@ async function main(): Promise<void> {
   }
 
   const manifest: ManifestEntry[] = [];
+  const tmp = mkdtempSync(path.join(tmpdir(), 'blog-video-'));
+  const fail = (msg: string): void => {
+    console.error(msg);
+    process.exitCode = 1;
+  };
   try {
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      deviceScaleFactor: 1,
-      colorScheme: 'light',
-    });
-    const page = await context.newPage();
     for (const shot of shots) {
+      const recording = shot.record !== undefined;
+      if (recording && spawnSync('ffmpeg', ['-version']).error) {
+        fail('HALT: ffmpeg not found on PATH (expected ~/.local/bin/ffmpeg)');
+        return;
+      }
+      const videoDir = path.join(tmp, shot.name);
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        deviceScaleFactor: 1,
+        colorScheme: 'light',
+        ...(recording ? { recordVideo: { dir: videoDir, size: { width: 1280, height: 720 } } } : {}),
+      });
+      let contextClosed = false;
       try {
-        await page.goto(shot.url, { timeout: GOTO_TIMEOUT_MS, waitUntil: 'networkidle' });
-      } catch {
-        await page.goto(shot.url, { timeout: GOTO_TIMEOUT_MS, waitUntil: 'load' });
-      }
-      if (!ALLOWED_ORIGINS.has(new URL(page.url()).origin)) {
-        console.error(`shot "${shot.name}" redirected off the allow-list to ${page.url()}`);
-        process.exitCode = 1;
-        return;
-      }
-      if (shot.scrollY) await page.evaluate((y) => window.scrollTo(0, y), shot.scrollY);
-      for (const a of shot.actions ?? []) {
-        if ('click' in a) await page.click(a.click, { timeout: ACTION_TIMEOUT_MS });
-        else if ('fill' in a) await page.fill(a.fill[0], a.fill[1], { timeout: ACTION_TIMEOUT_MS });
-        else if ('press' in a) await page.keyboard.press(a.press);
-        else await page.waitForTimeout(a.wait);
-      }
-      if (shot.waitMs) await page.waitForTimeout(shot.waitMs);
+        await context.route('**/*', (route) => {
+          const req = route.request();
+          return isAllowedNavigation(req.url(), req.isNavigationRequest()) ? route.continue() : route.abort();
+        });
+        const page = await context.newPage();
+        const recordStart = Date.now();
+        try {
+          await page.goto(shot.url, { timeout: GOTO_TIMEOUT_MS, waitUntil: 'networkidle' });
+        } catch {
+          await page.goto(shot.url, { timeout: GOTO_TIMEOUT_MS, waitUntil: 'load' });
+        }
+        if (shot.scrollY) await page.evaluate((y) => window.scrollTo(0, y), shot.scrollY);
+        const actionStart = Date.now();
+        for (const a of shot.actions ?? []) {
+          if ('click' in a) await page.click(a.click, { timeout: ACTION_TIMEOUT_MS });
+          else if ('fill' in a) await page.fill(a.fill[0], a.fill[1], { timeout: ACTION_TIMEOUT_MS });
+          else if ('press' in a) await page.keyboard.press(a.press);
+          else await page.waitForTimeout(a.wait);
+        }
+        if (shot.waitMs) await page.waitForTimeout(shot.waitMs);
+        if (shot.record) {
+          const remaining = shot.record.seconds * 1000 - (Date.now() - actionStart);
+          if (remaining > 0) await page.waitForTimeout(remaining);
+        }
+        if (!ALLOWED_ORIGINS.has(new URL(page.url()).origin)) {
+          fail(`shot "${shot.name}" ended off the allow-list at ${page.url()}`);
+          return;
+        }
 
-      let buf: Buffer | null = null;
-      let used = 0;
-      for (const quality of qualitySteps(maxBytes)) {
-        const candidate = await page.screenshot({ type: 'jpeg', quality });
-        buf = candidate;
-        used = quality;
-        if (candidate.length <= maxBytes) break;
+        let buf: Buffer | null = null;
+        let used = 0;
+        for (const quality of qualitySteps()) {
+          const candidate = await page.screenshot({ type: 'jpeg', quality });
+          buf = candidate;
+          used = quality;
+          if (candidate.length <= maxBytes) break;
+        }
+        if (!buf || buf.length > maxBytes) {
+          fail(`shot "${shot.name}" is ${buf?.length ?? 0} bytes at quality ${used}, over ${maxBytes}`);
+          return;
+        }
+        writeFileSync(path.join(outDir, `${shot.name}.jpg`), buf);
+        const entry: ManifestEntry = { name: shot.name, url: shot.url, kind: 'image', bytes: buf.length, quality: used };
+
+        if (shot.record) {
+          await context.close();
+          contextClosed = true;
+          const webm = readdirSync(videoDir).find((f) => f.endsWith('.webm'));
+          if (!webm) {
+            fail(`shot "${shot.name}": no video was recorded`);
+            return;
+          }
+          const offset = (actionStart - recordStart) / 1000 + 0.1;
+          const clipFile = path.join(outDir, `${shot.name}.mp4`);
+          const res = encodeClip(path.join(videoDir, webm), offset, shot.record.seconds, clipFile, maxClipBytes);
+          if (typeof res === 'string') {
+            rmSync(clipFile, { force: true });
+            fail(`shot "${shot.name}": ${res}`);
+            return;
+          }
+          entry.kind = 'video';
+          entry.seconds = shot.record.seconds;
+          entry.clipBytes = res.bytes;
+          entry.crf = res.crf;
+        }
+        manifest.push(entry);
+      } finally {
+        if (!contextClosed) await context.close();
       }
-      if (!buf || buf.length > maxBytes) {
-        console.error(`shot "${shot.name}" is ${buf?.length ?? 0} bytes at quality ${used}, over ${maxBytes}`);
-        process.exitCode = 1;
-        return;
-      }
-      writeFileSync(path.join(outDir, `${shot.name}.jpg`), buf);
-      manifest.push({ name: shot.name, url: shot.url, bytes: buf.length, quality: used });
     }
     writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
     console.log(JSON.stringify(manifest));
   } finally {
     await browser.close();
+    rmSync(tmp, { recursive: true, force: true });
   }
 }
 

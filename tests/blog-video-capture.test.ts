@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseShotList, qualitySteps } from '../scripts/blog-video-capture.js';
+import { isAllowedNavigation, parseShotList, qualitySteps } from '../scripts/blog-video-capture.js';
 
 const shot = (over: Record<string, unknown> = {}) => ({
   name: 'home',
@@ -60,8 +60,33 @@ describe('parseShotList', () => {
   });
 });
 
+describe('record', () => {
+  it('rejects seconds outside 1..6', () => {
+    expect(() => parseShotList([shot({ record: { seconds: 0 } })])).toThrow();
+    expect(() => parseShotList([shot({ record: { seconds: 7 } })])).toThrow();
+  });
+
+  it('accepts seconds 3', () => {
+    expect(parseShotList([shot({ record: { seconds: 3 } })])[0].record).toEqual({ seconds: 3 });
+  });
+});
+
+describe('isAllowedNavigation', () => {
+  it('blocks off-list navigations', () => {
+    expect(isAllowedNavigation('https://evil.test/', true)).toBe(false);
+  });
+
+  it('allows off-list subresources', () => {
+    expect(isAllowedNavigation('https://evil.test/font.png', false)).toBe(true);
+  });
+
+  it('allows allow-listed navigations', () => {
+    expect(isAllowedNavigation('https://bilko.run/x', true)).toBe(true);
+  });
+});
+
 describe('qualitySteps', () => {
   it('returns the bounded ladder', () => {
-    expect(qualitySteps(220000)).toEqual([80, 70, 60, 50, 40]);
+    expect(qualitySteps()).toEqual([80, 70, 60, 50, 40]);
   });
 });

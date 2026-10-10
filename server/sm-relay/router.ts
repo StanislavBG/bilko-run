@@ -48,7 +48,7 @@ interface BaseConn {
   missedPings: number;
   rateLimit: LeakyBucket;
 }
-interface BrowserConn extends BaseConn { id: string; }
+interface BrowserConn extends BaseConn { id: string; clientId?: string; }
 interface DeviceConn extends BaseConn { deviceId: string; }
 
 const MAX_MSG_BYTES = 256 * 1024;
@@ -176,14 +176,14 @@ function stopHeartbeat(): void {
   if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
 }
 
-function registerBrowser(ws: WebSocket, t: { userId: string; email: string }): void {
+function registerBrowser(ws: WebSocket, t: { userId: string; email: string; clientId?: string }): void {
   let existing = 0;
   for (const c of browserConns.values()) if (c.userId === t.userId) existing++;
   if (existing >= MAX_BROWSER_CONNS_PER_USER) { ws.close(1008, 'too_many_connections'); return; }
 
   const id = crypto.randomUUID();
   const conn: BrowserConn = {
-    ws, id, userId: t.userId, email: t.email, connectedAt: Date.now(),
+    ws, id, userId: t.userId, email: t.email, clientId: t.clientId, connectedAt: Date.now(),
     isAlive: true, missedPings: 0, rateLimit: makeBucket(BROWSER_RATE_CAPACITY, BROWSER_RATE_DRAIN_MS),
   };
   browserConns.set(id, conn);
@@ -238,6 +238,13 @@ export function closeSessionsForUser(userId: string): void {
       conn.ws.close(1000, 'logged_out');
       browserConns.delete(id);
     }
+  }
+}
+
+/** Close every live browser connection opened with a now-revoked client token. */
+export function notifyClientRevoked(clientId: string): void {
+  for (const conn of browserConns.values()) {
+    if (conn.clientId === clientId && conn.ws.readyState === WebSocket.OPEN) conn.ws.close(4001, 'token_revoked');
   }
 }
 

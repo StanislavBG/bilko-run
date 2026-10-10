@@ -138,15 +138,6 @@ export function timeAgo(ts: string): string {
   return `${days}d ago`;
 }
 
-export function Panel({ title, children, className = '' }: { title?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <div className={`bg-white rounded-xl border border-warm-200/60 p-5 ${className}`.trim()}>
-      {title && <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">{title}</h2>}
-      {children}
-    </div>
-  );
-}
-
 export function LoadingState({ loading, error, label = 'stats' }: { loading: boolean; error: string | null; label?: string }) {
   if (error) return <div className="text-red-500 text-center py-12">Could not load {label}: {error}</div>;
   if (loading) return <div className="text-warm-400 text-center py-12">Loading {label}...</div>;

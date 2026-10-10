@@ -8,5 +8,3 @@ export const AskRequestSchema = z.object({
   model: z.enum(ALLOWED_MODELS).default('claude-haiku-4-5-latest'),
   lessonSlug: z.string().regex(/^[a-z0-9-]{2,60}$/).optional(),
 }).strict();
-
-export type AskRequest = z.infer<typeof AskRequestSchema>;

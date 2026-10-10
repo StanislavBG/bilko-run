@@ -347,7 +347,6 @@ export const COPY = {
 } as const;
 
 export type LandingTab = (typeof COPY.tabs)[number];
-export type LandingPages = typeof COPY.pages;
 
 /** Fills `{name}` slots in a copy template. Unknown slots are left as-is. */
 export function fill(template: string, values: Record<string, string | number>): string {

@@ -1,7 +1,16 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import { fetchManualToc } from '../../lib/manualClient.js';
 import type { ManualToc } from '../../../shared/manual-catalog.js';
-import { layoutMode, type LayoutMode } from './layout.js';
+import {
+  createWheelTurner,
+  hashForPage,
+  layoutMode,
+  PAGE_COUNT,
+  pageForKey,
+  pageFromHash,
+  swipeDirection,
+  type LayoutMode,
+} from './layout.js';
 
 function currentLayout(): LayoutMode {
   if (typeof window === 'undefined') return layoutMode(1440, 860);
@@ -117,4 +126,135 @@ export function prefersReducedMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Longest a flip may hold the turn lock if `transitionend` never fires. */
+const FLIP_FALLBACK_MS = 900;
+const KEY_SKIP_TARGETS = 'input, textarea, select, [contenteditable], [role="tablist"]';
+
+/**
+ * Page-turn state for the two-page book: the active page, the turn lock, and
+ * the URL hash kept in step (both directions). `pagesRef` is the element that
+ * gets the instant-apply class when the hash changes from outside.
+ */
+export function useBookPages(pagesRef: RefObject<HTMLDivElement>) {
+  const [page, setPage] = useState(() => pageFromHash(window.location.hash));
+  const focusAfterTurn = useRef(false);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const turning = useRef(false);
+  const turnTimer = useRef<number | undefined>(undefined);
+
+  const endTurn = useCallback(() => {
+    turning.current = false;
+    window.clearTimeout(turnTimer.current);
+  }, []);
+
+  const turnTo = useCallback((n: number, opts?: { focus?: boolean }) => {
+    if (n < 0 || n >= PAGE_COUNT || n === pageRef.current || turning.current) return;
+    turning.current = true;
+    window.clearTimeout(turnTimer.current);
+    turnTimer.current = window.setTimeout(endTurn, FLIP_FALLBACK_MS);
+    focusAfterTurn.current = !!opts?.focus;
+    pageRef.current = n;
+    setPage(n);
+    const { pathname, search } = window.location;
+    window.history.replaceState(window.history.state, '', `${pathname}${search}${hashForPage(n)}`);
+  }, [endTurn]);
+
+  useEffect(() => () => window.clearTimeout(turnTimer.current), []);
+
+  useEffect(() => {
+    const onHash = () => {
+      focusAfterTurn.current = false;
+      const next = pageFromHash(window.location.hash);
+      if (next === pageRef.current) return;
+      // Applied without animation: suppress the transition for two frames.
+      const pages = pagesRef.current;
+      pages?.classList.add('smlp-pages--instant');
+      endTurn();
+      pageRef.current = next;
+      setPage(next);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => pages?.classList.remove('smlp-pages--instant')),
+      );
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [endTurn, pagesRef]);
+
+  return { page, pageRef, turning, focusAfterTurn, endTurn, turnTo };
+}
+
+/** Canvas-only turn inputs: wheel, keys, touch swipes. Reflow keeps normal scroll. */
+export function useCanvasTurnInputs({
+  canvas,
+  filmOpen,
+  rootRef,
+  pageRef,
+  turnTo,
+  turnToManual,
+}: {
+  canvas: boolean;
+  filmOpen: boolean;
+  rootRef: RefObject<HTMLDivElement>;
+  pageRef: MutableRefObject<number>;
+  turnTo: (n: number, opts?: { focus?: boolean }) => void;
+  turnToManual: () => void;
+}): void {
+  useEffect(() => {
+    if (!canvas) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const wheelTurner = createWheelTurner();
+    const onWheel = (e: WheelEvent) => {
+      if (filmOpen) return;
+      e.preventDefault();
+      const dir = wheelTurner(e.deltaY, e.deltaMode, performance.now());
+      if (dir === 0) return;
+      if (dir > 0 && pageRef.current === PAGE_COUNT - 1) turnToManual();
+      else turnTo(pageRef.current + dir);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (filmOpen || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest(KEY_SKIP_TARGETS)) return;
+      if (e.key === ' ' && target?.closest('button, a')) return;
+      const next = pageForKey(e.key, e.shiftKey, pageRef.current);
+      if (next === null) return;
+      e.preventDefault();
+      const forward = e.key === 'PageDown' || e.key === 'ArrowDown' || (e.key === ' ' && !e.shiftKey);
+      if (forward && pageRef.current === PAGE_COUNT - 1) {
+        turnToManual();
+        return;
+      }
+      turnTo(next, { focus: true });
+    };
+    let startX = 0;
+    let startY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      startX = t.clientX;
+      startY = t.clientY;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      const t = e.changedTouches[0];
+      if (filmOpen || !t) return;
+      const dir = swipeDirection(t.clientX - startX, t.clientY - startY);
+      if (dir === 0) return;
+      if (dir > 0 && pageRef.current === PAGE_COUNT - 1) turnToManual();
+      else turnTo(pageRef.current + dir);
+    };
+    root.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('keydown', onKey);
+    root.addEventListener('touchstart', onTouchStart, { passive: true });
+    root.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      root.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKey);
+      root.removeEventListener('touchstart', onTouchStart);
+      root.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [canvas, filmOpen, rootRef, pageRef, turnTo, turnToManual]);
 }

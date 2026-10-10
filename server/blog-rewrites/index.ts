@@ -4,6 +4,7 @@ import { rewrite as schedulerViewRewrite } from './twelve-releases-in-four-days-
 import { rewrite as sigmaRewrite } from './sigma-now-shows-who-sits-behind-a-contract.js';
 import { rewrite as bookRewrite } from './the-book-didnt-know-what-it-already-held.js';
 import { rewrite as newGameRewrite } from './a-new-game-a-week-old-and-already-playable.js';
+import { rewrite as twelvePlacesRewrite } from './twelve-places-one-weather-rule-you-set-yourself.js';
 
 export type { BlogRewrite } from './types.js';
 
@@ -13,4 +14,5 @@ export const BLOG_REWRITES: BlogRewrite[] = [
   sigmaRewrite,
   bookRewrite,
   newGameRewrite,
+  twelvePlacesRewrite,
 ].filter((r): r is BlogRewrite => r !== null);

@@ -152,11 +152,39 @@ rotation:
         edgar-rag and social-signals-trader as standalone projects are unaffected.
       retired: 2026-10-09
 
+pipeline:                               # the six-step content DAG (dag.md): decompose -> gather -> outline
+                                        # -> write -> compose -> illustrate. Borrowed from Burrow's research
+                                        # pipeline. Keys MUST match what loadPipelineConfigFromConfig() in
+                                        # scripts/blog-pipeline-check.ts reads; values are its code defaults.
+  min_questions: 3                      # step 3a: fewest reader questions in questions.json
+  max_questions: 7                      # step 3a: most reader questions in questions.json
+  required_question_kinds: [value, who, start]   # step 3a: kinds that must appear, and must be answered by a section
+  min_evidence_per_section: 2           # step 5a: a section with fewer evidence ids is dropped
+  community:                            # step 3b: community signal (burrow-brain) is high-quality only
+    min_upvotes: 25                     # keep an item if upvotes reach this floor...
+    min_quality: 0.7                    # ...or its quality score reaches this one; below both = dropped
+  budget:                               # blog target words = hook_words + sections * section_words + close_words
+    hook_words: 50                      # the opening hook
+    section_words: 140                  # each evidenced section
+    close_words: 60                     # was -> now -> next close with the one link
+    tolerance: 0.2                      # allowed +/- share around the target
+    blog_min_words: 200                 # clamp: the post is never allowed to be shorter than this
+    blog_max_words: 1000                # clamp: the post is never allowed to be longer than this
+  channels:                             # step 5c: ready-to-paste renditions (nothing posts them)
+    linkedin:
+      min_words: 120                    # stands alone, one https link
+      max_words: 250
+    x:
+      max_chars: 280
+
 tones:                                  # pick exactly ONE per post; record it in the ledger
-  changelog:        { words: [250, 450], shape: "1 hero change + 'Also shipped' bullets", payload: required_value_use_payload }
-  shipped-note:     { words: [350, 600], shape: "what I shipped, the one decision, what's next", payload: required_value_use_payload }
-  problem-outcome:  { words: [400, 600], shape: "open on the user's pain, land on what they can now do", payload: required_value_use_payload }
-  field-note:       { words: [500, 800],
+                                        # length is NOT a fixed range: it is computed from the number
+                                        # of evidenced sections (pipeline.budget below, dag.md), and
+                                        # max_sections caps how many sections the tone may have
+  changelog:        { max_sections: 2, shape: "1 hero change + 'Also shipped' bullets", payload: required_value_use_payload }
+  shipped-note:     { max_sections: 3, shape: "what I shipped, the one decision, what's next", payload: required_value_use_payload }
+  problem-outcome:  { max_sections: 3, shape: "open on the user's pain, land on what they can now do", payload: required_value_use_payload }
+  field-note:       { max_sections: 5,
                       shape: "one hard bug/decision used as PROOF of a value/use point, NOT as the
                         subject itself — the value/use point is the spine, the bug is supporting
                         color that earns it credibility. A field-note whose bug/decision IS the
@@ -164,7 +192,7 @@ tones:                                  # pick exactly ONE per post; record it i
                         below just like every other tone.",
                       extras: ["what I'd do differently (concrete)", "FAQ only if each entry adds a new angle"],
                       payload: required_value_use_payload }
-  metric-update:    { words: [300, 550], shape: "lead with the number that moved, then the 1-2 changes that moved it", payload: required_value_use_payload }
+  metric-update:    { max_sections: 3, shape: "lead with the number that moved, then the 1-2 changes that moved it", payload: required_value_use_payload }
   spine: was -> now -> next            # every post, regardless of tone
   required_value_use_payload: >
     Mandatory for EVERY tone above, regardless of shape — a post missing this fails the phase-5
@@ -262,10 +290,17 @@ links:                                  # derive from tile_registry host.kind pe
 gates:                                  # a phase may not hand off until its gate passes
   1_rotation: ledger permits the project (or user override)
   2_scan: window from content/blog/ post files; all repos enumerated; local-only pass ran; cron noise filtered
-  3_research: structured notes per story unit; slot dates re-verified vs commit dates; push status known
-  4_ground: every number traced to a queried source
+  3_research: >-
+    questions.json (3a Decompose) and evidence.json (3b Gather) exist in drafts/<slug>/ per the
+    schemas in dag.md; slot dates re-verified vs commit dates; push status known
+  4_ground: >-
+    every number traced to a queried source; every evidence.json item names its source and
+    community items clear pipeline.community floors (dag.md step 3b)
   5_draft: >-
-    one tone held within its word range; bot-tell blocklist clean; spine present; readability
+    outline.json (5a) with sections capped by the tone's max_sections, each with at least
+    pipeline.min_evidence_per_section evidence ids; renditions/linkedin.md and renditions/x.md
+    written (5c); npx tsx scripts/blog-pipeline-check.ts <drafts/slug dir> <post.md> exits 0 (dag.md);
+    bot-tell blocklist clean; spine present; readability
     checker exits 0 (npx tsx scripts/blog-readability.ts <draft.md> — plain-language gate, see
     the readability block above); marketing_blocklist clean and post stands alone off-site
     (syndication_ready — see distribution: above)

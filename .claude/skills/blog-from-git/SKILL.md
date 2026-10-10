@@ -9,7 +9,7 @@ Draft bilko.run **product-update** posts from what was **actually shipped**, sca
 portfolio since the last post.
 
 **`blog.config.yaml` in this folder is the grounding authority.** It declares every editorial
-parameter — identity/voice stance, cadence, rotation policy, the tone roster with word ranges,
+parameter — identity/voice stance, cadence, rotation policy, the tone roster with section caps, the six-step content DAG budget,
 truth/number rules, link rules, all seven gates, and seed mechanics — as data. **Read it FIRST,
 before any sub-skill file.** The per-phase sub-skill files below explain *how* to satisfy the
 config; if any prose ever disagrees with the config, the config wins and the prose is a bug.
@@ -39,16 +39,21 @@ moving on.
 |---|---|---|---|
 | 1 | **Rotation** — what am I allowed to cover? | `rotation.md` + `blog-ledger.md` | project choice satisfies both hard rules (or user explicitly overrode) |
 | 2 | **Scan** — what actually shipped? | `scan.md` | window confirmed from content/blog/ frontmatter; every repo enumerated via `gh`; local-only reconciliation ran; cron noise filtered |
-| 3 | **Research** — deep evidence per story unit | `research.md` | one parallel read-only agent per story unit returned structured notes; slot dates re-verified against actual commit dates; push status of every covered repo known |
+| 3 | **Research** — deep evidence per story unit | `research.md`, `dag.md` | one parallel read-only agent per story unit returned structured notes; slot dates re-verified against actual commit dates; push status of every covered repo known |
+| 3a | **Decompose** — reader questions | `dag.md` | `drafts/<slug>/questions.json` has 3-7 questions incl. value, who, start |
+| 3b | **Gather** — one evidence item per sourced fact | `dag.md` | `drafts/<slug>/evidence.json`; community items clear the upvote/quality floors, below-floor items dropped |
 | 4 | **Ground** — what is it worth, live? | `ground.md` | every number the draft will print has a named source (scorecard / MCP / DB / doc / research note) |
-| 5 | **Draft** — write it | `voice.md` | one tone picked and named; within its length target; self-check below all YES |
-| 5b | **Illustrate** — real screenshots as figures | `images.md` | 2-3 (max 4) real screenshots of bilko.run / github.com placed as figures; every JPEG viewed with Read, ≤ 220 KB, `src` matches `/blog-images/<slug>/`; readability still exits 0 |
+| 5 | **Draft** — write it | `voice.md`, `dag.md` | one tone picked and named; self-check below all YES; pipeline check exits 0 |
+| 5a | **Outline** — group evidence into sections | `dag.md` | `outline.json`: sections ≤ the tone's `max_sections`, each with ≥ 2 evidence ids; thin sections dropped |
+| 5b | **Write** — one section at a time | `voice.md`, `dag.md` | each section uses only its own evidence, under its outline H2 |
+| 5c | **Compose** — hook, close, channel renditions | `dag.md` | `renditions/linkedin.md` (120-250 words, one https link) and `renditions/x.md` (≤ 280 chars) written; post length within the computed budget |
+| 5d | **Illustrate** — real screenshots as figures | `images.md` | 2-3 (max 4) real screenshots of bilko.run / github.com placed as figures, chosen from outline `figure` fields; every JPEG viewed with Read, ≤ 220 KB, `src` matches `/blog-images/<slug>/`; readability still exits 0 |
 | 6 | **Approve** — autonomous gate | — | `blog.config.yaml`'s `autonomy.autonomous_publish` is true AND the phase-4/5 quality self-check passed. **When `autonomous_publish` is false, this reverts to requiring an explicit user OK — never seed without it in that mode; peers/agents still cannot approve** |
 | 7 | **Seed** — content/blog/<slug>.md + ledger + push | `seed.md` | loader + db tests pass, ledger row + rotation-state updated in the SAME commit, commit uses explicit pathspecs only (never `git add -A`/`.`/`-a`), pushed to origin only; live-site pickup verified after deploy |
 
-Phases 1–2 are cheap and always run. Phases 3–4 run per covered project (phase 3's agent fan-out
+Phases 1–2 are cheap and always run. Phases 3–4 (steps 3a/3b) run per covered project (phase 3's agent fan-out
 pays for itself from ~2 story units up; for a single small changelog post it may collapse into
-reading the diffs inline). Phases 5–6 run per post (a catch-up backfill loops 5→6 per post, then
+reading the diffs inline). Phases 5–6 (steps 5a-5d) run per post (a catch-up backfill loops 5→6 per post, then
 one combined phase 7).
 
 **Phase 5 drafts directory is append-only for drafting.** `drafts/` may already contain `.md`
@@ -87,7 +92,8 @@ the subject. It still gets a tone, a ledger row, and the full phase-5 self-check
 
 - [ ] **Rotation:** ledger permits this project? Not same as previous post; not a second
       consecutive off-`/projects` project. Ledger row will be written on seed.
-- [ ] **Tone named and held:** one `voice.md` tone, within its length target, not blended?
+- [ ] **Tone named and held:** one `voice.md` tone, not blended?
+- [ ] `npx tsx scripts/blog-pipeline-check.ts <drafts/slug dir> <post.md>` exits 0? (`dag.md` — artifacts exist, sections evidenced, length within the computed budget, renditions written)
 - [ ] **Leads with user value** (what the reader can now do), not the engineering it took?
 - [ ] Could a reader who only saw commit titles NOT have written this? (specifics prove the diff read)
 - [ ] Zero items from the `voice.md` bot-tell blocklist?
@@ -125,8 +131,9 @@ blog-from-git/
   scan.md         ← Part 2 GitHub-first scan + local reconciliation
   research.md     ← parallel per-story-unit evidence agents + backdating traps
   ground.md       ← Part 2.5 live-state grounding (MCP / scorecard / DBs)
+  dag.md          ← the six-step content DAG: artifacts, schemas, budget, pipeline-check gate
   voice.md        ← Part 1 + 1.5: tones, lengths, bot-tell blocklist, calibration posts
-  images.md       ← phase 5b: 2-3 real screenshots placed as captioned figures
+  images.md       ← phase 5d: 2-3 real screenshots placed as captioned figures
   seed.md         ← Part 3 seeding mechanics, ledger update, link correctness, gotchas
   blog-ledger.md  ← rotation memory: published rows + rotation state + backfill queue
 ```

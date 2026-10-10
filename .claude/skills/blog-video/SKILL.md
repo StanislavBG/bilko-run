@@ -10,6 +10,10 @@ scene is grounded in ONE blog post's text, not the repo. Where this file says "p
 or "per `<audio_policy>`", read that section of the agent file and follow it — including the Kokoro
 install and model download steps. Do not restate or fork them here.
 
+**System of record.** This file is the single source of truth for the Session Manager "Blog Video"
+HOT KEYS macro. The macro's prompt only points here. Change behaviour in this file, never in the
+macro text.
+
 Facts that hold once the blog-video feature has landed:
 
 - Videos live at `public/blog-videos/<slug>/index.html`, served at `/blog-videos/<slug>/` under a
@@ -33,7 +37,18 @@ Read the post in full from `content/blog/<slug>.md` (frontmatter title + body; s
 take its `name` and `tagline` from `src/data/standalone-projects.json`. Write a claims list: every
 caption, callout and narration line next to the verbatim post sentence it comes from. Drop any with
 no source. No invented numbers, logos, screens or features.
-**Exit:** claims list written; project name/tagline read from the registry.
+
+Then check for the post's content-DAG outline at
+`/home/bilko/Projects/Bilko/.claude/skills/blog-from-git/drafts/<slug>/outline.json` (the drafts
+folder is gitignored and lives only in the main checkout, so use that absolute path). When it exists,
+use its sections (`heading` + `point`) and their `figure` fields to choose the `you can` moments and
+what to capture for each, and read `evidence.json` in the same folder to confirm each claim. When it
+is missing (older posts), that is normal: fall back to the post's emphasis, as in the Story spine.
+
+Every scene `source` must be a verbatim PROSE sentence of the post. Figure lines
+(`![alt](src "caption")`) and their alt or caption text never count as a source.
+**Exit:** claims list written; project name/tagline read from the registry; outline and evidence
+used if present, otherwise the fallback noted.
 
 ## Story spine
 
@@ -48,12 +63,17 @@ to capture.
    interaction a post sentence describes (move a dial, switch a view, pick a place), with a `focus`
    rect and a callout of ≤7 words.
 6. **Payoff** (3-4 s, `text`): the post's own sharpest result sentence.
-7. **Closing** (3-4 s, `closing`): project name + full `https://` link.
+7. **Closing** (3-4 s, `closing`): project name + the post's one primary project link, the same
+   full `https://` URL the post itself links to.
 
 Durations sum to exactly 30; builder limits: scene 3-8 s, caption ≤12 words, ≥3 `screen` scenes.
 **Exit:** every beat has a scene, a source sentence and a duration; the sum is 30.
 
 ## 3. Capture
+
+If `public/blog-images/<slug>/` exists, its committed screenshots show which screens the post
+emphasises; let them guide the shot list. Still capture fresh with `scripts/blog-video-capture.ts`:
+those screenshots are stills, and the moments need motion clips.
 
 Write `<tmp>/shots.json` (`<tmp>` from `mktemp -d`): an array of
 `{ name, url, scrollY?, waitMs?, actions?: [{click: selector}|{fill: [selector, text]}|{press: key}|{wait: ms}], record?: {seconds} }`

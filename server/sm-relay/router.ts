@@ -30,6 +30,8 @@ interface Envelope {
   payload?: unknown;
   ts: number;
   relay_ts?: number;
+  /** device→browser only: unicast to this browser conn id instead of broadcasting. */
+  toConn?: string;
 }
 
 interface LeakyBucket {
@@ -66,6 +68,7 @@ const envelopeSchema = z.object({
   deviceId: z.string().max(128).optional(),
   payload: z.unknown().optional(),
   ts: z.number().int().positive(),
+  toConn: z.string().max(64).optional(),
 });
 
 const browserConns = new Map<string, BrowserConn>();
@@ -114,14 +117,25 @@ function routeFromBrowser(browser: BrowserConn, envelope: Envelope): void {
   if (!consumeRateLimit(browser.rateLimit)) { sendError(browser.ws, 'rate_limited', retryAfterMs(browser.rateLimit)); return; }
   if (!consumeRateLimit(device.rateLimit)) { sendError(browser.ws, 'rate_limited', retryAfterMs(device.rateLimit)); return; }
 
-  safeSend(device.ws, { ...envelope, relay_ts: Date.now() });
+  // SECURITY INVARIANT: sender identity comes from the authenticated conn and
+  // overwrites anything the browser put in the envelope. The agent keys one E2E
+  // session per fromConn, so this tag must be unspoofable.
+  const { toConn: _ignored, ...rest } = envelope;
+  safeSend(device.ws, { ...rest, fromConn: browser.id, fromClientId: browser.clientId ?? null, relay_ts: Date.now() });
 }
 
 function routeFromDevice(device: DeviceConn, envelope: Envelope): void {
+  const { toConn, ...rest } = envelope;
+  const out = { ...rest, deviceId: device.deviceId, relay_ts: Date.now() };
+  if (toConn !== undefined) {
+    // Unicast to one browser conn; silently drop if it is gone or not this user's.
+    const browser = browserConns.get(toConn);
+    if (browser && canRoute(browser, device)) safeSend(browser.ws, out);
+    return;
+  }
+  // Legacy broadcast to every same-user browser (agents/clients without toConn).
   for (const browser of browserConns.values()) {
-    if (browser.userId === device.userId) {
-      safeSend(browser.ws, { ...envelope, deviceId: device.deviceId, relay_ts: Date.now() });
-    }
+    if (browser.userId === device.userId) safeSend(browser.ws, out);
   }
 }
 
@@ -198,7 +212,21 @@ function registerBrowser(ws: WebSocket, t: { userId: string; email: string; clie
   }
 
   ws.on('message', (data) => handleMessage(conn, 'browser', data as Buffer));
-  ws.on('close', () => { browserConns.delete(id); if (!browserConns.size && !deviceConns.size) stopHeartbeat(); });
+  ws.on('close', (code) => {
+    browserConns.delete(id);
+    // Let the user's agents tear down this one client's E2E session and streams.
+    // 4001 is notifyClientRevoked's close code.
+    const reason = code === 4001 ? 'token_revoked' : 'closed';
+    for (const device of deviceConns.values()) {
+      if (device.userId === t.userId) {
+        safeSend(device.ws, {
+          type: 'event:client:disconnected', id: crypto.randomUUID(),
+          fromConn: id, fromClientId: t.clientId ?? null, reason, ts: Date.now(),
+        });
+      }
+    }
+    if (!browserConns.size && !deviceConns.size) stopHeartbeat();
+  });
   ws.on('error', () => ws.close());
   startHeartbeat();
 }

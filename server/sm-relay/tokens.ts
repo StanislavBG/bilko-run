@@ -33,7 +33,6 @@ export interface WsTicketEntry {
 }
 
 const OTP_TTL_MS = 5 * 60 * 1000;
-const OTP_MAX_ATTEMPTS = 3;
 const OTP_RATE_LIMIT_COUNT = 10;
 const OTP_RATE_WINDOW_MS = 60 * 60 * 1000;
 const WS_TICKET_TTL_MS = 30 * 1000;
@@ -42,11 +41,11 @@ const DEVICE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 // Unambiguous alphanumeric charset (excludes 0/O, 1/I, 8/B look-alikes)
 const OTP_CHARSET = 'ACDEFGHJKLMNPQRTUVWXY234679';
 
-export const otpStore = new Map<string, OtpEntry>();
-export const wsTicketStore = new Map<string, WsTicketEntry>();
-export const otpRateStore = new Map<string, { count: number; resetAt: number }>();
+const otpStore = new Map<string, OtpEntry>();
+const wsTicketStore = new Map<string, WsTicketEntry>();
+const otpRateStore = new Map<string, { count: number; resetAt: number }>();
 
-export function generateOtpCode(): string {
+function generateOtpCode(): string {
   const maxAccept = Math.floor(256 / OTP_CHARSET.length) * OTP_CHARSET.length;
   const chars: string[] = [];
   while (chars.length < 8) {
@@ -93,20 +92,6 @@ export function verifyOtp(
   }
   otpStore.delete(normalized);
   return { userId: entry.userId, email: entry.email };
-}
-
-export function recordOtpFailure(userId: string, now = Date.now()): boolean {
-  for (const [code, entry] of otpStore) {
-    if (entry.userId === userId && now <= entry.expiresAt) {
-      entry.attempts++;
-      if (entry.attempts >= OTP_MAX_ATTEMPTS) {
-        otpStore.delete(code);
-        return true;
-      }
-      return false;
-    }
-  }
-  return false;
 }
 
 /** Device tokens are stored hashed: a DB read never yields a usable bearer token. */

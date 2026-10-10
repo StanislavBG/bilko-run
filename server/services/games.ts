@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { dbAll, dbGet, dbRun, dbTransaction, txGet, txRun } from '../db.js';
-import { GAME_CONFIGS, CROSS_GAME_TRIGGERS, type GameConfig } from '../../shared/game-config.js';
+import { GAME_CONFIGS, CROSS_GAME_TRIGGERS } from '../../shared/game-config.js';
 
 // ── In-memory rate limiter: 60 score submissions / hour / (user + game) ──────
 
@@ -28,12 +28,6 @@ export function checkScoreRateLimit(userEmail: string, game: string): boolean {
 /** Exposed for tests: reset the rate-limit counter for a (user, game) pair. */
 export function resetScoreRateLimit(userEmail: string, game: string): void {
   _scoreCounts.delete(`${userEmail}:${game}`);
-}
-
-// ── Config helpers ─────────────────────────────────────────────────────────
-
-export function getGameConfig(slug: string): GameConfig | undefined {
-  return GAME_CONFIGS[slug];
 }
 
 // ── Leaderboard ────────────────────────────────────────────────────────────

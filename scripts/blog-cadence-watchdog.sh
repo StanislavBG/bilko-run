@@ -606,6 +606,13 @@ fi
 shopt -s nullglob
 EXISTING_DRAFTS=("$DRAFTS_DIR"/*.md)
 shopt -u nullglob
+# drafts/<slug>/ pipeline-artifact folders are directories, never pending
+# drafts — keep only regular files.
+_FILTERED_DRAFTS=()
+for _d in "${EXISTING_DRAFTS[@]}"; do
+  [[ -f "$_d" ]] && _FILTERED_DRAFTS+=("$_d")
+done
+EXISTING_DRAFTS=("${_FILTERED_DRAFTS[@]}")
 CONSUME_EXISTING_DRAFTS=0
 if (( ${#EXISTING_DRAFTS[@]} > 0 )) && [[ "$AUTONOMOUS_PUBLISH" != "true" ]]; then
   PENDING_ALERT_DAYS="$(grep -m1 'pending_draft_alert_days:' "$CONFIG_FILE" | grep -oP 'pending_draft_alert_days:\s*\K\d+')"
@@ -673,6 +680,8 @@ else
 fi
 COOLDOWN_INSTRUCTIONS="${COOLDOWN_INSTRUCTIONS}${RETIRED_INSTRUCTIONS}"
 
+DAG_INSTRUCTIONS="Content DAG: draft every post by following .claude/skills/blog-from-git/dag.md. For each post, write its pipeline artifacts under .claude/skills/blog-from-git/drafts/<slug>/ — questions.json, evidence.json, outline.json, renditions/linkedin.md and renditions/x.md. These artifact folders live in the gitignored drafts/ directory: never commit them (only the final content/blog/<slug>.md post and the ledger are ever committed)."
+
 if [[ "$AUTONOMOUS_PUBLISH" != "true" ]]; then
   # --- non-autonomous path: the original human-gated behavior, verbatim ---
   PROMPT="You are running unattended, triggered by a cron watchdog (scripts/blog-cadence-watchdog.sh) because the bilko.run blog's live publishing gap is ${GAP_DAYS} days, past the ${LOWER_BOUND}-day publish-due threshold (cadence.target_gap_days lower bound). There is NO human present in this session.
@@ -682,6 +691,8 @@ Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run P
 $MODE_INSTRUCTIONS
 
 $COOLDOWN_INSTRUCTIONS
+
+$DAG_INSTRUCTIONS
 
 STOP AFTER PHASE 5. Do not run phase 6 (Approve) or phase 7 (Seed) — this repo's editorial gate requires an EXPLICIT human OK before any post is seeded or published, and no human is present to give it. Concretely, in this run you must NOT:
 - create or edit any file under content/blog/
@@ -700,6 +711,7 @@ else
 - published_at (blog.config.yaml cadence.current_post_published_at: authored_at): for every post that is NOT a catch-up backfill post, set published_at to exactly \$AUTHORED_AT = $AUTHORED_AT — this run's own authored-at timestamp, never the ship date and never a value you compute yourself. Catch-up mode backfill posts are the only exception: keep honest backdating to when the work actually shipped (blog.config.yaml backdating: honest-only), unchanged.
 - Hard minimum gap (scripts/blog-cadence-gate.ts, code-enforced, no override): published_at for EVERY post you seed this run must be an explicit ISO timestamp >= ${NEXT_SLOT} (the cadence gate's computed next-allowed-slot). Before your git commit, run \`timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check\` and it must exit 0. If it does not, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: noop note=\"cadence gate check failed\"\`, and nothing else.
 - Readability gate (blog.config.yaml readability: checker, plain-language policy — GED/8th-grade level): before committing ANY draft, run \`npx tsx scripts/blog-readability.ts <draft-file>\` and it must exit 0. If it does not, rewrite the draft to fix what it flagged and re-run the checker — up to 2 rewrite-and-recheck cycles total. If it still does not exit 0 after 2 rewrites, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"readability\"\`, and nothing else.
+- Pipeline gate (scripts/blog-pipeline-check.ts, the content DAG checker): $DAG_INSTRUCTIONS Before committing ANY post, run \`npx tsx scripts/blog-pipeline-check.ts .claude/skills/blog-from-git/drafts/<slug> <draft-file>\` and it must exit 0. If it does not, fix what it flagged and re-run the checker — up to 2 fix-and-recheck cycles total. If it still does not exit 0 after 2 cycles, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"pipeline-check\"\`, and nothing else.
 - Seed by creating content/blog/<slug>.md for each post (copy the frontmatter keys of the newest file in content/blog/ — slug, title, excerpt, category, published, published_at, order — and set order higher than every other post; the post body is markdown below the frontmatter; see content/blog/README.md) and, in the SAME commit, append/update .claude/skills/blog-from-git/blog-ledger.md (a row per post + the rewritten \"Current rotation state\" block).
 - Before committing, run \`npx tsc --noEmit -p tsconfig.json\` and \`pnpm test tests/db.test.ts\`. If either fails, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"<the failing check>\"\`, and nothing else.
 - Stage ONLY the new post file(s) and .claude/skills/blog-from-git/blog-ledger.md via explicit pathspecs: \`git add content/blog/<slug>.md .claude/skills/blog-from-git/blog-ledger.md\` (one content/blog/<slug>.md path per post you seed). NEVER stage the whole working tree with a wildcard/blanket git-add, and never commit with an all-tracked-files shortcut flag — this working tree carries hundreds of unrelated modified files (e.g. public/outdoor-hours/hourly/*.json) that must never be swept into this commit.
@@ -737,6 +749,23 @@ While drafting, write each finished draft as a standalone markdown file under .c
   fi
   CLAUDE_TIMEOUT=3300
 fi
+
+# Post-publish audit of the content DAG: re-runs the pipeline checker for each
+# seeded slug. Report-only — never reverts, rewrites, or re-pushes anything.
+# Sets PIPELINE_FAILED_SLUGS (comma-separated) to the slugs whose check failed.
+run_pipeline_audit() {
+  local slug rc failed=()
+  for slug in "$@"; do
+    set +e
+    timeout 120 npx tsx scripts/blog-pipeline-check.ts "$DRAFTS_DIR/$slug" "content/blog/$slug.md" >&2
+    rc=$?
+    set -e
+    if [[ $rc -ne 0 ]]; then
+      failed+=("$slug")
+    fi
+  done
+  PIPELINE_FAILED_SLUGS="$(IFS=','; echo "${failed[*]:-}")"
+}
 
 echo "[blog-cadence-watchdog] mode=$MODE autonomous=$AUTONOMOUS_PUBLISH consume_existing=$CONSUME_EXISTING_DRAFTS — invoking claude -p"
 
@@ -991,7 +1020,13 @@ elif [[ "$SEED_LINE" == SEED_RESULT:\ published=* ]]; then
     if [[ "$VERIFY_LIVE" -eq 1 ]]; then
       VERIFY_OBSERVED_AT="$(TZ=America/Los_Angeles date -Iseconds)"
       echo "[blog-cadence-watchdog] live pickup verified at https://bilko.run/api/blog for slug(s): ${SEEDED_SLUGS[*]} (observed $VERIFY_OBSERVED_AT) — https://bilko.run/blog/${SEEDED_SLUGS[0]}"
-      write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: } live_at=$VERIFY_OBSERVED_AT slugs=${SEEDED_SLUGS[*]}"
+      run_pipeline_audit "${SEEDED_SLUGS[@]}"
+      if [[ -n "$PIPELINE_FAILED_SLUGS" ]]; then
+        echo "[blog-cadence-watchdog] pipeline-check failed for: $PIPELINE_FAILED_SLUGS — post stays published, flagging only" >&2
+        write_heartbeat "warn: ${SEED_LINE#SEED_RESULT: } live_at=$VERIFY_OBSERVED_AT slugs=${SEEDED_SLUGS[*]} pipeline-check failed slugs=$PIPELINE_FAILED_SLUGS"
+      else
+        write_heartbeat "ok: ${SEED_LINE#SEED_RESULT: } live_at=$VERIFY_OBSERVED_AT slugs=${SEEDED_SLUGS[*]}"
+      fi
     else
       echo "[blog-cadence-watchdog] FATAL: seeded slug(s) not live at https://bilko.run/api/blog after ${VERIFY_DEPLOY_TIMEOUT_SECONDS}s: ${SEEDED_SLUGS[*]}" >&2
       write_heartbeat "error: seeded slug(s) not live after ${VERIFY_DEPLOY_TIMEOUT_SECONDS}s: ${SEEDED_SLUGS[*]}"

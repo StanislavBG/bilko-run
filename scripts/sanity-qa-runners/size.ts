@@ -1,6 +1,6 @@
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { SanityTarget, SubagentResult, TargetStatus } from './types.js';
 import { budgetFor, APP_BUDGETS_GZ_BYTES } from '../../mcp-host-server/src/contract/app-budgets.js';

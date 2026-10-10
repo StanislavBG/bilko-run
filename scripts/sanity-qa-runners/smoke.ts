@@ -3,7 +3,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SanityTarget, SubagentResult, TargetStatus } from './types.js';
 
-const GAME_SLUGS = new Set(['sudoku', 'mindswiffer', 'game-academy']);
 const TIMEOUT_MS = 30_000;
 
 const CONSOLE_ERROR_IGNORE = [

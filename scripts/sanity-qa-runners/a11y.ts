@@ -1,10 +1,7 @@
 import { chromium } from '@playwright/test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
 import type { SanityTarget, SubagentResult, TargetStatus } from './types.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const AXE_CORE_PATH = require.resolve('axe-core');
 

@@ -99,6 +99,39 @@ describe('renderVideoHtml', () => {
     expect(html).toContain('A Demo &lt;Post&gt; &amp; More');
   });
 
+  describe('closing scene URL', () => {
+    const closing = (projectUrl: string, caption: string): string => {
+      const scenes = spec.scenes.map((s) => (s.type === 'closing' ? { ...s, caption } : s));
+      return renderVideoHtml({ ...spec, projectUrl, scenes });
+    };
+    const linkDiv = (h: string): string => h.match(/<div class="link in"[^>]*>[^<]*<\/div>/)![0];
+
+    it('uses nowrap and never break-all on .link', () => {
+      expect(html).toMatch(/\.link\{[^}]*white-space:nowrap/);
+      expect(html).not.toContain('word-break:break-all');
+    });
+
+    it('shrinks the font for a 45-char URL and drops the scheme', () => {
+      const url = 'https://bilko.run/projects/outdoor-hours-xyz/';
+      const link = linkDiv(closing(url, 'Something else'));
+      const px = Number(link.match(/font-size:(\d+)px/)![1]);
+      expect(px).toBeLessThan(58);
+      expect(link).toContain('>bilko.run/projects/outdoor-hours-xyz/<');
+      expect(link).not.toContain('https://');
+    });
+
+    it('does not render the caption again when it equals the URL', () => {
+      const h = closing('https://bilko.run/projects/demo/', 'bilko.run/projects/demo');
+      const count = h.split('bilko.run/projects/demo').length - 1;
+      expect(count).toBe(1);
+    });
+
+    it('still renders a different caption', () => {
+      const h = closing('https://bilko.run/projects/demo/', 'Go try it today');
+      expect(h).toContain('Go try it today');
+    });
+  });
+
   it('exposes smDemo and has no function token', () => {
     expect(html).toContain('window.smDemo');
     expect(html).not.toMatch(/function/i);

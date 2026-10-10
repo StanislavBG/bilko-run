@@ -90,7 +90,7 @@ describe('blog-cadence-watchdog.sh', () => {
   });
 
   it('seeds using explicit git add pathspecs, and never a blanket add anywhere in the script', () => {
-    expect(script).toMatch(/git add server\/db\.ts \.claude\/skills\/blog-from-git\/blog-ledger\.md/);
+    expect(script).toMatch(/git add content\/blog\/<slug>\.md \.claude\/skills\/blog-from-git\/blog-ledger\.md/);
     expect(script).not.toMatch(/git add -A/);
     expect(script).not.toMatch(/git add \./);
     expect(script).not.toMatch(/git commit -a/);
@@ -280,7 +280,7 @@ describe('blog-cadence-watchdog.sh', () => {
         .split('\n')
         .map((line) => line.replace(/^[\s]*-[\s]*/, '').replace(/[\s]*#.*$/, '').trim())
         .filter((line) => line.length > 0);
-      expect(paths).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+      expect(paths).toEqual(['content/blog/', '.claude/skills/blog-from-git/blog-ledger.md']);
     });
 
     it('skips a comment-only continuation line between the key and the first item (the exact defect)', () => {
@@ -288,11 +288,11 @@ describe('blog-cadence-watchdog.sh', () => {
       const input = [
         'allowed_commit_paths:                 # trailing comment',
         '                                       # wrapped continuation of that comment',
-        '  - server/db.ts',
+        '  - content/blog/',
         '  - .claude/skills/blog-from-git/blog-ledger.md',
         'push_branch: main',
       ].join('\n');
-      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+      expect(runAwk(awkProgram, input)).toEqual(['content/blog/', '.claude/skills/blog-from-git/blog-ledger.md']);
     });
 
     it('skips a blank line inside the block', () => {
@@ -300,34 +300,34 @@ describe('blog-cadence-watchdog.sh', () => {
       const input = [
         'allowed_commit_paths:',
         '',
-        '  - server/db.ts',
+        '  - content/blog/',
         '',
         '  - .claude/skills/blog-from-git/blog-ledger.md',
         'push_branch: main',
       ].join('\n');
-      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+      expect(runAwk(awkProgram, input)).toEqual(['content/blog/', '.claude/skills/blog-from-git/blog-ledger.md']);
     });
 
     it('strips an inline trailing comment on a list item', () => {
       const awkProgram = extractAllowedPathsAwk();
       const input = [
         'allowed_commit_paths:',
-        '  - server/db.ts   # the seed file',
+        '  - content/blog/   # the seed file',
         '  - .claude/skills/blog-from-git/blog-ledger.md',
       ].join('\n');
-      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+      expect(runAwk(awkProgram, input)).toEqual(['content/blog/', '.claude/skills/blog-from-git/blog-ledger.md']);
     });
 
     it('terminates the block at the next real YAML key, without swallowing later config', () => {
       const awkProgram = extractAllowedPathsAwk();
       const input = [
         'allowed_commit_paths:',
-        '  - server/db.ts',
+        '  - content/blog/',
         '  - .claude/skills/blog-from-git/blog-ledger.md',
         'push_branch: main',
         '  - not/a/real/item',
       ].join('\n');
-      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+      expect(runAwk(awkProgram, input)).toEqual(['content/blog/', '.claude/skills/blog-from-git/blog-ledger.md']);
     });
 
     it('returns an empty list when the key is genuinely empty or missing (fail-closed still trips)', () => {
@@ -343,10 +343,10 @@ describe('blog-cadence-watchdog.sh', () => {
       const awkProgram = extractAllowedPathsAwk();
       const input = [
         'allowed_commit_paths:',
-        '        - server/db.ts',
+        '        - content/blog/',
         '\t- .claude/skills/blog-from-git/blog-ledger.md',
       ].join('\n');
-      expect(runAwk(awkProgram, input)).toEqual(['server/db.ts', '.claude/skills/blog-from-git/blog-ledger.md']);
+      expect(runAwk(awkProgram, input)).toEqual(['content/blog/', '.claude/skills/blog-from-git/blog-ledger.md']);
     });
   });
 

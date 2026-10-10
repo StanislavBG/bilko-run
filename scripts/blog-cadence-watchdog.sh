@@ -47,7 +47,7 @@
 # .claude/skills/blog-from-git/blog.config.yaml's `autonomy.autonomous_publish`
 # — the OWNER'S CONTROL SURFACE and master kill switch:
 #   - autonomous_publish: true  (default) — runs the FULL pipeline through
-#     phase 7: draft, then seed (server/db.ts + blog-ledger.md, in the same
+#     phase 7: draft, then seed (content/blog/<slug>.md + blog-ledger.md, in the same
 #     commit), then push to origin main. Safety rails are mechanical, not a
 #     human in the loop: explicit commit pathspecs only, never a
 #     wildcard/blanket stage of the whole working tree, a `max_posts_per_run`
@@ -428,15 +428,15 @@ if [[ "$AUTONOMOUS_PUBLISH" == "true" ]]; then
     path="$(echo "$raw_line" | sed -E 's/^[[:space:]]*-[[:space:]]*//; s/[[:space:]]*#.*$//')"
     [[ -n "$path" ]] && ALLOWED_COMMIT_PATHS+=("$path")
   done <<< "$ALLOWED_PATHS_RAW"
-  EXPECTED_COMMIT_PATHS=("server/db.ts" ".claude/skills/blog-from-git/blog-ledger.md")
+  EXPECTED_COMMIT_PATHS=("content/blog/" ".claude/skills/blog-from-git/blog-ledger.md")
   if [[ "${#ALLOWED_COMMIT_PATHS[@]}" -eq 0 || "${ALLOWED_COMMIT_PATHS[*]}" != "${EXPECTED_COMMIT_PATHS[*]}" ]]; then
-    echo "[blog-cadence-watchdog] FATAL: autonomy.allowed_commit_paths in $CONFIG_FILE (got: '${ALLOWED_COMMIT_PATHS[*]}') no longer matches the seed pathspec this script commits (server/db.ts, .claude/skills/blog-from-git/blog-ledger.md) — update both together" >&2
+    echo "[blog-cadence-watchdog] FATAL: autonomy.allowed_commit_paths in $CONFIG_FILE (got: '${ALLOWED_COMMIT_PATHS[*]}') no longer matches the seed pathspec this script commits (content/blog/, .claude/skills/blog-from-git/blog-ledger.md) — update both together" >&2
     write_heartbeat "error: allowed_commit_paths does not match hard-coded seed pathspec"
     exit 1
   fi
 fi
 
-# --- measure the LIVE gap, not server/db.ts's seed data ---
+# --- measure the LIVE gap, not the seeded post files ---
 # Retry through a boot-time network race (see PRD: the 2026-09-11 00:02 PT
 # run fired before the network was up, curl returned a non-JSON-array body,
 # and `jq -r '[.[].published_at] | max'` aborted the whole script under
@@ -541,7 +541,7 @@ run_scan_only() {
 
 Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run PHASES 1-2 ONLY: 1 Rotation (read rotation.md + blog-ledger.md) and 2 Scan (scan.md — gh, not local working trees, for pushed repos; local reconciliation for unpushed/no-remote repos per the ledger's watchlist).
 
-Do NOT draft, seed, or publish anything this run. Do NOT create any file under .claude/skills/blog-from-git/drafts/. Do NOT edit server/db.ts or blog-ledger.md. Do NOT run git add, git commit, or git push.
+Do NOT draft, seed, or publish anything this run. Do NOT create any file under .claude/skills/blog-from-git/drafts/. Do NOT create or edit any file under content/blog/ or blog-ledger.md. Do NOT run git add, git commit, or git push.
 
 When done, print exactly one line summarizing what changed since the last scan (repos touched, notable commits), prefixed with 'SCAN_RESULT: ', and nothing else after it."
 
@@ -681,7 +681,7 @@ $MODE_INSTRUCTIONS
 $COOLDOWN_INSTRUCTIONS
 
 STOP AFTER PHASE 5. Do not run phase 6 (Approve) or phase 7 (Seed) — this repo's editorial gate requires an EXPLICIT human OK before any post is seeded or published, and no human is present to give it. Concretely, in this run you must NOT:
-- edit server/db.ts
+- create or edit any file under content/blog/
 - edit or append to blog-ledger.md
 - run git add, git commit, or git push
 - seed or publish anything
@@ -697,9 +697,9 @@ else
 - published_at (blog.config.yaml cadence.current_post_published_at: authored_at): for every post that is NOT a catch-up backfill post, set published_at to exactly \$AUTHORED_AT = $AUTHORED_AT — this run's own authored-at timestamp, never the ship date and never a value you compute yourself. Catch-up mode backfill posts are the only exception: keep honest backdating to when the work actually shipped (blog.config.yaml backdating: honest-only), unchanged.
 - Hard minimum gap (scripts/blog-cadence-gate.ts, code-enforced, no override): published_at for EVERY post you seed this run must be an explicit ISO timestamp >= ${NEXT_SLOT} (the cadence gate's computed next-allowed-slot). Before your git commit, run \`timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check\` and it must exit 0. If it does not, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: noop note=\"cadence gate check failed\"\`, and nothing else.
 - Readability gate (blog.config.yaml readability: checker, plain-language policy — GED/8th-grade level): before committing ANY draft, run \`npx tsx scripts/blog-readability.ts <draft-file>\` and it must exit 0. If it does not, rewrite the draft to fix what it flagged and re-run the checker — up to 2 rewrite-and-recheck cycles total. If it still does not exit 0 after 2 rewrites, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"readability\"\`, and nothing else.
-- Seed by editing server/db.ts (INSERT OR IGNORE per seed.md) and, in the SAME commit, append/update .claude/skills/blog-from-git/blog-ledger.md (a row per post + the rewritten \"Current rotation state\" block).
+- Seed by creating content/blog/<slug>.md for each post (copy the frontmatter keys of the newest file in content/blog/ — slug, title, excerpt, category, published, published_at, order — and set order higher than every other post; the post body is markdown below the frontmatter; see content/blog/README.md) and, in the SAME commit, append/update .claude/skills/blog-from-git/blog-ledger.md (a row per post + the rewritten \"Current rotation state\" block).
 - Before committing, run \`npx tsc --noEmit -p tsconfig.json\` and \`pnpm test tests/db.test.ts\`. If either fails, do NOT commit or push anything — abort and finish by printing exactly one line, \`SEED_RESULT: error note=\"<the failing check>\"\`, and nothing else.
-- Stage ONLY server/db.ts and .claude/skills/blog-from-git/blog-ledger.md via explicit pathspecs: \`git add server/db.ts .claude/skills/blog-from-git/blog-ledger.md\`. NEVER stage the whole working tree with a wildcard/blanket git-add, and never commit with an all-tracked-files shortcut flag — this working tree carries hundreds of unrelated modified files (e.g. public/outdoor-hours/hourly/*.json) that must never be swept into this commit.
+- Stage ONLY the new post file(s) and .claude/skills/blog-from-git/blog-ledger.md via explicit pathspecs: \`git add content/blog/<slug>.md .claude/skills/blog-from-git/blog-ledger.md\` (one content/blog/<slug>.md path per post you seed). NEVER stage the whole working tree with a wildcard/blanket git-add, and never commit with an all-tracked-files shortcut flag — this working tree carries hundreds of unrelated modified files (e.g. public/outdoor-hours/hourly/*.json) that must never be swept into this commit.
 - Push with \`git push origin main\` only — never any other remote (never content-grade) and never any other branch.
 - Cap how many posts you seed in this run at ${MAX_POSTS_PER_RUN} (blog.config.yaml autonomy.max_posts_per_run), even in catch-up mode. If more publishable posts exist than the cap, seed only the first ${MAX_POSTS_PER_RUN} (oldest-dated, honest backdating per blog.config.yaml truth rules) in one commit, and leave the rest queued in blog-ledger.md's \"Planned backfill queue\" block for a later run. Log how many you seeded vs deferred.
 - If there is genuinely no publishable material in this window, do NOT invent a post to satisfy cadence (blog.config.yaml truth.no_invented_metrics / every_number_needs_a_source still bind) — finish by printing exactly one line, \`SEED_RESULT: noop note=\"<why nothing was publishable>\"\`, and nothing else.

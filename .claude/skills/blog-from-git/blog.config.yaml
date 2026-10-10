@@ -261,7 +261,7 @@ links:                                  # derive from tile_registry host.kind pe
 
 gates:                                  # a phase may not hand off until its gate passes
   1_rotation: ledger permits the project (or user override)
-  2_scan: window from db.ts seeds; all repos enumerated; local-only pass ran; cron noise filtered
+  2_scan: window from content/blog/ post files; all repos enumerated; local-only pass ran; cron noise filtered
   3_research: structured notes per story unit; slot dates re-verified vs commit dates; push status known
   4_ground: every number traced to a queried source
   5_draft: >-
@@ -277,9 +277,14 @@ gates:                                  # a phase may not hand off until its gat
     live pickup verified at /api/blog after Render deploys
 
 seed_mechanics:
-  file: server/db.ts                   # INSERT OR IGNORE blocks in initDb()
+  file: content/blog/<slug>.md         # one new markdown file per post; the server inserts unseen
+                                       # posts at boot (server/blog-posts.ts). Frontmatter (between
+                                       # the two --- lines): slug, title, excerpt, category,
+                                       # published, published_at (explicit ISO), order (higher than
+                                       # all others). Copy the newest post's frontmatter. See
+                                       # content/blog/README.md.
   new_slugs_reach_production: true     # on next deploy boot (verified 2026-07-24)
-  edits_to_deployed_posts: admin blog API only (server/routes/blog.ts) — the seed edit is ignored
+  edits_to_deployed_posts: admin blog API only (server/routes/blog.ts) — editing the post file is ignored
   published_at: explicit ISO string, never new Date()
   push_remote: origin                  # StanislavBG/bilko-run main — NEVER content-grade
 
@@ -295,7 +300,7 @@ autonomy:                               # OWNER'S CONTROL SURFACE — Bilko is a
   push_branch: main
   allowed_commit_paths:                 # the ONLY paths an autonomous seed commit may stage —
                                          # explicit pathspecs only, never `git add -A`/`.`/`-a`
-    - server/db.ts
+    - content/blog/                    # the new post file(s): content/blog/<slug>.md
     - .claude/skills/blog-from-git/blog-ledger.md
   verify_deploy_timeout_seconds: 900     # bounded post-publish poll: how long to wait for a
                                          # seeded slug to appear at /api/blog before treating

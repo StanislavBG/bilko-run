@@ -89,8 +89,13 @@ const sceneHtml = (s: ResolvedScene, i: number, bg?: ResolvedScene['asset'], spe
       return `${open}${backdrop}<div class="fg"><div class="eyebrow in" data-d="0.2">${esc(spec?.projectName ?? '')}</div><h1 class="in" data-d="0.45">${esc(spec?.title ?? '')}</h1><p class="sub in" data-d="0.8">${cap}</p></div></div>`;
     case 'text':
       return `${open}<div class="plain"></div><div class="fg"><div class="rule in" data-d="0.1"></div><p class="big in" data-d="0.25">${cap}</p></div></div>`;
-    case 'closing':
-      return `${open}${backdrop}<div class="fg"><div class="eyebrow in" data-d="0.2">${esc(spec?.projectName ?? '')}</div><div class="link in" data-d="0.4">${esc(spec?.projectUrl ?? '')}</div><p class="sub in" data-d="0.8">${cap}</p></div></div>`;
+    case 'closing': {
+      const shown = (spec?.projectUrl ?? '').replace(/^https?:\/\//, '');
+      const px = Math.min(58, Math.floor(1100 / (Math.max(shown.length, 1) * 0.6)));
+      const norm = (u: string): string => u.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+      const sub = norm(s.caption) === norm(shown) ? '' : `<p class="sub in" data-d="0.8">${cap}</p>`;
+      return `${open}${backdrop}<div class="fg"><div class="eyebrow in" data-d="0.2">${esc(spec?.projectName ?? '')}</div><div class="link in" data-d="0.4" style="font-size:${px}px">${esc(shown)}</div>${sub}</div></div>`;
+    }
     default: {
       const m = s.asset ? media(s.asset, 'shot', `m${i}`) : '';
       const ring = s.focus ? `<div class="ring" id="r${i}"></div>` : '';
@@ -117,7 +122,7 @@ h1{font-size:62px;line-height:1.1;font-weight:800;letter-spacing:-1px;max-width:
 .sub{font-size:28px;color:var(--mut);margin-top:28px;max-width:960px;line-height:1.3}
 .big{font-size:54px;line-height:1.2;font-weight:800;max-width:1000px}
 .rule{width:96px;height:6px;border-radius:3px;background:var(--acc);margin-bottom:34px}
-.link{font-size:58px;font-weight:800;color:var(--acc);word-break:break-all;max-width:1100px;line-height:1.15}
+.link{font-size:58px;font-weight:800;color:var(--acc);white-space:nowrap;max-width:1100px;line-height:1.15}
 .closing .eyebrow{font-size:44px;letter-spacing:3px;color:var(--fg);margin-bottom:22px}
 .zoom{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0}
 .shot{display:block;width:1280px;height:720px;object-fit:fill}

@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { dbRun } from '../../db.js';
 import {
-  hashIp, incrementUsage, handleGenerateEndpoint, FREE_TIER_LIMIT, HEADLINE_GRADER_ENDPOINT, resetUsage,
+  incrementUsage, handleGenerateEndpoint, HEADLINE_GRADER_ENDPOINT,
   freeTierGate, askGeminiJson, toolErrorReply,
 } from './_shared.js';
 
@@ -60,26 +59,6 @@ Respond ONLY with valid JSON — no markdown, no extra text:
 
 export function registerHeadlineGraderRoutes(app: FastifyInstance): void {
   // ── Headline Grader ──────────────────────────────────────
-
-  app.post('/api/demos/headline-grader/unlock', async (req, reply) => {
-    const body = req.body as { email?: string } | null;
-    const email = (body?.email ?? '').trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      reply.status(400);
-      return { error: 'Valid email address required.' };
-    }
-    const ipHash = hashIp(req.ip);
-    try {
-      await dbRun(
-        'INSERT OR IGNORE INTO email_captures (email, tool, score, ip_hash, source) VALUES (?, ?, ?, ?, ?)',
-        email, 'headline-grader', '', ipHash, 'headline-grader',
-      );
-    } catch (_err) {
-      // already captured — that's fine, still grant the reset
-    }
-    await resetUsage(ipHash, HEADLINE_GRADER_ENDPOINT);
-    return { unlocked: true, remaining: FREE_TIER_LIMIT };
-  });
 
   app.post('/api/demos/headline-grader', async (req, reply) => {
     const body = req.body as { headline?: string; context?: string } | null;

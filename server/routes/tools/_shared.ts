@@ -52,13 +52,6 @@ export async function incrementUsage(ipHash: string, endpoint: string): Promise<
   return row?.count ?? 1;
 }
 
-export async function resetUsage(ipHash: string, endpoint: string): Promise<void> {
-  await dbRun(
-    'INSERT INTO usage_tracking (ip_hash, endpoint, date, count) VALUES (?, ?, ?, 0) ON CONFLICT(ip_hash, endpoint, date) DO UPDATE SET count = 0',
-    ipHash, endpoint, todayUTC(),
-  );
-}
-
 export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
@@ -129,11 +122,6 @@ export interface CostCtx {
 const CEILING_TTL_MS = 60_000;
 let ceilingTtlMs = process.env.VITEST ? 0 : CEILING_TTL_MS;
 const ceilingCache = new Map<string, { value: number | null; expires: number }>();
-
-/** Drops memoized spend-ceiling rows (call after editing app_spend_ceilings). */
-export function clearCeilingCache(): void {
-  ceilingCache.clear();
-}
 
 /** Test hook: override the ceiling memo TTL (0 disables it). Defaults to 60 s, and 0 under vitest. */
 export function setCeilingCacheTtl(ms: number): void {

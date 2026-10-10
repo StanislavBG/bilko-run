@@ -214,11 +214,6 @@ if (isProd) {
       redirect: true,
     });
 
-    // Registered AFTER staticPlugin — its GET handler falls back to
-    // reply.sendFile() (a staticPlugin decorator) for a slug with no synced
-    // events yet, so it needs that decorator to already exist.
-    registerProjectEventsRoutes(app);
-
     // Route-specific OG meta tags for social sharing (crawlers don't run JS)
     const indexHtml = readFileSync(resolve(distPath, 'index.html'), 'utf-8');
 
@@ -228,7 +223,7 @@ if (isProd) {
     const OG_OVERRIDES: Record<string, { title: string; description: string; url: string }> = {
       '/projects': {
         title: 'Projects — bilko.run',
-        description: 'AI-powered tools for makers, marketers, and founders. PageRoast, HeadlineGrader, AdScorer, and more.',
+        description: 'Every project Bilko is building: live apps, games and tools, each in its own repo.',
         url: 'https://bilko.run/projects',
       },
       '/blog': {
@@ -285,6 +280,12 @@ if (isProd) {
     });
   }
 }
+
+// Registered in dev and prod. In prod it comes AFTER staticPlugin so the GET
+// handler's reply.sendFile() fallback (a staticPlugin decorator) exists; in dev
+// (or prod without dist/) there is no decorator, the handler feature-detects
+// that and answers a JSON 404 'no events yet' instead of throwing.
+registerProjectEventsRoutes(app);
 
 try {
   await app.listen({ port: PORT, host: '0.0.0.0' });

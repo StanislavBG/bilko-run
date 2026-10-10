@@ -1,83 +1,45 @@
 ---
 slug: "localscore-browser-ai-that-never-sees-your-data"
-title: "LocalScore: The AI Tool That Never Sees Your Data"
-excerpt: "We built a document analyzer that runs entirely in your browser. No server, no API, no data transmission. Here's why browser-based AI is the future of privacy-sensitive tools."
+title: "Read a contract with AI that stays on your computer"
+excerpt: "Paste a contract, bill or meeting notes into LocalScore and get a plain English summary. The AI runs in your browser, so your text is never uploaded."
 category: "deep-dive"
 published: true
 published_at: "2026-04-04T09:12:07.754Z"
 order: 3
 ---
 
-## The privacy problem with AI tools
+Paste a lease, an invoice, or a messy meeting thread into LocalScore and get a plain English summary back. The AI runs inside your browser tab, so your words are not uploaded anywhere. After the first setup, you can even turn off your wi-fi and keep going.
 
-Every time you paste a document into ChatGPT, Claude, or any cloud AI tool, that document travels across the internet to someone else's server. For most content, that's fine. For contracts, financial statements, HR documents, or medical records, it's a compliance nightmare.
+## Paste a contract, get plain English back
 
-GDPR fines have hit €5.88 billion cumulatively. The EU AI Act adds penalties up to €35 million or 7% of global turnover. Companies are scared — and they should be.
+Most AI tools make you choose. Paste a private paper into a cloud chatbot and it travels to someone else's server. Skip the tool and you read every line yourself.
 
-But the alternative (not using AI at all) means missing out on the single biggest productivity leap of the decade.
+LocalScore removes that choice. You pick what kind of text you have: a contract, a bill or invoice, meeting notes, or your own website copy. Then you paste it in.
 
-## What if the AI ran on YOUR device?
+Each kind comes with its own questions. For a contract, the tool asks the AI to explain what each side has to do. It also asks for the key dates and the money involved. Anything that looks risky comes with a reason why, and anything that seems to be missing gets flagged. Legal terms are explained in parentheses.
 
-That's the idea behind [LocalScore](/projects/local-score). The AI model downloads to your browser and runs on your device's GPU. Your document is processed locally. Nothing is uploaded. Nothing is transmitted. Nothing is stored on any server.
+![The LocalScore page with a Private and Free card and a green Get Started button](/blog-images/localscore-browser-ai-that-never-sees-your-data/landing.jpg "The top of the live page: one button starts the setup, and the card says nothing gets uploaded.")
 
-This isn't a theoretical architecture. It works today, in production, in Chrome.
+## What stays on your computer
 
-## How Google Gemma made this possible
+The AI is Gemma 2B, a small open model from Google. It runs on your graphics chip through WebGPU, a browser feature. Your text goes to that model inside the tab, not to a server.
 
-On April 2, 2026, Google released Gemma 4 — a family of open-weight models designed for edge and browser deployment. The E2B (Effective 2B) model runs at 40-180 tokens per second in a browser tab via WebGPU.
+The project's README calls the app 100% client-side: documents never leave the browser. The page says the only network request is the one-time model download on your first visit. After that it says the work happens on your device.
 
-Key specs that make browser AI viable:
-- **3.2GB** at 4-bit quantization (downloads once, cached in IndexedDB)
-- **128K context window** — can process entire contracts
-- **Apache 2.0 license** — free for commercial use
-- **WebGPU acceleration** — uses your GPU, not your CPU
+There is one more thing to know. The project's rules ban any network call that carries your document. The page does send small usage counts, such as which kind of text you picked. If you open your browser's developer tools and watch the Network tab, you will see those. Your text should not be in any of them.
 
-Combined with WebLLM (an open-source browser inference engine), we can run Gemma at near-native speed inside a Chrome tab.
+![The old way, where words travel the internet to a big server, next to the new way, where they stay in your browser](/blog-images/localscore-browser-ai-that-never-sees-your-data/how-it-works.jpg "The page's own comparison: the old way sends your words to a server, the new way keeps them in your browser.")
 
-## What LocalScore does
+## Who it helps, and where it stops
 
-Four analysis modes, all running locally:
+It helps anyone holding papers they would rather not upload. Think of a renter with a lease, a freelancer with an NDA, or a shop owner with a stack of invoices. A thread on r/SideProject with 53 upvotes found that people praise tools that never upload their files, and bookmark them even for small jobs.
 
-1. **Contract Review**: Extract key terms, obligations, risks, unusual clauses, deadlines
-2. **Financial Summary**: Identify key numbers, trends, risks, action items
-3. **Meeting Notes**: Extract action items, decisions, owners, deadlines
-4. **General Analysis**: Summarize, extract key points, identify risks
+The tool is free. It needs no account and no password.
 
-After analysis, a green badge confirms: "Analyzed 100% locally. Your document was processed by AI running in your browser. Zero data was sent to any server."
+The limits are real. It runs in Chrome or Edge on a computer, not on phones yet. The first visit takes 1 to 2 minutes while the model sets up. The model is small. Its context setting is 4,096 tokens, which are small chunks of words. A long contract may need to go in pieces.
 
-## Don't trust us — verify it
+![The public GitHub page for the local-score repository](/blog-images/localscore-browser-ai-that-never-sees-your-data/github-repo.jpg "The source is public: three commits, no releases, last pushed in May 2026.")
 
-Open your browser's DevTools (F12), go to the Network tab, and run an analysis. You'll see zero network requests during processing. This is the strongest possible privacy architecture: there is no server to breach, no logs to subpoena, no API call to intercept.
+The repo is small. The phone gap and the short context window are the two things worth fixing next.
 
-## Why it's free
-
-LocalScore costs us nothing to operate. The user's GPU does all the work. No API calls, no Gemini tokens, no server compute. So we made it free — no credits, no limits, no catch.
-
-It drives traffic to [bilko.run](/projects) and builds trust. When someone sees that we offer a genuinely free, genuinely private tool, they're more likely to try the paid tools too.
-
-## The future of browser AI
-
-Gemma 4 is the beginning, not the end. As models get smaller and more capable, more tasks will move to the browser:
-- Real-time translation without internet
-- Private code review on sensitive codebases
-- Medical document analysis that stays on the hospital network
-- Legal document review that never leaves the law firm
-
-We're betting that privacy-first AI tools will become a category, not a feature.
-
-## Try it
-
-[LocalScore](/projects/local-score) works in Chrome 113+ and Edge 113+. First visit downloads the model (~1.6GB). After that, everything works offline.
-
-Your documents stay yours.
-
-## FAQ
-
-**Is it as good as ChatGPT or Claude?**
-No. Gemma 2B is smaller and less capable than frontier models. But for document analysis — extracting key terms, summarizing, identifying risks — it's surprisingly good. And the trade-off (slightly less capable but completely private) is worth it for sensitive documents.
-
-**Does it work on my phone?**
-Not yet. WebGPU support on mobile browsers is still limited. Desktop Chrome and Edge work reliably.
-
-**Can I use this for HIPAA-compliant workflows?**
-The tool itself doesn't store or transmit data, which removes the primary HIPAA concern. But consult your compliance team — HIPAA compliance involves more than just data transmission.
+You can [try LocalScore](https://bilko.run/projects/local-score/) in Chrome or Edge on a computer, and [read the code](https://github.com/StanislavBG/local-score) on GitHub.

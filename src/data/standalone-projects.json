@@ -15,7 +15,9 @@
     "tags": [
       "Browser",
       "Free"
-    ]
+    ],
+    "public": true,
+    "displayName": "Git Viewer"
   },
   {
     "slug": "sigma",
@@ -50,7 +52,9 @@
     "tags": [
       "Data",
       "Free"
-    ]
+    ],
+    "public": true,
+    "displayName": "Weather"
   },
   {
     "slug": "sudoku",
@@ -109,7 +113,8 @@
       "Electron",
       "CLI",
       "Free"
-    ]
+    ],
+    "public": true
   },
   {
     "slug": "academy",
@@ -127,7 +132,8 @@
     "tags": [
       "Learn",
       "Free"
-    ]
+    ],
+    "public": true
   },
   {
     "slug": "local-score",
@@ -200,7 +206,8 @@
       "Reddit",
       "Alpaca",
       "Free"
-    ]
+    ],
+    "public": true
   },
   {
     "slug": "page-roast",
@@ -482,7 +489,8 @@
       "MCP",
       "Host",
       "TypeScript"
-    ]
+    ],
+    "public": true
   },
   {
     "slug": "escape-velocity",
@@ -501,6 +509,7 @@
       "Space",
       "Godot",
       "Free"
-    ]
+    ],
+    "public": true
   }
 ]

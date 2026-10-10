@@ -497,12 +497,15 @@ echo "[blog-cadence-watchdog] $TODAY (PT): newest live post=$NEWEST_PUBLISHED_AT
 # there). Fail CLOSED: any failure here stops before any publish claude -p
 # call gets a chance to run — not even a scan-only decision is based on a
 # value this script could not validate. ---
+NEXT_SLOT_ERR="$(mktemp)"
 set +e
-NEXT_SLOT="$(timeout 180 pnpm tsx scripts/blog-cadence-gate.ts next-slot 2>&1)"
+NEXT_SLOT="$(timeout 180 pnpm tsx scripts/blog-cadence-gate.ts next-slot 2>"$NEXT_SLOT_ERR")"
 NEXT_SLOT_RC=$?
 set -e
+NEXT_SLOT_STDERR="$(cat "$NEXT_SLOT_ERR")"
+rm -f "$NEXT_SLOT_ERR"
 if [[ $NEXT_SLOT_RC -ne 0 || ! "$NEXT_SLOT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]; then
-  echo "[blog-cadence-watchdog] FATAL: cadence gate next-slot unavailable or returned a non-ISO value (rc=$NEXT_SLOT_RC): $NEXT_SLOT" >&2
+  echo "[blog-cadence-watchdog] FATAL: cadence gate next-slot unavailable or returned a non-ISO value (rc=$NEXT_SLOT_RC): stdout=$NEXT_SLOT stderr=$NEXT_SLOT_STDERR" >&2
   write_heartbeat "error: cadence gate unavailable"
   exit 1
 fi

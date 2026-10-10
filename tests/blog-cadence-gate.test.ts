@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   findSpacingViolations,
@@ -5,6 +6,9 @@ import {
   nextAllowedSlot,
   type SeededPost,
 } from '../scripts/blog-cadence-gate.js';
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const SINCE = '2026-10-01T00:00:00.000Z';
 
@@ -121,6 +125,26 @@ describe('loadSeededPosts env restoration', () => {
       }
     }
   }, 60_000);
+});
+
+describe('next-slot CLI stdout contract', () => {
+  it('next-slot prints exactly one ISO line on stdout (DB boot log must not leak into it)', () => {
+    const env = { ...process.env };
+    delete env.TURSO_DATABASE_URL;
+    delete env.TURSO_AUTH_TOKEN;
+
+    const result = spawnSync('pnpm', ['tsx', 'scripts/blog-cadence-gate.ts', 'next-slot'], {
+      cwd: path.join(path.dirname(fileURLToPath(import.meta.url)), '..'),
+      env,
+      encoding: 'utf-8',
+      timeout: 120_000,
+    });
+
+    expect(result.status).toBe(0);
+    const stdout = result.stdout.trim();
+    expect(stdout.split('\n')).toHaveLength(1);
+    expect(stdout).toMatch(/^\d{4}-\d{2}-\d{2}T[^\s]*Z$/);
+  }, 130_000);
 });
 
 describe('seeded posts obey the cadence gate', () => {

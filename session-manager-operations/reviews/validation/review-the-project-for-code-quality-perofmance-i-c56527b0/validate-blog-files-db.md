@@ -17,10 +17,10 @@ Base: f6c830b41387627d97916c1af828bf4c1472dae1. All PRD files found in `prds-arc
 - server/db.ts went from 3121 lines to 402 (db-schema.ts split included). The shrink is well over 2,000 lines.
 - Related tests green (blog-cadence-gate, blog-rewrites, blog-scheduled-publish, blog-contentgrade-scrub, db).
 
-## 1144-blog-pipeline-seed-path — REFUTED — dry run prints FATAL (pre-existing cause)
+## 1144-blog-pipeline-seed-path — VERIFIED (re-validated after fix 1166-fix)
 - `EXPECTED_COMMIT_PATHS=("content/blog/" ".claude/skills/blog-from-git/blog-ledger.md")` at scripts/blog-cadence-watchdog.sh:431. The consistency check against blog.config.yaml passes: the run got past it. `git grep 'server/db.ts'` in the script and config returns nothing.
 - Prompt text and pathspecs updated (diff reviewed). tests/blog-cadence-watchdog.test.ts and blog-watchdog-heartbeat.test.ts pass.
-- AC "dry run prints no FATAL" is NOT met. `bash scripts/blog-cadence-watchdog.sh --help` prints: `FATAL: cadence gate next-slot unavailable or returned a non-ISO value (rc=0): [DB] Initialized (local SQLite)\n2026-10-10T16:00:00.000Z`. Cause: `initDb()` logs `[DB] Initialized...` to stdout (server/db.ts:401), and the watchdog captures `2>&1` and requires the value to start with an ISO date (scripts/blog-cadence-watchdog.sh:501-505). The log line also exists in the base (db.ts:3120) and scripts/blog-cadence-gate.ts is unchanged, so this is not a regression from this plan, but the unattended watchdog fails closed on every run and will never publish.
+- Re-validated after fix 1166-fix: `pnpm tsx scripts/blog-cadence-gate.ts next-slot 2>/dev/null` now prints exactly one line, `NEXT_SLOT_OK 2026-10-10T16:00:00.000Z` (rc=0). Test `next-slot CLI stdout contract > next-slot prints exactly one ISO line on stdout` in tests/blog-cadence-gate.test.ts failed before the fix (2 lines) and passes after. The watchdog now captures stdout only and appends stderr to the FATAL message. The earlier finding: `initDb()` logged `[DB] Initialized...` to stdout (server/db.ts:401), which the watchdog merged via `2>&1` and rejected as non-ISO. Fixed by redirecting `console.log` to stderr around `initDb()` in `loadSeededPosts()`.
 
 ## 1145-blog-skill-docs-seed-path — VERIFIED
 - `git grep -n 'server/db.ts' -- .claude/skills/blog-from-git` returns one line, blog-ledger.md:52, a historical note marked "(historical; posts now live in content/blog/*.md)".
@@ -38,8 +38,9 @@ Base: f6c830b41387627d97916c1af828bf4c1472dae1. All PRD files found in `prds-arc
 
 ## Findings
 ### Important
-- scripts/blog-cadence-watchdog.sh:501 + server/db.ts:401: the stdout `[DB] Initialized` line breaks the next-slot ISO check, so the daily watchdog exits FATAL. The fix belongs in scripts/blog-cadence-gate.ts or the watchdog (print only the last line, or send the log to stderr). Pre-existing, but it contradicts 1144's acceptance criterion.
+- none
 ### Minor
+- Resolved: next-slot stdout polluted by `[DB] Initialized`; fixed in scripts/blog-cadence-gate.ts (+ watchdog stderr split).
 - First full `pnpm test` hit `SQLITE_BUSY` in 4 files; the rerun was clean. Likely contention on the shared sqlite file when other jobs run concurrently; not reproduced.
 - Untracked stray file `<path>` in the worktree, not part of this plan.
 - tests/db-boot.test.ts: the old-code round-trip baseline is not recorded in the repo.

@@ -70,6 +70,8 @@ export async function loadSeededPosts(): Promise<SeededPost[]> {
     BILKO_SQLITE_PATH: process.env.BILKO_SQLITE_PATH,
   };
 
+  const savedConsoleLog = console.log;
+
   try {
     delete process.env.TURSO_DATABASE_URL;
     delete process.env.TURSO_AUTH_TOKEN;
@@ -78,7 +80,14 @@ export async function loadSeededPosts(): Promise<SeededPost[]> {
     process.env.BILKO_SQLITE_PATH = path.join(tmpDir, 'cadence-check.db');
 
     const { initDb, dbAll } = await import('../server/db.js');
-    await initDb();
+    // initDb() logs "[DB] Initialized" to stdout; the CLI's stdout is the
+    // single ISO line the watchdog parses, so route that log to stderr.
+    console.log = console.error;
+    try {
+      await initDb();
+    } finally {
+      console.log = savedConsoleLog;
+    }
 
     const rows = await dbAll<{ slug: string; published_at: string | null }>(
       'SELECT slug, published_at FROM blog_posts WHERE published = 1',

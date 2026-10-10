@@ -20,9 +20,6 @@ async function getRules(): Promise<ReferrerRule[]> {
   return _rulesCache;
 }
 
-/** Clear the referrer rules cache (call after inserts if admin mutates table). */
-export function refreshReferrerRules(): void { _rulesCache = null; _rulesCacheAt = 0; }
-
 function hostMatches(host: string, pattern: string): boolean {
   if (host === pattern) return true;
   if (host.endsWith('.' + pattern)) return true;

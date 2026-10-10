@@ -4,8 +4,9 @@
  * Where to edit what:
  *   - Add / change / remove a project: use the bilko-host MCP, which edits
  *     src/data/standalone-projects.json. Don't hand-edit it from a sibling repo.
- *   - Adjust how a project is displayed (public visibility, display names,
- *     enrichment): src/data/projectsView.ts — PUBLIC_SLUGS, DISPLAY_NAME, ENRICH.
+ *   - Public visibility (`public`) and hub display name (`displayName`) are
+ *     optional fields on the entry in src/data/standalone-projects.json.
+ *   - Adjust hub enrichment (metric, language, detail): src/data/projectsView.ts — ENRICH.
  *   - Host kinds (static-path / external-url / react-route): docs/host-contract.md.
  *
  * The only code-level exception is SPA_ROUTE_OVERRIDES below.
@@ -32,6 +33,10 @@ export interface Project {
   tags?: readonly string[];
   /** Optional cover image URL/path. */
   thumbnail?: string;
+  /** Listed on the public /projects hub (others are admin-only). */
+  public?: boolean;
+  /** Hub-only name override; registry `name` stays stable elsewhere. */
+  displayName?: string;
 }
 
 /* ── Standalone projects (static-path or external) ────────────────── */

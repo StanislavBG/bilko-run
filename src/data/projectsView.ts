@@ -7,7 +7,7 @@
  *   - commit-order.json (slug → last-commit ISO, baked by
  *                        scripts/refresh-commit-order.ts; see that file for why)
  *
- * Public visitors see only PUBLIC_SLUGS. The admin (Clerk email in ADMIN_EMAILS)
+ * Public visitors see only projects with `public: true` in the registry. The admin (Clerk email in ADMIN_EMAILS)
  * gets a toggle that reveals every card. Cards are ordered by total commit count
  * descending (src/data/commit-counts.json, most-worked-on project first), ties
  * broken by last-commit date, so the list is a living "what's hot" leaderboard.
@@ -28,26 +28,6 @@ const COMMIT_COUNTS = commitCounts as Record<string, number>;
 function commitCount(slug: string): number {
   return COMMIT_COUNTS[slug] ?? 0;
 }
-
-/** Cards everyone sees. Everything else is admin-only behind the toggle. */
-export const PUBLIC_SLUGS: ReadonlySet<string> = new Set([
-  // 7 named projects
-  'session-manager',
-  'social-signals-trader',
-  'bilko-host',
-  'outdoor-hours',
-  'git-viewer',
-  'academy',
-  // games
-  'escape-velocity',
-]);
-
-/** Display-name overrides for the hub only (keeps registry names stable for
- *  HomePage / ⌘K / sanity-qa targets). */
-const DISPLAY_NAME: Record<string, string> = {
-  'git-viewer': 'Git Viewer',
-  'outdoor-hours': 'Weather',
-};
 
 export interface HubCard {
   slug: string;
@@ -135,7 +115,7 @@ function projectCard(p: Project): HubCard {
   const pkg = pkgBySlug.get(p.slug);
   return {
     slug: p.slug,
-    name: DISPLAY_NAME[p.slug] ?? p.name,
+    name: p.displayName ?? p.name,
     blurb: p.tagline,
     category: p.category,
     status: p.status,
@@ -147,7 +127,7 @@ function projectCard(p: Project): HubCard {
     github: pkg?.github,
     install: pkg?.install,
     lastCommitAt: commitMs(p.slug),
-    isPublic: PUBLIC_SLUGS.has(p.slug),
+    isPublic: p.public === true,
     ...ENRICH[p.slug],
   };
 }
@@ -155,7 +135,7 @@ function projectCard(p: Project): HubCard {
 function packageCard(pkg: Package): HubCard {
   return {
     slug: pkg.slug,
-    name: DISPLAY_NAME[pkg.slug] ?? pkg.name,
+    name: pkg.name,
     blurb: pkg.description,
     category: pkg.category,
     status: 'package',
@@ -167,7 +147,7 @@ function packageCard(pkg: Package): HubCard {
     github: pkg.github,
     install: pkg.install,
     lastCommitAt: commitMs(pkg.slug),
-    isPublic: PUBLIC_SLUGS.has(pkg.slug),
+    isPublic: false,
     ...ENRICH[pkg.slug],
   };
 }
@@ -188,3 +168,7 @@ export const HUB_CARDS: readonly HubCard[] = (() => {
 })();
 
 export const PUBLIC_CARDS: readonly HubCard[] = HUB_CARDS.filter(c => c.isPublic);
+
+/** Slugs of the public cards, in /projects order. Derived from the registry's
+ *  `public` flag — edit standalone-projects.json, not this file. */
+export const PUBLIC_SLUGS: ReadonlySet<string> = new Set(PUBLIC_CARDS.map(c => c.slug));

@@ -1,9 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useUser, useAuth } from '@clerk/clerk-react';
+import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
-import { ADMIN_EMAILS } from '../../constants.js';
-
-const API = import.meta.env.VITE_API_URL || '/api';
+import { useAdminFetch, useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 
 interface SecretRow {
   name: string;
@@ -83,35 +81,16 @@ function MarkRotatedModal({
 }
 
 export function SecretsPage() {
-  const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
-  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? '';
-  const isAdmin = ADMIN_EMAILS.includes(email);
+  const { isLoaded } = useUser();
+  const isAdmin = useIsAdmin();
+  const adminFetch = useAdminFetch();
 
-  const [rows, setRows] = useState<SecretRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error: loadError, loading, reload } = useAdminResource<SecretRow[]>('/admin/secrets', { enabled: isAdmin });
+  const rows = data ?? [];
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error = actionError ?? loadError;
   const [modal, setModal] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const token = await getToken();
-      const res = await fetch(`${API}/admin/secrets`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) { setError('Failed to load secrets metadata'); return; }
-      setRows(await res.json());
-      setError(null);
-    } catch {
-      setError('Network error');
-    }
-  }, [getToken]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    load().finally(() => setLoading(false));
-  }, [isAdmin, load]);
 
   useEffect(() => {
     document.title = 'Secrets — bilko.run';
@@ -121,17 +100,18 @@ export function SecretsPage() {
   async function markRotated(name: string, notes: string) {
     setSaving(true);
     try {
-      const token = await getToken();
-      await fetch(`${API}/admin/secrets/${encodeURIComponent(name)}/rotated`, {
+      const res = await adminFetch(`/admin/secrets/${encodeURIComponent(name)}/rotated`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes: notes || undefined }),
       });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      setActionError(null);
       setModal(null);
-      await load();
+      await reload();
+    } catch (e) {
+      setModal(null);
+      setActionError(e instanceof Error ? e.message : 'Request failed');
     } finally {
       setSaving(false);
     }

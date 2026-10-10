@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useUser, useAuth } from '@clerk/clerk-react';
+import { useState, useEffect, useRef } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
-import { ADMIN_EMAILS } from '../../constants.js';
+import { useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 import { BandwidthPanel } from './BandwidthPanel.js';
 import { BlogCadencePanel } from './BlogCadencePanel.js';
-
-const API = import.meta.env.VITE_API_URL || '/api';
 
 type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
 
@@ -116,37 +114,14 @@ function DriftBadge({ drift }: { drift: DriftStatus }) {
 }
 
 export function ObservabilityPage() {
-  const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
-  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? '';
-  const isAdmin = ADMIN_EMAILS.includes(email);
+  const { isLoaded } = useUser();
+  const isAdmin = useIsAdmin();
 
-  const [data, setData] = useState<ObservabilityResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, loading, reload: load } = useAdminResource<ObservabilityResponse>('/admin/observability', { enabled: isAdmin });
   const [refreshMs, setRefreshMs] = useState<number>(DEFAULT_REFRESH_MS);
   const [sortKey, setSortKey] = useState<SortKey>('slug');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const token = await getToken();
-      const res = await fetch(`${API}/admin/observability`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) { setError('Failed to load observability data'); return; }
-      setData(await res.json());
-      setError(null);
-    } catch {
-      setError('Network error');
-    }
-  }, [getToken]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    load().finally(() => setLoading(false));
-  }, [isAdmin, load]);
 
   // Poll only while the tab is actually being looked at. A background tab was
   // still hitting the endpoint every 30s indefinitely, which is where the bulk
@@ -250,7 +225,7 @@ export function ObservabilityPage() {
       </div>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}
-      {loading && <div className="text-warm-400 text-center py-16">Loading…</div>}
+      {loading && !data && <div className="text-warm-400 text-center py-16">Loading…</div>}
 
       {data && (
         <>

@@ -1,8 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/clerk-react';
-import { Navigate } from 'react-router-dom';
+import { useState } from 'react';
+import { AdminGate, useAdminFetch, useAdminResource } from '../hooks/useAdmin.js';
 
-const API = import.meta.env.VITE_API_URL || '/api';
 const COST_PER_CALL = 0.001;
 
 interface CostData {
@@ -26,38 +24,55 @@ function SparkBar({ value, max }: { value: number; max: number }) {
 }
 
 export function AdminCostPage() {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
-  const [data, setData] = useState<CostData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  return (
+    <AdminGate>
+      <CostContent />
+    </AdminGate>
+  );
+}
+
+function CostContent() {
+  const { data, error: loadError, reload } = useAdminResource<CostData>('/admin/cost');
+  const adminFetch = useAdminFetch();
+  const [actionError, setActionError] = useState<string | null>(null);
   const [ceilingEdits, setCeilingEdits] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const error = actionError ?? loadError;
 
-  const load = useCallback(async () => {
-    const token = await getToken();
-    const res = await fetch(`${API}/admin/cost`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) { setError('Failed to load cost data'); return; }
-    setData(await res.json());
-  }, [getToken]);
-
-  useEffect(() => { if (isLoaded && isSignedIn) load(); }, [isLoaded, isSignedIn, load]);
-
-  if (!isLoaded) return null;
-  if (!isSignedIn) return <Navigate to="/" replace />;
+  async function post(path: string, body: unknown) {
+    const res = await adminFetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  }
 
   async function resolveAlert(id: number) {
-    const token = await getToken();
-    await fetch(`${API}/admin/cost/resolve-alert`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    load();
+    try {
+      await post('/admin/cost/resolve-alert', { id });
+      setActionError(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Request failed');
+      return;
+    }
+    await reload();
   }
 
   async function saveCeiling(slug: string) {
     const val = parseInt(ceilingEdits[slug] ?? '', 10);
     if (!val || val < 1) return;
     setSaving(slug);
-    const token = await getToken();
-    await fetch(`${API}/admin/spend-ceiling`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ app_slug: slug, max_calls_per_day: val }) });
-    setSaving(null);
-    load();
+    try {
+      await post('/admin/spend-ceiling', { app_slug: slug, max_calls_per_day: val });
+      setActionError(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Request failed');
+      return;
+    } finally {
+      setSaving(null);
+    }
+    await reload();
   }
 
   const todayCalls = data?.todayTotal?.total ?? 0;

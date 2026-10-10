@@ -194,7 +194,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
             current_period_end: 0,
           });
         } else if (data.mode === 'payment' && email && stripeCustomerId) {
-          let productKey: string = PRODUCT_KEYS.AUDIENCEDECODER_REPORT;
+          // 'unattributed' matches no entitlement check (hasPurchased compares exact keys),
+          // so an unmatched price records the sale without granting any product.
+          let productKey: string = 'unattributed';
           let tokenAmount = 0;
           try {
             const s = getStripe()!;
@@ -211,11 +213,16 @@ export function registerStripeRoutes(app: FastifyInstance): void {
               // AudienceDecoder report. Never let that pass quietly.
               console.error(
                 `[stripe_webhook] price ${seenPriceId} matches no STRIPE_PRICE_* env var — ` +
-                `recording as ${productKey}. If this is a payment-link product, its ` +
+                `recording as ${productKey}, no entitlement granted. If this is a payment-link product, its ` +
                 `STRIPE_PRICE_* var must ALSO be set for attribution to work.`,
               );
             }
-          } catch { /* default to audiencedecoder */ }
+          } catch (err: any) {
+            console.error(
+              `[stripe_webhook] line-item lookup failed for session ${data.id} — ` +
+              `recording as ${productKey}, no entitlement granted:`, err?.message,
+            );
+          }
 
           await saveOneTimePurchase({
             email,

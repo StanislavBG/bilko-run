@@ -25,9 +25,9 @@ include it in the scan only if explicitly asked.)
 
 ```bash
 cd ~/Projects/Bilko
-grep -n "published_at" server/db.ts | tail -3      # blog seeds live in server/db.ts initDb()
+grep -h '^published_at' content/blog/*.md | sort | tail -3   # posts live in content/blog/<slug>.md
 ```
-Read the latest seed block(s) for the last post's date, slug, and what it covered (don't repeat
+Read the latest post file(s) (match the date to its file with `grep -l`) for the last post's date, slug, and what it covered (don't repeat
 it). Today's date is in session context. Window = `[last post date, today]`. Set
 `SINCE=<last-post-date>T00:00:00Z`. Cross-check against the ledger — they must agree.
 

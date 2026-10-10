@@ -142,7 +142,7 @@ to novelty.
 
 ## Calibration set (read both before drafting)
 
-Two real posts already in `server/db.ts` bracket the quality range:
+Two real posts already in `content/blog/` bracket the quality range:
 
 - ✅ **GOOD — `signal-builder-m0-to-m9`** (build-log). Real milestone IDs (m0–M9), real module
   names (`proactive_scan`, `score_tickers`, `catalyst_calendar`), a real number that was *counted*

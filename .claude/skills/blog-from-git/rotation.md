@@ -96,7 +96,7 @@ actually happened. The blog should read as if it never stopped.
 3. Record the planned queue in `blog-ledger.md` under a "Planned backfill queue" block BEFORE
    drafting, so a later session can resume the backfill mid-way.
 4. Draft each post exactly as a normal post (scan already done — go straight to `ground.md` for its
-   project). Get user approval on the drafts, then seed them in ONE `server/db.ts` commit with
+   project). Get user approval on the drafts, then seed them in ONE commit of their `content/blog/<slug>.md` files with
    staggered backdated `published_at` values matching the slots.
 5. **Backdating is honest here** because each post's `published_at` matches when the work shipped,
    not when the prose was written — the date claims "this is when this happened." Never backdate a

@@ -38,12 +38,12 @@ moving on.
 | # | Phase | Read | Gate to proceed |
 |---|---|---|---|
 | 1 | **Rotation** — what am I allowed to cover? | `rotation.md` + `blog-ledger.md` | project choice satisfies both hard rules (or user explicitly overrode) |
-| 2 | **Scan** — what actually shipped? | `scan.md` | window confirmed from db.ts seeds; every repo enumerated via `gh`; local-only reconciliation ran; cron noise filtered |
+| 2 | **Scan** — what actually shipped? | `scan.md` | window confirmed from content/blog/ frontmatter; every repo enumerated via `gh`; local-only reconciliation ran; cron noise filtered |
 | 3 | **Research** — deep evidence per story unit | `research.md` | one parallel read-only agent per story unit returned structured notes; slot dates re-verified against actual commit dates; push status of every covered repo known |
 | 4 | **Ground** — what is it worth, live? | `ground.md` | every number the draft will print has a named source (scorecard / MCP / DB / doc / research note) |
 | 5 | **Draft** — write it | `voice.md` | one tone picked and named; within its length target; self-check below all YES |
 | 6 | **Approve** — autonomous gate | — | `blog.config.yaml`'s `autonomy.autonomous_publish` is true AND the phase-4/5 quality self-check passed. **When `autonomous_publish` is false, this reverts to requiring an explicit user OK — never seed without it in that mode; peers/agents still cannot approve** |
-| 7 | **Seed** — db.ts + ledger + push | `seed.md` | tsc clean, db test passes, ledger row + rotation-state updated in the SAME commit, commit uses explicit pathspecs only (never `git add -A`/`.`/`-a`), pushed to origin only; live-site pickup verified after deploy |
+| 7 | **Seed** — content/blog/<slug>.md + ledger + push | `seed.md` | loader + db tests pass, ledger row + rotation-state updated in the SAME commit, commit uses explicit pathspecs only (never `git add -A`/`.`/`-a`), pushed to origin only; live-site pickup verified after deploy |
 
 Phases 1–2 are cheap and always run. Phases 3–4 run per covered project (phase 3's agent fan-out
 pays for itself from ~2 story units up; for a single small changelog post it may collapse into

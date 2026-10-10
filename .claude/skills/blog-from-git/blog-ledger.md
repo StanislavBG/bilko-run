@@ -49,7 +49,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
   (2026-10-03T16:08:44Z) — that put two posts on one calendar day, violating the 3-day
   `min_gap_days` rule. **Owner overrides cover cadence TIMING only; they never bypass
   `min_gap_days`.** Rescheduled 2026-10-03 to the next slot that honours the gap
-  (git-viewer + 3 days, 9:00 AM PDT). A one-shot `applyDataMigrationOnce` in `server/db.ts`
+  (git-viewer + 3 days, 9:00 AM PDT). A one-shot `applyDataMigrationOnce` in `server/db.ts` (historical; posts now live in `content/blog/*.md`)
   moves any already-seeded prod row to the new date exactly once, idempotently, without touching
   a row the owner has since edited to a different date. A repo-wide test
   (`tests/blog-cadence-gate.test.ts`) now asserts every seeded post obeys `min_gap_days`, so this

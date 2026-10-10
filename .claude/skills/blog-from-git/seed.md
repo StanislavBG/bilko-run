@@ -5,15 +5,18 @@ seeding is `blog.config.yaml`'s `autonomy.autonomous_publish` (the owner's maste
 the phase-4/5 quality self-check (SKILL.md) having passed — not an interactive human OK. When
 `autonomous_publish` is `true`, proceed straight to seeding once that self-check is clean. When it
 is `false`, this reverts to the old gate verbatim: show the full draft(s) and wait for an explicit
-human OK before editing `server/db.ts` / pushing. This gate applies before ANYTHING below runs.
+human OK before writing the post file / pushing. This gate applies before ANYTHING below runs.
 
 ## Seeding mechanics
 
-Seeds are `INSERT OR IGNORE INTO blog_posts (...)` in `server/db.ts` initDb(). Add a new
-`await dbRun(...)` after the latest. Fields: slug, title (backtick literal), excerpt (single-quote
-— escape apostrophes), content (backtick literal — **escape every backtick** `` \` `` and avoid
-`${`), category, `1`, published_at (explicit recent ISO string — **never `new Date()`**; stagger
-several so they order right). Categories: `build-log | lessons | deep-dive | market | product`.
+Posts are markdown files, one per post, in `content/blog/<slug>.md` (read `content/blog/README.md`
+first). The server loads them at boot (`server/blog-posts.ts`) and inserts any slug it has not seen.
+Create `content/blog/<slug>.md` with this frontmatter, then the body in markdown below it:
+`slug` (lowercase-dashes, unique), `title`, `excerpt`, `category`, `published` (`true`),
+`published_at` (explicit recent ISO string — **never `new Date()`**; stagger several so they order
+right), `order` (higher than every other post). Categories:
+`build-log | lessons | deep-dive | market | product`. No backtick or `${` escaping is needed — it is
+plain markdown.
 
 **`published_at` rule (`blog.config.yaml` `cadence.current_post_published_at: authored_at`):**
 portfolio, focused, and spotlight posts are dated to `max(now, output of
@@ -34,14 +37,13 @@ has passed; don't treat "not showing up yet" as a failure before then.
 
 ```bash
 cd ~/Projects/Bilko
-npx tsc --noEmit -p tsconfig.json 2>&1 | grep -i db.ts    # must be clean
-pnpm test tests/db.test.ts
+pnpm vitest run tests/blog-posts-loader.test.ts tests/db.test.ts   # must pass
 timeout 180 pnpm tsx scripts/blog-cadence-gate.ts check   # hard gap gate — must exit 0
 # if this fails: STOP — no commit, no push. Print SEED_RESULT: noop note="cadence gate check failed"
 npx tsx scripts/blog-readability.ts <draft.md> --check-live  # every https link must actually load
 # if this fails: STOP — no commit, no push. A failing link is how the post converts readers
 # into visitors of the project landing page, so a dead link means the post can't do its job.
-git add server/db.ts && git commit
+git add content/blog/<slug>.md .claude/skills/blog-from-git/blog-ledger.md && git commit
 git push origin main                                       # origin only — memory feedback_always_push
 ```
 Push to `origin` (`StanislavBG/bilko-run`) `main` **only** — never the `content-grade` remote
@@ -59,7 +61,7 @@ picked by ledger coverage age, not by new git work.
 
 ## Series / multi-post seeding
 
-Seed each post as its own `dbRun(...)` with staggered `published_at` so they order newest-first,
+Write each post as its own `content/blog/<slug>.md` with staggered `published_at` so they order newest-first,
 and category `build-log` (or `deep-dive` for the meaty one). Cross-link them in the body
 (`/blog/<other-slug>`) so a series reads as one ongoing thread. Burrow has no project tile —
 link the GitHub repo for "the code", not a `/projects/` path.
@@ -75,12 +77,12 @@ python3 -c "import json;[print(p['slug'],p['host']['kind'],p['host'].get('url','
 
 ## Gotchas
 
-- **New seeds DO reach production; edits DON'T.** Verified 2026-07-24: only the very first seed
-  is gated behind a `COUNT(*) == 0` check; every later seed is an unconditional `INSERT OR IGNORE`
-  run on every boot, so a NEW slug goes live on the next Render deploy automatically. But because
-  of the IGNORE, **editing an already-deployed post's seed changes nothing in production** — that
-  needs the admin blog API (`server/routes/blog.ts`). After pushing, verify the live site picked
-  the new slugs up once Render finishes deploying.
+- **New posts DO reach production; edits DON'T.** The loader inserts any slug it has not seen on
+  every boot, so a NEW `content/blog/<slug>.md` goes live on the next Render deploy automatically.
+  But a post already in the database is never overwritten by editing its file — changing a live
+  post needs a rewrite under `server/blog-rewrites/` (or the admin blog API,
+  `server/routes/blog.ts`). After pushing, verify the live site picked the new slugs up once Render
+  finishes deploying.
 - **Local-only repos are invisible to GitHub.** Always run the reconciliation pass (`scan.md` §5).
 - Don't trust commit counts as effort; filter cron noise first.
 - Stay in the Bilko lane operationally (memory `feedback_stay_in_bilko_lane`): *report* cross-repo

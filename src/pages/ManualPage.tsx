@@ -23,6 +23,7 @@ import {
 } from '../lib/manualClient.js';
 import '../styles/session-manager-landing.css';
 import '../styles/session-manager-manual.css';
+import { Chevron } from './session-manager-landing/Chevron.js';
 import { Header } from './session-manager-landing/Header.js';
 import { COPY, fill } from './session-manager-landing/copy.js';
 import {
@@ -140,21 +141,6 @@ const Chapter = memo(function Chapter({ c, n, count, body }: {
 const LANDING_HREF = '/products/session-manager';
 const PARTS_HREF = '/products/session-manager#parts';
 const BOOK_PAGE_COUNT = 3;
-
-function Chevron({ up }: { up?: boolean }) {
-  return (
-    <svg className="smlp-turn__chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path
-        d={up ? 'M3 10.5 8 5.5l5 5' : 'M3 5.5 8 10.5l5-5'}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 export default function ManualPage() {
   usePageView();

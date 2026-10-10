@@ -8,21 +8,16 @@ import { COPY, fill } from './session-manager-landing/copy.js';
 import { MacDownload, WindowsDownload, windowsAvailable } from './session-manager-landing/Downloads.js';
 import { Header } from './session-manager-landing/Header.js';
 import { FilmDialog } from './session-manager-landing/FilmDialog.js';
+import { Chevron } from './session-manager-landing/Chevron.js';
 import {
   useBodyOverflowLock,
+  useBookPages,
+  useCanvasTurnInputs,
   useLayoutMode,
   useManualToc,
   usePageFonts,
 } from './session-manager-landing/hooks.js';
-import {
-  createWheelTurner,
-  hashForPage,
-  PAGE_COUNT,
-  pageForKey,
-  pageFromHash,
-  swipeDirection,
-  type LayoutModeName,
-} from './session-manager-landing/layout.js';
+import { PAGE_COUNT, type LayoutModeName } from './session-manager-landing/layout.js';
 import { chapterHref, PartsBin, TABS } from './session-manager-landing/PartsBin.js';
 
 /**
@@ -161,25 +156,6 @@ function pageClass(canvas: boolean, active: boolean, cover: boolean): string {
   return cover && !active ? `${base} smlp-page--flipped` : base;
 }
 
-/** Longest a flip may hold the turn lock if `transitionend` never fires. */
-const FLIP_FALLBACK_MS = 900;
-const KEY_SKIP_TARGETS = 'input, textarea, select, [contenteditable], [role="tablist"]';
-
-function Chevron({ up }: { up?: boolean }) {
-  return (
-    <svg className="smlp-turn__chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <path
-        d={up ? 'M3 10.5 8 5.5l5 5' : 'M3 5.5 8 10.5l5-5'}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export default function SessionManagerPage() {
   const layout = useLayoutMode();
   const canvas = layout.mode === 'canvas';
@@ -188,37 +164,13 @@ export default function SessionManagerPage() {
   const toc = useManualToc();
   const [filmOpen, setFilmOpen] = useState(false);
   const watchRef = useRef<HTMLButtonElement>(null);
-  const [page, setPage] = useState(() => pageFromHash(window.location.hash));
   const coverRef = useRef<HTMLElement>(null);
   const partsRef = useRef<HTMLElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const focusAfterTurn = useRef(false);
-  const pageRef = useRef(page);
-  pageRef.current = page;
-  const turning = useRef(false);
+  const { page, pageRef, turning, focusAfterTurn, endTurn, turnTo } = useBookPages(pagesRef);
   const activeTab = useRef(0);
   const navigate = useNavigate();
-  const turnTimer = useRef<number | undefined>(undefined);
-
-  const endTurn = useCallback(() => {
-    turning.current = false;
-    window.clearTimeout(turnTimer.current);
-  }, []);
-
-  const turnTo = useCallback((n: number, opts?: { focus?: boolean }) => {
-    if (n < 0 || n >= PAGE_COUNT || n === pageRef.current || turning.current) return;
-    turning.current = true;
-    window.clearTimeout(turnTimer.current);
-    turnTimer.current = window.setTimeout(endTurn, FLIP_FALLBACK_MS);
-    focusAfterTurn.current = !!opts?.focus;
-    pageRef.current = n;
-    setPage(n);
-    const { pathname, search } = window.location;
-    window.history.replaceState(window.history.state, '', `${pathname}${search}${hashForPage(n)}`);
-  }, [endTurn]);
-
-  useEffect(() => () => window.clearTimeout(turnTimer.current), []);
 
   useEffect(() => {
     markBookPageReady();
@@ -242,81 +194,7 @@ export default function SessionManagerPage() {
     [navigate, canvas],
   );
 
-  useEffect(() => {
-    const onHash = () => {
-      focusAfterTurn.current = false;
-      const next = pageFromHash(window.location.hash);
-      if (next === pageRef.current) return;
-      // Applied without animation: suppress the transition for two frames.
-      const pages = pagesRef.current;
-      pages?.classList.add('smlp-pages--instant');
-      endTurn();
-      pageRef.current = next;
-      setPage(next);
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => pages?.classList.remove('smlp-pages--instant')),
-      );
-    };
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
-  }, [endTurn]);
-
-  // Canvas-only turn inputs: wheel, keys, touch swipes. Reflow keeps normal scroll.
-  useEffect(() => {
-    if (!canvas) return;
-    const root = rootRef.current;
-    if (!root) return;
-    const wheelTurner = createWheelTurner();
-    const onWheel = (e: WheelEvent) => {
-      if (filmOpen) return;
-      e.preventDefault();
-      const dir = wheelTurner(e.deltaY, e.deltaMode, performance.now());
-      if (dir === 0) return;
-      if (dir > 0 && pageRef.current === PAGE_COUNT - 1) turnToManual();
-      else turnTo(pageRef.current + dir);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (filmOpen || e.ctrlKey || e.metaKey || e.altKey) return;
-      const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest(KEY_SKIP_TARGETS)) return;
-      if (e.key === ' ' && target?.closest('button, a')) return;
-      const next = pageForKey(e.key, e.shiftKey, pageRef.current);
-      if (next === null) return;
-      e.preventDefault();
-      const forward = e.key === 'PageDown' || e.key === 'ArrowDown' || (e.key === ' ' && !e.shiftKey);
-      if (forward && pageRef.current === PAGE_COUNT - 1) {
-        turnToManual();
-        return;
-      }
-      turnTo(next, { focus: true });
-    };
-    let startX = 0;
-    let startY = 0;
-    const onTouchStart = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (!t) return;
-      startX = t.clientX;
-      startY = t.clientY;
-    };
-    const onTouchEnd = (e: TouchEvent) => {
-      const t = e.changedTouches[0];
-      if (filmOpen || !t) return;
-      const dir = swipeDirection(t.clientX - startX, t.clientY - startY);
-      if (dir === 0) return;
-      if (dir > 0 && pageRef.current === PAGE_COUNT - 1) turnToManual();
-      else turnTo(pageRef.current + dir);
-    };
-    root.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('keydown', onKey);
-    root.addEventListener('touchstart', onTouchStart, { passive: true });
-    root.addEventListener('touchend', onTouchEnd, { passive: true });
-    return () => {
-      root.removeEventListener('wheel', onWheel);
-      window.removeEventListener('keydown', onKey);
-      root.removeEventListener('touchstart', onTouchStart);
-      root.removeEventListener('touchend', onTouchEnd);
-    };
-  }, [canvas, filmOpen, turnTo, turnToManual]);
+  useCanvasTurnInputs({ canvas, filmOpen, rootRef, pageRef, turnTo, turnToManual });
 
   // React 18's types have no `inert` prop, so it is set on the element directly.
   useEffect(() => {

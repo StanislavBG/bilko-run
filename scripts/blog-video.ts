@@ -1,12 +1,12 @@
 // Blog Video macro primitive: pick the next post that needs a video, and validate a generated
-// video document is self-contained, network-free, <= 2 MB and declares a 5-30 s duration.
+// video document is self-contained, network-free, <= 4 MB and declares a 5-30 s duration.
 // Rules mirror session-manager's projectHomeAdminRoutes.cjs demo-video validator.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSeededPosts } from './blog-cadence-gate.js';
 
-const MAX_VIDEO_BYTES = 2 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 4 * 1024 * 1024;
 const MIN_DURATION_S = 5;
 const MAX_DURATION_S = 30;
 
@@ -54,6 +54,9 @@ const NETWORK_CHECKS: Check[] = [
 
 const DURATION_META_RE = /<meta\b[^>]*\bname\s*=\s*["']sm-demo-duration["'][^>]*\bcontent\s*=\s*["'](\d+)["'][^>]*>/i;
 
+const VOICE_META_RE = /<meta\b[^>]*\bname\s*=\s*["']blog-video-voice["'][^>]*\bcontent\s*=\s*["']([^"']*)["'][^>]*>/i;
+const CLAIMS_RE = /<script\b[^>]*\btype\s*=\s*["']application\/json["'][^>]*\bid\s*=\s*["']blog-video-claims["'][^>]*>([\s\S]*?)<\/script>/i;
+
 export function validateBlogVideoHtml(html: string): { ok: boolean; errors: string[] } {
   if (typeof html !== 'string' || html.trim().length === 0) {
     return { ok: false, errors: ['html must be a non-empty string'] };
@@ -79,7 +82,38 @@ export function validateBlogVideoHtml(html: string): { ok: boolean; errors: stri
       errors.push(`sm-demo-duration must be between ${MIN_DURATION_S} and ${MAX_DURATION_S}, got ${match[1]}`);
     }
   }
+  const voice = html.match(VOICE_META_RE);
+  if (!voice || voice[1].trim().length === 0) {
+    errors.push('html must declare <meta name="blog-video-voice" content="..."> with a non-empty voice name');
+  }
   return { ok: errors.length === 0, errors };
+}
+
+const normalizeText = (text: string): string =>
+  text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
+
+export function checkClaimsGrounded(html: string, postMarkdown: string): string[] {
+  const block = html.match(CLAIMS_RE);
+  if (!block) return ['html must include <script type="application/json" id="blog-video-claims">[{sceneId, source}]</script>'];
+  let claims: unknown;
+  try {
+    claims = JSON.parse(block[1]);
+  } catch (err) {
+    return [`blog-video-claims is not valid JSON: ${(err as Error).message}`];
+  }
+  if (!Array.isArray(claims)) return ['blog-video-claims must be a JSON array of {sceneId, source}'];
+  const fence = postMarkdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  const title = fence?.[1].match(/^title:\s*(.*)$/m)?.[1].trim().replace(/^(["'])([\s\S]*)\1$/, '$2') ?? '';
+  const haystack = [normalizeText(fence ? fence[2] : postMarkdown), normalizeText(title)];
+  const errors: string[] = [];
+  claims.forEach((claim, i) => {
+    const c = (claim ?? {}) as { sceneId?: unknown; source?: unknown };
+    const id = typeof c.sceneId === 'string' ? c.sceneId : `#${i}`;
+    const source = typeof c.source === 'string' ? normalizeText(c.source) : '';
+    if (!source) errors.push(`claim ${id}: missing source sentence`);
+    else if (!haystack.some((h) => h.includes(source))) errors.push(`claim ${id}: source not found in post: "${source}"`);
+  });
+  return errors;
 }
 
 export function pickNextPost(
@@ -101,7 +135,10 @@ export function pickNextPost(
 }
 
 async function main(): Promise<void> {
-  const [cmd, arg] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const [cmd, arg] = args;
+  const postIdx = args.indexOf('--post');
+  const postPath = postIdx >= 0 ? args[postIdx + 1] : undefined;
   if (cmd === 'next') {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const posts = await loadSeededPosts();
@@ -112,7 +149,12 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === 'validate' && arg) {
-    const result = validateBlogVideoHtml(readFileSync(arg, 'utf8'));
+    const html = readFileSync(arg, 'utf8');
+    const result = validateBlogVideoHtml(html);
+    if (postPath) {
+      result.errors.push(...checkClaimsGrounded(html, readFileSync(postPath, 'utf8')));
+      result.ok = result.errors.length === 0;
+    }
     if (result.ok) {
       console.log('OK');
       return;
@@ -120,7 +162,7 @@ async function main(): Promise<void> {
     for (const e of result.errors) console.log(e);
     process.exit(1);
   }
-  console.error('usage: blog-video.ts next | validate <file>');
+  console.error('usage: blog-video.ts next | validate <file> [--post content/blog/<slug>.md]');
   process.exit(2);
 }
 

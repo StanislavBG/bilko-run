@@ -36,7 +36,7 @@ Bilko's workspace lives in `~/Projects/` with this structure:
 ## Main URLs
 
 - **Home**: https://bilko.run — Bilko's solopreneur page, story, and tool showcase
-- **Projects**: https://bilko.run/projects — every registered project (driven by the registry; ~25 standalone projects + tools, not a fixed count)
+- **Projects**: https://bilko.run/projects — every registered project with `public: true` in the registry (driven by the registry; ~25 standalone projects + tools, not a fixed count)
 - **Blog**: https://bilko.run/blog — Build logs, lessons, and deep dives
 
 ## What This Is
@@ -118,11 +118,13 @@ All 14 sibling consumers depend on it locally with `"host-kit": "file:../Bilko/p
 Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAuth()`); there is no host-side `useAuth` wrapper.
 
 ### Backend Patterns (`server/`)
-- `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the inverse-mode generator helper. `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
+- `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the shared gateway helpers: `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check/deduct), `askGeminiJson` (Gemini call + JSON parse), `toolErrorReply` (uniform error reply), plus `handleGenerateEndpoint` (inverse-mode generator). `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
 - `server/routes/blog.ts` — Blog CRUD (admin-only writes)
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
 - `server/routes/analytics.ts` — Page views + admin stats dashboard (`/api/analytics/event` is open to same-origin sibling apps for `track()`)
 - `server/db.ts` — Turso client, async helpers (`dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`), migrations, seed data
+- `server/db-schema.ts` — table/schema definitions (split out of `db.ts`)
+- `server/blog-posts.ts` — loads `content/blog/*.md` seed posts
 - `server/gemini.ts` — Gemini API client (key via header, not URL)
 - `server/utils.ts` — `parseJsonResponse` (shared Gemini output parser)
 
@@ -131,7 +133,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
 
 - AI-tool gateway routes — `server/routes/tools/`
-- Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/`, `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/pages/SessionManagerPage.tsx`, `src/pages/ManualPage.tsx`, `src/styles/session-manager-*.css`, `data/manual/`
+- Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
 - Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
 - SocialSignalsTrader coffee checkout — in `server/routes/stripe.ts`
 - Game config — `shared/game-config.ts`
@@ -160,11 +162,11 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-54 files, 754 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+72 files, 872 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run
-- `pnpm typecheck` — client (`tsc --noEmit`) + server (`tsc -p tsconfig.server.json --noEmit`)
+- `pnpm typecheck` — client (`tsc --noEmit`) + server (`tsc -p tsconfig.server.json --noEmit`) + scripts (`tsc -p tsconfig.scripts.json`)
 - `pnpm test:e2e` — Playwright
 
 ### What a test must guard
@@ -177,4 +179,4 @@ A test earns its place by exercising host behavior: security (SSRF, auth, egress
 
 ## Blog
 
-Guidelines in `blogs.md`. Each post follows the structure: hook → context → meat (3-5 sections) → what we'd do differently → CTA. Blog posts are seeded in `server/db.ts` initDb().
+Guidelines in `blogs.md`. Each post follows the structure: hook → context → meat (3-5 sections) → what we'd do differently → CTA. Each post is one markdown file, `content/blog/<slug>.md` (frontmatter + body); `server/blog-posts.ts` loads them at boot and inserts new ones. How to add one: [`content/blog/README.md`](content/blog/README.md). Posts are no longer in `server/db.ts`.

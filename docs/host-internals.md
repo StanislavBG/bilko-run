@@ -21,8 +21,7 @@ Run manually:
 cd /home/bilko/Projects/Bilko && pnpm synthetic
 ```
 
-Schedule via the `schedule` skill at `0 */6 * * *` using the PRD at
-`~/.claude/session-manager/scheduled-plans/prds/90-platform-synthetic-cron.md`.
+Schedule via the `schedule` skill at `0 */6 * * *` (cron expression; the schedule lives in the scheduler, not in a repo file).
 
 Tune sensitivity via `STREAK_TO_ALERT` in `scripts/synthetic-monitor.ts`
 (default: 3 consecutive failures).
@@ -77,7 +76,7 @@ Exit codes: `0` = PASS, `1` = FAIL, `2` = internal error.
 
 ### Reports
 
-Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md`. The nightly cron (03:00 PDT) commits the report and opens a GitHub issue tagged `qa-failure` on FAIL.
+Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md` (gitignored; reports are not committed). The nightly cron (03:00 PDT) opens a GitHub issue tagged `qa-failure` on FAIL.
 
 ### Cron schedule
 
@@ -88,8 +87,7 @@ Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md`. The nightly cron (03:00
 `10:00 UTC = 03:00 PDT` (DST anchor; during PST it fires at 02:00 PST — acceptable).
 
 - On FAIL or ERROR: opens a GitHub issue on `StanislavBG/bilko-run` tagged `qa-failure` with the first 60 lines of the report (requires `gh` CLI; token sourced from `~/.env.cron`).
-- Report committed to `test-results/` and pushed to `origin`.
-- PRD: `~/.claude/session-manager/scheduled-plans/prds/93-sanity-qa-cron.md`.
+- The report stays local in `test-results/` (gitignored, never pushed).
 
 ### Prompt files (AI-subagent mode)
 
@@ -107,7 +105,7 @@ All paid `react-route` tools call `enforceCallLimits(ctx)` from `server/routes/t
 
 Open alerts are visible at `/admin/cost`. Ceilings can be tuned per-app via the admin UI or directly in the `app_spend_ceilings` table.
 
-Scheduled cron: `91-platform-cost-monitor-daily.md` runs `pnpm cost-monitor` daily at 7am PT.
+Scheduled cron: `pnpm cost-monitor` runs daily at 7am PT (configured in the scheduler).
 
 ## Static-asset caching
 

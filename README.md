@@ -46,12 +46,13 @@ How to confirm a deploy landed is in [docs/deployment.md](docs/deployment.md). S
 | Folder | What it is | Kind |
 |---|---|---|
 | `src/` | The website: pages, shared components, brand look | Platform |
-| `server/` | The API: auth, credits, database, blog, admin | Platform |
+| `server/` | The API: auth, credits, database (tables in `server/db-schema.ts`), blog loader, admin | Platform |
+| `content/blog/` | The blog posts: one text file per post (see `content/blog/README.md`) | Platform |
 | `shared/` | Code used by both site and API | Platform |
 | `public/` | Static files. `public/projects/<slug>/` holds published apps (do not edit) | Platform |
 | `packages/host-kit/` | Toolkit that apps in other repos use for sign-in and shared look | Platform |
 | `mcp-host-server/` | The `bilko-host` MCP that registers and publishes apps | Platform |
-| `scripts/` | Helper scripts for builds and maintenance | Platform |
+| `scripts/` | Helper scripts for builds and maintenance (type-checked by `pnpm typecheck`) | Platform |
 | `ops/` | Server setup files (systemd service units) | Platform |
 | `tests/` | Unit tests, run with `pnpm test` | Platform |
 | `e2e/` | Browser tests, run with `pnpm test:e2e` | Platform |
@@ -62,6 +63,14 @@ How to confirm a deploy landed is in [docs/deployment.md](docs/deployment.md). S
 | `server/routes/academy.ts` | Gateway for Bilko Academy | One specific app |
 | `server/sm-relay/`, `src/pages/session-manager-landing/` | Session Manager relay and landing page | One specific app |
 | `session-manager-operations/` | Session Manager's job and scheduler records | One specific app |
+
+## Add a blog post
+
+Copy a file in `content/blog/`, rename it after your post's web address (for example `my-new-post.md`), change the details at the top, and write the post underneath. Step by step: [content/blog/README.md](content/blog/README.md). The site picks it up on the next restart; no database editing needed.
+
+## Make a project public
+
+Set `public: true` in the project's registry entry (via the `bilko-host` MCP); it then appears on `/projects`.
 
 ## Before you push
 

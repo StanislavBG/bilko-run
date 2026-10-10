@@ -9,6 +9,8 @@ import {
   analyzeReadability,
   findProjectLinkIssues,
   checkLiveLinks,
+  collectHttpsLinks,
+  stripFigures,
   DEFAULT_THRESHOLDS,
   type ProjectRegistryEntry,
 } from '../scripts/blog-readability';
@@ -140,6 +142,43 @@ describe('analyzeReadability link checks', () => {
     expect(claimIssues[0].text).toBe(
       'Best of all, the project is open source, so you can poke around the code.',
     );
+  });
+});
+
+describe('analyzeReadability figure blocks', () => {
+  const FIGURE = '![A chart of weekly runs](/blog-images/x-y/a.jpg "Runs went up after the fix.")';
+
+  it('passes a clean post that carries a valid figure block', () => {
+    const report = analyzeReadability(PLAIN_PARAGRAPH + '\n\n' + FIGURE + '\n');
+    expect(report.linkIssues).toEqual([]);
+    expect(report.pass).toBe(true);
+  });
+
+  it.each([
+    '![Chart](/images/x.jpg "Caption here.")',
+    '![Chart](/blog-images/x-y/../a.jpg "Caption here.")',
+  ])('still reports a link issue for an unsafe figure: %s', (block) => {
+    const report = analyzeReadability(PLAIN_PARAGRAPH + '\n\n' + block + '\n');
+    expect(report.linkIssues.some((issue) => issue.kind === 'relative-link')).toBe(true);
+    expect(report.pass).toBe(false);
+  });
+
+  it('does not skip a figure with an off-site src, so its link is still live-checked', () => {
+    const block = '![Chart](https://evil.test/x.png "Caption here.")';
+    const body = PLAIN_PARAGRAPH + '\n\n' + block + '\n';
+    expect(collectHttpsLinks(stripFigures(body))).toContain('https://evil.test/x.png');
+    expect(analyzeReadability(body).wordCount).toBeGreaterThan(analyzeReadability(PLAIN_PARAGRAPH).wordCount);
+  });
+
+  it('never hands a valid figure src to the live link check', () => {
+    expect(collectHttpsLinks(stripFigures(FIGURE))).toEqual([]);
+  });
+
+  it('does not count figure alt or caption words', () => {
+    const base = analyzeReadability(PLAIN_PARAGRAPH);
+    const withFigure = analyzeReadability(PLAIN_PARAGRAPH + '\n\n' + FIGURE + '\n');
+    expect(withFigure.wordCount).toBe(base.wordCount);
+    expect(withFigure.fkGrade).toBe(base.fkGrade);
   });
 });
 

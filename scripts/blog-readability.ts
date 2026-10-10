@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
+import { parseFigure } from '../src/lib/blogMarkdown.js';
 
 export interface JargonPair {
   term: string;
@@ -71,6 +72,15 @@ export const DEFAULT_THRESHOLDS: ReadabilityThresholds = {
   ],
   marketingBlocklist: ['sign up now', "don't miss", 'game-changer'],
 };
+
+// Figure blocks render as images, not prose or links, so drop them before any check.
+// Uses the renderer's own parseFigure so readability and the post page agree.
+export function stripFigures(body: string): string {
+  return body
+    .split(/\n\s*\n/)
+    .filter((block) => parseFigure(block.trim()) === null)
+    .join('\n\n');
+}
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -255,7 +265,7 @@ export async function checkLiveLinks(
 }
 
 export function analyzeReadability(
-  markdown: string,
+  rawMarkdown: string,
   opts: Partial<ReadabilityThresholds> = {},
   projectRegistry?: ProjectRegistryEntry[],
 ): ReadabilityReport {
@@ -268,6 +278,7 @@ export function analyzeReadability(
     marketingBlocklist: opts.marketingBlocklist ?? DEFAULT_THRESHOLDS.marketingBlocklist,
   };
 
+  const markdown = stripFigures(rawMarkdown);
   const linkIssues = [
     ...findLinkIssues(markdown),
     ...(projectRegistry ? findProjectLinkIssues(markdown, projectRegistry) : []),
@@ -397,7 +408,7 @@ async function main(): Promise<number> {
     return report.pass ? 0 : 1;
   }
 
-  const liveFailures = await checkLiveLinks(collectHttpsLinks(markdown));
+  const liveFailures = await checkLiveLinks(collectHttpsLinks(stripFigures(markdown)));
   if (liveFailures.length > 0) {
     process.stderr.write('blog-readability: live link check failed:\n');
     for (const failure of liveFailures) {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import { fetchManualToc } from '../../lib/manualClient.js';
 import type { ManualToc } from '../../../shared/manual-catalog.js';
+import { COPY } from './copy.js';
 import {
   createWheelTurner,
   hashForPage,
@@ -117,6 +118,75 @@ export function useManualToc(): ManualToc | null {
     return () => { cancelled = true; };
   }, []);
   return toc;
+}
+
+export type CopyStatus = 'idle' | 'copied' | 'failed';
+
+export interface CopyInstall {
+  status: CopyStatus;
+  copy: () => void;
+  codeRef: RefObject<HTMLElement>;
+}
+
+function selectContents(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  try {
+    const sel = window.getSelection();
+    if (!sel) return false;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Copy state for the price tag's install command. "Copied" only shows after
+ * `writeText` resolves — or after the `execCommand('copy')` fallback reports
+ * success. Otherwise the command text is left selected so the visitor can
+ * press Cmd/Ctrl-C, and the label says so.
+ */
+export function useCopyInstall(): CopyInstall {
+  const [status, setStatus] = useState<CopyStatus>('idle');
+  const codeRef = useRef<HTMLElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const settle = useCallback((next: CopyStatus, ms: number) => {
+    clearTimeout(timer.current);
+    setStatus(next);
+    timer.current = setTimeout(() => setStatus('idle'), ms);
+  }, []);
+
+  const copy = useCallback(() => {
+    const fallback = () => {
+      let ok = false;
+      if (selectContents(codeRef.current)) {
+        try {
+          ok = document.execCommand('copy');
+        } catch {
+          ok = false;
+        }
+      }
+      settle(ok ? 'copied' : 'failed', ok ? 2200 : 4000);
+    };
+
+    const writeText = typeof navigator !== 'undefined' ? navigator.clipboard?.writeText : undefined;
+    if (!writeText) {
+      fallback();
+      return;
+    }
+    navigator.clipboard.writeText(COPY.priceTag.command).then(
+      () => settle('copied', 2200),
+      () => fallback(),
+    );
+  }, [settle]);
+
+  return { status, copy, codeRef };
 }
 
 /** True when the visitor asked the OS for reduced motion. */

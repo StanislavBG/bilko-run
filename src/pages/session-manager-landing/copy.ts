@@ -79,13 +79,22 @@ export const COPY = {
         "href": "https://github.com/StanislavBG/claude-code-session-manager/releases/latest"
       }
     },
+    "commandPrompt": "$",
+    "command": "npx claude-code-session-manager@latest",
+    "copyLabel": "Copy the install command",
+    "copiedLabel": "Copied — now paste it in your terminal",
+    "copyFailedLabel": "Couldn't copy — select it above",
+    "commandNote": "Node 22.12+, Claude Code signed in? Paste & go.",
     "note": "Free installer — no Node or terminal needed. First launch helps you set up Claude Code.",
     "unsignedNote": "Unsigned preview build: on Mac, right-click → Open the first time; on Windows, click More info → Run anyway.",
     "aria": {
       "region": "Price and download",
       "platforms": "Runs on macOS and Windows",
       "platformsWindowsSoon": "Runs on macOS; Windows coming soon",
-      "downloads": "Download the installer"
+      "downloads": "Download the installer",
+      "commandBox": "Install command",
+      "copiedStatus": "Install command copied to your clipboard.",
+      "copyFailedStatus": "Couldn't copy automatically. Select the command and copy it yourself."
     }
   },
   "partsBin": {

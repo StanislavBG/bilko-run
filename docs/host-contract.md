@@ -98,6 +98,18 @@ The registry (`src/data/standalone-projects.json`) is validated by `mcp-host-ser
 - A `static-path` entry's `host.path` must equal `/projects/<slug>/` exactly.
 - An `external-url` entry's `host.url` must start with `https://`.
 
+## Social share cards
+
+bilko.run generates each project's X/Twitter/OpenGraph share card from the registry. The registry tagline *is* the share copy.
+
+- **Image:** served at `https://bilko.run/og/<slug>.png`.
+- **Title:** `displayName ?? name` from the entry in `src/data/standalone-projects.json`.
+- **Description:** the entry's `tagline`.
+- **Injection:** when the host serves `/projects/<slug>/` HTML, it strips every `og:*` / `twitter:*` meta tag, the `<title>`, and the meta description, then injects its own. Hand-written tags in a sibling's `index.html` are overwritten, so don't write them.
+- **Changing a card:** update the registry entry (`displayName`, `name`, or `tagline`) via the `bilko-host` MCP. Never edit the published copy.
+
+Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
+
 ## URL canonicalization
 
 - `/products/<slug>` is the canonical path for every `react-route` app.

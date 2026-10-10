@@ -22,7 +22,7 @@ import { askGemini } from '../server/gemini.js';
 import { initDb, dbRun, dbGet } from '../server/db.js';
 import { grantFreeTokens, getTokenBalance } from '../server/services/tokens.js';
 import {
-  freeTierGate, creditGate, askGeminiJson, toolErrorReply, enforceCallLimits,
+  freeTierGate, creditGate, askGeminiJson, toolErrorReply, enforceCallLimits, handleGenerateEndpoint,
   setCeilingCacheTtl, hashIp, freeGateMsg, FREE_TIER_LIMIT,
 } from '../server/routes/tools/_shared.js';
 
@@ -176,6 +176,25 @@ describe('askGeminiJson', () => {
   it('throws when no JSON is present', async () => {
     vi.mocked(askGemini).mockResolvedValue('no json here');
     await expect(askGeminiJson('p')).rejects.toThrow(/parse/i);
+  });
+});
+
+describe('handleGenerateEndpoint', () => {
+  it('replies a generic 500 when Gemini throws and never leaks err.message', async () => {
+    vi.mocked(verifyClerkToken).mockResolvedValue('gen@test.com' as any);
+    vi.mocked(askGemini).mockRejectedValue(new Error('secret detail'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await inject(
+      async (req, reply) => handleGenerateEndpoint(req, reply, {
+        endpoint: ENDPOINT, inputField: 'topic', inputText: 'a long enough topic',
+        systemPrompt: 's', userPrompt: 'p', logTag: 'gen-test',
+      }),
+      { authorization: 'Bearer t' },
+    );
+    expect(res.statusCode).toBe(500);
+    expect(res.body).not.toContain('secret detail');
+    expect(res.json()).toEqual({ error: 'Generation failed. Please try again.' });
+    spy.mockRestore();
   });
 });
 

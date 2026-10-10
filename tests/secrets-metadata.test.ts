@@ -75,27 +75,42 @@ describe('secret_metadata', () => {
     expect(row?.notes).toBe('original note');
   });
 
-  it('seeding 6 secrets via initDb leaves all with null last_rotated_at', async () => {
-    // initDb seeds them with INSERT OR IGNORE; since we cleared the table,
-    // we need to run the seed manually to verify behavior
-    const names = [
-      'STRIPE_API_KEY', 'STRIPE_WEBHOOK_SECRET', 'GEMINI_API_KEY',
-      'CLERK_SECRET_KEY', 'CLERK_WEBHOOK_SECRET', 'TURSO_AUTH_TOKEN',
-    ];
-    const seededAt = Math.floor(Date.now() / 1000);
-    for (const name of names) {
-      await dbRun(
-        'INSERT OR IGNORE INTO secret_metadata (name, last_rotated_at, notes, created_at) VALUES (?, NULL, ?, ?)',
-        name, 'seeded on PRD 29', seededAt,
-      );
-    }
+  it('fresh DB seeds the names the server reads', async () => {
+    await dbRun('DELETE FROM data_migrations WHERE id = ?', '2026-10-10-secret-metadata-names');
+    await initDb();
     const rows = await dbAll<{ name: string; last_rotated_at: number | null }>(
       'SELECT name, last_rotated_at FROM secret_metadata',
     );
-    expect(rows).toHaveLength(6);
-    for (const row of rows) {
-      expect(row.last_rotated_at).toBeNull();
-    }
+    const names = rows.map(r => r.name).sort();
+    expect(names).toEqual([
+      'ANTHROPIC_API_KEY_ACADEMY', 'BILKO_GAME_HMAC_KEY', 'CLERK_SECRET_KEY', 'GEMINI_API_KEY',
+      'PROJECT_SNAPSHOT_TOKEN', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'TURSO_AUTH_TOKEN',
+    ]);
+    for (const row of rows) expect(row.last_rotated_at).toBeNull();
+  });
+
+  it('renames a pre-seeded STRIPE_API_KEY keeping its rotated_at, and drops CLERK_WEBHOOK_SECRET', async () => {
+    const rotatedAt = Math.floor(Date.now() / 1000) - 40 * 86400;
+    const now = Math.floor(Date.now() / 1000);
+    await dbRun('DELETE FROM data_migrations WHERE id = ?', '2026-10-10-secret-metadata-names');
+    await dbRun(
+      'INSERT INTO secret_metadata (name, last_rotated_at, rotated_by, notes, created_at) VALUES (?, ?, ?, ?, ?)',
+      'STRIPE_API_KEY', rotatedAt, 'admin@test.com', 'rotated', now,
+    );
+    await dbRun(
+      'INSERT INTO secret_metadata (name, last_rotated_at, notes, created_at) VALUES (?, NULL, ?, ?)',
+      'CLERK_WEBHOOK_SECRET', 'old', now,
+    );
+    await initDb();
+    const row = await dbGet<{ last_rotated_at: number; rotated_by: string }>(
+      'SELECT last_rotated_at, rotated_by FROM secret_metadata WHERE name = ?', 'STRIPE_SECRET_KEY',
+    );
+    expect(row?.last_rotated_at).toBe(rotatedAt);
+    expect(row?.rotated_by).toBe('admin@test.com');
+    const gone = await dbAll(
+      'SELECT name FROM secret_metadata WHERE name IN (?, ?)', 'STRIPE_API_KEY', 'CLERK_WEBHOOK_SECRET',
+    );
+    expect(gone).toHaveLength(0);
   });
 
   it('admin guard rejects non-admin (unit: requireAdmin logic)', async () => {

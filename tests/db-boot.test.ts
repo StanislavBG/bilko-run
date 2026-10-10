@@ -60,6 +60,6 @@ describe('initDb boot cost', () => {
     expect(snaps[1].schema).toEqual(snaps[0].schema);
     expect(snaps[1].data).toEqual(snaps[0].data);
     expect(snaps[0].data.referrer_rules.length).toBeGreaterThan(0);
-    expect(snaps[0].data.secret_metadata.length).toBe(6);
+    expect(snaps[0].data.secret_metadata.length).toBe(8);
   });
 });

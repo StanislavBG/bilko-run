@@ -583,9 +583,13 @@ const SEEDS = [
  * Two instances booting at once can both run the statements, so keep each one
  * safe to apply twice.
  */
-async function applyDataMigrationOnce(id: string, statements: InStatement[]): Promise<boolean> {
-  const done = await dbGet<{ n: number }>('SELECT 1 AS n FROM data_migrations WHERE id = ?', id);
-  if (done) return false;
+async function applyDataMigrationOnce(id: string, statements: InStatement[], doneIds?: Set<string>): Promise<boolean> {
+  if (doneIds) {
+    if (doneIds.has(id)) return false;
+  } else {
+    const done = await dbGet<{ n: number }>('SELECT 1 AS n FROM data_migrations WHERE id = ?', id);
+    if (done) return false;
+  }
   await getClient().batch(
     [
       ...statements,
@@ -593,7 +597,14 @@ async function applyDataMigrationOnce(id: string, statements: InStatement[]): Pr
     ],
     'write',
   );
+  doneIds?.add(id);
   return true;
+}
+
+/** Ids of every data migration already applied: one round-trip instead of one per migration. */
+async function loadDoneMigrationIds(): Promise<Set<string>> {
+  const rows = await dbAll<{ id: string }>('SELECT id FROM data_migrations');
+  return new Set(rows.map(r => r.id));
 }
 
 /**
@@ -601,14 +612,15 @@ async function applyDataMigrationOnce(id: string, statements: InStatement[]): Pr
  * migrationId. Never touches slug, published_at, category or published, so a
  * sibling PRD rewriting one post can't collide with another's.
  */
-export async function applyBlogRewrites(rewrites: BlogRewrite[]): Promise<void> {
+export async function applyBlogRewrites(rewrites: BlogRewrite[], doneIds?: Set<string>): Promise<void> {
+  const done = doneIds ?? await loadDoneMigrationIds();
   for (const r of rewrites) {
     await applyDataMigrationOnce(r.migrationId, [
       {
         sql: 'UPDATE blog_posts SET title = ?, excerpt = ?, content = ?, updated_at = ? WHERE slug = ?',
         args: [r.title, r.excerpt, r.content, new Date().toISOString(), r.slug],
       },
-    ]);
+    ], done);
   }
 }
 
@@ -618,92 +630,100 @@ export async function initDb(): Promise<void> {
   // Run all migrations in a single batch (one network round-trip)
   await client.batch(MIGRATIONS.map(sql => ({ sql, args: [] })), 'write');
 
-  // Additive migrations for existing DBs (safe to re-run)
-  for (const sql of [
-    'ALTER TABLE page_views ADD COLUMN email TEXT',
-    'ALTER TABLE page_views ADD COLUMN utm_source TEXT',
-    'ALTER TABLE page_views ADD COLUMN utm_medium TEXT',
-    'ALTER TABLE page_views ADD COLUMN utm_campaign TEXT',
-    'ALTER TABLE page_views ADD COLUMN utm_term TEXT',
-    'ALTER TABLE page_views ADD COLUMN utm_content TEXT',
-    'ALTER TABLE page_views ADD COLUMN visitor_id TEXT',
-    'ALTER TABLE page_views ADD COLUMN session_id TEXT',
-    'ALTER TABLE page_views ADD COLUMN is_new_visitor INTEGER DEFAULT 0',
-    'ALTER TABLE page_views ADD COLUMN referrer_host TEXT',
-    'ALTER TABLE page_views ADD COLUMN source_bucket TEXT',
-    'ALTER TABLE page_views ADD COLUMN device TEXT',
-    'ALTER TABLE page_views ADD COLUMN browser TEXT',
-    'ALTER TABLE page_views ADD COLUMN os TEXT',
-    'ALTER TABLE page_views ADD COLUMN is_bot INTEGER DEFAULT 0',
-    'ALTER TABLE page_views ADD COLUMN is_admin INTEGER DEFAULT 0',
-    'ALTER TABLE page_views ADD COLUMN created_at_ms INTEGER',
+  // Additive column migrations for existing DBs: read each table's columns once and
+  // ALTER only what is missing, so a steady-state boot issues no ALTER at all.
+  const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
+    page_views: [
+      ['email', 'TEXT'],
+      ['utm_source', 'TEXT'],
+      ['utm_medium', 'TEXT'],
+      ['utm_campaign', 'TEXT'],
+      ['utm_term', 'TEXT'],
+      ['utm_content', 'TEXT'],
+      ['visitor_id', 'TEXT'],
+      ['session_id', 'TEXT'],
+      ['is_new_visitor', 'INTEGER DEFAULT 0'],
+      ['referrer_host', 'TEXT'],
+      ['source_bucket', 'TEXT'],
+      ['device', 'TEXT'],
+      ['browser', 'TEXT'],
+      ['os', 'TEXT'],
+      ['is_bot', 'INTEGER DEFAULT 0'],
+      ['is_admin', 'INTEGER DEFAULT 0'],
+      ['created_at_ms', 'INTEGER'],
+    ],
+    funnel_events: [
+      ['session_id', 'TEXT'],
+      ['visitor_id', 'TEXT'],
+      ['path', 'TEXT'],
+      ['version', 'TEXT'],
+    ],
+    project_feedback: [
+      ['parent_id', 'TEXT'],
+      ['moderation_action', 'TEXT'],
+      ['moderation_at', 'INTEGER'],
+      ['moderation_reason', 'TEXT'],
+      ['status', 'TEXT'],
+      ['status_note', 'TEXT'],
+      ['status_at', 'INTEGER'],
+      ['receipt_hash', 'TEXT'],
+    ],
+  };
+  for (const [table, columns] of Object.entries(ADDITIVE_COLUMNS)) {
+    const existing = new Set((await client.execute(`PRAGMA table_info(${table})`)).rows.map(r => String(r.name)));
+    if (existing.size === 0) continue;
+    const missing = columns.filter(([name]) => !existing.has(name));
+    if (missing.length === 0) continue;
+    await client.batch(missing.map(([name, def]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${def}`), 'write');
+  }
+
+  // The install beacon collects no PII at all — the anonymous install UUID is
+  // the entire identity model — so identify_email can only ever hold NULL. Dropped
+  // rather than left in place: a column that can only be NULL invites someone
+  // to start filling it. No-ops on a DB that never had it.
+  const installCols = (await client.execute('PRAGMA table_info(app_installs)')).rows.map(r => String(r.name));
+  if (installCols.includes('identify_email')) {
+    await client.execute('ALTER TABLE app_installs DROP COLUMN identify_email');
+  }
+
+  // Indexes (some cover the columns added above), one batch.
+  await client.batch([
     'CREATE INDEX IF NOT EXISTS idx_page_views_visitor ON page_views(visitor_id)',
     'CREATE INDEX IF NOT EXISTS idx_page_views_session ON page_views(session_id)',
     'CREATE INDEX IF NOT EXISTS idx_page_views_source_bucket ON page_views(source_bucket)',
-    'ALTER TABLE funnel_events ADD COLUMN session_id TEXT',
-    'ALTER TABLE funnel_events ADD COLUMN visitor_id TEXT',
-    'ALTER TABLE funnel_events ADD COLUMN path TEXT',
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_tool ON funnel_events(tool)',
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_session ON funnel_events(session_id)',
-    // Desktop apps (unlike browser apps, which are always "latest") sit on old
-    // releases for months, so "did release X make usage worse" needs the version
-    // as a real column. Appended last so existing INSERT column orders are
-    // untouched; browser-app callers simply leave it NULL.
-    'ALTER TABLE funnel_events ADD COLUMN version TEXT',
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_tool_version ON funnel_events(tool, version)',
     'CREATE INDEX IF NOT EXISTS idx_page_views_email ON page_views(email)',
     'CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email)',
     'CREATE INDEX IF NOT EXISTS idx_token_transactions_reason ON token_transactions(reason)',
     'CREATE INDEX IF NOT EXISTS idx_stripe_one_time_purchases_created ON stripe_one_time_purchases(created_at)',
-    // Threading + moderation for the per-project feedback forum (see
-    // server/routes/project-feedback.ts). parent_id is client-supplied and
-    // opaque to this server; moderation_* is owner-only state set by the
-    // authed moderate route.
-    'ALTER TABLE project_feedback ADD COLUMN parent_id TEXT',
-    'ALTER TABLE project_feedback ADD COLUMN moderation_action TEXT',
-    'ALTER TABLE project_feedback ADD COLUMN moderation_at INTEGER',
-    'ALTER TABLE project_feedback ADD COLUMN moderation_reason TEXT',
     'CREATE INDEX IF NOT EXISTS idx_project_feedback_moderated ON project_feedback (slug, moderation_at)',
-    // Work-state lifecycle, separate from moderation (visibility). status NULL
-    // means 'open'. receipt_hash is sha256 of the one-time receipt handed to
-    // the submitter, so they can look up status without any account.
-    'ALTER TABLE project_feedback ADD COLUMN status TEXT',
-    'ALTER TABLE project_feedback ADD COLUMN status_note TEXT',
-    'ALTER TABLE project_feedback ADD COLUMN status_at INTEGER',
-    'ALTER TABLE project_feedback ADD COLUMN receipt_hash TEXT',
     'CREATE INDEX IF NOT EXISTS idx_project_feedback_status ON project_feedback (slug, status_at)',
-    // The install beacon collects no PII at all — the anonymous install UUID is
-    // the entire identity model — so this column can only ever hold NULL. Dropped
-    // rather than left in place: a column that can only be NULL invites someone
-    // to start filling it. No-ops on a DB that never had it.
-    'ALTER TABLE app_installs DROP COLUMN identify_email',
-  ]) {
-    try { await client.execute(sql); } catch { /* column/index already exists */ }
-  }
+  ], 'write');
 
-  // Seed referrer_rules (idempotent)
+  // Idempotent seeds, all sent as batched writes instead of one round-trip each.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const seedStatements: InStatement[] = [];
+
   for (const [pattern, bucket, source] of REFERRER_RULES_SEED) {
-    try {
-      await client.execute({
-        sql: 'INSERT OR IGNORE INTO referrer_rules (host_pattern, bucket, source_name) VALUES (?, ?, ?)',
-        args: [pattern, bucket, source],
-      });
-    } catch { /* ignore */ }
+    seedStatements.push({
+      sql: 'INSERT OR IGNORE INTO referrer_rules (host_pattern, bucket, source_name) VALUES (?, ?, ?)',
+      args: [pattern, bucket, source],
+    });
   }
 
-  // Seed app_budgets with default 200 KB gz budget for every static-path sibling (idempotent)
+  // app_budgets with default 200 KB gz budget for every static-path sibling
   const STATIC_SLUGS = [
     'game-academy', 'outdoor-hours', 'local-score', 'stepproof', 'stack-audit',
     'git-viewer', 'launch-grader', 'ad-scorer', 'headline-grader', 'thread-grader',
     'email-forge', 'audience-decoder', 'page-roast', 'social-signals-trader',
   ];
   for (const slug of STATIC_SLUGS) {
-    try {
-      await client.execute({
-        sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
-        args: [slug, DEFAULT_BUDGET_GZ_BYTES, Math.floor(Date.now() / 1000)],
-      });
-    } catch { /* ignore */ }
+    seedStatements.push({
+      sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
+      args: [slug, DEFAULT_BUDGET_GZ_BYTES, nowSec],
+    });
   }
 
   // Apps with a per-slug override in the budget contract (mcp-host-server/src/contract/app-budgets.ts),
@@ -715,36 +735,57 @@ export async function initDb(): Promise<void> {
   // already shipped). Raise-only: a budget that has been deliberately tightened below these
   // defaults is left alone only if it is already above them.
   for (const [slug, limit] of Object.entries(APP_BUDGETS_GZ_BYTES)) {
-    try {
-      await client.execute({
-        sql: 'INSERT INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?) '
-           + 'ON CONFLICT(slug) DO UPDATE SET max_size_gz_bytes = ?, updated_at = ? '
-           + 'WHERE app_budgets.max_size_gz_bytes < ?',
-        args: [slug, limit, Math.floor(Date.now() / 1000), limit, Math.floor(Date.now() / 1000), limit],
-      });
-    } catch { /* ignore */ }
+    seedStatements.push({
+      sql: 'INSERT INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?) '
+         + 'ON CONFLICT(slug) DO UPDATE SET max_size_gz_bytes = ?, updated_at = ? '
+         + 'WHERE app_budgets.max_size_gz_bytes < ?',
+      args: [slug, limit, nowSec, limit, nowSec, limit],
+    });
   }
 
-  // Seed app_spend_ceilings for all paid tools (idempotent)
+  // app_spend_ceilings for all paid tools. Academy gets a tighter ceiling:
+  // 5 calls/user × expected daily active users.
   const PAID_TOOL_SLUGS = [
     'stack-audit', 'launch-grader', 'page-roast',
     'ad-scorer', 'headline-grader', 'thread-grader',
     'email-forge', 'audience-decoder',
   ];
-  // Academy gets a tighter ceiling: 5 calls/user × expected daily active users
-  try {
-    await client.execute({
+  const CEILINGS: Array<[string, number]> = [['academy', 200], ...PAID_TOOL_SLUGS.map((slug): [string, number] => [slug, 2000])];
+  for (const [slug, max] of CEILINGS) {
+    seedStatements.push({
       sql: 'INSERT OR IGNORE INTO app_spend_ceilings (app_slug, max_calls_per_day, updated_at) VALUES (?, ?, ?)',
-      args: ['academy', 200, Math.floor(Date.now() / 1000)],
+      args: [slug, max, nowSec],
     });
-  } catch { /* ignore */ }
-  for (const slug of PAID_TOOL_SLUGS) {
-    try {
-      await client.execute({
-        sql: 'INSERT OR IGNORE INTO app_spend_ceilings (app_slug, max_calls_per_day, updated_at) VALUES (?, ?, ?)',
-        args: [slug, 2000, Math.floor(Date.now() / 1000)],
-      });
-    } catch { /* ignore */ }
+  }
+
+  // secret_metadata (NULL last_rotated_at = never rotated)
+  const SECRET_NAMES = [
+    'STRIPE_API_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'GEMINI_API_KEY',
+    'CLERK_SECRET_KEY',
+    'CLERK_WEBHOOK_SECRET',
+    'TURSO_AUTH_TOKEN',
+  ];
+  for (const name of SECRET_NAMES) {
+    seedStatements.push({
+      sql: 'INSERT OR IGNORE INTO secret_metadata (name, last_rotated_at, notes, created_at) VALUES (?, NULL, ?, ?)',
+      args: [name, 'seeded on PRD 29', nowSec],
+    });
+  }
+
+  // Blog posts from content/blog/*.md (one file per post, ordered by frontmatter).
+  // INSERT OR IGNORE never touches a row production already has; the one-shot
+  // data migrations below carry corrections to existing rows.
+  const seedPosts = loadBlogPosts();
+  for (const p of seedPosts) {
+    seedStatements.push({
+      sql: `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [p.slug, p.title, p.excerpt, p.content, p.category, p.published ? 1 : 0, p.published_at],
+    });
+  }
+  for (let i = 0; i < seedStatements.length; i += 50) {
+    await client.batch(seedStatements.slice(i, i + 50), 'write');
   }
 
   // Seed Wall of Shame with sample roasts (only if empty)
@@ -759,18 +800,6 @@ export async function initDb(): Promise<void> {
     );
   }
 
-  // Seed blog posts from content/blog/*.md (one file per post, ordered by frontmatter).
-  // INSERT OR IGNORE never touches a row production already has; the one-shot
-  // data migrations below carry corrections to existing rows.
-  const seedPosts = loadBlogPosts();
-  const insertPost = seedPosts.map(p => ({
-    sql: `INSERT OR IGNORE INTO blog_posts (slug, title, excerpt, content, category, published, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [p.slug, p.title, p.excerpt, p.content, p.category, p.published ? 1 : 0, p.published_at],
-  }));
-  for (let i = 0; i < insertPost.length; i += 50) {
-    await client.batch(insertPost.slice(i, i + 50), 'write');
-  }
-
   // The Field Manual went free on 2026-09-25 (release 2.0.1). This dated post
   // keeps its slug and its August story, but it must not read as a live $19.99
   // offer anywhere it appears: the /blog index and the share text show the
@@ -780,6 +809,7 @@ export async function initDb(): Promise<void> {
   // IGNORE never touches the row production already has, so the one-shot
   // data migration below rewrites that row once, and never again: an edit
   // the owner makes later through the blog admin sticks.
+  const doneIds = await loadDoneMigrationIds();
   const MANUAL_FREE_SLUG = 'the-app-stays-free-the-manual-is-19-99';
   const MANUAL_FREE_TITLE = 'The App Stays Free, The Manual Was $19.99 (Now Free)';
   const MANUAL_FREE_EXCERPT =
@@ -797,7 +827,7 @@ export async function initDb(): Promise<void> {
       sql: 'UPDATE blog_posts SET content = ? || content WHERE slug = ? AND content NOT LIKE ?',
       args: [MANUAL_FREE_NOTE, MANUAL_FREE_SLUG, '**Update, 2026-09-25:%'],
     },
-  ]);
+  ], doneIds);
 
   // Owner feedback 2026-10-03: this post's links must be full, clickable URLs
   // (the audience is early college students clicking straight through), and
@@ -821,7 +851,7 @@ export async function initDb(): Promise<void> {
       sql: "UPDATE blog_posts SET content = REPLACE(content, '](/', '](https://bilko.run/') WHERE content LIKE '%](/%'",
       args: [],
     },
-  ]);
+  ], doneIds);
 
   // One-shot fix for prod rows already seeded with the same-day timestamp
   // before this reschedule landed. WHERE pins both slug and the OLD
@@ -836,7 +866,7 @@ export async function initDb(): Promise<void> {
         '2026-10-03T17:26:18.000Z',
       ],
     },
-  ]);
+  ], doneIds);
 
   // ContentGrade is retired: drop it from two seeded posts. The exact old
   // sentence is replaced, so an owner edit elsewhere in the post survives.
@@ -858,28 +888,10 @@ export async function initDb(): Promise<void> {
       sql: 'UPDATE blog_posts SET content = replace(content, ?, ?), updated_at = ? WHERE slug = ?',
       args: [oldText, newText, new Date().toISOString(), slug],
     })),
+    doneIds,
   );
 
-  await applyBlogRewrites(BLOG_REWRITES);
-
-  // Seed secret_metadata (idempotent — INSERT OR IGNORE, NULL last_rotated_at = never rotated)
-  const SECRET_NAMES = [
-    'STRIPE_API_KEY',
-    'STRIPE_WEBHOOK_SECRET',
-    'GEMINI_API_KEY',
-    'CLERK_SECRET_KEY',
-    'CLERK_WEBHOOK_SECRET',
-    'TURSO_AUTH_TOKEN',
-  ];
-  const now = Math.floor(Date.now() / 1000);
-  for (const name of SECRET_NAMES) {
-    try {
-      await client.execute({
-        sql: 'INSERT OR IGNORE INTO secret_metadata (name, last_rotated_at, notes, created_at) VALUES (?, NULL, ?, ?)',
-        args: [name, 'seeded on PRD 29', now],
-      });
-    } catch { /* ignore */ }
-  }
+  await applyBlogRewrites(BLOG_REWRITES, doneIds);
 
   console.log('[DB] Initialized' + (process.env.TURSO_DATABASE_URL ? ' (Turso)' : ' (local SQLite)'));
 }

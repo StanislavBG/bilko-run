@@ -248,14 +248,29 @@ export async function initDb(): Promise<void> {
     });
   }
 
-  // secret_metadata (NULL last_rotated_at = never rotated)
+  // Correct the pre-2026-10-10 names before the seed below, so the seed's
+  // INSERT OR IGNORE can't create an empty STRIPE_SECRET_KEY row first and
+  // strand the recorded rotation dates under the old name.
+  await applyDataMigrationOnce('2026-10-10-secret-metadata-names', [
+    {
+      sql: 'UPDATE secret_metadata SET name = ? WHERE name = ? AND NOT EXISTS (SELECT 1 FROM secret_metadata WHERE name = ?)',
+      args: ['STRIPE_SECRET_KEY', 'STRIPE_API_KEY', 'STRIPE_SECRET_KEY'],
+    },
+    { sql: 'DELETE FROM secret_metadata WHERE name = ?', args: ['STRIPE_API_KEY'] },
+    { sql: 'DELETE FROM secret_metadata WHERE name = ?', args: ['CLERK_WEBHOOK_SECRET'] },
+  ]);
+
+  // secret_metadata (NULL last_rotated_at = never rotated). Only secrets that
+  // server/ code reads from process.env.
   const SECRET_NAMES = [
-    'STRIPE_API_KEY',
+    'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
     'GEMINI_API_KEY',
     'CLERK_SECRET_KEY',
-    'CLERK_WEBHOOK_SECRET',
     'TURSO_AUTH_TOKEN',
+    'ANTHROPIC_API_KEY_ACADEMY',
+    'PROJECT_SNAPSHOT_TOKEN',
+    'BILKO_GAME_HMAC_KEY',
   ];
   for (const name of SECRET_NAMES) {
     seedStatements.push({

@@ -94,6 +94,8 @@ describe('no stale top-level manual links survive in shipped source', () => {
       if (Array.isArray(node)) node.forEach((v, i) => walk(v, `${path}[${i}]`));
       else if (node && typeof node === 'object') {
         for (const [k, v] of Object.entries(node)) {
+          // coffeeHref is the host's /coffee tip-jar redirect, not a manual link.
+          if (k === 'coffeeHref') continue;
           if (typeof v === 'string' && /(href|Href|HrefTemplate)$/.test(k)) hrefs.push([`${path}.${k}`, v]);
           else walk(v, `${path}.${k}`);
         }

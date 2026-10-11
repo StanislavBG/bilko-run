@@ -29,6 +29,7 @@ export function Header({
         <span className="smlp-tagline">{h.tagline}</span>
       </div>
       <div className="smlp-header__right">
+        <a className="smlp-header__coffee" href={h.coffeeHref}>{h.coffeeLink}</a>
         <a
           className="smlp-header__manual"
           href={manual ? '/products/session-manager' : COPY.meta.manualHref}

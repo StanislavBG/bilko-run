@@ -1,21 +1,43 @@
 ---
 slug: "a-space-shooter-shrank-66-percent-to-fit-in-your-browser"
-title: "A Space Shooter Shrank 66% to Fit In Your Browser"
-excerpt: "Escape Velocity now runs straight in a browser tab, no download. Getting there meant cutting the game package from 43.4 MB to 14.6 MB and teaching the host to compress and serve wasm."
+title: "Eight Planets, One Browser Tab, Zero Downloads"
+excerpt: "Fly a full space-survivors run across Sol's eight planets in a browser tab. No download. The art pack shrank from 43.4 MB to 14.6 MB on launch day to make it load."
 category: "product"
 published: true
 published_at: "2026-09-26T19:00:00.000Z"
 order: 41
 ---
 
-[Escape Velocity](/projects/escape-velocity/) is a keyboard-only space-survivors arcade run — the Sol tutorial campaign of a bigger game called Starry Night Ships II, eight real planets as levels with two mini-bosses and a boss per planet, plus a bonus wizard duel waiting on Pluto once you clear the ring. It's for anyone who wants five minutes of an arcade run on a weeknight. To start, open the tile above — it boots in the browser, nothing to install.
+You can fly a full space-survivors run across our solar system in a browser tab right now, and the art pack that makes it possible shrank from 43.4 MB to 14.6 MB on launch day. Open [bilko.run/projects/escape-velocity](https://bilko.run/projects/escape-velocity/), click "Click to play," and you are parked at Mercury. Nothing to install.
 
-**Was.** Until last week this only existed as a desktop Godot build on my machine, not even pushed to a remote yet. Playing it meant exporting a Linux binary and running it from a terminal.
+## Pick a build and survive Mercury
 
-**Now.** It's a browser game. The Godot project exports straight to WebAssembly, which sounds like it should just work, and mostly did — except the resulting package was 43.4 MB, almost all of it fifteen Blender-baked 2048×2048 ground textures and seventeen planet surface maps, imported lossless. Re-importing them as lossy WebP at the same resolution got the package to 14.6 MB with no visible drop in quality side by side (I diffed before/after captures on Earth and Neptune to check). The source art never changed — only how Godot packs it for export.
+Escape Velocity is a keyboard-only game. Turn with A and D, fly with W or Space, and hold Space to drop onto a planet.
 
-That number mattered because of what it unblocked on the host side. Bilko's publish pipeline gives every game a 250 KB size budget by default, which a wasm engine blows through before the player ever sees a texture; Escape Velocity now gets an explicit 30 MB exemption instead, the compressor got taught to gzip \`application/wasm\` the same way it already gzips JS, and the CSP had to open a narrow door — \`wasm-unsafe-eval\`, wasm compilation only, not JS eval — before a browser would run the engine at all. None of that is visible to a player; all of it is why the tab downloads a roughly 10 MB payload instead of the uncompressed ~40 MB the export produces by default.
+Mercury's briefing is short: survive 3:00. Mini bosses show up at 1:00 and 2:00. Then The Lava Ape arrives for the end. Before you launch, you pick one of three builds: the Duo Pistol, the Black Widow rifle, or the Baller-Launcher, which fires soccer balls and basketballs.
 
-The bug worth mentioning: the quit button froze the browser tab solid on first try. Godot's \`get_tree().quit()\` assumes there's a process to exit, and a browser tab isn't one — that call is now skipped on web, the save still runs, and the menu relabels Quit to Save so it doesn't claim to do something it can't. A Playwright spec now boots the exported build headless and checks the save survives a reload, so that regression can't sneak back in quietly.
+![The Mercury briefing screen showing three ship builds to choose from](/blog-images/a-space-shooter-shrank-66-percent-to-fit-in-your-browser/mercury-briefing.jpg "Sunward Forge, map 1 of 8: three builds and a three-minute timer.")
 
-What's next: the underlying repo (\`starry-night-2\`) is still local-only — pushing it to GitHub is the next real task, not a game feature. After that, whether Escape Velocity grows past the Sol tutorial into the rest of the six-system universe depends on whether anyone actually finishes Sol first.
+A run is about three minutes, so you can finish one before your coffee cools. Your ship aims and fires on its own. You steer, dodge, and grab the stardust that enemies drop. Stardust levels you up, and each level-up lets you pick a new card to power the ship. Mercury sends in two enemy types, chasers and swarmers, so it works as a gentle first lesson.
+
+## Eight planets, then a wizard duel on Pluto
+
+Mercury is only map 1. The campaign is called Escape the Solar System, and its eight real planets are eight maps. Each map has two mini bosses and a level boss. The map screen starts at "1 of 9 bodies charted," because there is a ninth stop.
+
+![The Sol map with Mercury marked as tutorial map 1 of 8](/blog-images/a-space-shooter-shrank-66-percent-to-fit-in-your-browser/sol-system-map.jpg "Your ship parks at Mercury. Eight planets to conquer, and a ninth body to find.")
+
+That ninth stop is Pluto. It is a bonus, and it holds a wizard duel. You can fight the White Wizard, the Blue Wizard, the Twin Wizards, or Charon the Ferryman. Beat one and its harder Champion version unlocks.
+
+Win a planet's run and you conquer it. Conquer all eight and the ring around Sol closes on the map. Each win also pays out Core Shards, which you spend on Mothership unlocks.
+
+## How 43.4 MB became 14.6 MB
+
+The first browser export was 43.4 MB. Most of that weight was textures. 15 ground tiles, each 2048 by 2048 pixels, were stored with no compression, about 28 MB on their own. We saved them again as lossy WebP at the same size, and they dropped to about 3.3 MB.
+
+The pack was still at 18.7 MB, so the 17 planet surface maps got the same treatment. That landed it at 14.6 MB. We put Earth and Neptune side by side, before and after, and could see no difference.
+
+![The lava-streaked arena floor on Mercury with the player ship and enemies](/blog-images/a-space-shooter-shrank-66-percent-to-fit-in-your-browser/mercury-arena.jpg "This lava floor is one of the 15 ground tiles that went through the WebP change.")
+
+The game has grown since launch, with new bosses and wizard art. Today the page sends about 28 MB compressed, and a loading bar counts up to 60.5 MB uncompressed before the map appears. That 14.6 MB figure is the launch-day pack, not today's total.
+
+Try Mercury first. Pick the Baller-Launcher, and see if you can beat the Lava Ape.

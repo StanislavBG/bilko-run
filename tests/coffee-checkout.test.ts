@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Fastify from 'fastify';
-import { entryForPriceType, entryForPriceId, PRODUCT_KEYS } from '../shared/product-catalog.js';
+import { entryForPriceType, entryForPriceId, PRODUCT_KEYS, COFFEE_PAYMENT_LINK_DEFAULT } from '../shared/product-catalog.js';
 
 const listLineItems = vi.fn();
 const sessionsRetrieve = vi.fn();
@@ -63,6 +63,18 @@ describe('product catalog: publictrades_coffee', () => {
     const entry = entryForPriceId('price_coffee_123', env);
     expect(entry?.productKey).toBe(PRODUCT_KEYS.PUBLICTRADES_COFFEE);
   });
+
+  it('resolves the default coffee price with no env set', () => {
+    const entry = entryForPriceId('price_1U2LEcR6w0VtQRLThguPtRCI', {});
+    expect(entry?.productKey).toBe(PRODUCT_KEYS.PUBLICTRADES_COFFEE);
+  });
+
+  it('env price still resolves and unknown prices do not', () => {
+    const env = { STRIPE_PRICE_PUBLICTRADES_COFFEE: 'price_env_override' };
+    expect(entryForPriceId('price_env_override', env)?.productKey).toBe(PRODUCT_KEYS.PUBLICTRADES_COFFEE);
+    expect(entryForPriceId('price_unknown_zzz', env)).toBeUndefined();
+    expect(entryForPriceId('price_unknown_zzz', {})).toBeUndefined();
+  });
 });
 
 describe('GET /coffee', () => {
@@ -86,26 +98,14 @@ describe('GET /coffee', () => {
     await app.close();
   });
 
-  it('creates and redirects to a checkout session when only the price ID is configured', async () => {
-    process.env.STRIPE_PRICE_PUBLICTRADES_COFFEE = 'price_coffee_123';
-    sessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.com/session/coffee' });
+  it('redirects to the committed default payment link when nothing is configured', async () => {
     const app = await buildApp();
 
     const res = await app.inject({ method: 'GET', url: '/coffee' });
 
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toBe('https://checkout.stripe.com/session/coffee');
-    await app.close();
-  });
-
-  it('returns 200 HTML (never 404/5xx) when nothing is configured', async () => {
-    const app = await buildApp();
-
-    const res = await app.inject({ method: 'GET', url: '/coffee' });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toContain('text/html');
-    expect(res.body).toContain('temporarily unavailable');
+    expect(res.headers.location).toBe('https://buy.stripe.com/eVq6oJ73C65L6jbaow8k80d');
+    expect(COFFEE_PAYMENT_LINK_DEFAULT).toBe('https://buy.stripe.com/eVq6oJ73C65L6jbaow8k80d');
     await app.close();
   });
 });
@@ -173,6 +173,19 @@ describe('/checkout/success for publictrades_coffee', () => {
     expect(res.body).toContain('Thanks for your support');
     expect(res.body).not.toContain('You&#39;re now Pro');
     expect(res.body).not.toContain('Your license key');
+    await app.close();
+  });
+
+  it('renders coffee-specific thanks for the default coffee price', async () => {
+    delete process.env.STRIPE_PRICE_PUBLICTRADES_COFFEE;
+    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_1U2LEcR6w0VtQRLThguPtRCI' } }] });
+    const app = await buildApp();
+
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('Thanks for the coffee');
+    expect(res.body).toContain('https://bilko.run/');
     await app.close();
   });
 });

@@ -37,7 +37,7 @@ import { homedir } from 'node:os';
 import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables } from './db.js';
 import { runGates, gateSummary } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/registry.js';
-import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
+import { projectDir, parseBypass, parseRegistry, buildStaticEntry } from './publish-request.js';
 import { withPublishCheckout } from './publish-checkout.js';
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
@@ -157,7 +157,7 @@ server.registerTool('list_projects', {
 // 3) register_static_project ────────────────────────────────────────────
 server.registerTool('register_static_project', {
     title: 'Register a static-path app',
-    description: 'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app shows up on /, /products, and ⌘K. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
+    description: 'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app appears in ⌘K and the admin view of /projects; it appears on the public /projects hub only with public: true. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
     inputSchema: {
         slug: SlugSchema.describe('URL slug, kebab-case. Example: "outdoor-hours". Path will be /projects/<slug>/.'),
         name: z.string().min(1).describe('Display name. Example: "OutdoorHours".'),
@@ -168,29 +168,17 @@ server.registerTool('register_static_project', {
         sourceRepo: z.string().optional().describe('e.g. "github.com/StanislavBG/outdoor-hours"'),
         localPath: z.string().optional().describe('e.g. "~/Projects/Outdoor-Hours"'),
         tags: z.array(z.string()).optional().describe('Up to ~3 short tags, e.g. ["Free", "WebGPU"].'),
+        public: z.boolean().optional().describe('List the app on the public /projects hub and home page. Omit = admin-only.'),
+        displayName: z.string().min(1).max(60).optional().describe('Hub-only display name shown on the public /projects hub.'),
     },
-}, async ({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags }) => {
+}, async ({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags, public: isPublic, displayName }) => {
     try {
         const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
             const projects = await readRegistry(root);
             if (projects.some(p => p.slug === slug)) {
                 throw new Error(`slug "${slug}" already registered. Use unregister_project first if you want to replace it.`);
             }
-            const entry = {
-                slug,
-                name,
-                tagline,
-                category,
-                status,
-                year,
-                host: {
-                    kind: 'static-path',
-                    path: `/projects/${slug}/`,
-                    ...(sourceRepo ? { sourceRepo } : {}),
-                    ...(localPath ? { localPath } : {}),
-                },
-                ...(tags && tags.length ? { tags } : {}),
-            };
+            const entry = buildStaticEntry({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags, public: isPublic, displayName });
             projects.push(entry);
             await writeRegistry(root, projects);
             return {

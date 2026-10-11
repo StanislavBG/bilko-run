@@ -184,6 +184,8 @@ A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by ha
 6. bilko-host__status                                     # verify
 ```
 
+`register_static_project` also takes optional `public` (`true` lists the app on the public `/projects` hub and home page; omitted means admin-only) and `displayName` (a hub-only display name, 1-60 chars).
+
 The MCP commits + pushes to `origin` automatically, from a dedicated clean
 checkout kept in sync with `origin/main` (never your own working tree); Render
 redeploys within ~minute. If the push fails (conflicting concurrent publish,

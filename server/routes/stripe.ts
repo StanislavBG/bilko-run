@@ -10,6 +10,7 @@ import { creditTokens, grantFreeTokens, hasTokenAccount } from '../services/toke
 import { dbRun } from '../db.js';
 import {
   PRODUCT_KEYS,
+  COFFEE_PAYMENT_LINK_DEFAULT,
   entryForPriceType,
   entryForPriceId,
   type PriceType,
@@ -367,6 +368,11 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         <p><a href="/products/session-manager/manual" style="display:inline-block;background:#7fff7f;color:#000;padding:12px 20px;border-radius:6px;font-weight:600;text-decoration:none">Read the manual →</a></p>
         <p style="font-size:0.9em;color:#888">The app itself is free too — launch it any time with:</p>
         <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;font-size:1.1em">npx claude-code-session-manager@latest</pre>`
+        : productKey === PRODUCT_KEYS.PUBLICTRADES_COFFEE
+        ? `
+        <p>Thanks for the coffee ☕ — it keeps the free tools on bilko.run running.</p>
+        <p style="font-size:0.9em;color:#888">Receipt on file for <strong>${escHtml(email)}</strong>.</p>
+        <p><a href="https://bilko.run/">Back to bilko.run →</a></p>`
         : `
         <p>Your payment is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>
         <p style="font-size:0.9em;color:#888">Receipt on file for <strong>${escHtml(email)}</strong>.</p>`;
@@ -387,14 +393,15 @@ export function registerStripeRoutes(app: FastifyInstance): void {
   // other projects (the social-signals-trader dashboard, the
   // claude-code-session-manager npm `funding` field) point a plain <a href>
   // at, so the path must never change. Must never 404/5xx: when nothing is
-  // configured yet, show a 200 "temporarily unavailable" page instead.
+  // resolvable, show a 200 "temporarily unavailable" page instead. Defaults are
+  // the live Stripe product prod_V2Q4ego2oijqo4; env vars override them.
   app.get('/coffee', async (_req, reply) => {
-    const paymentLink = process.env.STRIPE_PAYMENT_LINK_PUBLICTRADES_COFFEE;
+    const paymentLink = process.env.STRIPE_PAYMENT_LINK_PUBLICTRADES_COFFEE || COFFEE_PAYMENT_LINK_DEFAULT;
     if (paymentLink) {
       return reply.redirect(paymentLink, 302);
     }
 
-    const priceId = process.env.STRIPE_PRICE_PUBLICTRADES_COFFEE;
+    const priceId = process.env.STRIPE_PRICE_PUBLICTRADES_COFFEE || entryForPriceType('publictrades_coffee')?.defaultPriceId;
     const stripe = getStripe();
     if (priceId && stripe) {
       try {

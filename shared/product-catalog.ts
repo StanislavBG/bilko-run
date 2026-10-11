@@ -35,6 +35,8 @@ export interface PriceCatalogEntry {
   priceType: PriceType;
   /** env var holding the Stripe price ID */
   envVar: string;
+  /** public Stripe price id used when the env var is unset */
+  defaultPriceId?: string;
   /** product_key written to `stripe_one_time_purchases` */
   productKey: ProductKey;
   mode: 'subscription' | 'payment';
@@ -47,8 +49,11 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   { priceType: 'pageroast_token_single', envVar: 'STRIPE_PRICE_TOKEN_SINGLE',          productKey: PRODUCT_KEYS.PAGEROAST_TOKENS,       mode: 'payment', tokenAmount: TOKENS_PER_SINGLE },
   { priceType: 'audiencedecoder_report', envVar: 'STRIPE_PRICE_AUDIENCEDECODER',       productKey: PRODUCT_KEYS.AUDIENCEDECODER_REPORT, mode: 'payment' },
   { priceType: 'session_manager',        envVar: 'STRIPE_PRICE_SESSION_MANAGER',       productKey: PRODUCT_KEYS.SESSION_MANAGER,        mode: 'payment' },
-  { priceType: 'publictrades_coffee',    envVar: 'STRIPE_PRICE_PUBLICTRADES_COFFEE',   productKey: PRODUCT_KEYS.PUBLICTRADES_COFFEE,    mode: 'payment' },
+  { priceType: 'publictrades_coffee',    envVar: 'STRIPE_PRICE_PUBLICTRADES_COFFEE',   defaultPriceId: 'price_1U2LEcR6w0VtQRLThguPtRCI', productKey: PRODUCT_KEYS.PUBLICTRADES_COFFEE,    mode: 'payment' },
 ];
+
+/** Public Stripe payment link for the live "Buy me a coffee" product (prod_V2Q4ego2oijqo4). */
+export const COFFEE_PAYMENT_LINK_DEFAULT = 'https://buy.stripe.com/eVq6oJ73C65L6jbaow8k80d';
 
 /** Lookup by priceType (what the frontend checkout request declares). */
 export function entryForPriceType(priceType: PriceType): PriceCatalogEntry | undefined {
@@ -64,5 +69,5 @@ export function entryForPriceId(
   env: Record<string, string | undefined>,
 ): PriceCatalogEntry | undefined {
   if (!priceId) return undefined;
-  return PRICE_CATALOG.find(e => env[e.envVar] === priceId);
+  return PRICE_CATALOG.find(e => (env[e.envVar] || e.defaultPriceId) === priceId);
 }

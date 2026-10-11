@@ -93,6 +93,10 @@ const ENRICH: Record<string, Enrich> = {
     metric: '8 planets', metricLabel: 'to conquer', lang: 'GDScript · Godot 4',
     detail: 'Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally.',
   },
+  'launch-kit': {
+    metric: '8 skills', metricLabel: '$9 one-time', lang: 'Markdown',
+    detail: 'Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire.',
+  },
 };
 
 function commitMs(slug: string): number {

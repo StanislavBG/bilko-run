@@ -527,6 +527,8 @@
     "tags": [
       "Claude Code",
       "Paid"
-    ]
+    ],
+    "public": true,
+    "displayName": "Launch Kit"
   }
 ]

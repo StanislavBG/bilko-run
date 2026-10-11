@@ -11,6 +11,7 @@ const EXPECTED: ReadonlyArray<readonly [string, string]> = [
   ['git-viewer', 'Git Viewer'],
   ['bilko-host', 'Bilko Host MCP'],
   ['outdoor-hours', 'Weather'],
+  ['launch-kit', 'Launch Kit'],
 ];
 
 describe('projectsView public cards', () => {

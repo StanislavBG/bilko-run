@@ -1,0 +1,45 @@
+import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
+
+// A $5/mo Git Viewer subscription must never read as a site-wide pro plan:
+// that would unlock every paid AI tool for $5.
+const subsList = vi.fn();
+vi.mock('stripe', () => ({
+  default: class {
+    customers = { list: vi.fn().mockResolvedValue({ data: [] }) };
+    subscriptions = { list: subsList };
+  },
+}));
+
+process.env.STRIPE_SECRET_KEY = 'sk_test_x';
+process.env.STRIPE_PRICE_GITVIEWER = 'price_gv';
+
+const { initDb, dbRun } = await import('../server/db.js');
+const { getActiveSubscriptionLive, getSubscriptionTier, upsertCustomer, priceToPlanTier } =
+  await import('../server/services/stripe.js');
+
+const sub = (id: string, price: string) => ({ id, current_period_end: 0, items: { data: [{ price: { id: price } }] } });
+
+beforeAll(async () => { await initDb(); });
+beforeEach(async () => {
+  await dbRun('DELETE FROM stripe_subscriptions');
+  subsList.mockReset();
+});
+
+describe('git_viewer subscription entitlement', () => {
+  it('priceToPlanTier maps STRIPE_PRICE_GITVIEWER to git_viewer', () => {
+    expect(priceToPlanTier('price_gv')).toBe('git_viewer');
+  });
+
+  it('git_viewer alone: gitViewer true, isPro false, DB tier stays free', async () => {
+    await upsertCustomer('gv@x.com', 'cus_gv');
+    subsList.mockResolvedValue({ data: [sub('sub_gv', 'price_gv')] });
+    expect(await getActiveSubscriptionLive('gv@x.com')).toEqual({ isPro: false, tier: 'free', gitViewer: true });
+    expect(await getSubscriptionTier('gv@x.com')).toBe('free');
+  });
+
+  it('pro + git_viewer: both flags, tier pro', async () => {
+    await upsertCustomer('both@x.com', 'cus_both');
+    subsList.mockResolvedValue({ data: [sub('sub_gv2', 'price_gv'), sub('sub_pro', 'price_pro')] });
+    expect(await getActiveSubscriptionLive('both@x.com')).toEqual({ isPro: true, tier: 'pro', gitViewer: true });
+  });
+});

@@ -79,3 +79,32 @@ export async function requireAdmin(req: any, reply: any): Promise<string | null>
   }
   return email;
 }
+
+/**
+ * Verify a Clerk session token and return the user's email plus the GitHub
+ * usernames linked to it via Clerk's GitHub social connection (lowercased).
+ * Null when the token is invalid. Not cached: used only by ownership checks.
+ */
+export async function verifyClerkGitHubUser(
+  authHeader: string | undefined,
+): Promise<{ email: string; githubLogins: string[] } | null> {
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7);
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  const clerk = getClerk();
+  if (!token || !secretKey || !clerk) return null;
+  try {
+    const payload = await verifyToken(token, { secretKey });
+    if (!payload?.sub) return null;
+    const user = await clerk.users.getUser(payload.sub);
+    const email = user.primaryEmailAddress?.emailAddress?.toLowerCase();
+    if (!email) return null;
+    const githubLogins = user.externalAccounts
+      .filter(a => a.provider === 'oauth_github' || a.provider === 'github')
+      .map(a => a.username?.toLowerCase())
+      .filter((u): u is string => !!u);
+    return { email, githubLogins };
+  } catch {
+    return null;
+  }
+}

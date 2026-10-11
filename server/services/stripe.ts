@@ -44,7 +44,7 @@ export async function saveSubscription(params: {
   current_period_end: number;
 }): Promise<void> {
   await dbRun(
-    `INSERT INTO stripe_subscriptions (email, stripe_customer_id, stripe_subscription_id, plan_tier, status, current_period_end) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(stripe_subscription_id) DO UPDATE SET status = excluded.status, current_period_end = excluded.current_period_end, updated_at = datetime('now')`,
+    `INSERT INTO stripe_subscriptions (email, stripe_customer_id, stripe_subscription_id, plan_tier, status, current_period_end) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(stripe_subscription_id) DO UPDATE SET plan_tier = excluded.plan_tier, status = excluded.status, current_period_end = excluded.current_period_end, updated_at = datetime('now')`,
     params.email, params.stripe_customer_id, params.stripe_subscription_id,
     params.plan_tier, params.status, params.current_period_end,
   );
@@ -60,7 +60,7 @@ export async function updateSubscriptionPeriod(stripeSubId: string, status: stri
 
 export async function getSubscriptionTier(email: string): Promise<'free' | 'pro' | 'business' | 'team'> {
   const row = await dbGet<{ plan_tier: string }>(
-    `SELECT plan_tier FROM stripe_subscriptions WHERE email = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+    `SELECT plan_tier FROM stripe_subscriptions WHERE email = ? AND status = 'active' AND plan_tier IN ('pro', 'business', 'team') ORDER BY created_at DESC LIMIT 1`,
     email,
   );
   const tier = row?.plan_tier;
@@ -72,8 +72,13 @@ export async function hasActiveSubscription(email: string): Promise<boolean> {
   return (await getSubscriptionTier(email)) !== 'free';
 }
 
+/** plan_tier for the $5/mo Git Viewer subscription. It is NOT a site-wide plan: it never sets isPro. */
+export const GIT_VIEWER_TIER = 'git_viewer';
+
 // Map Stripe price IDs to plan tiers
 export function priceToPlanTier(priceId: string): string {
+  const gitViewer = process.env.STRIPE_PRICE_GITVIEWER;
+  if (gitViewer && priceId === gitViewer) return GIT_VIEWER_TIER;
   const proBiz = process.env.STRIPE_PRICE_CONTENTGRADE_BUSINESS;
   const proTeam = process.env.STRIPE_PRICE_CONTENTGRADE_TEAM;
   if (proBiz && priceId === proBiz) return 'business';
@@ -105,12 +110,14 @@ export async function hasPurchased(email: string, productKey: string): Promise<b
 
 // ── Live subscription verification ───────────────────────────────────────────
 
-const _subCache = new Map<string, { isPro: boolean; tier: string; expiresAt: number }>();
+interface SubStatus { isPro: boolean; tier: string; gitViewer: boolean }
+
+const _subCache = new Map<string, SubStatus & { expiresAt: number }>();
 const SUB_CACHE_TTL_MS = 5 * 60 * 1000;
 const SUB_CACHE_ERROR_TTL_MS = 60 * 1000;
 const SUB_CACHE_MAX = 5000;
 
-function setSubCache(email: string, entry: { isPro: boolean; tier: string; expiresAt: number }): void {
+function setSubCache(email: string, entry: SubStatus & { expiresAt: number }): void {
   if (_subCache.size >= SUB_CACHE_MAX) {
     // Evict first expired entry, or oldest if none expired (Map preserves insertion order).
     const now = Date.now();
@@ -128,17 +135,32 @@ export async function hasActiveSubscriptionLive(email: string): Promise<boolean>
   return result.isPro;
 }
 
-export async function getActiveSubscriptionLive(email: string): Promise<{ isPro: boolean; tier: string }> {
+async function hasGitViewerSubscriptionDb(email: string): Promise<boolean> {
+  const row = await dbGet<{ id: number }>(
+    `SELECT id FROM stripe_subscriptions WHERE email = ? AND status = 'active' AND plan_tier = ? LIMIT 1`,
+    email, GIT_VIEWER_TIER,
+  );
+  return !!row;
+}
+
+async function subStatusFromDb(email: string): Promise<SubStatus> {
+  const tier = await getSubscriptionTier(email);
+  return { isPro: tier !== 'free', tier, gitViewer: await hasGitViewerSubscriptionDb(email) };
+}
+
+/**
+ * Live subscription state. `isPro`/`tier` describe the site-wide plan
+ * (pro/business/team) only; a Git Viewer subscription sets `gitViewer` and
+ * leaves `isPro` false, so $5/mo never unlocks the AI tools.
+ */
+export async function getActiveSubscriptionLive(email: string): Promise<SubStatus> {
   const cached = _subCache.get(email);
   if (cached && cached.expiresAt > Date.now()) {
-    return { isPro: cached.isPro, tier: cached.tier };
+    return { isPro: cached.isPro, tier: cached.tier, gitViewer: cached.gitViewer };
   }
 
   const stripe = getStripe();
-  if (!stripe) {
-    const tier = await getSubscriptionTier(email);
-    return { isPro: tier !== 'free', tier };
-  }
+  if (!stripe) return subStatusFromDb(email);
 
   let customerId = await getCustomerStripeId(email);
 
@@ -156,39 +178,40 @@ export async function getActiveSubscriptionLive(email: string): Promise<{ isPro:
   }
 
   if (!customerId) {
-    setSubCache(email, { isPro: false, tier: 'free', expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
-    return { isPro: false, tier: 'free' };
+    setSubCache(email, { isPro: false, tier: 'free', gitViewer: false, expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
+    return { isPro: false, tier: 'free', gitViewer: false };
   }
 
   try {
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       status: 'active',
-      limit: 1,
+      limit: 10,
     });
-    const isPro = subscriptions.data.length > 0;
+    let isPro = false;
     let tier = 'free';
-    if (isPro) {
-      const priceId = subscriptions.data[0]?.items?.data[0]?.price?.id ?? '';
-      tier = priceToPlanTier(priceId);
-      if ((await getSubscriptionTier(email)) === 'free') {
-        await saveSubscription({
-          email,
-          stripe_customer_id: customerId,
-          stripe_subscription_id: subscriptions.data[0].id,
-          plan_tier: tier,
-          status: 'active',
-          current_period_end: subscriptions.data[0].current_period_end,
-        });
-      }
+    let gitViewer = false;
+    for (const sub of subscriptions.data) {
+      const priceId = sub.items?.data[0]?.price?.id ?? '';
+      const subTier = priceToPlanTier(priceId);
+      if (subTier === GIT_VIEWER_TIER) gitViewer = true;
+      else if (!isPro) { isPro = true; tier = subTier; }
+      // UPSERT on stripe_subscription_id: backfills rows a missed webhook never wrote.
+      await saveSubscription({
+        email,
+        stripe_customer_id: customerId,
+        stripe_subscription_id: sub.id,
+        plan_tier: subTier,
+        status: 'active',
+        current_period_end: sub.current_period_end,
+      });
     }
-    setSubCache(email, { isPro, tier, expiresAt: Date.now() + SUB_CACHE_TTL_MS });
-    return { isPro, tier };
+    setSubCache(email, { isPro, tier, gitViewer, expiresAt: Date.now() + SUB_CACHE_TTL_MS });
+    return { isPro, tier, gitViewer };
   } catch (err) {
     console.error('[stripe] Live subscription check failed, falling back to DB:', err);
-    const tier = await getSubscriptionTier(email);
-    const isPro = tier !== 'free';
-    setSubCache(email, { isPro, tier, expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
-    return { isPro, tier };
+    const status = await subStatusFromDb(email);
+    setSubCache(email, { ...status, expiresAt: Date.now() + SUB_CACHE_ERROR_TTL_MS });
+    return status;
   }
 }

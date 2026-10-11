@@ -114,13 +114,55 @@ export function PricingPage() {
         </div>
       </section>
 
+      {/* Git Viewer — the one subscription */}
+      <section className="max-w-5xl mx-auto px-6 pb-16 md:pb-20">
+        <h2 className="text-display-md text-warm-900 text-center mb-2">Git Viewer</h2>
+        <p className="text-sm text-warm-500 text-center mb-8">
+          Turn your GitHub into a public portfolio. No setup — just your GitHub username.
+        </p>
+        <div className="grid md:grid-cols-2 gap-5 items-start max-w-3xl mx-auto">
+          {[
+            {
+              label: 'Free', price: '$0', unit: '', accent: 'text-warm-400',
+              features: ['3 projects', 'Public repos only', 'Refreshed at most once a day', 'Bilko branding'],
+            },
+            {
+              label: 'Paid', price: '$5', unit: '/ month', accent: 'text-fire-500',
+              features: ['Up to 12 projects you choose', 'Refreshed daily', 'Writing tab from your profile repo', 'Included with any existing bilko.run subscription'],
+            },
+          ].map(tier => (
+            <div key={tier.label} className="bg-white rounded-2xl shadow-elevation-1 p-7">
+              <span className={`text-label ${tier.accent}`}>{tier.label}</span>
+              <div className="flex items-baseline gap-1 mt-3 mb-6">
+                <span className="text-4xl font-black text-warm-900" style={{ letterSpacing: '-0.03em' }}>{tier.price}</span>
+                {tier.unit && <span className="text-sm text-warm-400 ml-0.5">{tier.unit}</span>}
+              </div>
+              <ul className="space-y-3 text-sm text-warm-600 mb-8">
+                {tier.features.map(f => (
+                  <li key={f} className="flex items-start gap-2.5">
+                    <span className={`${tier.accent} mt-0.5 flex-shrink-0`}>&#x2713;</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href="/projects/git-viewer/"
+                className="block w-full py-3 text-center text-sm font-bold text-fire-600 bg-fire-50 hover:bg-fire-100 rounded-xl transition-colors"
+              >
+                Open Git Viewer
+              </a>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* FAQ */}
       <section className="border-t border-warm-200/40">
         <div className="max-w-2xl mx-auto px-6 py-16 md:py-20">
           <h2 className="text-display-md text-warm-900 text-center mb-10">Common questions</h2>
           <div className="space-y-6">
             {[
-              { q: 'Why not a subscription?', a: 'Because you don\'t analyze pages every day. Pay for what you use, not what you don\'t.' },
+              { q: 'Why not a subscription?', a: 'Because you don\'t analyze pages every day. Pay for what you use, not what you don\'t. The one exception is Git Viewer at $5/month, because it keeps rebuilding your portfolio every day.' },
               { q: 'What if I don\'t use all my credits?', a: 'They never expire. Buy today, use the last one next year. No pressure.' },
               { q: 'Can I get a refund?', a: 'Credits are consumed instantly on analysis. All purchases are final — but your first analysis is free, so you know what you\'re getting.' },
               { q: 'Is my payment secure?', a: 'Payments are processed by Stripe. We never see your card number.' },
@@ -139,7 +181,7 @@ export function PricingPage() {
 
       <section className="max-w-3xl mx-auto px-6 py-12 text-center">
         <p className="text-sm text-warm-400">
-          One-time purchase. Powered by Stripe. No hidden fees. Built by one person.
+          Credits are one-time purchases. Powered by Stripe. No hidden fees. Built by one person.
         </p>
       </section>
     </>

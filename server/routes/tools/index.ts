@@ -8,6 +8,7 @@ import { registerStackAuditRoutes } from './stack-audit.js';
 import { registerLaunchGraderRoutes } from './launch-grader.js';
 import { registerPageRoastRoutes } from './page-roast.js';
 import { registerTokensRoutes } from './tokens.js';
+import { registerGitViewerRoutes } from './git-viewer.js';
 
 export function registerToolRoutes(app: FastifyInstance): void {
   registerHeadlineGraderRoutes(app);
@@ -19,4 +20,5 @@ export function registerToolRoutes(app: FastifyInstance): void {
   registerLaunchGraderRoutes(app);
   registerPageRoastRoutes(app);
   registerTokensRoutes(app);
+  registerGitViewerRoutes(app);
 }

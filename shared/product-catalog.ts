@@ -14,6 +14,7 @@ export const PRODUCT_KEYS = {
   AUDIENCEDECODER_REPORT: 'audiencedecoder_report',
   SESSION_MANAGER: 'session_manager',
   PUBLICTRADES_COFFEE: 'publictrades_coffee',
+  GIT_VIEWER: 'git_viewer',
 } as const;
 
 export type ProductKey = typeof PRODUCT_KEYS[keyof typeof PRODUCT_KEYS];
@@ -24,7 +25,8 @@ export type PriceType =
   | 'pageroast_token_single'
   | 'audiencedecoder_report'
   | 'session_manager'
-  | 'publictrades_coffee';
+  | 'publictrades_coffee'
+  | 'git_viewer';
 
 /** Token bundles — Stripe credits this many app tokens when the purchase clears. */
 export const TOKENS_PER_BUNDLE = 7;
@@ -37,7 +39,7 @@ export interface PriceCatalogEntry {
   envVar: string;
   /** public Stripe price id used when the env var is unset */
   defaultPriceId?: string;
-  /** product_key written to `stripe_one_time_purchases` */
+  /** product_key written to `stripe_one_time_purchases` (payment mode) */
   productKey: ProductKey;
   mode: 'subscription' | 'payment';
   /** Tokens credited on checkout — undefined means no token grant. */
@@ -50,6 +52,9 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   { priceType: 'audiencedecoder_report', envVar: 'STRIPE_PRICE_AUDIENCEDECODER',       productKey: PRODUCT_KEYS.AUDIENCEDECODER_REPORT, mode: 'payment' },
   { priceType: 'session_manager',        envVar: 'STRIPE_PRICE_SESSION_MANAGER',       productKey: PRODUCT_KEYS.SESSION_MANAGER,        mode: 'payment' },
   { priceType: 'publictrades_coffee',    envVar: 'STRIPE_PRICE_PUBLICTRADES_COFFEE',   defaultPriceId: 'price_1U2LEcR6w0VtQRLThguPtRCI', productKey: PRODUCT_KEYS.PUBLICTRADES_COFFEE,    mode: 'payment' },
+  // $5/mo hosted Git Viewer portfolio. Subscription: the webhook records it in
+  // stripe_subscriptions with plan_tier 'git_viewer' (priceToPlanTier), not as a purchase.
+  { priceType: 'git_viewer',             envVar: 'STRIPE_PRICE_GITVIEWER',             productKey: PRODUCT_KEYS.GIT_VIEWER,             mode: 'subscription' },
 ];
 
 /** Public Stripe payment link for the live "Buy me a coffee" product (prod_V2Q4ego2oijqo4). */

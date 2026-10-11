@@ -439,6 +439,18 @@ export const MIGRATIONS = [
     payload    TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
+  // Hosted Git Viewer portfolios (see server/routes/tools/git-viewer.ts). One
+  // row per GitHub login (lowercased); payload is the generated GitData JSON.
+  // owner_email/allowlist are set once the login's owner claims it.
+  `CREATE TABLE IF NOT EXISTS git_viewer_profiles (
+    login        TEXT PRIMARY KEY,
+    payload      TEXT NOT NULL,
+    tier         TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free','paid')),
+    locked_count INTEGER NOT NULL DEFAULT 0,
+    owner_email  TEXT,
+    allowlist    TEXT,
+    updated_at   INTEGER NOT NULL
+  )`,
   // Per-project live EVENT STREAM (see server/routes/project-events.ts) — the
   // append-only sibling of project_snapshots above. A sibling app's dashboard
   // polls a Range-capable ndjson file for appended rows (byte-cursor polling,

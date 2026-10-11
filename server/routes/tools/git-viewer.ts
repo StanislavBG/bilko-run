@@ -1,0 +1,284 @@
+import type { FastifyInstance } from 'fastify';
+import { dbAll, dbGet, dbRun } from '../../db.js';
+import { verifyClerkGitHubUser } from '../../clerk.js';
+import { getActiveSubscriptionLive } from '../../services/stripe.js';
+import { checkRateLimit, hashIp, incrementUsage } from './_shared.js';
+
+// Hosted Git Viewer portfolios — gateway for the git-viewer sibling
+// (~/Projects/git-viewer). Contract: git-viewer docs/prds/10-hosted-portfolios.md.
+//
+//   GET  /api/git-viewer/u/:login   public → 200 ready | 202 generating | 404 not_found | 429 rate_limited
+//   POST /api/git-viewer/claim      Clerk  → owner (GitHub login linked in Clerk) picks up to 12 repos
+//
+// Portfolios are generated in-process by the git-viewer library's
+// buildPortfolio() with the server's GITHUB_TOKEN, at most 2 at a time, and
+// cached in git_viewer_profiles. Free: 3 projects, regenerated at most once per
+// 24h when viewed. Paid ($5/mo git_viewer subscription, or a legacy
+// pro/business/team plan): up to 12 chosen repos + Writing, refreshed daily.
+
+export const GIT_VIEWER_ENDPOINT = 'git-viewer';
+export const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
+const REPO_NAME_RE = /^[A-Za-z0-9._-]{1,100}$/;
+export const PLAN_LIMITS = { free: 3, paid: 12 } as const;
+
+const STALE_SEC = 24 * 60 * 60;
+const MAX_CONCURRENT = 2;
+const MAX_QUEUED = 50;
+const POLL_AFTER_SEC = 5;
+const NOT_FOUND_TTL_MS = 60 * 60 * 1000;
+const FAILED_TTL_MS = 5 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+const REFRESH_BATCH = 20;
+
+type Tier = 'free' | 'paid';
+
+export type BuildPortfolio = (opts: {
+  user: string;
+  token?: string;
+  maxProjects: number;
+  allowlist?: string[];
+  writing: 'none' | 'profile-repo';
+}) => Promise<{ data: unknown; lockedCount: number }>;
+
+interface ProfileRow {
+  login: string;
+  payload: string;
+  tier: Tier;
+  locked_count: number;
+  owner_email: string | null;
+  allowlist: string | null;
+  updated_at: number;
+}
+
+interface Job { tier: Tier; allowlist?: string[] }
+
+// ── Portfolio builder (the git-viewer library) ──────────────────────────────
+// Loaded lazily so the host boots, and tests run, without the package; tests
+// inject a fake via setPortfolioBuilder. The specifier is a variable so the
+// server typechecks before @bilkobibitkov/git-viewer is installed.
+const LIB = '@bilkobibitkov/git-viewer';
+let builder: BuildPortfolio | null | undefined;
+
+export function setPortfolioBuilder(fn: BuildPortfolio | null | undefined): void {
+  builder = fn;
+}
+
+async function loadBuilder(): Promise<BuildPortfolio | null> {
+  if (builder !== undefined) return builder;
+  try {
+    const mod = await import(LIB) as { buildPortfolio?: BuildPortfolio };
+    builder = mod.buildPortfolio ?? null;
+  } catch (err: any) {
+    console.error(`[git-viewer] ${LIB} not loadable — hosted portfolios disabled:`, err?.message);
+    builder = null;
+  }
+  return builder;
+}
+
+// ── In-process generation queue ─────────────────────────────────────────────
+const jobs = new Map<string, Job>();   // queued or running, keyed by login
+const pending: string[] = [];
+let running = 0;
+const notFound = new Map<string, number>(); // login → expiry (ms)
+const failed = new Map<string, number>();
+
+/** Test hook: wait for the queue to drain. */
+export async function drainGitViewerQueue(): Promise<void> {
+  while (jobs.size > 0) await new Promise(r => setTimeout(r, 5));
+}
+
+/** Test hook: forget queue and negative-cache state. */
+export function resetGitViewerState(): void {
+  jobs.clear();
+  pending.length = 0;
+  running = 0;
+  notFound.clear();
+  failed.clear();
+}
+
+function isFresh(map: Map<string, number>, login: string): boolean {
+  const exp = map.get(login);
+  if (exp === undefined) return false;
+  if (exp > Date.now()) return true;
+  map.delete(login);
+  return false;
+}
+
+/** Queues a generation. A login already queued keeps one job (latest spec wins). */
+function enqueue(login: string, job: Job): boolean {
+  if (jobs.has(login)) {
+    jobs.set(login, job);
+    return true;
+  }
+  if (pending.length >= MAX_QUEUED) return false;
+  jobs.set(login, job);
+  pending.push(login);
+  pump();
+  return true;
+}
+
+function pump(): void {
+  while (running < MAX_CONCURRENT && pending.length > 0) {
+    const login = pending.shift()!;
+    const job = jobs.get(login)!;
+    running++;
+    void generate(login, job).finally(() => {
+      running--;
+      // A claim/upgrade that landed mid-run replaced the spec: run it again.
+      if (jobs.get(login) === job) jobs.delete(login);
+      else pending.push(login);
+      pump();
+    });
+  }
+}
+
+async function generate(login: string, job: Job): Promise<void> {
+  const build = await loadBuilder();
+  if (!build) return;
+  const paid = job.tier === 'paid';
+  try {
+    const { data, lockedCount } = await build({
+      user: login,
+      token: process.env.GITHUB_TOKEN || undefined,
+      maxProjects: paid ? PLAN_LIMITS.paid : PLAN_LIMITS.free,
+      allowlist: paid && job.allowlist?.length ? job.allowlist : undefined,
+      writing: paid ? 'profile-repo' : 'none',
+    });
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(login) DO UPDATE SET payload = excluded.payload, tier = excluded.tier,
+         locked_count = excluded.locked_count, updated_at = excluded.updated_at`,
+      login, JSON.stringify(data), job.tier, lockedCount, Math.floor(Date.now() / 1000),
+    );
+    failed.delete(login);
+  } catch (err: any) {
+    if (err?.status === 404) {
+      notFound.set(login, Date.now() + NOT_FOUND_TTL_MS);
+    } else {
+      console.error(`[git-viewer] generation failed for ${login}:`, err?.message ?? err);
+      failed.set(login, Date.now() + FAILED_TTL_MS);
+    }
+  }
+}
+
+// ── Entitlement ─────────────────────────────────────────────────────────────
+async function tierFor(row: Pick<ProfileRow, 'owner_email'> | undefined): Promise<Tier> {
+  if (!row?.owner_email) return 'free';
+  const sub = await getActiveSubscriptionLive(row.owner_email);
+  return sub.gitViewer || sub.isPro ? 'paid' : 'free';
+}
+
+function jobFor(row: Pick<ProfileRow, 'allowlist'> | undefined, tier: Tier): Job {
+  return { tier, allowlist: row?.allowlist ? JSON.parse(row.allowlist) as string[] : undefined };
+}
+
+function secondsToUtcMidnight(): number {
+  const now = new Date();
+  const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return Math.max(1, Math.ceil((midnight - now.getTime()) / 1000));
+}
+
+/** Daily refresh: claimed profiles older than 24h. Paid ones regenerate; lapsed paid ones drop to free. */
+export async function runGitViewerRefresh(): Promise<number> {
+  const cutoff = Math.floor(Date.now() / 1000) - STALE_SEC;
+  const rows = await dbAll<ProfileRow>(
+    `SELECT login, tier, owner_email, allowlist FROM git_viewer_profiles
+     WHERE owner_email IS NOT NULL AND updated_at < ? ORDER BY updated_at ASC LIMIT ?`,
+    cutoff, REFRESH_BATCH,
+  );
+  let queued = 0;
+  for (const row of rows) {
+    const tier = await tierFor(row);
+    if (tier === 'free' && row.tier === 'free') continue;
+    if (enqueue(row.login, jobFor(row, tier))) queued++;
+  }
+  return queued;
+}
+
+export function registerGitViewerRoutes(app: FastifyInstance): void {
+  app.get('/api/git-viewer/u/:login', async (req, reply) => {
+    const raw = (req.params as { login: string }).login;
+    if (!LOGIN_RE.test(raw)) return reply.code(404).send({ status: 'not_found' });
+    const login = raw.toLowerCase();
+    reply.header('cache-control', 'no-store');
+
+    const row = await dbGet<ProfileRow>('SELECT * FROM git_viewer_profiles WHERE login = ?', login);
+
+    if (row?.payload) {
+      const stale = row.updated_at < Math.floor(Date.now() / 1000) - STALE_SEC;
+      // Claimed free profiles can turn paid between daily refreshes (checkout just
+      // completed); the subscription lookup is cached for 5 minutes.
+      const tier = row.owner_email && row.tier === 'free' ? await tierFor(row) : row.tier;
+      if ((stale || tier !== row.tier) && !jobs.has(login) && !isFresh(failed, login)) {
+        enqueue(login, jobFor(row, tier));
+      }
+      reply.header('cache-control', 'public, max-age=300');
+      reply.header('content-type', 'application/json; charset=utf-8');
+      // payload is stored JSON — splice it in verbatim rather than re-parsing it.
+      return reply.send(
+        `{"status":"ready","login":${JSON.stringify(login)},"tier":${JSON.stringify(row.tier)},` +
+        `"lockedCount":${Number(row.locked_count)},"updatedAt":${JSON.stringify(new Date(row.updated_at * 1000).toISOString())},` +
+        `"data":${row.payload}}`,
+      );
+    }
+
+    if (isFresh(notFound, login)) return reply.code(404).send({ status: 'not_found' });
+    if (jobs.has(login)) return reply.code(202).send({ status: 'generating', retryAfterSec: POLL_AFTER_SEC });
+    if (isFresh(failed, login)) {
+      return reply.code(503).send({ status: 'error', retryAfterSec: Math.ceil(FAILED_TTL_MS / 1000) });
+    }
+    if (!(await loadBuilder())) return reply.code(503).send({ status: 'unavailable' });
+
+    // Only a NEW generation costs GitHub calls, so only that counts against the IP.
+    const ipHash = hashIp(req.ip);
+    const rate = await checkRateLimit(ipHash, GIT_VIEWER_ENDPOINT);
+    if (!rate.allowed) {
+      return reply.code(429).send({ status: 'rate_limited', retryAfterSec: secondsToUtcMidnight() });
+    }
+    if (!enqueue(login, jobFor(row, await tierFor(row)))) {
+      return reply.code(429).send({ status: 'rate_limited', retryAfterSec: 60 });
+    }
+    await incrementUsage(ipHash, GIT_VIEWER_ENDPOINT);
+    return reply.code(202).send({ status: 'generating', retryAfterSec: POLL_AFTER_SEC });
+  });
+
+  app.post('/api/git-viewer/claim', async (req, reply) => {
+    const body = req.body as { login?: unknown; allowlist?: unknown } | null;
+    const raw = typeof body?.login === 'string' ? body.login : '';
+    if (!LOGIN_RE.test(raw)) return reply.code(400).send({ error: 'Invalid GitHub login.' });
+    const login = raw.toLowerCase();
+
+    const allowlist = body?.allowlist ?? [];
+    if (
+      !Array.isArray(allowlist) || allowlist.length > PLAN_LIMITS.paid ||
+      !allowlist.every(n => typeof n === 'string' && REPO_NAME_RE.test(n))
+    ) {
+      return reply.code(400).send({ error: `allowlist must be up to ${PLAN_LIMITS.paid} repo names.` });
+    }
+
+    const user = await verifyClerkGitHubUser(req.headers.authorization);
+    if (!user) return reply.code(401).send({ error: 'Sign in required.' });
+    if (!user.githubLogins.includes(login)) {
+      return reply.code(403).send({ error: 'Your signed-in account is not linked to this GitHub login.' });
+    }
+
+    const allowlistJson = allowlist.length ? JSON.stringify(allowlist) : null;
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, allowlist, updated_at)
+       VALUES (?, '', 'free', 0, ?, ?, 0)
+       ON CONFLICT(login) DO UPDATE SET owner_email = excluded.owner_email, allowlist = excluded.allowlist`,
+      login, user.email, allowlistJson,
+    );
+    const tier = await tierFor({ owner_email: user.email });
+    enqueue(login, jobFor({ allowlist: allowlistJson }, tier));
+    return reply.send({ ok: true, login, tier, allowlist });
+  });
+
+  if (!process.env.VITEST) {
+    const timer = setInterval(() => {
+      runGitViewerRefresh().catch(err => console.error('[git-viewer] refresh failed:', err));
+    }, REFRESH_INTERVAL_MS);
+    timer.unref();
+    app.addHook('onClose', async () => clearInterval(timer));
+  }
+}

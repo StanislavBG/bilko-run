@@ -37,11 +37,11 @@ export interface SiteHeaderProps {
   rightSlot?: ReactNode;
 }
 
+/** Mirrors the host nav (`SECTIONS` in src/data/portfolio.ts) — keep them in sync. */
 export const DEFAULT_SECTIONS: readonly SiteSection[] = [
   { label: 'Home', href: 'https://bilko.run/' },
   { label: 'Projects', href: 'https://bilko.run/projects' },
   { label: 'Blog', href: 'https://bilko.run/blog' },
-  { label: 'Academy', href: 'https://bilko.run/projects/academy/' },
   { label: 'Contact', href: 'https://bilko.run/contact' },
 ];
 

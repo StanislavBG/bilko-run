@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { dbGet, dbRun } from '../db.js';
+import { entryForPriceType } from '../../shared/product-catalog.js';
 
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 let _stripe: Stripe | null = null;
@@ -77,7 +78,7 @@ export const GIT_VIEWER_TIER = 'git_viewer';
 
 // Map Stripe price IDs to plan tiers
 export function priceToPlanTier(priceId: string): string {
-  const gitViewer = process.env.STRIPE_PRICE_GITVIEWER;
+  const gitViewer = process.env.STRIPE_PRICE_GITVIEWER || entryForPriceType('git_viewer')?.defaultPriceId;
   if (gitViewer && priceId === gitViewer) return GIT_VIEWER_TIER;
   const proBiz = process.env.STRIPE_PRICE_CONTENTGRADE_BUSINESS;
   const proTeam = process.env.STRIPE_PRICE_CONTENTGRADE_TEAM;

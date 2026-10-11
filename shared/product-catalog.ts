@@ -54,7 +54,8 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   { priceType: 'publictrades_coffee',    envVar: 'STRIPE_PRICE_PUBLICTRADES_COFFEE',   defaultPriceId: 'price_1U2LEcR6w0VtQRLThguPtRCI', productKey: PRODUCT_KEYS.PUBLICTRADES_COFFEE,    mode: 'payment' },
   // $5/mo hosted Git Viewer portfolio. Subscription: the webhook records it in
   // stripe_subscriptions with plan_tier 'git_viewer' (priceToPlanTier), not as a purchase.
-  { priceType: 'git_viewer',             envVar: 'STRIPE_PRICE_GITVIEWER',             productKey: PRODUCT_KEYS.GIT_VIEWER,             mode: 'subscription' },
+  // Default is the live price on prod_VQ3LWcamPHLWbg 'Git Viewer Portfolio'.
+  { priceType: 'git_viewer',             envVar: 'STRIPE_PRICE_GITVIEWER',             defaultPriceId: 'price_1UPDEjR6w0VtQRLT1SKNJ3T1', productKey: PRODUCT_KEYS.GIT_VIEWER,             mode: 'subscription' },
 ];
 
 /** Public Stripe payment link for the live "Buy me a coffee" product (prod_V2Q4ego2oijqo4). */

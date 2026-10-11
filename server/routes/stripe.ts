@@ -82,7 +82,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       return { error: 'Stripe not configured' };
     }
 
-    const priceId = process.env[catalogEntry.envVar];
+    const priceId = process.env[catalogEntry.envVar] || catalogEntry.defaultPriceId;
     const mode = catalogEntry.mode;
 
     if (!priceId) {

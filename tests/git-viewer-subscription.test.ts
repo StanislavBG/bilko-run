@@ -17,6 +17,8 @@ const { initDb, dbRun } = await import('../server/db.js');
 const { getActiveSubscriptionLive, getSubscriptionTier, upsertCustomer, priceToPlanTier } =
   await import('../server/services/stripe.js');
 
+const { entryForPriceId } = await import('../shared/product-catalog.js');
+
 const sub = (id: string, price: string) => ({ id, current_period_end: 0, items: { data: [{ price: { id: price } }] } });
 
 beforeAll(async () => { await initDb(); });
@@ -28,6 +30,18 @@ beforeEach(async () => {
 describe('git_viewer subscription entitlement', () => {
   it('priceToPlanTier maps STRIPE_PRICE_GITVIEWER to git_viewer', () => {
     expect(priceToPlanTier('price_gv')).toBe('git_viewer');
+  });
+
+  it('with STRIPE_PRICE_GITVIEWER unset, the committed live price maps to git_viewer', () => {
+    const saved = process.env.STRIPE_PRICE_GITVIEWER;
+    delete process.env.STRIPE_PRICE_GITVIEWER;
+    try {
+      expect(priceToPlanTier('price_1UPDEjR6w0VtQRLT1SKNJ3T1')).toBe('git_viewer');
+      expect(entryForPriceId('price_1UPDEjR6w0VtQRLT1SKNJ3T1', {})?.productKey).toBe('git_viewer');
+      expect(priceToPlanTier('price_other')).toBe('pro');
+    } finally {
+      process.env.STRIPE_PRICE_GITVIEWER = saved;
+    }
   });
 
   it('git_viewer alone: gitViewer true, isPro false, DB tier stays free', async () => {

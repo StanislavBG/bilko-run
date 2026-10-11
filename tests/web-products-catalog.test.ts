@@ -35,9 +35,14 @@ const other: WebProduct = {
 const list = [demo, other];
 
 describe('catalog constants', () => {
-  it('has the 5 MiB cap and an empty catalog', () => {
+  it('has the 5 MiB cap and a valid catalog', () => {
     expect(MAX_RELEASE_BYTES).toBe(5 * 1024 * 1024);
-    expect(WEB_PRODUCTS).toEqual([]);
+    expect(WEB_PRODUCTS).toHaveLength(1);
+    expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
+  });
+
+  it('declares the launch-kit product', () => {
+    expect(webProductBySlug('launch-kit')?.productKey).toBe('wp_launch_kit');
     expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
   });
 });

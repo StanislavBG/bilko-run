@@ -43,7 +43,23 @@ export interface WebProduct {
 /** Hard cap on a stored release zip. */
 export const MAX_RELEASE_BYTES = 5 * 1024 * 1024;
 
-export const WEB_PRODUCTS: readonly WebProduct[] = [];
+export const WEB_PRODUCTS: readonly WebProduct[] = [
+  {
+    slug: 'launch-kit',
+    name: 'Bilko Launch Kit',
+    productKey: 'wp_launch_kit',
+    priceEnvVar: 'STRIPE_PRICE_WP_LAUNCH_KIT',
+    defaultPriceId: 'price_1UPEUuR6w0VtQRLTqFklclrS',
+    displayPrice: '$9',
+    downloadLimit: 20,
+    release: {
+      version: '1.0.0',
+      filename: 'bilko-launch-kit-1.0.0.zip',
+      bytes: 33920,
+      sha256: 'f74e8e96d7f9eb138d1c60af5e01441a57a44741dbf047a23a572925092efa4e',
+    },
+  },
+];
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 const SESSION_ID_RE = /^cs_(live|test)_[A-Za-z0-9]{10,250}$/;

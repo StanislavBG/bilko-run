@@ -135,7 +135,7 @@ Host code is framework by default — it should not know about one specific app.
 - AI-tool gateway routes — `server/routes/tools/`
 - Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
 - Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
-- SocialSignalsTrader coffee checkout — in `server/routes/stripe.ts`
+- Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer, home hero and Session Manager header
 - Game config — `shared/game-config.ts`
 - ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
 

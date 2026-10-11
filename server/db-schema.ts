@@ -500,6 +500,41 @@ export const MIGRATIONS = [
     id         TEXT PRIMARY KEY,
     applied_at INTEGER NOT NULL
   )`,
+  // Web products (paid downloads, see server/services/web-products.ts). Paid bytes
+  // live in the DB, pinned by the sha256 committed in shared/web-products.ts,
+  // because this repo is public and the zip must never be committed.
+  `CREATE TABLE IF NOT EXISTS web_product_orders (
+    checkout_session_id TEXT PRIMARY KEY,
+    slug           TEXT NOT NULL,
+    email          TEXT NOT NULL,
+    amount_total   INTEGER,
+    currency       TEXT,
+    payment_status TEXT,
+    created_at     INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_web_product_orders_slug_email ON web_product_orders(slug, email)`,
+  `CREATE TABLE IF NOT EXISTS web_product_downloads (
+    id INTEGER PRIMARY KEY,
+    slug                TEXT NOT NULL,
+    version             TEXT NOT NULL,
+    checkout_session_id TEXT,
+    email               TEXT,
+    via                 TEXT NOT NULL,
+    ip_hash             TEXT,
+    created_at          INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_web_product_downloads_slug_created ON web_product_downloads(slug, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_web_product_downloads_session ON web_product_downloads(checkout_session_id)`,
+  `CREATE TABLE IF NOT EXISTS web_product_releases (
+    slug        TEXT NOT NULL,
+    version     TEXT NOT NULL,
+    filename    TEXT NOT NULL,
+    sha256      TEXT NOT NULL,
+    bytes       INTEGER NOT NULL,
+    content     BLOB NOT NULL,
+    uploaded_at INTEGER NOT NULL,
+    PRIMARY KEY (slug, version)
+  )`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

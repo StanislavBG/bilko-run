@@ -1,5 +1,11 @@
 import { resolve, sep } from 'node:path';
-import { SlugSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
+import {
+  SlugSchema,
+  RegistrySchema,
+  RegistryProjectSchema,
+  type ProjectStatus,
+  type RegistryProject,
+} from './contract/registry.js';
 
 export type GateName = 'budget' | 'golden' | 'a11y' | 'audit';
 
@@ -72,5 +78,45 @@ export function parseRegistry(raw: string): RegistryProject[] {
     throw new Error(`invalid registry entry (slug "${slug}", field "${field}"): ${issue?.message ?? 'validation failed'}`);
   }
 
+  return result.data;
+}
+
+export function buildStaticEntry(input: {
+  slug: string;
+  name: string;
+  tagline: string;
+  category: string;
+  status: ProjectStatus;
+  year: number;
+  sourceRepo?: string;
+  localPath?: string;
+  tags?: string[];
+  public?: boolean;
+  displayName?: string;
+}): RegistryProject {
+  const candidate = {
+    slug: input.slug,
+    name: input.name,
+    tagline: input.tagline,
+    category: input.category,
+    status: input.status,
+    year: input.year,
+    host: {
+      kind: 'static-path' as const,
+      path: `/projects/${input.slug}/`,
+      ...(input.sourceRepo ? { sourceRepo: input.sourceRepo } : {}),
+      ...(input.localPath ? { localPath: input.localPath } : {}),
+    },
+    ...(input.tags && input.tags.length > 0 ? { tags: input.tags } : {}),
+    ...(typeof input.public === 'boolean' ? { public: input.public } : {}),
+    ...(input.displayName ? { displayName: input.displayName } : {}),
+  };
+
+  const result = RegistryProjectSchema.safeParse(candidate);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const field = issue?.path.join('.') || 'unknown';
+    throw new Error(`invalid registry entry (slug "${input.slug}", field "${field}"): ${issue?.message ?? 'validation failed'}`);
+  }
   return result.data;
 }

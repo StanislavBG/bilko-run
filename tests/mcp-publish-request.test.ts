@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { projectDir, parseBypass, parseRegistry } from '../mcp-host-server/src/publish-request.js';
+import { projectDir, parseBypass, parseRegistry, buildStaticEntry } from '../mcp-host-server/src/publish-request.js';
 
 const ROOT = resolve(__dirname, '..');
 const REGISTRY_JSON = resolve(ROOT, 'src/data/standalone-projects.json');
@@ -115,5 +115,57 @@ describe('parseRegistry', () => {
 
   it('throws on invalid JSON', () => {
     expect(() => parseRegistry('{not json')).toThrow();
+  });
+});
+
+describe('buildStaticEntry', () => {
+  const base = {
+    slug: 'my-app',
+    name: 'My App',
+    tagline: 'does things',
+    category: 'Tools',
+    status: 'live' as const,
+    year: 2026,
+  };
+
+  it('yields no optional keys for minimal input', () => {
+    const entry = buildStaticEntry(base);
+    expect(Object.keys(entry)).toEqual(['slug', 'name', 'tagline', 'category', 'status', 'year', 'host']);
+    expect(entry.host).toEqual({ kind: 'static-path', path: '/projects/my-app/' });
+  });
+
+  it('carries public true and displayName through, in registry key order', () => {
+    const entry = buildStaticEntry({
+      ...base,
+      sourceRepo: 'https://github.com/x/y',
+      localPath: '~/Projects/Y',
+      tags: ['a'],
+      public: true,
+      displayName: 'My App Pro',
+    });
+    expect(Object.keys(entry)).toEqual([
+      'slug', 'name', 'tagline', 'category', 'status', 'year', 'host', 'tags', 'public', 'displayName',
+    ]);
+    expect(entry.public).toBe(true);
+    expect(entry.displayName).toBe('My App Pro');
+    expect(entry.host).toEqual({
+      kind: 'static-path',
+      path: '/projects/my-app/',
+      sourceRepo: 'https://github.com/x/y',
+      localPath: '~/Projects/Y',
+    });
+  });
+
+  it('keeps public false as false', () => {
+    const entry = buildStaticEntry({ ...base, public: false });
+    expect(entry.public).toBe(false);
+  });
+
+  it('omits empty tags', () => {
+    expect('tags' in buildStaticEntry({ ...base, tags: [] })).toBe(false);
+  });
+
+  it('throws naming the field for a 61-character displayName', () => {
+    expect(() => buildStaticEntry({ ...base, displayName: 'x'.repeat(61) })).toThrowError(/displayName/);
   });
 });

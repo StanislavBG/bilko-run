@@ -23,6 +23,8 @@ export const COPY = {
     "tagline": "— the Claude Code supercharger",
     "manualLink": "Field Manual (it's free) →",
     "manualLinkNotFree": "Field Manual →",
+    "coffeeLink": "Buy me a coffee ☕",
+    "coffeeHref": "/coffee",
     "account": {
       "signIn": "Sign in",
       "signedInPrefixSr": "Signed in as",

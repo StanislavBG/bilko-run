@@ -225,6 +225,16 @@
   color: var(--smlp-rust);
 }
 
+.smlp-root .smlp-header__coffee {
+  color: var(--smlp-ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.smlp-root .smlp-header__coffee:hover {
+  color: var(--smlp-rust);
+}
+
 .smlp-chip {
   display: flex;
   align-items: center;
@@ -1517,6 +1527,14 @@
 @media (max-width: 559px) {
   .smlp-root--reflow .smlp-header__manual {
     display: none;
+  }
+
+  .smlp-root--reflow .smlp-header__right {
+    gap: 10px;
+  }
+
+  .smlp-root--reflow .smlp-header__coffee {
+    font-size: 13px;
   }
 }
 

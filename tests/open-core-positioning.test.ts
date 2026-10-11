@@ -160,7 +160,8 @@ describe('open-core positioning: the app is free and stays free, and so is the m
   });
 
   it('the manual is free: no checkout, no buy UI, no manual price on the page', () => {
-    const text = pageProse();
+    // The header's tip jar ("Buy me a coffee") is a tip link, not a manual checkout.
+    const text = pageProse().replaceAll(COPY.header.coffeeLink, '');
     for (const banned of [
       'startSessionManagerCheckout',
       'sessionManagerCheckout',

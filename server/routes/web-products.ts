@@ -1,19 +1,22 @@
 import type { FastifyInstance } from 'fastify';
-import { getStripe } from '../services/stripe.js';
+import { getStripe, hasPurchased } from '../services/stripe.js';
+import { verifyClerkToken } from '../clerk.js';
 import { dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import {
-  countSessionDownloads, findOrder, getRelease, recordDownload, recordOrder,
+  countSessionDownloads, findOrder, getRelease, hasOrderForEmail, recordDownload, recordOrder,
+  storeRelease,
   type WebProductOrder,
 } from '../services/web-products.js';
 import {
-  WEB_PRODUCTS, isValidCheckoutSessionId, isValidWebProductSlug,
+  MAX_RELEASE_BYTES, WEB_PRODUCTS, isValidCheckoutSessionId, isValidReleaseVersion, isValidWebProductSlug,
   resolveWebProductPriceId, webProductBySlug, type WebProduct,
 } from '../../shared/web-products.js';
 
 const RATE_WINDOW_MS = 60_000;
 const CHECKOUT_LIMIT = 10;
 const DELIVERY_LIMIT = 30;
+const UPLOAD_LIMIT = 5;
 
 const rateCounts = new Map<string, { count: number; windowStart: number }>();
 
@@ -239,6 +242,81 @@ export function registerWebProductRoutes(
       checkoutSessionId: sessionId,
       email: order.email || null,
       via: 'session',
+      ipHash: hashIp(req.ip),
+    });
+    return reply
+      .header('Content-Type', 'application/zip')
+      .header('Content-Disposition', `attachment; filename="${release.filename}"`)
+      .header('Cache-Control', 'private, no-store')
+      .header('X-Content-Type-Options', 'nosniff')
+      .send(release.content);
+  });
+
+  // Content-addressed release fill. No auth on purpose: anyone may PUT, but the
+  // server stores bytes only if they exactly match the sha256 and size committed
+  // in shared/web-products.ts, and only once. That keeps the paid zip out of the
+  // public repo without a deploy secret — an attacker can only upload the bytes
+  // we already declared. The zip parser is scoped to this plugin so the global
+  // JSON/rawBody parsers elsewhere are untouched.
+  app.register(async (scope) => {
+    scope.addContentTypeParser(
+      ['application/zip', 'application/octet-stream'],
+      { parseAs: 'buffer', bodyLimit: MAX_RELEASE_BYTES },
+      (_req, body, done) => done(null, body),
+    );
+    scope.put('/api/web-products/:slug/releases/:version', async (req, reply) => {
+      const { slug, version } = req.params as { slug?: string; version?: string };
+      const product = lookup(slug);
+      if (!product || !isValidReleaseVersion(version)) {
+        reply.status(404);
+        return { error: 'Not found' };
+      }
+      if (!rateOk(`wp-upload:${req.ip}`, UPLOAD_LIMIT)) {
+        reply.status(429);
+        return { error: 'Too many requests. Try again in a minute.' };
+      }
+      const body = req.body;
+      const result = Buffer.isBuffer(body) ? await storeRelease(product, version, body) : 'mismatch';
+      if (result === 'undeclared') {
+        reply.status(404);
+        return { error: 'Not found' };
+      }
+      if (result === 'mismatch') {
+        reply.status(422);
+        return { error: 'Bytes do not match the declared release.' };
+      }
+      if (result === 'exists') {
+        reply.status(409);
+        return { error: 'Release already stored.' };
+      }
+      reply.status(201);
+      return { stored: true, sha256: product.release!.sha256, bytes: product.release!.bytes };
+    });
+  });
+
+  // Re-download for buyers who lost their session link: Clerk-authenticated, and
+  // entitled by a recorded order for the email or a purchase/comp-grant row.
+  app.get('/api/web-products/:slug/account-download', async (req, reply) => {
+    const product = lookup((req.params as { slug?: string }).slug);
+    if (!product) return reply.status(404).send({ error: 'Not found' });
+    if (!rateOk(`wp-account:${req.ip}`, DELIVERY_LIMIT)) {
+      return reply.status(429).send({ error: 'Too many requests. Try again in a minute.' });
+    }
+    const email = await verifyClerkToken(req.headers.authorization);
+    if (!email) return reply.status(401).send({ error: 'Sign in required.' });
+    if (!(await hasOrderForEmail(product.slug, email)) && !(await hasPurchased(email, product.productKey))) {
+      return reply.status(402).send({ paid: false });
+    }
+    const release = product.release ? await getRelease(product.slug, product.release.version) : null;
+    if (!release || !product.release) {
+      return reply.status(404).send({ error: 'Release not available' });
+    }
+    await recordDownload({
+      slug: product.slug,
+      version: product.release.version,
+      checkoutSessionId: null,
+      email,
+      via: 'account',
       ipHash: hashIp(req.ip),
     });
     return reply

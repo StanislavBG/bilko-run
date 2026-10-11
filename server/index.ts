@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'fs';
 import { initDb, dbAll } from './db.js';
 import { registerToolRoutes } from './routes/tools/index.js';
 import { registerStripeRoutes } from './routes/stripe.js';
+import { registerWebProductRoutes } from './routes/web-products.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerBlogRoutes } from './routes/blog.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
@@ -145,6 +146,7 @@ registerEgressMeter(app);
 // Register API routes
 registerToolRoutes(app);
 registerStripeRoutes(app);
+registerWebProductRoutes(app);
 // Resolved here (before the blog routes) because they scan for videos at boot.
 const distCandidates = [
   resolve(__dirname, '..', '..', 'dist'),  // dist-server/server/ → dist/

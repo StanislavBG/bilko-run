@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "slug": "launch-kit",
+  "version": "1.0.0",
+  "builtAt": "2026-10-11T05:05:47.783Z",
+  "gitSha": "e644449",
+  "gitBranch": "main",
+  "hostKit": {
+    "version": "0.0.0"
+  },
+  "golden": {
+    "path": "/projects/launch-kit/",
+    "expect": "Launch Kit"
+  },
+  "health": {},
+  "bundle": {
+    "sizeBytesGz": 61210,
+    "fileCount": 6
+  }
+}

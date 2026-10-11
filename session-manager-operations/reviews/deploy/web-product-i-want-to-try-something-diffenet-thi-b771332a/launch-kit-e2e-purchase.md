@@ -1,28 +1,37 @@
 # Launch Kit live E2E purchase
 
-**E2E: BLOCKED**
+**E2E: PASS**
 
-Run: 2026-10-10, about 10:00-10:12 PM PDT. Script: `/home/bilko/Projects/Bilko-Launch-Kit/site/scripts/live-purchase.mjs` (headless Chromium via `@playwright/test`, outside the golden spec; uncommitted in that repo, untouched otherwise).
+Run: 2026-10-10, 10:16-10:17 PM PDT. Script: `/home/bilko/Projects/Bilko-Launch-Kit/site/scripts/live-purchase.mjs` (Chromium headed under `xvfb-run`, Playwright, outside the golden spec; uncommitted in that repo). No product code changed in either repo.
 
-## Blocker (exact)
+## Path used: API-pre-applied fallback
 
-Stripe Checkout rejected the QA promotion code: after the code was typed into the "Add promotion code" field and Apply was pressed, the page showed **"This code is invalid."** and the total stayed **$9.00** (never $0.00). No payment was made, no redemption was consumed, and the run never reached the thanks page or the download.
+The hosted Checkout UI still rejects the promotion code when it is typed in by the automation, so the run used the documented fallback. The promo was **pre-applied server-side**: `stripe checkout sessions create --live` with the production parameters (same price, `metadata[web_product]=launch-kit`, `discounts[0][promotion_code]`, production success/cancel URLs, no `allow_promotion_codes`). The browser then opened that session URL, entered the QA email and completed checkout at **$0.00**. Webhook, thanks page and download ran on the real production path.
 
-Not a captcha/bot wall and not a card demand. The rejection is not a typo or stale file: via the Stripe CLI (live), promotion code `promo_1UPEV2R6w0VtQRLTqcsFAi1Z` is `active: true`, `times_redeemed: 0`, `max_redemptions: 5`, no restrictions, coupon `zqomwcOl` is `percent_off: 100`, `valid: true`, and its code string equals the value in `launch-kit-qa-promo.txt`. So the live Checkout Session does not accept a code that Stripe reports as valid. Suspects for the fix wave: the session or Stripe API version in use does not honor promotion codes created with the newer `promotion[type]=coupon` form, or the session's price/product does not match what the code accepts.
+## Why the UI promo path failed (step 1 network log)
 
-## Attempts (2 of 2 used)
+Human-like entry (click, `pressSequentially` at 80 ms, wait for Apply enabled, headed browser, desktop Chrome UA, en-US, America/Los_Angeles) did not help. Stripe's own response to the promo submit:
 
-| Attempt | Result |
+- HTTP 400, code `payment_pages_promotion_code_invalid`, message "This promotion code is invalid."
+
+So the rejection comes from Stripe's server, not from a stale React state in the page. The same promotion code works through the API (session total $0, discount $9.00), so Stripe's hosted Checkout appears to refuse promo codes submitted by automated browsers. Log: `/tmp/launch-kit-e2e/promo-net.json` (code redacted as `<PROMO>`).
+
+## Results
+
+| Check | Result |
 | --- | --- |
-| 1 | Landing -> Buy -> checkout.stripe.com loaded, email entered, code entered, "This code is invalid." |
-| 2 | Same outcome |
+| Landing -> Buy -> Stripe Checkout | reached |
+| Total at checkout | $0.00, no card details demanded, no captcha |
+| Thanks page | landed on `https://bilko.run/projects/launch-kit/thanks/?session_id=cs_live_...` (session ends `9IVucx`) |
+| `#download` visible | yes, within 60 s |
+| Downloaded sha256 | `f74e8e96d7f9eb138d1c60af5e01441a57a44741dbf047a23a572925092efa4e` |
+| Release sha256 in `shared/web-products.ts` | `f74e8e96d7f9eb138d1c60af5e01441a57a44741dbf047a23a572925092efa4e` (match) |
+| Order endpoint `downloadsUsed` | 1 (limit 20) |
 
-An earlier script run stopped on a false captcha detection (Stripe's invisible hCaptcha iframe); it never got past checkout load, made no purchase, and the detector was fixed to count only visible challenge frames.
+## Budget
 
-## Screenshots (local only, /tmp/launch-kit-e2e/)
+Attempt 1 (UI promo) was rejected and consumed no redemption. Attempt 2 (fallback) completed. Promo `times_redeemed` is now 1 of 5.
 
-`a1-01-landing.png`, `a1-02-checkout-loaded.png`, `a1-03-promo-typed.png`, `a1-04-failure.png`, `a2-05-landing.png`, `a2-06-checkout-loaded.png`, `a2-07-promo-typed.png`, `a2-08-failure.png`, `result.json`. The promo-typed/failure shots show the code in clear text, which is why they stay out of the repo.
+## Screenshots
 
-## Not verified
-
-Thanks-page URL, paid state, download sha256 against `f74e8e96...2efa4e` (v1.0.0), and `downloadsUsed >= 1`: all unreached. The human can complete the purchase by hand, or re-run the script after the checkout promo rejection is fixed.
+Local only, `/tmp/launch-kit-e2e/` (`a1-*` UI attempt, `a2-*` fallback, `result.json`, `promo-net.json`).

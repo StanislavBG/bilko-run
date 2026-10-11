@@ -410,6 +410,36 @@ Access all three from `@bilkobibitkov/host-kit`'s `useLeaderboard(slug, opts)`, 
 
 Score submission is rate-limited to 60/hour per (user × game) and scores above `maxPlausibleScore` are rejected with 400. Optional HMAC: set `BILKO_GAME_HMAC_KEY`; the client signs `${slug}:${score}:${mode}:${ts}` and the server validates the `sig` field on POST.
 
+## Selling a downloadable web product
+
+A web product is a paid zip sold from a static-path landing page at `/projects/<slug>/`. Declared once in `shared/web-products.ts` (`WEB_PRODUCTS`); routes, the Stripe webhook and `/admin` → Products read from it. Slugs not in `WEB_PRODUCTS` (or failing the slug regex) return 404 on every route below.
+
+### Endpoints
+
+All responses are JSON unless noted. Rate limits are per IP per minute.
+
+| Endpoint | Auth | Success | Errors |
+|---|---|---|---|
+| `GET /api/web-products/:slug` | none | 200 `{ slug, name, displayPrice, version, available }` (`available` = release bytes stored + price id + Stripe configured; `Cache-Control: no-store`) | 404 unknown slug |
+| `POST /api/web-products/:slug/checkout` | none | 200 `{ url }` — Stripe Checkout (`mode: payment`, `metadata.web_product=<slug>`, success → `/projects/<slug>/thanks/?session_id=…`, cancel → `/projects/<slug>/?checkout=cancel`); logs a `checkout_start` funnel event | 404 unknown slug · 429 (10/min) · 503 Stripe or price unconfigured · 502 Stripe error |
+| `GET /api/web-products/:slug/order?session_id=cs_…` | possession of the Checkout session id; verified against Stripe (session metadata slug, complete + paid, line item price matches) and recorded | 200 `{ paid: true, slug, name, version, filename, bytes, downloadsUsed, downloadsLimit, email }` (email masked) | 400 bad session id · 402 `{ paid: false }` not paid · 404 unknown slug / session not for this product · 429 (30/min) · 502 Stripe unreachable |
+| `GET /api/web-products/:slug/download?session_id=cs_…` | same as `/order` | 200 `application/zip` attachment, `private, no-store`; records a download (`via: session`) | same as `/order`, plus 429 when the per-purchase `downloadLimit` is used up · 404 release not stored |
+| `PUT /api/web-products/:slug/releases/:version` | **none, by design** — body (`application/zip` or `application/octet-stream`, ≤ 5 MB) must match the committed `sha256` + `bytes` exactly, and is stored only once | 201 `{ stored: true, sha256, bytes }` | 404 unknown slug / invalid version / version not declared · 422 bytes don't match · 409 already stored · 429 (5/min) |
+| `GET /api/web-products/:slug/account-download` | Clerk Bearer token; entitled by a recorded order for the token's email or a `wp_<slug>` purchase/comp-grant row | 200 `application/zip` (records `via: account`) | 401 not signed in · 402 `{ paid: false }` · 404 unknown slug / release not stored · 429 (30/min) |
+| `GET /api/admin/web-products?days=30` | `requireAdmin` (`days` clamped 1–365) | 200 `{ days, products[], daily[] }` — per product: views, unique visitors, checkout starts, orders, revenue (cents), downloads, unique download sessions, last order/download, `releaseStored`; `daily` is per-slug per-day counts | 401/403 per `requireAdmin` |
+
+The Stripe webhook (`checkout.session.completed`) dispatches on `metadata.web_product` before any generic branch: it records the order only if paid, the line-item price equals the product's resolved price id, and an email is present; it also writes a one-time purchase row (`productKey` = `wp_<slug>`). `/stripe/success` redirects web-product sessions to the product's thanks page.
+
+### Playbook (new product)
+
+1. **Stripe:** create a live Product + one-time Price. Set product/session metadata `web_product=<slug>` (the checkout route sets it on the session; the webhook relies on it).
+2. **Build the zip** in a **private** sibling repo — never in this repo. Record the filename, byte size (≤ 5 MB) and sha256.
+3. **Declare it:** add a `WEB_PRODUCTS` entry in `shared/web-products.ts` — `slug`, `name`, `productKey` (`wp_` + slug with `-` → `_`), `priceEnvVar` (`STRIPE_PRICE_WP_*`), `defaultPriceId`, `displayPrice`, `downloadLimit`, and `release: { version, filename, bytes, sha256 }`. `validateWebProducts` checks the shape. Commit and push to `origin/main`; Render deploys. The env var, when set, overrides `defaultPriceId`.
+4. **Upload the bytes once:** `curl -X PUT --data-binary @<file>.zip -H 'Content-Type: application/zip' https://bilko.run/api/web-products/<slug>/releases/<version>`. No secret is needed — the server stores only bytes matching the committed sha256, once (409 afterwards). Confirm `GET /api/web-products/<slug>` returns `available: true`.
+5. **Landing page** in the sibling repo, published to `/projects/<slug>/` (static-path, see above): the buy button `POST`s `/api/web-products/<slug>/checkout` and redirects to the returned `url`; read `GET /api/web-products/<slug>` to show price/availability.
+6. **Thanks page** at `/projects/<slug>/thanks/`: read `session_id` from the query, call `GET …/order?session_id=` to show status and then `GET …/download?session_id=` for the file. If the link is lost or the session id is missing, offer sign-in (Clerk) and call `GET …/account-download` with the Bearer token.
+7. **Monitor** in `/admin` → Products (views, checkout starts, orders, revenue, downloads, release stored).
+
 ## Why this contract exists
 
 The AI tools were originally built as one product with one codebase. They've grown into independent products that happen to share a host. This contract makes that explicit, so:

@@ -128,6 +128,9 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/gemini.ts` — Gemini API client (key via header, not URL)
 - `server/utils.ts` — `parseJsonResponse` (shared Gemini output parser)
 
+### Web products (paid downloads)
+Paid zips sold from a static-path landing page. Declared in `shared/web-products.ts` (`WEB_PRODUCTS`: price id, release version/filename/bytes/sha256); public + delivery + content-addressed upload routes in `server/routes/web-products.ts`; admin metrics (`/admin` → Products) in `server/routes/admin-web-products.ts`; order/release/download storage in `server/services/web-products.ts`. The Stripe webhook dispatches on `metadata.web_product`. Endpoint table and the new-product playbook: the "Selling a downloadable web product" section of [`docs/host-contract.md`](docs/host-contract.md).
+
 ### Sanctioned app-specific host code
 
 Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
@@ -159,6 +162,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 - **Push to `origin` (`StanislavBG/bilko-run`) `main` only.** The `content-grade` remote is a separate project — **never push Bilko there** (the old "push to both" rule is dead; histories have diverged)
 - Render auto-deploys from `origin` (`bilko-run`) `main` — deploy source set in the Render dashboard
 - Static-path app fixes belong in the **sibling repo that owns the source**, not the published copy under `public/projects/<slug>/` (the publisher overwrites it)
+- **Paid download bytes never go in this repo (it is public on GitHub) — commit only their sha256 in `shared/web-products.ts`; the bytes live in the `web_product_releases` table.**
 - Env vars managed via Render dashboard
 
 ## Testing

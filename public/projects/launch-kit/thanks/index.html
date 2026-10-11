@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your download — Bilko Launch Kit</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/projects/launch-kit/assets/thanks-CMENpbOc.js"></script>
+  <link rel="modulepreload" crossorigin href="/projects/launch-kit/assets/track-BaSFjghc.js">
+  <link rel="stylesheet" crossorigin href="/projects/launch-kit/assets/track-VD1217ez.css">
+</head>
+<body class="thanks">
+  <main class="thanks-card">
+    <section data-state="pending">
+      <p class="mono">T-0 · confirming your payment</p>
+      <h1>Confirming your payment…</h1>
+      <p>Hang tight. This usually takes a few seconds.</p>
+    </section>
+
+    <section data-state="paid" hidden>
+      <p class="mono">T-0 · payment received</p>
+      <h1>You're cleared for launch</h1>
+      <ul class="facts">
+        <li>Receipt for <strong id="email"></strong></li>
+        <li>Bilko Launch Kit v<span id="version"></span></li>
+        <li>Downloads used: <span id="used"></span></li>
+      </ul>
+      <a id="download" class="pill" href="#">Download the Launch Kit</a>
+      <h2>Install in 3 steps</h2>
+      <ol>
+        <li>Unzip the download.</li>
+        <li>Copy the skill folders into <code>~/.claude/skills/</code> (or your project's <code>.claude/skills/</code>).</li>
+        <li>Open Claude and ask it to run the first skill; it tells you what to fire next.</li>
+      </ol>
+      <p><strong>Bookmark this page.</strong> It is your download link. Lost it? Sign in with your purchase email on the Launch Kit page.</p>
+    </section>
+
+    <section data-state="limit" hidden>
+      <p class="mono">T-0 · limit reached</p>
+      <h1>Download limit reached</h1>
+      <p>This purchase has used all of its downloads. Sign in with your purchase email to download again.</p>
+      <button id="recover-limit" class="pill" type="button">Sign in to re-download</button>
+    </section>
+
+    <section data-state="error" hidden>
+      <p class="mono">T-0 · hold</p>
+      <h1>We couldn't find that order</h1>
+      <p>The link may be incomplete or still processing. Try again in a minute, or <a data-help href="https://bilko.run/contact">contact us</a> and we will sort it out.</p>
+      <button id="recover" class="pill" type="button">Sign in to re-download</button>
+    </section>
+
+    <p id="recover-msg" class="note" role="status" hidden></p>
+    <a class="pill" href="/projects/launch-kit/">Back to the Launch Kit</a>
+  </main>
+</body>
+</html>

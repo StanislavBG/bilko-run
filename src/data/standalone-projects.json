@@ -62,7 +62,6 @@
     "tagline": "A clean, calm, free Sudoku — Bilko's second game.",
     "category": "Game · Puzzle",
     "status": "live",
-    "launchedAt": "2026-05-09",
     "year": 2026,
     "host": {
       "kind": "static-path",
@@ -74,7 +73,8 @@
       "Game",
       "Puzzle",
       "Free"
-    ]
+    ],
+    "launchedAt": "2026-05-09"
   },
   {
     "slug": "mindswiffer",
@@ -82,7 +82,6 @@
     "tagline": "Minesweeper, swept clean. No 50/50s, ever.",
     "category": "Game · Puzzle",
     "status": "live",
-    "launchedAt": "2026-05-09",
     "year": 2026,
     "host": {
       "kind": "static-path",
@@ -95,7 +94,8 @@
       "Puzzle",
       "Free",
       "No-guess"
-    ]
+    ],
+    "launchedAt": "2026-05-09"
   },
   {
     "slug": "session-manager",
@@ -416,7 +416,6 @@
     "tagline": "A clean-room nonogram. Solvable by thinking, never by guessing.",
     "category": "Game · Puzzle",
     "status": "live",
-    "launchedAt": "2026-05-10",
     "year": 2026,
     "host": {
       "kind": "static-path",
@@ -429,7 +428,8 @@
       "Puzzle",
       "Free",
       "No-guess"
-    ]
+    ],
+    "launchedAt": "2026-05-10"
   },
   {
     "slug": "cellar",
@@ -437,7 +437,6 @@
     "tagline": "FreeCell, clean-room. Every deal solver-verified. Daily challenge included.",
     "category": "Game · Card",
     "status": "live",
-    "launchedAt": "2026-05-09",
     "year": 2026,
     "host": {
       "kind": "static-path",
@@ -451,7 +450,8 @@
       "FreeCell",
       "Daily",
       "Free"
-    ]
+    ],
+    "launchedAt": "2026-05-09"
   },
   {
     "slug": "signal-builder",
@@ -511,5 +511,22 @@
       "Free"
     ],
     "public": true
+  },
+  {
+    "slug": "launch-kit",
+    "name": "Bilko Launch Kit",
+    "tagline": "8 Claude skills that take your product from it-works to launched. $9.",
+    "category": "Claude Skills · Download",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/launch-kit/",
+      "localPath": "~/Projects/Bilko-Launch-Kit"
+    },
+    "tags": [
+      "Claude Code",
+      "Paid"
+    ]
   }
 ]

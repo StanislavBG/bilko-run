@@ -15,6 +15,8 @@ import {
   entryForPriceId,
   type PriceType,
 } from '../../shared/product-catalog.js';
+import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId } from '../../shared/web-products.js';
+import { recordOrder } from '../services/web-products.js';
 
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -178,7 +180,44 @@ export function registerStripeRoutes(app: FastifyInstance): void {
           await upsertCustomer(email, stripeCustomerId);
         }
 
-        if (data.mode === 'subscription' && email && stripeCustomerId) {
+        // Web products (paid downloads) are dispatched first and never fall through
+        // to the generic branches below, which would book them as 'unattributed'.
+        const wpSlug = typeof data.metadata?.web_product === 'string' ? data.metadata.web_product : '';
+        const webProduct = wpSlug ? webProductBySlug(wpSlug, WEB_PRODUCTS) : undefined;
+
+        if (webProduct) {
+          const paidOk = data.payment_status === 'paid' || data.payment_status === 'no_payment_required';
+          let priceOk = false;
+          if (paidOk) {
+            const lineItems = await stripe.checkout.sessions.listLineItems(data.id, { limit: 1 });
+            const seenPriceId = lineItems.data[0]?.price?.id;
+            priceOk = !!seenPriceId && seenPriceId === resolveWebProductPriceId(webProduct, process.env);
+          }
+          const wpEmail = ((data.customer_details?.email ?? data.customer_email ?? '') as string).trim().toLowerCase();
+          if (!paidOk || !priceOk || !wpEmail) {
+            console.error(
+              `[stripe_webhook] web product ${webProduct.slug} session ${data.id} not recorded — ` +
+              `payment_status=${data.payment_status} priceMatch=${priceOk} email=${wpEmail ? 'present' : 'missing'}`,
+            );
+          } else {
+            await recordOrder({
+              checkoutSessionId: data.id,
+              slug: webProduct.slug,
+              email: wpEmail,
+              amountTotal: data.amount_total ?? null,
+              currency: data.currency ?? null,
+              paymentStatus: data.payment_status,
+            });
+            if (stripeCustomerId) {
+              await saveOneTimePurchase({
+                email: wpEmail,
+                stripe_customer_id: stripeCustomerId,
+                stripe_payment_intent_id: (data.payment_intent ?? data.id) as string,
+                product_key: webProduct.productKey,
+              });
+            }
+          }
+        } else if (data.mode === 'subscription' && email && stripeCustomerId) {
           let planTier = 'pro';
           try {
             const stripe = getStripe()!;
@@ -320,6 +359,14 @@ export function registerStripeRoutes(app: FastifyInstance): void {
 
     try {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      // Web-product buyers go to the product's own thanks page. Checked before
+      // payment_status so 100%-off (no_payment_required) sessions don't dead-end.
+      const wpMeta = (session.metadata as Record<string, string> | null)?.web_product;
+      const wpProduct = typeof wpMeta === 'string' ? webProductBySlug(wpMeta, WEB_PRODUCTS) : undefined;
+      if (wpProduct) {
+        return reply.redirect(`/projects/${wpProduct.slug}/thanks/?session_id=${encodeURIComponent(sessionId)}`, 302);
+      }
 
       if (session.payment_status !== 'paid') {
         reply.type('text/html').status(402);

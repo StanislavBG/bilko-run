@@ -40,6 +40,13 @@ export function HomePage() {
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
             <button className="pf-btn" onClick={() => navigate('/projects')}>See the work →</button>
             <button className="pf-btn ghost" onClick={() => navigate('/contact')}>Get in touch</button>
+            <a
+              href="/coffee"
+              className="pf-btn ghost"
+              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+            >
+              Buy me a coffee ☕
+            </a>
           </div>
         </div>
         <div className="pf-hero-side">

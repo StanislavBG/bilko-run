@@ -167,6 +167,7 @@ export function Layout() {
           <h4>Elsewhere</h4>
           <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer">GitHub →</a>
           <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer">Twitter →</a>
+          <a href="/coffee">Buy me a coffee ☕ →</a>
           <a href="mailto:bilko@bilko.run">Email →</a>
           <Link to="/privacy">Privacy →</Link>
           <Link to="/terms">Terms →</Link>

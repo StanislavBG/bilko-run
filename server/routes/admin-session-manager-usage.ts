@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
@@ -36,10 +37,29 @@ function median(values: number[]): number {
   return xs.length % 2 ? xs[mid] : Math.round((xs[mid - 1] + xs[mid]) / 2);
 }
 
+// Headless read access for the owner's scripts/MCP. SM_USAGE_READ_TOKEN is the
+// dedicated secret; PROJECT_SNAPSHOT_TOKEN (already held locally) is a fallback.
+// A Bearer matching neither falls through to requireAdmin — Clerk JWTs are Bearer too.
+function hasReadToken(authHeader: unknown): boolean {
+  const auth = typeof authHeader === 'string' ? authHeader : '';
+  if (!auth.startsWith('Bearer ')) return false;
+  const presented = Buffer.from(auth.slice(7));
+  if (presented.length === 0) return false;
+  for (const name of ['SM_USAGE_READ_TOKEN', 'PROJECT_SNAPSHOT_TOKEN']) {
+    const expected = process.env[name];
+    if (!expected) continue;
+    const want = Buffer.from(expected);
+    if (want.length === presented.length && timingSafeEqual(want, presented)) return true;
+  }
+  return false;
+}
+
 export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
   app.get('/api/admin/session-manager/usage', async (req, reply) => {
-    const email = await requireAdmin(req, reply);
-    if (!email) return;
+    if (!hasReadToken(req.headers.authorization)) {
+      const email = await requireAdmin(req, reply);
+      if (!email) return;
+    }
 
     const query = req.query as Record<string, unknown> | undefined;
     const days = clampDays(query?.days);

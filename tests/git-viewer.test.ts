@@ -18,7 +18,7 @@ import { verifyClerkGitHubUser } from '../server/clerk.js';
 import { getActiveSubscriptionLive } from '../server/services/stripe.js';
 import {
   registerGitViewerRoutes, setPortfolioBuilder, drainGitViewerQueue, resetGitViewerState,
-  runGitViewerRefresh, PLAN_LIMITS, type BuildPortfolio,
+  runGitViewerRefresh, failedTtlMs, PLAN_LIMITS, type BuildPortfolio,
 } from '../server/routes/tools/git-viewer.js';
 import { FREE_TIER_LIMIT } from '../server/routes/tools/_shared.js';
 
@@ -94,6 +94,37 @@ describe('GET /api/git-viewer/u/:login', () => {
     const res = await get('ghost-user');
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ status: 'not_found' });
+  });
+
+  it('GitHub rate-limit failure → 503 error until the budget resets', async () => {
+    const reset = Math.floor(Date.now() / 1000) + 1800;
+    build.mockRejectedValue(Object.assign(new Error('API rate limit exceeded'), {
+      status: 403,
+      response: { headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) } },
+    }));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await get('busy-user')).statusCode).toBe(202);
+    await drainGitViewerQueue();
+    expect(errSpy.mock.calls[0][0]).toContain('status=403 ratelimit-remaining=0');
+    errSpy.mockRestore();
+    const res = await get('busy-user');
+    expect(res.statusCode).toBe(503);
+    expect(res.json().status).toBe('error');
+    expect(res.json().retryAfterSec).toBeGreaterThan(1700);
+    expect(res.json().retryAfterSec).toBeLessThanOrEqual(1800);
+    expect(build).toHaveBeenCalledTimes(1);
+  });
+
+  it('failedTtlMs: rate limits wait for reset/retry-after (capped 1h), other errors 5 min', () => {
+    const now = 1_000_000_000_000;
+    const rl = (status: number, headers: Record<string, string>) => ({ status, response: { headers } });
+    expect(failedTtlMs(new Error('boom'), now)).toBe(5 * 60_000);
+    expect(failedTtlMs(rl(500, {}), now)).toBe(5 * 60_000);
+    expect(failedTtlMs(rl(403, { 'x-ratelimit-remaining': '12' }), now)).toBe(5 * 60_000);
+    expect(failedTtlMs(rl(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(now / 1000 + 600) }), now)).toBe(600_000);
+    expect(failedTtlMs(rl(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(now / 1000 + 99999) }), now)).toBe(3_600_000);
+    expect(failedTtlMs(rl(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(now / 1000 - 5) }), now)).toBe(60_000);
+    expect(failedTtlMs(rl(429, { 'retry-after': '90' }), now)).toBe(90_000);
   });
 
   it('per-IP generation limit → 429 with retryAfterSec', async () => {

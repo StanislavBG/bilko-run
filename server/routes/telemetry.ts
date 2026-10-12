@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { dbRun, dbGet } from '../db.js';
 
 const MAX_BATCH = 50;
@@ -37,11 +37,20 @@ function ipKey(req: { ip?: string; headers: Record<string, string | string[] | u
 // --- Abuse controls that do not know who the caller is ---------------------
 // These beacons are deliberately unauthenticated: a fresh install on a stranger's
 // machine must be able to POST successfully the first time it runs, with nothing
-// configured. So every control below is identity-free, and every one of them
-// DROPS SILENTLY WITH A 200 rather than a 4xx — a client that treats 4xx as
-// "the contract is broken, stop reporting" must not be permanently disabled by
-// routine throttling. Only the per-IP limiter (which predates this) answers 429,
-// which well-behaved clients back off from rather than disable on.
+// configured. So every control below is identity-free.
+//
+// Quota throttling answers 429 + Retry-After, never a 200: a 200 tells the
+// desktop client the batch was delivered, so it drops it from its queue and a
+// boot backlog replay or crash burst is lost for good. Both callers treat 429
+// as "back off and retry" (session-manager's telemetryClient requeues the batch
+// with exponential backoff; host-kit's browser SDK is fire-and-forget), and
+// neither treats it as the "contract is broken, stop reporting" 4xx. The quota
+// check is all-or-nothing per request and consumes no budget when it refuses,
+// so a retried batch never double-inserts the part that would have fit.
+//
+// Records that can never be valid (an `app` that is not slug-shaped, a /log
+// record with an invalid level) are still dropped silently and never charged:
+// retrying them would never succeed.
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -64,53 +73,82 @@ const APP_SLUG_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
 
 type Bucket = { count: number; windowStart: number };
 
-function bumpWindow(map: Map<string, Bucket>, key: string, windowMs: number, limit: number, n: number): boolean {
-  const now = Date.now();
-  const e = map.get(key);
-  if (!e || now - e.windowStart > windowMs) {
-    map.set(key, { count: n, windowStart: now });
-    if (map.size > 20_000) {
-      for (const [k, v] of map) if (now - v.windowStart > windowMs) map.delete(k);
-    }
-    return n <= limit;
-  }
-  e.count += n;
-  return e.count <= limit;
-}
+type Quota = { map: Map<string, Bucket>; key: string; windowMs: number; limit: number; n: number };
 
 const _visitorHour = new Map<string, Bucket>();
 const _visitorDay = new Map<string, Bucket>();
 const _appDay = new Map<string, Bucket>();
 
-// Records with no visitor_id are exempt here (browser SDK traffic often has none
-// on a first hit); they are still covered by the per-IP limiter and the per-app
-// ceiling.
-function allowVisitor(visitorId: string): boolean {
-  if (!visitorId) return true;
-  const hourOk = bumpWindow(_visitorHour, visitorId, HOUR_MS, VISITOR_HOURLY_LIMIT, 1);
-  const dayOk = bumpWindow(_visitorDay, visitorId, DAY_MS, VISITOR_DAILY_LIMIT, 1);
-  return hourOk && dayOk;
+/** Seconds until `q` would fit, or 0 when it fits now. Never mutates. */
+function quotaWait(q: Quota, now: number): number {
+  const e = q.map.get(q.key);
+  if (!e || now - e.windowStart > q.windowMs) return 0;
+  if (e.count + q.n <= q.limit) return 0;
+  return Math.max(1, Math.ceil((e.windowStart + q.windowMs - now) / 1000));
 }
 
-function allowApp(appName: string): boolean {
-  return bumpWindow(_appDay, appName, DAY_MS, APP_DAILY_LIMIT, 1);
+function quotaConsume(q: Quota, now: number): void {
+  const e = q.map.get(q.key);
+  if (!e || now - e.windowStart > q.windowMs) {
+    q.map.set(q.key, { count: q.n, windowStart: now });
+    if (q.map.size > 20_000) {
+      for (const [k, v] of q.map) if (now - v.windowStart > q.windowMs) q.map.delete(k);
+    }
+    return;
+  }
+  e.count += q.n;
 }
 
-// Shape + quota gate applied to every record of every batch, before any INSERT.
-// Returns the records that survive; everything else is dropped without a trace
-// of it reaching the caller.
-function admit(batch: unknown[]): Record<string, unknown>[] {
-  const out: Record<string, unknown>[] = [];
+/**
+ * All-or-nothing: either every quota fits and all are charged, or none is
+ * charged and the caller gets the longest wait among the ones that do not fit.
+ */
+function chargeQuotas(quotas: Quota[]): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  let wait = 0;
+  for (const q of quotas) wait = Math.max(wait, quotaWait(q, now));
+  if (wait > 0) return { ok: false, retryAfterSec: wait };
+  for (const q of quotas) quotaConsume(q, now);
+  return { ok: true };
+}
+
+type Admitted =
+  | { ok: true; records: Record<string, unknown>[] }
+  | { ok: false; retryAfterSec: number };
+
+// Shape + quota gate applied to every batch, before any INSERT. Malformed
+// records are dropped; if what survives does not fit the per-app or
+// per-install budget, the whole batch is refused so the client keeps it.
+// Records with no visitor_id are exempt from the per-install quota (browser SDK
+// traffic often has none on a first hit); they are still covered by the per-IP
+// limiter and the per-app ceiling.
+function admit(batch: unknown[], valid: (rec: Record<string, unknown>) => boolean = () => true): Admitted {
+  const records: Record<string, unknown>[] = [];
+  const perApp = new Map<string, number>();
+  const perVisitor = new Map<string, number>();
   for (const r of batch) {
     if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
     const rec = r as Record<string, unknown>;
     const appName = typeof rec.app === 'string' ? rec.app : '';
     if (!APP_SLUG_RE.test(appName)) continue;
-    if (!allowApp(appName)) continue;
-    if (!allowVisitor(typeof rec.visitor_id === 'string' ? rec.visitor_id.slice(0, 80) : '')) continue;
-    out.push(rec);
+    if (!valid(rec)) continue;
+    records.push(rec);
+    perApp.set(appName, (perApp.get(appName) ?? 0) + 1);
+    const visitorId = typeof rec.visitor_id === 'string' ? rec.visitor_id.slice(0, 80) : '';
+    if (visitorId) perVisitor.set(visitorId, (perVisitor.get(visitorId) ?? 0) + 1);
   }
-  return out;
+  const quotas: Quota[] = [];
+  for (const [key, n] of perApp) quotas.push({ map: _appDay, key, windowMs: DAY_MS, limit: APP_DAILY_LIMIT, n });
+  for (const [key, n] of perVisitor) {
+    quotas.push({ map: _visitorHour, key, windowMs: HOUR_MS, limit: VISITOR_HOURLY_LIMIT, n });
+    quotas.push({ map: _visitorDay, key, windowMs: DAY_MS, limit: VISITOR_DAILY_LIMIT, n });
+  }
+  const charged = chargeQuotas(quotas);
+  return charged.ok ? { ok: true, records } : charged;
+}
+
+function sendThrottled(reply: FastifyReply, retryAfterSec: number) {
+  return reply.code(429).header('Retry-After', String(retryAfterSec)).send({ error: 'quota_exceeded', retryAfterSec });
 }
 
 // A build-constant tag compiled into a client package (e.g.
@@ -120,6 +158,10 @@ function admit(batch: unknown[]): Record<string, unknown>[] {
 // hammering a public POST route cannot exhaust the budget of a real install that
 // happens to share an egress IP with it. Untagged traffic is never dropped for
 // being untagged — the browser SDK does not send it.
+//
+// The desktop client also sends `X-SM-Beacon-Key`. It is deliberately ignored:
+// its value is a public fallback constant compiled into the npm package, so
+// checking it would authenticate nothing.
 const BEACON_RE = /^[a-z0-9][a-z0-9._-]{0,39}\/[0-9][0-9a-z.\-+]{0,19}$/i;
 
 function beaconTag(req: { headers: Record<string, string | string[] | undefined> }): string {
@@ -200,8 +242,9 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
   app.post('/api/telemetry/event', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 1200)) return reply.code(429).send({ error: 'rate_limited' });
     const body = req.body as { batch?: unknown[] } | null;
-    const batch = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
-    for (const e of batch) {
+    const admitted = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
+    if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
+    for (const e of admitted.records) {
       await dbRun(
         `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -214,15 +257,19 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
         eventVersion(e),
       );
     }
-    return { ok: true, ingested: batch.length };
+    return { ok: true, ingested: admitted.records.length };
   });
 
   app.post('/api/telemetry/log', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 600)) return reply.code(429).send({ error: 'rate_limited' });
     const body = req.body as { batch?: unknown[] } | null;
-    const batch = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
-    for (const l of batch) {
-      if (!ALLOWED_LEVELS.has(String(l.level))) continue; // drop invalid levels silently
+    // Invalid levels are dropped silently, before they are charged to any quota.
+    const admitted = admit(
+      Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : [],
+      (l) => ALLOWED_LEVELS.has(String(l.level)),
+    );
+    if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
+    for (const l of admitted.records) {
       await dbRun(
         `INSERT INTO app_logs (app, version, level, msg, visitor_id, session_id, fields_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -237,14 +284,15 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
       );
     }
     await maybePrune();
-    return { ok: true };
+    return { ok: true, ingested: admitted.records.length };
   });
 
   app.post('/api/telemetry/error', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 300)) return reply.code(429).send({ error: 'rate_limited' });
     const body = req.body as { batch?: unknown[] } | null;
-    const batch = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
-    for (const e of batch) {
+    const admitted = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
+    if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
+    for (const e of admitted.records) {
       await dbRun(
         `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -262,7 +310,7 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
       );
     }
     await maybePrune();
-    return { ok: true };
+    return { ok: true, ingested: admitted.records.length };
   });
 
   // Durable install record. Unlike its three siblings this is an upsert keyed on
@@ -278,10 +326,11 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
     if (!installId) return reply.code(400).send({ error: 'install_id_required' });
     const appName = clamp(b.app, 60);
     if (!APP_SLUG_RE.test(appName)) return { ok: true };
-    // Silent drops from here down: an upsert that is throttled must look
-    // identical to one that landed, or the client disables itself.
-    if (!allowApp(appName)) return { ok: true };
-    if (!bumpWindow(_visitorDay, `install:${installId}`, DAY_MS, VISITOR_DAILY_LIMIT, 1)) return { ok: true };
+    const charged = chargeQuotas([
+      { map: _appDay, key: appName, windowMs: DAY_MS, limit: APP_DAILY_LIMIT, n: 1 },
+      { map: _visitorDay, key: `install:${installId}`, windowMs: DAY_MS, limit: VISITOR_DAILY_LIMIT, n: 1 },
+    ]);
+    if (!charged.ok) return sendThrottled(reply, charged.retryAfterSec);
     const now = Math.floor(Date.now() / 1000);
 
     await dbRun(

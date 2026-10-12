@@ -562,7 +562,12 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['visitor_id', 'TEXT'],
     ['path', 'TEXT'],
     ['version', 'TEXT'],
+    // Deployment environment ('prod' | 'dev' | 'test'); only telemetry ingest writes it.
+    ['env', 'TEXT'],
   ],
+  app_logs: [['env', 'TEXT']],
+  app_errors: [['env', 'TEXT']],
+  app_installs: [['env', 'TEXT']],
   project_feedback: [
     ['parent_id', 'TEXT'],
     ['moderation_action', 'TEXT'],

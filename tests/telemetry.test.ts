@@ -316,3 +316,25 @@ describe('Telemetry ingest — /api/telemetry/event version attribution', () => 
     expect(rows[0].version).toBeNull();
   });
 });
+
+describe('Telemetry ingest — env discriminator', () => {
+  it('stores env only when it is prod, dev or test', async () => {
+    await dbRun("DELETE FROM funnel_events WHERE tool = 'env-app'");
+    await inject('POST', '/api/telemetry/event', {
+      batch: [
+        { app: 'env-app', name: 'e', env: 'test' },
+        { app: 'env-app', name: 'e', env: 'staging' },
+        { app: 'env-app', name: 'e' },
+      ],
+    }, '10.3.0.1');
+    await inject('POST', '/api/telemetry/log', { batch: [{ app: 'env-app', level: 'info', msg: 'm', env: 'dev' }] }, '10.3.0.1');
+    await inject('POST', '/api/telemetry/error', { batch: [{ app: 'env-app', msg: 'm', env: 'prod' }] }, '10.3.0.1');
+    await inject('POST', '/api/telemetry/install', { install_id: 'env-inst', app: 'env-app', env: 'test' }, '10.3.0.1');
+
+    const ev = await dbAll<{ env: string | null }>(`SELECT env FROM funnel_events WHERE tool = 'env-app' ORDER BY id`);
+    expect(ev.map((r) => r.env)).toEqual(['test', null, null]);
+    expect((await dbAll<{ env: string }>(`SELECT env FROM app_logs WHERE app = 'env-app'`))[0].env).toBe('dev');
+    expect((await dbAll<{ env: string }>(`SELECT env FROM app_errors WHERE app = 'env-app'`))[0].env).toBe('prod');
+    expect((await dbAll<{ env: string }>(`SELECT env FROM app_installs WHERE app = 'env-app'`))[0].env).toBe('test');
+  });
+});

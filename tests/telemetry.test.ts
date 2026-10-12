@@ -189,19 +189,42 @@ describe('Telemetry abuse controls — identity-free, silent', () => {
     expect(await dbAll('SELECT * FROM app_errors')).toHaveLength(0);
   });
 
-  it('per-install hourly limit drops silently with a 200, never a 4xx', async () => {
+  it('per-install hourly limit answers 429 + Retry-After, never a silent 200', async () => {
     const visitor = `install-${Math.random()}`;
-    let lastStatus = 0;
+    const statuses: number[] = [];
+    let retryAfter = 0;
     // 5 requests × 50 records = 250 > the 200/hour per-install cap.
     for (let i = 0; i < 5; i++) {
       const res = await inject('POST', '/api/telemetry/error', {
         batch: Array.from({ length: 50 }, () => ({ app: 'quota-app', msg: 'burst', visitor_id: visitor })),
       }, `10.2.1.${i}`); // different IPs each time: only the per-install cap can bite
-      lastStatus = res.statusCode;
+      statuses.push(res.statusCode);
+      if (res.statusCode === 429) {
+        retryAfter = Number(res.headers['retry-after']);
+        expect(res.json()).toMatchObject({ error: 'quota_exceeded' });
+      }
     }
-    expect(lastStatus).toBe(200); // throttling must never look like a broken contract
+    expect(statuses).toEqual([200, 200, 200, 200, 429]);
+    expect(retryAfter).toBeGreaterThanOrEqual(1);
     const rows = await dbAll<{ n: number }>(`SELECT COUNT(*) AS n FROM app_errors WHERE app = 'quota-app'`);
-    expect(rows[0].n).toBe(200); // capped, not 250
+    expect(rows[0].n).toBe(200);
+  });
+
+  it('a refused batch consumes no quota: 190 used, 20 refused, then 10 fits', async () => {
+    const visitor = `install-${Math.random()}`;
+    const mk = (n: number) => ({
+      batch: Array.from({ length: n }, () => ({ app: 'peek-app', msg: 'x', visitor_id: visitor })),
+    });
+    for (let i = 0; i < 3; i++) {
+      expect((await inject('POST', '/api/telemetry/error', mk(50), `10.2.4.${i}`)).statusCode).toBe(200);
+    }
+    expect((await inject('POST', '/api/telemetry/error', mk(40), '10.2.4.3')).statusCode).toBe(200); // 190 used
+    const refused = await inject('POST', '/api/telemetry/error', mk(20), '10.2.4.4');
+    expect(refused.statusCode).toBe(429);
+    expect(Number(refused.headers['retry-after'])).toBeGreaterThanOrEqual(1);
+    expect((await inject('POST', '/api/telemetry/error', mk(10), '10.2.4.5')).statusCode).toBe(200);
+    const rows = await dbAll<{ n: number }>(`SELECT COUNT(*) AS n FROM app_errors WHERE app = 'peek-app'`);
+    expect(rows[0].n).toBe(200);
   });
 
   it('records with no visitor_id are not caught by the per-install limiter', async () => {

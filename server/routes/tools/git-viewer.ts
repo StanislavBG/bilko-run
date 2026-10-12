@@ -27,6 +27,7 @@ const MAX_QUEUED = 50;
 const POLL_AFTER_SEC = 5;
 const NOT_FOUND_TTL_MS = 60 * 60 * 1000;
 const FAILED_TTL_MS = 5 * 60 * 1000;
+const MAX_RATE_LIMITED_TTL_MS = 60 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const REFRESH_BATCH = 20;
 
@@ -132,6 +133,25 @@ function pump(): void {
   }
 }
 
+/**
+ * How long to remember a failed generation. A GitHub rate-limit error (Octokit
+ * RequestError: 403/429 with x-ratelimit-remaining 0 or retry-after) waits until
+ * the budget resets, capped at an hour; anything else retries after 5 minutes.
+ */
+export function failedTtlMs(err: any, now = Date.now()): number {
+  const status = err?.status;
+  const headers = err?.response?.headers ?? {};
+  if (status !== 403 && status !== 429) return FAILED_TTL_MS;
+  const retryAfter = Number(headers['retry-after']);
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return Math.min(retryAfter * 1000, MAX_RATE_LIMITED_TTL_MS);
+  }
+  if (String(headers['x-ratelimit-remaining']) !== '0') return FAILED_TTL_MS;
+  const resetMs = Number(headers['x-ratelimit-reset']) * 1000 - now;
+  if (!Number.isFinite(resetMs)) return FAILED_TTL_MS;
+  return Math.min(Math.max(resetMs, 60_000), MAX_RATE_LIMITED_TTL_MS);
+}
+
 async function generate(login: string, job: Job): Promise<void> {
   const build = await loadBuilder();
   if (!build) return;
@@ -155,9 +175,34 @@ async function generate(login: string, job: Job): Promise<void> {
     if (err?.status === 404) {
       notFound.set(login, Date.now() + NOT_FOUND_TTL_MS);
     } else {
-      console.error(`[git-viewer] generation failed for ${login}:`, err?.message ?? err);
-      failed.set(login, Date.now() + FAILED_TTL_MS);
+      const headers = err?.response?.headers ?? {};
+      const ttl = failedTtlMs(err);
+      console.error(
+        `[git-viewer] generation failed for ${login}: status=${err?.status ?? 'n/a'}` +
+        ` ratelimit-remaining=${headers['x-ratelimit-remaining'] ?? 'n/a'}` +
+        ` ratelimit-limit=${headers['x-ratelimit-limit'] ?? 'n/a'}` +
+        ` token=${process.env.GITHUB_TOKEN ? 'set' : 'unset'} retry-in=${Math.ceil(ttl / 1000)}s:`,
+        err?.message ?? err,
+      );
+      failed.set(login, Date.now() + ttl);
     }
+  }
+}
+
+/** Boot-time check that GITHUB_TOKEN works: logs the core budget (5000/h when authenticated, 60 when not). */
+async function logGitHubRateBudget(): Promise<void> {
+  const token = process.env.GITHUB_TOKEN;
+  try {
+    const res = await fetch('https://api.github.com/rate_limit', {
+      headers: { 'user-agent': 'bilko-run', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      signal: AbortSignal.timeout(10_000),
+    });
+    console.log(
+      `[git-viewer] GitHub rate budget: http=${res.status} token=${token ? 'set' : 'unset'}` +
+      ` limit=${res.headers.get('x-ratelimit-limit')} remaining=${res.headers.get('x-ratelimit-remaining')}`,
+    );
+  } catch (err: any) {
+    console.error('[git-viewer] GitHub rate budget check failed:', err?.message ?? err);
   }
 }
 
@@ -225,7 +270,8 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     if (isFresh(notFound, login)) return reply.code(404).send({ status: 'not_found' });
     if (jobs.has(login)) return reply.code(202).send({ status: 'generating', retryAfterSec: POLL_AFTER_SEC });
     if (isFresh(failed, login)) {
-      return reply.code(503).send({ status: 'error', retryAfterSec: Math.ceil(FAILED_TTL_MS / 1000) });
+      const retryAfterSec = Math.max(1, Math.ceil((failed.get(login)! - Date.now()) / 1000));
+      return reply.code(503).send({ status: 'error', retryAfterSec });
     }
     if (!(await loadBuilder())) return reply.code(503).send({ status: 'unavailable' });
 
@@ -275,6 +321,7 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
   });
 
   if (!process.env.VITEST) {
+    void logGitHubRateBudget();
     const timer = setInterval(() => {
       runGitViewerRefresh().catch(err => console.error('[git-viewer] refresh failed:', err));
     }, REFRESH_INTERVAL_MS);

@@ -9,7 +9,6 @@ const EXPECTED: ReadonlyArray<readonly [string, string]> = [
   ['escape-velocity', 'Escape Velocity'],
   ['academy', 'Academy'],
   ['git-viewer', 'Git Viewer'],
-  ['bilko-host', 'Bilko Host MCP'],
   ['launch-kit', 'Launch Kit'],
   ['outdoor-hours', 'Weather'],
 ];

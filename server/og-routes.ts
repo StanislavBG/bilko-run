@@ -35,7 +35,17 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
     if (!ctype.startsWith('text/html')) return payload;
     if (/^\s*attachment\b/i.test(String(reply.getHeader('content-disposition') ?? ''))) return payload;
     if (typeof payload !== 'string' && !Buffer.isBuffer(payload)) return payload;
-    const meta = resolveOg(req.url.split('?')[0], ctx);
+    const [path, qs = ''] = req.url.split('?', 2);
+    let meta = null;
+    for (const resolve of ctx.dynamic ?? []) {
+      try {
+        meta = await resolve(path, new URLSearchParams(qs));
+      } catch (err) {
+        req.log.warn({ err }, 'og: dynamic resolver failed; using static meta');
+      }
+      if (meta) break;
+    }
+    meta ??= resolveOg(path, ctx);
     if (!meta) return payload;
     reply.removeHeader('content-length');
     return injectOgMeta(typeof payload === 'string' ? payload : payload.toString('utf-8'), meta);

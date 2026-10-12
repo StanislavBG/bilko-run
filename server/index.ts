@@ -30,6 +30,7 @@ import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerSecurityHeaders } from './security-headers.js';
 import { registerOgRoutes } from './og-routes.js';
+import { gitViewerOg } from './routes/tools/git-viewer.js';
 import { loadOgProjects, type OgProject } from './og-meta.js';
 import { loadBlogPosts } from './blog-posts.js';
 import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
@@ -102,7 +103,7 @@ registerSecurityHeaders(app);
   const blogPosts = loadBlogPosts()
     .filter(p => p.published)
     .map(p => ({ slug: p.slug, title: p.title, excerpt: p.excerpt }));
-  registerOgRoutes(app, { projects, blogPosts });
+  registerOgRoutes(app, { projects, blogPosts, dynamic: [gitViewerOg] });
 }
 
 // Registered after CORS so its onSend hook can drop the `Vary: Origin` that

@@ -3,6 +3,7 @@ import { dbAll, dbGet, dbRun } from '../../db.js';
 import { verifyClerkGitHubUser } from '../../clerk.js';
 import { getActiveSubscriptionLive } from '../../services/stripe.js';
 import { checkRateLimit, hashIp, incrementUsage } from './_shared.js';
+import type { OgMeta } from '../../og-meta.js';
 
 // Hosted Git Viewer portfolios — gateway for the git-viewer sibling
 // (~/Projects/git-viewer). Contract: git-viewer docs/prds/10-hosted-portfolios.md.
@@ -238,6 +239,37 @@ export async function runGitViewerRefresh(): Promise<number> {
     if (enqueue(row.login, jobFor(row, tier))) queued++;
   }
   return queued;
+}
+
+const OG_PATH_RE = /^\/projects\/git-viewer\/(?:index\.html)?$/;
+const AVATAR_RE = /^https:\/\/avatars\.githubusercontent\.com\/[^\s"'<>]+$/;
+const OG_PITCH = 'Your Git, your Résumé';
+
+/**
+ * Per-user share card for `/projects/git-viewer/?u=<login>`. Reads the cached
+ * portfolio only (never queues a generation); an uncached login gets its own
+ * name with the static card image, an invalid one falls through to static meta.
+ */
+export async function gitViewerOg(path: string, query: URLSearchParams): Promise<OgMeta | null> {
+  if (!OG_PATH_RE.test(path)) return null;
+  const raw = query.get('u') ?? '';
+  if (!LOGIN_RE.test(raw)) return null;
+  const login = raw.toLowerCase();
+  const row = await dbGet<Pick<ProfileRow, 'payload'>>('SELECT payload FROM git_viewer_profiles WHERE login = ?', login);
+  let name = raw;
+  let avatar: string | undefined;
+  try {
+    const dev = row?.payload ? (JSON.parse(row.payload) as { developer?: { name?: unknown; avatarUrl?: unknown } }).developer : undefined;
+    if (typeof dev?.name === 'string' && dev.name.trim()) name = dev.name.trim().slice(0, 80);
+    if (typeof dev?.avatarUrl === 'string' && AVATAR_RE.test(dev.avatarUrl)) avatar = dev.avatarUrl;
+  } catch { /* corrupt payload → login-only card */ }
+  return {
+    title: `${name} — ${OG_PITCH}`,
+    description: `${name}'s GitHub as a portfolio and printable résumé. Make yours free in seconds on bilko.run.`,
+    url: `https://bilko.run/projects/git-viewer/?u=${encodeURIComponent(raw)}`,
+    image: avatar ?? 'https://bilko.run/og/git-viewer.png',
+    ...(avatar ? { card: 'summary' as const } : {}),
+  };
 }
 
 export function registerGitViewerRoutes(app: FastifyInstance): void {

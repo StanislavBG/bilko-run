@@ -1,8 +1,8 @@
 [
   {
     "slug": "git-viewer",
-    "name": "gitoverview",
-    "tagline": "Turn your GitHub into a public portfolio",
+    "name": "Git Viewer",
+    "tagline": "Your Git, your Résumé — a portfolio and printable résumé from your GitHub, free in seconds",
     "category": "Data · Portfolio",
     "status": "live",
     "year": 2026,

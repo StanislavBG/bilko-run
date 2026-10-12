@@ -7,7 +7,12 @@ export interface OgMeta {
   description: string;
   url: string;
   image: string;
+  /** 'summary' for a square image (e.g. an avatar); default is the 1200x630 large card. */
+  card?: 'summary' | 'summary_large_image';
 }
+
+/** Per-request override for one page, keyed by path + query (e.g. git-viewer `?u=`). */
+export type OgDynamicResolver = (path: string, query: URLSearchParams) => Promise<OgMeta | null>;
 
 export interface OgProject {
   slug: string;
@@ -20,6 +25,7 @@ export interface OgProject {
 export interface OgContext {
   projects: readonly OgProject[];
   blogPosts: readonly { slug: string; title: string; excerpt: string }[];
+  dynamic?: readonly OgDynamicResolver[];
 }
 
 const SITE = 'https://bilko.run';
@@ -135,6 +141,7 @@ export function injectOgMeta(html: string, meta: OgMeta): string {
   const d = esc(meta.description);
   const u = esc(meta.url);
   const i = esc(meta.image);
+  const large = meta.card !== 'summary';
   const block = [
     `<title>${t}</title>`,
     `<meta name="description" content="${d}" />`,
@@ -144,9 +151,10 @@ export function injectOgMeta(html: string, meta: OgMeta): string {
     `<meta property="og:description" content="${d}" />`,
     `<meta property="og:url" content="${u}" />`,
     `<meta property="og:image" content="${i}" />`,
-    `<meta property="og:image:width" content="1200" />`,
-    `<meta property="og:image:height" content="630" />`,
-    `<meta name="twitter:card" content="summary_large_image" />`,
+    ...(large
+      ? [`<meta property="og:image:width" content="1200" />`, `<meta property="og:image:height" content="630" />`]
+      : []),
+    `<meta name="twitter:card" content="${large ? 'summary_large_image' : 'summary'}" />`,
     `<meta name="twitter:site" content="@BilkoBibitkov" />`,
     `<meta name="twitter:title" content="${t}" />`,
     `<meta name="twitter:description" content="${d}" />`,

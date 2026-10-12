@@ -7,9 +7,10 @@ import { StatCard, type Stats } from './admin/analytics/parts.js';
 import { OverviewTab, UsersTab, RoastsTab, ActivityTab } from './admin/analytics/ActivityTabs.js';
 import { SourcesTab, FunnelsTab, AudienceTab, ToolsTab } from './admin/analytics/GrowthTabs.js';
 import { WebProductsTab } from './admin/analytics/WebProductsTab.js';
+import { SessionManagerTab } from './admin/analytics/SessionManagerTab.js';
 import { SyntheticTab, ManifestsTab } from './admin/analytics/OpsTabs.js';
 
-const TABS = ['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'products', 'manifests', 'synthetic'] as const;
+const TABS = ['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'products', 'session manager', 'manifests', 'synthetic'] as const;
 
 export function AdminPage() {
   const { isLoaded } = useUser();
@@ -95,6 +96,7 @@ export function AdminPage() {
           {tab === 'audience' && <AudienceTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'tools' && <ToolsTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'products' && <WebProductsTab days={days} excludeSelf={excludeSelf} />}
+          {tab === 'session manager' && <SessionManagerTab days={days} excludeSelf={excludeSelf} />}
 
           {tab === 'synthetic' && <SyntheticTab />}
           {tab === 'manifests' && <ManifestsTab />}

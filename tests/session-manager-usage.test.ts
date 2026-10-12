@@ -274,6 +274,45 @@ describe('GET /api/admin/session-manager/usage', () => {
     expect(errors.daily[0]).toMatchObject({ errors: 2, warns: 1 });
   });
 
+  it('excludes test/dev rows by default and honours ?env=', async () => {
+    asAdmin();
+    const inst = (id: string, env: string | null) => dbRun(
+      `INSERT INTO app_installs (install_id, app, app_version, platform, arch, cpu_count,
+         total_mem_mb, first_seen_at, last_seen_at, seen_count, env)
+       VALUES (?, ?, '0.81.0', 'linux', 'x64', 8, 16384, ?, ?, 1, ?)`,
+      id, APP, now - 86_400, now - 3_600, env,
+    );
+    await inst('p1', 'prod');
+    await inst('t1', 'test');
+    await inst('legacy', null);
+    await dbRun(
+      `INSERT INTO app_errors (app, version, name, msg, stack, visitor_id, context_json, created_at, env)
+       VALUES (?, '0.81.0', 'TestOnly', 'm', 'at t', 't1', '{}', ?, 'test')`,
+      APP, now - 600,
+    );
+    for (const env of ['test', 'prod']) {
+      await dbRun(
+        `INSERT INTO funnel_events (event, tool, visitor_id, env) VALUES ('epic.create', ?, 'p1', ?)`,
+        APP, env,
+      );
+    }
+
+    const def = (await get()).json();
+    expect(def.env).toBe('prod');
+    expect(def.installs.total).toBe(2);
+    expect(def.issues).toEqual([]);
+    expect(def.usage.daily.reduce((n: number, d: any) => n + d.epics, 0)).toBe(1);
+
+    const test = (await get('/api/admin/session-manager/usage?env=test')).json();
+    expect(test.env).toBe('test');
+    expect(test.installs.total).toBe(1);
+    expect(test.issues.map((i: any) => i.name)).toEqual(['TestOnly']);
+
+    const all = (await get('/api/admin/session-manager/usage?env=all')).json();
+    expect(all.env).toBe('all');
+    expect(all.installs.total).toBe(3);
+  });
+
   it('returns no field that could carry PII', async () => {
     asAdmin();
     await addInstall('i1');

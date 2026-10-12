@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
+import { parseEnvSelector, envPredicate } from './telemetry.js';
 
 const APP = 'session-manager';
 const ISSUE_LIMIT = 50;
@@ -40,7 +41,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
     const email = await requireAdmin(req, reply);
     if (!email) return;
 
-    const days = clampDays((req.query as Record<string, unknown> | undefined)?.days);
+    const query = req.query as Record<string, unknown> | undefined;
+    const days = clampDays(query?.days);
+    const env = parseEnvSelector(query?.env);
+    const ev = envPredicate(env);
+    const evE = envPredicate(env, 'e.env');
     const now = Math.floor(Date.now() / 1000);
     const since = now - days * 86_400;
     const since7 = now - 7 * 86_400;
@@ -71,33 +76,33 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN last_seen_at  > ? THEN 1 ELSE 0 END) AS active7,
                 SUM(CASE WHEN last_seen_at  > ? THEN 1 ELSE 0 END) AS active30,
                 SUM(CASE WHEN first_seen_at > ? THEN 1 ELSE 0 END) AS new7
-         FROM app_installs WHERE app = ?`,
-        since7, since30, since7, APP,
+         FROM app_installs WHERE app = ? AND ${ev.sql}`,
+        since7, since30, since7, APP, ...ev.args,
       ), null),
 
       safeQuery(() => dbAll<{ version: string | null; installs: number; active7: number }>(
         `SELECT app_version AS version,
                 COUNT(*) AS installs,
                 SUM(CASE WHEN last_seen_at > ? THEN 1 ELSE 0 END) AS active7
-         FROM app_installs WHERE app = ?
+         FROM app_installs WHERE app = ? AND ${ev.sql}
          GROUP BY app_version
          ORDER BY installs DESC
          LIMIT 50`,
-        since7, APP,
+        since7, APP, ...ev.args,
       ), []),
 
       safeQuery(() => dbAll<{ platform: string | null; arch: string | null; installs: number }>(
         `SELECT platform, arch, COUNT(*) AS installs
-         FROM app_installs WHERE app = ?
+         FROM app_installs WHERE app = ? AND ${ev.sql}
          GROUP BY platform, arch
          ORDER BY installs DESC
          LIMIT 50`,
-        APP,
+        APP, ...ev.args,
       ), []),
 
       safeQuery(() => dbAll<{ total_mem_mb: number | null; cpu_count: number | null }>(
-        `SELECT total_mem_mb, cpu_count FROM app_installs WHERE app = ?`,
-        APP,
+        `SELECT total_mem_mb, cpu_count FROM app_installs WHERE app = ? AND ${ev.sql}`,
+        APP, ...ev.args,
       ), []),
 
       // ---- usage ----------------------------------------------------------
@@ -110,11 +115,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN event = ? THEN 1 ELSE 0 END) AS epics,
                 COUNT(DISTINCT visitor_id) AS installsSeen
          FROM funnel_events
-         WHERE tool = ? AND created_at > ?
+         WHERE tool = ? AND created_at > ? AND ${ev.sql}
          GROUP BY date
          ORDER BY date DESC
          LIMIT ?`,
-        EV_LAUNCH, EV_SESSION, EV_EPIC, APP, sinceIso, days,
+        EV_LAUNCH, EV_SESSION, EV_EPIC, APP, sinceIso, ...ev.args, days,
       ), []),
 
       safeQuery(() => dbAll<{ version: string | null; launches: number; sessions: number }>(
@@ -122,11 +127,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN event = ? THEN 1 ELSE 0 END) AS launches,
                 SUM(CASE WHEN event = ? THEN 1 ELSE 0 END) AS sessions
          FROM funnel_events
-         WHERE tool = ? AND created_at > ?
+         WHERE tool = ? AND created_at > ? AND ${ev.sql}
          GROUP BY version
          ORDER BY launches DESC
          LIMIT 50`,
-        EV_LAUNCH, EV_SESSION, APP, sinceIso,
+        EV_LAUNCH, EV_SESSION, APP, sinceIso, ...ev.args,
       ), []),
 
       // ---- issues ---------------------------------------------------------
@@ -146,11 +151,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 MIN(created_at) AS firstSeen,
                 MAX(created_at) AS lastSeen
          FROM app_errors
-         WHERE app = ? AND created_at > ?
+         WHERE app = ? AND created_at > ? AND ${ev.sql}
          GROUP BY signature
          ORDER BY installsAffected DESC, occurrences DESC
          LIMIT ?`,
-        APP, since, ISSUE_LIMIT,
+        APP, since, ...ev.args, ISSUE_LIMIT,
       ), []),
 
       safeQuery(() => dbAll<{ signature: string; version: string | null }>(
@@ -158,8 +163,8 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 COALESCE(name, 'Error') || '|' || SUBSTR(COALESCE(stack, ''), 1, 80) AS signature,
                 version
          FROM app_errors
-         WHERE app = ? AND created_at > ? AND version IS NOT NULL`,
-        APP, since,
+         WHERE app = ? AND created_at > ? AND version IS NOT NULL AND ${ev.sql}`,
+        APP, since, ...ev.args,
       ), []),
 
       // Real platform, not a UA guess: every beacon stamps platform into
@@ -177,9 +182,9 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
          FROM app_errors e
          LEFT JOIN app_installs i
                 ON i.install_id = e.visitor_id AND i.app = e.app
-         WHERE e.app = ? AND e.created_at > ?
+         WHERE e.app = ? AND e.created_at > ? AND ${evE.sql}
          GROUP BY signature, platform`,
-        APP, since,
+        APP, since, ...evE.args,
       ), []),
 
       // ---- errors ---------------------------------------------------------
@@ -191,11 +196,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN level = 'warn'  THEN 1 ELSE 0 END) AS warns,
                 COUNT(DISTINCT visitor_id) AS installsAffected
          FROM app_logs
-         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn')
+         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${ev.sql}
          GROUP BY version
          ORDER BY errors DESC
          LIMIT 50`,
-        APP, since,
+        APP, since, ...ev.args,
       ), []),
 
       safeQuery(() => dbAll<{ date: string; errors: number; warns: number }>(
@@ -203,11 +208,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN level = 'error' THEN 1 ELSE 0 END) AS errors,
                 SUM(CASE WHEN level = 'warn'  THEN 1 ELSE 0 END) AS warns
          FROM app_logs
-         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn')
+         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${ev.sql}
          GROUP BY date
          ORDER BY date DESC
          LIMIT ?`,
-        APP, since, days,
+        APP, since, ...ev.args, days,
       ), []),
     ]);
 
@@ -229,6 +234,7 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
     return {
       generatedAt: now,
       windowDays: days,
+      env,
       installs: {
         total: installTotals?.total ?? 0,
         active7: installTotals?.active7 ?? 0,

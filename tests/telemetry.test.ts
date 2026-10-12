@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { initDb, dbAll, dbRun } from '../server/db.js';
-import { registerTelemetryRoutes, pruneTelemetry } from '../server/routes/telemetry.js';
+import { registerTelemetryRoutes, pruneTelemetry, pruneTelemetryScheduled } from '../server/routes/telemetry.js';
 
 const app = Fastify({ trustProxy: true, logger: false });
-registerTelemetryRoutes(app);
+registerTelemetryRoutes(app, { scheduledPrune: false });
 
 beforeAll(async () => {
   await initDb();
@@ -168,6 +168,33 @@ describe('Telemetry retention — pruneTelemetry()', () => {
     const errs = await dbAll<{ msg: string }>(`SELECT msg FROM app_errors WHERE app = 'old-app'`);
     expect(logs.map(l => l.msg)).toEqual(['fresh']);
     expect(errs.map(e => e.msg)).toEqual(['fresh']);
+  });
+});
+
+describe('Telemetry retention — pruneTelemetryScheduled()', () => {
+  it('prunes old telemetry events and stale installs, never web-analytics rows', async () => {
+    const old = new Date(Date.now() - 200 * 86_400_000).toISOString().slice(0, 19).replace('T', ' ');
+    await dbRun("DELETE FROM funnel_events WHERE tool = 'ret-app'");
+    await dbRun(`INSERT INTO funnel_events (event, tool, env, created_at) VALUES ('tel-old', 'ret-app', 'prod', ?)`, old);
+    await dbRun(`INSERT INTO funnel_events (event, tool, version, created_at) VALUES ('tel-old-legacy', 'ret-app', '0.1.0', ?)`, old);
+    await dbRun(`INSERT INTO funnel_events (event, tool, created_at) VALUES ('checkout_start', 'ret-app', ?)`, old);
+    await dbRun(`INSERT INTO funnel_events (event, tool, env) VALUES ('tel-fresh', 'ret-app', 'prod')`);
+    const now = Math.floor(Date.now() / 1000);
+    await dbRun(
+      `INSERT INTO app_installs (install_id, app, first_seen_at, last_seen_at) VALUES ('stale', 'ret-app', ?, ?)`,
+      now - 400 * 86_400, now - 366 * 86_400,
+    );
+    await dbRun(
+      `INSERT INTO app_installs (install_id, app, first_seen_at, last_seen_at) VALUES ('live', 'ret-app', ?, ?)`,
+      now - 400 * 86_400, now - 10 * 86_400,
+    );
+
+    await pruneTelemetryScheduled();
+
+    const events = await dbAll<{ event: string }>(`SELECT event FROM funnel_events WHERE tool = 'ret-app' ORDER BY event`);
+    expect(events.map(e => e.event)).toEqual(['checkout_start', 'tel-fresh']);
+    const installs = await dbAll<{ install_id: string }>(`SELECT install_id FROM app_installs WHERE app = 'ret-app'`);
+    expect(installs.map(i => i.install_id)).toEqual(['live']);
   });
 });
 

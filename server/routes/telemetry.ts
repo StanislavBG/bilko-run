@@ -231,11 +231,23 @@ function safeMeta(val: unknown, maxBytes: number): string {
 // PRUNE_EVERY_MS per process, delete anything past the age cap, then trim the
 // oldest rows back to the row cap. Cheap (two bounded DELETEs), and it cannot
 // let a burst grow the table without bound the way a nightly job would.
+//
+// That path alone is not enough: an app that stops reporting never triggers it,
+// and funnel_events / app_installs have no cap at all. So a daily in-process
+// timer (plus one run 5 minutes after boot, since Render restarts reset
+// in-process clocks and a daily interval alone might never fire) also calls
+// pruneTelemetryScheduled(). funnel_events is shared with web analytics and
+// web-product checkout metrics, which must never be pruned; telemetry ingest
+// always writes env and/or version, so only rows with one of them set qualify.
 const LOG_RETENTION_DAYS = 30;
 const ERROR_RETENTION_DAYS = 90;
 const MAX_LOG_ROWS = 200_000;
 const MAX_ERROR_ROWS = 100_000;
 const PRUNE_EVERY_MS = 10 * 60_000;
+const EVENT_RETENTION_DAYS = 180;
+const INSTALL_RETENTION_DAYS = 365;
+const SCHEDULED_PRUNE_EVERY_MS = DAY_MS;
+const SCHEDULED_PRUNE_FIRST_MS = 5 * 60_000;
 
 let _lastPruneAt = 0;
 
@@ -264,7 +276,34 @@ async function maybePrune(): Promise<void> {
   try { await pruneTelemetry(); } catch { /* best-effort */ }
 }
 
-export function registerTelemetryRoutes(app: FastifyInstance): void {
+export async function pruneTelemetryScheduled(): Promise<void> {
+  await pruneTelemetry();
+  const eventCutoff = new Date(Date.now() - EVENT_RETENTION_DAYS * DAY_MS)
+    .toISOString().slice(0, 19).replace('T', ' ');
+  await dbRun(
+    'DELETE FROM funnel_events WHERE created_at < ? AND (env IS NOT NULL OR version IS NOT NULL)',
+    eventCutoff,
+  );
+  const installCutoff = Math.floor(Date.now() / 1000) - INSTALL_RETENTION_DAYS * 86_400;
+  await dbRun('DELETE FROM app_installs WHERE last_seen_at < ?', installCutoff);
+}
+
+function startScheduledPrune(app: FastifyInstance): void {
+  const run = () => {
+    pruneTelemetryScheduled().catch(err => app.log.warn({ err }, 'scheduled telemetry prune failed'));
+  };
+  const first = setTimeout(run, SCHEDULED_PRUNE_FIRST_MS);
+  const timer = setInterval(run, SCHEDULED_PRUNE_EVERY_MS);
+  first.unref();
+  timer.unref();
+  app.addHook('onClose', async () => {
+    clearTimeout(first);
+    clearInterval(timer);
+  });
+}
+
+export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledPrune?: boolean } = {}): void {
+  if (opts.scheduledPrune !== false) startScheduledPrune(app);
   // Alias endpoint — writes to the same funnel_events table as /api/analytics/event.
   // No ALLOWED_EVENTS check; apps may track any event name via the SDK.
   app.post('/api/telemetry/event', async (req, reply) => {

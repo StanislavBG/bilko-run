@@ -18,6 +18,17 @@ import {
 import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId } from '../../shared/web-products.js';
 import { recordOrder } from '../services/web-products.js';
 
+/**
+ * Same-origin guard for caller-supplied redirect URLs (checkout success/cancel,
+ * billing-portal return). Anything not on PUBLIC_URL's origin falls back, so a
+ * Stripe-hosted page can never bounce a customer off-site.
+ */
+export function safeUrl(raw: string | undefined, fallback: string): string {
+  if (!raw) return fallback;
+  const allowedOrigin = new URL(process.env.PUBLIC_URL || 'https://bilko.run').origin;
+  try { return new URL(raw).origin === allowedOrigin ? raw : fallback; } catch { return fallback; }
+}
+
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -101,11 +112,6 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       }
 
       const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
-      const allowedOrigin = new URL(publicUrl).origin;
-      const safeUrl = (raw: string | undefined, fallback: string): string => {
-        if (!raw) return fallback;
-        try { return new URL(raw).origin === allowedOrigin ? raw : fallback; } catch { return fallback; }
-      };
       const defaultSuccessUrl = (priceType === 'pageroast_tokens' || priceType === 'pageroast_token_single')
         ? `${publicUrl}/projects/page-roast?tokens=purchased`
         : `${publicUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -330,7 +336,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
       const session = await stripe.billingPortal.sessions.create({
         customer: customerId,
-        return_url: body?.returnUrl ?? publicUrl,
+        return_url: safeUrl(body?.returnUrl, publicUrl),
       });
       return { url: session.url };
     } catch (err: any) {

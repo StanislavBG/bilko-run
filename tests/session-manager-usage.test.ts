@@ -45,8 +45,8 @@ beforeEach(async () => {
   });
 });
 
-function get(url = '/api/admin/session-manager/usage') {
-  return app.inject({ method: 'GET', url });
+function get(url = '/api/admin/session-manager/usage', headers: Record<string, string> = {}) {
+  return app.inject({ method: 'GET', url, headers });
 }
 
 async function addInstall(id: string, o: Partial<{
@@ -75,6 +75,25 @@ async function addError(o: {
 }
 
 describe('GET /api/admin/session-manager/usage', () => {
+  it('accepts the read tokens headlessly and refuses everything else', async () => {
+    vi.stubEnv('SM_USAGE_READ_TOKEN', 'sm-read-secret');
+    vi.stubEnv('PROJECT_SNAPSHOT_TOKEN', 'snapshot-secret');
+    try {
+      const url = '/api/admin/session-manager/usage?days=30';
+      for (const tok of ['sm-read-secret', 'snapshot-secret']) {
+        const res = await get(url, { authorization: `Bearer ${tok}` });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().windowDays).toBe(30);
+      }
+      for (const authorization of ['Bearer sm-read-secreT', 'Bearer sm-read-secret-x', 'Bearer ']) {
+        expect((await get(url, { authorization })).statusCode).toBe(403);
+      }
+      expect((await get(url)).statusCode).toBe(403);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('requires admin', async () => {
     const res = await get();
     expect(res.statusCode).toBe(403);

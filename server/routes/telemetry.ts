@@ -151,6 +151,34 @@ function sendThrottled(reply: FastifyReply, retryAfterSec: number) {
   return reply.code(429).header('Retry-After', String(retryAfterSec)).send({ error: 'quota_exceeded', retryAfterSec });
 }
 
+// Per-record deployment environment, as the client resolved it. Anything else
+// (including absent) is stored as NULL; read paths treat NULL as prod so rows
+// written before clients sent it, and browser-SDK rows, still count.
+const ALLOWED_ENVS = new Set(['prod', 'dev', 'test']);
+
+function envOf(rec: Record<string, unknown>): string | null {
+  return typeof rec.env === 'string' && ALLOWED_ENVS.has(rec.env) ? rec.env : null;
+}
+
+export type EnvSelector = 'prod' | 'dev' | 'test' | 'all';
+
+/** Parse a `?env=` query value; anything unrecognised means the prod default. */
+export function parseEnvSelector(raw: unknown): EnvSelector {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return v === 'all' || (typeof v === 'string' && ALLOWED_ENVS.has(v)) ? (v as EnvSelector) : 'prod';
+}
+
+/**
+ * SQL predicate for read paths over telemetry tables. `column` is a trusted
+ * literal (e.g. `env` or `e.env`), never user input; the selector value is
+ * always bound. NULL counts as prod (see ALLOWED_ENVS above).
+ */
+export function envPredicate(sel: EnvSelector, column = 'env'): { sql: string; args: string[] } {
+  if (sel === 'all') return { sql: '1 = 1', args: [] };
+  if (sel === 'prod') return { sql: `COALESCE(${column}, 'prod') = 'prod'`, args: [] };
+  return { sql: `${column} = ?`, args: [sel] };
+}
+
 // A build-constant tag compiled into a client package (e.g.
 // `X-SM-Beacon: session-manager/1.2.3`). It ships inside a public npm package,
 // so it is NOT a secret and nothing here treats it as authentication. Its only
@@ -246,8 +274,8 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
     for (const e of admitted.records) {
       await dbRun(
-        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         clamp(e.name, 80),
         clamp(e.app, 60),
         safeMeta(e.props, MAX_FIELD_BYTES),
@@ -255,6 +283,7 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
         clamp(e.visitor_id, 80),
         clamp((e.props as Record<string, unknown> | undefined)?.path, 200),
         eventVersion(e),
+        envOf(e),
       );
     }
     return { ok: true, ingested: admitted.records.length };
@@ -271,8 +300,8 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
     for (const l of admitted.records) {
       await dbRun(
-        `INSERT INTO app_logs (app, version, level, msg, visitor_id, session_id, fields_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO app_logs (app, version, level, msg, visitor_id, session_id, fields_json, created_at, env)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         clamp(l.app, 60),
         clamp(l.version, 20),
         String(l.level),
@@ -281,6 +310,7 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
         clamp(l.session_id, 80),
         safeMeta(l.fields, MAX_FIELD_BYTES),
         Math.floor((typeof l.ts === 'number' ? l.ts : Date.now()) / 1000),
+        envOf(l),
       );
     }
     await maybePrune();
@@ -294,8 +324,8 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
     for (const e of admitted.records) {
       await dbRun(
-        `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at, env)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         clamp(e.app, 60),
         clamp(e.version, 20),
         clamp(e.name, 60),
@@ -307,6 +337,7 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
         clamp(e.session_id, 80),
         safeMeta(e.context, MAX_FIELD_BYTES),
         Math.floor((typeof e.ts === 'number' ? e.ts : Date.now()) / 1000),
+        envOf(e),
       );
     }
     await maybePrune();
@@ -337,8 +368,8 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
       `INSERT INTO app_installs (
          install_id, app, app_version, platform, os_release, arch, cpu_count,
          total_mem_mb, node_version, electron_version, install_channel, locale,
-         timezone, first_seen_at, last_seen_at, seen_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+         timezone, env, first_seen_at, last_seen_at, seen_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON CONFLICT(install_id) DO UPDATE SET
          app              = excluded.app,
          app_version      = excluded.app_version,
@@ -352,6 +383,7 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
          install_channel  = excluded.install_channel,
          locale           = excluded.locale,
          timezone         = excluded.timezone,
+         env              = excluded.env,
          last_seen_at     = excluded.last_seen_at,
          seen_count       = app_installs.seen_count + 1`,
       installId,
@@ -367,6 +399,7 @@ export function registerTelemetryRoutes(app: FastifyInstance): void {
       clamp(b.install_channel, 20),
       clamp(b.locale, 20),
       clamp(b.timezone, 60),
+      envOf(b),
       now,
       now,
     );

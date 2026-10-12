@@ -53,10 +53,10 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     displayPrice: '$9',
     downloadLimit: 20,
     release: {
-      version: '1.0.0',
-      filename: 'bilko-launch-kit-1.0.0.zip',
-      bytes: 33920,
-      sha256: 'f74e8e96d7f9eb138d1c60af5e01441a57a44741dbf047a23a572925092efa4e',
+      version: '1.0.1',
+      filename: 'bilko-launch-kit-1.0.1.zip',
+      bytes: 32631,
+      sha256: '40506573c3855d6412fc64d8718e9f74b24fa873da1e2991e708ea0581ffd7c5',
     },
   },
 ];

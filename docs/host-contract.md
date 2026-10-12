@@ -110,6 +110,41 @@ bilko.run generates each project's X/Twitter/OpenGraph share card from the regis
 
 Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
 
+## Public project catalog
+
+Machine-readable list of exactly the cards an anonymous visitor sees on `/projects` (registry entries with `public: true`), plus how to talk about each one. Use it instead of scraping `/projects` (a client-rendered SPA) or mirroring the registry by hand. No auth.
+
+- **JSON:** `GET https://bilko.run/api/projects` — `Cache-Control: public, max-age=300`.
+- **MCP:** `https://bilko.run/mcp` — streamable HTTP, stateless (POST only). Two read-only tools: `list_projects()` returns the same body as the JSON route; `get_project(slug)` returns one entry, or an `isError` "not found" result for unknown **and** non-public slugs. No write tools. (Publishing stays in the local `bilko-host` stdio MCP.)
+
+```jsonc
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-11T19:00:00.000Z", // ISO-8601 UTC
+  "projects": [                                // /projects page order
+    {
+      "slug": "git-viewer",
+      "name": "Git Viewer",                    // displayName ?? name, as on the card
+      "tagline": "Turn your GitHub into a public portfolio",
+      "category": "Data · Portfolio",
+      "status": "live",                        // live | cooking | postponed | archived
+      "url": "https://bilko.run/projects/git-viewer/", // absolute; the card's own link
+      "tags": ["Browser", "Freemium"],
+      "detail": "…",                           // drawer story; falls back to tagline
+      "audience": "…",                         // who it is for; may be ""
+      "talking_points": ["…"]                  // plain facts a promoter may state; may be []
+    }
+  ]
+}
+```
+
+- **`url`** is the card's real destination, so it follows the card's overrides: `session-manager` links to `https://bilko.run/products/session-manager` (its landing page), and `external-url` entries link to their external URL.
+- **Source of truth:** built from `PUBLIC_CARDS` in `src/data/projectsView.ts` (`src/data/projectCatalog.ts`), so the page and the API can't disagree. Change who is public with the registry `public` flag. Change `detail` in `ENRICH` (`projectsView.ts`). Change `audience`/`talking_points` in `PROMO` (`projectCatalog.ts`). Talking points may be posted publicly word for word, so keep each one a plain fact the site already supports.
+- **Freshness:** the data is baked in at build time. It changes when a registry change reaches `main` and deploys.
+- **Versioning:** adding a field does not bump the version. Renaming, removing, or retyping a field, or changing what `url` points at, bumps `schema_version`. Consumers should ignore fields they don't know.
+
+Implemented in `server/routes/project-catalog.ts`; tests in `tests/project-catalog.test.ts`.
+
 ## URL canonicalization
 
 - `/products/<slug>` is the canonical path for every `react-route` app.

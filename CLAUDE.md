@@ -120,6 +120,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 ### Backend Patterns (`server/`)
 - `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the shared gateway helpers: `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check/deduct), `askGeminiJson` (Gemini call + JSON parse), `toolErrorReply` (uniform error reply), plus `handleGenerateEndpoint` (inverse-mode generator). `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
 - `server/routes/blog.ts` — Blog CRUD (admin-only writes)
+- `server/routes/project-catalog.ts` — public `GET /api/projects` + read-only MCP at `/mcp` (the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog")
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
 - `server/routes/analytics.ts` — Page views + admin stats dashboard (`/api/analytics/event` is open to same-origin sibling apps for `track()`)
 - `server/db.ts` — Turso client, async helpers (`dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`), migrations, seed data
@@ -168,7 +169,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-77 files, 936 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+90 files, 1046 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

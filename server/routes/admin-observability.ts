@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { load as loadYaml } from 'js-yaml';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
+import { parseEnvSelector, envPredicate } from './telemetry.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
 import { flushEgress, topEgress, topEgressBySlug, topStaticAssets, earliestEgressDate, dayKey } from '../egress.js';
 
@@ -44,6 +45,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const email = await requireAdmin(req, reply);
     if (!email) return;
 
+    const env = parseEnvSelector((req.query as { env?: string } | undefined)?.env);
+    const ev = envPredicate(env);
+    const evA = envPredicate(env, 'a.env');
     const since = Math.floor(Date.now() / 1000) - 86_400;
     // page_views.created_at_ms is in milliseconds; other tables use seconds
     const sinceMsEpoch = since * 1000;
@@ -80,14 +84,14 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       ), []),
 
       safeQuery(() => dbAll<{ app: string; n: number }>(
-        `SELECT app, COUNT(*) AS n FROM app_errors WHERE created_at > ? GROUP BY app`,
-        since,
+        `SELECT app, COUNT(*) AS n FROM app_errors WHERE created_at > ? AND ${ev.sql} GROUP BY app`,
+        since, ...ev.args,
       ), []),
 
       safeQuery(() => dbAll<{ app: string; level: string; n: number }>(
         `SELECT app, level, COUNT(*) AS n FROM app_logs
-         WHERE created_at > ? AND level IN ('warn','error') GROUP BY app, level`,
-        since,
+         WHERE created_at > ? AND level IN ('warn','error') AND ${ev.sql} GROUP BY app, level`,
+        since, ...ev.args,
       ), []),
 
       // SQLite has no native PERCENTILE; AVG as p50 approximation, MAX as p95
@@ -109,9 +113,10 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       safeQuery(() => dbAll<{ app: string; msg: string; created_at: number }>(
         `SELECT a.app, a.msg, a.created_at FROM app_errors a
          JOIN (SELECT app, MAX(created_at) AS max_at
-               FROM app_errors WHERE created_at > ? GROUP BY app) m
-           ON a.app = m.app AND a.created_at = m.max_at`,
-        since,
+               FROM app_errors WHERE created_at > ? AND ${ev.sql} GROUP BY app) m
+           ON a.app = m.app AND a.created_at = m.max_at
+        WHERE ${evA.sql}`,
+        since, ...ev.args, ...evA.args,
       ), []),
 
       safeQuery(() => dbAll<{ alert_kind: string; app_slug: string | null; details_json: string }>(
@@ -125,8 +130,8 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       safeQuery(() => dbAll<{ app: string; installs: number; active7: number }>(
         `SELECT app, COUNT(*) AS installs,
                 SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) AS active7
-           FROM app_installs GROUP BY app ORDER BY installs DESC`,
-        since - 6 * 86_400,
+           FROM app_installs WHERE ${ev.sql} GROUP BY app ORDER BY installs DESC`,
+        since - 6 * 86_400, ...ev.args,
       ), []),
     ]);
 
@@ -177,7 +182,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       };
     });
 
-    return { rows, desktopApps, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
+    return { env, rows, desktopApps, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
   });
 
   // Desktop-app panel: installs are a slowly-changing dimension (app_installs),
@@ -192,7 +197,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const email = await requireAdmin(req, reply);
     if (!email) return;
 
-    const q = req.query as { app?: string; days?: string; limit?: string };
+    const q = req.query as { app?: string; days?: string; limit?: string; env?: string };
+    const env = parseEnvSelector(q.env);
+    const ev = envPredicate(env);
     const appName = (q.app || 'session-manager').slice(0, 60);
     const days = Math.min(Math.max(parseInt(q.days || '30', 10) || 30, 1), 365);
     const limit = Math.min(Math.max(parseInt(q.limit || '20', 10) || 20, 1), 100);
@@ -210,28 +217,28 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN last_seen_at  >= ? THEN 1 ELSE 0 END) AS active7,
                 SUM(CASE WHEN last_seen_at  >= ? THEN 1 ELSE 0 END) AS active30,
                 SUM(CASE WHEN first_seen_at >= ? THEN 1 ELSE 0 END) AS new7
-           FROM app_installs WHERE app = ?`,
-        since7, since30, since7, appName,
+           FROM app_installs WHERE app = ? AND ${ev.sql}`,
+        since7, since30, since7, appName, ...ev.args,
       ), undefined),
 
       safeQuery(() => dbAll<{ platform: string | null; n: number }>(
         `SELECT platform, COUNT(*) AS n FROM app_installs
-          WHERE app = ? GROUP BY platform ORDER BY n DESC`,
-        appName,
+          WHERE app = ? AND ${ev.sql} GROUP BY platform ORDER BY n DESC`,
+        appName, ...ev.args,
       ), []),
 
       safeQuery(() => dbAll<{ arch: string | null; n: number }>(
         `SELECT arch, COUNT(*) AS n FROM app_installs
-          WHERE app = ? GROUP BY arch ORDER BY n DESC`,
-        appName,
+          WHERE app = ? AND ${ev.sql} GROUP BY arch ORDER BY n DESC`,
+        appName, ...ev.args,
       ), []),
 
       safeQuery(() => dbAll<{ app_version: string | null; installs: number; active7: number }>(
         `SELECT app_version, COUNT(*) AS installs,
                 SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) AS active7
-           FROM app_installs WHERE app = ?
+           FROM app_installs WHERE app = ? AND ${ev.sql}
           GROUP BY app_version ORDER BY installs DESC`,
-        since7, appName,
+        since7, appName, ...ev.args,
       ), []),
 
       // The release-regression query: errors per version, and how many distinct
@@ -239,9 +246,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       // very different signal from 10 errors across 10 installs).
       safeQuery(() => dbAll<{ version: string | null; errors: number; visitors: number }>(
         `SELECT version, COUNT(*) AS errors, COUNT(DISTINCT visitor_id) AS visitors
-           FROM app_errors WHERE app = ? AND created_at >= ?
+           FROM app_errors WHERE app = ? AND created_at >= ? AND ${ev.sql}
           GROUP BY version ORDER BY errors DESC`,
-        appName, sinceWindow,
+        appName, sinceWindow, ...ev.args,
       ), []),
 
       // Top-N signatures with counts, rather than the single latest `msg`
@@ -251,20 +258,21 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       }>(
         `SELECT name, msg, COUNT(*) AS n, COUNT(DISTINCT visitor_id) AS visitors,
                 MAX(created_at) AS last_seen
-           FROM app_errors WHERE app = ? AND created_at >= ?
+           FROM app_errors WHERE app = ? AND created_at >= ? AND ${ev.sql}
           GROUP BY name, msg ORDER BY n DESC LIMIT ?`,
-        appName, sinceWindow, limit,
+        appName, sinceWindow, ...ev.args, limit,
       ), []),
 
       safeQuery(() => dbAll<{ level: string; n: number }>(
         `SELECT level, COUNT(*) AS n FROM app_logs
-          WHERE app = ? AND created_at >= ? GROUP BY level`,
-        appName, sinceWindow,
+          WHERE app = ? AND created_at >= ? AND ${ev.sql} GROUP BY level`,
+        appName, sinceWindow, ...ev.args,
       ), []),
     ]);
 
     return {
       app: appName,
+      env,
       days,
       installs: {
         total:    totals?.total    ?? 0,

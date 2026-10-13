@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
+import staticPlugin from '@fastify/static';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { initDb, dbRun, dbAll } from '../server/db.js';
 import { registerPageHitRecorder, flushPageHits, slugFromPath } from '../server/page-hits.js';
 
@@ -86,5 +90,31 @@ describe('page hit recorder', () => {
     expect(r[0].visitor_hash).toBe(r[1].visitor_hash);
     expect(JSON.stringify(r)).not.toContain('203.0.113.7');
     expect(JSON.stringify(r)).not.toContain('Windows NT');
+  });
+});
+
+describe('page hit recorder over @fastify/static', () => {
+  it('records the static app HTML document but not its assets', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'page-hits-static-'));
+    mkdirSync(join(root, 'projects', 'demo'), { recursive: true });
+    writeFileSync(join(root, 'projects', 'demo', 'index.html'), '<html>demo</html>');
+    writeFileSync(join(root, 'projects', 'demo', 'app.js'), 'console.log(1)');
+
+    const app2 = Fastify({ logger: false });
+    registerPageHitRecorder(app2, { flush: false });
+    await app2.register(staticPlugin, { root });
+    await app2.ready();
+
+    const page = await app2.inject({ method: 'GET', url: '/projects/demo/' });
+    const asset = await app2.inject({ method: 'GET', url: '/projects/demo/app.js' });
+    expect(page.statusCode).toBe(200);
+    expect(asset.statusCode).toBe(200);
+    await settle();
+    await flushPageHits();
+    await app2.close();
+
+    const r = await rows();
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ slug: 'demo', status: 200, path: '/projects/demo/' });
   });
 });

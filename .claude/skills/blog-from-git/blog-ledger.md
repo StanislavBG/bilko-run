@@ -9,6 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
+| 2026-10-13 | launch-kit-eight-skills-hand-off-one-shared-brief | launch-kit-eight-skills-hand-off-one-shared-brief | ❌ no tile | unspecified (burrow) |
 | 2026-10-07 | twelve-places-one-weather-rule-you-set-yourself | outdoor-hours | ✅ | problem-outcome (spotlight, scheduled) |
 | 2026-10-03 | turn-your-github-year-into-a-heatmap-and-badge-wall | git-viewer | ✅ | problem-outcome (spotlight) |
 | 2026-09-26 | a-space-shooter-shrank-66-percent-to-fit-in-your-browser | escape-velocity | ✅ | shipped-note |
@@ -43,38 +44,14 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** outdoor-hours (on-list, ✅ tile), spotlight post rescheduled to
-  2026-10-07T16:00:00.000Z. Originally seeded for 2026-10-03T17:26:18Z under an owner override
-  ("publish, lets start getting new blogs") the same day as the git-viewer post
-  (2026-10-03T16:08:44Z) — that put two posts on one calendar day, violating the 3-day
-  `min_gap_days` rule. **Owner overrides cover cadence TIMING only; they never bypass
-  `min_gap_days`.** Rescheduled 2026-10-03 to the next slot that honours the gap
-  (git-viewer + 3 days, 9:00 AM PDT). A one-shot `applyDataMigrationOnce` in `server/db.ts` (historical; posts now live in `content/blog/*.md`)
-  moves any already-seeded prod row to the new date exactly once, idempotently, without touching
-  a row the owner has since edited to a different date. A repo-wide test
-  (`tests/blog-cadence-gate.test.ts`) now asserts every seeded post obeys `min_gap_days`, so this
-  can't recur silently. The override covers cadence TIMING only; the 3-post project cooldown and
-  every other rotation rule still applied normally when picking the subject. Re-ran the GitHub
-  scan since 2026-09-26: still only
-  `bilko-run` (host, meta) and `claude-code-session-manager` (session-manager, on cooldown) had
-  pushed — no rotation-eligible project had new work, so `cadence.no_new_work_fallback: spotlight`
-  fired again. Candidate order (never-covered-first, registry slug order, cooldown projects
-  removed): outdoor-hours, sudoku, mindswiffer, local-score, bilko-flow, game-academy,
-  headline-grader, thread-grader, stepproof, ad-scorer, email-forge, audience-decoder,
-  launch-grader, stack-audit, bglabs, fizzpop, etch, cellar. Picked outdoor-hours (first on that
-  list). Grounded in its live data bundle (`public/outdoor-hours/last10y.json`: 12 regions across
-  CA/WA/FL/VA/NY/HI/Bulgaria, 5 named weather profiles, data back to 2016) and its page source
-  (`~/Projects/Outdoor-Hours/src/OutdoorHoursPage.tsx`: 7-dial custom rule, plain-English
-  leaderboard sentence, percent-gap-to-days math, year-over-year toggle), not git activity.
-  `max_posts_per_run: 1` capped it to one seed for this run.
+- **Last project covered:** launch-kit-eight-skills-hand-off-one-shared-brief (off-list, no tile), post `launch-kit-eight-skills-hand-off-one-shared-brief` seeded 2026-10-13 by scripts/blog-seed.sh.
 - **Rotation debt:** none — last post on-`/projects`. burrow (off-list, no tile) is ineligible as a
   sole subject (no user-facing surface); do not queue it as a standalone post.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
   08-19), problem→outcome (07-02, 08-11, 10-03 ×2 spotlight), shipped-note (07-06, 07-21, 08-23,
   08-27, 09-22, 09-26), field-note (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18,
   08-04). Next: compare reception/readability rather than adding tones.
-- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** outdoor-hours,
-  git-viewer, escape-velocity.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** launch-kit-eight-skills-hand-off-one-shared-brief, outdoor-hours, git-viewer.
 - **Due / under-covered on-list projects** (good next candidates): local-score, game-academy,
   stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
   audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku.

@@ -622,16 +622,17 @@
     "public": true,
     "displayName": "Launch Kit",
     "listing": {
-      "detail": "Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire.",
-      "metric": "8 skills",
-      "metricLabel": "$9 one-time",
-      "lang": "Markdown",
-      "audience": "Solo builders using Claude Code who have a working product and need to launch it.",
-      "talkingPoints": [
-        "Eight Claude skills that take a product from \"it works\" to launched.",
-        "$9 one-time download.",
-        "All eight skills share one context file; each writes one file and names the next skill to run."
-      ]
+      "offering": "content",
+      "pricing": "paid",
+      "callToAction": "Get the Launch Kit: eight Claude skills that plan and write your launch. $9 one-time download.",
+      "avoidClaims": [
+        "Launch Kit is a SaaS, app or subscription. It is a one-time $9 zip download of Claude skill files.",
+        "Launch Kit is free or open source.",
+        "Launch Kit guarantees sales, signups, revenue or a successful launch.",
+        "Launch Kit is made, endorsed or sold by Anthropic.",
+        "Launch Kit is built for ChatGPT, Gemini or other non-Claude assistants."
+      ],
+      "shareImage": "/projects/launch-kit/og.png"
     }
   }
 ]

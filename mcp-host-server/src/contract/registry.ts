@@ -48,6 +48,12 @@ export const ListingOfferingSchema = z.enum([
 
 export const ListingPricingSchema = z.enum(['free', 'freemium', 'paid', 'none']);
 
+export const ProjectAssetPathSchema = z
+  .string()
+  .max(200)
+  .regex(/^\/projects\/[a-z0-9-]+\/[A-Za-z0-9._/-]+\.png$/, 'must be a /projects/<slug>/... .png path')
+  .refine((s) => !s.includes('..') && !s.includes('//'), 'must not contain ".." or "//"');
+
 export const ListingSchema = z
   .object({
     detail: z.string().min(1).max(400).optional(),
@@ -60,6 +66,8 @@ export const ListingSchema = z
     pricing: ListingPricingSchema.optional(),
     callToAction: z.string().min(1).max(120).optional(),
     avoidClaims: z.array(z.string().min(1).max(200)).max(5).optional(),
+    icon: ProjectAssetPathSchema.optional(),
+    shareImage: ProjectAssetPathSchema.optional(),
   })
   .strict();
 
@@ -128,6 +136,17 @@ export const RegistrySchema = z.array(RegistryProjectSchema).superRefine((entrie
           code: z.ZodIssueCode.custom,
           message: `slug "${entry.slug}" field "${field}" mentions a retired product (ContentGrade)`,
           path: [index, ...field.replace(/\[(\d+)\]/g, '.$1').split('.')],
+        });
+      }
+    }
+
+    for (const key of ['icon', 'shareImage'] as const) {
+      const value = entry.listing?.[key];
+      if (value !== undefined && !value.startsWith(`/projects/${entry.slug}/`)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `slug "${entry.slug}" field "listing.${key}" must start with "/projects/${entry.slug}/", got "${value}"`,
+          path: [index, 'listing', key],
         });
       }
     }

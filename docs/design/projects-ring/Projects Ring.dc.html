@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><style>html,body{margin:0;height:100%;background:#f5f0e6;color:#1a1612;font-family:"Inter Tight",system-ui,sans-serif;overflow:auto}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#1a1612;text-decoration:none}a:hover{color:#a83818}@keyframes dcFadeA{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@keyframes dcFadeB{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}</style></helmet>
+<div style="height:100vh;min-height:720px;display:flex;flex-direction:column;background:#f5f0e6">
+  <header style="flex:none;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 32px;border-bottom:1px solid #d4ccb8">
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:30px;height:30px;border-radius:50%;background:#1a1612;color:#f5f0e6;display:flex;align-items:center;justify-content:center;font:400 15px 'Source Serif 4',serif">B</span><span style="font:400 20px 'Source Serif 4',serif">Bilko Bibitkov</span></div>
+    <nav style="display:flex;gap:28px;font-size:15px"><a href="#">Home</a><a href="#" style="border-bottom:2px solid #a83818;padding-bottom:4px">Projects</a><a href="#">Blog</a><a href="#">Contact</a></nav>
+    <span style="font:500 11px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#5d5648">SEARCH ⌘K</span>
+  </header>
+  <div style="flex:none;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:28px 32px 20px">
+    <div style="display:flex;flex-direction:column;gap:6px"><div style="font:500 11px 'JetBrains Mono',monospace;letter-spacing:.18em;color:#5d5648">SECTION 02 · PORTFOLIO</div><div style="font:400 44px/1 'Source Serif 4',serif;letter-spacing:-.02em">Projects &amp; Packages.</div></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onClick="{{ prev }}" aria-label="Previous project" style="width:44px;height:44px;border:1px solid #2a241c;background:transparent;cursor:pointer;font-size:16px" style-hover="background:#1a1612;color:#f5f0e6">←</button>
+      <span style="font:500 12px 'JetBrains Mono',monospace;letter-spacing:.12em;min-width:100px;text-align:center">{{ hero.n }} / {{ total }}</span>
+      <button onClick="{{ next }}" aria-label="Next project" style="width:44px;height:44px;border:1px solid #2a241c;background:transparent;cursor:pointer;font-size:16px" style-hover="background:#1a1612;color:#f5f0e6">→</button>
+    </div>
+  </div>
+  <div ref="{{ stageRef }}" style="flex:1;min-height:0;position:relative;overflow:hidden;border-top:1px solid #2a241c;border-bottom:1px solid #2a241c">
+    <sc-for list="{{ ring }}" as="it" hint-placeholder-count="0">
+      <div onClick="{{ it.onClick }}" title="{{ it.title }}" style="position:absolute;top:50%;left:0;width:{{ it.w }};height:{{ it.h }};transform:{{ it.tf }};opacity:{{ it.op }};pointer-events:{{ it.pe }};background:#ede6d6;border:1px solid #2a241c;cursor:pointer;overflow:hidden;transition:transform .55s cubic-bezier(.6,0,.2,1),width .55s,height .55s,opacity .4s" style-hover="background:#e3dcc8">
+        <div style="position:absolute;inset:0;padding:16px 0;display:flex;flex-direction:column;align-items:center;gap:12px">
+          <span style="font:500 10px 'JetBrains Mono',monospace;color:#5d5648">{{ it.n }}</span>
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ it.dot }}"></span>
+          <span style="writing-mode:vertical-rl;transform:rotate(180deg);font-family:'Source Serif 4',serif;font-size:{{ it.fs }};line-height:1;white-space:nowrap;margin-top:auto">{{ it.title }}</span>
+        </div>
+      </div>
+    </sc-for>
+    <div style="position:absolute;top:0;height:100%;left:{{ heroLeft }};width:{{ heroW }};background:#f5f0e6;border-left:1px solid #2a241c;border-right:1px solid #2a241c;padding:28px 32px;z-index:2">
+      <div style="display:flex;flex-direction:column;gap:16px;height:100%;animation:{{ hero.anim }} .45s ease both">
+        <div style="display:flex;align-items:center;gap:10px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#5d5648"><span style="width:9px;height:9px;border-radius:50%;background:{{ hero.dot }}"></span>{{ hero.n }} · {{ hero.tagline }}<span style="margin-left:auto;padding:4px 12px;border:1px solid #2e5a3e;color:#2e5a3e;letter-spacing:.16em">LIVE</span></div>
+        <div style="flex:1 1 0;min-height:0;border:1px solid #d4ccb8;background:repeating-linear-gradient(135deg,#ede6d6 0 10px,#e3dcc8 10px 11px);display:flex;align-items:center;justify-content:center;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#5d5648">SCREENSHOT</div>
+        <div style="font:400 52px/1 'Source Serif 4',serif;letter-spacing:-.02em">{{ hero.title }}</div>
+        <div style="font-size:17px;line-height:1.5;color:#3a342b;text-wrap:pretty">{{ hero.desc }}</div>
+        <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap;padding-top:16px;border-top:1px solid #d4ccb8">
+          <sc-for list="{{ hero.meta }}" as="m" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:2px"><span style="font:400 19px/1.2 'Source Serif 4',serif">{{ m.v }}</span><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#5d5648">{{ m.l }}</span></div></sc-for>
+          <div style="margin-left:auto;display:flex;gap:10px">
+            <button style="background:transparent;border:1px solid #2a241c;padding:12px 18px;font-size:15px;cursor:pointer" style-hover="background:#ede6d6">Full story</button>
+            <button style="background:#1a1612;color:#f5f0e6;border:0;padding:12px 20px;font-weight:500;font-size:15px;cursor:pointer" style-hover="background:#a83818">Open →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="flex:none;padding:16px 32px 18px">
+    <div style="display:flex;align-items:flex-end;gap:1px;height:28px;cursor:pointer">
+      <sc-for list="{{ ticks }}" as="tk" hint-placeholder-count="0"><div onClick="{{ tk.onClick }}" title="{{ tk.title }}" style="flex:1;height:{{ tk.h }};background:{{ tk.c }};transition:height .3s,background .3s" style-hover="background:#1a1612"></div></sc-for>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#5d5648"><span>NEWEST</span><span>SCROLL · ←/→ · CLICK A SPINE OR TICK</span><span>OLDEST</span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;autoplay&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;interval&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:5,&quot;min&quot;:2,&quot;max&quot;:12,&quot;step&quot;:1,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;falloff&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.9,&quot;min&quot;:0.8,&quot;max&quot;:1,&quot;step&quot;:0.02,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Ring&quot;}}">
+const P = [
+  { title: 'Session Manager', desc: 'Local cockpit for Claude Code CLI sessions.', tags: ['DEV TOOL', 'CLI'], stat: ['free', 'APP + MANUAL'], lang: 'TypeScript', date: 'Oct 10, 2026', dot: '#a83818' },
+  { title: 'Social Signals Trader', desc: 'An end-to-end experiment in market-trading automation driven by social sentiment.', tags: ['AI TOOL', 'DATA'], date: 'Oct 11, 2026', dot: '#1a1612' },
+  { title: 'Escape Velocity', desc: "Escape the Solar System: a keyboard-only space survivors run across Sol's eight planets.", tags: ['GAME', 'ARCADE'], stat: ['8 planets', 'TO CONQUER'], lang: 'Godot 4', date: 'Oct 4, 2026', dot: '#2e5a3e' },
+  { title: 'Academy', desc: 'Free, ad-free AI fundamentals for humans — every claim cited.', tags: ['LEARN'], date: 'Oct 11, 2026', dot: '#a83818' },
+  { title: 'Git Viewer', desc: 'Your Git, your Résumé — a portfolio and printable résumé from your GitHub, free in seconds.', tags: ['DATA', 'PORTFOLIO'], stat: ['3 free · 12 paid', 'REPOS PER PORTFOLIO'], date: 'Oct 10, 2026', dot: '#1a1612' },
+  { title: 'Launch Kit', desc: '8 Claude skills that take your product from it-works to launched. $9.', tags: ['CLAUDE SKILLS', 'DOWNLOAD'], date: 'Oct 10, 2026', dot: '#2e5a3e' },
+  { title: 'Weather', desc: 'KOUT-7: ten years of comfortable hours, scored.', tags: ['AI TOOL', 'PRODUCTIVITY'], stat: ['10 yrs', 'OF DATA'], lang: 'Python', date: 'May 8, 2026', dot: '#a83818' },
+];
+// Mock: 140 entries cycling the 7 real projects to demonstrate scale.
+const M = 140;
+const ALL = Array.from({ length: M }, (_, i) => P[i % P.length]);
+const pad3 = i => String(i + 1).padStart(3, '0');
+const wrap = (i, a) => { let k = (((i - a) % M) + M) % M; if (k > M / 2) k -= M; return k; };
+const meta = p => [p.stat && { v: p.stat[0], l: p.stat[1] }, p.lang && { v: p.lang, l: 'PRIMARY LANG' }, { v: p.date, l: 'UPDATED' }].filter(Boolean);
+class Component extends DCLogic {
+  state = { a: 0, f: false, w: 1280, h: 560 };
+  stageRef = React.createRef();
+  go(i) { this.setState(s => ({ a: ((i % M) + M) % M, f: !s.f })); }
+  step(d) { this.go(this.state.a + d); }
+  componentDidMount() {
+    const el = this.stageRef.current;
+    this.ro = new ResizeObserver(() => el && this.setState({ w: el.clientWidth, h: el.clientHeight }));
+    if (el) {
+      this.ro.observe(el);
+      this.onWheel = e => {
+        e.preventDefault();
+        const t = Date.now(); if (t - (this.lw || 0) < 140) return;
+        const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (Math.abs(d) < 4) return; this.lw = t; this.step(d > 0 ? 1 : -1);
+      };
+      el.addEventListener('wheel', this.onWheel, { passive: false });
+    }
+    this.onKey = e => { const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key]; if (d && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) { e.preventDefault(); this.step(d); } };
+    window.addEventListener('keydown', this.onKey);
+    this.startTimer();
+  }
+  startTimer() { clearInterval(this.t); this.t = setInterval(() => { if (this.props.autoplay) this.step(1); }, (this.props.interval ?? 5) * 1000); }
+  componentDidUpdate(pp) { if (pp.autoplay !== this.props.autoplay || pp.interval !== this.props.interval) this.startTimer(); }
+  componentWillUnmount() {
+    clearInterval(this.t); this.ro?.disconnect();
+    window.removeEventListener('keydown', this.onKey);
+    this.stageRef.current?.removeEventListener('wheel', this.onWheel);
+  }
+  renderVals() {
+    const { a, f, w, h } = this.state;
+    const falloff = this.props.falloff ?? 0.9;
+    const HW = Math.round(Math.max(460, Math.min(680, w * 0.44)));
+    const HL = Math.round((w - HW) / 2), HR = HL + HW;
+    const base = Math.max(120, h - 40);
+    const W = j => 64 * Math.pow(falloff, j - 1);
+    const cum = j => { let s = 8; for (let m = 1; m < j; m++) s += W(m) + 6; return s; };
+    const ring = ALL.map((p, i) => {
+      const k = wrap(i, a), j = Math.abs(k), n = pad3(i);
+      if (j === 0) return { ...p, n, w: '64px', h: base + 'px', tf: `translate(${w / 2 - 32}px,-50%)`, op: 0, pe: 'none', fs: '22px', onClick: null };
+      const jj = Math.min(j, 30), sw = W(jj), x = k > 0 ? HR + cum(jj) : HL - cum(jj) - sw;
+      const off = k > 0 ? x > w : x + sw < 0;
+      const hidden = off || j > 29;
+      return { ...p, n, w: sw + 'px', h: base * Math.pow(0.95, jj) + 'px', tf: `translate(${x}px,-50%)`, op: hidden ? 0 : Math.max(0.25, 1 - (j - 1) * 0.06), pe: hidden ? 'none' : 'auto', fs: Math.max(11, Math.round(22 * Math.pow(0.93, jj - 1))) + 'px', onClick: () => this.go(i) };
+    });
+    const hp = ALL[a];
+    return {
+      total: M, stageRef: this.stageRef, ring,
+      heroLeft: HL + 'px', heroW: HW + 'px',
+      hero: { ...hp, n: pad3(a), meta: meta(hp), tagline: hp.tags.join(' · '), anim: f ? 'dcFadeA' : 'dcFadeB' },
+      ticks: ALL.map((p, i) => { const d = Math.abs(wrap(i, a)); return { title: `${pad3(i)} ${p.title}`, onClick: () => this.go(i), h: d === 0 ? '28px' : d <= 6 ? '16px' : '8px', c: d === 0 ? '#a83818' : d <= 6 ? '#5d5648' : '#d4ccb8' }; }),
+      prev: () => this.step(-1), next: () => this.step(1),
+    };
+  }
+}
+</script>
+</body>
+</html>

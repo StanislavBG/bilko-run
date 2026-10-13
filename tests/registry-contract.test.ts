@@ -107,6 +107,48 @@ describe('RegistryProjectSchema optional fields', () => {
   });
 });
 
+describe('listing icon and shareImage', () => {
+  const withListing = (listing: Record<string, unknown>) => [{ ...BASE_ENTRY, listing }];
+
+  it('parses a valid icon and shareImage', () => {
+    const result = RegistrySchema.safeParse(
+      withListing({
+        icon: '/projects/foo-bar/icon.png',
+        shareImage: '/projects/foo-bar/img/share.png',
+      })
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it.each([
+    ['a .jpg', '/projects/foo-bar/share.jpg'],
+    ['a .. path', '/projects/foo-bar/../other/share.png'],
+    ['a // path', '/projects/foo-bar//share.png'],
+    ['an https URL', 'https://example.com/projects/foo-bar/share.png'],
+  ])('rejects %s', (_label, value) => {
+    for (const key of ['icon', 'shareImage']) {
+      expect(RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { [key]: value } }).success).toBe(false);
+    }
+  });
+
+  it('rejects another slug\'s path, naming slug and field', () => {
+    for (const key of ['icon', 'shareImage']) {
+      const result = RegistrySchema.safeParse(withListing({ [key]: '/projects/other-app/x.png' }));
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const msg = result.error.issues.map((i) => i.message).join('\n');
+        expect(msg).toContain('foo-bar');
+        expect(msg).toContain(`listing.${key}`);
+      }
+    }
+  });
+
+  it('rejects a path over 200 chars', () => {
+    const long = `/projects/foo-bar/${'a'.repeat(200)}.png`;
+    expect(RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { icon: long } }).success).toBe(false);
+  });
+});
+
 describe('listing and content standards', () => {
   const VALID_LISTING = {
     detail: 'A short story about the project.',

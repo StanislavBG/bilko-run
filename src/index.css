@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/portfolio.css";
+@import "./styles/projects-ring.css";
 
 @theme {
   /* Warm, human palette — away from dark/purple/robotic */

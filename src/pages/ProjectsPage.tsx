@@ -1,23 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { ADMIN_EMAILS } from '../constants.js';
 import { PROJECTS } from '../data/projectsRegistry.js';
 import { projectMetadataRows } from '../data/projectMetadata.js';
-import { HUB_CARDS, PUBLIC_CARDS, lastWorkedLabel, type HubCard } from '../data/projectsView.js';
+import { HUB_CARDS, PUBLIC_CARDS, type HubCard } from '../data/projectsView.js';
+import { RING_DOTS, heroBox, pad3, ringOffset, ringStats, spineGeom, tickStyle } from '../data/projectsRing.js';
 import { track } from '../hooks/usePageView.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 /**
- * Combined Projects + Packages hub.
+ * Combined Projects + Packages hub, rendered as the "Projects Ring": a fixed
+ * hero window with an endless ring of vertical spines and a tick scrubber
+ * (spec: docs/design/projects-ring/README.md).
  *
- * - Public visitors see only PUBLIC_CARDS (the 7 featured projects + flagship
- *   packages), ordered by commit-count (most-worked-on project first).
- * - The admin (Clerk email in ADMIN_EMAILS) gets a toggle that reveals every
- *   card in HUB_CARDS.
- * - Cards are full-width hero rows that expand inline on click with detail +
- *   links. On desktop the collapsed list fits the viewport without page scroll;
- *   the list area scrolls internally if an expansion overflows.
+ * - Public visitors see only PUBLIC_CARDS; the admin (Clerk email in
+ *   ADMIN_EMAILS) gets a toggle that reveals every card in HUB_CARDS.
+ * - "Full story" swaps the hero screenshot for the old drawer content.
  */
 
 function statusMeta(card: HubCard): { label: string; cls: string } {
@@ -29,9 +28,6 @@ function statusMeta(card: HubCard): { label: string; cls: string } {
     default:          return { label: 'Shipped', cls: 'shipped' };
   }
 }
-
-/** Color-coded accent rail/dot, cycled by row order for visual rhythm. */
-const ACCENTS = ['tang', 'ink', 'blue'] as const;
 
 /** Split "Data · Portfolio" into ["Data", "Portfolio"] for the chip column. */
 function categoryChips(category: string): string[] {
@@ -56,20 +52,37 @@ function MetadataPanel({ slug }: { slug: string }) {
   );
 }
 
-function HubRow({ card, index, expanded, isAdmin, onToggle }: { card: HubCard; index: number; expanded: boolean; isAdmin: boolean; onToggle: () => void }) {
-  const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
-  const status = statusMeta(card);
-  const worked = lastWorkedLabel(card);
-  const accent = ACCENTS[index % ACCENTS.length];
-  const chips = categoryChips(card.category);
+const FONT_LINK_ID = 'pr-fonts';
+const FONT_HREF =
+  'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap';
 
-  function open() {
-    if (!card.href) return;
-    track('hub_open', { tool: card.slug, metadata: { type: card.type } });
-    if (card.isInternal) navigate(card.href);
-    else window.location.href = card.href;
-  }
+/**
+ * Page-scoped web fonts: one `<link rel="stylesheet">` on mount, removed on
+ * unmount. A link to fonts.googleapis.com passes the CSP's style-src; a runtime
+ * `<style>` element would not (no nonce), so none is created.
+ */
+function useRingFonts(): void {
+  useEffect(() => {
+    const added: HTMLLinkElement[] = [];
+    const add = (id: string, attrs: Record<string, string>) => {
+      if (document.getElementById(id)) return;
+      const link = document.createElement('link');
+      link.id = id;
+      for (const [k, v] of Object.entries(attrs)) link.setAttribute(k, v);
+      document.head.appendChild(link);
+      added.push(link);
+    };
+    add('pr-preconnect-css', { rel: 'preconnect', href: 'https://fonts.googleapis.com' });
+    add('pr-preconnect-files', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' });
+    add(FONT_LINK_ID, { rel: 'stylesheet', href: FONT_HREF });
+    return () => {
+      for (const link of added) link.remove();
+    };
+  }, []);
+}
+
+function StoryPanel({ card, isAdmin }: { card: HubCard; isAdmin: boolean }) {
+  const [copied, setCopied] = useState(false);
 
   function copyInstall() {
     if (!card.install) return;
@@ -80,83 +93,54 @@ function HubRow({ card, index, expanded, isAdmin, onToggle }: { card: HubCard; i
   }
 
   return (
-    <div className={`pf-hub-row ${accent}${expanded ? ' expanded' : ''}`}>
-      <div className="pf-hub-headrow">
-      <button className="pf-hub-head" onClick={onToggle} aria-expanded={expanded}>
-        <span className="pf-hub-rail" aria-hidden="true" />
-        <span className="pf-hub-ord">{String(index + 1).padStart(2, '0')}</span>
-        <span className="pf-hub-dotcell"><span className={`pf-hub-dot ${accent}`} aria-hidden="true" /></span>
-        <span className="pf-hub-main">
-          <span className="pf-hub-name">{card.name}</span>
-          <span className="pf-hub-tagline">{card.blurb}</span>
-        </span>
-        <span className="pf-hub-cats">
-          {chips.map(c => <span key={c} className="pf-hub-cat">{c}</span>)}
-        </span>
-        <span className="pf-hub-stat">
-          {card.metric && <span className="pf-hub-stat-n">{card.metric}</span>}
-          {card.metricLabel && <span className="pf-hub-stat-l">{card.metricLabel}</span>}
-        </span>
-        <span className="pf-hub-stat">
-          {card.lang && <span className="pf-hub-stat-n">{card.lang}</span>}
-          {card.lang && <span className="pf-hub-stat-l">primary lang</span>}
-        </span>
-        <span className="pf-hub-when" title="Last commit">{worked}</span>
-        <span className={`pf-hub-badge ${status.cls}`}>{status.label}</span>
-        <span className={`pf-hub-caret${expanded ? ' open' : ''}`} aria-hidden="true">›</span>
-      </button>
-      {card.href && card.status !== 'postponed' && (
-        <button className="pf-hub-open" onClick={open} aria-label={`Open ${card.name}`}>
-          {card.type === 'package' ? 'GitHub' : 'Open'} →
-        </button>
-      )}
-      </div>
-
-      {expanded && (
-        <div className="pf-hub-body">
-          <div className="pf-hub-detail-col">
-            <p className="pf-hub-detail">{card.detail ?? card.blurb}</p>
-            {card.tags.length > 0 && (
-              <div className="pf-hub-tags">
-                {card.tags.map(t => <span key={t} className="pf-pill-sm">{t}</span>)}
-              </div>
-            )}
-            {card.install && (
-              <button className="pf-hub-install" onClick={copyInstall} aria-label={`Copy install command for ${card.name}`}>
-                <span className="pf-hub-dollar">$</span> {card.install}
-                <span className="pf-hub-copy">{copied ? 'copied' : 'copy'}</span>
-              </button>
-            )}
-          </div>
-          <div className="pf-hub-actions">
-            {card.npm && (
-              <a href={card.npm} target="_blank" rel="noopener noreferrer" className="pf-hub-link">npm →</a>
-            )}
-            {card.github && (
-              <a href={card.github} target="_blank" rel="noopener noreferrer" className="pf-hub-src">
-                {card.github.replace(/^https?:\/\//, '')}
-              </a>
-            )}
-            {card.slug === 'session-manager' && (
-              <a href="/projects/session-manager/" className="pf-hub-link">Web Remote →</a>
-            )}
-          </div>
-          {isAdmin && card.type === 'project' && <MetadataPanel slug={card.slug} />}
+    <div className="pr-story">
+      <p className="pf-hub-detail">{card.detail ?? card.blurb}</p>
+      {card.tags.length > 0 && (
+        <div className="pf-hub-tags">
+          {card.tags.map(t => <span key={t} className="pf-pill-sm">{t}</span>)}
         </div>
       )}
+      {card.install && (
+        <button className="pf-hub-install" onClick={copyInstall} aria-label={`Copy install command for ${card.name}`}>
+          <span className="pf-hub-dollar">$</span> {card.install}
+          <span className="pf-hub-copy">{copied ? 'copied' : 'copy'}</span>
+        </button>
+      )}
+      <div className="pf-hub-actions">
+        {card.npm && (
+          <a href={card.npm} target="_blank" rel="noopener noreferrer" className="pf-hub-link">npm →</a>
+        )}
+        {card.github && (
+          <a href={card.github} target="_blank" rel="noopener noreferrer" className="pf-hub-src">
+            {card.github.replace(/^https?:\/\//, '')}
+          </a>
+        )}
+        {card.slug === 'session-manager' && (
+          <a href="/projects/session-manager/" className="pf-hub-link">Web Remote →</a>
+        )}
+      </div>
+      {isAdmin && card.type === 'project' && <MetadataPanel slug={card.slug} />}
     </div>
   );
 }
 
 export function ProjectsPage() {
   const { user } = useUser();
+  const navigate = useNavigate();
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
   const isAdmin = ADMIN_EMAILS.includes(email);
 
   const [showAll, setShowAll] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [stage, setStage] = useState({ w: 1280, h: 560 });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const lastWheel = useRef(0);
+  const storyOpenRef = useRef(false);
+  storyOpenRef.current = storyOpen;
 
   useDocumentTitle('Projects — Bilko Bibitkov');
+  useRingFonts();
 
   useEffect(() => {
     track('page_view', { tool: 'projects' });
@@ -170,40 +154,195 @@ export function ProjectsPage() {
 
   const cards = useMemo(() => (isAdmin && showAll ? HUB_CARDS : PUBLIC_CARDS), [isAdmin, showAll]);
   const hiddenCount = HUB_CARDS.length - PUBLIC_CARDS.length;
+  const n = cards.length;
+
+  const go = useCallback((i: number) => {
+    if (n === 0) return;
+    setActive(((i % n) + n) % n);
+    setStoryOpen(false);
+  }, [n]);
+  const step = useCallback((d: number) => {
+    if (n === 0) return;
+    setActive(a => (((a + d) % n) + n) % n);
+    setStoryOpen(false);
+  }, [n]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      e.preventDefault();
+      step(d);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [step]);
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => setStage({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const onWheel = (e: WheelEvent) => {
+      if (storyOpenRef.current && (e.target as HTMLElement | null)?.closest?.('.pr-story')) return;
+      e.preventDefault();
+      const t = Date.now();
+      if (t - lastWheel.current < 140) return;
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (Math.abs(d) < 4) return;
+      lastWheel.current = t;
+      step(d > 0 ? 1 : -1);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [step, n]);
+
+  function toggleShowAll() {
+    setShowAll(s => !s);
+    setActive(0);
+    setStoryOpen(false);
+  }
+
+  const card = cards[active];
+
+  function open() {
+    if (!card?.href) return;
+    track('hub_open', { tool: card.slug, metadata: { type: card.type } });
+    if (card.isInternal) navigate(card.href);
+    else window.location.href = card.href;
+  }
+
+  const hero = heroBox(stage.w);
+  const status = card ? statusMeta(card) : null;
+  const chips = card ? categoryChips(card.category) : [];
 
   return (
-    <div className="pf-page pf-hub-page">
-      <header className="pf-hub-header">
-        <div>
-          <div className="pf-eyebrow">Section 02 · Portfolio</div>
-          <h1 className="pf-hub-h1">Projects &amp; Packages.</h1>
-          <p className="pf-hub-lede">
-            Live tools and open-source packages, newest on top. Open any project directly, or click its row for the full story.
-          </p>
+    <div className="pr-page">
+      <div className="pr-bar">
+        <div className="pr-bar-title">
+          <div className="pr-eyebrow">SECTION 02 · PORTFOLIO</div>
+          <h1 className="pr-h1">Projects &amp; Packages.</h1>
         </div>
-        {isAdmin && (
-          <button
-            className={`pf-chip pf-hub-toggle${showAll ? ' on' : ''}`}
-            onClick={() => setShowAll(s => !s)}
-            title="Admin-only"
-          >
-            {showAll ? `Showing all · ${HUB_CARDS.length}` : `Show all (+${hiddenCount}) · admin`}
-          </button>
-        )}
-      </header>
-
-      <div className="pf-hub-list">
-        {cards.map((card, i) => (
-          <HubRow
-            key={`${card.type}:${card.slug}`}
-            card={card}
-            index={i}
-            expanded={expanded === card.slug}
-            isAdmin={isAdmin}
-            onToggle={() => setExpanded(cur => (cur === card.slug ? null : card.slug))}
-          />
-        ))}
+        <div className="pr-bar-ctl">
+          {isAdmin && (
+            <button
+              className={`pf-chip pf-hub-toggle${showAll ? ' on' : ''}`}
+              onClick={toggleShowAll}
+              title="Admin-only"
+            >
+              {showAll ? `Showing all · ${HUB_CARDS.length}` : `Show all (+${hiddenCount}) · admin`}
+            </button>
+          )}
+          <button className="pr-nav" onClick={() => step(-1)} aria-label="Previous project">←</button>
+          <span className="pr-counter">{n ? pad3(active) : '000'} / {n}</span>
+          <button className="pr-nav" onClick={() => step(1)} aria-label="Next project">→</button>
+        </div>
       </div>
+
+      {n === 0 || !card ? (
+        <p className="pr-empty">No projects yet.</p>
+      ) : (
+        <>
+          <div className="pr-stage" ref={stageRef}>
+            {cards.map((c, i) => {
+              const g = spineGeom(ringOffset(i, active, n), stage.w, stage.h);
+              return (
+                <button
+                  key={`${c.type}:${c.slug}`}
+                  type="button"
+                  className="pr-spine"
+                  aria-label={`Open ${c.name}`}
+                  title={c.name}
+                  tabIndex={g.hidden ? -1 : 0}
+                  aria-hidden={g.hidden || undefined}
+                  onClick={() => go(i)}
+                  style={{
+                    width: g.w,
+                    height: g.h,
+                    transform: `translate(${g.x}px,-50%)`,
+                    opacity: g.opacity,
+                    pointerEvents: g.hidden ? 'none' : 'auto',
+                  }}
+                >
+                  <span className="pr-spine-in">
+                    <span className="pr-spine-n">{pad3(i)}</span>
+                    <span className="pr-spine-dot" style={{ background: RING_DOTS[i % 3] }} />
+                    <span className="pr-spine-title" style={{ fontSize: g.fontPx }}>{c.name}</span>
+                  </span>
+                </button>
+              );
+            })}
+
+            <div className="pr-hero" style={{ left: hero.left, width: hero.width }}>
+              <div className="pr-hero-in" key={card.slug}>
+                <div className="pr-meta">
+                  <span className="pr-meta-dot" style={{ background: RING_DOTS[active % 3] }} />
+                  {pad3(active)} · {chips.map(c => c.toUpperCase()).join(' · ')}
+                  {status && <span className={`pr-badge ${status.cls}`}>{status.label.toUpperCase()}</span>}
+                </div>
+                {storyOpen ? (
+                  <StoryPanel card={card} isAdmin={isAdmin} />
+                ) : (
+                  <div className="pr-shot">
+                    {card.thumbnail
+                      ? <img src={card.thumbnail} alt={card.name} />
+                      : <span>SCREENSHOT</span>}
+                  </div>
+                )}
+                <div className="pr-title">{card.name}</div>
+                <div className="pr-desc">{card.blurb}</div>
+                <div className="pr-foot">
+                  {ringStats(card).map(m => (
+                    <div key={m.l} className="pr-stat">
+                      <span className="pr-stat-v">{m.v}</span>
+                      <span className="pr-stat-l">{m.l}</span>
+                    </div>
+                  ))}
+                  <div className="pr-actions">
+                    <button className="pr-btn" aria-expanded={storyOpen} onClick={() => setStoryOpen(o => !o)}>
+                      Full story
+                    </button>
+                    {card.href && card.status !== 'postponed' && (
+                      <button className="pr-btn pr-btn-primary" onClick={open}>
+                        {card.type === 'package' ? 'GitHub' : 'Open'} →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pr-scrubber">
+            <div className="pr-ticks">
+              {cards.map((c, i) => {
+                const t = tickStyle(Math.abs(ringOffset(i, active, n)));
+                return (
+                  <div
+                    key={`${c.type}:${c.slug}`}
+                    className="pr-tick"
+                    title={`${pad3(i)} ${c.name}`}
+                    onClick={() => go(i)}
+                    style={{ height: t.h, background: t.color }}
+                  />
+                );
+              })}
+            </div>
+            <div className="pr-caps">
+              <span>NEWEST</span>
+              <span>SCROLL · ←/→ · CLICK A SPINE OR TICK</span>
+              <span>OLDEST</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

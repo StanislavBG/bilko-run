@@ -49,7 +49,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const ev = envPredicate(env);
     const evA = envPredicate(env, 'a.env');
     const since = Math.floor(Date.now() / 1000) - 86_400;
-    // page_views.created_at_ms is in milliseconds; other tables use seconds
+    // page_hits.ts_ms is in milliseconds; other tables use seconds
     const sinceMsEpoch = since * 1000;
     // api_egress_daily is bucketed by calendar day, not a rolling window, so
     // "today + yesterday" is the closest available approximation of a
@@ -64,13 +64,13 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       }>(`SELECT slug, app_version, git_sha, host_kit_version, built_at, bundle_size_gz
           FROM app_manifests`), []),
 
-      // Traffic: extract slug from /projects/<slug>/... path prefix
+      // Traffic: human server-side page hits per slug (page_hits is written by
+      // the HTML-response recorder, so static-path apps are counted too).
       safeQuery(() => dbAll<{ slug: string; n: number }>(
-        `SELECT SUBSTR(path, 11, INSTR(SUBSTR(path, 11) || '/', '/') - 1) AS slug,
-                COUNT(*) AS n
-         FROM page_views
-         WHERE created_at_ms > ? AND path LIKE '/projects/%'
-         GROUP BY 1`,
+        `SELECT slug, COUNT(*) AS n
+         FROM page_hits
+         WHERE ts_ms >= ? AND is_bot = 0 AND status < 400 AND slug IS NOT NULL
+         GROUP BY slug`,
         sinceMsEpoch,
       ), []),
 
@@ -183,6 +183,114 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     });
 
     return { env, rows, desktopApps, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
+  });
+
+  // Server-side traffic report from page_hits. Human aggregates exclude bots and
+  // error responses; botHits and `recent` deliberately include bots (flagged).
+  app.get('/api/admin/traffic', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+
+    const q = req.query as { days?: string; slug?: string };
+    const days = Math.min(Math.max(parseInt(q.days || '7', 10) || 7, 1), 90);
+    const slug = q.slug ? q.slug.slice(0, 100) : null;
+    const since = Date.now() - days * 86_400_000;
+
+    const slugSql = slug ? ' AND slug = ?' : '';
+    const slugArgs: string[] = slug ? [slug] : [];
+    const human = `ts_ms >= ? AND is_bot = 0 AND status < 400${slugSql}`;
+    const humanArgs = [since, ...slugArgs];
+
+    const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest] = await Promise.all([
+      safeQuery(() => dbGet<{ hits: number; visitors: number }>(
+        `SELECT COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors FROM page_hits WHERE ${human}`,
+        ...humanArgs,
+      ), undefined),
+      safeQuery(() => dbGet<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM page_hits WHERE ts_ms >= ? AND is_bot = 1${slugSql}`,
+        since, ...slugArgs,
+      ), undefined),
+      safeQuery(() => dbGet<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM page_hits WHERE ts_ms >= ? AND is_bot = 0 AND status = 404${slugSql}`,
+        since, ...slugArgs,
+      ), undefined),
+      safeQuery(() => dbAll<{ date: string; hits: number; visitors: number }>(
+        `SELECT date, COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors
+           FROM page_hits WHERE ${human} GROUP BY date ORDER BY date`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ path: string; hits: number; visitors: number }>(
+        `SELECT path, COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors
+           FROM page_hits WHERE ${human} GROUP BY path ORDER BY hits DESC LIMIT 25`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ host: string; hits: number }>(
+        `SELECT referrer_host AS host, COUNT(*) AS hits
+           FROM page_hits WHERE ${human} AND referrer_host IS NOT NULL
+          GROUP BY referrer_host ORDER BY hits DESC LIMIT 25`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ slug: string; hits: number; visitors: number }>(
+        `SELECT slug, COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors
+           FROM page_hits WHERE ${human} AND slug IS NOT NULL
+          GROUP BY slug ORDER BY hits DESC LIMIT 25`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ country: string; hits: number }>(
+        `SELECT country, COUNT(*) AS hits FROM page_hits
+          WHERE ${human} AND country IS NOT NULL GROUP BY country ORDER BY hits DESC LIMIT 25`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ device: string; hits: number }>(
+        `SELECT device, COUNT(*) AS hits FROM page_hits
+          WHERE ${human} GROUP BY device ORDER BY hits DESC LIMIT 25`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ browser: string; hits: number }>(
+        `SELECT browser, COUNT(*) AS hits FROM page_hits
+          WHERE ${human} GROUP BY browser ORDER BY hits DESC LIMIT 25`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{
+        ts_ms: number; path: string; status: number; referrer_host: string | null;
+        country: string | null; device: string; browser: string; os: string; is_bot: number;
+      }>(
+        `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, is_bot
+           FROM page_hits WHERE ts_ms >= ?${slugSql} ORDER BY ts_ms DESC LIMIT 50`,
+        since, ...slugArgs,
+      ), []),
+      safeQuery(() => dbGet<{ d: string | null }>(`SELECT MIN(date) AS d FROM page_hits`), undefined),
+    ]);
+
+    return {
+      days,
+      totals: {
+        hits: totals?.hits ?? 0,
+        visitors: totals?.visitors ?? 0,
+        botHits: botRow?.n ?? 0,
+        notFound: notFoundRow?.n ?? 0,
+      },
+      byDay,
+      topPages,
+      topReferrers,
+      bySlug,
+      byCountry,
+      byDevice,
+      byBrowser,
+      recent: recent.map(r => ({
+        ts: r.ts_ms,
+        path: r.path,
+        status: r.status,
+        referrerHost: r.referrer_host,
+        country: r.country,
+        device: r.device,
+        browser: r.browser,
+        os: r.os,
+        isBot: r.is_bot === 1,
+      })),
+      earliestDate: earliest?.d ?? null,
+      generatedAt: Math.floor(Date.now() / 1000),
+    };
   });
 
   // Desktop-app panel: installs are a slowly-changing dimension (app_installs),

@@ -42,6 +42,7 @@ beforeEach(async () => {
   await dbRun('DELETE FROM api_egress_daily');
   await dbRun('DELETE FROM static_asset_daily');
   await dbRun('DELETE FROM app_installs');
+  await dbRun('DELETE FROM page_hits');
   delete process.env.BILKO_LATEST_HOST_KIT;
   // Reset to default: reject
   mockAdmin.mockImplementation(async (_req: any, reply: any) => {
@@ -409,5 +410,54 @@ describe('Session Manager panel — /api/admin/observability/installs', () => {
     const res = await app.inject({ method: 'GET', url: '/api/admin/observability' });
     const body = JSON.parse(res.body);
     expect(body.desktopApps).toEqual([{ app: 'session-manager', installs: 1, active7: 1 }]);
+  });
+});
+
+async function insertHit(opts: {
+  path: string; slug: string | null; visitor: string; status?: number; isBot?: number;
+}) {
+  const ts = Date.now() - 60_000;
+  await dbRun(
+    `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, 'US', 'desktop', 'Chrome', 'Linux', ?)`,
+    ts, new Date(ts).toISOString().slice(0, 10), opts.path, opts.slug,
+    opts.status ?? 200, opts.visitor, opts.isBot ?? 0,
+  );
+}
+
+async function seedTraffic() {
+  await insertHit({ path: '/projects/demo/', slug: 'demo', visitor: 'v1' });
+  await insertHit({ path: '/projects/demo/', slug: 'demo', visitor: 'v2' });
+  await insertHit({ path: '/projects/demo/', slug: 'demo', visitor: 'bot1', isBot: 1 });
+  await insertHit({ path: '/projects/demo/missing', slug: 'demo', visitor: 'v3', status: 404 });
+}
+
+describe('GET /api/admin/traffic', () => {
+  it('rejects non-admin with 403', async () => {
+    const res = await get('/api/admin/traffic');
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('reports human hits, bots and 404s separately', async () => {
+    asAdmin();
+    await seedTraffic();
+    const res = await get('/api/admin/traffic');
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.days).toBe(7);
+    expect(body.totals).toEqual({ hits: 2, visitors: 2, botHits: 1, notFound: 1 });
+    expect(body.bySlug[0].slug).toBe('demo');
+    expect(body.recent.length).toBe(4);
+  });
+});
+
+describe('observability rollup traffic24h', () => {
+  it('counts human page_hits per slug', async () => {
+    asAdmin();
+    await insertManifest('demo');
+    await seedTraffic();
+    const res = await get('/api/admin/observability');
+    const row = JSON.parse(res.body).rows.find((r: any) => r.slug === 'demo');
+    expect(row.traffic24h).toBe(2);
   });
 });

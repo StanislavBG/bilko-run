@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { injectOgMeta, resolveOg, type OgContext } from './og-meta.js';
 import { renderOgCard } from './og-image.js';
+import { readProjectPng } from './og-assets.js';
+
+const SHARE_MAX_BYTES = 5 * 1024 * 1024;
 
 const OG_FILE_RE = /^([a-z0-9-]+)\.png$/;
 
@@ -17,6 +20,16 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
     } else {
       const p = ctx.projects.find(x => x.slug === slug);
       if (!p) return reply.status(404).type('text/plain').send('Not found');
+      if (p.shareImage && ctx.staticRoot) {
+        const asset = readProjectPng(ctx.staticRoot, slug, p.shareImage, SHARE_MAX_BYTES);
+        if (asset && asset.width === 1200 && asset.height === 630) {
+          reply.header('cache-control', 'public, max-age=86400');
+          return reply.type('image/png').send(asset.bytes);
+        }
+        req.log.warn(
+          `og: shareImage for ${slug} unusable (${asset ? `${asset.width}x${asset.height}, need 1200x630` : 'missing, oversize, escaped or not a PNG'}); using generated card`,
+        );
+      }
       png = renderOgCard({
         title: p.displayName ?? p.name,
         tagline: p.tagline,

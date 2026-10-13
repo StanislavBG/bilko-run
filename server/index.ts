@@ -95,6 +95,13 @@ registerSecurityHeaders(app);
 // Social-card routes + per-page OG meta injection. Must come right after the
 // security-headers hook so it sees buffered, nonce-stamped HTML (and runs
 // before compression). Registry/blog data is read once at boot.
+// Resolved here (before the blog routes) because they scan for videos at boot.
+const distCandidates = [
+  resolve(__dirname, '..', '..', 'dist'),  // dist-server/server/ → dist/
+  resolve(process.cwd(), 'dist'),           // cwd/dist/
+  resolve(__dirname, '..', 'dist'),         // one level up
+];
+const distPath = distCandidates.find(p => existsSync(p)) ?? distCandidates[0];
 {
   let projects: OgProject[] = [];
   try {
@@ -105,7 +112,7 @@ registerSecurityHeaders(app);
   const blogPosts = loadBlogPosts()
     .filter(p => p.published)
     .map(p => ({ slug: p.slug, title: p.title, excerpt: p.excerpt }));
-  registerOgRoutes(app, { projects, blogPosts, dynamic: [gitViewerOg] });
+  registerOgRoutes(app, { projects, blogPosts, dynamic: [gitViewerOg], staticRoot: distPath });
 }
 
 // Registered after CORS so its onSend hook can drop the `Vary: Origin` that
@@ -160,13 +167,6 @@ registerToolRoutes(app);
 registerStripeRoutes(app);
 registerWebProductRoutes(app);
 registerAdminWebProductRoutes(app);
-// Resolved here (before the blog routes) because they scan for videos at boot.
-const distCandidates = [
-  resolve(__dirname, '..', '..', 'dist'),  // dist-server/server/ → dist/
-  resolve(process.cwd(), 'dist'),           // cwd/dist/
-  resolve(__dirname, '..', 'dist'),         // one level up
-];
-const distPath = distCandidates.find(p => existsSync(p)) ?? distCandidates[0];
 registerBlogRoutes(app, {
   videosRoot: isProd ? join(distPath, 'blog-videos') : join(process.cwd(), 'public', 'blog-videos'),
 });

@@ -20,12 +20,17 @@ export interface OgProject {
   displayName?: string;
   tagline: string;
   category: string;
+  /** Registry `listing.icon` / `listing.shareImage`: /projects/<slug>/... .png paths. */
+  icon?: string;
+  shareImage?: string;
 }
 
 export interface OgContext {
   projects: readonly OgProject[];
   blogPosts: readonly { slug: string; title: string; excerpt: string }[];
   dynamic?: readonly OgDynamicResolver[];
+  /** Root of the served static bundle (dist); enables listing.shareImage lookups. */
+  staticRoot?: string;
 }
 
 const SITE = 'https://bilko.run';
@@ -77,6 +82,9 @@ export function loadOgProjects(file?: string): OgProject[] {
       category: String(p.category ?? ''),
     };
     if (typeof p.displayName === 'string' && p.displayName) out.displayName = p.displayName;
+    const listing = p.listing as Record<string, unknown> | undefined;
+    if (typeof listing?.icon === 'string' && listing.icon) out.icon = listing.icon;
+    if (typeof listing?.shareImage === 'string' && listing.shareImage) out.shareImage = listing.shareImage;
     return out;
   });
 }

@@ -1,5 +1,9 @@
 import Fastify from 'fastify';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { Resvg } from '@resvg/resvg-js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { registerSecurityHeaders } from '../server/security-headers.js';
 import { registerOgRoutes } from '../server/og-routes.js';
 import { loadOgProjects } from '../server/og-meta.js';
@@ -9,13 +13,34 @@ import { gitViewerOg } from '../server/routes/tools/git-viewer.js';
 const HTML =
   '<html><head><title>Old</title><meta property="og:title" content="Page Roast"></head><body><script src="/a.js"></script></body></html>';
 
-const projects = loadOgProjects();
+const staticRoot = mkdtempSync(join(tmpdir(), 'og-static-'));
+const svgPng = (w: number, h: number) =>
+  Buffer.from(new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="#123456"/></svg>`).render().asPng());
+const goodPng = svgPng(1200, 630);
+mkdirSync(join(staticRoot, 'projects', 'share-ok'), { recursive: true });
+mkdirSync(join(staticRoot, 'projects', 'share-other'), { recursive: true });
+writeFileSync(join(staticRoot, 'projects', 'share-ok', 'og.png'), goodPng);
+writeFileSync(join(staticRoot, 'projects', 'share-ok', 'small.png'), svgPng(600, 315));
+writeFileSync(join(staticRoot, 'projects', 'share-ok', 'fake.png'), Buffer.from('not a png at all, just text'));
+writeFileSync(join(staticRoot, 'projects', 'share-other', 'og.png'), goodPng);
+
+const mk = (slug: string, shareImage: string) => ({ slug, name: slug, tagline: 't', category: 'c', shareImage });
+const projects = [
+  ...loadOgProjects(),
+  mk('share-ok', '/projects/share-ok/og.png'),
+  mk('share-small', '/projects/share-ok/small.png'),
+  mk('share-fake', '/projects/share-ok/fake.png'),
+  mk('share-missing', '/projects/share-ok/missing.png'),
+  mk('share-escape', '/projects/share-ok/../share-other/og.png'),
+];
 const app = Fastify();
+
+afterAll(() => rmSync(staticRoot, { recursive: true, force: true }));
 
 beforeAll(async () => {
   await initDb();
   registerSecurityHeaders(app);
-  registerOgRoutes(app, { projects, blogPosts: [], dynamic: [gitViewerOg] });
+  registerOgRoutes(app, { projects, blogPosts: [], dynamic: [gitViewerOg], staticRoot });
   app.get('/projects/page-roast/', async (_req, reply) => reply.type('text/html').send(HTML));
   app.get('/products/session-manager', async (_req, reply) => reply.type('text/html').send(HTML));
   app.get('/projects/git-viewer/', async (_req, reply) => reply.type('text/html').send(HTML));
@@ -48,6 +73,25 @@ describe('OG image routes', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('image/png');
   });
+
+  it('serves a valid 1200x630 shareImage byte-for-byte', async () => {
+    const res = await app.inject({ method: 'GET', url: '/og/share-ok.png' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('image/png');
+    expect(res.headers['cache-control']).toBe('public, max-age=86400');
+    expect(Buffer.compare(res.rawPayload, goodPng)).toBe(0);
+  });
+
+  it.each(['share-small', 'share-fake', 'share-missing', 'share-escape'])(
+    'falls back to the generated card for %s',
+    async slug => {
+      const res = await app.inject({ method: 'GET', url: `/og/${slug}.png` });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('image/png');
+      expect(Buffer.compare(res.rawPayload, goodPng)).not.toBe(0);
+      expect(res.rawPayload.subarray(0, 4).toString('hex')).toBe('89504e47');
+    },
+  );
 
   it('404s unknown and malformed names', async () => {
     for (const url of ['/og/nope.png', '/og/..%2fx.png']) {

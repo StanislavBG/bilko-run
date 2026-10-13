@@ -14,6 +14,9 @@
  *     sibling through the bilko-host MCP.
  *     Talking points are read by social pipelines (Burrow) and may be stated
  *     publicly verbatim — keep each one a plain, checkable fact from the site.
+ *   - Marketing fields (`offering`, `pricing`, `call_to_action`, `avoid_claims`)
+ *     come from the same `listing` block. Burrow must honor `avoid_claims`:
+ *     never state any of those claims when promoting the project.
  */
 import { PUBLIC_CARDS, type HubCard } from './projectsView.js';
 
@@ -35,6 +38,14 @@ export interface CatalogProject {
   audience: string;
   /** Plain factual claims a promoter may state. May be empty. */
   talking_points: string[];
+  /** saas | free-tool | showcase | open-source | game | content | experiment, or ''. */
+  offering: string;
+  /** free | freemium | paid | none, or ''. */
+  pricing: string;
+  /** One-line call to action. May be empty. */
+  call_to_action: string;
+  /** Claims a promoter must not make. May be empty. */
+  avoid_claims: string[];
 }
 
 export interface Catalog {
@@ -59,6 +70,10 @@ function toCatalogProject(card: HubCard): CatalogProject {
     detail: card.detail ?? card.blurb,
     audience: card.audience ?? '',
     talking_points: [...(card.talkingPoints ?? [])],
+    offering: card.offering ?? '',
+    pricing: card.pricing ?? '',
+    call_to_action: card.callToAction ?? '',
+    avoid_claims: [...(card.avoidClaims ?? [])],
   };
 }
 
@@ -69,7 +84,7 @@ export function buildCatalog(now: Date = new Date()): Catalog {
   return {
     schema_version: CATALOG_SCHEMA_VERSION,
     generated_at: now.toISOString(),
-    projects: CATALOG_PROJECTS.map(p => ({ ...p, tags: [...p.tags], talking_points: [...p.talking_points] })),
+    projects: CATALOG_PROJECTS.map(p => ({ ...p, tags: [...p.tags], talking_points: [...p.talking_points], avoid_claims: [...p.avoid_claims] })),
   };
 }
 

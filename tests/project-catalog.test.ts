@@ -12,7 +12,7 @@ beforeAll(async () => {
 });
 afterAll(() => app.close());
 
-const FIELDS = ['slug', 'name', 'tagline', 'category', 'status', 'url', 'tags', 'detail', 'audience', 'talking_points'].sort();
+const FIELDS = ['slug', 'name', 'tagline', 'category', 'status', 'url', 'tags', 'detail', 'audience', 'talking_points', 'offering', 'pricing', 'call_to_action', 'avoid_claims'].sort();
 const NON_PUBLIC = HUB_CARDS.filter(c => c.type === 'project' && !c.isPublic).map(c => c.slug);
 
 async function mcp(body: object) {
@@ -43,6 +43,8 @@ describe('GET /api/projects', () => {
       expect(typeof p.detail).toBe('string');
       expect(typeof p.audience).toBe('string');
       expect(Array.isArray(p.talking_points)).toBe(true);
+      expect(typeof p.call_to_action).toBe('string');
+      expect(Array.isArray(p.avoid_claims)).toBe(true);
       expect(Array.isArray(p.tags)).toBe(true);
     }
   });
@@ -80,7 +82,9 @@ describe('public MCP at /mcp', () => {
   it('get_project returns a public project and not-found for a non-public slug', async () => {
     const slug = PUBLIC_CARDS[0].slug;
     const ok = await mcp({ method: 'tools/call', params: { name: 'get_project', arguments: { slug } } });
-    expect(JSON.parse(ok.result.content[0].text).slug).toBe(slug);
+    const got = JSON.parse(ok.result.content[0].text);
+    expect(got.slug).toBe(slug);
+    for (const k of ['offering', 'pricing', 'call_to_action', 'avoid_claims']) expect(got).toHaveProperty(k);
 
     const miss = await mcp({ method: 'tools/call', params: { name: 'get_project', arguments: { slug: NON_PUBLIC[0] } } });
     expect(miss.result.isError).toBe(true);
@@ -90,6 +94,19 @@ describe('public MCP at /mcp', () => {
   it('rejects GET (no server-initiated streams in stateless mode)', async () => {
     const res = await app.inject({ method: 'GET', url: '/mcp' });
     expect(res.statusCode).toBe(405);
+  });
+});
+
+describe('marketing enums', () => {
+  it('serves offering and pricing as "" or a known enum value for every public project', async () => {
+    const projects = (await app.inject({ method: 'GET', url: '/api/projects' })).json().projects as
+      { offering: string; pricing: string }[];
+    const offerings = ['', 'saas', 'free-tool', 'showcase', 'open-source', 'game', 'content', 'experiment'];
+    const pricings = ['', 'free', 'freemium', 'paid', 'none'];
+    for (const p of projects) {
+      expect(offerings).toContain(p.offering);
+      expect(pricings).toContain(p.pricing);
+    }
   });
 });
 

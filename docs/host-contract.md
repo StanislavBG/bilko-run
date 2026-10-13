@@ -98,6 +98,56 @@ The registry (`src/data/standalone-projects.json`) is validated by `mcp-host-ser
 - A `static-path` entry's `host.path` must equal `/projects/<slug>/` exactly.
 - An `external-url` entry's `host.url` must start with `https://`.
 
+## Project listing — who owns what
+
+A project's `/projects` card is split between the sibling that owns the app and Bilko, the host.
+
+| Owner | Fields |
+|---|---|
+| **Project** (its own repo) | `name`, `displayName`, `tagline`, `category`, `tags`, `status`, `thumbnail`, `listing` (`detail`, `metric`, `metricLabel`, `lang`, `audience`, `talkingPoints`), and `url` on `external-url` entries |
+| **Bilko** (host) | `slug`, `host` (kind, path), `year`, `launchedAt`, `public` |
+
+Sibling sessions never ask Bilko to change card copy. They edit it themselves. Bilko-owned fields are rejected in any listing patch.
+
+**Ownership rule.** `host.localPath` binds a slug to exactly one repo. `register_static_project` records the caller's `callerRepoPath` there, and refuses a repo that is already bound to another slug. `publish_static_project` (via `sourceRepoPath`), `unregister_project` and `update_project_listing` (via `callerRepoPath`) refuse any other caller.
+
+**Content standards** (enforced by `mcp-host-server/src/contract/registry.ts` on every write):
+
+| Field | Limit |
+|---|---|
+| `name` | 1–40 chars |
+| `displayName` | 1–60 chars |
+| `tagline` | 1–160 chars |
+| `category` | 1–40 chars |
+| `tags` | up to 6, each 1–24 chars |
+| `thumbnail` | `https://` URL or a `/path` |
+| `listing.detail` | 1–400 chars |
+| `listing.metric`, `listing.metricLabel` | 1–24 chars each |
+| `listing.lang` | 1–40 chars |
+| `listing.audience` | up to 200 chars |
+| `listing.talkingPoints` | up to 5, each 1–200 chars |
+
+Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `tags`, and every `listing` text field) may mention the retired ContentGrade product (`/content-?grade/i`). The write fails with the slug and field name.
+
+**Two edit paths.** Both take the same patch and run the same ownership and schema checks.
+
+1. `update_project_listing { slug, callerRepoPath, patch }` — edits the card now. Commits and pushes. Use `get_project { slug }` first to see the current entry. Set `displayName`, `tags`, `thumbnail` or `listing` to `null` in the patch to remove it.
+2. `bilko.listing.json` at the sibling repo root (max 16 KB) — `publish_static_project` reads it from `sourceRepoPath` and syncs it into the registry in the same commit as the bytes. The result line reports `listing: synced from bilko.listing.json`, `listing: unchanged` or `listing: no bilko.listing.json`. Invalid JSON or a rejected field fails the publish.
+
+```json
+{
+  "tagline": "KOUT-7 weather report for planning outdoor hours",
+  "tags": ["Browser", "Free"],
+  "listing": {
+    "detail": "Shows which hours of the day are comfortable outside, using ten years of local weather.",
+    "audience": "Runners and gardeners",
+    "talkingPoints": ["Runs fully in the browser", "No account needed"]
+  }
+}
+```
+
+**Going public.** `register_static_project` never sets `public`; a new app is admin-only. Listing it on `/projects` and the home page is the Bilko owner's call, made in a Bilko session. Sibling sessions cannot change `public`.
+
 ## Social share cards
 
 bilko.run generates each project's X/Twitter/OpenGraph share card from the registry. The registry tagline *is* the share copy.
@@ -139,7 +189,7 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
 ```
 
 - **`url`** is the card's real destination, so it follows the card's overrides: `session-manager` links to `https://bilko.run/products/session-manager` (its landing page), and `external-url` entries link to their external URL.
-- **Source of truth:** built from `PUBLIC_CARDS` in `src/data/projectsView.ts` (`src/data/projectCatalog.ts`), so the page and the API can't disagree. Change who is public with the registry `public` flag. Change `detail` in `ENRICH` (`projectsView.ts`). Change `audience`/`talking_points` in `PROMO` (`projectCatalog.ts`). Talking points may be posted publicly word for word, so keep each one a plain fact the site already supports.
+- **Source of truth:** built from `PUBLIC_CARDS` in `src/data/projectsView.ts` (`src/data/projectCatalog.ts`), so the page and the API can't disagree. Change who is public with the registry `public` flag (Bilko-owned). `detail`, `audience` and `talking_points` come from the registry entry's `listing` (`detail`, `audience`, `talkingPoints`), which the project edits itself; see "Project listing — who owns what". Talking points may be posted publicly word for word, so keep each one a plain fact the site already supports.
 - **Freshness:** the data is baked in at build time. It changes when a registry change reaches `main` and deploys.
 - **Versioning:** adding a field does not bump the version. Renaming, removing, or retyping a field, or changing what `url` points at, bumps `schema_version`. Consumers should ignore fields they don't know.
 
@@ -214,12 +264,12 @@ A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by ha
 1. bilko-host__get_host_contract                          # read this file
 2. bilko-host__list_projects                              # check slug isn't taken
 3. (build your app: pnpm build → dist/)
-4. bilko-host__register_static_project { slug, name, … }  # first deploy only
-5. bilko-host__publish_static_project { slug, distPath, sourceRepoPath }  # every deploy
+4. bilko-host__register_static_project { slug, name, tagline, category, status, year, callerRepoPath, … }  # first deploy only
+5. bilko-host__publish_static_project { slug, distPath, sourceRepoPath }  # every deploy; syncs bilko.listing.json if present
 6. bilko-host__status                                     # verify
 ```
 
-`register_static_project` also takes optional `public` (`true` lists the app on the public `/projects` hub and home page; omitted means admin-only) and `displayName` (a hub-only display name, 1-60 chars).
+`register_static_project` binds the slug to `callerRepoPath` (your repo root) and also takes optional `tags` and `displayName` (a hub-only display name, 1-60 chars). It has no `public` parameter: new apps are admin-only until the Bilko owner lists them. Later card edits go through `update_project_listing` or `bilko.listing.json`; see "Project listing — who owns what".
 
 The MCP commits + pushes to `origin` automatically, from a dedicated clean
 checkout kept in sync with `origin/main` (never your own working tree); Render

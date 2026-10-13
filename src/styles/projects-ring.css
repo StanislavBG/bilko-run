@@ -70,3 +70,25 @@
 .pr-tick { flex: 1; transition: height .3s, background .3s; }
 .pr-tick:hover { background: var(--pr-ink) !important; }
 .pr-caps { display: flex; justify-content: space-between; margin-top: 8px; font: 500 10px var(--pr-mono); letter-spacing: .14em; color: var(--pr-ink-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-spine, .pr-tick { transition-duration: 0s; }
+  .pr-hero-in { animation: none; }
+}
+
+@media (max-width: 900px) {
+  .pr-page { height: auto; min-height: 0; }
+  .pr-bar { flex-wrap: wrap; align-items: flex-start; padding: 20px 16px 16px; gap: 14px; }
+  .pr-h1 { font-size: 32px; }
+  .pr-bar-ctl { flex-wrap: wrap; }
+  .pr-stage { flex: none; height: auto; overflow: visible; }
+  .pr-spine { display: none; }
+  /* Inline left/width from heroBox() must be overridden. */
+  .pr-hero { position: static; left: auto !important; width: auto !important; height: auto; padding: 20px 16px; border-left: 0; border-right: 0; }
+  .pr-hero-in { height: auto; }
+  .pr-shot { flex: none; aspect-ratio: 16 / 10; }
+  .pr-story { flex: none; max-height: 60vh; }
+  .pr-title { font-size: 36px; }
+  .pr-actions { margin-left: 0; width: 100%; }
+  .pr-scrubber { padding: 16px; }
+}

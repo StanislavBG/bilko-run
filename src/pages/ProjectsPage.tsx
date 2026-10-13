@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { ADMIN_EMAILS } from '../constants.js';
 import { PROJECTS } from '../data/projectsRegistry.js';
@@ -127,11 +127,16 @@ function StoryPanel({ card, isAdmin }: { card: HubCard; isAdmin: boolean }) {
 export function ProjectsPage() {
   const { user } = useUser();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
   const isAdmin = ADMIN_EMAILS.includes(email);
 
   const [showAll, setShowAll] = useState(false);
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(() => {
+    const slug = searchParams.get('p');
+    const i = slug ? PUBLIC_CARDS.findIndex(c => c.slug === slug) : -1;
+    return i < 0 ? 0 : i;
+  });
   const [storyOpen, setStoryOpen] = useState(false);
   const [stage, setStage] = useState({ w: 1280, h: 560 });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -205,12 +210,25 @@ export function ProjectsPage() {
   }, [step, n]);
 
   function toggleShowAll() {
-    setShowAll(s => !s);
-    setActive(0);
+    const nextCards = !showAll ? HUB_CARDS : PUBLIC_CARDS;
+    const i = nextCards.findIndex(c => c.slug === cards[active]?.slug);
+    setShowAll(!showAll);
+    setActive(i < 0 ? 0 : i);
     setStoryOpen(false);
   }
 
   const card = cards[active];
+  const activeSlug = card?.slug;
+
+  useEffect(() => {
+    if (!activeSlug) return;
+    setSearchParams(prev => {
+      if (prev.get('p') === activeSlug) return prev;
+      const next = new URLSearchParams(prev);
+      next.set('p', activeSlug);
+      return next;
+    }, { replace: true });
+  }, [activeSlug, setSearchParams]);
 
   function open() {
     if (!card?.href) return;
@@ -280,7 +298,7 @@ export function ProjectsPage() {
               );
             })}
 
-            <div className="pr-hero" style={{ left: hero.left, width: hero.width }}>
+            <div className="pr-hero" aria-live="polite" style={{ left: hero.left, width: hero.width }}>
               <div className="pr-hero-in" key={card.slug}>
                 <div className="pr-meta">
                   <span className="pr-meta-dot" style={{ background: RING_DOTS[active % 3] }} />

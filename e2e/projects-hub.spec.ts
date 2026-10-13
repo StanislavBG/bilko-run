@@ -35,3 +35,22 @@ test('ring navigation, ticks, Open and Full story', async ({ page }) => {
   await page.waitForURL(url => url.toString().includes(card.href!));
   expect(page.url()).toContain(card.href!);
 });
+
+test('?p= deep link selects the card and navigation syncs the URL', async ({ page }) => {
+  await page.goto(`/projects?p=${PUBLIC_CARDS[2].slug}`);
+  await expect(page.locator('.pr-counter')).toHaveText(`003 / ${N}`);
+
+  await page.goto('/projects');
+  await expect(page.locator('.pr-counter')).toHaveText(`001 / ${N}`);
+  await page.getByRole('button', { name: 'Next project' }).click();
+  await expect(page).toHaveURL(new RegExp(`p=${PUBLIC_CARDS[1].slug}`));
+});
+
+test('narrow viewport: hero Open is visible and spines are hidden', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/projects');
+  await expect(page.locator('.pr-hero').getByRole('button', { name: /^(Open|GitHub) →$/ })).toBeVisible();
+  for (const spine of await page.locator('.pr-spine').all()) {
+    await expect(spine).toBeHidden();
+  }
+});

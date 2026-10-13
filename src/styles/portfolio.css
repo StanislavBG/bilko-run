@@ -524,100 +524,17 @@
 .pf-mobile-icon { font-family: var(--pf-font-display); font-size: 20px; width: 24px; text-align: center; color: var(--pf-accent); }
 .pf-mobile-tag { margin-left: auto; font-family: var(--pf-font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pf-ink-3); }
 
-/* ── Projects + Packages hub (/projects) ──────────────────────────── */
-/* Desktop: fit the whole list in the viewport with no page scroll. The list
-   region scrolls internally if an expanded card overflows. Mobile stacks and
-   scrolls normally. Topbar is ~58px sticky. */
-.pf-hub-page {
-  padding: 0 28px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-/* On the hub route the shell becomes a viewport-height flex column so the card
-   list fills the screen with no page scroll; the global footer is hidden. The
-   `hub-route` body class is toggled by ProjectsPage, so all other routes keep
-   their normal flow (footer below, page scrolls). */
+/* ── Projects Ring hub (/projects) ────────────────────────────────── */
+/* The `hub-route` body class is toggled by ProjectsPage: desktop fits the page
+   in the viewport (no page scroll, footer hidden); mobile scrolls normally. */
 body.hub-route .portfolio-shell { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 body.hub-route main { flex: 1; min-height: 0; }
 body.hub-route .pf-footer { display: none; }
-.pf-hub-header {
-  display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap;
-  padding: 28px 0 18px;
-  border-bottom: 1px solid var(--pf-rule);
-}
-.pf-hub-h1 {
-  font-family: var(--pf-font-display);
-  font-size: clamp(32px, 4.5vw, 52px);
-  font-weight: 400; line-height: 0.98; letter-spacing: -0.02em;
-  margin: 8px 0 8px;
-}
-.pf-hub-lede { color: var(--pf-ink-2); font-size: 15px; max-width: 560px; }
 .pf-hub-toggle {
   cursor: pointer; border-color: var(--pf-rule-2); color: var(--pf-ink-2);
   background: transparent; white-space: nowrap;
 }
 .pf-hub-toggle.on { background: var(--pf-ink); color: var(--pf-bg); border-color: var(--pf-ink); }
-
-.pf-hub-list {
-  flex: 1; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column;
-  padding: 14px 0 24px;
-}
-/* Rich full-width project rows — one project per line, expandable drawer.
-   (Design handoff: "Projects & Packages." rich rows.) */
-.pf-hub-row { border-bottom: 1px solid var(--pf-rule); transition: background var(--pf-motion-fast); }
-.pf-hub-row.expanded { background: var(--pf-paper); }
-.pf-hub-headrow { display: flex; align-items: center; position: relative; }
-.pf-hub-headrow:hover, .pf-hub-row.expanded .pf-hub-headrow { background: var(--pf-paper); }
-.pf-hub-open {
-  flex: none; cursor: pointer; border: 0; border-radius: 8px; margin-right: 18px;
-  background: var(--pf-ink); color: var(--pf-bg); white-space: nowrap;
-  font-family: var(--pf-font-mono); font-size: 12px; font-weight: 600;
-  letter-spacing: 0.04em; padding: 9px 16px; min-height: 36px;
-}
-.pf-hub-open:hover { background: var(--pf-accent); }
-.pf-hub-head {
-  flex: 1; min-width: 0; cursor: pointer; background: transparent; border: 0; text-align: left;
-  display: grid; align-items: center;
-  grid-template-columns: 4px 34px 22px minmax(240px, 1.6fr) minmax(132px, 0.9fr) 92px 104px 112px 72px 22px;
-  gap: 22px; padding: 34px 18px 34px 0; min-height: 108px; position: relative;
-  transition: background var(--pf-motion-fast);
-}
-.pf-hub-row:hover .pf-hub-head, .pf-hub-row.expanded .pf-hub-head { background: var(--pf-paper); }
-.pf-hub-rail { width: 4px; height: 0; align-self: stretch; border-radius: 0 2px 2px 0; transition: height var(--pf-motion-med); }
-.pf-hub-row:hover .pf-hub-rail, .pf-hub-row.expanded .pf-hub-rail { height: 100%; }
-.pf-hub-row.tang .pf-hub-rail { background: var(--pf-accent); }
-.pf-hub-row.ink  .pf-hub-rail { background: var(--pf-ink); }
-.pf-hub-row.blue .pf-hub-rail { background: var(--pf-blue); }
-.pf-hub-ord { font-family: var(--pf-font-mono); font-size: 13px; color: var(--pf-ink-3); }
-.pf-hub-dotcell { display: grid; place-items: center; }
-.pf-hub-dot { width: 9px; height: 9px; border-radius: 50%; position: relative; }
-.pf-hub-dot.tang { background: var(--pf-accent); color: var(--pf-accent); }
-.pf-hub-dot.ink  { background: var(--pf-ink); color: var(--pf-ink); }
-.pf-hub-dot.blue { background: var(--pf-blue); color: var(--pf-blue); }
-.pf-hub-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1px solid currentColor; opacity: 0.3; }
-.pf-hub-main { min-width: 0; }
-.pf-hub-name { font-family: var(--pf-font-display); font-weight: 400; font-size: 28px; line-height: 1; letter-spacing: -0.015em; display: block; margin-bottom: 5px; }
-.pf-hub-tagline { font-size: 13px; color: var(--pf-ink-2); line-height: 1.35; display: block; }
-.pf-hub-cats { display: flex; flex-wrap: wrap; gap: 5px; }
-.pf-hub-cat { font-family: var(--pf-font-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pf-ink-2); border: 1px solid var(--pf-rule-2); padding: 3px 7px; border-radius: 2px; white-space: nowrap; }
-.pf-hub-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.pf-hub-stat-n { font-family: var(--pf-font-display); font-size: 19px; line-height: 1; color: var(--pf-ink); }
-.pf-hub-stat-l { font-family: var(--pf-font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pf-ink-3); }
-.pf-hub-when { font-family: var(--pf-font-mono); font-size: 12px; color: var(--pf-ink-3); white-space: nowrap; }
-.pf-hub-badge { font-family: var(--pf-font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 9px; border-radius: 2px; text-align: center; white-space: nowrap; }
-.pf-hub-badge.live { color: var(--pf-green, oklch(0.45 0.12 150)); border: 1px solid color-mix(in oklab, var(--pf-green, oklch(0.7 0.15 150)) 50%, var(--pf-rule)); }
-.pf-hub-badge.cooking { color: var(--pf-accent); border: 1px solid color-mix(in oklab, var(--pf-accent) 50%, var(--pf-rule)); }
-.pf-hub-badge.pkg { color: var(--pf-blue); border: 1px solid color-mix(in oklab, var(--pf-blue) 50%, var(--pf-rule)); }
-.pf-hub-badge.shipped, .pf-hub-badge.postponed { color: var(--pf-ink-2); border: 1px solid var(--pf-rule-2); }
-.pf-hub-caret { font-family: var(--pf-font-display); font-size: 22px; color: var(--pf-ink-3); transition: transform var(--pf-motion-fast); text-align: center; }
-.pf-hub-caret.open { transform: rotate(90deg); color: var(--pf-accent); }
-
-.pf-hub-body { display: grid; grid-template-columns: 1fr auto; gap: 48px; align-items: start; padding: 4px 20px 26px 56px; }
-.pf-hub-detail-col { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .pf-hub-detail { font-size: 15.5px; line-height: 1.6; color: var(--pf-ink-2); max-width: 640px; margin: 0; text-wrap: pretty; }
 .pf-hub-actions { display: flex; flex-direction: column; gap: 14px; align-items: flex-end; }
 .pf-hub-src { font-family: var(--pf-font-mono); font-size: 12px; color: var(--pf-ink-3); text-decoration: none; white-space: nowrap; }
@@ -637,14 +554,13 @@ body.hub-route .pf-footer { display: none; }
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pf-accent);
 }
-.pf-hub-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .pf-hub-link {
   font-family: var(--pf-font-mono); font-size: 12px; font-weight: 700;
   color: var(--pf-ink-2); text-decoration: none;
 }
 .pf-hub-link:hover { color: var(--pf-accent); }
 
-.pf-hub-meta-wrap { grid-column: 1 / -1; min-width: 0; border-top: 1px dashed var(--pf-ink-2); padding-top: 14px; }
+.pf-hub-meta-wrap { min-width: 0; border-top: 1px dashed var(--pf-ink-2); padding-top: 14px; }
 .pf-hub-meta-h { font-family: var(--pf-font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 10px; color: var(--pf-ink-2); }
 .pf-hub-meta { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 20px; row-gap: 6px; }
 .pf-hub-meta-row { display: contents; }
@@ -657,18 +573,6 @@ body.hub-route .pf-footer { display: none; }
   body.hub-route .portfolio-shell { height: auto; display: block; overflow: visible; }
   body.hub-route main { flex: none; }
   body.hub-route .pf-footer { display: grid; }
-  .pf-hub-page { height: auto; overflow: visible; padding: 0 16px 48px; }
-  .pf-hub-list { overflow: visible; }
-  .pf-hub-head {
-    grid-template-columns: 4px 1fr auto 22px;
-    gap: 12px; row-gap: 10px; padding: 16px 12px 16px 0;
-  }
-  .pf-hub-open { margin-right: 12px; padding: 8px 12px; }
-  .pf-hub-ord, .pf-hub-dotcell, .pf-hub-stat, .pf-hub-when { display: none; }
-  .pf-hub-main { grid-column: 2 / -1; }
-  .pf-hub-cats { grid-column: 2; }
-  .pf-hub-badge { grid-column: 3; }
-  .pf-hub-body { grid-template-columns: 1fr; gap: 20px; padding: 4px 12px 24px 16px; }
   .pf-hub-actions { align-items: flex-start; }
   .pf-hub-meta { grid-template-columns: 1fr; row-gap: 0; }
   .pf-hub-meta dd { margin-bottom: 8px; }

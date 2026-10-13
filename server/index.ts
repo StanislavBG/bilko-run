@@ -36,6 +36,7 @@ import { loadBlogPosts } from './blog-posts.js';
 import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
+import { registerClickBeacon } from './click-beacon.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -150,6 +151,9 @@ registerEgressMeter(app);
 // Server-side page-hit recorder: every HTML document response (SPA shell, blog,
 // static-path apps) lands in page_hits; flushed on a timer and on app.close().
 registerPageHitRecorder(app);
+
+// Inline CSP-nonced click beacon into every HTML document response.
+registerClickBeacon(app);
 
 // Register API routes
 registerToolRoutes(app);

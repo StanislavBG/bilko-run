@@ -22,6 +22,7 @@ test('first row opens in one click without expanding', async ({ page }) => {
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(row.locator('.pf-hub-primary')).toHaveCount(0);
+  await expect(page.locator('.pf-hub-meta')).toHaveCount(0);
 
   await open.click();
   await page.waitForURL(url => url.toString().includes(card.href!));

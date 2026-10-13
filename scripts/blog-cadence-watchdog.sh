@@ -80,8 +80,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# cron runs with a bare PATH; the claude CLI lives in ~/.local/bin.
-export PATH="$HOME/.local/bin:$PATH"
+# cron/systemd run with a bare PATH; the env file adds ~/.npm-global/bin and
+# ~/.local/bin and defines the watchdog_missing_binaries preflight.
+# shellcheck source=scripts/blog-watchdog-env.sh
+source "scripts/blog-watchdog-env.sh"
 
 CONFIG_FILE=".claude/skills/blog-from-git/blog.config.yaml"
 DRAFTS_DIR=".claude/skills/blog-from-git/drafts"
@@ -321,6 +323,15 @@ on_exit() {
   fi
 }
 trap on_exit EXIT
+
+# Fail fast and distinctly when a required binary is unresolvable (the
+# 2026-10-03 rc=127 outage reported only "cadence gate unavailable").
+missing_bins="$(watchdog_missing_binaries)"
+if [[ -n "$missing_bins" ]]; then
+  echo "[blog-cadence-watchdog] FATAL: required binaries not on PATH: $missing_bins (PATH=$PATH)" >&2
+  write_heartbeat "error: missing binary $missing_bins"
+  exit 1
+fi
 
 LOCKFILE="/tmp/bilko.blog-cadence-watchdog.lock"
 exec 9>"$LOCKFILE"

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet, dbRun } from '../../db.js';
 import { verifyClerkGitHubUser } from '../../clerk.js';
 import { getActiveSubscriptionLive } from '../../services/stripe.js';
-import { checkRateLimit, hashIp, incrementUsage } from './_shared.js';
+import { getUsageCount, hashIp, incrementUsage } from './_shared.js';
 import type { OgMeta } from '../../og-meta.js';
 
 // Hosted Git Viewer portfolios — gateway for the git-viewer sibling
@@ -14,8 +14,19 @@ import type { OgMeta } from '../../og-meta.js';
 // Portfolios are generated in-process by the git-viewer library's
 // buildPortfolio() with the server's GITHUB_TOKEN, at most 2 at a time, and
 // cached in git_viewer_profiles. Free: 3 projects, regenerated at most once per
-// 24h when viewed. Paid ($5/mo git_viewer subscription, or a legacy
-// pro/business/team plan): up to 12 chosen repos + Writing, refreshed daily.
+// 24h when viewed; claimed free profiles are also refreshed weekly unviewed.
+// Paid ($5/mo git_viewer subscription, or a legacy pro/business/team plan): up
+// to 12 chosen repos + Writing, refreshed daily. Showcase logins are kept
+// cached by the refresh loop regardless of claim or tier.
+//
+// New-build budget (only an uncached login costs GitHub calls):
+//   - NEW_BUILDS_PER_IP distinct new builds per IP per UTC day, its own counter
+//     (not the paid tools' FREE_TIER_LIMIT), so a visitor can try a few logins
+//     and still reach their own.
+//   - Exempt: showcase logins, claimed profiles, a signed-in user building a
+//     GitHub login linked to their Clerk account, and paid subscribers.
+//   - Global guard: after a GitHub rate-limit failure, every new build answers
+//     503 until the budget resets (no point queueing jobs that will fail).
 
 export const GIT_VIEWER_ENDPOINT = 'git-viewer';
 export const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
@@ -31,6 +42,10 @@ const FAILED_TTL_MS = 5 * 60 * 1000;
 const MAX_RATE_LIMITED_TTL_MS = 60 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const REFRESH_BATCH = 20;
+export const NEW_BUILDS_PER_IP = 10;
+export const CLAIMED_FREE_REFRESH_SEC = 7 * 24 * 60 * 60;
+/** Always kept cached and refreshed daily, never subject to a visitor's quota. Lowercase. */
+export const SHOWCASE_LOGINS: readonly string[] = ['stanislavbg'];
 
 type Tier = 'free' | 'paid';
 
@@ -83,6 +98,7 @@ const pending: string[] = [];
 let running = 0;
 const notFound = new Map<string, number>(); // login → expiry (ms)
 const failed = new Map<string, number>();
+let githubBudgetUntil = 0; // ms; set when GitHub rate-limits a generation
 
 /** Test hook: wait for the queue to drain. */
 export async function drainGitViewerQueue(): Promise<void> {
@@ -96,6 +112,7 @@ export function resetGitViewerState(): void {
   running = 0;
   notFound.clear();
   failed.clear();
+  githubBudgetUntil = 0;
 }
 
 function isFresh(map: Map<string, number>, login: string): boolean {
@@ -132,6 +149,14 @@ function pump(): void {
       pump();
     });
   }
+}
+
+/** True for an Octokit RequestError caused by GitHub's rate limit (not a plain 403). */
+export function isGitHubRateLimited(err: any): boolean {
+  if (err?.status !== 403 && err?.status !== 429) return false;
+  const headers = err?.response?.headers ?? {};
+  const retryAfter = Number(headers['retry-after']);
+  return (Number.isFinite(retryAfter) && retryAfter > 0) || String(headers['x-ratelimit-remaining']) === '0';
 }
 
 /**
@@ -186,6 +211,7 @@ async function generate(login: string, job: Job): Promise<void> {
         err?.message ?? err,
       );
       failed.set(login, Date.now() + ttl);
+      if (isGitHubRateLimited(err)) githubBudgetUntil = Math.max(githubBudgetUntil, Date.now() + ttl);
     }
   }
 }
@@ -224,21 +250,48 @@ function secondsToUtcMidnight(): number {
   return Math.max(1, Math.ceil((midnight - now.getTime()) / 1000));
 }
 
-/** Daily refresh: claimed profiles older than 24h. Paid ones regenerate; lapsed paid ones drop to free. */
+/**
+ * Hourly sweep. Showcase logins: generated if missing, regenerated after 24h.
+ * Claimed paid profiles: regenerated after 24h (lapsed ones drop to free).
+ * Claimed free profiles: regenerated after 7 days. A free profile that turned
+ * paid is picked up sooner by claim or by its next view.
+ */
 export async function runGitViewerRefresh(): Promise<number> {
-  const cutoff = Math.floor(Date.now() / 1000) - STALE_SEC;
+  const now = Math.floor(Date.now() / 1000);
+  const dailyCutoff = now - STALE_SEC;
+  let queued = 0;
+
+  for (const login of SHOWCASE_LOGINS) {
+    const row = await dbGet<ProfileRow>(
+      'SELECT login, payload, tier, owner_email, allowlist, updated_at FROM git_viewer_profiles WHERE login = ?', login,
+    );
+    if (row?.payload && row.updated_at >= dailyCutoff) continue;
+    if (jobs.has(login) || isFresh(failed, login) || isFresh(notFound, login)) continue;
+    if (enqueue(login, jobFor(row, await tierFor(row)))) queued++;
+  }
+
   const rows = await dbAll<ProfileRow>(
     `SELECT login, tier, owner_email, allowlist FROM git_viewer_profiles
-     WHERE owner_email IS NOT NULL AND updated_at < ? ORDER BY updated_at ASC LIMIT ?`,
-    cutoff, REFRESH_BATCH,
+     WHERE owner_email IS NOT NULL AND updated_at < CASE tier WHEN 'paid' THEN ? ELSE ? END
+     ORDER BY updated_at ASC LIMIT ?`,
+    dailyCutoff, now - CLAIMED_FREE_REFRESH_SEC, REFRESH_BATCH,
   );
-  let queued = 0;
   for (const row of rows) {
-    const tier = await tierFor(row);
-    if (tier === 'free' && row.tier === 'free') continue;
-    if (enqueue(row.login, jobFor(row, tier))) queued++;
+    if (jobs.has(row.login) || isFresh(failed, row.login)) continue;
+    if (enqueue(row.login, jobFor(row, await tierFor(row)))) queued++;
   }
   return queued;
+}
+
+/** Whether a new build of `login` skips the per-IP budget (see header comment). */
+async function exemptFromIpLimit(login: string, row: ProfileRow | undefined, authHeader: string | undefined): Promise<boolean> {
+  if (SHOWCASE_LOGINS.includes(login) || row?.owner_email) return true;
+  if (!authHeader) return false;
+  const user = await verifyClerkGitHubUser(authHeader);
+  if (!user) return false;
+  if (user.githubLogins.includes(login)) return true;
+  const sub = await getActiveSubscriptionLive(user.email);
+  return sub.gitViewer || sub.isPro;
 }
 
 const OG_PATH_RE = /^\/projects\/git-viewer\/(?:index\.html)?$/;
@@ -307,16 +360,20 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     }
     if (!(await loadBuilder())) return reply.code(503).send({ status: 'unavailable' });
 
+    if (githubBudgetUntil > Date.now()) {
+      return reply.code(503).send({ status: 'error', retryAfterSec: Math.ceil((githubBudgetUntil - Date.now()) / 1000) });
+    }
+
     // Only a NEW generation costs GitHub calls, so only that counts against the IP.
+    const exempt = await exemptFromIpLimit(login, row, req.headers.authorization);
     const ipHash = hashIp(req.ip);
-    const rate = await checkRateLimit(ipHash, GIT_VIEWER_ENDPOINT);
-    if (!rate.allowed) {
+    if (!exempt && await getUsageCount(ipHash, GIT_VIEWER_ENDPOINT) >= NEW_BUILDS_PER_IP) {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: secondsToUtcMidnight() });
     }
     if (!enqueue(login, jobFor(row, await tierFor(row)))) {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: 60 });
     }
-    await incrementUsage(ipHash, GIT_VIEWER_ENDPOINT);
+    if (!exempt) await incrementUsage(ipHash, GIT_VIEWER_ENDPOINT);
     return reply.code(202).send({ status: 'generating', retryAfterSec: POLL_AFTER_SEC });
   });
 
@@ -354,9 +411,12 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
 
   if (!process.env.VITEST) {
     void logGitHubRateBudget();
-    const timer = setInterval(() => {
+    const refresh = () => {
       runGitViewerRefresh().catch(err => console.error('[git-viewer] refresh failed:', err));
-    }, REFRESH_INTERVAL_MS);
+    };
+    // First sweep shortly after boot so showcase profiles exist without waiting an hour.
+    app.addHook('onReady', async () => { setTimeout(refresh, 30_000).unref(); });
+    const timer = setInterval(refresh, REFRESH_INTERVAL_MS);
     timer.unref();
     app.addHook('onClose', async () => clearInterval(timer));
   }

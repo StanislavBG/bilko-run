@@ -18,9 +18,9 @@ import { verifyClerkGitHubUser } from '../server/clerk.js';
 import { getActiveSubscriptionLive } from '../server/services/stripe.js';
 import {
   registerGitViewerRoutes, setPortfolioBuilder, drainGitViewerQueue, resetGitViewerState,
-  runGitViewerRefresh, failedTtlMs, PLAN_LIMITS, type BuildPortfolio,
+  runGitViewerRefresh, failedTtlMs, isGitHubRateLimited, PLAN_LIMITS, NEW_BUILDS_PER_IP, SHOWCASE_LOGINS,
+  type BuildPortfolio,
 } from '../server/routes/tools/git-viewer.js';
-import { FREE_TIER_LIMIT } from '../server/routes/tools/_shared.js';
 
 const app = Fastify({ logger: false });
 registerGitViewerRoutes(app);
@@ -47,8 +47,20 @@ beforeEach(async () => {
     .mockResolvedValue({ isPro: false, tier: 'free', gitViewer: false });
 });
 
-const get = (login: string, ip = '10.0.0.1') =>
-  app.inject({ method: 'GET', url: `/api/git-viewer/u/${encodeURIComponent(login)}`, remoteAddress: ip });
+const get = (login: string, ip = '10.0.0.1', authorization?: string) =>
+  app.inject({
+    method: 'GET', url: `/api/git-viewer/u/${encodeURIComponent(login)}`, remoteAddress: ip,
+    headers: authorization ? { authorization } : {},
+  });
+
+/** Spends this IP's whole new-build budget on distinct uncached logins. */
+async function exhaustIp(ip = '10.0.0.1'): Promise<void> {
+  build.mockImplementation(() => new Promise(() => {})); // stay queued, never cached
+  for (let i = 0; i < NEW_BUILDS_PER_IP; i++) expect((await get(`burn${i}`, ip)).statusCode).toBe(202);
+  expect((await get('burn-extra', ip)).statusCode).toBe(429);
+  resetGitViewerState();
+  build.mockReset().mockResolvedValue({ data: { projects: [] }, lockedCount: 0 });
+}
 
 const claim = (body: unknown) =>
   app.inject({
@@ -127,8 +139,33 @@ describe('GET /api/git-viewer/u/:login', () => {
     expect(failedTtlMs(rl(429, { 'retry-after': '90' }), now)).toBe(90_000);
   });
 
-  it('per-IP generation limit → 429 with retryAfterSec', async () => {
-    for (let i = 0; i < FREE_TIER_LIMIT; i++) expect((await get(`user${i}`)).statusCode).toBe(202);
+  it('isGitHubRateLimited: only rate-limit 403/429s count', () => {
+    const rl = (status: number, headers: Record<string, string>) => ({ status, response: { headers } });
+    expect(isGitHubRateLimited(new Error('boom'))).toBe(false);
+    expect(isGitHubRateLimited(rl(403, { 'x-ratelimit-remaining': '12' }))).toBe(false);
+    expect(isGitHubRateLimited(rl(403, { 'x-ratelimit-remaining': '0' }))).toBe(true);
+    expect(isGitHubRateLimited(rl(429, { 'retry-after': '30' }))).toBe(true);
+  });
+
+  it('a GitHub rate limit blocks every new build (any login, any IP) until it resets', async () => {
+    build.mockRejectedValue(Object.assign(new Error('API rate limit exceeded'), {
+      status: 403,
+      response: { headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 900) } },
+    }));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await get('first');
+    await drainGitViewerQueue();
+    errSpy.mockRestore();
+    const res = await get('second', '10.9.9.9');
+    expect(res.statusCode).toBe(503);
+    expect(res.json().retryAfterSec).toBeGreaterThan(800);
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(await dbGet('SELECT count FROM usage_tracking')).toMatchObject({ count: 1 }); // 'second' not charged
+  });
+
+  it(`per-IP limit allows ${NEW_BUILDS_PER_IP} new builds/day, then 429 with retryAfterSec`, async () => {
+    expect(NEW_BUILDS_PER_IP).toBeGreaterThanOrEqual(10);
+    for (let i = 0; i < NEW_BUILDS_PER_IP; i++) expect((await get(`user${i}`)).statusCode).toBe(202);
     const res = await get('one-more');
     expect(res.statusCode).toBe(429);
     expect(res.json().status).toBe('rate_limited');
@@ -139,7 +176,41 @@ describe('GET /api/git-viewer/u/:login', () => {
 
   it('polling a queued login does not spend the IP budget', async () => {
     build.mockImplementation(() => new Promise(() => {}));
-    for (let i = 0; i < FREE_TIER_LIMIT + 3; i++) expect((await get('slow')).statusCode).toBe(202);
+    for (let i = 0; i < NEW_BUILDS_PER_IP + 3; i++) expect((await get('slow')).statusCode).toBe(202);
+  });
+
+  it('the showcase login builds from an IP with no budget left, and serves 200 once cached', async () => {
+    const showcase = SHOWCASE_LOGINS[0];
+    await exhaustIp();
+    expect((await get(showcase)).statusCode).toBe(202);
+    await drainGitViewerQueue();
+    const res = await get(showcase);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe('ready');
+  });
+
+  it('a signed-in owner building their own login skips the per-IP limit and spends nothing', async () => {
+    await exhaustIp();
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'o@x.com', githubLogins: ['octocat'] });
+    expect((await get('OctoCat', '10.0.0.1', 'Bearer t')).statusCode).toBe(202);
+    // a different login is still limited for a free signed-in user
+    expect((await get('someone', '10.0.0.1', 'Bearer t')).statusCode).toBe(429);
+  });
+
+  it('a paid subscriber skips the per-IP limit', async () => {
+    await exhaustIp();
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'p@x.com', githubLogins: [] });
+    vi.mocked(getActiveSubscriptionLive).mockResolvedValue({ isPro: false, tier: 'free', gitViewer: true });
+    expect((await get('anyone', '10.0.0.1', 'Bearer t')).statusCode).toBe(202);
+  });
+
+  it('a claimed profile with no cached payload yet rebuilds without the per-IP limit', async () => {
+    await exhaustIp();
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, updated_at)
+       VALUES ('claimed', '', 'free', 0, 'c@x.com', 0)`,
+    );
+    expect((await get('claimed')).statusCode).toBe(202);
   });
 
   it('regenerates a free profile only once it is older than 24h', async () => {
@@ -204,7 +275,17 @@ describe('POST /api/git-viewer/claim', () => {
 describe('daily refresh', () => {
   const dayOld = () => Math.floor(Date.now() / 1000) - 25 * 3600;
 
-  it('refreshes paid profiles and leaves free ones alone', async () => {
+  beforeEach(async () => {
+    // A fresh showcase copy, so the sweep only queues what each test inserts.
+    for (const login of SHOWCASE_LOGINS) {
+      await dbRun(
+        `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES (?, '{}', 'free', 0, ?)`,
+        login, Math.floor(Date.now() / 1000),
+      );
+    }
+  });
+
+  it('refreshes paid profiles and leaves day-old free ones alone', async () => {
     await dbRun(
       `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, allowlist, updated_at)
        VALUES ('paiduser', '{}', 'paid', 0, 'p@x.com', '["a"]', ?), ('freeuser', '{}', 'free', 3, NULL, NULL, ?),
@@ -228,5 +309,36 @@ describe('daily refresh', () => {
     await drainGitViewerQueue();
     const row = await dbGet<{ tier: string }>('SELECT tier FROM git_viewer_profiles WHERE login = ?', 'lapsed');
     expect(row?.tier).toBe('free');
+  });
+
+  it('refreshes claimed free profiles weekly; unclaimed ones never', async () => {
+    const weekOld = Math.floor(Date.now() / 1000) - 8 * 86400;
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, updated_at)
+       VALUES ('weekly', '{}', 'free', 3, 'w@x.com', ?), ('anon', '{}', 'free', 3, NULL, ?)`,
+      weekOld, weekOld,
+    );
+    await runGitViewerRefresh();
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: 'weekly', maxProjects: PLAN_LIMITS.free }));
+  });
+
+  it('seeds a missing showcase profile and refreshes it after 24h, unviewed', async () => {
+    const showcase = SHOWCASE_LOGINS[0];
+    await dbRun('DELETE FROM git_viewer_profiles WHERE login = ?', showcase);
+    await runGitViewerRefresh();
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: showcase }));
+    expect((await get(showcase)).statusCode).toBe(200);
+
+    await runGitViewerRefresh(); // fresh → no rebuild
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledTimes(1);
+
+    await dbRun('UPDATE git_viewer_profiles SET updated_at = ? WHERE login = ?', dayOld(), showcase);
+    await runGitViewerRefresh();
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledTimes(2);
   });
 });

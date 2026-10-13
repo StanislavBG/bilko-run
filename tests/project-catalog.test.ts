@@ -1,6 +1,6 @@
 // @vitest-environment node
 import Fastify from 'fastify';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { registerProjectCatalogRoutes } from '../server/routes/project-catalog.js';
 import { PUBLIC_CARDS, HUB_CARDS } from '../src/data/projectsView.js';
 
@@ -90,5 +90,38 @@ describe('public MCP at /mcp', () => {
   it('rejects GET (no server-initiated streams in stateless mode)', async () => {
     const res = await app.inject({ method: 'GET', url: '/mcp' });
     expect(res.statusCode).toBe(405);
+  });
+});
+
+describe('registry-owned audience / talking_points', () => {
+  it('serves git-viewer promo copy from its listing and empty values when a project has no listing', async () => {
+    const projects = (await app.inject({ method: 'GET', url: '/api/projects' })).json().projects as
+      { slug: string; audience: string; talking_points: string[] }[];
+    const gv = projects.find(p => p.slug === 'git-viewer')!;
+    expect(gv.audience).toBe('Developers who want their GitHub activity to double as a portfolio.');
+    expect(gv.talking_points).toEqual([
+      'Turns your public GitHub repos into a public portfolio page.',
+      'Ranks repos by recency and activity.',
+      'Updates itself when you push code — no manual upkeep.',
+    ]);
+  });
+
+  it('yields audience "" and talking_points [] for a public project with no listing', async () => {
+    vi.resetModules();
+    vi.doMock('../src/data/projectsRegistry.js', async importOriginal => {
+      const real = await importOriginal<typeof import('../src/data/projectsRegistry.js')>();
+      const base = real.PROJECTS.find(p => p.public === true)!;
+      const { listing: _listing, ...bare } = base;
+      return { ...real, PROJECTS: [{ ...bare, slug: 'no-listing-fixture', public: true }] };
+    });
+    try {
+      const { CATALOG_PROJECTS } = await import('../src/data/projectCatalog.js');
+      const row = CATALOG_PROJECTS.find(p => p.slug === 'no-listing-fixture')!;
+      expect(row.audience).toBe('');
+      expect(row.talking_points).toEqual([]);
+    } finally {
+      vi.doUnmock('../src/data/projectsRegistry.js');
+      vi.resetModules();
+    }
   });
 });

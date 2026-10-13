@@ -22,7 +22,13 @@
       "metric": "12 repos",
       "metricLabel": "indexed",
       "lang": "TypeScript",
-      "detail": "Pulls every public repo, scores it by recency and activity, and renders a living portfolio. No manual upkeep — push code, the dashboard updates itself."
+      "detail": "Pulls every public repo, scores it by recency and activity, and renders a living portfolio. No manual upkeep — push code, the dashboard updates itself.",
+      "audience": "Developers who want their GitHub activity to double as a portfolio.",
+      "talkingPoints": [
+        "Turns your public GitHub repos into a public portfolio page.",
+        "Ranks repos by recency and activity.",
+        "Updates itself when you push code — no manual upkeep."
+      ]
     }
   },
   {
@@ -66,7 +72,12 @@
       "metric": "10 yrs",
       "metricLabel": "of data",
       "lang": "Python",
-      "detail": "A comfort index that scores a decade of weather data into \"comfortable hours\" per place. Find where the year is actually pleasant, not just warm."
+      "detail": "A comfort index that scores a decade of weather data into \"comfortable hours\" per place. Find where the year is actually pleasant, not just warm.",
+      "audience": "Anyone deciding where or when the weather is actually pleasant.",
+      "talkingPoints": [
+        "Scores ten years of weather data into \"comfortable hours\" per place.",
+        "Free to use in the browser."
+      ]
     }
   },
   {
@@ -133,7 +144,14 @@
       "metric": "free",
       "metricLabel": "app + manual",
       "lang": "TypeScript",
-      "detail": "A free desktop cockpit for Claude Code: sessions with a persona and a mission, a scheduler that waits out your token limit, and every setting in one window."
+      "detail": "A free desktop cockpit for Claude Code: sessions with a persona and a mission, a scheduler that waits out your token limit, and every setting in one window.",
+      "audience": "Developers who run Claude Code sessions every day.",
+      "talkingPoints": [
+        "Free desktop app for managing Claude Code CLI sessions.",
+        "Each session gets a persona and a mission.",
+        "Has a scheduler that waits out your token limit and resumes work.",
+        "Ships with a free Field Manual."
+      ]
     }
   },
   {
@@ -153,7 +171,14 @@
       "Learn",
       "Free"
     ],
-    "public": true
+    "public": true,
+    "listing": {
+      "audience": "Non-technical people who want to understand AI from the ground up.",
+      "talkingPoints": [
+        "Free, ad-free AI fundamentals course.",
+        "Every claim in the course is cited."
+      ]
+    }
   },
   {
     "slug": "local-score",
@@ -239,7 +264,13 @@
       "metric": "10",
       "metricLabel": "subreddits",
       "lang": "Python",
-      "detail": "Agents read sentiment across ten subreddits, place trades, and publish every position live. Wins and losses both — radical transparency as a feature."
+      "detail": "Agents read sentiment across ten subreddits, place trades, and publish every position live. Wins and losses both — radical transparency as a feature.",
+      "audience": "People curious whether Reddit sentiment can drive real trades.",
+      "talkingPoints": [
+        "Autonomous trading bots read sentiment across ten subreddits.",
+        "Every position is published live — wins and losses.",
+        "Results are compared against SPY on a public dashboard."
+      ]
     }
   },
   {
@@ -530,7 +561,12 @@
       "metric": "live",
       "metricLabel": "registry",
       "lang": "TypeScript",
-      "detail": "The MCP server behind bilko.run: Claude sessions in sibling repos use it to register, publish, and inspect their apps here — and to read their own usage bill."
+      "detail": "The MCP server behind bilko.run: Claude sessions in sibling repos use it to register, publish, and inspect their apps here — and to read their own usage bill.",
+      "audience": "Developers running Claude Code who want to publish small apps to one host.",
+      "talkingPoints": [
+        "An MCP server that lets Claude sessions register, publish, and inspect apps on bilko.run.",
+        "Open source, in the bilko-run GitHub repo."
+      ]
     }
   },
   {
@@ -556,7 +592,14 @@
       "metric": "8 planets",
       "metricLabel": "to conquer",
       "lang": "GDScript · Godot 4",
-      "detail": "Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally."
+      "detail": "Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally.",
+      "audience": "Players who like short, keyboard-only arcade survivors runs.",
+      "talkingPoints": [
+        "Keyboard-only space survivors game across all eight planets of the Solar System.",
+        "Runs fully in the browser — no install.",
+        "Progress saves locally.",
+        "Free to play."
+      ]
     }
   },
   {
@@ -581,7 +624,13 @@
       "metric": "8 skills",
       "metricLabel": "$9 one-time",
       "lang": "Markdown",
-      "detail": "Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire."
+      "detail": "Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire.",
+      "audience": "Solo builders using Claude Code who have a working product and need to launch it.",
+      "talkingPoints": [
+        "Eight Claude skills that take a product from \"it works\" to launched.",
+        "$9 one-time download.",
+        "All eight skills share one context file; each writes one file and names the next skill to run."
+      ]
     }
   }
 ]

@@ -55,6 +55,10 @@ export interface HubCard {
   lang?: string;
   /** Longer story shown in the expanded drawer; falls back to blurb. */
   detail?: string;
+  /** One line: who it is for (from the registry listing). */
+  audience?: string;
+  /** Plain factual claims a promoter may state (from the registry listing). */
+  talkingPoints?: readonly string[];
 }
 
 function commitMs(slug: string): number {
@@ -94,6 +98,8 @@ function projectCard(p: Project): HubCard {
     metricLabel: p.listing?.metricLabel,
     lang: p.listing?.lang,
     detail: p.listing?.detail,
+    audience: p.listing?.audience,
+    talkingPoints: p.listing?.talkingPoints,
   };
 }
 

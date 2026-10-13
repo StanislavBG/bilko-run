@@ -270,7 +270,7 @@ export function ProjectsPage() {
         <>
           <div className="pr-stage" ref={stageRef}>
             {cards.map((c, i) => {
-              const g = spineGeom(ringOffset(i, active, n), stage.w, stage.h);
+              const g = spineGeom(ringOffset(i, active, n), stage.w, stage.h, undefined, n);
               return (
                 <button
                   key={`${c.type}:${c.slug}`}

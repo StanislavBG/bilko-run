@@ -73,6 +73,42 @@ describe('spineGeom', () => {
   });
 });
 
+describe('spineGeom fill (n given)', () => {
+  const W = 1440;
+  const H = 560;
+  const hb = heroBox(W);
+  const heroRight = hb.left + hb.width;
+  it('n=7: right and left spines span hero gap to stage margin', () => {
+    const r = [1, 2, 3].map((k) => spineGeom(k, W, H, 0.9, 7));
+    expect(r.reduce((a, g) => a + g.w, 0) + 2 * 6).toBeCloseTo(W - heroRight - 16, 0);
+    expect(r[0].x).toBeCloseTo(heroRight + 8, 5);
+    expect(r[2].x + r[2].w).toBeCloseTo(W - 8, 0);
+    const l = [-1, -2, -3].map((k) => spineGeom(k, W, H, 0.9, 7));
+    expect(l.reduce((a, g) => a + g.w, 0) + 2 * 6).toBeCloseTo(hb.left - 16, 0);
+    expect(l[0].x + l[0].w).toBeCloseTo(hb.left - 8, 5);
+    expect(l[2].x).toBeCloseTo(8, 0);
+  });
+  it('n=7: heights, opacity and font unchanged by scaling', () => {
+    const a = spineGeom(2, W, H, 0.9, 7);
+    const b = spineGeom(2, W, H);
+    expect({ h: a.h, o: a.opacity, f: a.fontPx, hid: a.hidden }).toEqual({
+      h: b.h, o: b.opacity, f: b.fontPx, hid: b.hidden,
+    });
+  });
+  it('n=140: identical to the no-n call', () => {
+    for (let k = -70; k <= 70; k++) {
+      expect(spineGeom(k, W, H, 0.9, 140)).toEqual(spineGeom(k, W, H));
+    }
+  });
+  it('n=2: single right spine fills its side, no left spine', () => {
+    const g = spineGeom(1, W, H, 0.9, 2);
+    expect(g.x).toBeCloseTo(heroRight + 8, 5);
+    expect(g.x + g.w).toBeCloseTo(W - 8, 0);
+    const l = spineGeom(-1, W, H, 0.9, 2);
+    expect(Number.isFinite(l.x) && Number.isFinite(l.w)).toBe(true);
+  });
+});
+
 describe('tickStyle / pad3 / RING_DOTS', () => {
   it('tickStyle', () => {
     expect(tickStyle(0)).toEqual({ h: 28, color: '#a83818' });

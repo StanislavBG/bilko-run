@@ -31,7 +31,26 @@ const HERO_GAP = 8;
 const SPINE_GAP = 6;
 const MAX_J = 30;
 
-export function spineGeom(k: number, stageW: number, stageH: number, falloff = 0.9): SpineGeom {
+const STAGE_MARGIN = 8;
+const MAX_SIDE = 29;
+
+/** Factor (>1) that stretches `count` spines to fill `available` px; 1 when they already reach it. */
+function sideScale(count: number, available: number, falloff: number): number {
+  if (count <= 0 || available <= 0) return 1;
+  let sum = 0;
+  for (let m = 1; m <= count; m++) sum += 64 * Math.pow(falloff, m - 1);
+  const gaps = SPINE_GAP * (count - 1);
+  return sum + gaps < available ? (available - gaps) / sum : 1;
+}
+
+/** `n` (card count), when given, widens a side's spines to fill the stage when there are too few to reach it. */
+export function spineGeom(
+  k: number,
+  stageW: number,
+  stageH: number,
+  falloff = 0.9,
+  n?: number,
+): SpineGeom {
   const base = Math.max(120, stageH - 40);
   if (k === 0) {
     return { x: stageW / 2 - 32, w: 64, h: base, opacity: 0, fontPx: 22, hidden: true };
@@ -40,7 +59,12 @@ export function spineGeom(k: number, stageW: number, stageH: number, falloff = 0
   const heroRight = left + width;
   const j = Math.abs(k);
   const jj = Math.min(j, MAX_J);
-  const spineW = (m: number) => 64 * Math.pow(falloff, m - 1);
+  let scale = 1;
+  if (n !== undefined) {
+    const count = k > 0 ? Math.min(MAX_SIDE, Math.floor(n / 2)) : Math.min(MAX_SIDE, n - 1 - Math.floor(n / 2));
+    scale = sideScale(count, left - HERO_GAP - STAGE_MARGIN, falloff);
+  }
+  const spineW = (m: number) => 64 * Math.pow(falloff, m - 1) * scale;
   let cum = HERO_GAP;
   for (let m = 1; m < jj; m++) cum += spineW(m) + SPINE_GAP;
   const w = spineW(jj);

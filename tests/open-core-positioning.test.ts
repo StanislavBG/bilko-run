@@ -76,6 +76,21 @@ function registryEntry(file: string): string {
   return src.slice(idx, idx + 1200);
 }
 
+/**
+ * Like registryEntry, but with listing.avoidClaims removed for the JSON registry.
+ * avoidClaims holds negated claims ("must not say X"), so money words there are expected.
+ */
+function registryEntryPositiveClaims(file: string): string {
+  if (!file.endsWith('.json')) return registryEntry(file);
+  const entry = (JSON.parse(read(file)) as { slug: string; listing?: Record<string, unknown> }[]).find(
+    p => p.slug === 'session-manager',
+  );
+  expect(entry, `${file} has no session-manager entry`).toBeDefined();
+  const copy = structuredClone(entry!);
+  delete copy.listing?.avoidClaims;
+  return JSON.stringify(copy);
+}
+
 describe('open-core positioning: the app is free and stays free, and so is the manual', () => {
   it('the landing page is split across the page file and its component folder', () => {
     // If the folder moves, every assertion below would silently read nothing.
@@ -322,7 +337,7 @@ describe('open-core positioning: the app is free and stays free, and so is the m
 
   it('the registry card never implies the app or the manual costs money', () => {
     for (const file of [PROJECTS_JSON, PACKAGES_REGISTRY]) {
-      const entry = registryEntry(file);
+      const entry = registryEntryPositiveClaims(file);
       expect(entry, `${file} still calls the manual paid`).not.toMatch(/paid|\$\d|sold separately/i);
     }
   });

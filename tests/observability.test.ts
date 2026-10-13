@@ -485,3 +485,61 @@ describe('observability rollup traffic24h', () => {
     expect(row.traffic24h).toBe(2);
   });
 });
+
+describe('GET /api/admin/traffic full detail', () => {
+  async function hit(o: { ts: number; path: string; visitorId?: string | null; hash?: string; isAdmin?: number; email?: string | null; ip?: string; ua?: string; ref?: string | null }) {
+    await dbRun(
+      `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin)
+       VALUES (?, ?, ?, NULL, 200, NULL, ?, 'US', 'desktop', 'Chrome', 'Linux', 0, ?, ?, ?, ?, ?, ?)`,
+      o.ts, new Date(o.ts).toISOString().slice(0, 10), o.path, o.hash ?? 'h',
+      o.ip ?? '1.2.3.4', o.ua ?? 'UA/1', o.ref ?? null, o.visitorId ?? null, o.email ?? null, o.isAdmin ?? 0,
+    );
+  }
+  async function click(ts: number, visitorId: string, label: string) {
+    await dbRun(
+      `INSERT INTO click_events (ts_ms, date, path, slug, tag, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin)
+       VALUES (?, ?, '/a', NULL, 'button', ?, '/go', 'h', 0, '1.2.3.4', ?, NULL, 0)`,
+      ts, new Date(ts).toISOString().slice(0, 10), label, visitorId,
+    );
+  }
+
+  it('recent rows carry ip/ua/userEmail and visitors aggregate hits+clicks', async () => {
+    asAdmin();
+    const now = Date.now();
+    await hit({ ts: now - 5000, path: '/a', visitorId: 'vid1', email: 'x@y.com', ref: 'https://r.com/p' });
+    await hit({ ts: now - 4000, path: '/b', visitorId: 'vid1', email: 'x@y.com' });
+    await click(now - 3000, 'vid1', 'Buy');
+    const body = JSON.parse((await get('/api/admin/traffic')).body);
+    expect(body.recent[0]).toMatchObject({ ip: '1.2.3.4', ua: 'UA/1', visitorId: 'vid1', userEmail: 'x@y.com', isAdmin: false });
+    expect(body.totals.visitors).toBe(1);
+    expect(body.visitors).toHaveLength(1);
+    expect(body.visitors[0]).toMatchObject({ visitorId: 'vid1', ip: '1.2.3.4', userEmail: 'x@y.com', hits: 2, clicks: 1, pages: 2, isAdmin: false });
+  });
+
+  it('self=exclude drops admin rows; default includes and flags them', async () => {
+    asAdmin();
+    const now = Date.now();
+    await hit({ ts: now - 2000, path: '/a', visitorId: 'me', isAdmin: 1 });
+    await hit({ ts: now - 1000, path: '/a', visitorId: 'other' });
+    const all = JSON.parse((await get('/api/admin/traffic')).body);
+    expect(all.totals.hits).toBe(2);
+    expect(all.visitors.find((v: any) => v.visitorId === 'me').isAdmin).toBe(true);
+    const ex = JSON.parse((await get('/api/admin/traffic?self=exclude')).body);
+    expect(ex.totals.hits).toBe(1);
+    expect(ex.visitors.map((v: any) => v.visitorId)).toEqual(['other']);
+    expect(ex.recent).toHaveLength(1);
+  });
+
+  it('timeline merges hits and clicks in time order and 403s non-admins', async () => {
+    expect((await get('/api/admin/traffic/visitor/vid1')).statusCode).toBe(403);
+    asAdmin();
+    const now = Date.now();
+    await hit({ ts: now - 3000, path: '/a', visitorId: 'vid1' });
+    await click(now - 2000, 'vid1', 'Buy');
+    await hit({ ts: now - 1000, path: '/b', visitorId: 'vid1' });
+    await hit({ ts: now - 1500, path: '/z', visitorId: 'other' });
+    const body = JSON.parse((await get('/api/admin/traffic/visitor/vid1')).body);
+    expect(body.events.map((e: any) => [e.kind, e.path])).toEqual([['hit', '/a'], ['click', '/a'], ['hit', '/b']]);
+    expect(body.events[1]).toMatchObject({ label: 'Buy', href: '/go', ip: '1.2.3.4' });
+  });
+});

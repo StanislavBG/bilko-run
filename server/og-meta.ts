@@ -1,5 +1,6 @@
+import { createHash } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 export interface OgMeta {
@@ -89,6 +90,36 @@ export function loadOgProjects(file?: string): OgProject[] {
   });
 }
 
+const versionCache = new Map<string, string>();
+
+/** 8-hex content version for a project's card: copy plus icon/shareImage bytes when readable. */
+function projectVersion(p: OgProject, staticRoot?: string): string {
+  const key = JSON.stringify([p.slug, p.displayName ?? p.name, p.tagline, p.category, p.icon ?? '', p.shareImage ?? '', staticRoot ?? '']);
+  const hit = versionCache.get(key);
+  if (hit) return hit;
+  const h = createHash('sha1').update(JSON.stringify([p.displayName ?? p.name, p.tagline, p.category]));
+  if (staticRoot) {
+    const base = resolve(staticRoot, 'projects', p.slug) + sep;
+    for (const asset of [p.icon, p.shareImage]) {
+      if (!asset) continue;
+      const file = resolve(staticRoot, asset.replace(/^\/+/, ''));
+      if (!file.startsWith(base)) continue;
+      try {
+        h.update(readFileSync(file));
+      } catch {
+        /* unreadable asset: version on text only */
+      }
+    }
+  }
+  const v = h.digest('hex').slice(0, 8);
+  versionCache.set(key, v);
+  return v;
+}
+
+function projectImage(p: OgProject, ctx: OgContext): string {
+  return `${SITE}/og/${p.slug}.png?v=${projectVersion(p, ctx.staticRoot)}`;
+}
+
 function projectMeta(p: OgProject, url: string, image: string): OgMeta {
   return { title: `${p.displayName ?? p.name} — bilko.run`, description: p.tagline, url, image };
 }
@@ -105,7 +136,7 @@ export function resolveOg(path: string, ctx: OgContext): OgMeta | null {
     const slug = proj[1];
     if (!SLUG_RE.test(slug)) return null;
     const p = ctx.projects.find(x => x.slug === slug);
-    return p ? projectMeta(p, `${SITE}/projects/${slug}/`, `${SITE}/og/${slug}.png`) : null;
+    return p ? projectMeta(p, `${SITE}/projects/${slug}/`, projectImage(p, ctx)) : null;
   }
 
   const prod = PRODUCT_PATH_RE.exec(clean);
@@ -113,7 +144,7 @@ export function resolveOg(path: string, ctx: OgContext): OgMeta | null {
     const p = ctx.projects.find(x => x.slug === 'session-manager');
     if (!p) return null;
     const canonical = `/products/session-manager${prod[1] ?? ''}`;
-    return projectMeta(p, `${SITE}${canonical}`, `${SITE}/og/session-manager.png`);
+    return projectMeta(p, `${SITE}${canonical}`, projectImage(p, ctx));
   }
 
   const blog = BLOG_PATH_RE.exec(clean);

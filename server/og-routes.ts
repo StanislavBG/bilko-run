@@ -4,6 +4,7 @@ import { renderOgCard } from './og-image.js';
 import { readProjectPng } from './og-assets.js';
 
 const SHARE_MAX_BYTES = 5 * 1024 * 1024;
+const ICON_MAX_BYTES = 512 * 1024;
 
 const OG_FILE_RE = /^([a-z0-9-]+)\.png$/;
 
@@ -30,7 +31,13 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
           `og: shareImage for ${slug} unusable (${asset ? `${asset.width}x${asset.height}, need 1200x630` : 'missing, oversize, escaped or not a PNG'}); using generated card`,
         );
       }
+      let iconPng: Buffer | undefined;
+      if (p.icon && ctx.staticRoot) {
+        const icon = readProjectPng(ctx.staticRoot, slug, p.icon, ICON_MAX_BYTES);
+        if (icon && icon.width === icon.height && icon.width >= 128 && icon.width <= 1024) iconPng = icon.bytes;
+      }
       png = renderOgCard({
+        iconPng,
         title: p.displayName ?? p.name,
         tagline: p.tagline,
         category: p.category,

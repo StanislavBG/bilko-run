@@ -67,8 +67,18 @@ describe('resolveOg', () => {
       expect(m.title).toBe('Page Roast — bilko.run');
       expect(m.description).toBe('Roasts landing pages');
       expect(m.url).toBe('https://bilko.run/projects/page-roast/');
-      expect(m.image).toBe('https://bilko.run/og/page-roast.png');
+      expect(m.image).toMatch(/^https:\/\/bilko\.run\/og\/page-roast\.png\?v=[0-9a-f]{8}$/);
     }
+  });
+  it('versions the project og:image by content', () => {
+    const v = (tagline: string) =>
+      resolveOg('/projects/vers-x/', {
+        ...ctx,
+        projects: [{ slug: 'vers-x', name: 'X', tagline, category: 'c' }],
+      })!.image;
+    expect(v('one')).toMatch(/\/og\/vers-x\.png\?v=[0-9a-f]{8}$/);
+    expect(v('one')).toBe(v('one'));
+    expect(v('one')).not.toBe(v('two'));
   });
   it('maps session-manager product paths with canonical url', () => {
     expect(resolveOg('/products/session-manager', ctx)!.url).toBe('https://bilko.run/products/session-manager');

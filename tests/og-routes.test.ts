@@ -108,7 +108,7 @@ describe('OG meta injection', () => {
     const name = projects.find(p => p.slug === 'page-roast')!;
     expect(res.body).toContain('og:title');
     expect(res.body).toContain(`${name.displayName ?? name.name} — bilko.run`);
-    expect(res.body).toContain('https://bilko.run/og/page-roast.png');
+    expect(res.body).toMatch(/https:\/\/bilko\.run\/og\/page-roast\.png\?v=[0-9a-f]{8}/);
     expect(res.body).not.toContain('content="Page Roast"');
     expect(res.body).toContain('name="csp-nonce"');
   });

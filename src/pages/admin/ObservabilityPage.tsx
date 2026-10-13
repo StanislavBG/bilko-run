@@ -5,6 +5,7 @@ import { useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 import { formatBytes } from '../../lib/format.js';
 import { BandwidthPanel } from './BandwidthPanel.js';
 import { BlogCadencePanel } from './BlogCadencePanel.js';
+import { TrafficPanel } from './TrafficPanel.js';
 import { DriftBadge, type DriftStatus } from './DriftBadge.js';
 
 interface Row {
@@ -211,6 +212,8 @@ export function ObservabilityPage() {
           </div>
         </div>
       </div>
+
+      <TrafficPanel />
 
       {error && <p className="text-red-500 text-sm">{error}</p>}
       {loading && !data && <div className="text-warm-400 text-center py-16">Loading…</div>}

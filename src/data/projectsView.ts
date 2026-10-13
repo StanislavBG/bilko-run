@@ -67,6 +67,8 @@ export interface HubCard {
   callToAction?: string;
   /** Claims a promoter must NOT make about this project (from the registry listing). */
   avoidClaims?: readonly string[];
+  /** Screenshot path from the registry entry; the Projects Ring hero shows it when present. */
+  thumbnail?: string;
 }
 
 function commitMs(slug: string): number {
@@ -112,6 +114,7 @@ function projectCard(p: Project): HubCard {
     pricing: p.listing?.pricing,
     callToAction: p.listing?.callToAction,
     avoidClaims: p.listing?.avoidClaims,
+    thumbnail: p.thumbnail,
   };
 }
 

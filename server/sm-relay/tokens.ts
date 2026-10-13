@@ -1,8 +1,10 @@
 // Session Manager web-remote relay — token stores.
 // Ported from session-manager web-remote/relay/src/tokens.ts.
-// Auth-mechanism-agnostic: `userId` is the Clerk user's email (see routes.ts).
+// Auth-mechanism-agnostic: `userId` is the Clerk user's email (see routes/sm-relay.ts).
 // Long-lived device tokens persist in the `sm_relay_devices` table and client tokens
-// in `sm_relay_clients`, so paired desktops survive a redeploy. Short-lived OTPs, WS tickets and rate counters stay in-process —
+// in `sm_relay_clients`, so paired desktops survive a redeploy. Both expire on a
+// sliding window: each successful verify pushes expiry out again, so a token in use
+// stays paired indefinitely and only an idle one lapses. Short-lived OTPs, WS tickets and rate counters stay in-process —
 // losing them on redeploy only means re-requesting a code or ticket.
 import crypto from 'node:crypto';
 import { dbGet, dbAll, dbRun } from '../db.js';
@@ -57,6 +59,8 @@ const OTP_RATE_WINDOW_MS = 60 * 60 * 1000;
 const WS_TICKET_TTL_MS = 30 * 1000;
 const DEVICE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const CLIENT_TOKEN_TTL_MS = DEVICE_TOKEN_TTL_MS;
+/** A verified token is renewed once it has aged this much, so renewal writes at most this often. */
+const TOKEN_RENEW_AFTER_MS = 10 * 24 * 60 * 60 * 1000;
 
 // Unambiguous alphanumeric charset (excludes 0/O, 1/I, 8/B look-alikes)
 const OTP_CHARSET = 'ACDEFGHJKLMNPQRTUVWXY234679';
@@ -174,6 +178,14 @@ export async function verifyDeviceToken(token: string, now = Date.now()): Promis
     await dbRun('DELETE FROM sm_relay_devices WHERE device_id = ?', row.device_id);
     return null;
   }
+  if (Number(row.expires_at) - now < DEVICE_TOKEN_TTL_MS - TOKEN_RENEW_AFTER_MS) {
+    // Keyed on token_hash too, so a concurrent re-pair's fresh row is never touched.
+    row.expires_at = now + DEVICE_TOKEN_TTL_MS;
+    await dbRun(
+      'UPDATE sm_relay_devices SET expires_at = ? WHERE device_id = ? AND token_hash = ?',
+      row.expires_at, row.device_id, hashToken(token),
+    );
+  }
   return toDevice(row);
 }
 
@@ -260,6 +272,10 @@ export async function verifyClientToken(token: string, now = Date.now()): Promis
   if (now > Number(row.expires_at)) {
     await dbRun('DELETE FROM sm_relay_clients WHERE client_id = ?', row.client_id);
     return null;
+  }
+  if (Number(row.expires_at) - now < CLIENT_TOKEN_TTL_MS - TOKEN_RENEW_AFTER_MS) {
+    row.expires_at = now + CLIENT_TOKEN_TTL_MS;
+    await dbRun('UPDATE sm_relay_clients SET expires_at = ? WHERE client_id = ?', row.expires_at, row.client_id);
   }
   return toClient(row);
 }

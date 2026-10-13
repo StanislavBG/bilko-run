@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { ADMIN_EMAILS } from '../constants.js';
+import { PROJECTS } from '../data/projectsRegistry.js';
+import { projectMetadataRows } from '../data/projectMetadata.js';
 import { HUB_CARDS, PUBLIC_CARDS, lastWorkedLabel, type HubCard } from '../data/projectsView.js';
 import { track } from '../hooks/usePageView.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
@@ -36,7 +38,25 @@ function categoryChips(category: string): string[] {
   return category.split(/[·,/]/).map(s => s.trim()).filter(Boolean);
 }
 
-function HubRow({ card, index, expanded, onToggle }: { card: HubCard; index: number; expanded: boolean; onToggle: () => void }) {
+function MetadataPanel({ slug }: { slug: string }) {
+  const entry = PROJECTS.find(p => p.slug === slug);
+  if (!entry) return null;
+  return (
+    <div className="pf-hub-meta-wrap">
+      <h3 className="pf-hub-meta-h">Metadata · admin</h3>
+      <dl className="pf-hub-meta">
+        {projectMetadataRows(entry).map(r => (
+          <div key={r.key} className="pf-hub-meta-row">
+            <dt>{r.key}</dt>
+            <dd className={r.missing ? 'missing' : undefined}>{r.missing ? '— not set' : r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function HubRow({ card, index, expanded, isAdmin, onToggle }: { card: HubCard; index: number; expanded: boolean; isAdmin: boolean; onToggle: () => void }) {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const status = statusMeta(card);
@@ -121,6 +141,7 @@ function HubRow({ card, index, expanded, onToggle }: { card: HubCard; index: num
               <a href="/projects/session-manager/" className="pf-hub-link">Web Remote →</a>
             )}
           </div>
+          {isAdmin && card.type === 'project' && <MetadataPanel slug={card.slug} />}
         </div>
       )}
     </div>
@@ -178,6 +199,7 @@ export function ProjectsPage() {
             card={card}
             index={i}
             expanded={expanded === card.slug}
+            isAdmin={isAdmin}
             onToggle={() => setExpanded(cur => (cur === card.slug ? null : card.slug))}
           />
         ))}

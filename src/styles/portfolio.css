@@ -644,6 +644,14 @@ body.hub-route .pf-footer { display: none; }
 }
 .pf-hub-link:hover { color: var(--pf-accent); }
 
+.pf-hub-meta-wrap { grid-column: 1 / -1; min-width: 0; border-top: 1px dashed var(--pf-ink-2); padding-top: 14px; }
+.pf-hub-meta-h { font-family: var(--pf-font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 10px; color: var(--pf-ink-2); }
+.pf-hub-meta { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 20px; row-gap: 6px; }
+.pf-hub-meta-row { display: contents; }
+.pf-hub-meta dt { font-family: var(--pf-font-mono); font-size: 12px; font-weight: 700; color: var(--pf-ink-2); }
+.pf-hub-meta dd { margin: 0; font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; min-width: 0; }
+.pf-hub-meta dd.missing { opacity: 0.45; font-style: italic; }
+
 @media (max-width: 900px) {
   /* Mobile: drop the fit-to-viewport constraint and scroll normally. */
   body.hub-route .portfolio-shell { height: auto; display: block; overflow: visible; }
@@ -662,6 +670,8 @@ body.hub-route .pf-footer { display: none; }
   .pf-hub-badge { grid-column: 3; }
   .pf-hub-body { grid-template-columns: 1fr; gap: 20px; padding: 4px 12px 24px 16px; }
   .pf-hub-actions { align-items: flex-start; }
+  .pf-hub-meta { grid-template-columns: 1fr; row-gap: 0; }
+  .pf-hub-meta dd { margin-bottom: 8px; }
 }
 
 @media (max-width: 900px) {

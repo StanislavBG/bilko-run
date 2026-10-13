@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { PUBLIC_CARDS, HUB_CARDS } from '../src/data/projectsView';
+import { PROJECTS } from '../src/data/projectsRegistry';
+import { projectMetadataRows } from '../src/data/projectMetadata';
+import { ListingSchema } from '../mcp-host-server/src/contract/registry';
 
 // Captured from the pre-change code (hardcoded PUBLIC_SLUGS / DISPLAY_NAME).
 const EXPECTED: ReadonlyArray<readonly [string, string]> = [
@@ -40,5 +43,26 @@ describe('projectsView listing-driven enrichment', () => {
     expect(bare).toBeDefined();
     expect(bare?.metric).toBeUndefined();
     expect(bare?.detail).toBeUndefined();
+  });
+});
+
+describe('projectMetadataRows', () => {
+  it('lists every listing key for git-viewer and flags absent offering as missing', () => {
+    const gv = PROJECTS.find(p => p.slug === 'git-viewer')!;
+    const rows = projectMetadataRows(gv);
+    const byKey = new Map(rows.map(r => [r.key, r]));
+    for (const k of ListingSchema.keyof().options) {
+      expect(byKey.has(`listing.${k}`), `listing.${k}`).toBe(true);
+    }
+    if (gv.listing?.offering === undefined) {
+      expect(byKey.get('listing.offering')).toEqual({ key: 'listing.offering', value: '', missing: true });
+    }
+    expect(byKey.get('slug')?.value).toBe('git-viewer');
+  });
+
+  it('marks listing.offering missing when absent', () => {
+    const base = PROJECTS[0];
+    const rows = projectMetadataRows({ ...base, listing: { ...base.listing, offering: undefined } });
+    expect(rows.find(r => r.key === 'listing.offering')?.missing).toBe(true);
   });
 });

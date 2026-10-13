@@ -12,7 +12,7 @@ beforeAll(async () => {
 });
 afterAll(() => app.close());
 
-const FIELDS = ['slug', 'name', 'tagline', 'category', 'status', 'url', 'tags', 'detail', 'audience', 'talking_points', 'offering', 'pricing', 'call_to_action', 'avoid_claims'].sort();
+const FIELDS = ['slug', 'name', 'tagline', 'category', 'status', 'url', 'tags', 'detail', 'audience', 'talking_points', 'offering', 'pricing', 'call_to_action', 'avoid_claims', 'share_image_url'].sort();
 const NON_PUBLIC = HUB_CARDS.filter(c => c.type === 'project' && !c.isPublic).map(c => c.slug);
 
 async function mcp(body: object) {
@@ -107,6 +107,15 @@ describe('marketing enums', () => {
       expect(offerings).toContain(p.offering);
       expect(pricings).toContain(p.pricing);
     }
+  });
+});
+
+describe('share_image_url', () => {
+  it('is https://bilko.run/og/<slug>.png for every public project', async () => {
+    const projects = (await app.inject({ method: 'GET', url: '/api/projects' })).json().projects as
+      { slug: string; share_image_url: string }[];
+    expect(projects.length).toBeGreaterThan(0);
+    for (const p of projects) expect(p.share_image_url).toBe(`https://bilko.run/og/${p.slug}.png`);
   });
 });
 

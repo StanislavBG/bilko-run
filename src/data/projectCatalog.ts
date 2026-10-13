@@ -17,6 +17,8 @@
  *   - Marketing fields (`offering`, `pricing`, `call_to_action`, `avoid_claims`)
  *     come from the same `listing` block. Burrow must honor `avoid_claims`:
  *     never state any of those claims when promoting the project.
+ *   - `share_image_url` is derived (`/og/<slug>.png`). X unfurls the project
+ *     `url`'s og:image automatically, so this is for previews/attachments only.
  */
 import { PUBLIC_CARDS, type HubCard } from './projectsView.js';
 
@@ -46,6 +48,8 @@ export interface CatalogProject {
   call_to_action: string;
   /** Claims a promoter must not make. May be empty. */
   avoid_claims: string[];
+  /** Absolute URL of the project's X/OG card image: https://bilko.run/og/<slug>.png. */
+  share_image_url: string;
 }
 
 export interface Catalog {
@@ -74,6 +78,7 @@ function toCatalogProject(card: HubCard): CatalogProject {
     pricing: card.pricing ?? '',
     call_to_action: card.callToAction ?? '',
     avoid_claims: [...(card.avoidClaims ?? [])],
+    share_image_url: `${SITE_ORIGIN}/og/${card.slug}.png`,
   };
 }
 

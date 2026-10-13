@@ -272,7 +272,7 @@ describe('blog-cadence-watchdog.sh', () => {
         .filter((line) => line.length > 0);
     }
 
-    it('returns exactly the two configured paths when run against the real blog.config.yaml', () => {
+    it('returns exactly the three configured paths when run against the real blog.config.yaml', () => {
       const awkProgram = extractAllowedPathsAwk();
       const configPath = join(__dirname, '../.claude/skills/blog-from-git/blog.config.yaml');
       const output = execFileSync('awk', [awkProgram, configPath], { encoding: 'utf-8' });
@@ -280,7 +280,7 @@ describe('blog-cadence-watchdog.sh', () => {
         .split('\n')
         .map((line) => line.replace(/^[\s]*-[\s]*/, '').replace(/[\s]*#.*$/, '').trim())
         .filter((line) => line.length > 0);
-      expect(paths).toEqual(['content/blog/', '.claude/skills/blog-from-git/blog-ledger.md']);
+      expect(paths).toEqual(['content/blog/', 'public/blog-images/', '.claude/skills/blog-from-git/blog-ledger.md']);
     });
 
     it('skips a comment-only continuation line between the key and the first item (the exact defect)', () => {

@@ -439,9 +439,9 @@ if [[ "$AUTONOMOUS_PUBLISH" == "true" ]]; then
     path="$(echo "$raw_line" | sed -E 's/^[[:space:]]*-[[:space:]]*//; s/[[:space:]]*#.*$//')"
     [[ -n "$path" ]] && ALLOWED_COMMIT_PATHS+=("$path")
   done <<< "$ALLOWED_PATHS_RAW"
-  EXPECTED_COMMIT_PATHS=("content/blog/" ".claude/skills/blog-from-git/blog-ledger.md")
+  EXPECTED_COMMIT_PATHS=("content/blog/" "public/blog-images/" ".claude/skills/blog-from-git/blog-ledger.md")
   if [[ "${#ALLOWED_COMMIT_PATHS[@]}" -eq 0 || "${ALLOWED_COMMIT_PATHS[*]}" != "${EXPECTED_COMMIT_PATHS[*]}" ]]; then
-    echo "[blog-cadence-watchdog] FATAL: autonomy.allowed_commit_paths in $CONFIG_FILE (got: '${ALLOWED_COMMIT_PATHS[*]}') no longer matches the seed pathspec this script commits (content/blog/, .claude/skills/blog-from-git/blog-ledger.md) — update both together" >&2
+    echo "[blog-cadence-watchdog] FATAL: autonomy.allowed_commit_paths in $CONFIG_FILE (got: '${ALLOWED_COMMIT_PATHS[*]}') no longer matches the seed pathspec this script commits (content/blog/, public/blog-images/, .claude/skills/blog-from-git/blog-ledger.md) — update both together" >&2
     write_heartbeat "error: allowed_commit_paths does not match hard-coded seed pathspec"
     exit 1
   fi

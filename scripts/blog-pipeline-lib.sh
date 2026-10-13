@@ -10,11 +10,21 @@ source "$BP_LIB_DIR/blog-watchdog-env.sh"
 BP_CLAUDE_MODEL="claude-sonnet-5"
 
 BP_DRAFT_REQUIRED_BINARIES=(claude git npx pnpm timeout)
+BP_SEED_REQUIRED_BINARIES=(awk curl flock git jq node npx pnpm timeout)
 
 # Echoes the space-separated required binaries that do not resolve. Empty = all fine.
 bp_missing_binaries() {
   local bin missing=()
   for bin in "${BP_DRAFT_REQUIRED_BINARIES[@]}"; do
+    command -v "$bin" >/dev/null 2>&1 || missing+=("$bin")
+  done
+  echo "${missing[*]:-}"
+}
+
+# Same as bp_missing_binaries, for blog-seed.sh (no claude needed; curl/jq/flock/node are).
+bp_missing_seed_binaries() {
+  local bin missing=()
+  for bin in "${BP_SEED_REQUIRED_BINARIES[@]}"; do
     command -v "$bin" >/dev/null 2>&1 || missing+=("$bin")
   done
   echo "${missing[*]:-}"

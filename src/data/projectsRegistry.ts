@@ -6,7 +6,7 @@
  *     src/data/standalone-projects.json. Don't hand-edit it from a sibling repo.
  *   - Public visibility (`public`) and hub display name (`displayName`) are
  *     optional fields on the entry in src/data/standalone-projects.json.
- *   - Adjust hub enrichment (metric, language, detail): src/data/projectsView.ts — ENRICH.
+ *   - Adjust hub enrichment (metric, language, detail): the entry's `listing` block via the bilko-host MCP.
  *   - Host kinds (static-path / external-url / react-route): docs/host-contract.md.
  *
  * The only code-level exception is SPA_ROUTE_OVERRIDES below.
@@ -14,6 +14,7 @@
 
 import type {
   ProjectStatus,
+  Listing,
   RegistryProject,
 } from '../../mcp-host-server/src/contract/registry.js';
 
@@ -23,6 +24,8 @@ export type ProjectHost = RegistryProject['host'] | { kind: 'react-route'; path:
 
 export interface Project {
   slug: string;
+  /** Project-owned card content; edited by the owning sibling via the bilko-host MCP */
+  listing?: Listing;
   name: string;
   tagline: string;
   /** Display category — "AI Tool", "Game", "Data", "Productivity", etc. */

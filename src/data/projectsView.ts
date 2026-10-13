@@ -49,55 +49,13 @@ export interface HubCard {
   /** Last-commit time as epoch ms; 0 when unknown (sorts last). */
   lastCommitAt: number;
   isPublic: boolean;
-  /** Rich-row enrichment (from ENRICH below). Absent → row cell is omitted. */
+  /** Rich-row enrichment (from the registry entry's listing). Absent → row cell is omitted. */
   metric?: string;
   metricLabel?: string;
   lang?: string;
   /** Longer story shown in the expanded drawer; falls back to blurb. */
   detail?: string;
 }
-
-/**
- * Per-project enrichment for the rich hub rows (headline metric, primary
- * language, expanded-drawer story). Keyed by slug; any project absent here
- * still renders — the metric/lang cells just collapse. Display-only; the
- * canonical project facts stay in standalone-projects.json / packages.ts.
- */
-interface Enrich { metric: string; metricLabel: string; lang: string; detail: string; }
-const ENRICH: Record<string, Enrich> = {
-  'git-viewer': {
-    metric: '12 repos', metricLabel: 'indexed', lang: 'TypeScript',
-    detail: 'Pulls every public repo, scores it by recency and activity, and renders a living portfolio. No manual upkeep — push code, the dashboard updates itself.',
-  },
-  'session-manager': {
-    metric: 'free', metricLabel: 'app + manual', lang: 'TypeScript',
-    detail: 'A free desktop cockpit for Claude Code: sessions with a persona and a mission, a scheduler that waits out your token limit, and every setting in one window.',
-  },
-  'social-signals-trader': {
-    metric: '10', metricLabel: 'subreddits', lang: 'Python',
-    detail: 'Agents read sentiment across ten subreddits, place trades, and publish every position live. Wins and losses both — radical transparency as a feature.',
-  },
-  'bilko-host': {
-    metric: 'live', metricLabel: 'registry', lang: 'TypeScript',
-    detail: 'The MCP server behind bilko.run: Claude sessions in sibling repos use it to register, publish, and inspect their apps here — and to read their own usage bill.',
-  },
-  'outdoor-hours': {
-    metric: '10 yrs', metricLabel: 'of data', lang: 'Python',
-    detail: 'A comfort index that scores a decade of weather data into "comfortable hours" per place. Find where the year is actually pleasant, not just warm.',
-  },
-  'bilko-flow': {
-    metric: 'I1–I7', metricLabel: 'steel frame', lang: 'TypeScript',
-    detail: 'Describe a goal in plain language; bilko-flow compiles it into a typed, DAG-validated workflow that runs the same way every time. The engine behind the studio.',
-  },
-  'escape-velocity': {
-    metric: '8 planets', metricLabel: 'to conquer', lang: 'GDScript · Godot 4',
-    detail: 'Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally.',
-  },
-  'launch-kit': {
-    metric: '8 skills', metricLabel: '$9 one-time', lang: 'Markdown',
-    detail: 'Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire.',
-  },
-};
 
 function commitMs(slug: string): number {
   const iso = COMMIT_ORDER[slug];
@@ -132,7 +90,10 @@ function projectCard(p: Project): HubCard {
     install: pkg?.install,
     lastCommitAt: commitMs(p.slug),
     isPublic: p.public === true,
-    ...ENRICH[p.slug],
+    metric: p.listing?.metric,
+    metricLabel: p.listing?.metricLabel,
+    lang: p.listing?.lang,
+    detail: p.listing?.detail,
   };
 }
 
@@ -152,7 +113,6 @@ function packageCard(pkg: Package): HubCard {
     install: pkg.install,
     lastCommitAt: commitMs(pkg.slug),
     isPublic: false,
-    ...ENRICH[pkg.slug],
   };
 }
 

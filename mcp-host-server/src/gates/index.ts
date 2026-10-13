@@ -7,6 +7,7 @@ export interface GateContext {
   manifest?:   Manifest;      // pre-validated by the manifest gate
   bypass:      Set<string>;   // gate names the caller asked to skip
   adminEmail?: string;        // for audit log
+  listing?:    { icon?: string; shareImage?: string }; // declared share assets (patch, else registry)
 }
 
 export interface GateResult {
@@ -23,8 +24,9 @@ import { budgetGate }   from './budget.js';
 import { a11yGate }     from './a11y.js';
 import { goldenGate }   from './golden.js';
 import { auditGate }    from './audit.js';
+import { shareAssetsGate } from './share-assets.js';
 
-const GATES: Gate[] = [manifestGate, budgetGate, goldenGate, a11yGate, auditGate];
+const GATES: Gate[] = [manifestGate, budgetGate, goldenGate, a11yGate, auditGate, shareAssetsGate];
 
 export async function runGates(ctx: GateContext): Promise<GateResult[]> {
   const results: GateResult[] = [];

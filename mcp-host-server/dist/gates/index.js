@@ -3,7 +3,8 @@ import { budgetGate } from './budget.js';
 import { a11yGate } from './a11y.js';
 import { goldenGate } from './golden.js';
 import { auditGate } from './audit.js';
-const GATES = [manifestGate, budgetGate, goldenGate, a11yGate, auditGate];
+import { shareAssetsGate } from './share-assets.js';
+const GATES = [manifestGate, budgetGate, goldenGate, a11yGate, auditGate, shareAssetsGate];
 export async function runGates(ctx) {
     const results = [];
     for (const gate of GATES) {

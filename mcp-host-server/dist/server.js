@@ -286,6 +286,15 @@ server.registerTool('get_project', {
         return err(e.message);
     }
 });
+// Share assets declared by bilko.listing.json (if it sets a listing), else the registry entry.
+function declaredShareAssets(projects, slug, sourceRepoPath) {
+    const patch = sourceRepoPath ? readListingFile(resolve(sourceRepoPath.replace(/^~(?=\/|$)/, homedir()))) : undefined;
+    const patched = patch && typeof patch === 'object' ? patch.listing : undefined;
+    const source = patched && typeof patched === 'object'
+        ? patched
+        : projects.find(p => p.slug === slug)?.listing;
+    return source ? { icon: source.icon, shareImage: source.shareImage } : undefined;
+}
 // 5) publish_static_project ─────────────────────────────────────────────
 server.registerTool('publish_static_project', {
     title: 'Publish a static-path app build',
@@ -311,7 +320,8 @@ server.registerTool('publish_static_project', {
         }
         // Cheap ownership check before gates, which execute commands in sourceRepoPath.
         // The check inside withPublishCheckout remains the authoritative re-check.
-        assertPublishOwner(await readRegistry(HOST_ROOT), slug, sourceRepoPath);
+        const preRegistry = await readRegistry(HOST_ROOT);
+        assertPublishOwner(preRegistry, slug, sourceRepoPath);
         // Run publish gates against distPath, outside the publish checkout/lock.
         const bypassResult = parseBypass(bypass, bypassReason);
         if ('error' in bypassResult) {
@@ -323,6 +333,7 @@ server.registerTool('publish_static_project', {
             sourceRepo: sourceRepoPath,
             bypass: bypassResult.gates,
             adminEmail: undefined,
+            listing: declaredShareAssets(preRegistry, slug, sourceRepoPath),
         };
         const results = await runGates(ctx);
         const summary = gateSummary(results);

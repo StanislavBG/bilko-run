@@ -662,8 +662,8 @@
     "status": "live",
     "year": 2026,
     "host": {
-      "kind": "static-path",
-      "path": "/projects/family-frame/",
+      "kind": "external-url",
+      "url": "https://family-frame.replit.app",
       "sourceRepo": "github.com/StanislavBG/family-frame",
       "localPath": "~/Projects/family-frame"
     },
@@ -671,6 +671,7 @@
       "PWA",
       "Family",
       "Free"
-    ]
+    ],
+    "public": true
   }
 ]

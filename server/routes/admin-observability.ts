@@ -201,7 +201,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const human = `ts_ms >= ? AND is_bot = 0 AND status < 400${slugSql}`;
     const humanArgs = [since, ...slugArgs];
 
-    const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest] = await Promise.all([
+    const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest, clickTotal, topClicks] = await Promise.all([
       safeQuery(() => dbGet<{ hits: number; visitors: number }>(
         `SELECT COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors FROM page_hits WHERE ${human}`,
         ...humanArgs,
@@ -260,6 +260,18 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         since, ...slugArgs,
       ), []),
       safeQuery(() => dbGet<{ d: string | null }>(`SELECT MIN(date) AS d FROM page_hits`), undefined),
+      safeQuery(() => dbGet<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM click_events WHERE ts_ms >= ? AND is_bot = 0${slugSql}`,
+        since, ...slugArgs,
+      ), undefined),
+      safeQuery(() => dbAll<{
+        path: string; tag: string | null; label: string | null; href: string | null; clicks: number; visitors: number;
+      }>(
+        `SELECT path, tag, label, href, COUNT(*) AS clicks, COUNT(DISTINCT visitor_hash) AS visitors
+           FROM click_events WHERE ts_ms >= ? AND is_bot = 0${slugSql}
+          GROUP BY path, tag, label, href ORDER BY clicks DESC LIMIT 25`,
+        since, ...slugArgs,
+      ), []),
     ]);
 
     return {
@@ -269,6 +281,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         visitors: totals?.visitors ?? 0,
         botHits: botRow?.n ?? 0,
         notFound: notFoundRow?.n ?? 0,
+        clicks: clickTotal?.n ?? 0,
       },
       byDay,
       topPages,
@@ -277,6 +290,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       byCountry,
       byDevice,
       byBrowser,
+      topClicks,
       recent: recent.map(r => ({
         ts: r.ts_ms,
         path: r.path,

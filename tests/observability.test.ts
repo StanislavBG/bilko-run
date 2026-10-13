@@ -43,6 +43,7 @@ beforeEach(async () => {
   await dbRun('DELETE FROM static_asset_daily');
   await dbRun('DELETE FROM app_installs');
   await dbRun('DELETE FROM page_hits');
+  await dbRun('DELETE FROM click_events');
   delete process.env.BILKO_LATEST_HOST_KIT;
   // Reset to default: reject
   mockAdmin.mockImplementation(async (_req: any, reply: any) => {
@@ -445,9 +446,32 @@ describe('GET /api/admin/traffic', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.days).toBe(7);
-    expect(body.totals).toEqual({ hits: 2, visitors: 2, botHits: 1, notFound: 1 });
+    expect(body.totals).toEqual({ hits: 2, visitors: 2, botHits: 1, notFound: 1, clicks: 0 });
+    expect(body.topClicks).toEqual([]);
     expect(body.bySlug[0].slug).toBe('demo');
     expect(body.recent.length).toBe(4);
+  });
+});
+
+describe('GET /api/admin/traffic clicks', () => {
+  async function insertClick(visitor: string, isBot = 0) {
+    const now = Date.now();
+    await dbRun(
+      `INSERT INTO click_events (ts_ms, date, path, slug, tag, label, href, visitor_hash, is_bot)
+       VALUES (?, ?, '/projects/demo/', 'demo', 'button', 'Buy now', NULL, ?, ?)`,
+      now, new Date(now).toISOString().slice(0, 10), visitor, isBot,
+    );
+  }
+
+  it('aggregates human clicks and excludes bots', async () => {
+    asAdmin();
+    await insertClick('v1');
+    await insertClick('v1');
+    await insertClick('v2');
+    await insertClick('bot1', 1);
+    const body = JSON.parse((await get('/api/admin/traffic')).body);
+    expect(body.totals.clicks).toBe(3);
+    expect(body.topClicks[0]).toMatchObject({ path: '/projects/demo/', tag: 'button', label: 'Buy now', clicks: 3, visitors: 2 });
   });
 });
 

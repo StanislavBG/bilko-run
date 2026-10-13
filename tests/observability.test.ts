@@ -516,6 +516,30 @@ describe('GET /api/admin/traffic full detail', () => {
     expect(body.visitors[0]).toMatchObject({ visitorId: 'vid1', ip: '1.2.3.4', userEmail: 'x@y.com', hits: 2, clicks: 1, pages: 2, isAdmin: false });
   });
 
+  it('counts one visitor_id once across days in totals, topPages, bySlug and topClicks', async () => {
+    asAdmin();
+    const now = Date.now();
+    const day = 86_400_000;
+    for (const [ts, hash] of [[now - 60_000, 'hash-day2'], [now - day - 60_000, 'hash-day1']] as const) {
+      const date = new Date(ts).toISOString().slice(0, 10);
+      await dbRun(
+        `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, visitor_id)
+         VALUES (?, ?, '/projects/stable/', 'stable', 200, NULL, ?, 'US', 'desktop', 'Chrome', 'Linux', 0, 'stable-vid')`,
+        ts, date, hash,
+      );
+      await dbRun(
+        `INSERT INTO click_events (ts_ms, date, path, slug, tag, label, href, visitor_hash, is_bot, visitor_id)
+         VALUES (?, ?, '/projects/stable/', 'stable', 'button', 'Stable btn', NULL, ?, 0, 'stable-vid')`,
+        ts, date, hash,
+      );
+    }
+    const body = JSON.parse((await get('/api/admin/traffic?days=7&slug=stable')).body);
+    expect(body.totals.visitors).toBe(1);
+    expect(body.topPages[0]).toMatchObject({ path: '/projects/stable/', hits: 2, visitors: 1 });
+    expect(body.bySlug[0]).toMatchObject({ slug: 'stable', hits: 2, visitors: 1 });
+    expect(body.topClicks[0]).toMatchObject({ label: 'Stable btn', clicks: 2, visitors: 1 });
+  });
+
   it('self=exclude drops admin rows; default includes and flags them', async () => {
     asAdmin();
     const now = Date.now();

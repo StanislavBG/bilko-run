@@ -218,12 +218,12 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         since, ...slugArgs,
       ), undefined),
       safeQuery(() => dbAll<{ date: string; hits: number; visitors: number }>(
-        `SELECT date, COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors
+        `SELECT date, COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors
            FROM page_hits WHERE ${human} GROUP BY date ORDER BY date`,
         ...humanArgs,
       ), []),
       safeQuery(() => dbAll<{ path: string; hits: number; visitors: number }>(
-        `SELECT path, COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors
+        `SELECT path, COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors
            FROM page_hits WHERE ${human} GROUP BY path ORDER BY hits DESC LIMIT 25`,
         ...humanArgs,
       ), []),
@@ -234,7 +234,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         ...humanArgs,
       ), []),
       safeQuery(() => dbAll<{ slug: string; hits: number; visitors: number }>(
-        `SELECT slug, COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors
+        `SELECT slug, COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors
            FROM page_hits WHERE ${human} AND slug IS NOT NULL
           GROUP BY slug ORDER BY hits DESC LIMIT 25`,
         ...humanArgs,
@@ -273,7 +273,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       safeQuery(() => dbAll<{
         path: string; tag: string | null; label: string | null; href: string | null; clicks: number; visitors: number;
       }>(
-        `SELECT path, tag, label, href, COUNT(*) AS clicks, COUNT(DISTINCT visitor_hash) AS visitors
+        `SELECT path, tag, label, href, COUNT(*) AS clicks, COUNT(DISTINCT ${VKEY}) AS visitors
            FROM click_events WHERE ts_ms >= ? AND is_bot = 0${slugSql}
           GROUP BY path, tag, label, href ORDER BY clicks DESC LIMIT 25`,
         since, ...slugArgs,

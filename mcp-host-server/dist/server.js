@@ -13,6 +13,8 @@
  *   - list_projects              → returns every project the host knows about
  *   - register_static_project    → adds a static-path entry to the registry
  *   - unregister_project         → removes an entry by slug
+ *   - update_project_listing      → owner-only edit of a project's /projects card content
+ *   - get_project                → returns one registry entry by slug
  *   - publish_static_project     → copies built dist/ into host's public/projects/<slug>/
  *   - status                     → host git status (uncommitted files, last 5 commits)
  *   - usage_report               → per-project egress (bytes/requests), no Clerk JWT needed
@@ -39,6 +41,8 @@ import { runGates, gateSummary } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry, buildStaticEntry } from './publish-request.js';
 import { withPublishCheckout } from './publish-checkout.js';
+import { ListingPatchSchema } from './listing-patch.js';
+import { updateListingInRegistry } from './listing-tool.js';
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
 // Layout: <HOST_ROOT>/mcp-host-server/dist/server.js  →  ../../
@@ -231,6 +235,53 @@ server.registerTool('unregister_project', {
             lines.push(`removed: ${dir}`);
         lines.push(pushedLine(outcome));
         return ok(lines.join('\n'));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 4b) update_project_listing ────────────────────────────────────────────
+server.registerTool('update_project_listing', {
+    title: 'Update a project listing',
+    description: 'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints}). Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. Commits and pushes; bilko.run redeploys in ~1 minute.',
+    inputSchema: {
+        slug: SlugSchema,
+        callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
+        patch: ListingPatchSchema.describe('Fields to change.'),
+    },
+}, async ({ slug, callerRepoPath, patch }) => {
+    try {
+        const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
+            const projects = await readRegistry(root);
+            const { next, changed } = updateListingInRegistry(projects, slug, callerRepoPath, patch);
+            const message = `listing: update ${slug}`;
+            if (!changed)
+                return { result: { changed: false }, paths: [], message };
+            await writeRegistry(root, next);
+            return { result: { changed: true }, paths: ['src/data/standalone-projects.json'], message };
+        });
+        if (!outcome.ok)
+            return checkoutErr(outcome);
+        if (!outcome.result.changed)
+            return ok(`no change: ${slug}`);
+        return ok([`updated listing: ${slug}`, pushedLine(outcome)].join('\n'));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 4c) get_project ───────────────────────────────────────────────────────
+server.registerTool('get_project', {
+    title: 'Get a project',
+    description: 'Returns the full registry entry for one slug as JSON. Read-only; use it to see your current card before calling update_project_listing.',
+    inputSchema: { slug: SlugSchema },
+}, async ({ slug }) => {
+    try {
+        const projects = await readRegistry(HOST_ROOT);
+        const entry = projects.find(p => p.slug === slug);
+        if (!entry)
+            return err(`slug "${slug}" not found in registry.`);
+        return ok(JSON.stringify(entry, null, 2));
     }
     catch (e) {
         return err(e.message);

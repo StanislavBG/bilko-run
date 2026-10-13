@@ -104,7 +104,7 @@ A project's `/projects` card is split between the sibling that owns the app and 
 
 | Owner | Fields |
 |---|---|
-| **Project** (its own repo) | `name`, `displayName`, `tagline`, `category`, `tags`, `status`, `thumbnail`, `listing` (`detail`, `metric`, `metricLabel`, `lang`, `audience`, `talkingPoints`, `offering`, `pricing`, `callToAction`, `avoidClaims`), and `url` on `external-url` entries |
+| **Project** (its own repo) | `name`, `displayName`, `tagline`, `category`, `tags`, `status`, `thumbnail`, `listing` (`detail`, `metric`, `metricLabel`, `lang`, `audience`, `talkingPoints`, `offering`, `pricing`, `callToAction`, `avoidClaims`, `icon`, `shareImage`), and `url` on `external-url` entries |
 | **Bilko** (host) | `slug`, `host` (kind, path), `year`, `launchedAt`, `public` |
 
 Sibling sessions never ask Bilko to change card copy. They edit it themselves. Bilko-owned fields are rejected in any listing patch.
@@ -130,6 +130,8 @@ Sibling sessions never ask Bilko to change card copy. They edit it themselves. B
 | `listing.pricing` | one of `free`, `freemium`, `paid`, `none` |
 | `listing.callToAction` | 1–120 chars |
 | `listing.avoidClaims` | up to 5, each 1–200 chars |
+| `listing.icon` | path starting with `/projects/<own-slug>/`, ending in `.png`; the `share-assets` gate also needs a square PNG, 128–1024 px, ≤512 KB |
+| `listing.shareImage` | path starting with `/projects/<own-slug>/`, ending in `.png`; the `share-assets` gate also needs exactly 1200x630, ≤5 MB |
 
 Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `tags`, and every `listing` text field) may mention the retired ContentGrade product (`/content-?grade/i`). The write fails with the slug and field name.
 
@@ -189,7 +191,27 @@ bilko.run generates each project's X/Twitter/OpenGraph share card from the regis
 - **Title:** `displayName ?? name` from the entry in `src/data/standalone-projects.json`.
 - **Description:** the entry's `tagline`.
 - **Injection:** when the host serves `/projects/<slug>/` HTML, it strips every `og:*` / `twitter:*` meta tag, the `<title>`, and the meta description, then injects its own. Hand-written tags in a sibling's `index.html` are overwritten, so don't write them.
+- **Version:** the `og:image` URL carries `?v=<8-hex content hash>` of the card copy plus the icon and share image bytes. When any of them change, the URL changes, so X refetches the image.
 - **Changing a card:** update the registry entry (`displayName`, `name`, or `tagline`) via the `bilko-host` MCP. Never edit the published copy.
+
+### Custom share image
+
+`https://bilko.run/og/<slug>.png` resolves in this order:
+
+1. A valid `listing.shareImage` (1200x630 PNG, ≤5 MB) is served as-is.
+2. Otherwise a generated card that draws `listing.icon` (square PNG, 128–1024 px, ≤512 KB).
+3. Otherwise the plain generated card.
+
+If a declared file is missing, oversize or the wrong size at serve time, the host logs it and falls back to the next step.
+
+Recipe for a sibling:
+
+1. Add the PNG to the build output. For example, put `public/og.png` in the repo; it lands at `/projects/<slug>/og.png`.
+2. Set the path in `bilko.listing.json` (`{ "listing": { "shareImage": "/projects/<slug>/og.png" } }`), or call `update_project_listing` with the same patch. Use `icon` the same way for a square icon.
+3. Run `publish_static_project`.
+4. Open `https://bilko.run/og/<slug>.png` and check the card.
+
+The `share-assets` publish gate blocks the publish when a declared `icon` or `shareImage` is missing from the bundle, is not a PNG, or has the wrong size. The path must start with `/projects/<your-slug>/`.
 
 Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
 
@@ -219,7 +241,8 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
       "offering": "showcase",                  // saas | free-tool | showcase | open-source | game | content | experiment; "" when unset
       "pricing": "none",                       // free | freemium | paid | none; "" when unset
       "call_to_action": "…",                   // the one action to ask for; "" when unset
-      "avoid_claims": ["…"]                    // claims promoters must never make; [] when unset
+      "avoid_claims": ["…"],                   // claims promoters must never make; [] when unset
+      "share_image_url": "https://bilko.run/og/git-viewer.png" // absolute; the card X unfurls (see "Social share cards")
     }
   ]
 }

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBot } from '../services/analytics.js';
-import { slugFromPath, visitorHash } from '../page-hits.js';
+import { slugFromPath, visitorHash, stableVisitorId, sessionCookie } from '../page-hits.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
 // Event allowlist (must match client-side enum).
@@ -229,11 +229,20 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const ua = String(req.headers['user-agent'] ?? '').slice(0, 300);
       const nowMs = Date.now();
       const date = new Date(nowMs).toISOString().slice(0, 10);
+      const bot = isBot(ua);
+      // Same identity rules as page_hits: Clerk session cookie, skipped for bots.
+      let userEmail: string | null = null;
+      const token = bot ? null : sessionCookie(req.headers.cookie);
+      try {
+        if (token) userEmail = (await verifyClerkToken('Bearer ' + token)) ?? null;
+      } catch { /* anonymous */ }
+      const isAdmin = userEmail && ADMIN_EMAILS.includes(userEmail.toLowerCase()) ? 1 : 0;
       await dbRun(
-        `INSERT INTO click_events (ts_ms, date, path, slug, tag, el_id, label, href, visitor_hash, is_bot)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO click_events (ts_ms, date, path, slug, tag, el_id, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         nowMs, date, path, slugFromPath(path), tag, elId, label, href,
-        visitorHash(date, ip ?? '', ua), isBot(ua) ? 1 : 0,
+        visitorHash(date, ip ?? '', ua), bot ? 1 : 0,
+        ip, stableVisitorId(ip ?? '', String(req.headers['user-agent'] ?? '')), userEmail, isAdmin,
       );
     } catch { /* never fail */ }
     reply.status(204);

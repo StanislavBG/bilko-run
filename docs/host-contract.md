@@ -146,6 +146,12 @@ Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `
 }
 ```
 
+### Trust model
+
+The ownership check compares a self-asserted `callerRepoPath` / `sourceRepoPath` with `host.localPath`. It guards against one project's session editing another project's slug by mistake. It does not authenticate the caller: a hostile local session can pass any path it likes. A leading `~` in `callerRepoPath` is expanded to the home directory before the absolute-path check.
+
+The real boundary is where the write tools run. They exist only in the local stdio `bilko-host` MCP on the owner's machine, and they push with the owner's GitHub access to `StanislavBG/bilko-run`. The public `https://bilko.run/mcp` is read-only.
+
 **Going public.** `register_static_project` never sets `public`; a new app is admin-only. Listing it on `/projects` and the home page is the Bilko owner's call, made in a Bilko session. Sibling sessions cannot change `public`.
 
 ## Social share cards

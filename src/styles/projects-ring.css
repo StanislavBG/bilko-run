@@ -20,18 +20,18 @@
 .pr-eyebrow { font: 500 11px var(--pr-mono); letter-spacing: .18em; color: var(--pr-ink-3); }
 .pr-h1 { margin: 0; font: 400 44px/1 var(--pr-serif); letter-spacing: -.02em; }
 .pr-bar-ctl { display: flex; align-items: center; gap: 10px; }
-.pr-nav { width: 44px; height: 44px; border: 1px solid var(--pr-rule); background: transparent; cursor: pointer; font-size: 16px; color: var(--pr-ink); }
-.pr-nav:hover { background: var(--pr-ink); color: var(--pr-paper); }
+.pr-page .pr-nav { width: 44px; height: 44px; border: 1px solid var(--pr-rule); background: transparent; cursor: pointer; font-size: 16px; color: var(--pr-ink); }
+.pr-page .pr-nav:hover { background: var(--pr-ink); color: var(--pr-paper); }
 .pr-counter { font: 500 12px var(--pr-mono); letter-spacing: .12em; min-width: 100px; text-align: center; }
 .pr-empty { padding: 32px; margin: 0; color: var(--pr-ink-3); }
 
 .pr-stage { flex: 1; min-height: 0; position: relative; overflow: hidden; border-top: 1px solid var(--pr-rule); border-bottom: 1px solid var(--pr-rule); }
-.pr-spine {
+.pr-page .pr-spine {
   position: absolute; top: 50%; left: 0; padding: 0; overflow: hidden; cursor: pointer;
   background: var(--pr-paper-2); border: 1px solid var(--pr-rule); color: var(--pr-ink);
   transition: transform .55s cubic-bezier(.6,0,.2,1), width .55s, height .55s, opacity .4s;
 }
-.pr-spine:hover { background: var(--pr-paper-3); }
+.pr-page .pr-spine:hover { background: var(--pr-paper-3); }
 .pr-spine-in { position: absolute; inset: 0; padding: 16px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .pr-spine-n { font: 500 10px var(--pr-mono); color: var(--pr-ink-3); }
 .pr-spine-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
@@ -60,19 +60,19 @@
 .pr-stat-v { font: 400 19px/1.2 var(--pr-serif); }
 .pr-stat-l { font: 500 9px var(--pr-mono); letter-spacing: .14em; color: var(--pr-ink-3); }
 .pr-actions { margin-left: auto; display: flex; gap: 10px; }
-.pr-btn { background: transparent; border: 1px solid var(--pr-rule); padding: 12px 18px; font-size: 15px; cursor: pointer; color: var(--pr-ink); }
-.pr-btn:hover { background: var(--pr-paper-2); }
-.pr-btn-primary { background: var(--pr-ink); color: var(--pr-paper); border: 0; padding: 12px 20px; font-weight: 500; }
-.pr-btn-primary:hover { background: var(--pr-accent); }
+.pr-page .pr-btn { background: transparent; border: 1px solid var(--pr-rule); padding: 12px 18px; font-size: 15px; cursor: pointer; color: var(--pr-ink); }
+.pr-page .pr-btn:hover { background: var(--pr-paper-2); }
+.pr-page .pr-btn-primary { background: var(--pr-ink); color: var(--pr-paper); border: 0; padding: 12px 20px; font-weight: 500; }
+.pr-page .pr-btn-primary:hover { background: var(--pr-accent); }
 
 .pr-scrubber { flex: none; padding: 16px 32px 18px; }
 .pr-ticks { display: flex; align-items: flex-end; gap: 1px; height: 28px; cursor: pointer; }
-.pr-tick { flex: 1; transition: height .3s, background .3s; }
-.pr-tick:hover { background: var(--pr-ink) !important; }
+.pr-page .pr-tick { flex: 1; transition: height .3s, background .3s; }
+.pr-page .pr-tick:hover { background: var(--pr-ink) !important; }
 .pr-caps { display: flex; justify-content: space-between; margin-top: 8px; font: 500 10px var(--pr-mono); letter-spacing: .14em; color: var(--pr-ink-3); }
 
 @media (prefers-reduced-motion: reduce) {
-  .pr-spine, .pr-tick { transition-duration: 0s; }
+  .pr-page .pr-spine, .pr-page .pr-tick { transition-duration: 0s; }
   .pr-hero-in { animation: none; }
 }
 
@@ -82,7 +82,7 @@
   .pr-h1 { font-size: 32px; }
   .pr-bar-ctl { flex-wrap: wrap; }
   .pr-stage { flex: none; height: auto; overflow: visible; }
-  .pr-spine { display: none; }
+  .pr-page .pr-spine { display: none; }
   /* Inline left/width from heroBox() must be overridden. */
   .pr-hero { position: static; left: auto !important; width: auto !important; height: auto; padding: 20px 16px; border-left: 0; border-right: 0; }
   .pr-hero-in { height: auto; }

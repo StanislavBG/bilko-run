@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { updateListingInRegistry } from '../mcp-host-server/src/listing-tool.js';
+import os from 'node:os';
+import { updateListingInRegistry, buildRegistration } from '../mcp-host-server/src/listing-tool.js';
 import { RegistrySchema, type RegistryProject } from '../mcp-host-server/src/contract/registry.js';
 
 const OWNER = '/tmp/listing-tool-owner-repo';
@@ -57,5 +58,28 @@ describe('updateListingInRegistry', () => {
     const { changed, next } = updateListingInRegistry(registry(), 'demo', OWNER, { tagline: 'Old tagline' });
     expect(changed).toBe(false);
     expect(next).toEqual(registry());
+  });
+});
+
+describe('buildRegistration', () => {
+  const base = { slug: 'fresh', name: 'Fresh', tagline: 'T', category: 'Game', status: 'live' as const, year: 2026 };
+
+  it('builds an admin-only entry (no public key)', () => {
+    const entry = buildRegistration(registry(), { ...base, callerRepoPath: '/tmp/listing-tool-fresh-repo' });
+    expect('public' in entry).toBe(false);
+    expect(entry.host.localPath).toBe('/tmp/listing-tool-fresh-repo');
+  });
+
+  it('collapses the home dir to ~', () => {
+    const entry = buildRegistration(registry(), { ...base, callerRepoPath: `${os.homedir()}/Projects/Fresh` });
+    expect(entry.host.localPath).toBe('~/Projects/Fresh');
+  });
+
+  it('refuses a duplicate slug', () => {
+    expect(() => buildRegistration(registry(), { ...base, slug: 'demo', callerRepoPath: '/tmp/listing-tool-fresh-repo' })).toThrow(/already registered/);
+  });
+
+  it('refuses a repo already bound to another slug', () => {
+    expect(() => buildRegistration(registry(), { ...base, callerRepoPath: OWNER })).toThrow(/already bound/);
   });
 });

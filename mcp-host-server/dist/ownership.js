@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-function canonical(p) {
+export function canonicalPath(p) {
     const expanded = p === '~' || p.startsWith('~/') ? path.join(os.homedir(), p.slice(1)) : p;
     const abs = path.resolve(expanded);
     try {
@@ -20,7 +20,7 @@ export function assertCallerOwnsSlug(entry, callerRepoPath) {
     if (!callerRepoPath || !callerRepoPath.trim()) {
         throw new Error(`callerRepoPath is required to change "${entry.slug}"`);
     }
-    if (canonical(localPath) !== canonical(callerRepoPath)) {
+    if (canonicalPath(localPath) !== canonicalPath(callerRepoPath)) {
         throw new Error(`"${entry.slug}" is owned by ${localPath}; caller is ${callerRepoPath}`);
     }
 }

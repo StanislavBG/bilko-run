@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { RegistryProject } from './contract/registry.js';
 
-function canonical(p: string): string {
+export function canonicalPath(p: string): string {
   const expanded = p === '~' || p.startsWith('~/') ? path.join(os.homedir(), p.slice(1)) : p;
   const abs = path.resolve(expanded);
   try {
@@ -22,7 +22,7 @@ export function assertCallerOwnsSlug(entry: RegistryProject, callerRepoPath: str
   if (!callerRepoPath || !callerRepoPath.trim()) {
     throw new Error(`callerRepoPath is required to change "${entry.slug}"`);
   }
-  if (canonical(localPath) !== canonical(callerRepoPath)) {
+  if (canonicalPath(localPath) !== canonicalPath(callerRepoPath)) {
     throw new Error(`"${entry.slug}" is owned by ${localPath}; caller is ${callerRepoPath}`);
   }
 }

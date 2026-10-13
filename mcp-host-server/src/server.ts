@@ -41,10 +41,11 @@ import { ManifestSchema } from './manifest-schema.js';
 import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables } from './db.js';
 import { runGates, gateSummary, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
-import { projectDir, parseBypass, parseRegistry, buildStaticEntry } from './publish-request.js';
+import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout, type PublishOutcome } from './publish-checkout.js';
 import { ListingPatchSchema } from './listing-patch.js';
-import { updateListingInRegistry } from './listing-tool.js';
+import { updateListingInRegistry, buildRegistration } from './listing-tool.js';
+import { assertCallerOwnsSlug } from './ownership.js';
 
 const exec = promisify(execFile);
 
@@ -187,7 +188,7 @@ server.registerTool(
   {
     title: 'Register a static-path app',
     description:
-      'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app appears in ⌘K and the admin view of /projects; it appears on the public /projects hub only with public: true. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
+      'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app appears in ⌘K and the admin view of /projects; it is admin-only: public listing on /projects is the Bilko owner\'s call, made in a Bilko session. The new slug is bound to callerRepoPath, and only that repo can later publish, unregister, or edit it. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
     inputSchema: {
       slug: SlugSchema.describe('URL slug, kebab-case. Example: "outdoor-hours". Path will be /projects/<slug>/.'),
       name: z.string().min(1).describe('Display name. Example: "OutdoorHours".'),
@@ -196,20 +197,16 @@ server.registerTool(
       status: ProjectStatusSchema.default('live'),
       year: z.number().int().describe('Year of the build, e.g. 2026.'),
       sourceRepo: z.string().optional().describe('e.g. "github.com/StanislavBG/outdoor-hours"'),
-      localPath: z.string().optional().describe('e.g. "~/Projects/Outdoor-Hours"'),
+      callerRepoPath: z.string().min(1).describe('Absolute path to the repo registering this app, e.g. "/home/bilko/Projects/Outdoor-Hours". Bound as host.localPath (home collapsed to ~).'),
       tags: z.array(z.string()).optional().describe('Up to ~3 short tags, e.g. ["Free", "WebGPU"].'),
-      public: z.boolean().optional().describe('List the app on the public /projects hub and home page. Omit = admin-only.'),
       displayName: z.string().min(1).max(60).optional().describe('Hub-only display name shown on the public /projects hub.'),
     },
   },
-  async ({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags, public: isPublic, displayName }) => {
+  async ({ slug, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName }) => {
     try {
       const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
         const projects = await readRegistry(root);
-        if (projects.some(p => p.slug === slug)) {
-          throw new Error(`slug "${slug}" already registered. Use unregister_project first if you want to replace it.`);
-        }
-        const entry = buildStaticEntry({ slug, name, tagline, category, status, year, sourceRepo, localPath, tags, public: isPublic, displayName });
+        const entry = buildRegistration(projects, { slug, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName });
         projects.push(entry);
         await writeRegistry(root, projects);
         return {
@@ -220,7 +217,7 @@ server.registerTool(
       });
 
       if (!outcome.ok) return checkoutErr(outcome);
-      return ok([`registered: ${slug} → /projects/${slug}/`, pushedLine(outcome)].join('\n'));
+      return ok([`registered: ${slug} → /projects/${slug}/ (admin-only until the Bilko owner lists it)`, pushedLine(outcome)].join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);
     }
@@ -233,20 +230,23 @@ server.registerTool(
   {
     title: 'Unregister a static-path app',
     description:
-      'Removes a project from the host registry by slug. Does NOT delete the public/projects/<slug>/ directory — pass deleteAssets=true to also rm -rf those bytes. Use this when retiring an app or before re-registering with different metadata. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main.',
+      'Removes a project from the host registry by slug. Only the repo bound to the slug (callerRepoPath must match host.localPath) may remove it. Does NOT delete the public/projects/<slug>/ directory — pass deleteAssets=true to also rm -rf those bytes. Use this when retiring an app or before re-registering with different metadata. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main.',
     inputSchema: {
       slug: SlugSchema,
+      callerRepoPath: z.string().min(1).describe('Absolute path to the repo that owns this slug.'),
       deleteAssets: z.boolean().default(false).describe('Also remove public/projects/<slug>/.'),
     },
   },
-  async ({ slug, deleteAssets }) => {
+  async ({ slug, callerRepoPath, deleteAssets }) => {
     try {
       const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
         const projects = await readRegistry(root);
-        const next = projects.filter(p => p.slug !== slug);
-        if (next.length === projects.length) {
+        const existing = projects.find(p => p.slug === slug);
+        if (!existing) {
           throw new Error(`slug "${slug}" not found in registry.`);
         }
+        assertCallerOwnsSlug(existing, callerRepoPath);
+        const next = projects.filter(p => p.slug !== slug);
         await writeRegistry(root, next);
         const paths = ['src/data/standalone-projects.json'];
         const removed: string[] = [];
@@ -333,17 +333,16 @@ server.registerTool(
   {
     title: 'Publish a static-path app build',
     description:
-      'Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs five publish gates (manifest, budget, golden, a11y, audit) before copying. Any non-bypassed gate failure blocks the publish. Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
+      'Only the repo bound to the slug may publish it (sourceRepoPath must match host.localPath; unregistered slugs are refused). Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs five publish gates (manifest, budget, golden, a11y, audit) before copying. Any non-bypassed gate failure blocks the publish. Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
     inputSchema: {
       slug: SlugSchema,
       distPath: z.string().describe('Absolute path to the built dist/ directory in the sibling repo. Example: "/home/bilko/Projects/Outdoor-Hours/dist".'),
       sourceRepoPath: z.string().optional().describe('Absolute path to the sibling repo root (e.g. "/home/bilko/Projects/Stack-Audit"). Required for golden and audit gates.'),
       bypass: z.string().optional().describe('Comma-separated gate names to skip, e.g. "a11y" or "golden,audit". Each bypass is logged.'),
       bypassReason: z.string().optional().describe('Required justification when bypass is set. Logged to publish_overrides.'),
-      requireRegistered: z.boolean().default(true).describe('Refuse to publish a slug that isn\'t in the registry.'),
     },
   },
-  async ({ slug, distPath, sourceRepoPath, bypass, bypassReason, requireRegistered }) => {
+  async ({ slug, distPath, sourceRepoPath, bypass, bypassReason }) => {
     try {
       // Sanity: dist exists and looks like a build.
       const distAbs = resolve(distPath);
@@ -402,12 +401,11 @@ server.registerTool(
 
       // Gates passed — copy + swap + commit + push, all inside the publish checkout.
       const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
-        if (requireRegistered) {
-          const projects = await readRegistry(root);
-          const p = projects.find(x => x.slug === slug);
-          if (!p) throw new Error(`slug "${slug}" is not registered. Call register_static_project first.`);
-          if (p.host.kind !== 'static-path') throw new Error(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
-        }
+        const projects = await readRegistry(root);
+        const p = projects.find(x => x.slug === slug);
+        if (!p) throw new Error(`slug "${slug}" is not registered. Call register_static_project first.`);
+        if (p.host.kind !== 'static-path') throw new Error(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
+        assertCallerOwnsSlug(p, sourceRepoPath);
 
         const publicProjects = resolve(root, 'public/projects');
         const target = projectDir(publicProjects, slug);

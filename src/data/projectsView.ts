@@ -59,6 +59,14 @@ export interface HubCard {
   audience?: string;
   /** Plain factual claims a promoter may state (from the registry listing). */
   talkingPoints?: readonly string[];
+  /** What kind of offering this is (from the registry listing). */
+  offering?: string;
+  /** Pricing model: free | freemium | paid | none (from the registry listing). */
+  pricing?: string;
+  /** One-line call to action a promoter may use (from the registry listing). */
+  callToAction?: string;
+  /** Claims a promoter must NOT make about this project (from the registry listing). */
+  avoidClaims?: readonly string[];
 }
 
 function commitMs(slug: string): number {
@@ -100,6 +108,10 @@ function projectCard(p: Project): HubCard {
     detail: p.listing?.detail,
     audience: p.listing?.audience,
     talkingPoints: p.listing?.talkingPoints,
+    offering: p.listing?.offering,
+    pricing: p.listing?.pricing,
+    callToAction: p.listing?.callToAction,
+    avoidClaims: p.listing?.avoidClaims,
   };
 }
 

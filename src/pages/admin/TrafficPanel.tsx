@@ -10,6 +10,7 @@ interface SlugRow { slug: string; hits: number; visitors: number }
 interface CountryRow { country: string; hits: number }
 interface DeviceRow { device: string; hits: number }
 interface BrowserRow { browser: string; hits: number }
+interface ClickRow { path: string; tag: string | null; label: string | null; href: string | null; clicks: number; visitors: number }
 interface RecentRow {
   ts: number;
   path: string;
@@ -24,7 +25,7 @@ interface RecentRow {
 
 interface TrafficResponse {
   days: number;
-  totals: { hits: number; visitors: number; botHits: number; notFound: number };
+  totals: { hits: number; visitors: number; botHits: number; notFound: number; clicks: number };
   byDay: DayRow[];
   topPages: PageRow[];
   topReferrers: ReferrerRow[];
@@ -32,6 +33,7 @@ interface TrafficResponse {
   byCountry: CountryRow[];
   byDevice: DeviceRow[];
   byBrowser: BrowserRow[];
+  topClicks: ClickRow[];
   recent: RecentRow[];
   earliestDate: string | null;
   generatedAt: number;
@@ -177,11 +179,12 @@ export function TrafficPanel() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Stat label="Hits" value={data.totals.hits} />
             <Stat label="Unique visitors" value={data.totals.visitors} />
             <Stat label="Bot hits" value={data.totals.botHits} />
             <Stat label="404s" value={data.totals.notFound} />
+            <Stat label="Clicks" value={data.totals.clicks} />
           </div>
 
           <div className="rounded-xl border border-warm-200/60 bg-white">
@@ -272,6 +275,20 @@ export function TrafficPanel() {
               ]}
             />
           </div>
+
+          <DataTable
+            title="Top clicks"
+            rows={data.topClicks}
+            rowKey={r => `${r.path}|${r.tag}|${r.label}|${r.href}`}
+            emptyText="No clicks recorded yet"
+            cols={[
+              { header: 'Page', render: r => r.path },
+              { header: 'Element', render: r => r.label || r.tag || '—' },
+              { header: 'Target', render: r => r.href ?? '—' },
+              { header: 'Clicks', align: 'right', render: r => r.clicks.toLocaleString() },
+              { header: 'Visitors', align: 'right', render: r => r.visitors.toLocaleString() },
+            ]}
+          />
 
           <div className="overflow-x-auto rounded-xl border border-warm-200/60 bg-white">
             <div className="px-4 py-3 border-b border-warm-100 text-xs font-bold text-warm-600 uppercase tracking-wide">

@@ -41,8 +41,7 @@ import { runGates, gateSummary } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout } from './publish-checkout.js';
-import { ListingPatchSchema } from './listing-patch.js';
-import { updateListingInRegistry, buildRegistration, readListingFile } from './listing-tool.js';
+import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
@@ -247,7 +246,7 @@ server.registerTool('update_project_listing', {
     inputSchema: {
         slug: SlugSchema,
         callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
-        patch: ListingPatchSchema.describe('Fields to change.'),
+        patch: z.record(z.string(), z.unknown()).describe('Fields to change; null deletes an optional field; url only for external-url entries'),
     },
 }, async ({ slug, callerRepoPath, patch }) => {
     try {
@@ -310,6 +309,9 @@ server.registerTool('publish_static_project', {
         if (!existsSync(resolve(distAbs, 'index.html'))) {
             return err(`distPath has no index.html — not a Vite build? (${distAbs})`);
         }
+        // Cheap ownership check before gates, which execute commands in sourceRepoPath.
+        // The check inside withPublishCheckout remains the authoritative re-check.
+        assertPublishOwner(await readRegistry(HOST_ROOT), slug, sourceRepoPath);
         // Run publish gates against distPath, outside the publish checkout/lock.
         const bypassResult = parseBypass(bypass, bypassReason);
         if ('error' in bypassResult) {

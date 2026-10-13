@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
-import { updateListingInRegistry, buildRegistration, readListingFile } from '../mcp-host-server/src/listing-tool.js';
+import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from '../mcp-host-server/src/listing-tool.js';
 import { RegistrySchema, type RegistryProject } from '../mcp-host-server/src/contract/registry.js';
 
 const OWNER = '/tmp/listing-tool-owner-repo';
@@ -118,5 +118,43 @@ describe('readListingFile', () => {
     fs.writeFileSync(path.join(d, 'bilko.listing.json'), JSON.stringify({ tagline: 'Hi', public: true }));
     const patch = readListingFile(d);
     expect(() => updateListingInRegistry(registry(), 'demo', OWNER, patch)).toThrow();
+  });
+});
+
+describe('assertPublishOwner', () => {
+  it('rejects an unknown slug', () => {
+    expect(() => assertPublishOwner(registry(), 'nope', OWNER)).toThrow(
+      'slug "nope" is not registered. Call register_static_project first.',
+    );
+  });
+  it('rejects a non-owner path', () => {
+    expect(() => assertPublishOwner(registry(), 'demo', '/tmp/listing-tool-intruder')).toThrow(/is owned by/);
+  });
+  it('accepts the owner path', () => {
+    expect(() => assertPublishOwner(registry(), 'demo', OWNER)).not.toThrow();
+  });
+});
+
+describe('updateListingInRegistry patch wire shapes', () => {
+  it('null deletes an optional field', () => {
+    const base = registry();
+    base[0] = { ...base[0], displayName: 'Shown' };
+    const { next } = updateListingInRegistry(base, 'demo', OWNER, { displayName: null });
+    expect(next[0].displayName).toBeUndefined();
+  });
+  it('url sets host.url on an external-url entry', () => {
+    const ext = RegistrySchema.parse([
+      {
+        slug: 'ext',
+        name: 'Ext',
+        tagline: 'T',
+        category: 'Game',
+        status: 'live',
+        year: 2026,
+        host: { kind: 'external-url', url: 'https://old.example', localPath: OWNER },
+      },
+    ]);
+    const { next } = updateListingInRegistry(ext, 'ext', OWNER, { url: 'https://x.example' });
+    expect((next[0].host as { url: string }).url).toBe('https://x.example');
   });
 });

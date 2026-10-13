@@ -1,9 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { RegistrySchema } from './contract/registry.js';
-import { assertCallerOwnsSlug } from './ownership.js';
+import { assertCallerOwnsSlug, canonicalPath } from './ownership.js';
 import { applyListingPatch } from './listing-patch.js';
 import { buildStaticEntry } from './publish-request.js';
-import { canonicalPath } from './ownership.js';
 import os from 'node:os';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -21,6 +20,17 @@ export function updateListingInRegistry(projects, slug, callerRepoPath, patch) {
     const patched = applyListingPatch(original, patch);
     const next = RegistrySchema.parse(projects.map((p, i) => (i === idx ? patched : p)));
     return { next, changed: !isDeepStrictEqual(original, next[idx]) };
+}
+/**
+ * Cheap ownership check run BEFORE publish gates (which execute commands in
+ * the caller's sourceRepoPath). The check inside the publish checkout stays
+ * authoritative.
+ */
+export function assertPublishOwner(projects, slug, sourceRepoPath) {
+    const entry = projects.find((p) => p.slug === slug);
+    if (!entry)
+        throw new Error(`slug "${slug}" is not registered. Call register_static_project first.`);
+    assertCallerOwnsSlug(entry, sourceRepoPath);
 }
 function collapseHome(p) {
     const home = os.homedir();

@@ -84,7 +84,8 @@ describe('secret_metadata', () => {
     const names = rows.map(r => r.name).sort();
     expect(names).toEqual([
       'ANTHROPIC_API_KEY_ACADEMY', 'BILKO_GAME_HMAC_KEY', 'CLERK_SECRET_KEY', 'GEMINI_API_KEY',
-      'PROJECT_SNAPSHOT_TOKEN', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'TURSO_AUTH_TOKEN',
+      'PROJECT_SNAPSHOT_TOKEN', 'SM_USAGE_READ_TOKEN', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
+      'TURSO_AUTH_TOKEN',
     ]);
     for (const row of rows) expect(row.last_rotated_at).toBeNull();
   });

@@ -52,7 +52,6 @@ const MANUAL_PAGE = 'src/pages/session-manager-landing/ManualPage.tsx';
 const PROJECTS_JSON = 'src/data/standalone-projects.json';
 const PACKAGES_REGISTRY = 'src/data/packages.ts';
 const PROJECTS_PAGE = 'src/pages/ProjectsPage.tsx';
-const PROJECTS_VIEW = 'src/data/projectsView.ts';
 
 /** Every source file the landing page renders from: page, copy, components, hooks. */
 const PAGE_FILES = [
@@ -240,17 +239,19 @@ describe('open-core positioning: the app is free and stays free, and so is the m
   });
 
   it('the /projects hub card does not advertise retired or missing features either', () => {
-    // The hub's Session Manager row carried a drawer story (diffs, bookmarks, a
+    // The hub card text now comes from the registry `listing` block in
+    // standalone-projects.json. The hub's Session Manager row carried a drawer story (diffs, bookmarks, a
     // timeline) that the app never shipped. The row's "Web Remote →" link stays:
     // the relay and its paired-phone bundle at /projects/session-manager/ are
     // live by owner decision (session-manager CLAUDE.md: "The bilko.run relay
     // stays live — do NOT delete … the product-page copy").
     const hub = read(PROJECTS_PAGE);
     expect(hub).toContain('href="/projects/session-manager/"');
-    const view = stripComments(read(PROJECTS_VIEW));
-    const idx = view.indexOf("'session-manager': {");
-    expect(idx, 'projectsView.ts has no session-manager ENRICH entry').toBeGreaterThan(-1);
-    const entry = view.slice(idx, view.indexOf('},', idx));
+    const parsed = JSON.parse(read(PROJECTS_JSON));
+    const projects: Array<{ slug: string; listing?: unknown }> = Array.isArray(parsed) ? parsed : parsed.projects;
+    const listing = projects.find(p => p.slug === 'session-manager')?.listing;
+    expect(listing, 'standalone-projects.json session-manager entry has no listing').toBeTruthy();
+    const entry = JSON.stringify(listing);
     for (const claim of ['Web Remote', 'terminal cockpit', 'diffs', 'Bookmarks', 'bookmarks', 'timeline', 'sessions tracked']) {
       expect(entry, `hub card claims "${claim}"`).not.toContain(claim);
     }

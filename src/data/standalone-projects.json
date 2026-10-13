@@ -634,5 +634,24 @@
       ],
       "shareImage": "/projects/launch-kit/og.png"
     }
+  },
+  {
+    "slug": "family-frame",
+    "name": "Family Frame",
+    "tagline": "The window between homes: a shared family screen for photos, calendar, messages and weather.",
+    "category": "Home · Family",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/family-frame/",
+      "sourceRepo": "github.com/StanislavBG/family-frame",
+      "localPath": "~/Projects/family-frame"
+    },
+    "tags": [
+      "PWA",
+      "Family",
+      "Free"
+    ]
   }
 ]

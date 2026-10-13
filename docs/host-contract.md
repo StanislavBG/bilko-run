@@ -104,7 +104,7 @@ A project's `/projects` card is split between the sibling that owns the app and 
 
 | Owner | Fields |
 |---|---|
-| **Project** (its own repo) | `name`, `displayName`, `tagline`, `category`, `tags`, `status`, `thumbnail`, `listing` (`detail`, `metric`, `metricLabel`, `lang`, `audience`, `talkingPoints`), and `url` on `external-url` entries |
+| **Project** (its own repo) | `name`, `displayName`, `tagline`, `category`, `tags`, `status`, `thumbnail`, `listing` (`detail`, `metric`, `metricLabel`, `lang`, `audience`, `talkingPoints`, `offering`, `pricing`, `callToAction`, `avoidClaims`), and `url` on `external-url` entries |
 | **Bilko** (host) | `slug`, `host` (kind, path), `year`, `launchedAt`, `public` |
 
 Sibling sessions never ask Bilko to change card copy. They edit it themselves. Bilko-owned fields are rejected in any listing patch.
@@ -126,6 +126,10 @@ Sibling sessions never ask Bilko to change card copy. They edit it themselves. B
 | `listing.lang` | 1–40 chars |
 | `listing.audience` | up to 200 chars |
 | `listing.talkingPoints` | up to 5, each 1–200 chars |
+| `listing.offering` | one of `saas`, `free-tool`, `showcase`, `open-source`, `game`, `content`, `experiment` |
+| `listing.pricing` | one of `free`, `freemium`, `paid`, `none` |
+| `listing.callToAction` | 1–120 chars |
+| `listing.avoidClaims` | up to 5, each 1–200 chars |
 
 Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `tags`, and every `listing` text field) may mention the retired ContentGrade product (`/content-?grade/i`). The write fails with the slug and field name.
 
@@ -141,10 +145,33 @@ Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `
   "listing": {
     "detail": "Shows which hours of the day are comfortable outside, using ten years of local weather.",
     "audience": "Runners and gardeners",
-    "talkingPoints": ["Runs fully in the browser", "No account needed"]
+    "talkingPoints": ["Runs fully in the browser", "No account needed"],
+    "offering": "free-tool",
+    "pricing": "free",
+    "callToAction": "Check your outdoor hours"
   }
 }
 ```
+
+### Marketing meta-categories
+
+Each project owns the marketing fields in its own `listing`. Fill them in; promoters such as Burrow read them to decide what to market and how.
+
+`offering` says what kind of thing the project is:
+
+- `saas` — others can sign up and use it with their own data.
+- `free-tool` — a free utility anyone can use, no account tied to their data.
+- `showcase` — a personal portfolio or presentation layer, not a product others sign up for.
+- `open-source` — the code is the offering; people install or fork it.
+- `game` — something to play.
+- `content` — articles, courses or other material to read or watch.
+- `experiment` — early or exploratory; no promise it stays.
+
+`pricing` is `free`, `freemium`, `paid` or `none` (nothing to buy, e.g. a showcase).
+
+`callToAction` is the one action a promoter should ask people to take.
+
+`avoidClaims` are claims promoters must never make about the project. Use them to rule out wrong guesses, for example "Git Viewer is a SaaS".
 
 ### Trust model
 
@@ -188,7 +215,11 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
       "tags": ["Browser", "Freemium"],
       "detail": "…",                           // drawer story; falls back to tagline
       "audience": "…",                         // who it is for; may be ""
-      "talking_points": ["…"]                  // plain facts a promoter may state; may be []
+      "talking_points": ["…"],                 // plain facts a promoter may state; may be []
+      "offering": "showcase",                  // saas | free-tool | showcase | open-source | game | content | experiment; "" when unset
+      "pricing": "none",                       // free | freemium | paid | none; "" when unset
+      "call_to_action": "…",                   // the one action to ask for; "" when unset
+      "avoid_claims": ["…"]                    // claims promoters must never make; [] when unset
     }
   ]
 }
@@ -196,6 +227,7 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
 
 - **`url`** is the card's real destination, so it follows the card's overrides: `session-manager` links to `https://bilko.run/products/session-manager` (its landing page), and `external-url` entries link to their external URL.
 - **Source of truth:** built from `PUBLIC_CARDS` in `src/data/projectsView.ts` (`src/data/projectCatalog.ts`), so the page and the API can't disagree. Change who is public with the registry `public` flag (Bilko-owned). `detail`, `audience` and `talking_points` come from the registry entry's `listing` (`detail`, `audience`, `talkingPoints`), which the project edits itself; see "Project listing — who owns what". Talking points may be posted publicly word for word, so keep each one a plain fact the site already supports.
+- **Marketing fields:** `offering`, `pricing`, `call_to_action` and `avoid_claims` come from the entry's `listing` (`offering`, `pricing`, `callToAction`, `avoidClaims`); see "Marketing meta-categories". They are `''` / `[]` when unset. They are additive under `schema_version` 1. **`avoid_claims` is binding:** consumers like Burrow must never make those claims.
 - **Freshness:** the data is baked in at build time. It changes when a registry change reaches `main` and deploys.
 - **Versioning:** adding a field does not bump the version. Renaming, removing, or retyping a field, or changing what `url` points at, bumps `schema_version`. Consumers should ignore fields they don't know.
 

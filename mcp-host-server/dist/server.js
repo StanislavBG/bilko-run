@@ -42,7 +42,7 @@ import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/regi
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout } from './publish-checkout.js';
 import { ListingPatchSchema } from './listing-patch.js';
-import { updateListingInRegistry, buildRegistration } from './listing-tool.js';
+import { updateListingInRegistry, buildRegistration, readListingFile } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
@@ -359,6 +359,26 @@ server.registerTool('publish_static_project', {
             if (p.host.kind !== 'static-path')
                 throw new Error(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
             assertCallerOwnsSlug(p, sourceRepoPath);
+            // Listing file is validated before any bytes are copied, so a bad file aborts cleanly.
+            let listingNext;
+            let listingStatus = 'listing: no bilko.listing.json';
+            const listingPatch = sourceRepoPath ? readListingFile(resolve(sourceRepoPath.replace(/^~(?=\/|$)/, homedir()))) : undefined;
+            if (listingPatch !== undefined) {
+                let res;
+                try {
+                    res = updateListingInRegistry(projects, slug, sourceRepoPath, listingPatch);
+                }
+                catch (e) {
+                    throw new Error(`bilko.listing.json: ${e.message}`);
+                }
+                if (res.changed) {
+                    listingNext = res.next;
+                    listingStatus = 'listing: synced from bilko.listing.json';
+                }
+                else {
+                    listingStatus = 'listing: unchanged';
+                }
+            }
             const publicProjects = resolve(root, 'public/projects');
             const target = projectDir(publicProjects, slug);
             const incoming = `${target}.incoming-${process.pid}`;
@@ -373,7 +393,12 @@ server.registerTool('publish_static_project', {
             }
             await rename(incoming, target);
             await rm(oldAside, { recursive: true, force: true });
-            return { result: { target }, paths: [`public/projects/${slug}`], message: `publish: ${slug} build` };
+            const paths = [`public/projects/${slug}`];
+            if (listingNext) {
+                await writeRegistry(root, listingNext);
+                paths.push('src/data/standalone-projects.json');
+            }
+            return { result: { target, listingStatus }, paths, message: `publish: ${slug} build` };
         });
         if (!outcome.ok)
             return checkoutErr(outcome);
@@ -389,6 +414,7 @@ server.registerTool('publish_static_project', {
         const lines = [
             `gates: ${results.map(r => `${r.name}=${r.status}`).join(', ')}`,
             `published: ${distAbs} → public/projects/${slug}`,
+            outcome.result.listingStatus,
             pushedLine(outcome),
         ];
         return ok(lines.join('\n'));

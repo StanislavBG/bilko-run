@@ -5,6 +5,7 @@ import { applyListingPatch } from './listing-patch.js';
 import { buildStaticEntry } from './publish-request.js';
 import { canonicalPath } from './ownership.js';
 import os from 'node:os';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -66,4 +67,26 @@ export function buildRegistration(
   }
   const { callerRepoPath, ...rest } = input;
   return buildStaticEntry({ ...rest, localPath: collapseHome(callerRepoPath) });
+}
+
+const LISTING_FILE = 'bilko.listing.json';
+const LISTING_MAX_BYTES = 16384;
+
+/**
+ * Reads `<sourceRepoPath>/bilko.listing.json` (an `update_project_listing` patch).
+ * Returns undefined when absent; throws `bilko.listing.json: <reason>` when
+ * unreadable, over 16 KB, or not valid JSON.
+ */
+export function readListingFile(sourceRepoPath: string): unknown | undefined {
+  const file = path.join(sourceRepoPath, LISTING_FILE);
+  if (!existsSync(file)) return undefined;
+  const size = statSync(file).size;
+  if (size > LISTING_MAX_BYTES) {
+    throw new Error(`${LISTING_FILE}: file is ${size} bytes, over the ${LISTING_MAX_BYTES}-byte limit`);
+  }
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch (e) {
+    throw new Error(`${LISTING_FILE}: invalid JSON (${(e as Error).message})`);
+  }
 }

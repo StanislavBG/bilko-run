@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import os from 'node:os';
-import { updateListingInRegistry, buildRegistration } from '../mcp-host-server/src/listing-tool.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { updateListingInRegistry, buildRegistration, readListingFile } from '../mcp-host-server/src/listing-tool.js';
 import { RegistrySchema, type RegistryProject } from '../mcp-host-server/src/contract/registry.js';
 
 const OWNER = '/tmp/listing-tool-owner-repo';
@@ -81,5 +83,40 @@ describe('buildRegistration', () => {
 
   it('refuses a repo already bound to another slug', () => {
     expect(() => buildRegistration(registry(), { ...base, callerRepoPath: OWNER })).toThrow(/already bound/);
+  });
+});
+
+describe('readListingFile', () => {
+  function tmp(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'listing-file-'));
+  }
+
+  it('returns undefined when the file is absent', () => {
+    expect(readListingFile(tmp())).toBeUndefined();
+  });
+
+  it('throws on invalid JSON', () => {
+    const d = tmp();
+    fs.writeFileSync(path.join(d, 'bilko.listing.json'), '{nope');
+    expect(() => readListingFile(d)).toThrow(/^bilko\.listing\.json: /);
+  });
+
+  it('throws when the file is over 16 KB', () => {
+    const d = tmp();
+    fs.writeFileSync(path.join(d, 'bilko.listing.json'), JSON.stringify({ tagline: 'x'.repeat(17000) }));
+    expect(() => readListingFile(d)).toThrow(/bilko\.listing\.json: .*limit/);
+  });
+
+  it('returns the parsed object for a valid file', () => {
+    const d = tmp();
+    fs.writeFileSync(path.join(d, 'bilko.listing.json'), JSON.stringify({ tagline: 'Hi' }));
+    expect(readListingFile(d)).toEqual({ tagline: 'Hi' });
+  });
+
+  it('a file containing public: true is rejected by updateListingInRegistry', () => {
+    const d = tmp();
+    fs.writeFileSync(path.join(d, 'bilko.listing.json'), JSON.stringify({ tagline: 'Hi', public: true }));
+    const patch = readListingFile(d);
+    expect(() => updateListingInRegistry(registry(), 'demo', OWNER, patch)).toThrow();
   });
 });

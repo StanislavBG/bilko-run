@@ -19,10 +19,10 @@
     "public": true,
     "displayName": "Git Viewer",
     "listing": {
+      "detail": "Pulls every public repo, scores it by recency and activity, and renders a living portfolio. No manual upkeep — push code, the dashboard updates itself.",
       "metric": "12 repos",
       "metricLabel": "indexed",
       "lang": "TypeScript",
-      "detail": "Pulls every public repo, scores it by recency and activity, and renders a living portfolio. No manual upkeep — push code, the dashboard updates itself.",
       "audience": "Developers who want their GitHub activity to double as a portfolio.",
       "talkingPoints": [
         "Turns your public GitHub repos into a public portfolio page.",
@@ -69,10 +69,10 @@
     "public": true,
     "displayName": "Weather",
     "listing": {
+      "detail": "A comfort index that scores a decade of weather data into \"comfortable hours\" per place. Find where the year is actually pleasant, not just warm.",
       "metric": "10 yrs",
       "metricLabel": "of data",
       "lang": "Python",
-      "detail": "A comfort index that scores a decade of weather data into \"comfortable hours\" per place. Find where the year is actually pleasant, not just warm.",
       "audience": "Anyone deciding where or when the weather is actually pleasant.",
       "talkingPoints": [
         "Scores ten years of weather data into \"comfortable hours\" per place.",
@@ -141,16 +141,26 @@
     ],
     "public": true,
     "listing": {
+      "detail": "A free desktop cockpit for Claude Code: sessions with a persona and a mission, a scheduler that waits out your token limit, and every setting in one window.",
       "metric": "free",
       "metricLabel": "app + manual",
       "lang": "TypeScript",
-      "detail": "A free desktop cockpit for Claude Code: sessions with a persona and a mission, a scheduler that waits out your token limit, and every setting in one window.",
       "audience": "Developers who run Claude Code sessions every day.",
       "talkingPoints": [
         "Free desktop app for managing Claude Code CLI sessions.",
         "Each session gets a persona and a mission.",
         "Has a scheduler that waits out your token limit and resumes work.",
         "Ships with a free Field Manual."
+      ],
+      "offering": "free-tool",
+      "pricing": "free",
+      "callToAction": "Try it: run npx claude-code-session-manager@latest, or grab the installer from GitHub Releases.",
+      "avoidClaims": [
+        "It is a hosted SaaS or cloud service. It is a local desktop app; sessions and files stay on the user's machine.",
+        "It is made, endorsed or supported by Anthropic. It is an independent, single-author open-source project.",
+        "It includes Claude access or replaces a Claude plan. Users need Claude Code installed and signed in with their own account.",
+        "It has a paid, pro or trial tier. The app and the Field Manual are both free (MIT).",
+        "It is a team or enterprise product with support or an SLA."
       ]
     }
   },
@@ -216,10 +226,10 @@
       "Workflows"
     ],
     "listing": {
+      "detail": "Describe a goal in plain language; bilko-flow compiles it into a typed, DAG-validated workflow that runs the same way every time. The engine behind the studio.",
       "metric": "I1–I7",
       "metricLabel": "steel frame",
-      "lang": "TypeScript",
-      "detail": "Describe a goal in plain language; bilko-flow compiles it into a typed, DAG-validated workflow that runs the same way every time. The engine behind the studio."
+      "lang": "TypeScript"
     }
   },
   {
@@ -261,10 +271,10 @@
     ],
     "public": true,
     "listing": {
+      "detail": "Agents read sentiment across ten subreddits, place trades, and publish every position live. Wins and losses both — radical transparency as a feature.",
       "metric": "10",
       "metricLabel": "subreddits",
       "lang": "Python",
-      "detail": "Agents read sentiment across ten subreddits, place trades, and publish every position live. Wins and losses both — radical transparency as a feature.",
       "audience": "People curious whether Reddit sentiment can drive real trades.",
       "talkingPoints": [
         "Autonomous trading bots read sentiment across ten subreddits.",
@@ -558,10 +568,10 @@
       "TypeScript"
     ],
     "listing": {
+      "detail": "The MCP server behind bilko.run: Claude sessions in sibling repos use it to register, publish, and inspect their apps here — and to read their own usage bill.",
       "metric": "live",
       "metricLabel": "registry",
       "lang": "TypeScript",
-      "detail": "The MCP server behind bilko.run: Claude sessions in sibling repos use it to register, publish, and inspect their apps here — and to read their own usage bill.",
       "audience": "Developers running Claude Code who want to publish small apps to one host.",
       "talkingPoints": [
         "An MCP server that lets Claude sessions register, publish, and inspect apps on bilko.run.",
@@ -589,10 +599,10 @@
     ],
     "public": true,
     "listing": {
+      "detail": "Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally.",
       "metric": "8 planets",
       "metricLabel": "to conquer",
       "lang": "GDScript · Godot 4",
-      "detail": "Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally.",
       "audience": "Players who like short, keyboard-only arcade survivors runs.",
       "talkingPoints": [
         "Keyboard-only space survivors game across all eight planets of the Solar System.",
@@ -621,10 +631,10 @@
     "public": true,
     "displayName": "Launch Kit",
     "listing": {
+      "detail": "Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire.",
       "metric": "8 skills",
       "metricLabel": "$9 one-time",
       "lang": "Markdown",
-      "detail": "Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire.",
       "audience": "Solo builders using Claude Code who have a working product and need to launch it.",
       "talkingPoints": [
         "Eight Claude skills that take a product from \"it works\" to launched.",

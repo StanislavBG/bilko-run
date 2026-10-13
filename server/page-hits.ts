@@ -70,6 +70,10 @@ function refHost(referer: string | null | undefined, ownHost: string | null | un
   return h;
 }
 
+export function visitorHash(date: string, ip: string, ua: string): string {
+  return createHash('sha256').update(`${date}|${ip}|${ua}`).digest('hex').slice(0, 16);
+}
+
 export function recordPageHit(input: PageHitInput): void {
   if (buffer.length >= MAX_BUFFER) return;
   const date = dayKey(input.ts);
@@ -82,7 +86,7 @@ export function recordPageHit(input: PageHitInput): void {
     slug: slugFromPath(path),
     status: input.status,
     referrer_host: refHost(input.referer, input.host),
-    visitor_hash: createHash('sha256').update(`${date}|${input.ip}|${input.ua}`).digest('hex').slice(0, 16),
+    visitor_hash: visitorHash(date, input.ip, input.ua),
     country: input.country ? input.country.slice(0, 8) : null,
     device,
     browser,

@@ -29,7 +29,8 @@
     "host": {
       "kind": "external-url",
       "url": "https://sigma-plus.replit.app",
-      "sourceRepo": "github.com/midt-bg/sigma"
+      "sourceRepo": "github.com/midt-bg/sigma",
+      "localPath": "~/Projects/sigma"
     },
     "tags": [
       "Open Data",
@@ -107,7 +108,8 @@
     "host": {
       "kind": "static-path",
       "path": "/projects/session-manager/",
-      "sourceRepo": "github.com/StanislavBG/session-manager"
+      "sourceRepo": "github.com/StanislavBG/session-manager",
+      "localPath": "~/Projects/session-manager"
     },
     "tags": [
       "Electron",
@@ -163,7 +165,8 @@
     "host": {
       "kind": "external-url",
       "url": "https://www.npmjs.com/package/bilko-flow",
-      "sourceRepo": "github.com/StanislavBG/bilko-flow"
+      "sourceRepo": "github.com/StanislavBG/bilko-flow",
+      "localPath": "~/Projects/bilko-flow"
     },
     "tags": [
       "TypeScript",
@@ -382,7 +385,8 @@
     "host": {
       "kind": "external-url",
       "url": "https://bglabs.app",
-      "sourceRepo": "github.com/StanislavBG/bglabs"
+      "sourceRepo": "github.com/StanislavBG/bglabs",
+      "localPath": "~/Projects/BGLabs"
     },
     "tags": [
       "Canvas",
@@ -399,7 +403,8 @@
     "host": {
       "kind": "static-path",
       "path": "/projects/fizzpop/",
-      "sourceRepo": "github.com/StanislavBG/Bilko-Fizzpop"
+      "sourceRepo": "github.com/StanislavBG/Bilko-Fizzpop",
+      "localPath": "~/Projects/Bilko-Fizzpop"
     },
     "tags": [
       "Game",
@@ -483,7 +488,8 @@
     "host": {
       "kind": "external-url",
       "url": "https://github.com/StanislavBG/bilko-run/tree/main/mcp-host-server",
-      "sourceRepo": "github.com/StanislavBG/bilko-run/tree/main/mcp-host-server"
+      "sourceRepo": "github.com/StanislavBG/bilko-run/tree/main/mcp-host-server",
+      "localPath": "~/Projects/Bilko"
     },
     "tags": [
       "MCP",

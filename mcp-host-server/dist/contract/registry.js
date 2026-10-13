@@ -23,22 +23,54 @@ export const ProjectHostSchema = z.discriminatedUnion('kind', [
     StaticPathHostSchema,
     ExternalUrlHostSchema,
 ]);
+export const ListingSchema = z
+    .object({
+    detail: z.string().min(1).max(400).optional(),
+    metric: z.string().min(1).max(24).optional(),
+    metricLabel: z.string().min(1).max(24).optional(),
+    lang: z.string().min(1).max(40).optional(),
+    audience: z.string().max(200).optional(),
+    talkingPoints: z.array(z.string().min(1).max(200)).max(5).optional(),
+})
+    .strict();
 export const RegistryProjectSchema = z
     .object({
     slug: SlugSchema,
-    name: z.string(),
-    tagline: z.string(),
-    category: z.string(),
+    name: z.string().min(1).max(40),
+    tagline: z.string().min(1).max(160),
+    category: z.string().min(1).max(40),
     status: ProjectStatusSchema,
     year: z.number().int(),
     host: ProjectHostSchema,
-    tags: z.array(z.string()).optional(),
-    thumbnail: z.string().optional(),
+    tags: z.array(z.string().min(1).max(24)).max(6).optional(),
+    thumbnail: z
+        .string()
+        .refine((s) => s.startsWith('https://') || s.startsWith('/'), 'thumbnail must be https:// or a /path')
+        .optional(),
     launchedAt: z.string().optional(),
     public: z.boolean().optional(),
     displayName: z.string().min(1).max(60).optional(),
+    listing: ListingSchema.optional(),
 })
     .strict();
+export const BANNED_LISTING_TERMS = [/content-?grade/i];
+function listingTextFields(entry) {
+    const fields = [
+        ['name', entry.name],
+        ['displayName', entry.displayName],
+        ['tagline', entry.tagline],
+        ['category', entry.category],
+    ];
+    (entry.tags ?? []).forEach((t, i) => fields.push([`tags[${i}]`, t]));
+    const l = entry.listing;
+    if (l) {
+        for (const k of ['detail', 'metric', 'metricLabel', 'lang', 'audience']) {
+            fields.push([`listing.${k}`, l[k]]);
+        }
+        (l.talkingPoints ?? []).forEach((t, i) => fields.push([`listing.talkingPoints[${i}]`, t]));
+    }
+    return fields.filter((f) => typeof f[1] === 'string');
+}
 export const RegistrySchema = z.array(RegistryProjectSchema).superRefine((entries, ctx) => {
     const seenSlugs = new Set();
     entries.forEach((entry, index) => {
@@ -50,6 +82,15 @@ export const RegistrySchema = z.array(RegistryProjectSchema).superRefine((entrie
             });
         }
         seenSlugs.add(entry.slug);
+        for (const [field, value] of listingTextFields(entry)) {
+            if (BANNED_LISTING_TERMS.some((re) => re.test(value))) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `slug "${entry.slug}" field "${field}" mentions a retired product (ContentGrade)`,
+                    path: [index, ...field.replace(/\[(\d+)\]/g, '.$1').split('.')],
+                });
+            }
+        }
         if (entry.host.kind === 'static-path') {
             const expectedPath = `/projects/${entry.slug}/`;
             if (entry.host.path !== expectedPath) {

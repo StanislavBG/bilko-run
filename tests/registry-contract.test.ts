@@ -107,6 +107,79 @@ describe('RegistryProjectSchema optional fields', () => {
   });
 });
 
+describe('listing and content standards', () => {
+  const VALID_LISTING = {
+    detail: 'A short story about the project.',
+    metric: '12k',
+    metricLabel: 'users',
+    lang: 'TypeScript',
+    audience: 'Solo builders',
+    talkingPoints: ['Fast', 'Free'],
+  };
+
+  it('parses a valid listing', () => {
+    const result = RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: VALID_LISTING });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a tagline over 160 chars', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, tagline: 'x'.repeat(161) }).success
+    ).toBe(false);
+  });
+
+  it('rejects more than 6 tags', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, tags: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] })
+        .success
+    ).toBe(false);
+  });
+
+  it('rejects more than 5 talking points', () => {
+    const talkingPoints = ['a', 'b', 'c', 'd', 'e', 'f'];
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { talkingPoints } }).success
+    ).toBe(false);
+  });
+
+  it('rejects a listing detail over 400 chars', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { detail: 'x'.repeat(401) } })
+        .success
+    ).toBe(false);
+  });
+
+  it('rejects an unknown listing key', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { nope: 'x' } }).success
+    ).toBe(false);
+  });
+
+  it('rejects a ContentGrade mention in listing.detail, naming slug and field', () => {
+    const result = RegistrySchema.safeParse([
+      { ...BASE_ENTRY, listing: { detail: 'Built on Content-Grade tech' } },
+    ]);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join('\n');
+      expect(msg).toContain('foo-bar');
+      expect(msg).toContain('listing.detail');
+    }
+  });
+
+  it('rejects a ContentGrade mention in the tagline', () => {
+    expect(
+      RegistrySchema.safeParse([{ ...BASE_ENTRY, tagline: 'powered by contentgrade' }]).success
+    ).toBe(false);
+  });
+
+  it('rejects an http thumbnail', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, thumbnail: 'http://x' }).success
+    ).toBe(false);
+  });
+});
+
 describe('RegistrySchema rejection cases', () => {
   it('rejects a duplicate slug', () => {
     const result = RegistrySchema.safeParse([BASE_ENTRY, BASE_ENTRY]);

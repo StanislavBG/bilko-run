@@ -191,19 +191,22 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const email = await requireAdmin(req, reply);
     if (!email) return;
 
-    const q = req.query as { days?: string; slug?: string };
+    const q = req.query as { days?: string; slug?: string; self?: string };
     const days = Math.min(Math.max(parseInt(q.days || '7', 10) || 7, 1), 90);
     const slug = q.slug ? q.slug.slice(0, 100) : null;
     const since = Date.now() - days * 86_400_000;
 
-    const slugSql = slug ? ' AND slug = ?' : '';
+    // Default includes the owner's own traffic; self=exclude drops is_admin rows.
+    const selfSql = q.self === 'exclude' ? ' AND COALESCE(is_admin, 0) = 0' : '';
+    const slugSql = (slug ? ' AND slug = ?' : '') + selfSql;
     const slugArgs: string[] = slug ? [slug] : [];
     const human = `ts_ms >= ? AND is_bot = 0 AND status < 400${slugSql}`;
+    const VKEY = 'COALESCE(visitor_id, visitor_hash)';
     const humanArgs = [since, ...slugArgs];
 
-    const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest, clickTotal, topClicks] = await Promise.all([
+    const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest, clickTotal, topClicks, visitorRows, visitorClicks] = await Promise.all([
       safeQuery(() => dbGet<{ hits: number; visitors: number }>(
-        `SELECT COUNT(*) AS hits, COUNT(DISTINCT visitor_hash) AS visitors FROM page_hits WHERE ${human}`,
+        `SELECT COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors FROM page_hits WHERE ${human}`,
         ...humanArgs,
       ), undefined),
       safeQuery(() => dbGet<{ n: number }>(
@@ -254,9 +257,12 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       safeQuery(() => dbAll<{
         ts_ms: number; path: string; status: number; referrer_host: string | null;
         country: string | null; device: string; browser: string; os: string; is_bot: number;
+        ip: string | null; ua: string | null; referrer: string | null; visitor_id: string | null;
+        visitor_hash: string | null; user_email: string | null; is_admin: number | null;
       }>(
-        `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, is_bot
-           FROM page_hits WHERE ts_ms >= ?${slugSql} ORDER BY ts_ms DESC LIMIT 50`,
+        `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, is_bot,
+                ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin
+           FROM page_hits WHERE ts_ms >= ?${slugSql} ORDER BY ts_ms DESC LIMIT 200`,
         since, ...slugArgs,
       ), []),
       safeQuery(() => dbGet<{ d: string | null }>(`SELECT MIN(date) AS d FROM page_hits`), undefined),
@@ -272,7 +278,26 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
           GROUP BY path, tag, label, href ORDER BY clicks DESC LIMIT 25`,
         since, ...slugArgs,
       ), []),
+      safeQuery(() => dbAll<{
+        vid: string; ip: string | null; country: string | null; device: string | null;
+        browser: string | null; os: string | null; user_email: string | null; is_admin: number | null;
+        hits: number; pages: number; first_seen: number; last_seen: number;
+      }>(
+        `SELECT ${VKEY} AS vid, MAX(ip) AS ip, MAX(country) AS country, MAX(device) AS device,
+                MAX(browser) AS browser, MAX(os) AS os, MAX(user_email) AS user_email,
+                MAX(COALESCE(is_admin, 0)) AS is_admin, COUNT(*) AS hits,
+                COUNT(DISTINCT path) AS pages, MIN(ts_ms) AS first_seen, MAX(ts_ms) AS last_seen
+           FROM page_hits WHERE ${human} AND ${VKEY} IS NOT NULL
+          GROUP BY vid ORDER BY hits DESC, last_seen DESC LIMIT 100`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ vid: string; n: number }>(
+        `SELECT ${VKEY} AS vid, COUNT(*) AS n FROM click_events
+          WHERE ts_ms >= ? AND is_bot = 0${slugSql} AND ${VKEY} IS NOT NULL GROUP BY vid`,
+        since, ...slugArgs,
+      ), []),
     ]);
+    const clicksByVisitor = new Map(visitorClicks.map(c => [c.vid, c.n]));
 
     return {
       days,
@@ -301,8 +326,74 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         browser: r.browser,
         os: r.os,
         isBot: r.is_bot === 1,
+        ip: r.ip,
+        ua: r.ua,
+        referrer: r.referrer,
+        visitorId: r.visitor_id ?? r.visitor_hash,
+        userEmail: r.user_email,
+        isAdmin: r.is_admin === 1,
+      })),
+      visitors: visitorRows.map(v => ({
+        visitorId: v.vid,
+        ip: v.ip,
+        country: v.country,
+        device: v.device,
+        browser: v.browser,
+        os: v.os,
+        userEmail: v.user_email,
+        isAdmin: v.is_admin === 1,
+        hits: v.hits,
+        clicks: clicksByVisitor.get(v.vid) ?? 0,
+        pages: v.pages,
+        firstSeen: v.first_seen,
+        lastSeen: v.last_seen,
       })),
       earliestDate: earliest?.d ?? null,
+      generatedAt: Math.floor(Date.now() / 1000),
+    };
+  });
+
+  // Per-visitor timeline: page hits and clicks merged, oldest first, latest 500.
+  app.get('/api/admin/traffic/visitor/:id', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+
+    const id = String((req.params as { id: string }).id).slice(0, 200);
+    const q = req.query as { days?: string };
+    const days = Math.min(Math.max(parseInt(q.days || '7', 10) || 7, 1), 90);
+    const since = Date.now() - days * 86_400_000;
+
+    const rows = await safeQuery(() => dbAll<{
+      ts_ms: number; kind: string; path: string; status: number | null; label: string | null;
+      href: string | null; referrer: string | null; ip: string | null; ua: string | null;
+    }>(
+      `SELECT * FROM (
+         SELECT ts_ms, 'hit' AS kind, path, status, NULL AS label, NULL AS href,
+                COALESCE(referrer, referrer_host) AS referrer, ip, ua
+           FROM page_hits WHERE ts_ms >= ? AND COALESCE(visitor_id, visitor_hash) = ?
+         UNION ALL
+         SELECT ts_ms, 'click' AS kind, path, NULL AS status, label, href,
+                NULL AS referrer, ip, NULL AS ua
+           FROM click_events WHERE ts_ms >= ? AND COALESCE(visitor_id, visitor_hash) = ?
+          ORDER BY ts_ms DESC LIMIT 500
+       ) ORDER BY ts_ms ASC`,
+      since, id, since, id,
+    ), []);
+
+    return {
+      visitorId: id,
+      days,
+      events: rows.map(r => ({
+        ts: r.ts_ms,
+        kind: r.kind as 'hit' | 'click',
+        path: r.path,
+        ...(r.status != null ? { status: r.status } : {}),
+        ...(r.label != null ? { label: r.label } : {}),
+        ...(r.href != null ? { href: r.href } : {}),
+        ...(r.referrer != null ? { referrer: r.referrer } : {}),
+        ip: r.ip,
+        ua: r.ua,
+      })),
       generatedAt: Math.floor(Date.now() / 1000),
     };
   });

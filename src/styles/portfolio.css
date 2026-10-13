@@ -570,8 +570,17 @@ body.hub-route .pf-footer { display: none; }
    (Design handoff: "Projects & Packages." rich rows.) */
 .pf-hub-row { border-bottom: 1px solid var(--pf-rule); transition: background var(--pf-motion-fast); }
 .pf-hub-row.expanded { background: var(--pf-paper); }
+.pf-hub-headrow { display: flex; align-items: center; position: relative; }
+.pf-hub-headrow:hover, .pf-hub-row.expanded .pf-hub-headrow { background: var(--pf-paper); }
+.pf-hub-open {
+  flex: none; cursor: pointer; border: 0; border-radius: 8px; margin-right: 18px;
+  background: var(--pf-ink); color: var(--pf-bg); white-space: nowrap;
+  font-family: var(--pf-font-mono); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.04em; padding: 9px 16px; min-height: 36px;
+}
+.pf-hub-open:hover { background: var(--pf-accent); }
 .pf-hub-head {
-  width: 100%; cursor: pointer; background: transparent; border: 0; text-align: left;
+  flex: 1; min-width: 0; cursor: pointer; background: transparent; border: 0; text-align: left;
   display: grid; align-items: center;
   grid-template-columns: 4px 34px 22px minmax(240px, 1.6fr) minmax(132px, 0.9fr) 92px 104px 112px 72px 22px;
   gap: 22px; padding: 34px 18px 34px 0; min-height: 108px; position: relative;
@@ -629,13 +638,6 @@ body.hub-route .pf-footer { display: none; }
   font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pf-accent);
 }
 .pf-hub-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.pf-hub-primary {
-  cursor: pointer; border: 0; border-radius: 8px;
-  background: var(--pf-ink); color: var(--pf-bg);
-  font-family: var(--pf-font-mono); font-size: 12px; font-weight: 600;
-  letter-spacing: 0.04em; padding: 9px 16px;
-}
-.pf-hub-primary:hover { background: var(--pf-accent); }
 .pf-hub-link {
   font-family: var(--pf-font-mono); font-size: 12px; font-weight: 700;
   color: var(--pf-ink-2); text-decoration: none;
@@ -653,6 +655,7 @@ body.hub-route .pf-footer { display: none; }
     grid-template-columns: 4px 1fr auto 22px;
     gap: 12px; row-gap: 10px; padding: 16px 12px 16px 0;
   }
+  .pf-hub-open { margin-right: 12px; padding: 8px 12px; }
   .pf-hub-ord, .pf-hub-dotcell, .pf-hub-stat, .pf-hub-when { display: none; }
   .pf-hub-main { grid-column: 2 / -1; }
   .pf-hub-cats { grid-column: 2; }

@@ -61,6 +61,7 @@ function HubRow({ card, index, expanded, onToggle }: { card: HubCard; index: num
 
   return (
     <div className={`pf-hub-row ${accent}${expanded ? ' expanded' : ''}`}>
+      <div className="pf-hub-headrow">
       <button className="pf-hub-head" onClick={onToggle} aria-expanded={expanded}>
         <span className="pf-hub-rail" aria-hidden="true" />
         <span className="pf-hub-ord">{String(index + 1).padStart(2, '0')}</span>
@@ -84,6 +85,12 @@ function HubRow({ card, index, expanded, onToggle }: { card: HubCard; index: num
         <span className={`pf-hub-badge ${status.cls}`}>{status.label}</span>
         <span className={`pf-hub-caret${expanded ? ' open' : ''}`} aria-hidden="true">›</span>
       </button>
+      {card.href && card.status !== 'postponed' && (
+        <button className="pf-hub-open" onClick={open} aria-label={`Open ${card.name}`}>
+          {card.type === 'package' ? 'GitHub' : 'Open'} →
+        </button>
+      )}
+      </div>
 
       {expanded && (
         <div className="pf-hub-body">
@@ -102,11 +109,6 @@ function HubRow({ card, index, expanded, onToggle }: { card: HubCard; index: num
             )}
           </div>
           <div className="pf-hub-actions">
-            {card.href && card.status !== 'postponed' && (
-              <button className="pf-hub-primary" onClick={open}>
-                {card.type === 'package' ? 'View on GitHub' : 'Open'} →
-              </button>
-            )}
             {card.npm && (
               <a href={card.npm} target="_blank" rel="noopener noreferrer" className="pf-hub-link">npm →</a>
             )}
@@ -155,7 +157,7 @@ export function ProjectsPage() {
           <div className="pf-eyebrow">Section 02 · Portfolio</div>
           <h1 className="pf-hub-h1">Projects &amp; Packages.</h1>
           <p className="pf-hub-lede">
-            Live tools and open-source packages, newest on top. Click any row to expand the full story.
+            Live tools and open-source packages, newest on top. Open any project directly, or click its row for the full story.
           </p>
         </div>
         {isAdmin && (

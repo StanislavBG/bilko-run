@@ -86,7 +86,7 @@ A registry entry — a `static-path`/`external-url` entry in `src/data/standalon
 
 ### `external-url` apps
 
-- Just the URL.
+- Just the URL (`https://` only). Register it with the MCP's `register_external_project` (see below). There is no bundle, so `publish_static_project` refuses external-url slugs.
 
 ## Registry rules
 
@@ -109,7 +109,7 @@ A project's `/projects` card is split between the sibling that owns the app and 
 
 Sibling sessions never ask Bilko to change card copy. They edit it themselves. Bilko-owned fields are rejected in any listing patch.
 
-**Ownership rule.** `host.localPath` binds a slug to exactly one repo. `register_static_project` records the caller's `callerRepoPath` there, and refuses a repo that is already bound to another slug. `publish_static_project` (via `sourceRepoPath`), `unregister_project` and `update_project_listing` (via `callerRepoPath`) refuse any other caller.
+**Ownership rule.** `host.localPath` binds a slug to exactly one repo. `register_static_project` / `register_external_project` record the caller's `callerRepoPath` there, and refuses a repo that is already bound to another slug. `publish_static_project` (via `sourceRepoPath`), `unregister_project` and `update_project_listing` (via `callerRepoPath`) refuse any other caller.
 
 **Content standards** (enforced by `mcp-host-server/src/contract/registry.ts` on every write):
 
@@ -181,7 +181,7 @@ The ownership check compares a self-asserted `callerRepoPath` / `sourceRepoPath`
 
 The real boundary is where the write tools run. They exist only in the local stdio `bilko-host` MCP on the owner's machine, and they push with the owner's GitHub access to `StanislavBG/bilko-run`. The public `https://bilko.run/mcp` is read-only.
 
-**Going public.** `register_static_project` never sets `public`; a new app is admin-only. Listing it on `/projects` and the home page is the Bilko owner's call, made in a Bilko session. Sibling sessions cannot change `public`.
+**Going public.** `register_static_project` / `register_external_project` never set `public`; a new app is admin-only. Listing it on `/projects` and the home page is the Bilko owner's call, made in a Bilko session. Sibling sessions cannot change `public`.
 
 ## Social share cards
 
@@ -326,11 +326,12 @@ A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by ha
 2. bilko-host__list_projects                              # check slug isn't taken
 3. (build your app: pnpm build → dist/)
 4. bilko-host__register_static_project { slug, name, tagline, category, status, year, callerRepoPath, … }  # first deploy only
+   # app hosted on its own domain instead? bilko-host__register_external_project { slug, url, name, tagline, category, status, year, callerRepoPath, … } and skip steps 3 and 5
 5. bilko-host__publish_static_project { slug, distPath, sourceRepoPath }  # every deploy; syncs bilko.listing.json if present
 6. bilko-host__status                                     # verify
 ```
 
-`register_static_project` binds the slug to `callerRepoPath` (your repo root) and also takes optional `tags` and `displayName` (a hub-only display name, 1-60 chars). It has no `public` parameter: new apps are admin-only until the Bilko owner lists them. Later card edits go through `update_project_listing` or `bilko.listing.json`; see "Project listing — who owns what".
+`register_static_project` (and `register_external_project`, which adds a required `https://` `url`) binds the slug to `callerRepoPath` (your repo root) and also takes optional `tags` and `displayName` (a hub-only display name, 1-60 chars). It has no `public` parameter: new apps are admin-only until the Bilko owner lists them. Later card edits go through `update_project_listing` or `bilko.listing.json`; see "Project listing — who owns what".
 
 The MCP commits + pushes to `origin` automatically, from a dedicated clean
 checkout kept in sync with `origin/main` (never your own working tree); Render
@@ -472,7 +473,7 @@ Every static-path publish runs five gates in order, against `distPath` (and `sou
 | `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz) | `budget` |
 | `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` | `golden` |
 | `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
-| `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath`; the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
+| `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath` (`npm audit --omit=dev --audit-level=high --json` instead when the repo has a `package-lock.json` and no `pnpm-lock.yaml`); the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
 
 The `manifest` gate short-circuits the pipeline — if it fails, the other four are skipped (their results would be meaningless without a valid manifest).
 

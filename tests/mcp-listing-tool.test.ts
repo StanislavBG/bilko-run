@@ -84,6 +84,30 @@ describe('buildRegistration', () => {
   it('refuses a repo already bound to another slug', () => {
     expect(() => buildRegistration(registry(), { ...base, callerRepoPath: OWNER })).toThrow(/already bound/);
   });
+
+  describe('with url (register_external_project)', () => {
+    const ext = { ...base, url: 'https://fresh.example.app', callerRepoPath: '/tmp/listing-tool-fresh-repo' };
+
+    it('builds an admin-only external-url entry bound to the caller', () => {
+      const entry = buildRegistration(registry(), ext);
+      expect(entry.host).toEqual({ kind: 'external-url', url: 'https://fresh.example.app', localPath: '/tmp/listing-tool-fresh-repo' });
+      expect('public' in entry).toBe(false);
+      expect(RegistrySchema.parse([...registry(), entry])).toHaveLength(3);
+    });
+
+    it('refuses a non-https url', () => {
+      expect(() => buildRegistration(registry(), { ...ext, url: 'http://fresh.example.app' })).toThrow(/https/);
+      expect(() => buildRegistration(registry(), { ...ext, url: 'javascript:alert(1)' })).toThrow(/https/);
+    });
+
+    it('refuses a duplicate slug', () => {
+      expect(() => buildRegistration(registry(), { ...ext, slug: 'demo' })).toThrow(/already registered/);
+    });
+
+    it('refuses a repo already bound to another slug', () => {
+      expect(() => buildRegistration(registry(), { ...ext, callerRepoPath: OWNER })).toThrow(/already bound/);
+    });
+  });
 });
 
 describe('readListingFile', () => {
@@ -132,6 +156,14 @@ describe('assertPublishOwner', () => {
   });
   it('accepts the owner path', () => {
     expect(() => assertPublishOwner(registry(), 'demo', OWNER)).not.toThrow();
+  });
+  it('refuses to publish a bundle for an external-url entry', () => {
+    const reg = RegistrySchema.parse([
+      ...registry(),
+      { slug: 'ext', name: 'Ext', tagline: 'T', category: 'Game', status: 'live', year: 2026,
+        host: { kind: 'external-url', url: 'https://ext.example.app', localPath: '/tmp/listing-tool-ext-repo' } },
+    ]);
+    expect(() => assertPublishOwner(reg, 'ext', '/tmp/listing-tool-ext-repo')).toThrow(/external-url entry; there is no bundle/);
   });
 });
 

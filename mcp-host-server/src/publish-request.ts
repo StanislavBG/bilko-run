@@ -81,7 +81,7 @@ export function parseRegistry(raw: string): RegistryProject[] {
   return result.data;
 }
 
-export function buildStaticEntry(input: {
+type EntryInput = {
   slug: string;
   name: string;
   tagline: string;
@@ -93,7 +93,24 @@ export function buildStaticEntry(input: {
   tags?: string[];
   public?: boolean;
   displayName?: string;
-}): RegistryProject {
+};
+
+export function buildStaticEntry(input: EntryInput): RegistryProject {
+  return buildEntry(input, { kind: 'static-path', path: `/projects/${input.slug}/` });
+}
+
+/** Like buildStaticEntry, but for an app hosted on another domain. `url` must be https://. */
+export function buildExternalEntry(input: EntryInput & { url: string }): RegistryProject {
+  if (!input.url.startsWith('https://')) {
+    throw new Error(`invalid registry entry (slug "${input.slug}", field "host.url"): url must start with https://`);
+  }
+  return buildEntry(input, { kind: 'external-url', url: input.url });
+}
+
+function buildEntry(
+  input: EntryInput,
+  host: { kind: 'static-path'; path: string } | { kind: 'external-url'; url: string },
+): RegistryProject {
   const candidate = {
     slug: input.slug,
     name: input.name,
@@ -102,8 +119,7 @@ export function buildStaticEntry(input: {
     status: input.status,
     year: input.year,
     host: {
-      kind: 'static-path' as const,
-      path: `/projects/${input.slug}/`,
+      ...host,
       ...(input.sourceRepo ? { sourceRepo: input.sourceRepo } : {}),
       ...(input.localPath ? { localPath: input.localPath } : {}),
     },

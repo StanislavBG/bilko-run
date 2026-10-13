@@ -57,6 +57,16 @@ export function parseRegistry(raw) {
     return result.data;
 }
 export function buildStaticEntry(input) {
+    return buildEntry(input, { kind: 'static-path', path: `/projects/${input.slug}/` });
+}
+/** Like buildStaticEntry, but for an app hosted on another domain. `url` must be https://. */
+export function buildExternalEntry(input) {
+    if (!input.url.startsWith('https://')) {
+        throw new Error(`invalid registry entry (slug "${input.slug}", field "host.url"): url must start with https://`);
+    }
+    return buildEntry(input, { kind: 'external-url', url: input.url });
+}
+function buildEntry(input, host) {
     const candidate = {
         slug: input.slug,
         name: input.name,
@@ -65,8 +75,7 @@ export function buildStaticEntry(input) {
         status: input.status,
         year: input.year,
         host: {
-            kind: 'static-path',
-            path: `/projects/${input.slug}/`,
+            ...host,
             ...(input.sourceRepo ? { sourceRepo: input.sourceRepo } : {}),
             ...(input.localPath ? { localPath: input.localPath } : {}),
         },

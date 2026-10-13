@@ -12,6 +12,7 @@
  *   - get_host_contract          → returns the host contract markdown
  *   - list_projects              → returns every project the host knows about
  *   - register_static_project    → adds a static-path entry to the registry
+ *   - register_external_project  → adds an external-url entry (app hosted on another domain)
  *   - unregister_project         → removes an entry by slug
  *   - update_project_listing      → owner-only edit of a project's /projects card content
  *   - get_project                → returns one registry entry by slug
@@ -217,6 +218,49 @@ server.registerTool(
 
       if (!outcome.ok) return checkoutErr(outcome);
       return ok([`registered: ${slug} → /projects/${slug}/ (admin-only until the Bilko owner lists it)`, pushedLine(outcome)].join('\n'));
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  },
+);
+
+// 3b) register_external_project ─────────────────────────────────────────
+server.registerTool(
+  'register_external_project',
+  {
+    title: 'Register an externally hosted app',
+    description:
+      'Adds an external-url entry to the bilko.run host registry: for an app hosted on its own domain (e.g. https://<app>.replit.app), whose /projects card links straight to that URL. No bundle is published, so never call publish_static_project for it. url must be https://. Same rules as register_static_project otherwise: unique slug, admin-only until the Bilko owner lists it, and the slug is bound to callerRepoPath, so only that repo can later unregister it or edit its card (including url, via update_project_listing). The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main.',
+    inputSchema: {
+      slug: SlugSchema.describe('Kebab-case slug, unique in the registry. Example: "family-frame".'),
+      url: z.string().url().describe('The app\'s live https:// URL, e.g. "https://family-frame.replit.app".'),
+      name: z.string().min(1).describe('Display name. Example: "Family Frame".'),
+      tagline: z.string().min(1).describe('One-sentence pitch shown on cards.'),
+      category: z.string().describe('Display category. Common: "AI Tool · Productivity", "AI Tool · Content", "AI Tool · Dev", "Game", "Data".'),
+      status: ProjectStatusSchema.default('live'),
+      year: z.number().int().describe('Year of the build, e.g. 2026.'),
+      sourceRepo: z.string().optional().describe('e.g. "github.com/StanislavBG/family-frame"'),
+      callerRepoPath: z.string().min(1).describe('Absolute path to the repo registering this app, e.g. "/home/bilko/Projects/family-frame". Bound as host.localPath (home collapsed to ~).'),
+      tags: z.array(z.string()).optional().describe('Up to ~3 short tags, e.g. ["Free", "PWA"].'),
+      displayName: z.string().min(1).max(60).optional().describe('Hub-only display name shown on the public /projects hub.'),
+    },
+  },
+  async ({ slug, url, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName }) => {
+    try {
+      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
+        const projects = await readRegistry(root);
+        const entry = buildRegistration(projects, { slug, url, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName });
+        projects.push(entry);
+        await writeRegistry(root, projects);
+        return {
+          result: { slug },
+          paths: ['src/data/standalone-projects.json'],
+          message: `registry: add ${slug} (${name}, external)`,
+        };
+      });
+
+      if (!outcome.ok) return checkoutErr(outcome);
+      return ok([`registered: ${slug} → ${url} (admin-only until the Bilko owner lists it)`, pushedLine(outcome)].join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);
     }

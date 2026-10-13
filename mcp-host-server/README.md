@@ -15,6 +15,7 @@ Per the [host contract](../docs/host-contract.md), each app lives in its own rep
 | `get_host_contract` | no | First thing to call from a new session — returns the full contract markdown. |
 | `list_projects` | no | Check if a slug is taken; inspect what's currently registered. |
 | `register_static_project` | yes (registry + commit + push) | First deploy of a new app. |
+| `register_external_project` | yes (registry + commit + push) | Register an app hosted on its own domain: `{ slug, url (https://), name, tagline, category, status, year, callerRepoPath, … }`. The card links straight to `url`; nothing is published. |
 | `update_project_listing` | yes (registry + commit + push) | Change your own `/projects` card: `{ slug, callerRepoPath, patch }`. Only project-owned fields; `public`, slug and hosting are rejected. |
 | `get_project` | no | Read one registry entry (`{ slug }`) before editing its listing. |
 | `unregister_project` | yes | Retire an app (optionally also delete `public/projects/<slug>/`). |
@@ -76,7 +77,7 @@ Even when the server is connected, its tools may arrive as *deferred* tools: the
 6.  Verify:                      bilko-host__status
 ```
 
-`sourceRepoPath` is the sibling repo root (not `dist/`). The `golden` and `audit` publish gates shell out into it to run `tests/golden.spec.ts` and `pnpm audit`; omit it and both gates fail outright, which blocks the publish unless you explicitly bypass them.
+`sourceRepoPath` is the sibling repo root (not `dist/`). The `golden` and `audit` publish gates shell out into it to run `tests/golden.spec.ts` and `pnpm audit` (`npm audit --omit=dev` in npm-only repos); omit it and both gates fail outright, which blocks the publish unless you explicitly bypass them.
 
 That's it. Render redeploys after step 4 and 5; bilko.run/projects/<slug>/ goes live within ~minute.
 
@@ -93,7 +94,7 @@ Without `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` set, the server's DB writes (man
 ## Safety notes
 
 - The server resolves the host repo from its own location: `<HOST_ROOT>/mcp-host-server/dist/server.js` → `<HOST_ROOT>`. Don't move the binary.
-- `register_static_project` refuses duplicate slugs — call `unregister_project` first if you want to replace.
+- `register_static_project` / `register_external_project` refuse duplicate slugs — call `unregister_project` first if you want to replace.
 - **Ownership.** `register_static_project` binds the slug to `callerRepoPath` (stored as `host.localPath`). `publish_static_project` (`sourceRepoPath`), `unregister_project` and `update_project_listing` (`callerRepoPath`) refuse any other repo. `publish_static_project` also refuses unregistered slugs.
 - **Trust model.** The ownership check compares a self-asserted `callerRepoPath` / `sourceRepoPath` with `host.localPath`. It stops one project's session editing another's slug by mistake; it is not authentication and does not stop a hostile local session. The real boundary is that write tools exist only in this local stdio MCP on the owner's machine and push with the owner's GitHub access to `StanislavBG/bilko-run`; the public `https://bilko.run/mcp` is read-only. Details: [host contract, Trust model](../docs/host-contract.md#trust-model).
 - **Listings.** Siblings own their card content. Edit it with `update_project_listing`, or commit a `bilko.listing.json` (max 16 KB, same shape as the `patch`) at the repo root: `publish_static_project` syncs it into the registry. `public`, `slug`, `host`, `year` and `launchedAt` are Bilko-owned. `register_static_project` never sets `public`; going public is the Bilko owner's call. Caps and the banned-term rule are in the [host contract](../docs/host-contract.md) under "Project listing — who owns what".

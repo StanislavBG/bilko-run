@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { RegistrySchema, type RegistryProject, type ProjectStatus } from './contract/registry.js';
 import { assertCallerOwnsSlug, canonicalPath } from './ownership.js';
 import { applyListingPatch } from './listing-patch.js';
-import { buildStaticEntry } from './publish-request.js';
+import { buildStaticEntry, buildExternalEntry } from './publish-request.js';
 import os from 'node:os';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -40,6 +40,9 @@ export function assertPublishOwner(
   const entry = projects.find((p) => p.slug === slug);
   if (!entry) throw new Error(`slug "${slug}" is not registered. Call register_static_project first.`);
   assertCallerOwnsSlug(entry, sourceRepoPath);
+  if (entry.host.kind !== 'static-path') {
+    throw new Error(`slug "${slug}" is an ${entry.host.kind} entry; there is no bundle to publish. Edit its card with update_project_listing.`);
+  }
 }
 
 function collapseHome(p: string): string {
@@ -50,8 +53,10 @@ function collapseHome(p: string): string {
 }
 
 /**
- * Pure core of `register_static_project`: builds a schema-validated entry bound
- * to the caller's repo. Never sets `public` (admin-only until the Bilko owner lists it).
+ * Pure core of `register_static_project` and `register_external_project`: builds
+ * a schema-validated entry bound to the caller's repo — external-url when `url`
+ * is given (https:// only), static-path otherwise. Never sets `public`
+ * (admin-only until the Bilko owner lists it).
  */
 export function buildRegistration(
   projects: RegistryProject[],
@@ -66,6 +71,7 @@ export function buildRegistration(
     callerRepoPath: string;
     tags?: string[];
     displayName?: string;
+    url?: string;
   },
 ): RegistryProject {
   if (!input.callerRepoPath || !path.isAbsolute(input.callerRepoPath.replace(/^~(?=\/|$)/, os.homedir()))) {
@@ -79,8 +85,9 @@ export function buildRegistration(
   if (bound) {
     throw new Error(`repo ${input.callerRepoPath} is already bound to slug "${bound.slug}"`);
   }
-  const { callerRepoPath, ...rest } = input;
-  return buildStaticEntry({ ...rest, localPath: collapseHome(callerRepoPath) });
+  const { callerRepoPath, url, ...rest } = input;
+  const localPath = collapseHome(callerRepoPath);
+  return url === undefined ? buildStaticEntry({ ...rest, localPath }) : buildExternalEntry({ ...rest, localPath, url });
 }
 
 const LISTING_FILE = 'bilko.listing.json';

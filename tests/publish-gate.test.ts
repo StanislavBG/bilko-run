@@ -298,6 +298,33 @@ describe('auditGate', () => {
     expect(result.status).toBe('fail');
     expect(result.details).toContain('pnpm audit failed');
   });
+
+  it('uses npm audit in an npm-only repo (package-lock.json, no pnpm-lock.yaml)', async () => {
+    const clean = JSON.stringify({ metadata: { vulnerabilities: { high: 0, critical: 0 } } });
+    vi.mocked(execSync).mockReturnValue(clean as never);
+    vi.mocked(existsSync).mockImplementation((p) => String(p) === '/tmp/fake-npm-repo/package-lock.json');
+    try {
+      const result = await auditGate(makeCtx({ sourceRepo: '/tmp/fake-npm-repo' }));
+      expect(result.status).toBe('pass');
+      expect(vi.mocked(execSync).mock.lastCall?.[0]).toBe('npm audit --omit=dev --audit-level=high --json');
+    } finally {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      vi.mocked(existsSync).mockImplementation(actual.existsSync);
+    }
+  });
+
+  it('keeps pnpm audit when pnpm-lock.yaml is present', async () => {
+    const clean = JSON.stringify({ metadata: { vulnerabilities: { high: 0, critical: 0 } } });
+    vi.mocked(execSync).mockReturnValue(clean as never);
+    vi.mocked(existsSync).mockImplementation((p) => String(p).startsWith('/tmp/fake-both-repo/'));
+    try {
+      await auditGate(makeCtx({ sourceRepo: '/tmp/fake-both-repo' }));
+      expect(vi.mocked(execSync).mock.lastCall?.[0]).toBe('pnpm audit --prod --audit-level=high --json');
+    } finally {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      vi.mocked(existsSync).mockImplementation(actual.existsSync);
+    }
+  });
 });
 
 // ── runGates integration ─────────────────────────────────────────────────────

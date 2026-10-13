@@ -173,6 +173,50 @@ describe('listing and content standards', () => {
     ).toBe(false);
   });
 
+  it('parses the marketing listing fields', () => {
+    const listing = {
+      offering: 'showcase',
+      pricing: 'none',
+      callToAction: 'Open the portfolio',
+      avoidClaims: ['Not a SaaS'],
+    };
+    const result = RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.listing).toEqual(listing);
+  });
+
+  it('rejects an unknown offering', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { offering: 'startup' } }).success
+    ).toBe(false);
+  });
+
+  it('rejects a callToAction over 120 chars', () => {
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { callToAction: 'x'.repeat(121) } })
+        .success
+    ).toBe(false);
+  });
+
+  it('rejects more than 5 avoidClaims', () => {
+    const avoidClaims = ['a', 'b', 'c', 'd', 'e', 'f'];
+    expect(
+      RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { avoidClaims } }).success
+    ).toBe(false);
+  });
+
+  it('rejects a ContentGrade mention in avoidClaims, naming slug and field', () => {
+    const result = RegistrySchema.safeParse([
+      { ...BASE_ENTRY, listing: { avoidClaims: ['fine', 'Do not say ContentGrade'] } },
+    ]);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join('\n');
+      expect(msg).toContain('foo-bar');
+      expect(msg).toContain('listing.avoidClaims[1]');
+    }
+  });
+
   it('rejects an http thumbnail', () => {
     expect(
       RegistryProjectSchema.safeParse({ ...BASE_ENTRY, thumbnail: 'http://x' }).success

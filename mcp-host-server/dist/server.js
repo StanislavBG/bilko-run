@@ -242,7 +242,7 @@ server.registerTool('unregister_project', {
 // 4b) update_project_listing ────────────────────────────────────────────
 server.registerTool('update_project_listing', {
     title: 'Update a project listing',
-    description: 'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints}). Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. Commits and pushes; bilko.run redeploys in ~1 minute.',
+    description: 'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints,offering,pricing,callToAction,avoidClaims}). offering/pricing/callToAction/avoidClaims tell promoters (e.g. Burrow) what kind of project this is, what the reader should do, and claims never to make. Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. Commits and pushes; bilko.run redeploys in ~1 minute.',
     inputSchema: {
         slug: SlugSchema,
         callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),

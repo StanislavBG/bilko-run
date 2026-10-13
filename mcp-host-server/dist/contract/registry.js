@@ -23,6 +23,16 @@ export const ProjectHostSchema = z.discriminatedUnion('kind', [
     StaticPathHostSchema,
     ExternalUrlHostSchema,
 ]);
+export const ListingOfferingSchema = z.enum([
+    'saas',
+    'free-tool',
+    'showcase',
+    'open-source',
+    'game',
+    'content',
+    'experiment',
+]);
+export const ListingPricingSchema = z.enum(['free', 'freemium', 'paid', 'none']);
 export const ListingSchema = z
     .object({
     detail: z.string().min(1).max(400).optional(),
@@ -31,6 +41,10 @@ export const ListingSchema = z
     lang: z.string().min(1).max(40).optional(),
     audience: z.string().max(200).optional(),
     talkingPoints: z.array(z.string().min(1).max(200)).max(5).optional(),
+    offering: ListingOfferingSchema.optional(),
+    pricing: ListingPricingSchema.optional(),
+    callToAction: z.string().min(1).max(120).optional(),
+    avoidClaims: z.array(z.string().min(1).max(200)).max(5).optional(),
 })
     .strict();
 export const RegistryProjectSchema = z
@@ -64,10 +78,11 @@ function listingTextFields(entry) {
     (entry.tags ?? []).forEach((t, i) => fields.push([`tags[${i}]`, t]));
     const l = entry.listing;
     if (l) {
-        for (const k of ['detail', 'metric', 'metricLabel', 'lang', 'audience']) {
+        for (const k of ['detail', 'metric', 'metricLabel', 'lang', 'audience', 'callToAction']) {
             fields.push([`listing.${k}`, l[k]]);
         }
         (l.talkingPoints ?? []).forEach((t, i) => fields.push([`listing.talkingPoints[${i}]`, t]));
+        (l.avoidClaims ?? []).forEach((t, i) => fields.push([`listing.avoidClaims[${i}]`, t]));
     }
     return fields.filter((f) => typeof f[1] === 'string');
 }

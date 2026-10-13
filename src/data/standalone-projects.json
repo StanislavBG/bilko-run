@@ -271,15 +271,15 @@
     ],
     "public": true,
     "listing": {
-      "detail": "Agents read sentiment across ten subreddits, place trades, and publish every position live. Wins and losses both — radical transparency as a feature.",
-      "metric": "10",
-      "metricLabel": "subreddits",
-      "lang": "Python",
-      "audience": "People curious whether Reddit sentiment can drive real trades.",
-      "talkingPoints": [
-        "Autonomous trading bots read sentiment across ten subreddits.",
-        "Every position is published live — wins and losses.",
-        "Results are compared against SPY on a public dashboard."
+      "offering": "experiment",
+      "pricing": "none",
+      "callToAction": "Follow the public trade log and see how the account does against SPY",
+      "avoidClaims": [
+        "Never present it as financial or investment advice, or as signals anyone should trade on.",
+        "Never claim it is profitable, beats the market, or has guaranteed or expected returns; the options book lost about 50% and was hibernated.",
+        "Never say it trades real money; every order goes to an Alpaca paper (simulated) account.",
+        "Never call it a service, fund or SaaS that people can invest in, subscribe to, or copy trades from.",
+        "Never claim Reddit sentiment reliably predicts stock or options prices."
       ]
     }
   },

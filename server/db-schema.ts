@@ -153,6 +153,21 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_page_hits_date ON page_hits(date)`,
   `CREATE INDEX IF NOT EXISTS idx_page_hits_slug_date ON page_hits(slug, date)`,
   `CREATE INDEX IF NOT EXISTS idx_page_hits_ts ON page_hits(ts_ms)`,
+  `CREATE TABLE IF NOT EXISTS click_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts_ms INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    path TEXT NOT NULL,
+    slug TEXT,
+    tag TEXT,
+    el_id TEXT,
+    label TEXT,
+    href TEXT,
+    visitor_hash TEXT,
+    is_bot INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_click_events_date ON click_events(date)`,
+  `CREATE INDEX IF NOT EXISTS idx_click_events_path_date ON click_events(path, date)`,
   `CREATE TABLE IF NOT EXISTS social_roast_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rival_pair_id INTEGER REFERENCES social_roast_rivals(id),

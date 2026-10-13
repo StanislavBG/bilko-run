@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBot } from '../services/analytics.js';
+import { slugFromPath, visitorHash } from '../page-hits.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
 // Event allowlist (must match client-side enum).
@@ -196,6 +197,47 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       }
     } catch { /* never fail */ }
     return { ok: true };
+  });
+
+  // Click beacon: one row per click (page, element, link target). Accepts JSON
+  // or text/plain (navigator.sendBeacon). Always 204 except on a bad path.
+  app.post('/api/analytics/click', async (req, reply) => {
+    try {
+      let body: any = req.body;
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch { body = null; }
+      }
+      const str = (v: unknown, max: number): string => (typeof v === 'string' ? v.slice(0, max) : '');
+      const path = str(body?.path, 300);
+      if (!path.startsWith('/')) {
+        reply.status(400);
+        return { error: 'path required' };
+      }
+
+      const ip = (req.ip as string | undefined) ?? null;
+      if (!checkEventRate(null, ip, EVENT_RATE_LIMIT_VISITOR, EVENT_RATE_LIMIT_IP, 'click')) {
+        reply.status(204);
+        return reply.send();
+      }
+
+      const tag = str(body?.tag, 20).toLowerCase() || null;
+      const elId = str(body?.id, 80) || null;
+      const label = str(body?.label, 400).replace(/\s+/g, ' ').trim().slice(0, 80) || null;
+      const rawHref = str(body?.href, 300);
+      const href = /^(https?:\/\/|\/(?![/\\]))/i.test(rawHref) ? rawHref : null;
+
+      const ua = String(req.headers['user-agent'] ?? '').slice(0, 300);
+      const nowMs = Date.now();
+      const date = new Date(nowMs).toISOString().slice(0, 10);
+      await dbRun(
+        `INSERT INTO click_events (ts_ms, date, path, slug, tag, el_id, label, href, visitor_hash, is_bot)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        nowMs, date, path, slugFromPath(path), tag, elId, label, href,
+        visitorHash(date, ip ?? '', ua), isBot(ua) ? 1 : 0,
+      );
+    } catch { /* never fail */ }
+    reply.status(204);
+    return reply.send();
   });
 
   // Dashboard stats — admin only

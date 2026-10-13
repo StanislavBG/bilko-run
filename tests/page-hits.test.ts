@@ -1,11 +1,18 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+
+const { verifyMock } = vi.hoisted(() => ({ verifyMock: vi.fn() }));
+vi.mock('../server/clerk.js', async (orig) => ({
+  ...(await orig<typeof import('../server/clerk.js')>()),
+  verifyClerkToken: verifyMock,
+}));
+
 import Fastify from 'fastify';
 import staticPlugin from '@fastify/static';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { initDb, dbRun, dbAll } from '../server/db.js';
-import { registerPageHitRecorder, flushPageHits, slugFromPath } from '../server/page-hits.js';
+import { registerPageHitRecorder, flushPageHits, slugFromPath, stableVisitorId, sessionCookie, recordPageHit } from '../server/page-hits.js';
 
 const app = Fastify({ logger: false });
 registerPageHitRecorder(app, { flush: false });
@@ -29,6 +36,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await dbRun('DELETE FROM page_hits');
+  verifyMock.mockReset();
+  verifyMock.mockResolvedValue(null);
 });
 
 const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36';
@@ -78,7 +87,7 @@ describe('page hit recorder', () => {
     expect((await rows())[0].is_bot).toBe(1);
   });
 
-  it('shares one hashed visitor per IP+UA per day and stores no IP', async () => {
+  it('shares one hashed visitor per IP+UA per day', async () => {
     const opts = { method: 'GET' as const, url: '/projects/outdoor-hours/', headers: { 'user-agent': CHROME }, remoteAddress: '203.0.113.7' };
     await app.inject(opts);
     await app.inject(opts);
@@ -88,8 +97,6 @@ describe('page hit recorder', () => {
     expect(r).toHaveLength(2);
     expect(r[0].visitor_hash).toMatch(/^[0-9a-f]{16}$/);
     expect(r[0].visitor_hash).toBe(r[1].visitor_hash);
-    expect(JSON.stringify(r)).not.toContain('203.0.113.7');
-    expect(JSON.stringify(r)).not.toContain('Windows NT');
   });
 });
 
@@ -116,5 +123,79 @@ describe('page hit recorder over @fastify/static', () => {
     const r = await rows();
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ slug: 'demo', status: 200, path: '/projects/demo/' });
+  });
+});
+
+interface Detail { ip: string | null; ua: string | null; referrer: string | null; visitor_id: string | null; user_email: string | null; is_admin: number }
+const detail = () => dbAll<Detail>('SELECT * FROM page_hits ORDER BY id');
+const ADMIN = 'bilkobibitkov2000@gmail.com';
+
+describe('full request detail', () => {
+  it('stores ip, ua, referrer and a stable visitor_id', async () => {
+    await app.inject({
+      method: 'GET', url: '/projects/outdoor-hours/', remoteAddress: '203.0.113.7',
+      headers: { 'user-agent': CHROME, referer: 'https://www.google.com/search?q=x' },
+    });
+    await settle();
+    await flushPageHits();
+    const [r] = await detail();
+    expect(r.ip).toBe('203.0.113.7');
+    expect(r.ua).toBe(CHROME);
+    expect(r.referrer).toBe('https://www.google.com/search?q=x');
+    expect(r.visitor_id).toBe(stableVisitorId('203.0.113.7', CHROME));
+    expect(r.visitor_id).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('gives the same visitor_id on different dates but different daily hashes', async () => {
+    const base = { path: '/', status: 200, ip: '198.51.100.2', ua: CHROME };
+    recordPageHit({ ...base, ts: Date.UTC(2026, 0, 1, 12) });
+    recordPageHit({ ...base, ts: Date.UTC(2026, 0, 2, 12) });
+    await flushPageHits();
+    const r = await dbAll<{ visitor_id: string; visitor_hash: string }>('SELECT * FROM page_hits ORDER BY id');
+    expect(r).toHaveLength(2);
+    expect(r[0].visitor_id).toBe(r[1].visitor_id);
+    expect(r[0].visitor_hash).not.toBe(r[1].visitor_hash);
+  });
+
+  it('sessionCookie extracts __session', () => {
+    expect(sessionCookie('a=1; __session=tok; b=2')).toBe('tok');
+    expect(sessionCookie('a=1')).toBeNull();
+    expect(sessionCookie(undefined)).toBeNull();
+  });
+
+  it('identifies an admin from the __session cookie', async () => {
+    verifyMock.mockResolvedValue(ADMIN);
+    await app.inject({
+      method: 'GET', url: '/projects/outdoor-hours/',
+      headers: { 'user-agent': CHROME, cookie: '__session=tok' },
+    });
+    await settle();
+    await flushPageHits();
+    expect(verifyMock).toHaveBeenCalledWith('Bearer tok');
+    const [r] = await detail();
+    expect(r.user_email).toBe(ADMIN);
+    expect(r.is_admin).toBe(1);
+  });
+
+  it('leaves identity empty without a cookie or when lookup throws', async () => {
+    await app.inject({ method: 'GET', url: '/projects/outdoor-hours/', headers: { 'user-agent': CHROME } });
+    verifyMock.mockRejectedValue(new Error('boom'));
+    await app.inject({ method: 'GET', url: '/projects/outdoor-hours/', headers: { 'user-agent': CHROME, cookie: '__session=bad' } });
+    await settle();
+    await flushPageHits();
+    const r = await detail();
+    expect(r).toHaveLength(2);
+    for (const x of r) { expect(x.user_email).toBeNull(); expect(x.is_admin).toBe(0); }
+  });
+
+  it('never verifies tokens for bots', async () => {
+    await app.inject({
+      method: 'GET', url: '/projects/outdoor-hours/',
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)', cookie: '__session=tok' },
+    });
+    await settle();
+    await flushPageHits();
+    expect(verifyMock).not.toHaveBeenCalled();
+    expect(await detail()).toHaveLength(1);
   });
 });

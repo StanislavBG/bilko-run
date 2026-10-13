@@ -571,6 +571,14 @@ export const MIGRATIONS = [
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
+  page_hits: [
+    ['ip', 'TEXT'],
+    ['ua', 'TEXT'],
+    ['referrer', 'TEXT'],
+    ['visitor_id', 'TEXT'],
+    ['user_email', 'TEXT'],
+    ['is_admin', 'INTEGER DEFAULT 0'],
+  ],
   page_views: [
     ['email', 'TEXT'],
     ['utm_source', 'TEXT'],

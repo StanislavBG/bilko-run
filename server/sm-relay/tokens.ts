@@ -2,9 +2,8 @@
 // Ported from session-manager web-remote/relay/src/tokens.ts.
 // Auth-mechanism-agnostic: `userId` is the Clerk user's email (see routes/sm-relay.ts).
 // Long-lived device tokens persist in the `sm_relay_devices` table and client tokens
-// in `sm_relay_clients`, so paired desktops survive a redeploy. Both expire on a
-// sliding window: each successful verify pushes expiry out again, so a token in use
-// stays paired indefinitely and only an idle one lapses. Short-lived OTPs, WS tickets and rate counters stay in-process —
+// in `sm_relay_clients`, so paired desktops survive a redeploy. Neither expires: a
+// pairing lasts until the owner revokes it (row delete). Short-lived OTPs, WS tickets and rate counters stay in-process —
 // losing them on redeploy only means re-requesting a code or ticket.
 import crypto from 'node:crypto';
 import { dbGet, dbAll, dbRun } from '../db.js';
@@ -30,7 +29,8 @@ export interface DeviceRecord {
   userId: string;
   email: string;
   issuedAt: number;
-  expiresAt: number;
+  /** Always null: device tokens never expire. Kept so API consumers see a stable shape. */
+  expiresAt: null;
   devicePubKey: string;
 }
 
@@ -50,17 +50,16 @@ export interface ClientRecord {
   email: string;
   clientName: string;
   issuedAt: number;
-  expiresAt: number;
+  /** Always null: client tokens never expire. */
+  expiresAt: null;
 }
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_RATE_LIMIT_COUNT = 10;
 const OTP_RATE_WINDOW_MS = 60 * 60 * 1000;
 const WS_TICKET_TTL_MS = 30 * 1000;
-const DEVICE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
-const CLIENT_TOKEN_TTL_MS = DEVICE_TOKEN_TTL_MS;
-/** A verified token is renewed once it has aged this much, so renewal writes at most this often. */
-const TOKEN_RENEW_AFTER_MS = 10 * 24 * 60 * 60 * 1000;
+/** Written to the legacy NOT NULL `expires_at` column; tokens never expire, so it is never read. */
+const NO_EXPIRY = 0;
 
 // Unambiguous alphanumeric charset (excludes 0/O, 1/I, 8/B look-alikes)
 const OTP_CHARSET = 'ACDEFGHJKLMNPQRTUVWXY234679';
@@ -131,7 +130,6 @@ interface DeviceRow {
   user_id: string;
   email: string;
   issued_at: number;
-  expires_at: number;
   device_pub_key: string;
 }
 
@@ -141,12 +139,12 @@ function toDevice(row: DeviceRow): DeviceRecord {
     userId: row.user_id,
     email: row.email,
     issuedAt: Number(row.issued_at),
-    expiresAt: Number(row.expires_at),
+    expiresAt: null,
     devicePubKey: row.device_pub_key,
   };
 }
 
-const DEVICE_COLS = 'device_id, user_id, email, issued_at, expires_at, device_pub_key';
+const DEVICE_COLS = 'device_id, user_id, email, issued_at, device_pub_key';
 
 /** Re-pairing a deviceId replaces its row, which invalidates the previous token. */
 export async function issueDeviceToken(
@@ -163,36 +161,23 @@ export async function issueDeviceToken(
      ON CONFLICT(device_id) DO UPDATE SET
        token_hash = excluded.token_hash, user_id = excluded.user_id, email = excluded.email,
        issued_at = excluded.issued_at, expires_at = excluded.expires_at, device_pub_key = excluded.device_pub_key`,
-    deviceId, hashToken(token), userId, email, now, now + DEVICE_TOKEN_TTL_MS, devicePubKey,
+    deviceId, hashToken(token), userId, email, now, NO_EXPIRY, devicePubKey,
   );
   return token;
 }
 
-export async function verifyDeviceToken(token: string, now = Date.now()): Promise<DeviceRecord | null> {
+export async function verifyDeviceToken(token: string): Promise<DeviceRecord | null> {
   const row = await dbGet<DeviceRow>(
     `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE token_hash = ?`,
     hashToken(token),
   );
-  if (!row) return null;
-  if (now > Number(row.expires_at)) {
-    await dbRun('DELETE FROM sm_relay_devices WHERE device_id = ?', row.device_id);
-    return null;
-  }
-  if (Number(row.expires_at) - now < DEVICE_TOKEN_TTL_MS - TOKEN_RENEW_AFTER_MS) {
-    // Keyed on token_hash too, so a concurrent re-pair's fresh row is never touched.
-    row.expires_at = now + DEVICE_TOKEN_TTL_MS;
-    await dbRun(
-      'UPDATE sm_relay_devices SET expires_at = ? WHERE device_id = ? AND token_hash = ?',
-      row.expires_at, row.device_id, hashToken(token),
-    );
-  }
-  return toDevice(row);
+  return row ? toDevice(row) : null;
 }
 
-export async function getDevice(deviceId: string, now = Date.now()): Promise<DeviceRecord | null> {
+export async function getDevice(deviceId: string): Promise<DeviceRecord | null> {
   const row = await dbGet<DeviceRow>(
-    `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE device_id = ? AND expires_at >= ?`,
-    deviceId, now,
+    `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE device_id = ?`,
+    deviceId,
   );
   return row ? toDevice(row) : null;
 }
@@ -203,10 +188,10 @@ export async function revokeDevice(deviceId: string): Promise<boolean> {
   return changes > 0;
 }
 
-export async function getDevicesForUser(userId: string, now = Date.now()): Promise<Array<Omit<DeviceRecord, 'userId'>>> {
+export async function getDevicesForUser(userId: string): Promise<Array<Omit<DeviceRecord, 'userId'>>> {
   const rows = await dbAll<DeviceRow>(
-    `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE user_id = ? AND expires_at >= ? ORDER BY issued_at`,
-    userId, now,
+    `SELECT ${DEVICE_COLS} FROM sm_relay_devices WHERE user_id = ? ORDER BY issued_at`,
+    userId,
   );
   return rows.map((r) => {
     const { userId: _u, ...rest } = toDevice(r);
@@ -231,7 +216,6 @@ interface ClientRow {
   email: string;
   client_name: string;
   issued_at: number;
-  expires_at: number;
 }
 
 function toClient(row: ClientRow): ClientRecord {
@@ -241,11 +225,11 @@ function toClient(row: ClientRow): ClientRecord {
     email: row.email,
     clientName: row.client_name,
     issuedAt: Number(row.issued_at),
-    expiresAt: Number(row.expires_at),
+    expiresAt: null,
   };
 }
 
-const CLIENT_COLS = 'client_id, user_id, email, client_name, issued_at, expires_at';
+const CLIENT_COLS = 'client_id, user_id, email, client_name, issued_at';
 
 export async function issueClientToken(
   userId: string,
@@ -258,40 +242,31 @@ export async function issueClientToken(
   await dbRun(
     `INSERT INTO sm_relay_clients (client_id, token_hash, user_id, email, client_name, issued_at, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    clientId, hashToken(clientToken), userId, email, clientName, now, now + CLIENT_TOKEN_TTL_MS,
+    clientId, hashToken(clientToken), userId, email, clientName, now, NO_EXPIRY,
   );
   return { clientId, clientToken };
 }
 
-export async function verifyClientToken(token: string, now = Date.now()): Promise<ClientRecord | null> {
+export async function verifyClientToken(token: string): Promise<ClientRecord | null> {
   const row = await dbGet<ClientRow>(
     `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE token_hash = ?`,
     hashToken(token),
   );
-  if (!row) return null;
-  if (now > Number(row.expires_at)) {
-    await dbRun('DELETE FROM sm_relay_clients WHERE client_id = ?', row.client_id);
-    return null;
-  }
-  if (Number(row.expires_at) - now < CLIENT_TOKEN_TTL_MS - TOKEN_RENEW_AFTER_MS) {
-    row.expires_at = now + CLIENT_TOKEN_TTL_MS;
-    await dbRun('UPDATE sm_relay_clients SET expires_at = ? WHERE client_id = ?', row.expires_at, row.client_id);
-  }
-  return toClient(row);
+  return row ? toClient(row) : null;
 }
 
-export async function getClient(clientId: string, now = Date.now()): Promise<ClientRecord | null> {
+export async function getClient(clientId: string): Promise<ClientRecord | null> {
   const row = await dbGet<ClientRow>(
-    `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE client_id = ? AND expires_at >= ?`,
-    clientId, now,
+    `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE client_id = ?`,
+    clientId,
   );
   return row ? toClient(row) : null;
 }
 
-export async function getClientsForUser(userId: string, now = Date.now()): Promise<Array<Omit<ClientRecord, 'userId'>>> {
+export async function getClientsForUser(userId: string): Promise<Array<Omit<ClientRecord, 'userId'>>> {
   const rows = await dbAll<ClientRow>(
-    `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE user_id = ? AND expires_at >= ? ORDER BY issued_at`,
-    userId, now,
+    `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE user_id = ? ORDER BY issued_at`,
+    userId,
   );
   return rows.map((r) => {
     const { userId: _u, ...rest } = toClient(r);
@@ -339,7 +314,8 @@ export function consumeWsTicket(ticket: string, now = Date.now()): WsTicketEntry
   return entry;
 }
 
-export async function purgeExpired(now = Date.now()): Promise<void> {
+/** In-process stores only; paired device and client rows never expire. */
+export function purgeExpired(now = Date.now()): void {
   for (const [code, entry] of otpStore) {
     if (now > entry.expiresAt) otpStore.delete(code);
   }
@@ -349,6 +325,4 @@ export async function purgeExpired(now = Date.now()): Promise<void> {
   for (const [userId, rate] of otpRateStore) {
     if (now > rate.resetAt) otpRateStore.delete(userId);
   }
-  await dbRun('DELETE FROM sm_relay_devices WHERE expires_at < ?', now);
-  await dbRun('DELETE FROM sm_relay_clients WHERE expires_at < ?', now);
 }

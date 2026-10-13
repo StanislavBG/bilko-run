@@ -229,16 +229,4 @@ describe('sm-relay client tokens', () => {
     expect(await tokens.verifyClientToken(theirs.clientToken)).not.toBeNull();
     await app.close();
   });
-
-  it('expired client tokens are rejected and purged', async () => {
-    const { tokens } = await boot();
-    const longAgo = Date.now() - 100 * 24 * 60 * 60 * 1000;
-    const { clientToken, clientId } = await tokens.issueClientToken(OWNER, OWNER, 'old', longAgo);
-    expect(await tokens.verifyClientToken(clientToken)).toBeNull();
-    expect(await tokens.getClient(clientId)).toBeNull();
-
-    const again = await tokens.issueClientToken(OWNER, OWNER, 'old', longAgo);
-    await tokens.purgeExpired();
-    expect(await dbGet('SELECT 1 FROM sm_relay_clients WHERE client_id = ?', again.clientId)).toBeUndefined();
-  });
 });

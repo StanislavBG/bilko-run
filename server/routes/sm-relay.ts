@@ -285,9 +285,7 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
     reply.send({ ok: true });
   });
 
-  // Periodic housekeeping (in-process stores + expired device rows)
-  const timer = setInterval(() => {
-    purgeExpired().catch((err) => app.log.warn({ err }, 'sm-relay purgeExpired failed'));
-  }, 5 * 60 * 1000);
+  // Periodic housekeeping (in-process OTPs, WS tickets, rate counters)
+  const timer = setInterval(() => purgeExpired(), 5 * 60 * 1000);
   if (typeof timer.unref === 'function') timer.unref();
 }

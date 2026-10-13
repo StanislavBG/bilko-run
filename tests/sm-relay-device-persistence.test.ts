@@ -108,16 +108,4 @@ describe('sm-relay device token persistence', () => {
     expect(await tokens.getDevicesForUser(USER)).toHaveLength(1);
     await app.close();
   });
-
-  it('expired tokens are rejected and purged', async () => {
-    const { tokens } = await boot();
-    const issuedAt = Date.now() - 100 * 24 * 60 * 60 * 1000;
-    const token = await tokens.issueDeviceToken(DEVICE_ID, USER, USER, PUB_KEY, issuedAt);
-    expect(await tokens.verifyDeviceToken(token)).toBeNull();
-    expect(await tokens.getDevice(DEVICE_ID)).toBeNull();
-
-    await tokens.issueDeviceToken(DEVICE_ID, USER, USER, PUB_KEY, issuedAt);
-    await tokens.purgeExpired();
-    expect(await dbGet('SELECT 1 FROM sm_relay_devices WHERE device_id = ?', DEVICE_ID)).toBeUndefined();
-  });
 });

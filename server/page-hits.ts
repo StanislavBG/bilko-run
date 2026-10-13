@@ -4,13 +4,15 @@ import type { InStatement } from '@libsql/client';
 import { getClient } from './db.js';
 import { dayKey } from './egress.js';
 import { parseUa, isBot } from './services/analytics.js';
+import { verifyClerkToken, ADMIN_EMAILS } from './clerk.js';
 
 // Server-side page-hit recorder: logs every HTML document response, so pages
 // that never run client JS (static-path apps) still show up in observability.
 //
 // Same constraints as egress.ts: nothing touches the DB on the request path
 // (rows buffer in memory, flushed on a timer), and a recording failure never
-// fails a response. No raw IP or user-agent is stored — only a per-day hash.
+// fails a response. Rows carry full request detail (IP, user-agent, referrer),
+// a cross-day visitor_id, and the Clerk email when a __session cookie resolves.
 
 const FLUSH_MS = 60_000;
 const BATCH_CHUNK = 100;
@@ -26,6 +28,7 @@ export interface PageHitInput {
   referer?: string | null;
   host?: string | null;
   country?: string | null;
+  userEmail?: string | null;
 }
 
 interface PageHitRow {
@@ -41,6 +44,12 @@ interface PageHitRow {
   browser: string;
   os: string;
   is_bot: number;
+  ip: string;
+  ua: string;
+  referrer: string | null;
+  visitor_id: string;
+  user_email: string | null;
+  is_admin: number;
 }
 
 let buffer: PageHitRow[] = [];
@@ -74,6 +83,21 @@ export function visitorHash(date: string, ip: string, ua: string): string {
   return createHash('sha256').update(`${date}|${ip}|${ua}`).digest('hex').slice(0, 16);
 }
 
+export function stableVisitorId(ip: string, ua: string): string {
+  const salt = process.env.ANALYTICS_VISITOR_SALT ?? 'bilko-visitor-v1';
+  return createHash('sha256').update(`${salt}|${ip}|${ua}`).digest('hex').slice(0, 16);
+}
+
+export function sessionCookie(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === '__session') return part.slice(eq + 1).trim() || null;
+  }
+  return null;
+}
+
 export function recordPageHit(input: PageHitInput): void {
   if (buffer.length >= MAX_BUFFER) return;
   const date = dayKey(input.ts);
@@ -92,6 +116,12 @@ export function recordPageHit(input: PageHitInput): void {
     browser,
     os,
     is_bot: isBot(input.ua) ? 1 : 0,
+    ip: input.ip.slice(0, 64),
+    ua: input.ua.slice(0, 400),
+    referrer: input.referer ? input.referer.slice(0, 500) : null,
+    visitor_id: stableVisitorId(input.ip, input.ua),
+    user_email: input.userEmail ?? null,
+    is_admin: input.userEmail && ADMIN_EMAILS.includes(input.userEmail.toLowerCase()) ? 1 : 0,
   });
 }
 
@@ -103,9 +133,9 @@ export async function flushPageHits(): Promise<void> {
       buffer = [];
       const client = getClient();
       const stmts: InStatement[] = rows.map((r) => ({
-        sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot],
+        sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot, r.ip, r.ua, r.referrer, r.visitor_id, r.user_email, r.is_admin],
       }));
       for (let i = 0; i < stmts.length; i += BATCH_CHUNK) {
         try {
@@ -142,7 +172,7 @@ export function registerPageHitRecorder(app: FastifyInstance, opts: { flush?: bo
 
       const h = req.headers;
       const country = (h['cf-ipcountry'] ?? h['x-vercel-ip-country'] ?? h['x-country']) as string | undefined;
-      recordPageHit({
+      const input: PageHitInput = {
         ts: Date.now(),
         path,
         status: reply.statusCode,
@@ -151,7 +181,16 @@ export function registerPageHitRecorder(app: FastifyInstance, opts: { flush?: bo
         referer: h.referer as string | undefined,
         host: h.host as string | undefined,
         country,
-      });
+      };
+      const token = isBot(input.ua) ? null : sessionCookie(h.cookie);
+      // Identity lookup runs detached: the response is already sent, and any
+      // failure just records the hit anonymously.
+      void (async () => {
+        try {
+          if (token) input.userEmail = await verifyClerkToken('Bearer ' + token);
+        } catch { /* anonymous */ }
+        try { recordPageHit(input); } catch { /* never break the server */ }
+      })();
     } catch { /* recording must never break a response */ }
   });
 

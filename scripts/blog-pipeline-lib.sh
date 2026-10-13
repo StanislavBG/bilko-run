@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sourced by blog-draft.sh (and later blog-seed.sh / the watchdog) — do not execute,
+# Sourced by blog-draft.sh, blog-seed.sh and blog-cadence-watchdog.sh — do not execute,
 # and do not `set -e` here. Shared helpers for the blog-from-git pipeline entrypoints.
 
 BP_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,4 +112,68 @@ The script checks these paths afterward and fails the run if any changed.
 If rotation finds nothing worth writing (and the no-new-work spotlight fallback has no candidate either), do not invent a post and do not write post.md. Print exactly one final line: DRAFT_RESULT: skipped reason="<why>"
 Otherwise, when post.md is done, print exactly one final line: DRAFT_RESULT: drafted
 PROMPT
+}
+
+# bp_body <post.md> — the markdown body below the closing frontmatter fence.
+bp_body() {
+  awk 'NR == 1 { next } fence { print; next } $0 == "---" { fence = 1 }' "$1"
+}
+
+# bp_pending_draft_to_bundle <draft.md> <bundle_dir> — turns a pending watchdog draft
+# (frontmatter title, slug, category, tone, published_at, authored_*; no excerpt) into a
+# blog-seed.sh bundle. published_at is NOT carried over: a stale value would make the cadence
+# gate refuse the post forever. A missing excerpt is derived from the first prose line.
+# An optional drafts/<slug>/images dir next to the draft is copied in. Returns 1 with a reason.
+bp_pending_draft_to_bundle() {
+  local draft="$1" bundle="$2" slug title excerpt category tone body images
+  slug="$(bp_fm_get "$draft" slug)"; title="$(bp_fm_get "$draft" title)"
+  excerpt="$(bp_fm_get "$draft" excerpt)"; category="$(bp_fm_get "$draft" category)"
+  tone="$(bp_fm_get "$draft" tone)"; body="$(bp_body "$draft")"
+  if [[ -z "$excerpt" ]]; then
+    excerpt="$(printf '%s\n' "$body" | awk 'NF && !/^[#!>|`-]/ { print; exit }' | sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/[*_`]//g' | cut -c1-200)"
+  fi
+  if [[ -z "$slug" || -z "$title" || -z "$category" || -z "$excerpt" || -z "$body" ]]; then
+    echo "pending draft is missing slug, title, category, excerpt or body"; return 1
+  fi
+  mkdir -p "$bundle" || return 1
+  {
+    echo "---"
+    jq -nr --arg v "$slug" '"slug: " + ($v | @json)'
+    jq -nr --arg v "$title" '"title: " + ($v | @json)'
+    jq -nr --arg v "$excerpt" '"excerpt: " + ($v | @json)'
+    jq -nr --arg v "$category" '"category: " + ($v | @json)'
+    [[ -n "$tone" ]] && jq -nr --arg v "$tone" '"tone: " + ($v | @json)'
+    echo "---"
+    printf '%s\n' "$body"
+  } > "$bundle/post.md"
+  images="$(dirname "$draft")/$slug/images"
+  if [[ -d "$images" ]]; then
+    mkdir -p "$bundle/images" && cp -r "$images/." "$bundle/images/"
+  fi
+  return 0
+}
+
+# bp_bundle_to_draft <bundle_dir> <draft.md> <published_at> <authored_at> — leaves a reviewable
+# draft (title, slug, excerpt, category, published_at, tone, authored_by, authored_at) and copies
+# the bundle's images next to it in drafts/<slug>/images for a later conversion back.
+bp_bundle_to_draft() {
+  local bundle="$1" draft="$2" published_at="$3" authored_at="$4" slug
+  slug="$(bp_fm_get "$bundle/post.md" slug)"
+  {
+    echo "---"
+    jq -nr --arg v "$(bp_fm_get "$bundle/post.md" title)" '"title: " + ($v | @json)'
+    jq -nr --arg v "$slug" '"slug: " + ($v | @json)'
+    jq -nr --arg v "$(bp_fm_get "$bundle/post.md" excerpt)" '"excerpt: " + ($v | @json)'
+    jq -nr --arg v "$(bp_fm_get "$bundle/post.md" category)" '"category: " + ($v | @json)'
+    echo "published_at: \"$published_at\""
+    echo "tone: \"unspecified (blog-draft)\""
+    echo "authored_by: blog-cadence-watchdog"
+    echo "authored_at: \"$authored_at\""
+    echo "---"
+    bp_body "$bundle/post.md"
+  } > "$draft" || return 1
+  if [[ -d "$bundle/images" ]]; then
+    mkdir -p "$(dirname "$draft")/$slug/images" && cp -r "$bundle/images/." "$(dirname "$draft")/$slug/images/"
+  fi
+  return 0
 }

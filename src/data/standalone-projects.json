@@ -246,7 +246,7 @@
   {
     "slug": "social-signals-trader",
     "name": "Social Signals Trader",
-    "tagline": "Autonomous trading bots reading 10 subreddits — live results, in public.",
+    "tagline": "An end-to-end experiment in market-trading automation driven by social sentiment.",
     "category": "AI Tool · Data",
     "status": "live",
     "year": 2026,
@@ -259,19 +259,18 @@
     "tags": [
       "Reddit",
       "Alpaca",
+      "Paper trading",
+      "Experiment",
       "Free"
     ],
     "public": true,
     "listing": {
-      "offering": "experiment",
-      "pricing": "none",
-      "callToAction": "Follow the public trade log and see how the account does against SPY",
-      "avoidClaims": [
-        "Never present it as financial or investment advice, or as signals anyone should trade on.",
-        "Never claim it is profitable, beats the market, or has guaranteed or expected returns; the options book lost about 50% and was hibernated.",
-        "Never say it trades real money; every order goes to an Alpaca paper (simulated) account.",
-        "Never call it a service, fund or SaaS that people can invest in, subscribe to, or copy trades from.",
-        "Never claim Reddit sentiment reliably predicts stock or options prices."
+      "detail": "A novel, just-for-fun project: WallStreetBets chatter flows through Burrow into an autonomous options trader that runs entirely on cron and trades an Alpaca paper account. A way to explore the market without risk. The only risk is learning automation!",
+      "audience": "People curious how far end-to-end trading automation on social sentiment can go.",
+      "talkingPoints": [
+        "Reddit WallStreetBets sentiment in, paper options trades out, fully automated on cron.",
+        "Paper account only: explore the market without risking money.",
+        "The real experiment is learning automation end to end."
       ]
     }
   },

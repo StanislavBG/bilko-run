@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { registerProjectCatalogRoutes } from '../server/routes/project-catalog.js';
 import { PUBLIC_CARDS, HUB_CARDS } from '../src/data/projectsView.js';
+import { PROJECTS } from '../src/data/projectsRegistry.js';
 
 const app = Fastify();
 
@@ -124,12 +125,11 @@ describe('registry-owned audience / talking_points', () => {
     const projects = (await app.inject({ method: 'GET', url: '/api/projects' })).json().projects as
       { slug: string; audience: string; talking_points: string[] }[];
     const gv = projects.find(p => p.slug === 'git-viewer')!;
-    expect(gv.audience).toBe('Developers who want their GitHub activity to double as a portfolio.');
-    expect(gv.talking_points).toEqual([
-      'Turns your public GitHub repos into a public portfolio page.',
-      'Ranks repos by recency and activity.',
-      'Updates itself when you push code — no manual upkeep.',
-    ]);
+    const entry = PROJECTS.find(p => p.slug === 'git-viewer')!;
+    expect(gv.audience).toBe(entry.listing?.audience ?? '');
+    expect(gv.talking_points).toEqual(entry.listing?.talkingPoints ?? []);
+    expect(gv.audience.length).toBeGreaterThan(0);
+    expect(gv.talking_points.length).toBeGreaterThan(0);
   });
 
   it('yields audience "" and talking_points [] for a public project with no listing', async () => {

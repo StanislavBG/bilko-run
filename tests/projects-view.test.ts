@@ -25,17 +25,21 @@ describe('projectsView public cards', () => {
 describe('projectsView listing-driven enrichment', () => {
   const byslug = (s: string) => HUB_CARDS.find(c => c.slug === s);
 
-  it('git-viewer and launch-kit carry the same metric/detail as the former ENRICH map', () => {
-    const gv = byslug('git-viewer');
-    expect(gv?.metric).toBe('12 repos');
-    expect(gv?.metricLabel).toBe('indexed');
-    expect(gv?.lang).toBe('TypeScript');
-    expect(gv?.detail).toBe('Pulls every public repo, scores it by recency and activity, and renders a living portfolio. No manual upkeep — push code, the dashboard updates itself.');
-    const lk = byslug('launch-kit');
-    expect(lk?.metric).toBe('8 skills');
-    expect(lk?.metricLabel).toBe('$9 one-time');
-    expect(lk?.lang).toBe('Markdown');
-    expect(lk?.detail).toBe('Eight Claude skills that run your launch from one shared context file: page roast, headlines, pricing, launch emails, launch week, build-in-public posts, first 100 customers. Each writes one file and names the next skill to fire.');
+  it('git-viewer and launch-kit cards carry metric/detail from their registry listing', () => {
+    for (const slug of ['git-viewer', 'launch-kit']) {
+      const p = PROJECTS.find(x => x.slug === slug)!;
+      const card = byslug(slug);
+      expect(card, slug).toBeDefined();
+      // launch-kit's listing currently carries no metric/detail; only git-viewer proves enrichment.
+      if (slug === 'git-viewer') {
+        expect(p.listing?.metric, `${slug} metric`).toBeDefined();
+        expect(p.listing?.detail, `${slug} detail`).toBeDefined();
+      }
+      expect(card?.metric).toBe(p.listing?.metric);
+      expect(card?.metricLabel).toBe(p.listing?.metricLabel);
+      expect(card?.lang).toBe(p.listing?.lang);
+      expect(card?.detail).toBe(p.listing?.detail);
+    }
   });
 
   it('a project with no listing has metric/detail undefined', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,6 +18,10 @@ describe('check-blog-watchdog-heartbeat.sh', () => {
   let dir: string;
   let fakeSystemctl: string;
   let retryMarkerFile: string;
+  let fakeNotify: string;
+  let fakeGh: string;
+  let alertStateFile: string;
+  let callLog: string;
 
   function runChecker(heartbeatPath: string): RunResult {
     try {
@@ -29,6 +33,11 @@ describe('check-blog-watchdog-heartbeat.sh', () => {
           // retry marker file — both are stubbed/isolated into the tmp dir.
           SYSTEMCTL: fakeSystemctl,
           BLOG_WATCHDOG_RETRY_MARKER_FILE: retryMarkerFile,
+          // Likewise: never send a real notification or open a real issue.
+          NOTIFY_SEND: fakeNotify,
+          GH: fakeGh,
+          BLOG_WATCHDOG_ALERT_STATE_FILE: alertStateFile,
+          STUB_CALL_LOG: callLog,
         },
         timeout: 10_000,
         encoding: 'utf-8',
@@ -54,6 +63,16 @@ describe('check-blog-watchdog-heartbeat.sh', () => {
       { mode: 0o755 }
     );
     retryMarkerFile = join(dir, '.watchdog-retry-test');
+    alertStateFile = join(dir, '.watchdog-alert-test');
+    callLog = join(dir, 'calls.log');
+    fakeNotify = join(dir, 'fake-notify.sh');
+    fakeGh = join(dir, 'fake-gh.sh');
+    writeFileSync(fakeNotify, '#!/usr/bin/env bash\necho "notify $*" >>"$STUB_CALL_LOG"\nexit 0\n', {
+      mode: 0o755,
+    });
+    writeFileSync(fakeGh, '#!/usr/bin/env bash\necho "gh $*" >>"$STUB_CALL_LOG"\nexit 0\n', {
+      mode: 0o755,
+    });
   });
 
   afterAll(() => {
@@ -121,6 +140,22 @@ describe('check-blog-watchdog-heartbeat.sh', () => {
     const result = runChecker(join(dir, 'does-not-exist.txt'));
     expect(result.status).toBe(1);
   });
+
+  it('escalates a missing-binary heartbeat once, then rate-limits for 24h', () => {
+    rmSync(alertStateFile, { force: true });
+    rmSync(callLog, { force: true });
+    const p = writeHeartbeat('missing-binary.txt', `${freshTs()} error: missing binary pnpm`);
+    const calls = () =>
+      existsSync(callLog) ? readFileSync(callLog, 'utf-8').split('\n').filter(Boolean) : [];
+
+    expect(runChecker(p).status).toBe(1);
+    const first = calls();
+    expect(first.filter((l) => l.startsWith('notify '))).toHaveLength(1);
+    expect(first.some((l) => l.startsWith('gh ') && l.includes('issue create'))).toBe(true);
+
+    expect(runChecker(p).status).toBe(1);
+    expect(calls()).toEqual(first);
+  });
 });
 
 // should_retry is a pure function sourced directly out of the script (guarded
@@ -180,5 +215,45 @@ describe('should_retry', () => {
 
   it('does not retry when the watchdog service is already active', () => {
     expect(runShouldRetry('error: claude -p exited 1', now, '', 'active')).toBe('none');
+  });
+});
+
+function runShouldAlert(kind: string, status: string, nowEpoch: number, state: string): string {
+  return execFileSync(
+    'bash',
+    ['-c', 'source "$1"; should_alert "$2" "$3" "$4" "$5"', '_', SCRIPT, kind, status, String(nowEpoch), state],
+    { timeout: 10_000, encoding: 'utf-8' }
+  ).trim();
+}
+
+describe('should_alert', () => {
+  const now = Math.floor(new Date('2026-06-15T20:00:00Z').getTime() / 1000);
+  const hour = 3600;
+
+  it('alerts immediately on a stale heartbeat', () => {
+    expect(runShouldAlert('stale', '', now, '')).toBe('alert');
+  });
+
+  it('alerts immediately on a missing binary', () => {
+    expect(runShouldAlert('status', 'error: missing binary pnpm', now, '')).toBe('alert');
+  });
+
+  it('waits 12h of unhealthy before alerting on other errors', () => {
+    const status = 'error: cadence gate unavailable';
+    expect(runShouldAlert('status', status, now, `first_bad=${now - hour}`)).toBe('none');
+    expect(runShouldAlert('status', status, now, `first_bad=${now - 13 * hour}`)).toBe('alert');
+  });
+
+  it('is rate-limited to once per 24h for every kind', () => {
+    const state = `first_bad=${now - 20 * hour}\nlast_alert=${now - 2 * hour}`;
+    expect(runShouldAlert('stale', '', now, state)).toBe('none');
+    expect(runShouldAlert('malformed', '', now, state)).toBe('none');
+    expect(runShouldAlert('status', 'error: missing binary pnpm', now, state)).toBe('none');
+  });
+
+  it('does not alert on ok:', () => {
+    expect(runShouldAlert('status', 'ok: within cadence', now, `first_bad=${now - 40 * hour}`)).toBe(
+      'none'
+    );
   });
 });

@@ -116,3 +116,23 @@ Finished drafts are written to `.claude/skills/blog-from-git/drafts/<published-d
 Nothing downstream (seeding, publishing) touches a draft until a human reviews it and explicitly
 tells Claude (interactively) to seed it, per the human-gate instructions in the script itself and
 in `.claude/skills/blog-from-git/SKILL.md`.
+
+## systemd PATH and human escalation
+
+**PATH requirement.** systemd user services start with a minimal `PATH`. The watchdog needs `pnpm`
+(in `~/.npm-global/bin`) and `claude` (in `~/.local/bin`); `scripts/blog-watchdog-env.sh` puts both
+on `PATH`. If either is missing the watchdog writes an `error: missing binary <names>` heartbeat
+instead of failing silently (it once failed with rc=127 for 9 days, 2026-10-03 to 2026-10-12).
+
+**Escalation.** `scripts/check-blog-watchdog-heartbeat.sh` still retries as before, and now also
+alerts a human (`should_alert` decides, `send_alert` delivers):
+
+- Alert **immediately** when the heartbeat is stale, malformed/missing, or reports `error: missing binary`.
+- Alert for any other `error:`/`warn:`/unrecognized status once it has been unhealthy for **12h+**.
+- At most **one alert per 24h**; recovery (`ok:`) deletes the state file, resetting both clocks.
+- Channels: `notify-send --urgency=critical` (desktop) and a GitHub issue on `StanislavBG/bilko-run`
+  titled `Blog watchdog unhealthy — <YYYY-MM-DD PT>` (a comment is added instead if an open
+  `Blog watchdog unhealthy` issue exists). `$HOME/.env.cron` is sourced for `GITHUB_TOKEN`. A failed
+  channel is logged and skipped; `last_alert` is only recorded if at least one channel succeeded.
+- State file: `.claude/skills/blog-from-git/drafts/.watchdog-alert` (override with
+  `BLOG_WATCHDOG_ALERT_STATE_FILE`), lines `first_bad=<epoch>` and `last_alert=<epoch>`.

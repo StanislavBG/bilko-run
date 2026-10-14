@@ -287,13 +287,7 @@
     ],
     "public": true,
     "listing": {
-      "detail": "A novel, just-for-fun project: WallStreetBets chatter flows through Burrow into an autonomous options trader that runs entirely on cron and trades an Alpaca paper account. A way to explore the market without risk. The only risk is learning automation!",
-      "audience": "People curious how far end-to-end trading automation on social sentiment can go.",
-      "talkingPoints": [
-        "Reddit WallStreetBets sentiment in, paper options trades out, fully automated on cron.",
-        "Paper account only: explore the market without risking money.",
-        "The real experiment is learning automation end to end."
-      ]
+      "shareImage": "/projects/social-signals-trader/og.png"
     }
   },
   {

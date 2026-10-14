@@ -13,7 +13,7 @@ window.FEEDBACK_THREADS = {
   },
   "funnel": {
     "breachingSla": 0,
-    "generatedAt": "2026-10-03T16:45:01Z",
+    "generatedAt": "2026-10-03T17:00:02Z",
     "open": 0,
     "positions": {
       "openWatchClosely": 0,
@@ -45,7 +45,7 @@ window.FEEDBACK_THREADS = {
       "medium": 0
     }
   },
-  "generatedAt": "2026-10-03T16:45:01Z",
+  "generatedAt": "2026-10-03T17:00:02Z",
   "schema": 2,
   "threads": [{
     "answered": true,
@@ -1936,7 +1936,7 @@ window.FEEDBACK_THREADS = {
   //       // null/non-finite for a legitimate "can't compute" case (e.g.
   //       // division by zero) — <Help/> falls back to formula-only then.
   //     unit: "$",                       // "$" | "%" | "" | "px" — result unit
-  //     source: "src/social_signals_trader/options_summary.py:250",  // file:line
+  //     source: "src/social_signals_trader/options/options_summary.py:250",  // file:line
   //   }
   //
   // PRDs 1026/1027 wire call-site `inputs` — follow this exact shape so they
@@ -1968,7 +1968,7 @@ window.FEEDBACK_THREADS = {
     }],
     result: v => v.width * 100 * v.contracts - v.credit,
     unit: "$",
-    source: "src/social_signals_trader/options_summary.py:250"
+    source: "src/social_signals_trader/options/options_summary.py:250"
   };
   var TERMS = {
     credit_received: {
@@ -1990,7 +1990,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => -v.net_per_contract * 100 * v.contracts,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:223"
+        source: "src/social_signals_trader/options/options_summary.py:223"
       }
     },
     debit_paid: {
@@ -2016,7 +2016,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.limit_price * 100 * v.contracts,
         unit: "$",
-        source: "src/social_signals_trader/options_chain.py:655"
+        source: "src/social_signals_trader/options/options_chain.py:655"
       }
     },
     open_orders_reconciliation: {
@@ -2040,7 +2040,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.credit,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:223"
+        source: "src/social_signals_trader/options/options_summary.py:223"
       }
     },
     max_loss: {
@@ -2086,7 +2086,7 @@ window.FEEDBACK_THREADS = {
           return String(v.right).toLowerCase() === "call" ? v.short_strike + cps : v.short_strike - cps;
         },
         unit: "$",
-        source: "src/social_signals_trader/aggregations.py:502"
+        source: "src/social_signals_trader/ui/aggregations.py:502"
       }
     },
     cushion: {
@@ -2117,7 +2117,7 @@ window.FEEDBACK_THREADS = {
           return r === "call" ? (v.short_strike - v.spot) / v.spot : (v.spot - v.short_strike) / v.spot;
         },
         unit: "%",
-        source: "src/social_signals_trader/options_summary.py:243"
+        source: "src/social_signals_trader/options/options_summary.py:243"
       }
     },
     band: {
@@ -2156,8 +2156,14 @@ window.FEEDBACK_THREADS = {
           return Math.round((exp.getTime() - today.getTime()) / 86400000);
         },
         unit: "",
-        source: "src/social_signals_trader/options_summary_render.py:195"
+        source: "src/social_signals_trader/ui/options_summary_render.py:195"
       }
+    },
+    fund_hibernated: {
+      label: "Hibernated",
+      short: "The options experiment is over; the fund is not opening new trades.",
+      long: "The options experiment concluded on 2026-10-08. The trader no longer scans for or places new spreads (config flag hibernate = true in data/spread_config.json, mirrored to window.SPREAD_CONFIG.config.hibernate). Positions already open are still managed to exit by the deterministic exit policy, so the book, P/L and trade log keep updating until the last spread closes.",
+      example: "A spread opened on 2026-10-02 and expiring 2026-10-16 still closes on its exit rules; no replacement spread is proposed or placed afterwards."
     },
     last_updated: {
       label: "Last updated",
@@ -2224,7 +2230,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => Math.abs(v.short_strike - v.long_strike),
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:208"
+        source: "src/social_signals_trader/options/options_summary.py:208"
       }
     },
     contracts: {
@@ -2409,7 +2415,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.this_credit - v.median_credit,
         unit: "$",
-        source: "src/social_signals_trader/proposal_comparison.py:build_comparison"
+        source: "src/social_signals_trader/options/proposal_comparison.py:build_comparison"
       }
     },
     proposal_deck_freshness: {
@@ -2439,7 +2445,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => 1 - Math.abs(v.short_leg_delta),
         unit: "%",
-        source: "src/social_signals_trader/options_summary.py:322"
+        source: "src/social_signals_trader/options/options_summary.py:322"
       }
     },
     ev: {
@@ -2476,7 +2482,7 @@ window.FEEDBACK_THREADS = {
           return (pop * creditPc - (1 - pop) * maxLossPc) * v.contracts;
         },
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:325"
+        source: "src/social_signals_trader/options/options_summary.py:325"
       }
     },
     breakeven_credit: {
@@ -2500,7 +2506,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => (1 - v.pop) * v.width * 100 * v.contracts,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:326"
+        source: "src/social_signals_trader/options/options_summary.py:326"
       }
     },
     pct_captured: {
@@ -2524,7 +2530,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.credit == null || v.credit <= 0 ? null : (v.credit - v.close_cost) / v.credit,
         unit: "%",
-        source: "src/social_signals_trader/options_summary.py:269"
+        source: "src/social_signals_trader/options/options_summary.py:269"
       }
     },
     profit_target: {
@@ -2547,7 +2553,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.credit * (1 - v.profit_target_pct),
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:275"
+        source: "src/social_signals_trader/options/options_summary.py:275"
       }
     },
     max_loss_pct: {
@@ -2571,7 +2577,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.credit * (1 + v.max_loss_pct),
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:279"
+        source: "src/social_signals_trader/options/options_summary.py:279"
       }
     },
     strike_breach_exit: {
@@ -2599,7 +2605,7 @@ window.FEEDBACK_THREADS = {
           return String(v.right).toLowerCase() === "put" ? v.short_strike + buffer : v.short_strike - buffer;
         },
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:274"
+        source: "src/social_signals_trader/options/options_summary.py:274"
       }
     },
     bull_put_spread: {
@@ -2648,7 +2654,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => Math.max(v.put_width, v.call_width) * 100 * v.contracts,
         unit: "$",
-        source: "src/social_signals_trader/options_chain.py:1021"
+        source: "src/social_signals_trader/options/options_chain.py:1021"
       }
     },
     condor_pop: {
@@ -2672,7 +2678,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => 1 - Math.abs(v.put_short_delta) - Math.abs(v.call_short_delta),
         unit: "%",
-        source: "src/social_signals_trader/options_chain.py:1021"
+        source: "src/social_signals_trader/options/options_chain.py:1021"
       }
     },
     open_pl: {
@@ -2696,7 +2702,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.credit - v.close_cost,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:266"
+        source: "src/social_signals_trader/options/options_summary.py:266"
       }
     },
     risked_of: {
@@ -2721,7 +2727,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.max_loss ? v.open_pl / v.max_loss : null,
         unit: "%",
-        source: "src/social_signals_trader/options_summary_render.py:674"
+        source: "src/social_signals_trader/ui/options_summary_render.py:674"
       }
     },
     realized_pl: {
@@ -2746,7 +2752,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.credit_received - v.exit_cost,
         unit: "$",
-        source: "src/social_signals_trader/spread_trader.py:1462"
+        source: "src/social_signals_trader/options/spread_trader.py:1462"
       }
     },
     decay: {
@@ -2778,7 +2784,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.equity ? (v.spread_risk + v.stock_value) / v.equity : null,
         unit: "%",
-        source: "src/social_signals_trader/spread_trader.py:517"
+        source: "src/social_signals_trader/options/spread_trader.py:517"
       }
     },
     wide_quote: {
@@ -2802,7 +2808,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.ask + v.bid ? (v.ask - v.bid) / ((v.ask + v.bid) / 2) : null,
         unit: "%",
-        source: "src/social_signals_trader/options_summary.py:183"
+        source: "src/social_signals_trader/options/options_summary.py:183"
       }
     },
     variance_risk_premium: {
@@ -2822,7 +2828,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.avg_implied_vol - v.avg_realized_vol,
         unit: "%",
-        source: "src/social_signals_trader/beta.py:462"
+        source: "src/social_signals_trader/options/beta.py:462"
       }
     },
     risk_reward: {
@@ -2846,7 +2852,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.max_gain ? v.max_loss / v.max_gain : null,
         unit: "",
-        source: "src/social_signals_trader/options_summary.py:250"
+        source: "src/social_signals_trader/options/options_summary.py:250"
       }
     },
     exit_cost: {
@@ -2880,7 +2886,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.contracts ? v.credit / v.contracts : null,
         unit: "$",
-        source: "src/social_signals_trader/spread_trader.py:1415"
+        source: "src/social_signals_trader/options/spread_trader.py:1415"
       }
     },
     collateral_per_contract: {
@@ -2902,7 +2908,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.contracts ? v.collateral / v.contracts : null,
         unit: "$",
-        source: "src/social_signals_trader/proposal_cards.py:538"
+        source: "src/social_signals_trader/options/proposal_cards.py:538"
       }
     },
     fill_state: {
@@ -3006,7 +3012,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => Math.min((v.short_ask - v.long_bid) * 100, v.width * 100) * v.contracts,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:257-262"
+        source: "src/social_signals_trader/options/options_summary.py:257-262"
       }
     },
     unpaired_leg: {
@@ -3060,7 +3066,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.min_credit_breakeven_multiple * (1 - v.pop) * v.width * 100,
         unit: "$",
-        source: "src/social_signals_trader/spread_trader.py:117,402"
+        source: "src/social_signals_trader/options/spread_trader.py:117,402"
       }
     },
     ann_yield: {
@@ -3088,7 +3094,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.max_loss > 0 && v.dte > 0 ? v.credit / v.max_loss * (365 / v.dte) : null,
         unit: "%",
-        source: "src/social_signals_trader/options_chain.py:214-217"
+        source: "src/social_signals_trader/options/options_chain.py:214-217"
       }
     },
     max_positions: {
@@ -3116,7 +3122,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.equity * v.max_total_risk_equity_multiple,
         unit: "$",
-        source: "src/social_signals_trader/spread_trader.py:515"
+        source: "src/social_signals_trader/options/spread_trader.py:515"
       }
     },
     max_per_underlying: {
@@ -3134,7 +3140,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.max_per_underlying,
         unit: "",
-        source: "src/social_signals_trader/spread_trader.py:170"
+        source: "src/social_signals_trader/options/spread_trader.py:170"
       }
     },
     max_drawdown_from_peak_pct: {
@@ -3142,14 +3148,14 @@ window.FEEDBACK_THREADS = {
       short: "New entries halt once account equity has fallen this far from its own all-time high.",
       long: "Derived on read from Alpaca's own portfolio history — no separate state file. Halting means the sleeve stops OPENING new positions; existing positions keep managing their own exits (strike breach, max-loss stop, profit target) unchanged. A same-day, tighter-window sibling of this rail already exists (see the daily-loss circuit breaker) — this one watches the longer horizon of drawdown from the account's peak, not just today's move.",
       example: "With the cap at 15%, an account that peaked at $130,000 and has fallen to $112,000 (13.8% off peak) still opens new entries; a fall to $109,000 (16.2% off peak) halts new entries until equity recovers.",
-      source: "src/social_signals_trader/spread_trader.py — SpreadConfig.max_drawdown_from_peak_pct / drawdown_status()"
+      source: "src/social_signals_trader/options/spread_trader.py — SpreadConfig.max_drawdown_from_peak_pct / drawdown_status()"
     },
     max_index_cluster_pct: {
       label: "Max index cluster",
       short: "The most of deployed collateral that broad-market index ETFs (SPY, QQQ, DIA, IWM, TQQQ, …) may occupy together, treated as one correlated bet.",
       long: "max_per_underlying bounds a single NAME; it says nothing about several index ETFs moving together in the same market drop. A candidate that would push the combined index share of gross deployed collateral past this cap is skipped — the next-ranked non-index candidate takes the slot instead. This re-allocates capital toward single-name diversification; it never loosens any other gate.",
       example: "With the cap at 70% and the book already 70% index-ETF collateral, a new SPY or QQQ candidate is skipped (rejected_index_cluster_cap) while a DELL candidate that cleared every other gate is still accepted.",
-      source: "src/social_signals_trader/spread_trader.py — SpreadConfig.max_index_cluster_pct / plan()"
+      source: "src/social_signals_trader/options/spread_trader.py — SpreadConfig.max_index_cluster_pct / plan()"
     },
     min_pop: {
       label: "Min PoP requirement",
@@ -3164,7 +3170,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.min_pop,
         unit: "%",
-        source: "src/social_signals_trader/spread_trader.py:69"
+        source: "src/social_signals_trader/options/spread_trader.py:69"
       }
     },
     max_short_delta: {
@@ -3180,7 +3186,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.max_short_delta,
         unit: "",
-        source: "src/social_signals_trader/spread_trader.py:61"
+        source: "src/social_signals_trader/options/spread_trader.py:61"
       }
     },
     margin_buffer_pct: {
@@ -3204,7 +3210,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.equity ? v.maintenance_margin / v.equity : null,
         unit: "%",
-        source: "src/social_signals_trader/spread_trader.py:523"
+        source: "src/social_signals_trader/options/spread_trader.py:523"
       }
     },
     max_expiry_concentration_pct: {
@@ -3228,7 +3234,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.total_book_risk ? v.expiry_risk / v.total_book_risk : null,
         unit: "%",
-        source: "src/social_signals_trader/spread_trader.py:178,688"
+        source: "src/social_signals_trader/options/spread_trader.py:178,688"
       }
     },
     target_invested_pct: {
@@ -3250,7 +3256,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.equity * v.target_invested_pct,
         unit: "$",
-        source: "src/social_signals_trader/spread_trader.py:191,545"
+        source: "src/social_signals_trader/options/spread_trader.py:191,545"
       }
     },
     beta_gate_floor_pct: {
@@ -3266,7 +3272,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.beta_gate_floor_pct,
         unit: "%",
-        source: "src/social_signals_trader/spread_trader.py:206; src/social_signals_trader/beta.py:379"
+        source: "src/social_signals_trader/options/spread_trader.py:206; src/social_signals_trader/options/beta.py:379"
       }
     },
     hold_to_expiry: {
@@ -3293,7 +3299,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.short_strike * v.strike_breach_buffer_pct,
         unit: "$",
-        source: "src/social_signals_trader/spread_trader.py:1385"
+        source: "src/social_signals_trader/options/spread_trader.py:1385"
       }
     },
     live_flag: {
@@ -3389,7 +3395,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.total,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:223"
+        source: "src/social_signals_trader/options/options_summary.py:223"
       }
     },
     total_open_pl: {
@@ -3411,7 +3417,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.total,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:266"
+        source: "src/social_signals_trader/options/options_summary.py:266"
       }
     },
     total_max_loss: {
@@ -3433,7 +3439,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.total,
         unit: "$",
-        source: "src/social_signals_trader/options_summary.py:250"
+        source: "src/social_signals_trader/options/options_summary.py:250"
       }
     },
     order_expires: {
@@ -3489,7 +3495,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.pct_captured <= -v.max_loss_pct || v.pct_captured >= v.profit_target_pct ? 1 : 0,
         unit: "",
-        source: "src/social_signals_trader/options_summary_render.py:546"
+        source: "src/social_signals_trader/ui/options_summary_render.py:546"
       }
     },
     suppressed_exit: {
@@ -3521,7 +3527,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.raw_close_cost > v.width * 100 * v.contracts ? 1 : 0,
         unit: "",
-        source: "src/social_signals_trader/options_summary.py:266"
+        source: "src/social_signals_trader/options/options_summary.py:266"
       }
     },
     at_stake: {
@@ -3543,7 +3549,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.total,
         unit: "$",
-        source: "src/social_signals_trader/options_summary_render.py:597"
+        source: "src/social_signals_trader/ui/options_summary_render.py:597"
       }
     },
     unpriceable: {
@@ -3625,7 +3631,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.breakeven_credit > 0 ? v.credit / v.breakeven_credit : null,
         unit: "×",
-        source: "src/social_signals_trader/spread_trader.py:scan"
+        source: "src/social_signals_trader/options/spread_trader.py:scan"
       }
     },
     funnel_top_ticker_share: {
@@ -3646,7 +3652,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.total_priced > 0 ? v.top_ticker_priced / v.total_priced : null,
         unit: "%",
-        source: "src/social_signals_trader/spread_trader.py:scan"
+        source: "src/social_signals_trader/options/spread_trader.py:scan"
       }
     },
     funnel_drawdown_halt: {
@@ -3654,42 +3660,42 @@ window.FEEDBACK_THREADS = {
       short: "New entries are halted because the account has drawn down too far from its peak equity — existing positions are unaffected.",
       long: "spread_trader.drawdown_status() compares current equity against the highest equity point in the trailing 1-month portfolio history (maxed against the live reading, so an intraday peak is never lost). Once the drop from that peak reaches max_drawdown_from_peak_pct, execute() refuses every new entry for the rest of the tick — exits, re-pegs, and reconciliation are untouched, since halting means 'stop opening new positions', never 'start closing existing ones'. Fails CLOSED on an unreadable portfolio history (halts rather than silently trading through a data outage). Because plan() itself is never gated on this rail (the deck is a preview, not a checkpoint), a halted day still shows candidates that WOULD have traded — this line is the only place that context is visible next to them.",
       example: "Equity peaked at $210,000, now sits at $161,700 — a 23% drawdown against a 15% limit halts new entries until the account recovers or the peak is revised down by a full month rolling off.",
-      source: "src/social_signals_trader/spread_trader.py:drawdown_status"
+      source: "src/social_signals_trader/options/spread_trader.py:drawdown_status"
     },
     funnel_rejected_max_per_underlying: {
       label: "Set aside — per-underlying position cap",
       short: "Qualifying candidates set aside because that underlying already holds max_per_underlying open/working positions.",
       long: "Counted in plan()'s allocation loop (_allocate()) before a candidate is priced against any book-level budget — a second SPY candidate is set aside here even if the book has plenty of room left in general, because SPY specifically is already at its per-underlying position limit.",
       example: "max_per_underlying=2 and the book already holds two open SPY spreads: a third, otherwise-qualifying SPY candidate is set aside here rather than competing for the risk budget.",
-      source: "src/social_signals_trader/spread_trader.py:_allocate"
+      source: "src/social_signals_trader/options/spread_trader.py:_allocate"
     },
     funnel_rejected_risk_budget: {
       label: "Set aside — book risk budget already spent",
       short: "Qualifying candidates set aside because adding them would push total open risk past the book's deployment target for this tick.",
       long: "The running total of every already-chosen candidate's total_risk (plus the existing open/working book) versus deployment()'s target minus stock value — the same budget the book fills to before this rail binds. A candidate ranked low enough in EV order can lose out to earlier picks even though it individually would have qualified.",
       example: "The book's target risk budget is $50,000; after filling $48,000 of it with higher-EV picks, a $5,000-risk candidate ranked further down the list is set aside here.",
-      source: "src/social_signals_trader/spread_trader.py:_allocate"
+      source: "src/social_signals_trader/options/spread_trader.py:_allocate"
     },
     funnel_rejected_buying_power: {
       label: "Set aside — options buying power already spent",
       short: "Qualifying candidates set aside because this tick's NEW risk has already used up the broker's reported options buying power.",
       long: "A separate cap from the risk budget above: buying power is only consumed by what THIS tick is about to add, not by what is already posted. A book that is under its risk-budget target can still hit this cap if the broker is reporting tight options buying power.",
       example: "$10,000 of options buying power remains; two $6,000-risk candidates cannot both be added even though the risk budget has room for both — the second is set aside here.",
-      source: "src/social_signals_trader/spread_trader.py:_allocate"
+      source: "src/social_signals_trader/options/spread_trader.py:_allocate"
     },
     funnel_rejected_margin_cap: {
       label: "Set aside — broker margin cap",
       short: "Qualifying candidates set aside because adding them would push the broker's projected maintenance margin past the fund's own margin cap.",
       long: "Projects this order's own risk onto the broker's maintenance margin (the same width × 100 × contracts figure broker_spreads() reports as risk, which is what the broker holds as collateral) and compares it against margin_cap = equity × (1 − margin_buffer_pct). Distinct from the risk budget and buying power caps above — this one tracks the broker's own margin accounting, not the fund's internal deployment target.",
       example: "Maintenance margin sits $2,000 under the cap; a $3,000-risk candidate would breach it and is set aside here, even though it clears every other book-level check.",
-      source: "src/social_signals_trader/spread_trader.py:_allocate"
+      source: "src/social_signals_trader/options/spread_trader.py:_allocate"
     },
     funnel_rejected_expiry_concentration: {
       label: "Set aside — expiry-concentration cap",
       short: "Qualifying candidates set aside because too much of the book's risk already sits on that same expiry date.",
       long: "Compares one expiry's cumulative risk (seeded from the already-open/working book, then added to as this tick's own picks land on it) against max_expiry_concentration_pct of the book's target risk budget — measured against the TARGET, not the currently-deployed amount, so the very first position of an empty book is never treated as '100% of book risk' on its own expiry.",
       example: "max_expiry_concentration_pct=0.30 and the 2026-09-11 expiry already holds 28% of the book's target risk: a candidate on that same expiry that would push it to 35% is set aside here, even though a same-EV candidate on a different expiry would clear.",
-      source: "src/social_signals_trader/spread_trader.py:_allocate"
+      source: "src/social_signals_trader/options/spread_trader.py:_allocate"
     },
     outcome_n_closed: {
       label: "Closed spreads",
@@ -3702,14 +3708,14 @@ window.FEEDBACK_THREADS = {
       short: "How this batch of closed spreads actually ended — as opposed to how the rules INTENDED them to end.",
       long: "Every close is folded onto one of a fixed set of reasons: profit target (closed at the 50%-of-credit target), max loss (closed at the 100%-of-credit stop), strike breach (the short strike traded through before either stop fired), expired worthless, assigned, exercised, flattened out of band (closed by the out-of-band reconciliation sweep, not a policy trigger), or other. A reason bucket's count and realized P&L are shown together so a bar can be read as both 'how often' and 'how much it mattered'.",
       example: "38 of 144 closes hit the profit target for a combined +$1,900; 6 closes were strike breaches for a combined -$3,400 — the same count of events can carry very different P&L weight.",
-      source: "src/social_signals_trader/outcome_stats.py:_normalize_exit_reason"
+      source: "src/social_signals_trader/options/outcome_stats.py:_normalize_exit_reason"
     },
     outcome_win_rate: {
       label: "Win rate",
       short: "The share of closed spreads in this group that made money (realized P&L > $0).",
       long: "Counts a trade as a winner the moment its realized P&L is positive, however small — it says nothing about the SIZE of wins vs losses, only how often the trade ended in the black. A high win rate with a small credit-capture figure usually means small frequent wins offset by a few large losers.",
       example: "8 winners out of 12 closed put spreads is a 66.7% win rate for that bucket.",
-      source: "src/social_signals_trader/outcome_stats.py:_aggregate"
+      source: "src/social_signals_trader/options/outcome_stats.py:_aggregate"
     },
     outcome_realized_pnl: {
       label: "Realized P&L",
@@ -3736,7 +3742,7 @@ window.FEEDBACK_THREADS = {
         }],
         result: v => v.credit ? v.realized_pnl / v.credit : null,
         unit: "%",
-        source: "src/social_signals_trader/outcome_stats.py:_closed_trades"
+        source: "src/social_signals_trader/options/outcome_stats.py:_closed_trades"
       }
     },
     outcome_dte_bucket: {
@@ -3744,28 +3750,28 @@ window.FEEDBACK_THREADS = {
       short: "Days-to-expiry band the spread was opened in, not how long it was actually held.",
       long: "Grouping trades by their entry DTE (not days held) answers 'does the rules' choice of expiry matter to the outcome' — a short-DTE trade and a long-DTE trade can have identical exit reasons but very different win rates because of how much time premium and gamma risk they carried at entry.",
       example: "A spread opened 6 days from expiry falls in the '5-9' bucket regardless of whether it closed the next day or held to expiry.",
-      source: "src/social_signals_trader/beta.py:_dte_bucket"
+      source: "src/social_signals_trader/options/beta.py:_dte_bucket"
     },
     outcome_side: {
       label: "Side",
       short: "Put credit spread or call credit spread, taken from the short leg's option right.",
       long: "Splits closed-trade outcomes by which side of the market the position was betting against — puts (bearish-neutral) vs calls (bullish-neutral) — so a rules change to one side's momentum gate can be checked against that side's own realized track record instead of the whole book's.",
       example: "Put spreads might show a 70% win rate while call spreads show 40% over the same window — that split is invisible in an all-trades total.",
-      source: "src/social_signals_trader/outcome_stats.py:_side"
+      source: "src/social_signals_trader/options/outcome_stats.py:_side"
     },
     outcome_pending_closes: {
       label: "Pending closes",
       short: "Closes submitted to the broker but not yet confirmed filled — not counted as closed trades above.",
       long: "A close order can rest unfilled for a while (re-pegged on later ticks) before the broker actually fills it. Until that fill is confirmed, the position is still open at the broker, so it is deliberately excluded from the closed-trade count and realized P&L above — counting it early would report a loss (or win) that may still change once the real fill lands.",
       example: "2 pending closes means 2 positions have a close order working at the broker right now, neither yet reflected in the 'closed' totals.",
-      source: "src/social_signals_trader/outcome_stats.py:_pending_closes_count"
+      source: "src/social_signals_trader/options/outcome_stats.py:_pending_closes_count"
     },
     outcome_thin_bucket: {
       label: "Thin sample",
       short: "This bucket has fewer than 5 closed trades — its win rate and P&L are not yet statistically meaningful.",
       long: "A bucket with 1-2 trades can show a 100% or 0% win rate purely from noise. Thin buckets are still shown (an empty/thin bucket is itself informative — it says the rules rarely land here), just visually muted so they aren't read with the same confidence as a bucket built on dozens of trades.",
       example: "A DTE bucket with 2 closed trades, one win and one loss, reports a 50% win rate that could easily flip with the next single trade — treat it as a data point, not a conclusion.",
-      source: "src/social_signals_trader/outcome_stats.py:_THIN_THRESHOLD"
+      source: "src/social_signals_trader/options/outcome_stats.py:_THIN_THRESHOLD"
     }
   };
   function normalizeTerm(term) {
@@ -4180,7 +4186,7 @@ window.FEEDBACK_THREADS = {
   // must not haunt the page forever.
   var PENDING_TTL_MS = 24 * 60 * 60 * 1000;
   // Mirrors USER_AUTHOR / _AUTHOR_LABELS[USER_AUTHOR] in
-  // src/social_signals_trader/feedback_threads.py — hardcoded here so the
+  // src/social_signals_trader/ui/feedback_threads.py — hardcoded here so the
   // echo slots into messages[] with no renderer-side special case.
   var PENDING_AUTHOR = "visitor";
   var PENDING_AUTHOR_LABEL = "Visitor";
@@ -10045,7 +10051,7 @@ function optionsTradeLogParts(log, expectedOpenCount) {
         className: "opt-log-title"
       }, "Options trade log"), /*#__PURE__*/React.createElement("p", {
         className: "opt-log-empty"
-      }, "No spread activity yet. Generate with", " ", /*#__PURE__*/React.createElement("code", null, "python -m social_signals_trader.spread_trader --export-log"), "."))
+      }, "No spread activity yet. Generate with", " ", /*#__PURE__*/React.createElement("code", null, "python -m social_signals_trader.options.spread_trader --export-log"), "."))
     };
   }
   var openOrders = [];
@@ -10575,6 +10581,21 @@ function MandatePace({
     className: "opts-mandate-pace-value"
   }, pctFraction(t30.return), " / ", pctFraction(m.requiredMonthly), " per month"));
 }
+
+// True only for an explicit `hibernate: true` on the published spread config;
+// a missing config/key reads as an active fund.
+function optionsHibernated() {
+  return window.SPREAD_CONFIG?.config?.hibernate === true;
+}
+function HibernationNotice() {
+  if (!optionsHibernated()) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "opts-stale-banner opts-hibernate-banner",
+    role: "status"
+  }, "\u23F8 HIBERNATED \u2014 the options experiment concluded on 2026-10-08. No new trades are being opened; open positions are managed to exit.", /*#__PURE__*/React.createElement(window.Help, {
+    term: "fund_hibernated"
+  }));
+}
 function Headline({
   text,
   staleLabel,
@@ -10586,7 +10607,7 @@ function Headline({
     className: "opts-headline"
   }, /*#__PURE__*/React.createElement("div", {
     className: "opts-headline-main"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(HibernationNotice, null), /*#__PURE__*/React.createElement("div", {
     className: "opts-headline-text"
   }, glossify(text)), staleLabel && /*#__PURE__*/React.createElement("div", {
     className: "opts-stale-banner"
@@ -12398,7 +12419,7 @@ window.OutcomeStatsCard = OutcomeStatsCard;
 // separate conversations and an answer can never land under the wrong one.
 //
 // Data: window.FEEDBACK_THREADS, generated by
-// `python -m social_signals_trader.feedback_cli build` into data-feedback.js
+// `python -m social_signals_trader.ui.feedback_cli build` into data-feedback.js
 // and overlaid live by lib/live-snapshot.js. Missing/empty is the normal
 // cold-start case — every entry point below degrades to "nothing to show".
 
@@ -14787,6 +14808,22 @@ function ProposedTrades({
     setExpanded(next);
     storeExpanded(next);
   };
+  if (window.SPREAD_CONFIG?.config?.hibernate === true) {
+    return /*#__PURE__*/React.createElement("section", {
+      className: "card opt-panel prop-panel",
+      id: "proposed-trades"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "opt-panel-head"
+    }, /*#__PURE__*/React.createElement("h3", {
+      className: "opt-panel-title"
+    }, "Proposed trades", window.Help && /*#__PURE__*/React.createElement(window.Help, {
+      term: "fund_hibernated"
+    }))), /*#__PURE__*/React.createElement("article", {
+      className: "prop-card prop-card--halted"
+    }, /*#__PURE__*/React.createElement("p", {
+      className: "opt-log-empty"
+    }, "Trading hibernated \u2014 no proposals are generated or executed")));
+  }
   return /*#__PURE__*/React.createElement("section", {
     className: "card opt-panel prop-panel",
     id: "proposed-trades"
@@ -15920,7 +15957,7 @@ function timelineSteps(ev, facts) {
 
 // One reasoning row matches this trade when its position key — ticker +
 // short_strike + long_strike + expiry, written by
-// src/social_signals_trader/position_reasoning.py — equals this trade's own
+// src/social_signals_trader/options/position_reasoning.py — equals this trade's own
 // key. Same-ticker/different-expiry rows never collide because expiry is
 // part of the key. "failed" rows carry no ticker and never match anything.
 function _reasoningRowMatches(row, ticker, shortStrike, longStrike, expiry) {

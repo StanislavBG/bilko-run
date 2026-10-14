@@ -2041,6 +2041,9 @@ table.trades .sub-cell { font-size: 10.5px; color: var(--muted); }
    reviewer isn't left wondering where a card went, but nothing on it should
    read as live or actionable. */
 .prop-card--expired { border-left-color: var(--neg); opacity: 0.72; }
+/* Fund hibernated — the deck is replaced by a single stopped-state card.
+   Neutral and muted (not --neg): nothing is wrong, trading is deliberately off. */
+.prop-card--halted { border-left-color: var(--line-2); background: var(--surface-2); color: var(--muted); }
 .prop-card-meta { margin-top: 4px; }
 .prop-expired-note {
   font-size: 12px; color: var(--neg); font-weight: 600; margin: 8px 0 0; max-width: 85ch;

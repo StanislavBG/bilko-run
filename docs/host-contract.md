@@ -196,6 +196,15 @@ bilko.run generates each project's X/Twitter/OpenGraph share card from the regis
 
 ### Custom share image
 
+The same `https://bilko.run/og/<slug>.png` is two things: the X/LinkedIn link preview, and the hero image of your project's card on https://bilko.run/projects. There it is shown uncropped at 1200x630 on a dark background. So your `listing.shareImage` is your hero, not an afterthought social card. A project without one shows the plain generated text card in both places.
+
+Design it as a hero:
+
+- Show the product itself: real UI or the key visual.
+- Keep the name and the one-line promise legible at small sizes. No tiny text.
+- Keep important content inside the central ~1000x500 safe area.
+- The file rule is unchanged: 1200x630 PNG, ≤5 MB.
+
 `https://bilko.run/og/<slug>.png` resolves in this order:
 
 1. A valid `listing.shareImage` (1200x630 PNG, ≤5 MB) is served as-is.

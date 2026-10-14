@@ -91,7 +91,7 @@ describe('GET /api/git-viewer/u/:login', () => {
     expect(ready.headers['cache-control']).toBe('public, max-age=300');
     const body = ready.json();
     expect(body).toMatchObject({ status: 'ready', login: 'octocat', tier: 'free', lockedCount: 7 });
-    expect(body.data.projects).toHaveLength(3);
+    expect(body.data.projects).toHaveLength(1);
     expect(new Date(body.updatedAt).toISOString()).toBe(body.updatedAt);
 
     await get('octocat');
@@ -329,7 +329,9 @@ describe('daily refresh', () => {
     await dbRun('DELETE FROM git_viewer_profiles WHERE login = ?', showcase);
     await runGitViewerRefresh();
     await drainGitViewerQueue();
-    expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: showcase }));
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({
+      user: showcase, maxProjects: PLAN_LIMITS.paid, writing: 'profile-repo',
+    }));
     expect((await get(showcase)).statusCode).toBe(200);
 
     await runGitViewerRefresh(); // fresh → no rebuild
@@ -340,5 +342,50 @@ describe('daily refresh', () => {
     await runGitViewerRefresh();
     await drainGitViewerQueue();
     expect(build).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('free tier cut to 1 project (2026-10-14)', () => {
+  const MIGRATION = '2026-10-14-git-viewer-free-1-project';
+  const fresh = () => Math.floor(Date.now() / 1000);
+
+  it('marks cached free profiles stale once; paid rows keep their timestamp', async () => {
+    const now = fresh();
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, updated_at)
+       VALUES ('anonfree', '{}', 'free', 9, NULL, ?), ('claimedfree', '{}', 'free', 9, 'f@x.com', ?),
+              ('paiduser', '{}', 'paid', 0, 'p@x.com', ?)`,
+      now, now, now,
+    );
+    await dbRun('DELETE FROM data_migrations WHERE id = ?', MIGRATION);
+    await initDb();
+    const at = async (login: string) =>
+      (await dbGet<{ updated_at: number }>('SELECT updated_at FROM git_viewer_profiles WHERE login = ?', login))?.updated_at;
+    expect(await at('anonfree')).toBe(0);
+    expect(await at('claimedfree')).toBe(0);
+    expect(await at('paiduser')).toBe(now);
+
+    // An unclaimed free row rebuilds at the new cap on its next view.
+    expect((await get('anonfree')).statusCode).toBe(200);
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: 'anonfree', maxProjects: 1 }));
+    expect((await get('anonfree')).json().data.projects).toHaveLength(1);
+
+    // A claimed free row rebuilds in the sweep without being viewed.
+    await runGitViewerRefresh();
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: 'claimedfree', maxProjects: 1 }));
+  });
+
+  it('a showcase profile cached at the free tier upgrades to paid on its next view', async () => {
+    const showcase = SHOWCASE_LOGINS[0];
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES (?, '{}', 'free', 9, ?)`,
+      showcase, fresh(),
+    );
+    expect((await get(showcase)).statusCode).toBe(200);
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: showcase, maxProjects: PLAN_LIMITS.paid }));
+    expect((await get(showcase)).json()).toMatchObject({ tier: 'paid' });
   });
 });

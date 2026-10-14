@@ -13,11 +13,11 @@ import type { OgMeta } from '../../og-meta.js';
 //
 // Portfolios are generated in-process by the git-viewer library's
 // buildPortfolio() with the server's GITHUB_TOKEN, at most 2 at a time, and
-// cached in git_viewer_profiles. Free: 3 projects, regenerated at most once per
+// cached in git_viewer_profiles. Free: 1 project, regenerated at most once per
 // 24h when viewed; claimed free profiles are also refreshed weekly unviewed.
 // Paid ($5/mo git_viewer subscription, or a legacy pro/business/team plan): up
-// to 12 chosen repos + Writing, refreshed daily. Showcase logins are kept
-// cached by the refresh loop regardless of claim or tier.
+// to 12 chosen repos + Writing, refreshed daily. Showcase logins build at the
+// paid tier and are kept cached by the refresh loop regardless of claim.
 //
 // New-build budget (only an uncached login costs GitHub calls):
 //   - NEW_BUILDS_PER_IP distinct new builds per IP per UTC day, its own counter
@@ -31,7 +31,7 @@ import type { OgMeta } from '../../og-meta.js';
 export const GIT_VIEWER_ENDPOINT = 'git-viewer';
 export const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const REPO_NAME_RE = /^[A-Za-z0-9._-]{1,100}$/;
-export const PLAN_LIMITS = { free: 3, paid: 12 } as const;
+export const PLAN_LIMITS = { free: 1, paid: 12 } as const;
 
 const STALE_SEC = 24 * 60 * 60;
 const MAX_CONCURRENT = 2;
@@ -234,7 +234,8 @@ async function logGitHubRateBudget(): Promise<void> {
 }
 
 // ── Entitlement ─────────────────────────────────────────────────────────────
-async function tierFor(row: Pick<ProfileRow, 'owner_email'> | undefined): Promise<Tier> {
+async function tierFor(login: string, row: Pick<ProfileRow, 'owner_email'> | undefined): Promise<Tier> {
+  if (SHOWCASE_LOGINS.includes(login)) return 'paid';
   if (!row?.owner_email) return 'free';
   const sub = await getActiveSubscriptionLive(row.owner_email);
   return sub.gitViewer || sub.isPro ? 'paid' : 'free';
@@ -267,7 +268,7 @@ export async function runGitViewerRefresh(): Promise<number> {
     );
     if (row?.payload && row.updated_at >= dailyCutoff) continue;
     if (jobs.has(login) || isFresh(failed, login) || isFresh(notFound, login)) continue;
-    if (enqueue(login, jobFor(row, await tierFor(row)))) queued++;
+    if (enqueue(login, jobFor(row, await tierFor(login, row)))) queued++;
   }
 
   const rows = await dbAll<ProfileRow>(
@@ -278,7 +279,7 @@ export async function runGitViewerRefresh(): Promise<number> {
   );
   for (const row of rows) {
     if (jobs.has(row.login) || isFresh(failed, row.login)) continue;
-    if (enqueue(row.login, jobFor(row, await tierFor(row)))) queued++;
+    if (enqueue(row.login, jobFor(row, await tierFor(row.login, row)))) queued++;
   }
   return queued;
 }
@@ -337,8 +338,9 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     if (row?.payload) {
       const stale = row.updated_at < Math.floor(Date.now() / 1000) - STALE_SEC;
       // Claimed free profiles can turn paid between daily refreshes (checkout just
-      // completed); the subscription lookup is cached for 5 minutes.
-      const tier = row.owner_email && row.tier === 'free' ? await tierFor(row) : row.tier;
+      // completed); the subscription lookup is cached for 5 minutes. Unclaimed
+      // free rows resolve without a lookup (free, or paid for a showcase login).
+      const tier = row.tier === 'free' ? await tierFor(login, row) : row.tier;
       if ((stale || tier !== row.tier) && !jobs.has(login) && !isFresh(failed, login)) {
         enqueue(login, jobFor(row, tier));
       }
@@ -370,7 +372,7 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     if (!exempt && await getUsageCount(ipHash, GIT_VIEWER_ENDPOINT) >= NEW_BUILDS_PER_IP) {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: secondsToUtcMidnight() });
     }
-    if (!enqueue(login, jobFor(row, await tierFor(row)))) {
+    if (!enqueue(login, jobFor(row, await tierFor(login, row)))) {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: 60 });
     }
     if (!exempt) await incrementUsage(ipHash, GIT_VIEWER_ENDPOINT);
@@ -404,7 +406,7 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
        ON CONFLICT(login) DO UPDATE SET owner_email = excluded.owner_email, allowlist = excluded.allowlist`,
       login, user.email, allowlistJson,
     );
-    const tier = await tierFor({ owner_email: user.email });
+    const tier = await tierFor(login, { owner_email: user.email });
     enqueue(login, jobFor({ allowlist: allowlistJson }, tier));
     return reply.send({ ok: true, login, tier, allowlist });
   });

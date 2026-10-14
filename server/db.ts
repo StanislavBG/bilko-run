@@ -400,5 +400,12 @@ export async function initDb(): Promise<void> {
 
   await applyBlogRewrites(BLOG_REWRITES, doneIds);
 
+  // The git-viewer free tier dropped from 3 projects to 1 on 2026-10-14. Mark
+  // cached free profiles stale so each rebuilds at the new cap: unclaimed ones
+  // on their next view, claimed ones in the next refresh sweep.
+  await applyDataMigrationOnce('2026-10-14-git-viewer-free-1-project', [
+    { sql: "UPDATE git_viewer_profiles SET updated_at = 0 WHERE tier = 'free'", args: [] },
+  ], doneIds);
+
   console.log('[DB] Initialized' + (process.env.TURSO_DATABASE_URL ? ' (Turso)' : ' (local SQLite)'));
 }

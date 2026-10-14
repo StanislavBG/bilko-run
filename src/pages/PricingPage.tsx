@@ -124,7 +124,7 @@ export function PricingPage() {
           {[
             {
               label: 'Free', price: '$0', unit: '', accent: 'text-warm-400',
-              features: ['3 projects', 'Public repos only', 'Refreshed at most once a day', 'Bilko branding'],
+              features: ['1 project', 'Public repos only', 'Refreshed at most once a day', 'Bilko branding'],
             },
             {
               label: 'Paid', price: '$5', unit: '/ month', accent: 'text-fire-500',

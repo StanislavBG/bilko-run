@@ -82,3 +82,16 @@ test('ring buttons keep their outlines and fills over the portfolio reset', asyn
 
   await page.screenshot({ path: '/tmp/projects-ring-outlines.png' });
 });
+
+test('hero shows the /og share card uncropped and swaps on navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/projects');
+  const img = page.locator('.pr-shot img');
+  await expect(img).toHaveAttribute('src', new RegExp(`/og/${PUBLIC_CARDS[0].slug}\\.png$`));
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(1200);
+
+  await page.screenshot({ path: '/tmp/projects-ring-og.png' });
+
+  await page.getByRole('button', { name: 'Next project' }).click();
+  await expect(img).toHaveAttribute('src', new RegExp(`/og/${PUBLIC_CARDS[1].slug}\\.png$`));
+});

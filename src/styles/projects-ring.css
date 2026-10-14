@@ -51,7 +51,8 @@
   display: flex; align-items: center; justify-content: center;
   font: 500 11px var(--pr-mono); letter-spacing: .14em; color: var(--pr-ink-3);
 }
-.pr-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pr-shot:has(img) { background: #1b1714; }
+.pr-shot img { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; }
 .pr-story { flex: 1 1 0; min-height: 0; overflow-y: auto; border: 1px solid var(--pr-rule-soft); padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .pr-title { font: 400 52px/1 var(--pr-serif); letter-spacing: -.02em; }
 .pr-desc { font-size: 17px; line-height: 1.5; color: var(--pr-ink-2); text-wrap: pretty; }
@@ -86,7 +87,7 @@
   /* Inline left/width from heroBox() must be overridden. */
   .pr-hero { position: static; left: auto !important; width: auto !important; height: auto; padding: 20px 16px; border-left: 0; border-right: 0; }
   .pr-hero-in { height: auto; }
-  .pr-shot { flex: none; aspect-ratio: 16 / 10; }
+  .pr-shot { flex: none; aspect-ratio: 1200 / 630; }
   .pr-story { flex: none; max-height: 60vh; }
   .pr-title { font-size: 36px; }
   .pr-actions { margin-left: 0; width: 100%; }

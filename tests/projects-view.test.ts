@@ -23,6 +23,15 @@ describe('projectsView public cards', () => {
   });
 });
 
+describe('projectsView share-card thumbnails', () => {
+  it('every project card uses its /og share card; packages have none', () => {
+    for (const c of HUB_CARDS) {
+      if (c.type === 'project') expect(c.thumbnail).toBe(`/og/${c.slug}.png`);
+      if (c.type === 'package') expect(c.thumbnail).toBeUndefined();
+    }
+  });
+});
+
 describe('projectsView listing-driven enrichment', () => {
   const byslug = (s: string) => HUB_CARDS.find(c => c.slug === s);
 

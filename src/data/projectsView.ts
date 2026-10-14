@@ -114,7 +114,7 @@ function projectCard(p: Project): HubCard {
     pricing: p.listing?.pricing,
     callToAction: p.listing?.callToAction,
     avoidClaims: p.listing?.avoidClaims,
-    thumbnail: p.thumbnail,
+    thumbnail: `/og/${p.slug}.png`,
   };
 }
 

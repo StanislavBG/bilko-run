@@ -45,6 +45,7 @@ beforeEach(async () => {
   vi.mocked(verifyClerkGitHubUser).mockReset().mockResolvedValue(null);
   vi.mocked(getActiveSubscriptionLive).mockReset()
     .mockResolvedValue({ isPro: false, tier: 'free', gitViewer: false });
+  vi.unstubAllEnvs();
 });
 
 const get = (login: string, ip = '10.0.0.1', authorization?: string) =>
@@ -325,6 +326,7 @@ describe('daily refresh', () => {
   });
 
   it('seeds a missing showcase profile and refreshes it after 24h, unviewed', async () => {
+    vi.stubEnv('GITHUB_TOKEN', 'ghp_test');
     const showcase = SHOWCASE_LOGINS[0];
     await dbRun('DELETE FROM git_viewer_profiles WHERE login = ?', showcase);
     await runGitViewerRefresh();
@@ -377,7 +379,16 @@ describe('free tier cut to 1 project (2026-10-14)', () => {
     expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: 'claimedfree', maxProjects: 1 }));
   });
 
-  it('a showcase profile cached at the free tier upgrades to paid on its next view', async () => {
+  it('without GITHUB_TOKEN the showcase builds free (a paid build cannot fit 60 calls/h)', async () => {
+    vi.stubEnv('GITHUB_TOKEN', '');
+    const showcase = SHOWCASE_LOGINS[0];
+    expect((await get(showcase)).statusCode).toBe(202);
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: showcase, maxProjects: PLAN_LIMITS.free, writing: 'none' }));
+  });
+
+  it('a showcase profile cached at the free tier upgrades to paid on its next view once a token is set', async () => {
+    vi.stubEnv('GITHUB_TOKEN', 'ghp_test');
     const showcase = SHOWCASE_LOGINS[0];
     await dbRun(
       `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES (?, '{}', 'free', 9, ?)`,

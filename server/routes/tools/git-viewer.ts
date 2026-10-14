@@ -17,7 +17,8 @@ import type { OgMeta } from '../../og-meta.js';
 // 24h when viewed; claimed free profiles are also refreshed weekly unviewed.
 // Paid ($5/mo git_viewer subscription, or a legacy pro/business/team plan): up
 // to 12 chosen repos + Writing, refreshed daily. Showcase logins build at the
-// paid tier and are kept cached by the refresh loop regardless of claim.
+// paid tier when GITHUB_TOKEN is set (free otherwise) and are kept cached by
+// the refresh loop regardless of claim.
 //
 // New-build budget (only an uncached login costs GitHub calls):
 //   - NEW_BUILDS_PER_IP distinct new builds per IP per UTC day, its own counter
@@ -235,7 +236,9 @@ async function logGitHubRateBudget(): Promise<void> {
 
 // ── Entitlement ─────────────────────────────────────────────────────────────
 async function tierFor(login: string, row: Pick<ProfileRow, 'owner_email'> | undefined): Promise<Tier> {
-  if (SHOWCASE_LOGINS.includes(login)) return 'paid';
+  // A paid build needs ~70+ GitHub calls; unauthenticated (60/h per IP) it can
+  // never finish and starves every other build, so showcase goes paid only with a token.
+  if (SHOWCASE_LOGINS.includes(login)) return process.env.GITHUB_TOKEN ? 'paid' : 'free';
   if (!row?.owner_email) return 'free';
   const sub = await getActiveSubscriptionLive(row.owner_email);
   return sub.gitViewer || sub.isPro ? 'paid' : 'free';

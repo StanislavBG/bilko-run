@@ -39,7 +39,8 @@
         "Shows every public repo on the free tier",
         "It is a local tool you have to install",
         "Fully free with no paid tier"
-      ]
+      ],
+      "shareImage": "/projects/git-viewer/og.png"
     }
   },
   {

@@ -201,6 +201,16 @@
         "Free, ad-free AI fundamentals course.",
         "Every claim in the course is cited."
       ],
+      "offering": "content",
+      "pricing": "free",
+      "callToAction": "Start the free course at https://bilko.run/projects/academy/",
+      "avoidClaims": [
+        "Awards a certificate, certification or accredited credit",
+        "Is an official Anthropic or Claude course",
+        "Requires coding or technical experience",
+        "Offers unlimited AI chat or tutoring",
+        "Has a paid tier or premium content"
+      ],
       "shareImage": "/projects/academy/og.png"
     }
   },

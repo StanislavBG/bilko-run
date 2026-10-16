@@ -613,17 +613,7 @@
     ],
     "public": true,
     "listing": {
-      "detail": "Keyboard-only space survivors run across Sol — dodge, dash, and fight your way past all eight planets. Runs fully in the browser, no install, progress saves locally.",
-      "metric": "8 planets",
-      "metricLabel": "to conquer",
-      "lang": "GDScript · Godot 4",
-      "audience": "Players who like short, keyboard-only arcade survivors runs.",
-      "talkingPoints": [
-        "Keyboard-only space survivors game across all eight planets of the Solar System.",
-        "Runs fully in the browser — no install.",
-        "Progress saves locally.",
-        "Free to play."
-      ]
+      "shareImage": "/projects/escape-velocity/og.png"
     }
   },
   {

@@ -89,6 +89,15 @@
       "talkingPoints": [
         "Scores ten years of weather data into \"comfortable hours\" per place.",
         "Free to use in the browser."
+      ],
+      "offering": "free-tool",
+      "pricing": "free",
+      "callToAction": "Compare comfortable outdoor hours by place at https://bilko.run/projects/outdoor-hours/",
+      "avoidClaims": [
+        "Gives weather forecasts or predicts future weather",
+        "Shows live or real-time weather",
+        "Covers any place in the world",
+        "Is an app you have to install or sign up for"
       ]
     }
   },

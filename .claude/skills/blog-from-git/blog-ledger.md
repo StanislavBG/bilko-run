@@ -9,6 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
+| 2026-10-16 | the-family-screen-that-opens-your-mail-for-you | the-family-screen-that-opens-your-mail-for-you | ❌ no tile | unspecified (burrow) |
 | 2026-10-13 | launch-kit-eight-skills-hand-off-one-shared-brief | launch-kit-eight-skills-hand-off-one-shared-brief | ❌ no tile | unspecified (burrow) |
 | 2026-10-07 | twelve-places-one-weather-rule-you-set-yourself | outdoor-hours | ✅ | problem-outcome (spotlight, scheduled) |
 | 2026-10-03 | turn-your-github-year-into-a-heatmap-and-badge-wall | git-viewer | ✅ | problem-outcome (spotlight) |
@@ -44,14 +45,14 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** launch-kit-eight-skills-hand-off-one-shared-brief (off-list, no tile), post `launch-kit-eight-skills-hand-off-one-shared-brief` seeded 2026-10-13 by scripts/blog-seed.sh.
+- **Last project covered:** the-family-screen-that-opens-your-mail-for-you (off-list, no tile), post `the-family-screen-that-opens-your-mail-for-you` seeded 2026-10-16 by scripts/blog-seed.sh.
 - **Rotation debt:** none — last post on-`/projects`. burrow (off-list, no tile) is ineligible as a
   sole subject (no user-facing surface); do not queue it as a standalone post.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
   08-19), problem→outcome (07-02, 08-11, 10-03 ×2 spotlight), shipped-note (07-06, 07-21, 08-23,
   08-27, 09-22, 09-26), field-note (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18,
   08-04). Next: compare reception/readability rather than adding tones.
-- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** launch-kit-eight-skills-hand-off-one-shared-brief, outdoor-hours, git-viewer.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** the-family-screen-that-opens-your-mail-for-you, launch-kit-eight-skills-hand-off-one-shared-brief, outdoor-hours.
 - **Due / under-covered on-list projects** (good next candidates): local-score, game-academy,
   stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
   audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku.

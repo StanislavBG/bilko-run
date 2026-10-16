@@ -614,6 +614,7 @@
     "public": true,
     "listing": {
       "detail": "A keyboard-only spaceship game. Start on Mercury with a guided tutorial, pick a playstyle, shop at the Galaxy Café between planets and fight your way out of the Solar System. Free in the browser.",
+      "audience": "Desktop players who like short survivors-style action runs and build-crafting, playing in a web browser with a keyboard.",
       "talkingPoints": [
         "A guided first run drops you onto Mercury and teaches the controls and HUD as they come up.",
         "Five playstyles: Boss Hunter, Contagion, Brawler, Artillery and Ricochet, each with its own kit and gear.",
@@ -623,6 +624,14 @@
       ],
       "offering": "game",
       "pricing": "free",
+      "callToAction": "Play it free in your desktop browser at bilko.run/projects/escape-velocity/ — no download, no sign-up needed.",
+      "avoidClaims": [
+        "Do not claim mobile, touch or tablet support: the game is keyboard-only.",
+        "Do not claim gamepad/controller support.",
+        "Do not claim multiplayer or online co-op.",
+        "Do not claim a downloadable, Steam or app-store version exists.",
+        "Do not claim in-app purchases or a paid tier; it is free."
+      ],
       "shareImage": "/projects/escape-velocity/og.png"
     }
   },

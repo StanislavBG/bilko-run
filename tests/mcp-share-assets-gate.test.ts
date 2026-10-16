@@ -4,6 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { shareAssetsGate } from '../mcp-host-server/src/gates/share-assets.js';
+import { budgetGate } from '../mcp-host-server/src/gates/budget.js';
+import { randomBytes } from 'node:crypto';
 import type { GateContext } from '../mcp-host-server/src/gates/index.js';
 
 function png(width: number, height: number): Buffer {
@@ -90,5 +92,39 @@ describe('shareAssetsGate', () => {
     const r = await run({ icon: '/projects/demo/../../etc/x.png' });
     expect(r.status).toBe('fail');
     expect(r.details).toContain('escapes');
+  });
+});
+
+describe('budgetGate share-asset exclusion', () => {
+  const manifest = { bundle: { sizeBytesGz: 0, fileCount: 1 } } as unknown as GateContext['manifest'];
+  const budget = (listing?: GateContext['listing']) =>
+    budgetGate({ slug: 'demo', bundleDir: dir, bypass: new Set(), manifest, listing });
+  // A valid 1200x630 PNG padded with incompressible bytes: well over the 200 KB default budget.
+  const heavyShareImage = () => Buffer.concat([png(1200, 630), randomBytes(250_000)]);
+
+  it('a valid declared shareImage does not count against the budget', async () => {
+    put('img/share.png', heavyShareImage());
+    put('index.html', '<!doctype html><title>demo</title>');
+    const r = await budget({ shareImage: '/projects/demo/img/share.png' });
+    expect(r.status).toBe('pass');
+    expect(r.details).toContain('excluding 1 share asset');
+  });
+
+  it('the same bytes count when the image is not declared', async () => {
+    put('img/share.png', heavyShareImage());
+    expect((await budget(undefined)).status).toBe('fail');
+  });
+
+  it('an invalid declared shareImage still counts against the budget', async () => {
+    put('img/share.png', Buffer.concat([png(1200, 600), randomBytes(250_000)]));
+    const r = await budget({ shareImage: '/projects/demo/img/share.png' });
+    expect(r.status).toBe('fail');
+    expect(r.details).toContain('exceeds budget');
+  });
+
+  it('other bundle bytes still count', async () => {
+    put('img/share.png', heavyShareImage());
+    put('blob.bin', randomBytes(250_000));
+    expect((await budget({ shareImage: '/projects/demo/img/share.png' })).status).toBe('fail');
   });
 });

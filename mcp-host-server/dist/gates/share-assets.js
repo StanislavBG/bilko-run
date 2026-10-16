@@ -9,13 +9,18 @@ function readPngSize(buf) {
         return undefined;
     return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
-/** Returns a problem description, or undefined when the asset is valid. */
-function checkAsset(ctxSlug, bundleDir, field, assetPath) {
+/** Absolute path of a declared asset inside the bundle, or undefined when it escapes the bundle. */
+function resolveAsset(ctxSlug, bundleDir, assetPath) {
     const prefix = `/projects/${ctxSlug}/`;
     const rel = assetPath.startsWith(prefix) ? assetPath.slice(prefix.length) : assetPath.replace(/^\/+/, '');
     const root = resolve(bundleDir);
     const file = resolve(root, rel);
-    if (file !== root && !file.startsWith(root + sep))
+    return file !== root && file.startsWith(root + sep) ? file : undefined;
+}
+/** Returns a problem description, or undefined when the asset is valid. */
+function checkAsset(ctxSlug, bundleDir, field, assetPath) {
+    const file = resolveAsset(ctxSlug, bundleDir, assetPath);
+    if (!file)
         return 'path escapes the bundle directory';
     if (!existsSync(file) || !statSync(file).isFile())
         return 'file not found in the staged bundle';
@@ -41,11 +46,29 @@ function checkAsset(ctxSlug, bundleDir, field, assetPath) {
     }
     return undefined;
 }
-export const shareAssetsGate = async (ctx) => {
-    const declared = ['icon', 'shareImage'].flatMap((field) => {
+function declaredAssets(ctx) {
+    return ['icon', 'shareImage'].flatMap((field) => {
         const p = ctx.listing?.[field];
         return p ? [[field, p]] : [];
     });
+}
+/**
+ * Absolute paths of declared share assets that pass this gate's checks. The budget gate
+ * leaves these out of its gzip sum: they are already capped here, and PNGs barely gzip.
+ */
+export function validShareAssetFiles(ctx) {
+    const files = new Set();
+    for (const [field, p] of declaredAssets(ctx)) {
+        if (checkAsset(ctx.slug, ctx.bundleDir, field, p))
+            continue;
+        const file = resolveAsset(ctx.slug, ctx.bundleDir, p);
+        if (file)
+            files.add(file);
+    }
+    return files;
+}
+export const shareAssetsGate = async (ctx) => {
+    const declared = declaredAssets(ctx);
     if (declared.length === 0) {
         return { name: 'share-assets', status: 'pass', details: 'no share assets declared' };
     }

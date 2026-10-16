@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
-import type { Gate, GateResult } from './index.js';
+import type { Gate, GateContext, GateResult } from './index.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const SHARE_IMAGE = { width: 1200, height: 630, maxBytes: 5 * 1024 * 1024 };
@@ -12,13 +12,19 @@ function readPngSize(buf: Buffer): { width: number; height: number } | undefined
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
-/** Returns a problem description, or undefined when the asset is valid. */
-function checkAsset(ctxSlug: string, bundleDir: string, field: 'icon' | 'shareImage', assetPath: string): string | undefined {
+/** Absolute path of a declared asset inside the bundle, or undefined when it escapes the bundle. */
+function resolveAsset(ctxSlug: string, bundleDir: string, assetPath: string): string | undefined {
   const prefix = `/projects/${ctxSlug}/`;
   const rel = assetPath.startsWith(prefix) ? assetPath.slice(prefix.length) : assetPath.replace(/^\/+/, '');
   const root = resolve(bundleDir);
   const file = resolve(root, rel);
-  if (file !== root && !file.startsWith(root + sep)) return 'path escapes the bundle directory';
+  return file !== root && file.startsWith(root + sep) ? file : undefined;
+}
+
+/** Returns a problem description, or undefined when the asset is valid. */
+function checkAsset(ctxSlug: string, bundleDir: string, field: 'icon' | 'shareImage', assetPath: string): string | undefined {
+  const file = resolveAsset(ctxSlug, bundleDir, assetPath);
+  if (!file) return 'path escapes the bundle directory';
   if (!existsSync(file) || !statSync(file).isFile()) return 'file not found in the staged bundle';
 
   const buf = readFileSync(file);
@@ -39,11 +45,29 @@ function checkAsset(ctxSlug: string, bundleDir: string, field: 'icon' | 'shareIm
   return undefined;
 }
 
-export const shareAssetsGate: Gate = async (ctx): Promise<GateResult> => {
-  const declared = (['icon', 'shareImage'] as const).flatMap((field) => {
+function declaredAssets(ctx: GateContext): (readonly ['icon' | 'shareImage', string])[] {
+  return (['icon', 'shareImage'] as const).flatMap((field) => {
     const p = ctx.listing?.[field];
     return p ? [[field, p] as const] : [];
   });
+}
+
+/**
+ * Absolute paths of declared share assets that pass this gate's checks. The budget gate
+ * leaves these out of its gzip sum: they are already capped here, and PNGs barely gzip.
+ */
+export function validShareAssetFiles(ctx: GateContext): Set<string> {
+  const files = new Set<string>();
+  for (const [field, p] of declaredAssets(ctx)) {
+    if (checkAsset(ctx.slug, ctx.bundleDir, field, p)) continue;
+    const file = resolveAsset(ctx.slug, ctx.bundleDir, p);
+    if (file) files.add(file);
+  }
+  return files;
+}
+
+export const shareAssetsGate: Gate = async (ctx): Promise<GateResult> => {
+  const declared = declaredAssets(ctx);
   if (declared.length === 0) {
     return { name: 'share-assets', status: 'pass', details: 'no share assets declared' };
   }

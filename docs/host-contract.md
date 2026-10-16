@@ -222,6 +222,8 @@ Recipe for a sibling:
 
 The `share-assets` publish gate blocks the publish when a declared `icon` or `shareImage` is missing from the bundle, is not a PNG, or has the wrong size. The path must start with `/projects/<your-slug>/`.
 
+Share assets do not count against your gzip budget. The `budget` gate leaves a declared `icon`/`shareImage` out of its sum when it passes these checks, so a full-quality hero up to 5 MB fits even a near-budget app. The same PNG left undeclared, or declared but invalid, counts like any other file.
+
 Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
 
 ## Public project catalog
@@ -461,7 +463,8 @@ capability required. Two things about the contract apply across the **whole
 bundle**, not per-document:
 
 - **`budget` gate is bundle-wide.** The gzip budget — and the 200 KB default
-  limit it's checked against — covers *every* file under `dist/`, summed.
+  limit it's checked against — covers *every* file under `dist/`, summed
+  (except a valid declared `listing.icon`/`listing.shareImage`, see below).
   Adding a second or third document eats into the same budget as the root
   page, not a fresh allowance each. Request a higher per-app budget in
   `mcp-host-server/src/contract/app-budgets.ts` if a multi-document bundle
@@ -474,17 +477,18 @@ bundle**, not per-document:
 
 ## Publish gate
 
-Every static-path publish runs five gates in order, against `distPath` (and `sourceRepoPath`, where required). All must pass, or be explicitly bypassed, before the bundle is swapped into `public/projects/<slug>/`.
+Every static-path publish runs six gates in order, against `distPath` (and `sourceRepoPath`, where required). All must pass, or be explicitly bypassed, before the bundle is swapped into `public/projects/<slug>/`.
 
 | Gate | What it checks | Bypassable |
 |---|---|---|
 | `manifest` | `manifest.json` exists at the bundle root, parses, validates against the Zod schema, and its `slug` matches the registered slug | **No — never bypassable** |
-| `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz) | `budget` |
+| `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz). A declared `listing.icon`/`listing.shareImage` that passes the `share-assets` checks is left out of the sum; it has its own cap there. An invalid one still counts | `budget` |
 | `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` | `golden` |
 | `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
 | `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath` (`npm audit --omit=dev --audit-level=high --json` instead when the repo has a `package-lock.json` and no `pnpm-lock.yaml`); the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
+| `share-assets` | Each declared `listing.icon`/`listing.shareImage` is in the bundle, is a PNG, and has the right size and byte cap (see "Custom share image") | **No** |
 
-The `manifest` gate short-circuits the pipeline — if it fails, the other four are skipped (their results would be meaningless without a valid manifest).
+The `manifest` gate short-circuits the pipeline — if it fails, the other five are skipped (their results would be meaningless without a valid manifest).
 
 ### `sourceRepoPath` requirement
 

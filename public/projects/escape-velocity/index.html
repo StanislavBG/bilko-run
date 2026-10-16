@@ -119,6 +119,35 @@ body {
 	line-height: 1.4;
 	text-align: left;
 }
+
+#cloud {
+	margin: 1.25rem 0 0;
+	font-size: 0.85rem;
+	color: #a8a8c0;
+}
+
+#cloud[hidden], #cloud-signin[hidden], #cloud-status[hidden] {
+	display: none;
+}
+
+#cloud-signin {
+	font: inherit;
+	font-size: 0.9rem;
+	color: #7fd1ff;
+	background: transparent;
+	border: 1px solid #7fd1ff;
+	border-radius: 0.5rem;
+	padding: 0.5rem 1rem;
+	cursor: pointer;
+}
+
+#cloud-signin:hover {
+	background-color: #14202c;
+}
+
+#cloud-status {
+	margin: 0;
+}
 		</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
@@ -144,12 +173,161 @@ body {
 					<p id="loading-text">Loading&hellip;</p>
 				</div>
 				<div id="status-notice" hidden></div>
+				<div id="cloud">
+					<button id="cloud-signin" type="button">Sign in to save progress across devices</button>
+					<p id="cloud-status" hidden>Signed in &mdash; progress syncs to your bilko.run account</p>
+				</div>
 			</div>
 		</div>
 
+		<script>
+(function () {
+	const CLERK_SRC = 'https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+	const CLERK_KEY = 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
+	const SAVE_URL = '/api/games/escape-velocity/save';
+	const CLERK_LOAD_TIMEOUT_MS = 10000;
+
+	function hasSignedInCookie() {
+		const m = /(?:^|;\s*)__client_uat=([^;]*)/.exec(document.cookie);
+		if (!m) return false;
+		const v = Number(m[1]);
+		return Number.isFinite(v) && v > 0;
+	}
+
+	function withTimeout(promise, ms) {
+		let timer;
+		const t = new Promise(function (_, reject) {
+			timer = setTimeout(function () { reject(new Error('timeout')); }, ms);
+		});
+		return Promise.race([promise, t]).finally(function () { clearTimeout(timer); });
+	}
+
+	let clerkPromise = null;
+	function loadClerk() {
+		if (clerkPromise) return clerkPromise;
+		clerkPromise = (async function () {
+			try {
+				await new Promise(function (resolve, reject) {
+					const script = document.createElement('script');
+					script.src = CLERK_SRC;
+					script.setAttribute('data-clerk-publishable-key', CLERK_KEY);
+					script.crossOrigin = 'anonymous';
+					const meta = document.querySelector('meta[name="csp-nonce"]');
+					const nonce = meta && meta.getAttribute('content');
+					if (nonce) script.nonce = nonce;
+					script.addEventListener('load', function () { resolve(); });
+					script.addEventListener('error', function () { reject(new Error('clerk script failed')); });
+					document.head.appendChild(script);
+				});
+				if (!window.Clerk) throw new Error('window.Clerk missing');
+				await withTimeout(window.Clerk.load(), CLERK_LOAD_TIMEOUT_MS);
+				return window.Clerk;
+			} catch (e) {
+				evCloud.lastStatus = 'clerk-unavailable';
+				return null;
+			}
+		}());
+		return clerkPromise;
+	}
+
+	// Bearer token only, fetched fresh before each request. Never cookie auth.
+	async function authFetch(method, body) {
+		const clerk = await loadClerk();
+		const token = clerk && clerk.session ? await clerk.session.getToken() : null;
+		if (!token) return null;
+		const headers = { 'authorization': 'Bearer ' + token };
+		if (body !== undefined) headers['content-type'] = 'application/json';
+		return fetch(SAVE_URL, { method: method, headers: headers, body: body });
+	}
+
+	function blobToString(blob) {
+		if (blob === null || blob === undefined) return null;
+		return typeof blob === 'string' ? blob : JSON.stringify(blob);
+	}
+
+	let version = 0;
+	let loadedOnce = false;
+
+	async function fetchRemote() {
+		const r = await authFetch('GET');
+		if (!r) { evCloud.lastStatus = 'signed-out'; return null; }
+		if (!r.ok) { evCloud.lastStatus = 'load-' + r.status; return null; }
+		const j = await r.json();
+		version = Number(j.version) || 0;
+		loadedOnce = true;
+		evCloud.lastStatus = 'loaded';
+		return blobToString(j.blob);
+	}
+
+	const evCloud = {
+		initialBlob: null,
+		conflictBlob: null,
+		hasSignedInCookie: hasSignedInCookie,
+		loadClerk: loadClerk,
+		lastStatus: 'idle',
+		signedIn: function () {
+			return !!(window.Clerk && window.Clerk.user);
+		},
+		signIn: async function () {
+			const clerk = await loadClerk();
+			if (clerk) clerk.openSignIn();
+		},
+		load: async function () {
+			try {
+				return await fetchRemote();
+			} catch (e) {
+				evCloud.lastStatus = 'load-error';
+				return null;
+			}
+		},
+		save: async function (blob) {
+			try {
+				// Never PUT over a cloud save this page session has not seen.
+				if (!loadedOnce) { evCloud.lastStatus = 'not-synced'; return { ok: false, status: 0 }; }
+				const r = await authFetch('PUT', JSON.stringify({ blob: blob, expectedVersion: version }));
+				if (!r) { evCloud.lastStatus = 'signed-out'; return { ok: false, status: 0 }; }
+				if (r.status === 409) {
+					// Hand the newer remote blob to the game to merge; no blind retry.
+					evCloud.conflictBlob = await fetchRemote();
+					evCloud.lastStatus = 'conflict';
+					return { ok: false, status: 409 };
+				}
+				if (r.ok) {
+					const j = await r.json();
+					version = Number(j.version) || version;
+				}
+				evCloud.lastStatus = r.ok ? 'saved' : 'save-' + r.status;
+				return { ok: r.ok, status: r.status };
+			} catch (e) {
+				evCloud.lastStatus = 'save-error';
+				return { ok: false, status: 0 };
+			}
+		},
+	};
+	window.evCloud = evCloud;
+
+	const cta = document.getElementById('cloud-signin');
+	const note = document.getElementById('cloud-status');
+	function render() {
+		const on = evCloud.signedIn();
+		cta.hidden = on;
+		note.hidden = !on;
+	}
+	cta.addEventListener('click', function () { evCloud.signIn(); });
+	render();
+
+	if (hasSignedInCookie()) {
+		loadClerk().then(function (clerk) {
+			if (!clerk) return;
+			render();
+			clerk.addListener(render);
+		});
+	}
+}());
+		</script>
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":21025024,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":20707672,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -199,10 +377,29 @@ const engine = new Engine(GODOT_CONFIG);
 		playButton.hidden = true;
 		setStatusNotice('Your browser is missing features required to run this game:\n' + missing.join('\n'));
 	} else {
-		playButton.addEventListener('click', function () {
+		playButton.addEventListener('click', async function () {
 			playButton.disabled = true;
 			playButton.hidden = true;
 			loading.hidden = false;
+			if (window.evCloud && window.evCloud.hasSignedInCookie()) {
+				let timedOut = false;
+				try {
+					const prefetch = (async function () {
+						await window.evCloud.loadClerk();
+						return window.evCloud.load();
+					}());
+					// A load that finishes after the race still reaches the game as a conflict to merge.
+					prefetch.then(function (blob) {
+						if (timedOut && blob) window.evCloud.conflictBlob = blob;
+					}).catch(function () {});
+					window.evCloud.initialBlob = await Promise.race([
+						prefetch,
+						new Promise(function (resolve) { setTimeout(function () { timedOut = true; resolve(null); }, 4000); }),
+					]);
+				} catch (e) {
+					window.evCloud.initialBlob = null;
+				}
+			}
 			engine.startGame({
 				'onProgress': function (current, total) {
 					if (current > 0 && total > 0) {

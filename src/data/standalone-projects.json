@@ -613,6 +613,16 @@
     ],
     "public": true,
     "listing": {
+      "detail": "A keyboard-only spaceship game. Start on Mercury with a guided tutorial, pick a playstyle, shop at the Galaxy Café between planets and fight your way out of the Solar System. Free in the browser.",
+      "talkingPoints": [
+        "A guided first run drops you onto Mercury and teaches the controls and HUD as they come up.",
+        "Five playstyles: Boss Hunter, Contagion, Brawler, Artillery and Ricochet, each with its own kit and gear.",
+        "Spend Core Shards at the Galaxy Café between planets on boons, class gear and weapon mounts.",
+        "Follow the Quest panel from Escape Mercury to Neptune, then watch the credits roll.",
+        "Signed-in bilko.run players keep their progress across devices; guests save locally."
+      ],
+      "offering": "game",
+      "pricing": "free",
       "shareImage": "/projects/escape-velocity/og.png"
     }
   },

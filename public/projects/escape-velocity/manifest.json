@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "slug": "escape-velocity",
   "version": "1.0.0",
-  "builtAt": "2026-10-05T18:09:44.685Z",
-  "gitSha": "359afe5",
-  "gitBranch": "sm-epic/fire-wizzard-spells-you-help-on-the-fire-wizzard-797f9ad3",
+  "builtAt": "2026-10-16T05:05:32.650Z",
+  "gitSha": "9b326a9",
+  "gitBranch": "sm-job/223-publish-campaign-live",
   "hostKit": {
     "version": "0.0.0"
   },
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 29994379,
-    "fileCount": 14
+    "sizeBytesGz": 29697498,
+    "fileCount": 10
   }
 }

@@ -267,10 +267,10 @@
   },
   {
     "slug": "game-academy",
-    "name": "Boat Shooter",
-    "tagline": "Postponed — browser arcade shooter, first entry in the Bilko Game Academy. We'll come back to it.",
+    "name": "Bilko Game Academy",
+    "tagline": "Alpha: browser game library. Sign in with bilko.run to keep your progress across devices. First game: Boat Shooter.",
     "category": "Game",
-    "status": "postponed",
+    "status": "live",
     "year": 2026,
     "host": {
       "kind": "static-path",
@@ -279,10 +279,15 @@
       "localPath": "~/Projects/Bilko-Game-Academy"
     },
     "tags": [
-      "Postponed",
-      "Canvas",
-      "Arcade"
-    ]
+      "Alpha",
+      "Game",
+      "PWA"
+    ],
+    "listing": {
+      "offering": "game",
+      "pricing": "free",
+      "callToAction": "Play Boat Shooter"
+    }
   },
   {
     "slug": "social-signals-trader",

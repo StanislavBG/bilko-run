@@ -74,12 +74,7 @@ export function BlogPage() {
               <div className="pf-tag">
                 {CATEGORY_LABELS[post.category] ?? post.category}
                 {post.video_url && (
-                  <span
-                    className="pf-mono"
-                    style={{ marginLeft: 8, padding: '1px 6px', borderRadius: 999, border: '1px solid currentColor', fontSize: 10 }}
-                  >
-                    ▶ Video
-                  </span>
+                  <span className="pf-mono pf-video-badge">▶ Video</span>
                 )}
               </div>
               <div className="pf-read">{estimateReadTime(post.excerpt)}</div>

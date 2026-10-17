@@ -236,7 +236,12 @@ function registerDevice(ws: WebSocket, t: { userId: string; email: string; devic
     ws, deviceId: t.deviceId, userId: t.userId, email: t.email, connectedAt: Date.now(),
     isAlive: true, missedPings: 0, rateLimit: makeBucket(DEVICE_RATE_CAPACITY, DEVICE_RATE_DRAIN_MS),
   };
+  // A reconnecting desktop can beat the relay to noticing its old socket died
+  // (1006). Close the superseded socket so it can't linger half-open answering
+  // app-level pings; its close handler below sees it no longer owns the slot.
+  const previous = deviceConns.get(t.deviceId);
   deviceConns.set(t.deviceId, conn);
+  if (previous && previous.ws !== ws) previous.ws.close(4000, 'superseded');
   setupHeartbeat(ws, conn);
   safeSend(ws, { type: 'auth:ok', id: crypto.randomUUID(), deviceId: t.deviceId, ts: Date.now() });
 
@@ -248,6 +253,12 @@ function registerDevice(ws: WebSocket, t: { userId: string; email: string; devic
 
   ws.on('message', (data) => handleMessage(conn, 'agent', data as Buffer));
   ws.on('close', () => {
+    // Only the conn that still owns the slot may evict it and announce offline;
+    // a stale socket closing after a reconnect must not take down the live one.
+    if (deviceConns.get(t.deviceId) !== conn) {
+      if (!browserConns.size && !deviceConns.size) stopHeartbeat();
+      return;
+    }
     deviceConns.delete(t.deviceId);
     for (const browser of browserConns.values()) {
       if (browser.userId === t.userId) {

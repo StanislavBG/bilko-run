@@ -391,7 +391,8 @@
 .pf-post-row:hover { padding-left: 16px; background: var(--pf-paper); }
 .pf-post-row .pf-date { font-family: var(--pf-font-mono); font-size: 12px; color: var(--pf-ink-3); }
 .pf-post-row .pf-title { font-family: var(--pf-font-display); font-size: 28px; font-weight: 400; letter-spacing: -0.01em; line-height: 1.1; }
-.pf-post-row .pf-tag { font-family: var(--pf-font-mono); font-size: 10px; color: var(--pf-ink-3); text-transform: uppercase; letter-spacing: 0.1em; }
+.pf-post-row .pf-tag { font-family: var(--pf-font-mono); font-size: 10px; color: var(--pf-ink-3); text-transform: uppercase; letter-spacing: 0.1em; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.portfolio-shell .pf-video-badge { display: inline-block; white-space: nowrap; padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor; font-size: 10px; }
 .pf-post-row .pf-read { font-family: var(--pf-font-mono); font-size: 11px; color: var(--pf-ink-3); text-align: right; }
 .pf-post-row:hover .pf-arrow { opacity: 1; transform: translateX(0); }
 .pf-post-row .pf-arrow { display: inline-block; opacity: 0; transform: translateX(-6px); transition: all var(--pf-motion-fast); margin-left: 6px; color: var(--pf-accent); }

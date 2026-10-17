@@ -13,6 +13,8 @@ export const APP_BUDGETS_GZ_BYTES: Readonly<Record<string, number>> = Object.fre
   'session-manager': 1_300_000,
   // Godot web game: ~10 MB gz wasm engine + game pck.
   'escape-velocity': 30_000_000,
+  // Phaser game + ~117 downscaled WebP sprites (post-incident: sprites were 116 MB PNG).
+  'game-academy': 5_000_000,
 });
 
 export function budgetFor(slug: string): number {

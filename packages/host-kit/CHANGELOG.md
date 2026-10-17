@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0
+
+### Minor Changes
+
+- 732e7ec: Add `SiteHeader` — a shared, dependency-free Bilko top bar for static-path
+  sibling apps. Reproduces the host's `pf-topbar` (brand, section links to
+  absolute bilko.run URLs, optional Search/⌘K trigger, Online status pill, and a
+  `rightSlot` for app-specific controls) without needing Clerk or React Router, so
+  siblings served at `/projects/<slug>/` get consistent brand chrome. Theme-aware
+  via host-kit CSS tokens with Bilko-light fallbacks. Exports `SiteHeader`,
+  `DEFAULT_SECTIONS`, and the `SiteHeaderProps` / `SiteSection` types.
+- 732e7ec: Fix: `useSaveState`, `useUnlocks` and `useLeaderboard().submit` sent cookies only,
+  which the bilko.run host ignores — every authenticated call 401'd. They now send
+  `Authorization: Bearer <Clerk JWT>` via the new auth helpers, and skip the request
+  entirely when no user is signed in.
+
+  New exports: `initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`,
+  `authFetch`, `hasSignedInCookie`, and the `AuthState` type. They lazy-load clerk-js
+  from `clerk.bilko.run`, only when the `__client_uat` cookie shows a prior sign-in.
+
+### Patch Changes
+
+- e423d47: `bilko-host-kit` manifest CLI: detect the bare `host-kit` dependency name (and still
+  the legacy `@bilkobibitkov/host-kit`), reading the installed version for `file:`
+  specifiers. Before this, bare-name consumers got `hostKit.version: "0.0.0"`.
+- 9091b4d: Remove the Workflows link from `SiteHeader`'s `DEFAULT_SECTIONS` because bilko.run/workflows was retired.
+- 8b743b1: Drop the Academy link from `SiteHeader`'s `DEFAULT_SECTIONS` so it matches the host nav (Home, Projects, Blog, Contact). Build `dist/` on install (`prepare`) so `file:` consumers never pick up a stale build.
+
 ## 0.7.2
 
 - **`bilko-host-kit emit-manifest`** — fall back to reading the actually-installed `@bilkobibitkov/host-kit` version from `node_modules/` when a consumer's `package.json` declares the dep as `workspace:*` (or any non-numeric range). Previously emitted `0.0.0` for workspace consumers.

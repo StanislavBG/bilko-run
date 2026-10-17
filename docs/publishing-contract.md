@@ -18,7 +18,7 @@ If an npm package *also* happens to be a sibling app (e.g. PageRoast CLI + `/pro
 
 A short rulebook every Bilko npm package follows. Apply it to:
 
-- Reusable libraries (`@bilkobibitkov/host-kit`, `@bilkobibitkov/sudoku-engine`).
+- Reusable libraries (`host-kit`, `@bilkobibitkov/sudoku-engine`).
 - CLIs users `npx` (`@bilkobibitkov/agent-trace`, `@bilkobibitkov/page-roast`).
 - Monorepo subpackages (anything under `Preflight/packages/*`).
 
@@ -36,7 +36,7 @@ If none apply, leave the code in its host repo. Don't extract for vanity.
 
 | Kind | Example | Build shape | Notes |
 |---|---|---|---|
-| Library | `@bilkobibitkov/host-kit`, `sudoku-engine` | Dual ESM+CJS via `tsup`; `exports` map with `types`/`import`/`require` triple. | Browsers and Node both consume. |
+| Library | `host-kit`, `sudoku-engine` | Dual ESM+CJS via `tsup`; `exports` map with `types`/`import`/`require` triple. | Browsers and Node both consume. |
 | CLI | `@bilkobibitkov/agent-trace`, `@bilkobibitkov/page-roast` | ESM-only is fine; `bin` field; `#!/usr/bin/env node` shim in `bin/<name>.js`. | `npx @bilkobibitkov/<name> --help` must work. |
 | Monorepo subpackage | `Preflight/packages/agent-comply`, `Preflight/packages/license` | Live in a `pnpm-workspace.yaml` workspace; tag format `<pkg>-v<ver>`. | Inter-package deps use the workspace's published version, not `workspace:*`, when shipped. |
 

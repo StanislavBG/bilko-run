@@ -1,11 +1,11 @@
-# @bilkobibitkov/host-kit
+# host-kit
 
 Shared React component kit used by bilko.run sibling apps.
 
 ## Install
 
 ```
-pnpm add @bilkobibitkov/host-kit
+pnpm add host-kit@^0.8.0
 # peer deps:
 pnpm add react @clerk/clerk-react
 ```

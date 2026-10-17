@@ -41,6 +41,7 @@ These are the OS services. Apps use them; they should not reimplement.
 ### To `static-path` and `external-url` apps additionally
 
 - **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page.
+- **Same-origin framing only.** Responses under `/projects/` carry CSP `frame-ancestors 'self'`, so one static-path app may embed another in an iframe (e.g. Game Academy hosting an engine game slug) and talk to it over `postMessage`. Cross-origin framing is refused; every other host page is `frame-ancestors 'none'`.
 
 ### Calling authenticated host APIs from a `static-path` app
 

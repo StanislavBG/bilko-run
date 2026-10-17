@@ -34,6 +34,7 @@ These are the OS services. Apps use them; they should not reimplement.
 - **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
 - **Page-view analytics.** `usePageView()` hook fires once per route mount.
 - **Shared UI for siblings** lives in `host-kit` (`packages/host-kit/`), not in this bundle; the old in-repo `tool-page` kit and `useToolApi` hook are gone.
+- **Which host-kit to install.** Use the unscoped npm package `host-kit`, **`>=0.8.0`**: `"host-kit": "^0.8.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. 0.8.0 is the first npm release that has the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`) and Bearer-authenticated games hooks. `host-kit@0.7.2` and the legacy scoped `@bilkobibitkov/host-kit` (last release 0.7.2, no longer published) do not have it. In 0.7.2 the games hooks send cookies only, so every call gets a 401.
 - **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
 - **Database.** Turso/libSQL via `dbGet/dbAll/dbRun/dbTransaction` from `server/db.ts`. Falls back to local SQLite in dev. All SQL parameterized.
 
@@ -46,7 +47,7 @@ These are the OS services. Apps use them; they should not reimplement.
 A `static-path` app is same-origin with `/api`, so it *can* call authenticated host endpoints (`/api/games/*`, the AI-tool gateways, `/api/academy/*`). There is **one supported way to authenticate: send a Clerk session JWT in `Authorization: Bearer <token>`.** `requireAuth` / `requireAdmin` in `server/clerk.ts` read only that header.
 
 - **Cookies are not accepted.** Clerk's first-party `__session` cookie on bilko.run is **not** read by the host, and `credentials: 'include'` by itself always gets a 401. This is deliberate. That cookie is a 60-second token that only clerk-js refreshes. A static page that doesn't run clerk-js would get intermittent 401s about a minute after page load. Accepting it would also make every mutating `/api` route cookie-authenticated, which means CSRF exposure.
-- **How to get the token:** load clerk-js from the host's Clerk Frontend API (`https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js`, with the bilko.run publishable key as `data-clerk-publishable-key`). Call `await Clerk.load()`, then `await Clerk.session?.getToken()` before **each** request. Don't cache the token, because clerk-js already caches and refreshes it. The host CSP already allows `clerk.bilko.run` in `script-src`. Copy the CSP nonce from `<meta name="csp-nonce">` onto the script tag. **Use host-kit instead of rolling your own:** `authFetch(url, init)` (`getAuthToken()`, `useAuth()`, `openSignIn()`) from `host-kit` does all of this. The `useSaveState` / `useUnlocks` / `useLeaderboard` hooks already use it.
+- **How to get the token:** load clerk-js from the host's Clerk Frontend API (`https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js`, with the bilko.run publishable key as `data-clerk-publishable-key`). Call `await Clerk.load()`, then `await Clerk.session?.getToken()` before **each** request. Don't cache the token, because clerk-js already caches and refreshes it. The host CSP already allows `clerk.bilko.run` in `script-src`. Copy the CSP nonce from `<meta name="csp-nonce">` onto the script tag. **Use host-kit instead of rolling your own:** `authFetch(url, init)` (`getAuthToken()`, `useAuth()`, `openSignIn()`) from `host-kit` (`>=0.8.0`) does all of this. The `useSaveState` / `useUnlocks` / `useLeaderboard` hooks already use it.
 - **Gate the load cheaply:** a `__client_uat` cookie value > 0 means the user has signed in on bilko.run. If it is absent or `0`, treat the user as signed out without downloading clerk-js.
 - **Identity on the server** is always the email from the verified token. Never trust a user id or email in the request body.
 
@@ -360,7 +361,7 @@ your publish — retry it.
 ## Telemetry contract
 
 Every sibling app SHOULD call `initTelemetry({ app, version })` from
-`@bilkobibitkov/host-kit` at boot. This wires three signals automatically:
+`host-kit` at boot. This wires three signals automatically:
 
 - `track(name, props)` → `analytics_events` (same table as `/api/analytics/event`)
 - `log.info|warn|error(msg, fields)` → `app_logs` (info sampled at 10% by default)
@@ -372,7 +373,7 @@ The SDK is non-blocking and batched (5s buffer, flush on page-hide). It uses
 before any send.
 
 ```ts
-import { initTelemetry } from '@bilkobibitkov/host-kit';
+import { initTelemetry } from 'host-kit';
 initTelemetry({ app: 'my-app', version: '1.0.0' });
 ```
 
@@ -403,7 +404,7 @@ Defined in `shared/manifest-schema.ts` (Zod) and mirrored in `mcp-host-server/sr
 | `builtAt` | ISO 8601 UTC string | `new Date().toISOString()` at build time |
 | `gitSha` | `string` | 7–40 hex chars. `git rev-parse --short HEAD` |
 | `gitBranch` | `string` | `git rev-parse --abbrev-ref HEAD` |
-| `hostKit.version` | `string` | Version of `@bilkobibitkov/host-kit` in use. `"0.0.0"` if not used |
+| `hostKit.version` | `string` | Version of `host-kit` (or legacy `@bilkobibitkov/host-kit`) in use. `"0.0.0"` if not used |
 | `golden.path` | `string` | URL path the synthetic monitor GETs. Must start with `/` |
 | `golden.expect` | `string` | Optional CSS selector or text the monitor checks for |
 | `health.path` | `string` (optional) | If present, host health poller GETs this path every N minutes |
@@ -516,7 +517,7 @@ Default budget per app: **200 KB gzipped**, from `DEFAULT_BUDGET_GZ_BYTES` in `m
 
 ## Game services
 
-For games hosted on bilko.run (current: Boat Shooter; upcoming: Sudoku), the host provides three platform services accessed via the `@bilkobibitkov/host-kit` React hooks `useLeaderboard`, `useSaveState`, and `useUnlocks`.
+For games hosted on bilko.run (current: Boat Shooter; upcoming: Sudoku), the host provides three platform services accessed via the `host-kit` React hooks `useLeaderboard`, `useSaveState`, and `useUnlocks`.
 
 ### Endpoints
 
@@ -566,7 +567,7 @@ export interface GameConfig {
 
 Adding a new achievement key is a code change to `shared/game-config.ts`. Keys are stable — never rename a key after it has been unlocked by real users.
 
-Access all three from `@bilkobibitkov/host-kit`'s `useLeaderboard(slug, opts)`, `useSaveState<T>(slug)`, and `useUnlocks(slug)` hooks.
+Access all three from `host-kit`'s `useLeaderboard(slug, opts)`, `useSaveState<T>(slug)`, and `useUnlocks(slug)` hooks.
 
 ### Anti-cheat
 

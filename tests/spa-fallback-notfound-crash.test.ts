@@ -103,3 +103,24 @@ describe('unmatched /projects/ paths do not crash the production process', () =>
     expect(health.status).toBe(200);
   });
 });
+
+describe('registered static-path slug with no published bundle', () => {
+  // game-academy stays in the registry (status postponed) but its bundle was
+  // unpublished. Its root must be a terminal 404, not a 200 SPA shell the
+  // client then bounces to /products/<slug>/ and back.
+  it('/projects/game-academy/ answers 404 with no redirect', async () => {
+    expect(existsSync(resolve(repoRoot, 'dist/projects/game-academy/index.html'))).toBe(false);
+    const res = await fetch(`${BASE}/projects/game-academy/`, { redirect: 'manual' });
+    expect(res.status).toBe(404);
+    expect(res.headers.get('location')).toBeNull();
+    expect(res.headers.get('content-type')).toMatch(/^text\/html/);
+  });
+
+  it('a published bundle still serves its own index.html at /projects/<slug>/', async () => {
+    const res = await fetch(`${BASE}/projects/local-score/`, { redirect: 'manual' });
+    expect(res.status).toBe(200);
+    // The host SPA shell's loading placeholder (index.html) — absent from sibling bundles.
+    expect(await res.text()).not.toContain('font-size:3rem;margin-bottom:.5rem">🔥');
+  });
+});
+

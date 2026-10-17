@@ -7,7 +7,9 @@ import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
+import { UnpublishedProjectPage } from './pages/UnpublishedProjectPage.js';
 import { PROJECTS } from './data/projectsRegistry.js';
+import { projectsPathAction } from './lib/projectPaths.js';
 
 // One full reload per tab session when a lazy chunk fails to load (typically a
 // 404 after a deploy replaced the hashed filenames). The sessionStorage flag
@@ -87,7 +89,15 @@ const APP_TO_PRODUCT: Record<string, string> = {
 
 function RedirectProjectsToProducts() {
   const loc = useLocation();
-  return <Navigate to={loc.pathname.replace(/^\/projects/, '/products') + loc.search + loc.hash} replace />;
+  const action = projectsPathAction(loc.pathname, PROJECTS);
+  // Full page load (not <Navigate>) so Fastify gets a chance to serve the bundle.
+  const hardTo = action.kind === 'hard-navigate' ? action.to : null;
+  useEffect(() => {
+    if (hardTo) window.location.replace(hardTo);
+  }, [hardTo]);
+  if (action.kind === 'navigate') return <Navigate to={action.to + loc.search + loc.hash} replace />;
+  if (action.kind === 'unpublished') return <UnpublishedProjectPage project={action.project} />;
+  return null;
 }
 
 // /products/<slug> for a slug that's not a react-route tool — check whether

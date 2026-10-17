@@ -17,7 +17,7 @@ Per the [host contract](../docs/host-contract.md), each app lives in its own rep
 | `register_static_project` | yes (registry + commit + push) | First deploy of a new app. |
 | `register_external_project` | yes (registry + commit + push) | Register an app hosted on its own domain: `{ slug, url (https://), name, tagline, category, status, year, callerRepoPath, … }`. The card links straight to `url`; nothing is published. |
 | `update_project_listing` | yes (registry + commit + push) | Change your own `/projects` card: `{ slug, callerRepoPath, patch }`. Only project-owned fields; `public`, slug and hosting are rejected. |
-| `get_project` | no | Read one registry entry (`{ slug }`) before editing its listing. |
+| `get_project` | no | Read one registry entry (`{ slug }`) before editing its listing. Like `list_projects`, it fetches and reads `origin/main`, so it sees listings pushed since the host checkout was last pulled. |
 | `unregister_project` | yes | Retire an app (optionally also delete `public/projects/<slug>/`). |
 | `publish_static_project` | yes (copies bytes + commit + push) | After every `vite build` in your app repo. |
 | `status` | no | Verify a publish landed; see uncommitted state. |

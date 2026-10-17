@@ -44,6 +44,7 @@ import { runGates, gateSummary, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout, type PublishOutcome } from './publish-checkout.js';
+import { readLatestRegistryRaw } from './registry-source.js';
 import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 
@@ -53,7 +54,6 @@ const exec = promisify(execFile);
 // Layout: <HOST_ROOT>/mcp-host-server/dist/server.js  →  ../../
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOST_ROOT = resolve(__dirname, '..', '..');
-const REGISTRY_JSON = resolve(HOST_ROOT, 'src/data/standalone-projects.json');
 const HOST_CONTRACT = resolve(HOST_ROOT, 'docs/host-contract.md');
 const PUBLIC_PROJECTS = resolve(HOST_ROOT, 'public/projects');
 
@@ -98,6 +98,11 @@ async function upsertManifest(manifest: ReturnType<typeof ManifestSchema.parse>)
 async function readRegistry(root: string): Promise<RegistryProject[]> {
   const raw = await readFile(resolve(root, 'src/data/standalone-projects.json'), 'utf8');
   return parseRegistry(raw);
+}
+
+// Read tools use origin/main, not HOST_ROOT's tree, which lags until someone pulls.
+async function readLatestRegistry(): Promise<RegistryProject[]> {
+  return parseRegistry((await readLatestRegistryRaw(HOST_ROOT)).raw);
 }
 
 async function writeRegistry(root: string, projects: RegistryProject[]): Promise<void> {
@@ -159,7 +164,8 @@ server.registerTool(
   },
   async () => {
     try {
-      const standalone = await readRegistry(HOST_ROOT);
+      const latest = await readLatestRegistryRaw(HOST_ROOT);
+      const standalone = parseRegistry(latest.raw);
       const counts = {
         standalone: standalone.length,
         public_projects_dirs: existsSync(PUBLIC_PROJECTS)
@@ -170,8 +176,9 @@ server.registerTool(
         standalone,
         notes: [
           `react-route apps live in src/config/tools.ts and aren't returned here.`,
-          `Sources: ${REGISTRY_JSON} (this process's local host checkout).`,
-          `The authoritative copy lives on origin/main — this local copy can lag behind a publish made from another checkout.`,
+          latest.source === 'remote'
+            ? `Source: ${latest.ref}:src/data/standalone-projects.json (fetched just now).`
+            : `Source: ${latest.ref} (local working tree; could not read origin/main: ${latest.reason}). May lag behind origin/main.`,
         ],
         counts: { standalone: counts.standalone, public_projects_dirs: await counts.public_projects_dirs },
       };
@@ -360,7 +367,7 @@ server.registerTool(
   },
   async ({ slug }) => {
     try {
-      const projects = await readRegistry(HOST_ROOT);
+      const projects = await readLatestRegistry();
       const entry = projects.find(p => p.slug === slug);
       if (!entry) return err(`slug "${slug}" not found in registry.`);
       return ok(JSON.stringify(entry, null, 2));
@@ -412,7 +419,7 @@ server.registerTool(
 
       // Cheap ownership check before gates, which execute commands in sourceRepoPath.
       // The check inside withPublishCheckout remains the authoritative re-check.
-      const preRegistry = await readRegistry(HOST_ROOT);
+      const preRegistry = await readLatestRegistry();
       assertPublishOwner(preRegistry, slug, sourceRepoPath);
 
       // Run publish gates against distPath, outside the publish checkout/lock.

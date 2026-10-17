@@ -46,7 +46,15 @@ export function isBlogVideoPath(url: string): boolean {
   return url.split('?')[0].startsWith('/blog-videos/');
 }
 
-function buildCsp(nonce: string): string {
+// Static-path projects (/projects/<slug>/) may be framed by other same-origin
+// pages — Game Academy loads engine games (Godot, Unity) as their own slugs in
+// a same-origin iframe and talks to them over postMessage. Everything else
+// stays unframeable.
+export function isStaticProjectPath(url: string): boolean {
+  return url.split('?')[0].startsWith('/projects/');
+}
+
+function buildCsp(nonce: string, frameAncestors: string): string {
   const directives = [
     `default-src 'self'`,
     // 'wasm-unsafe-eval' allows WebAssembly compilation only (not JS eval) —
@@ -66,7 +74,7 @@ function buildCsp(nonce: string): string {
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self' https://*.stripe.com`,
-    `frame-ancestors 'none'`,
+    `frame-ancestors ${frameAncestors}`,
     `report-uri /api/security/csp-report`,
   ];
   // Browsers ignore upgrade-insecure-requests in a report-only policy and log a
@@ -144,7 +152,7 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
       return;
     }
     const cspHeader = ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only';
-    reply.header(cspHeader, buildCsp(nonce));
+    reply.header(cspHeader, buildCsp(nonce, isStaticProjectPath(req.url) ? `'self'` : `'none'`));
   });
 
   // Inject the per-request nonce onto every <script> and <style> tag in HTML responses.

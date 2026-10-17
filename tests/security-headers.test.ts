@@ -21,6 +21,7 @@ beforeAll(async () => {
   registerSecurityHeaders(app);
   app.get('/test-html', async (_req, reply) => reply.type('text/html').send(TEST_HTML));
   app.get('/api/test', async () => ({ ok: true }));
+  app.get('/projects/escape-velocity/', async (_req, reply) => reply.type('text/html').send(TEST_HTML));
   app.get('/blog-videos/x/', async (_req, reply) => reply.type('text/html').send('<html><head></head><body><script>1</script></body></html>'));
   await app.ready();
 });
@@ -166,6 +167,18 @@ describe('Security headers — blog video fence', () => {
     expect(res.headers['content-security-policy-report-only']).toBeUndefined();
     expect(res.payload).not.toContain('nonce=');
     expect(res.payload).toBe('<html><head></head><body><script>1</script></body></html>');
+  });
+
+  it('static-path projects are frameable same-origin only; host pages are not frameable', async () => {
+    const frameAncestors = (headers: Record<string, string | string[] | undefined>) =>
+      getCsp(headers).split(';').map((d) => d.trim()).find((d) => d.startsWith('frame-ancestors'));
+    const project = await app.inject({ method: 'GET', url: '/projects/escape-velocity/?v=1' });
+    expect(frameAncestors(project.headers)).toBe(`frame-ancestors 'self'`);
+    expect(project.headers['x-frame-options']).toBeUndefined();
+    const host = await app.inject({ method: 'GET', url: '/test-html' });
+    expect(frameAncestors(host.headers)).toBe(`frame-ancestors 'none'`);
+    const reactRoute = await app.inject({ method: 'GET', url: '/products/session-manager' });
+    expect(frameAncestors(reactRoute.headers)).toBe(`frame-ancestors 'none'`);
   });
 
   it('normal HTML CSP frame-src allows self', async () => {

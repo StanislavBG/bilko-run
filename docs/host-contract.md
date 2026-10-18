@@ -32,7 +32,7 @@ These are the OS services. Apps use them; they should not reimplement.
 - **Credits: token wallet.** Spend via `deductToken(email)` and check via `getTokenBalance(email)` from `server/services/tokens.ts`. Free users get a starter grant via `grantFreeTokens(email)`.
 - **Payments: Stripe.** Subscription state via `getActiveSubscriptionLive(email)`; one-time purchases via `hasPurchased(email, productKey)`. Both from `server/services/stripe.ts`.
 - **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
-- **Page-view analytics.** `usePageView()` hook fires once per route mount.
+- **Page-view and click analytics.** Automatic: the host injects a beacon into every HTML page (pageviews on load and SPA navigation, clicks, session ids via the `bilko_vid`/`bilko_sid` cookies). No hook to call. See [`docs/observability.md`](observability.md).
 - **Shared UI for siblings** lives in `host-kit` (`packages/host-kit/`), not in this bundle; the old in-repo `tool-page` kit and `useToolApi` hook are gone.
 - **Which host-kit to install.** Use the unscoped npm package `host-kit`, **`>=0.8.0`**: `"host-kit": "^0.8.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. 0.8.0 is the first npm release that has the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`) and Bearer-authenticated games hooks. `host-kit@0.7.2` and the legacy scoped `@bilkobibitkov/host-kit` (last release 0.7.2, no longer published) do not have it. In 0.7.2 the games hooks send cookies only, so every call gets a 401.
 - **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
@@ -361,24 +361,26 @@ your publish — retry it.
 
 ## Telemetry contract
 
-Every sibling app SHOULD call `initTelemetry({ app, version })` from
-`host-kit` at boot. This wires three signals automatically:
+Full adoption process: [`docs/observability.md`](observability.md). Summary:
 
-- `track(name, props)` → `analytics_events` (same table as `/api/analytics/event`)
+**Free, no code.** The host injects a beacon into every HTML document (SPA and every static-path app): pageviews on load and SPA navigation, clicks on `a`/`button`/`[role=button]`/`summary`/`[data-track]`, all stitched into one session by the first-party `bilko_vid` (1 year) and `bilko_sid` (30-minute sliding idle) cookies. Tag important buttons with `data-track="<area>-<action>"`.
+
+**SDK.** Every sibling app SHOULD call `initTelemetry({ app, version })` from `host-kit` at boot:
+
+- `track(name, props)` → `POST /api/telemetry/event` → `funnel_events` (not `analytics_events`)
+- `trackFlow(flow, step, props)` → `track('<flow>.<step>', { flow, step, ... })`, kebab-case names
 - `log.info|warn|error(msg, fields)` → `app_logs` (info sampled at 10% by default)
-- Uncaught `window.error` + `unhandledrejection` → `app_errors` (100% sampled, de-duped at 3/min per fingerprint)
+- `logError(err, context)` and uncaught `window.error` + `unhandledrejection` → `app_errors` (100% sampled, de-duped at 3/min per fingerprint)
 
-The SDK is non-blocking and batched (5s buffer, flush on page-hide). It uses
-`sendBeacon` so late-lifecycle errors are not dropped. PII keys matching
-`/(email|password|token|key|ssn|card|cvv|apikey)/i` are redacted client-side
-before any send.
+The SDK is non-blocking and batched (5s buffer, flush on page-hide) and uses `sendBeacon`. The default endpoint is relative (`/api/telemetry`) on bilko.run. `track()` called without `initTelemetry` auto-inits (app from `/projects/<slug>/`) and posts to `/api/telemetry/event`; it no longer posts to `/api/analytics/event`. Only logs and error capture need `initTelemetry`. Prop/field keys matching `/(email|password|token|key|ssn|card|cvv|apikey)/i` are redacted client-side; never put emails, tokens or free text in props.
 
 ```ts
-import { initTelemetry } from 'host-kit';
+import { initTelemetry, trackFlow } from 'host-kit';
 initTelemetry({ app: 'my-app', version: '1.0.0' });
+trackFlow('checkout', 'click-buy', { product: 'pro' });
 ```
 
-Server endpoints (all rate-limited per IP, append-only tables):
+Server endpoints (all rate-limited per IP, append-only tables; the cookie session ids are stamped onto every record):
 
 | Endpoint | Table | Rate limit |
 |---|---|---|
@@ -386,8 +388,7 @@ Server endpoints (all rate-limited per IP, append-only tables):
 | `POST /api/telemetry/log` | `app_logs` | 600/min |
 | `POST /api/telemetry/error` | `app_errors` | 300/min |
 
-`track()` works without `initTelemetry` (falls back to pre-0.3.0 direct-send).
-Apps that don't call `initTelemetry` get no structured logs or error capture.
+See also [`docs/telemetry-beacons.md`](telemetry-beacons.md) for the full endpoint table. Verify in `/admin/observability` (Sessions and Flows).
 
 ## Manifest contract
 

@@ -1,6 +1,6 @@
 # Public telemetry beacons
 
-Four unauthenticated POST endpoints on bilko.run that any app — a browser bundle, a CLI,
+Unauthenticated POST endpoints on bilko.run that any app — a browser bundle, a CLI,
 an Electron desktop app on a stranger's laptop — can report into with nothing configured.
 
 | Route | Table | Shape | Per-IP limit |
@@ -9,6 +9,12 @@ an Electron desktop app on a stranger's laptop — can report into with nothing 
 | `POST /api/telemetry/log` | `app_logs` | `{ batch: [{ app, version, level, msg, visitor_id, session_id, fields, ts }] }` | 600/min |
 | `POST /api/telemetry/error` | `app_errors` | `{ batch: [{ app, version, name, msg, stack, url, ua, visitor_id, session_id, context, ts }] }` | 300/min |
 | `POST /api/telemetry/install` | `app_installs` | single object, upsert keyed on `install_id` | 60/min |
+| `POST /api/analytics/pageview` | `page_views` | `{ path, referrer, screen, visitor_id, session_id, utm_* }` (injected beacon) | event-rate limiter |
+| `POST /api/analytics/click` | `click_events` | `{ path, tag, id, label, href, visitor_id, session_id, track }` (injected beacon; `track` is the `data-track` name) | event-rate limiter |
+
+Session columns: `session_id` on `page_views`, `page_hits`, `click_events`, `funnel_events`, `app_logs`, `app_errors`; `client_vid` (cookie visitor id) on `click_events` and `page_hits`; `track_name` on `click_events`. The pageview and click beacons are injected into every HTML page by the host; ids come from the `bilko_vid`/`bilko_sid` cookies (`server/session-identity.ts`), which win over body ids.
+
+Adoption process, tagging rules and PII rules: [observability.md](observability.md).
 
 `MAX_BATCH` is 50 records; the server body limit is 2 MB (`server/index.ts`); stacks clamp at
 16 KB, other strings at their column widths. Everything is registered in `server/index.ts` via

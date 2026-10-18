@@ -1,3 +1,4 @@
+import { trackFlow } from '../../hooks/usePageView.js';
 import { COPY } from './copy.js';
 
 /**
@@ -6,6 +7,11 @@ import { COPY } from './copy.js';
  */
 
 const dl = COPY.priceTag.downloads;
+
+/** Fire-and-forget download-click telemetry. Links always point at the latest release. */
+export function trackDownloadClick(platform: string): void {
+  trackFlow('download', 'click-download', { artifact: 'session-manager', version: 'latest', platform });
+}
 
 /** False until the GitHub release carries the Windows installer. */
 export const windowsAvailable: boolean = dl.windows.windowsAvailable;
@@ -31,7 +37,7 @@ function WindowsGlyph() {
 
 export function MacDownload({ className = '' }: { className?: string }) {
   return (
-    <a className={`smlp-dl ${className}`.trim()} href={dl.mac.href} download>
+    <a className={`smlp-dl ${className}`.trim()} href={dl.mac.href} download data-track="download-mac" onClick={() => trackDownloadClick('mac')}>
       <AppleGlyph />
       <span>{dl.mac.label}</span>
     </a>
@@ -52,7 +58,7 @@ export function WindowsDownload({ className = '' }: { className?: string }) {
     );
   }
   return (
-    <a className={`smlp-dl ${className}`.trim()} href={dl.windows.href} download>
+    <a className={`smlp-dl ${className}`.trim()} href={dl.windows.href} download data-track="download-windows" onClick={() => trackDownloadClick('windows')}>
       <WindowsGlyph />
       <span>{dl.windows.label}</span>
     </a>

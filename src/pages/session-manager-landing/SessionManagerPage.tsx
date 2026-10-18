@@ -5,7 +5,8 @@ import '../../styles/session-manager-landing.css';
 import { bookNavigate, markBookPageReady, shouldInterceptClick } from './bookTurn.js';
 import { COPY, fill } from './copy.js';
 import { CopyButton } from './CopyButton.js';
-import { MacDownload, WindowsDownload, windowsAvailable } from './Downloads.js';
+import { MacDownload, WindowsDownload, trackDownloadClick, windowsAvailable } from './Downloads.js';
+import { trackFlow } from '../../hooks/usePageView.js';
 import { Header } from './Header.js';
 import { FilmDialog } from './FilmDialog.js';
 import { Chevron } from './Chevron.js';
@@ -89,6 +90,7 @@ function Hero({
           type="button"
           className="smlp-cta smlp-cta--film"
           aria-haspopup="dialog"
+          data-track="sm-film-play"
           onClick={onWatch}
         >
           <span className="smlp-cta__thumb" aria-hidden="true">
@@ -101,7 +103,7 @@ function Hero({
             <span className="smlp-cta__sub">{film.subtitle}</span>
           </span>
         </button>
-        <a className="smlp-cta smlp-cta--manual" href={manual.href}>
+        <a className="smlp-cta smlp-cta--manual" href={manual.href} data-track="sm-hero-manual">
           <span className="smlp-cta__spine" aria-hidden="true">FM</span>
           <span className="smlp-cta__text">
             <span className="smlp-cta__title">{manual.title}</span>
@@ -136,7 +138,7 @@ function PriceTag() {
         </p>
         <div className="smlp-tag__install" role="group" aria-label={tag.aria.downloads}>
           <MacDownload />
-          <a className="smlp-dl__alt" href={dl.macIntel.href} download>
+          <a className="smlp-dl__alt" href={dl.macIntel.href} download data-track="download-mac-intel" onClick={() => trackDownloadClick('mac-intel')}>
             {dl.macIntel.label}
           </a>
           <WindowsDownload />
@@ -156,7 +158,7 @@ function PriceTag() {
           <p className="smlp-tag__note">{tag.note}</p>
           <p className="smlp-tag__fineprint">
             {tag.unsignedNote}{' '}
-            <a className="smlp-tag__releases" href={dl.allReleases.href}>
+            <a className="smlp-tag__releases" href={dl.allReleases.href} data-track="sm-all-releases">
               {dl.allReleases.label}
             </a>
           </p>
@@ -237,7 +239,10 @@ export default function SessionManagerPage() {
     };
   }, []);
 
-  const openFilm = useCallback(() => setFilmOpen(true), []);
+  const openFilm = useCallback(() => {
+    trackFlow('film', 'play');
+    setFilmOpen(true);
+  }, []);
   const closeFilm = useCallback(() => {
     setFilmOpen(false);
     // Older Safari doesn't hand focus back when a modal dialog closes.
@@ -279,7 +284,7 @@ export default function SessionManagerPage() {
                 <PriceTag />
               </div>
               {canvas && (
-                <button type="button" className="smlp-turn smlp-turn--next" onClick={() => turnTo(1, { focus: true })}>
+                <button type="button" className="smlp-turn smlp-turn--next" data-track="sm-page-next" onClick={() => turnTo(1, { focus: true })}>
                   {COPY.pages.next}
                   <Chevron />
                 </button>
@@ -294,7 +299,7 @@ export default function SessionManagerPage() {
             >
               {canvas && (
                 <div className="smlp-backrow">
-                  <button type="button" className="smlp-turn smlp-turn--back" onClick={() => turnTo(0, { focus: true })}>
+                  <button type="button" className="smlp-turn smlp-turn--back" data-track="sm-page-back" onClick={() => turnTo(0, { focus: true })}>
                     <Chevron up />
                     {COPY.pages.prev}
                   </button>
@@ -302,7 +307,7 @@ export default function SessionManagerPage() {
               )}
               <PartsBin mode={layout.mode} toc={toc} onTabChange={i => { activeTab.current = i; }} />
               {canvas && (
-                <button type="button" className="smlp-turn smlp-turn--manual" onClick={turnToManual}>
+                <button type="button" className="smlp-turn smlp-turn--manual" data-track="sm-page-manual" onClick={turnToManual}>
                   {COPY.book.toManual}
                   <Chevron />
                 </button>
@@ -319,6 +324,7 @@ export default function SessionManagerPage() {
                 className={page === i ? 'smlp-dot smlp-dot--on' : 'smlp-dot'}
                 aria-label={fill(COPY.pages.aria.goToTemplate, { n: i + 1, count: PAGE_COUNT })}
                 aria-current={page === i ? 'page' : undefined}
+                data-track={`sm-page-dot-${i + 1}`}
                 onClick={() => turnTo(i, { focus: true })}
               />
             ))}
@@ -326,6 +332,7 @@ export default function SessionManagerPage() {
               className="smlp-dot smlp-dot--manual"
               href={chapterHref(TABS[activeTab.current].chapter.slug, toc)}
               aria-label={COPY.book.aria.manualDot}
+              data-track="sm-page-dot-manual"
               onClick={e => onBookLinkClick(e, chapterHref(TABS[activeTab.current].chapter.slug, toc))}
             />
           </nav>

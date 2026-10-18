@@ -1,3 +1,4 @@
+import { trackFlow } from '../../hooks/usePageView.js';
 import type { MouseEvent } from 'react';
 import { AccountChip } from './AccountChip.js';
 import { COPY } from './copy.js';
@@ -29,10 +30,16 @@ export function Header({
         <span className="smlp-tagline">{h.tagline}</span>
       </div>
       <div className="smlp-header__right">
-        <a className="smlp-header__coffee" href={h.coffeeHref}>{h.coffeeLink}</a>
+        <a
+          className="smlp-header__coffee"
+          href={h.coffeeHref}
+          data-track="tip-coffee"
+          onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee' })}
+        >{h.coffeeLink}</a>
         <a
           className="smlp-header__manual"
           href={manual ? '/products/session-manager' : COPY.meta.manualHref}
+          data-track="sm-nav-manual"
           onClick={onLinkClick}
         >
           {manual ? COPY.book.backToApp : allFree ? h.manualLink : h.manualLinkNotFree}

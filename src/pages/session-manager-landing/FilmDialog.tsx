@@ -343,7 +343,7 @@ export function FilmDialog({ open, onClose, layout }: Props) {
           </div>
           <div className="smlp-film__closer">
             <span className="smlp-film__esc" aria-hidden="true">{film.escHint}</span>
-            <button type="button" className="smlp-film__close" aria-label={film.aria.close} onClick={onClose}>
+            <button type="button" className="smlp-film__close" data-track="sm-film-close" aria-label={film.aria.close} onClick={onClose}>
               <span aria-hidden="true">×</span>
             </button>
           </div>
@@ -412,6 +412,7 @@ export function FilmDialog({ open, onClose, layout }: Props) {
                   <a
                     className="smlp-end__manual"
                     href={end.manualHref}
+                    data-track="sm-film-end-manual"
                     onClick={() => {
                       videoRef.current?.pause();
                       onClose();
@@ -420,7 +421,7 @@ export function FilmDialog({ open, onClose, layout }: Props) {
                     {end.manualCta}
                   </a>
                 </div>
-                <button type="button" className="smlp-end__replay" onClick={replay}>
+                <button type="button" className="smlp-end__replay" data-track="sm-film-replay" onClick={replay}>
                   {end.replay}
                 </button>
               </div>
@@ -433,6 +434,7 @@ export function FilmDialog({ open, onClose, layout }: Props) {
                 ref={playRef}
                 type="button"
                 className="smlp-film__play"
+                data-track="sm-film-toggle-play"
                 aria-label={ended ? film.aria.replay : playing ? film.aria.pause : film.aria.play}
                 onClick={togglePlay}
               >
@@ -452,14 +454,15 @@ export function FilmDialog({ open, onClose, layout }: Props) {
                 type="button"
                 className="smlp-film__opt smlp-film__opt--rate"
                 aria-label={fill(film.aria.speedTemplate, { rate: rateLabel })}
+                data-track="sm-film-rate"
                 onClick={cycleRate}
               >
                 {rateLabel}
               </button>
-              <button type="button" className="smlp-film__opt" onClick={toggleMute}>
+              <button type="button" className="smlp-film__opt" data-track="sm-film-mute" onClick={toggleMute}>
                 {muted ? film.soundOff : film.soundOn}
               </button>
-              <button type="button" className="smlp-film__opt" onClick={toggleFullscreen}>
+              <button type="button" className="smlp-film__opt" data-track="sm-film-fullscreen" onClick={toggleFullscreen}>
                 {isFullscreen ? film.exitFullscreen : film.fullscreen}
               </button>
             </div>

@@ -274,6 +274,10 @@ if (isProd) {
       if (path.startsWith('/blog-videos/')) {
         return reply.status(404).type('text/plain').send('Not found');
       }
+      // A /projects/<slug>/ root the static plugin didn't serve has no
+      // published bundle: real 404 status. The SPA renders a terminal
+      // "not published" page there (src/lib/projectPaths.ts), never a redirect.
+      if (/^\/projects\/[^/]+\/(?:index\.html)?$/.test(path)) reply.status(404);
       // Never cacheable: the onSend hook stamps a per-request CSP nonce into
       // this HTML, so a shared or reused copy would carry a nonce that no
       // longer matches the response's CSP header.

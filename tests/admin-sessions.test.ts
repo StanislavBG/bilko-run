@@ -105,6 +105,57 @@ describe('admin sessions', () => {
     expect(timeline[5]).toMatchObject({ app: 'sudoku', msg: 'boom' });
   });
 
+  describe('flows', () => {
+    const seedFlow = async () => {
+      const iso = (offset: number) =>
+        new Date(Math.floor((Date.now() - 600_000 + offset) / 1000) * 1000).toISOString().slice(0, 19).replace('T', ' ');
+      const steps: [string, number, number][] = [['open', 10, 0], ['play', 6, 1000], ['win', 2, 2000]];
+      for (const [step, n, off] of steps) {
+        for (let i = 0; i < n; i++) {
+          await dbRun(
+            `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id) VALUES (?, 'flowapp', ?, ?, ?)`,
+            `main.${step}`, JSON.stringify({ flow: 'main', step }), iso(off), `flow-sess-${i}`);
+        }
+      }
+    };
+
+    it('returns a seeded funnel ordered by sessions', async () => {
+      await seedFlow();
+      const res = await app.inject({ method: 'GET', url: '/api/admin/flows' });
+      expect(res.statusCode).toBe(200);
+      const { flows } = res.json();
+      const f = flows.find((x: any) => x.app === 'flowapp');
+      expect(f.flow).toBe('main');
+      expect(f.steps.map((s: any) => [s.step, s.sessions])).toEqual([['open', 10], ['play', 6], ['win', 2]]);
+      expect(f.total_sessions).toBe(10);
+      expect(flows.some((x: any) => x.app === 'sudoku')).toBe(false);
+    });
+
+    it('filters by app', async () => {
+      await seedFlow();
+      const { apps, flows } = (await app.inject({ method: 'GET', url: '/api/admin/flows?app=flowapp' })).json();
+      expect(apps.map((a: any) => a.app)).toEqual(['flowapp']);
+      expect(flows.map((f: any) => f.app)).toEqual(['flowapp']);
+      const none = (await app.inject({ method: 'GET', url: '/api/admin/flows?app=nope' })).json();
+      expect(none).toEqual({ apps: [], flows: [] });
+    });
+
+    it('counts per-app errors and sessions', async () => {
+      const { apps } = (await app.inject({ method: 'GET', url: '/api/admin/flows' })).json();
+      const sudoku = apps.find((a: any) => a.app === 'sudoku');
+      expect(sudoku).toMatchObject({ sessions: 1, views: 1, clicks: 0, events: 1, errors: 1, error_sessions: 1 });
+      expect(sudoku.last_seen_ms).toBeGreaterThan(0);
+      const sm = apps.find((a: any) => a.app === 'session-manager');
+      expect(sm).toMatchObject({ views: 1, errors: 0, error_sessions: 0 });
+    });
+
+    it('400s on a bad app value and rejects non-admins', async () => {
+      expect((await app.inject({ method: 'GET', url: '/api/admin/flows?app=bad%20app!' })).statusCode).toBe(400);
+      mockAdmin.mockImplementation(async (_r: any, reply: any) => { reply.status(401).send({ error: 'no' }); return null; });
+      expect((await app.inject({ method: 'GET', url: '/api/admin/flows' })).statusCode).toBe(401);
+    });
+  });
+
   it('400s on a malformed id and 404s on an unknown one', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/admin/sessions/not-an-id' })).statusCode).toBe(400);
     expect((await app.inject({ method: 'GET', url: '/api/admin/sessions/44444444-4444-4444-8444-444444444444' })).statusCode).toBe(404);

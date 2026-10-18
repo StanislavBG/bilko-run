@@ -50,7 +50,144 @@ function parseProps(raw: string | null): unknown {
   try { return JSON.parse(raw); } catch { return raw; }
 }
 
+const APP_FILTER_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
+
+interface AppAgg {
+  sessions: Set<string>;
+  views: number;
+  clicks: number;
+  events: number;
+  errors: number;
+  errorSessions: Set<string>;
+  lastSeen: number;
+}
+
+function sqlUtc(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+}
+
 export function registerAdminSessionRoutes(app: FastifyInstance): void {
+  app.get('/api/admin/flows', async (req, reply) => {
+    const admin = await requireAdmin(req, reply);
+    if (!admin) return;
+
+    const q = (req.query ?? {}) as { days?: string; app?: string };
+    const days = intParam(q.days, 7, 1, 30);
+    if (q.app !== undefined && !APP_FILTER_RE.test(String(q.app))) {
+      return reply.status(400).send({ error: 'Invalid app.' });
+    }
+    const appFilter = q.app !== undefined ? String(q.app) : null;
+    const sinceMs = Date.now() - days * 86_400_000;
+    const sinceUtc = sqlUtc(sinceMs);
+    const sinceSec = Math.floor(sinceMs / 1000);
+
+    const aggs = new Map<string, AppAgg>();
+    const get = (slug: string): AppAgg => {
+      let a = aggs.get(slug);
+      if (!a) {
+        a = { sessions: new Set(), views: 0, clicks: 0, events: 0, errors: 0, errorSessions: new Set(), lastSeen: 0 };
+        aggs.set(slug, a);
+      }
+      return a;
+    };
+    const appTool = appFilter ? ' AND tool = ?' : '';
+    const toolParams = appFilter ? [appFilter] : [];
+
+    const [views, clicks, events, errors, steps, totals] = await Promise.all([
+      dbAll<{ path: string; session_id: string | null; n: number; last_ms: number }>(
+        `SELECT path, session_id, COUNT(*) AS n, MAX(created_at_ms) AS last_ms FROM page_views
+          WHERE created_at_ms >= ? AND (path LIKE '/projects/%' OR path LIKE '/products/%')
+          GROUP BY path, session_id`, sinceMs),
+      dbAll<{ path: string; session_id: string | null; n: number; last_ms: number }>(
+        `SELECT path, session_id, COUNT(*) AS n, MAX(ts_ms) AS last_ms FROM click_events
+          WHERE ts_ms >= ? AND (path LIKE '/projects/%' OR path LIKE '/products/%')
+          GROUP BY path, session_id`, sinceMs),
+      dbAll<{ tool: string; session_id: string | null; n: number; last_ms: number }>(
+        `SELECT tool, session_id, COUNT(*) AS n,
+                MAX(CAST(strftime('%s', created_at) AS INTEGER)) * 1000 AS last_ms
+           FROM funnel_events WHERE created_at >= ? AND tool IS NOT NULL AND tool != ''${appTool}
+          GROUP BY tool, session_id`, sinceUtc, ...toolParams),
+      dbAll<{ app: string; session_id: string | null; n: number; last_s: number }>(
+        `SELECT app, session_id, COUNT(*) AS n, MAX(created_at) AS last_s FROM app_errors
+          WHERE created_at >= ?${appFilter ? ' AND app = ?' : ''}
+          GROUP BY app, session_id`, sinceSec, ...toolParams),
+      dbAll<{ tool: string; flow: string; step: string | null; sessions: number; first_ms: number }>(
+        `SELECT tool, json_extract(metadata, '$.flow') AS flow, json_extract(metadata, '$.step') AS step,
+                COUNT(DISTINCT session_id) AS sessions,
+                MIN(CAST(strftime('%s', created_at) AS INTEGER)) * 1000 AS first_ms
+           FROM funnel_events
+          WHERE created_at >= ? AND tool IS NOT NULL AND tool != '' AND json_valid(metadata)
+            AND json_extract(metadata, '$.flow') IS NOT NULL${appTool}
+          GROUP BY tool, flow, step`, sinceUtc, ...toolParams),
+      dbAll<{ tool: string; flow: string; sessions: number }>(
+        `SELECT tool, json_extract(metadata, '$.flow') AS flow, COUNT(DISTINCT session_id) AS sessions
+           FROM funnel_events
+          WHERE created_at >= ? AND tool IS NOT NULL AND tool != '' AND json_valid(metadata)
+            AND json_extract(metadata, '$.flow') IS NOT NULL${appTool}
+          GROUP BY tool, flow`, sinceUtc, ...toolParams),
+    ]);
+
+    for (const r of views) {
+      const slug = appSlugFromPath(r.path);
+      if (!slug || (appFilter && slug !== appFilter)) continue;
+      const a = get(slug);
+      a.views += r.n;
+      if (r.session_id) a.sessions.add(r.session_id);
+      a.lastSeen = Math.max(a.lastSeen, r.last_ms ?? 0);
+    }
+    for (const r of clicks) {
+      const slug = appSlugFromPath(r.path);
+      if (!slug || (appFilter && slug !== appFilter)) continue;
+      const a = get(slug);
+      a.clicks += r.n;
+      if (r.session_id) a.sessions.add(r.session_id);
+      a.lastSeen = Math.max(a.lastSeen, r.last_ms ?? 0);
+    }
+    for (const r of events) {
+      const a = get(r.tool);
+      a.events += r.n;
+      if (r.session_id) a.sessions.add(r.session_id);
+      a.lastSeen = Math.max(a.lastSeen, r.last_ms ?? 0);
+    }
+    for (const r of errors) {
+      const a = get(r.app);
+      a.errors += r.n;
+      if (r.session_id) { a.sessions.add(r.session_id); a.errorSessions.add(r.session_id); }
+      a.lastSeen = Math.max(a.lastSeen, (r.last_s ?? 0) * 1000);
+    }
+
+    const apps = [...aggs.entries()]
+      .map(([slug, a]) => ({
+        app: slug,
+        sessions: a.sessions.size,
+        views: a.views,
+        clicks: a.clicks,
+        events: a.events,
+        errors: a.errors,
+        error_sessions: a.errorSessions.size,
+        last_seen_ms: a.lastSeen,
+      }))
+      .sort((x, y) => y.sessions - x.sessions || x.app.localeCompare(y.app));
+
+    const flowMap = new Map<string, { app: string; flow: string; steps: { step: string; sessions: number; first_seen_ms: number }[]; total_sessions: number }>();
+    const key = (tool: string, flow: string) => `${tool}\u0000${flow}`;
+    for (const t of totals) {
+      flowMap.set(key(t.tool, String(t.flow)), { app: t.tool, flow: String(t.flow), steps: [], total_sessions: t.sessions });
+    }
+    for (const s of steps) {
+      const f = flowMap.get(key(s.tool, String(s.flow)));
+      if (f) f.steps.push({ step: String(s.step ?? ''), sessions: s.sessions, first_seen_ms: s.first_ms });
+    }
+    const flows = [...flowMap.values()]
+      .map(f => ({
+        ...f,
+        steps: f.steps.sort((x, y) => y.sessions - x.sessions || x.first_seen_ms - y.first_seen_ms),
+      }))
+      .sort((x, y) => x.app.localeCompare(y.app) || x.flow.localeCompare(y.flow));
+
+    return { apps, flows };
+  });
+
   app.get('/api/admin/sessions', async (req, reply) => {
     const admin = await requireAdmin(req, reply);
     if (!admin) return;

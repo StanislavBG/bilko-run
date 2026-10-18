@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
-import { track } from '../hooks/usePageView.js';
+import { track, trackFlow } from '../hooks/usePageView.js';
 import { useIsAdmin } from '../hooks/useAdmin.js';
 import { SECTIONS } from '../data/portfolio.js';
 import { CommandPalette } from './portfolio/CommandPalette.js';
@@ -49,13 +49,14 @@ export function Layout() {
         <nav>
           {SECTIONS.map(s =>
             s.href ? (
-              <a key={s.id} href={s.href} className={activePath === s.path ? 'active' : ''}>
+              <a key={s.id} href={s.href} data-track={`nav-${s.id}`} className={activePath === s.path ? 'active' : ''}>
                 {s.label}
               </a>
             ) : (
               <NavLink
                 key={s.id}
                 to={s.path}
+                data-track={`nav-${s.id}`}
                 className={() => (activePath === s.path ? 'active' : '')}
                 end={s.path === '/'}
               >
@@ -117,13 +118,13 @@ export function Layout() {
             <div className="pf-eyebrow" style={{ marginBottom: 12 }}>Sections</div>
             {SECTIONS.map(s =>
               s.href ? (
-                <a key={s.id} href={s.href} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
+                <a key={s.id} href={s.href} data-track={`nav-${s.id}`} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
                   <span className="pf-mobile-icon">{s.icon}</span>
                   <span>{s.label}</span>
                   <span className="pf-mobile-tag">{s.tag}</span>
                 </a>
               ) : (
-                <Link key={s.id} to={s.path} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
+                <Link key={s.id} to={s.path} data-track={`nav-${s.id}`} className={'pf-mobile-link ' + (activePath === s.path ? 'active' : '')}>
                   <span className="pf-mobile-icon">{s.icon}</span>
                   <span>{s.label}</span>
                   <span className="pf-mobile-tag">{s.tag}</span>
@@ -153,23 +154,23 @@ export function Layout() {
         <div className="pf-col">
           <h4>Sections</h4>
           {SECTIONS.slice(0, 3).map(s => (
-            <Link key={s.id} to={s.path}>{s.label}</Link>
+            <Link key={s.id} to={s.path} data-track={`footer-${s.id}`}>{s.label}</Link>
           ))}
         </div>
         <div className="pf-col">
           <h4>More</h4>
           {SECTIONS.slice(3).map(s => (
-            <Link key={s.id} to={s.path}>{s.label}</Link>
+            <Link key={s.id} to={s.path} data-track={`footer-${s.id}`}>{s.label}</Link>
           ))}
         </div>
         <div className="pf-col">
           <h4>Elsewhere</h4>
-          <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer">GitHub →</a>
-          <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer">Twitter →</a>
-          <a href="/coffee">Buy me a coffee ☕ →</a>
-          <a href="mailto:bilko@bilko.run">Email →</a>
-          <Link to="/privacy">Privacy →</Link>
-          <Link to="/terms">Terms →</Link>
+          <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" data-track="footer-github">GitHub →</a>
+          <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" data-track="footer-twitter">Twitter →</a>
+          <a href="/coffee" data-track="tip-coffee" onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee', area: 'footer' })}>Buy me a coffee ☕ →</a>
+          <a href="mailto:bilko@bilko.run" data-track="footer-email">Email →</a>
+          <Link to="/privacy" data-track="footer-privacy">Privacy →</Link>
+          <Link to="/terms" data-track="footer-terms">Terms →</Link>
         </div>
       </footer>
 

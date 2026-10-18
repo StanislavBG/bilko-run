@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { BlogVideoPlayer } from '../components/BlogVideoPlayer.js';
 import { parseFigure, splitInlineLinks } from '../lib/blogMarkdown.js';
 import { useDocumentTitle, DEFAULT_DOCUMENT_TITLE } from '../hooks/useDocumentTitle.js';
+import { trackFlow } from '../hooks/usePageView.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -47,6 +48,10 @@ export function BlogPostPage() {
     }).catch(() => setNotFound(true)).finally(() => setLoading(false));
   }, [slug]);
 
+  useEffect(() => {
+    if (slug) trackFlow('read', 'start', { slug });
+  }, [slug]);
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-[50vh]">
       <div className="h-5 w-5 rounded-full border-2 border-fire-500 border-t-transparent animate-spin" />
@@ -57,7 +62,7 @@ export function BlogPostPage() {
     <div className="max-w-2xl mx-auto px-6 py-20 text-center">
       <h1 className="text-2xl font-black text-warm-900 mb-2">Post not found</h1>
       <p className="text-warm-500 mb-4">This post doesn't exist or hasn't been published yet.</p>
-      <Link to="/blog" className="text-fire-500 hover:text-fire-600 font-semibold">Back to blog &rarr;</Link>
+      <Link to="/blog" data-track="blog-post-back" className="text-fire-500 hover:text-fire-600 font-semibold">Back to blog &rarr;</Link>
     </div>
   );
 
@@ -127,6 +132,7 @@ export function BlogPostPage() {
             <a
               key={`${i}-${j}-${k}`}
               href={p.href}
+              data-track="blog-post-link"
               {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               className="text-fire-600 underline hover:text-fire-700"
             >
@@ -144,7 +150,7 @@ export function BlogPostPage() {
     <article className="max-w-2xl mx-auto px-6 pb-16">
       {/* Breadcrumb */}
       <div className="pt-8 pb-4">
-        <Link to="/blog" className="text-sm text-warm-400 hover:text-fire-500 transition-colors">&larr; Back to blog</Link>
+        <Link to="/blog" data-track="blog-post-back" className="text-sm text-warm-400 hover:text-fire-500 transition-colors">&larr; Back to blog</Link>
       </div>
 
       {/* Header */}
@@ -169,11 +175,11 @@ export function BlogPostPage() {
       {/* Share + CTA */}
       <div className="mt-12 pt-8 border-t border-warm-200/40">
         <div className="flex flex-wrap gap-3 mb-8">
-          <button onClick={() => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}`, '_blank', 'width=550,height=420')}
+          <button data-track="blog-post-share-x" onClick={() => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}`, '_blank', 'width=550,height=420')}
             className="inline-flex items-center gap-2 px-4 py-2 bg-warm-900 hover:bg-warm-800 text-white text-sm font-semibold rounded-lg transition-colors">
             Share on X
           </button>
-          <button onClick={() => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`https://bilko.run/blog/${post.slug}`)}`, '_blank')}
+          <button data-track="blog-post-share-linkedin" onClick={() => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(`https://bilko.run/blog/${post.slug}`)}`, '_blank')}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#0077B5] hover:bg-[#006299] text-white text-sm font-semibold rounded-lg transition-colors">
             Share on LinkedIn
           </button>
@@ -182,7 +188,7 @@ export function BlogPostPage() {
         <div className="bg-warm-50 rounded-2xl border border-warm-200/60 p-6 text-center">
           <p className="text-warm-900 font-bold mb-2">Want to try the tools?</p>
           <p className="text-sm text-warm-500 mb-4">Everything mentioned in this post is live and free to start.</p>
-          <Link to="/projects" className="inline-flex items-center gap-2 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl transition-all">
+          <Link to="/projects" data-track="blog-post-cta-projects" className="inline-flex items-center gap-2 px-6 py-3 bg-fire-500 hover:bg-fire-600 text-white font-bold rounded-xl transition-all">
             View All Tools
           </Link>
         </div>

@@ -65,7 +65,7 @@ export function BlogPage() {
       {!loading && posts.length > 0 && (
         <div className="pf-post-list">
           {posts.map(post => (
-            <div key={post.slug} className="pf-post-row" onClick={() => navigate(`/blog/${post.slug}`)}>
+            <div key={post.slug} className="pf-post-row" data-track="blog-open-post" onClick={() => navigate(`/blog/${post.slug}`)}>
               <div className="pf-date">{formatDate(post.published_at)}</div>
               <div className="pf-title">
                 {post.title}

@@ -16,7 +16,7 @@ export function PortfolioProjectDetailPage() {
       <div className="pf-page" style={{ padding: '60px 0' }}>
         <div className="pf-eyebrow">404</div>
         <h1 className="pf-serif" style={{ fontSize: 80, fontWeight: 400, margin: '12px 0 24px' }}>Not found.</h1>
-        <button className="pf-btn" onClick={() => navigate('/projects')}>← Back to projects</button>
+        <button className="pf-btn" data-track="project-detail-back" onClick={() => navigate('/projects')}>← Back to projects</button>
       </div>
     );
   }
@@ -24,6 +24,7 @@ export function PortfolioProjectDetailPage() {
   return (
     <div className="pf-page pf-proj-detail">
       <button
+        data-track="project-detail-back"
         onClick={() => navigate('/projects')}
         className="pf-mono"
         style={{ cursor: 'pointer', margin: '32px 0 16px', color: 'var(--pf-ink-2)' }}
@@ -67,9 +68,9 @@ export function PortfolioProjectDetailPage() {
           <div style={{ position: 'sticky', top: 90 }}>
             <div style={{ padding: 24, background: 'var(--pf-paper)', border: '1px solid var(--pf-rule)' }}>
               <div className="pf-eyebrow" style={{ marginBottom: 12 }}>Visit</div>
-              <button className="pf-btn" style={{ width: '100%', justifyContent: 'center' }}>Open project →</button>
+              <button className="pf-btn" data-track="project-detail-open-app" style={{ width: '100%', justifyContent: 'center' }}>Open project →</button>
               <div className="pf-eyebrow" style={{ marginTop: 24, marginBottom: 12 }}>Source</div>
-              <a className="pf-mono" style={{ color: 'var(--pf-ink)', display: 'block' }}>github.com/bilko/{p.id}</a>
+              <a className="pf-mono" data-track="project-detail-source" style={{ color: 'var(--pf-ink)', display: 'block' }}>github.com/bilko/{p.id}</a>
               <div className="pf-eyebrow" style={{ marginTop: 24, marginBottom: 12 }}>Tags</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {p.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}

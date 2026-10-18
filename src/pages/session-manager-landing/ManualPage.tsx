@@ -16,6 +16,7 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from '
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { formatBytes } from '../../lib/format.js';
+import { trackFlow } from '../../hooks/usePageView.js';
 import {
   fetchManualToc, fetchManualChapter, manualDownloadUrl,
   type ManualChapterBody, type ManualChapterUnavailable, type TokenGetter,
@@ -33,6 +34,8 @@ import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../../
 
 /** Chapter requests from a visitor who isn't (or isn't yet known to be) signed in. */
 const NO_TOKEN: TokenGetter = async () => null;
+
+const trackAppDownload = () => trackFlow('download', 'click-download', { artifact: 'session-manager', platform: 'any' });
 
 function isUnavailable(c: ManualChapterBody | ManualChapterUnavailable | null): c is ManualChapterUnavailable {
   return !!c && (c as ManualChapterUnavailable).locked === true;
@@ -228,7 +231,7 @@ export default function ManualPage() {
         <h1 className="smlm-title">{MANUAL_TITLE}</h1>
         <p className="smlm-summary">
           The first release is still being cut. Check back shortly — or get the app free from the{' '}
-          <a href="/products/session-manager">Session Manager page</a> — Mac and Windows installers, no terminal needed.
+          <a href="/products/session-manager" data-track="download-session-manager-app" onClick={trackAppDownload}>Session Manager page</a> — Mac and Windows installers, no terminal needed.
         </p>
       </main>
     ));
@@ -262,7 +265,7 @@ export default function ManualPage() {
         {toc.assets.length > 0 && (
           <div className="smlm-downloads">
             {toc.assets.map(a => (
-              <a key={a.id} href={manualDownloadUrl(a.id)} download className="smlm-download">
+              <a key={a.id} href={manualDownloadUrl(a.id)} download data-track={`download-manual-${a.id}`} onClick={() => trackFlow('download', 'click-download', { artifact: 'session-manager', platform: a.id })} className="smlm-download">
                 ↓ {a.label} <span className="smlm-download__size">({formatBytes(a.bytes)})</span>
               </a>
             ))}
@@ -271,7 +274,7 @@ export default function ManualPage() {
 
         <p className="smlm-appnote">
           The app itself is free too — get it from the{' '}
-          <a href="/products/session-manager">Session Manager page</a> — Mac and Windows installers, no terminal needed.
+          <a href="/products/session-manager" data-track="download-session-manager-app" onClick={trackAppDownload}>Session Manager page</a> — Mac and Windows installers, no terminal needed.
           This is the guide that teaches it.
         </p>
 
@@ -280,7 +283,7 @@ export default function ManualPage() {
             <div key={`${g.part ?? ''}-${gi}`} className="smlm-toc__group">
               {g.part && <div className="smlm-toc__part">{g.part}</div>}
               {g.items.map(({ c, n }) => (
-                <a key={c.slug} href={`#${c.slug}`} className="smlm-toc__row" title={c.blurb}>
+                <a key={c.slug} href={`#${c.slug}`} data-track={`manual-nav-${c.slug}`} className="smlm-toc__row" title={c.blurb}>
                   <span className="smlm-toc__num">{String(n).padStart(2, '0')}</span>
                   <span className="smlm-toc__label">{c.title}</span>
                 </a>
@@ -292,7 +295,7 @@ export default function ManualPage() {
 
       {canvas && (
         <div className="smlm-backrow">
-          <button type="button" className="smlp-turn" onClick={e => leaveTo(e, PARTS_HREF)}>
+          <button type="button" data-track="manual-nav-parts" className="smlp-turn" onClick={e => leaveTo(e, PARTS_HREF)}>
             <Chevron up />
             {COPY.book.toParts}
           </button>
@@ -318,6 +321,7 @@ export default function ManualPage() {
           {dotHrefs.map((href, i) => (
             <a
               key={href}
+              data-track={`manual-nav-${href === LANDING_HREF ? 'landing' : 'parts'}`}
               className="smlp-dot smlp-dot--manual"
               href={href}
               aria-label={fill(COPY.pages.aria.goToTemplate, { n: i + 1, count: BOOK_PAGE_COUNT })}
@@ -327,6 +331,7 @@ export default function ManualPage() {
           <a
             className="smlp-dot smlp-dot--manual smlp-dot--on"
             href={`${LANDING_HREF}/manual`}
+            data-track="manual-nav-manual"
             aria-label={fill(COPY.pages.aria.goToTemplate, { n: 3, count: BOOK_PAGE_COUNT })}
             aria-current="page"
             onClick={e => e.preventDefault()}

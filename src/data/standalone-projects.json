@@ -268,7 +268,7 @@
   {
     "slug": "game-academy",
     "name": "Bilko Game Academy",
-    "tagline": "Alpha: browser game library. Sign in with bilko.run to keep your progress across devices. First game: Boat Shooter.",
+    "tagline": "Alpha: browser game library. Sign in with bilko.run to keep your progress across devices. First game: Pong.",
     "category": "Game",
     "status": "live",
     "year": 2026,
@@ -286,7 +286,7 @@
     "listing": {
       "offering": "game",
       "pricing": "free",
-      "callToAction": "Play Boat Shooter"
+      "callToAction": "Play Pong"
     }
   },
   {

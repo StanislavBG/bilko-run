@@ -154,4 +154,45 @@ describe('POST /api/analytics/click', () => {
     expect(click?.visitor_id).toBeTruthy();
     expect(click?.visitor_id).toBe(hit?.visitor_id);
   });
+
+  const VID = '11111111-1111-4111-8111-111111111111';
+  const SID = '22222222-2222-4222-8222-222222222222';
+  const BVID = '33333333-3333-4333-8333-333333333333';
+  const BSID = '44444444-4444-4444-8444-444444444444';
+  // The flood test exhausts the default IP's limiter; use a fresh IP.
+  const postFresh = (payload: Record<string, unknown>) =>
+    app.inject({ method: 'POST', url: '/api/analytics/click', remoteAddress: '192.0.2.30', payload });
+
+  it('stores session ids from the bilko cookies over body ids', async () => {
+    await app.inject({
+      method: 'POST', url: '/api/analytics/click', remoteAddress: '192.0.2.20',
+      headers: { cookie: `bilko_vid=${VID}; bilko_sid=${SID}` },
+      payload: { path: '/blog', tag: 'a', visitor_id: BVID, session_id: BSID },
+    });
+    const row = await dbGet<Record<string, any>>('SELECT session_id, client_vid FROM click_events');
+    expect(row?.session_id).toBe(SID);
+    expect(row?.client_vid).toBe(VID);
+  });
+
+  it('falls back to valid body ids when there are no cookies', async () => {
+    await postFresh({ path: '/blog', tag: 'a', visitor_id: BVID, session_id: BSID });
+    const row = await dbGet<Record<string, any>>('SELECT session_id, client_vid FROM click_events');
+    expect(row?.session_id).toBe(BSID);
+    expect(row?.client_vid).toBe(BVID);
+  });
+
+  it('rejects malformed ids (stores NULL)', async () => {
+    await postFresh({ path: '/blog', tag: 'a', visitor_id: 'not-a-uuid', session_id: "x'; DROP TABLE" });
+    const row = await dbGet<Record<string, any>>('SELECT session_id, client_vid FROM click_events');
+    expect(row?.session_id).toBeNull();
+    expect(row?.client_vid).toBeNull();
+  });
+
+  it('stores track_name sliced to 60 chars, else NULL', async () => {
+    await postFresh({ path: '/a', tag: 'a', track: 'x'.repeat(100) });
+    await postFresh({ path: '/b', tag: 'a' });
+    const rows = await dbAll<{ path: string; track_name: string | null }>('SELECT path, track_name FROM click_events ORDER BY id');
+    expect(rows[0].track_name).toBe('x'.repeat(60));
+    expect(rows[1].track_name).toBeNull();
+  });
 });

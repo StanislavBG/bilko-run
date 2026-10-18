@@ -3,6 +3,7 @@ import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBot } from '../services/analytics.js';
 import { slugFromPath, visitorHash, stableVisitorId, sessionCookie } from '../page-hits.js';
+import { readSessionIds, isValidId } from '../session-identity.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
 // Event allowlist (must match client-side enum).
@@ -72,11 +73,35 @@ function parseRefHost(raw: string | null): string | null {
   }
 }
 
+// Cookie ids are the source of truth. Body ids are the fallback: strict mode
+// (click) accepts only valid UUIDs; legacy mode (pageview/event) also keeps the
+// older client-generated ids, truncated to 64 chars.
+function resolveIds(
+  req: { headers: { cookie?: string } },
+  body: { visitor_id?: unknown; session_id?: unknown } | null | undefined,
+  strict: boolean,
+): { visitorId: string | null; sessionId: string | null } {
+  const c = readSessionIds(req.headers.cookie);
+  const fromBody = (v: unknown): string | null => {
+    if (isValidId(v)) return v;
+    if (strict || typeof v !== 'string') return null;
+    return v.slice(0, 64) || null;
+  };
+  return {
+    visitorId: c.visitorId ?? fromBody(body?.visitor_id),
+    sessionId: c.sessionId ?? fromBody(body?.session_id),
+  };
+}
+
 export function registerAnalyticsRoutes(app: FastifyInstance): void {
   // Fire-and-forget page view tracking — no cookies, no PII
   app.post('/api/analytics/pageview', async (req, reply) => {
     try {
-      const body = req.body as {
+      let raw: unknown = req.body;
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch { raw = null; }
+      }
+      const body = (raw && typeof raw === 'object' ? raw : null) as {
         path?: string; referrer?: string; screen?: string; email?: string;
         utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_term?: string; utm_content?: string;
         visitor_id?: string; session_id?: string;
@@ -84,7 +109,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const path = (body?.path ?? '/').slice(0, 200);
       const referrer = (body?.referrer ?? '').slice(0, 500) || null;
       const screen = (body?.screen ?? '').slice(0, 20) || null;
-      const email = (body?.email ?? '').slice(0, 200).toLowerCase() || null;
+      let email = (typeof body?.email === 'string' ? body.email : '').slice(0, 200).toLowerCase() || null;
       const ua = ((req.headers['user-agent'] ?? '') as string).slice(0, 300) || '';
       const date = new Date().toISOString().slice(0, 10);
       const nowMs = Date.now();
@@ -94,8 +119,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const utmTerm = (body?.utm_term ?? '').slice(0, 200) || null;
       const utmContent = (body?.utm_content ?? '').slice(0, 200) || null;
       const country = ((req.headers['cf-ipcountry'] ?? req.headers['x-vercel-ip-country'] ?? req.headers['x-country'] ?? null) as string | null) || null;
-      const visitorId = (body?.visitor_id ?? '').slice(0, 64) || null;
-      const sessionId = (body?.session_id ?? '').slice(0, 64) || null;
+      const { visitorId, sessionId } = resolveIds(req, body, false);
 
       // Same dual-key limiter as /event, with a more generous per-visitor cap.
       if (!checkEventRate(visitorId, (req.ip as string | undefined) ?? null, EVENT_RATE_LIMIT_VISITOR * 2, EVENT_RATE_LIMIT_IP * 2, 'pv')) {
@@ -113,7 +137,15 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const { device, browser, os } = parseUa(ua);
       // Admin flag comes only from a verified Clerk token — never from body.email.
       const verified = await verifyClerkToken(req.headers.authorization);
-      const isAdmin = verified && ADMIN_EMAILS.includes(verified.toLowerCase()) ? 1 : 0;
+      let verifiedEmail = verified;
+      if (!email && !bot && !verifiedEmail) {
+        const token = sessionCookie(req.headers.cookie);
+        try {
+          if (token) verifiedEmail = (await verifyClerkToken('Bearer ' + token)) ?? null;
+        } catch { /* anonymous */ }
+      }
+      if (!email && verifiedEmail) email = verifiedEmail.slice(0, 200).toLowerCase();
+      const isAdmin = verifiedEmail && ADMIN_EMAILS.includes(verifiedEmail.toLowerCase()) ? 1 : 0;
 
       // One round-trip: page view (is_new_visitor computed in-statement) + session upsert.
       const stmts: { sql: string; args: any[] }[] = [{
@@ -167,8 +199,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         reply.status(400);
         return { error: 'Unknown event' };
       }
-      const visitorId = (body?.visitor_id ?? '').slice(0, 64) || null;
-      const sessionId = (body?.session_id ?? '').slice(0, 64) || null;
+      const { visitorId, sessionId } = resolveIds(req, body, false);
       const tool = (body?.tool ?? '').slice(0, 80) || null;
       const path = (body?.path ?? '').slice(0, 200) || null;
 
@@ -220,6 +251,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         return reply.send();
       }
 
+      const { visitorId: clientVid, sessionId: clickSid } = resolveIds(req, body, true);
+      const trackName = str(body?.track, 60) || null;
       const tag = str(body?.tag, 20).toLowerCase() || null;
       const elId = str(body?.id, 80) || null;
       const label = str(body?.label, 400).replace(/\s+/g, ' ').trim().slice(0, 80) || null;
@@ -238,11 +271,12 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       } catch { /* anonymous */ }
       const isAdmin = userEmail && ADMIN_EMAILS.includes(userEmail.toLowerCase()) ? 1 : 0;
       await dbRun(
-        `INSERT INTO click_events (ts_ms, date, path, slug, tag, el_id, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO click_events (ts_ms, date, path, slug, tag, el_id, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin, session_id, client_vid, track_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         nowMs, date, path, slugFromPath(path), tag, elId, label, href,
         visitorHash(date, ip ?? '', ua), bot ? 1 : 0,
         ip, stableVisitorId(ip ?? '', String(req.headers['user-agent'] ?? '')), userEmail, isAdmin,
+        clickSid, clientVid, trackName,
       );
     } catch { /* never fail */ }
     reply.status(204);

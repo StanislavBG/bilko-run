@@ -1,0 +1,112 @@
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import Fastify from 'fastify';
+import { initDb, dbRun } from '../server/db.js';
+import { registerAdminSessionRoutes } from '../server/routes/admin-sessions.js';
+
+vi.mock('../server/clerk.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../server/clerk.js')>();
+  return {
+    ...original,
+    requireAdmin: vi.fn().mockImplementation(async (_req: any, reply: any) => {
+      reply.status(403).send({ error: 'Admin access required.' });
+      return null;
+    }),
+  };
+});
+
+import { requireAdmin } from '../server/clerk.js';
+const mockAdmin = requireAdmin as ReturnType<typeof vi.fn>;
+const asAdmin = () => mockAdmin.mockImplementation(async () => 'admin@example.com');
+
+const SID = '11111111-1111-4111-8111-111111111111';
+const SID2 = '22222222-2222-4222-8222-222222222222';
+const VID = '33333333-3333-4333-8333-333333333333';
+
+const app = Fastify({ logger: false });
+registerAdminSessionRoutes(app);
+
+beforeAll(async () => {
+  await initDb();
+  await app.ready();
+});
+
+beforeEach(async () => {
+  for (const t of ['sessions', 'page_views', 'click_events', 'funnel_events', 'app_errors']) {
+    await dbRun(`DELETE FROM ${t}`);
+  }
+  asAdmin();
+  const now = Date.now();
+  const t0 = now - 60_000;
+  await dbRun(
+    `INSERT INTO sessions (session_id, visitor_id, started_at, ended_at, landing_path, exit_path, page_count, email)
+     VALUES (?, ?, ?, ?, '/', '/projects/sudoku/', 2, 'a@b.co')`,
+    SID, VID, t0, t0 + 50_000,
+  );
+  await dbRun(
+    `INSERT INTO sessions (session_id, visitor_id, started_at, ended_at, landing_path, exit_path, page_count)
+     VALUES (?, ?, ?, ?, '/blog', '/blog', 1)`,
+    SID2, VID, now - 120_000, now - 110_000,
+  );
+  const pv = (p: string, ms: number, sid = SID) => dbRun(
+    `INSERT INTO page_views (path, referrer, date, session_id, created_at_ms) VALUES (?, 'ref', '2026-10-18', ?, ?)`, p, sid, ms);
+  await pv('/', t0);
+  await pv('/projects/sudoku/', t0 + 10_000);
+  await pv('/products/session-manager', t0 + 20_000);
+  await pv('/blog', now - 120_000, SID2);
+  await dbRun(
+    `INSERT INTO click_events (ts_ms, date, path, label, href, session_id, track_name)
+     VALUES (?, '2026-10-18', '/', 'Go', '/projects/sudoku/', ?, 'hero_cta')`, t0 + 5_000, SID);
+  // funnel_events.created_at is UTC text; pick t0+15s
+  const iso = new Date(Math.floor((t0 + 15_000) / 1000) * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  await dbRun(
+    `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id, path) VALUES ('game_start', 'sudoku', '{"level":3}', ?, ?, '/projects/sudoku/')`,
+    iso, SID);
+  await dbRun(
+    `INSERT INTO app_errors (app, name, msg, url, session_id, created_at) VALUES ('sudoku', 'TypeError', 'boom', '/projects/sudoku/', ?, ?)`,
+    SID, Math.floor((t0 + 25_000) / 1000));
+});
+
+describe('admin sessions', () => {
+  it('rejects non-admins on both routes', async () => {
+    mockAdmin.mockImplementation(async (_r: any, reply: any) => { reply.status(401).send({ error: 'no' }); return null; });
+    expect((await app.inject({ method: 'GET', url: '/api/admin/sessions' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID}` })).statusCode).toBe(401);
+  });
+
+  it('lists sessions with counts and apps, newest first', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/admin/sessions' });
+    expect(res.statusCode).toBe(200);
+    const { sessions } = res.json();
+    expect(sessions.map((s: any) => s.session_id)).toEqual([SID, SID2]);
+    expect(sessions[0]).toMatchObject({
+      click_count: 1, event_count: 1, error_count: 1, duration_ms: 50_000,
+      apps: ['session-manager', 'sudoku'], email: 'a@b.co',
+    });
+    expect(sessions[1].apps).toEqual([]);
+  });
+
+  it('filters by app', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=sudoku' });
+    expect(res.json().sessions.map((s: any) => s.session_id)).toEqual([SID]);
+    const none = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=nope' });
+    expect(none.json().sessions).toEqual([]);
+  });
+
+  it('returns a merged ascending timeline', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID}` });
+    expect(res.statusCode).toBe(200);
+    const { session, timeline } = res.json();
+    expect(session.session_id).toBe(SID);
+    expect(timeline.map((t: any) => t.kind)).toEqual(['view', 'click', 'view', 'event', 'view', 'error']);
+    const ts = timeline.map((t: any) => t.ts);
+    expect([...ts].sort((a, b) => a - b)).toEqual(ts);
+    expect(timeline[1]).toMatchObject({ label: 'Go', track_name: 'hero_cta' });
+    expect(timeline[3]).toMatchObject({ name: 'game_start', app: 'sudoku', props: { level: 3 } });
+    expect(timeline[5]).toMatchObject({ app: 'sudoku', msg: 'boom' });
+  });
+
+  it('400s on a malformed id and 404s on an unknown one', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/admin/sessions/not-an-id' })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/api/admin/sessions/44444444-4444-4444-8444-444444444444' })).statusCode).toBe(404);
+  });
+});

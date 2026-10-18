@@ -179,6 +179,10 @@ export async function initDb(): Promise<void> {
   // Indexes (some cover the columns added above), one batch.
   await client.batch([
     'CREATE INDEX IF NOT EXISTS idx_page_hits_visitor ON page_hits(visitor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_page_hits_session ON page_hits(session_id)',
+    'CREATE INDEX IF NOT EXISTS idx_click_events_session ON click_events(session_id)',
+    'CREATE INDEX IF NOT EXISTS idx_app_errors_session ON app_errors(session_id)',
+    'CREATE INDEX IF NOT EXISTS idx_funnel_events_visitor ON funnel_events(visitor_id)',
     'CREATE INDEX IF NOT EXISTS idx_page_views_visitor ON page_views(visitor_id)',
     'CREATE INDEX IF NOT EXISTS idx_page_views_session ON page_views(session_id)',
     'CREATE INDEX IF NOT EXISTS idx_page_views_source_bucket ON page_views(source_bucket)',

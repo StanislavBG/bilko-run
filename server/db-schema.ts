@@ -576,6 +576,9 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['visitor_id', 'TEXT'],
     ['user_email', 'TEXT'],
     ['is_admin', 'INTEGER DEFAULT 0'],
+    ['session_id', 'TEXT'],
+    ['client_vid', 'TEXT'],
+    ['track_name', 'TEXT'],
   ],
   page_hits: [
     ['ip', 'TEXT'],
@@ -584,6 +587,8 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['visitor_id', 'TEXT'],
     ['user_email', 'TEXT'],
     ['is_admin', 'INTEGER DEFAULT 0'],
+    ['session_id', 'TEXT'],
+    ['client_vid', 'TEXT'],
   ],
   page_views: [
     ['email', 'TEXT'],

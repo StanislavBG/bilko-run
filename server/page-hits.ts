@@ -4,6 +4,7 @@ import type { InStatement } from '@libsql/client';
 import { getClient } from './db.js';
 import { dayKey } from './egress.js';
 import { parseUa, isBot } from './services/analytics.js';
+import { readSessionIds } from './session-identity.js';
 import { verifyClerkToken, ADMIN_EMAILS } from './clerk.js';
 
 // Server-side page-hit recorder: logs every HTML document response, so pages
@@ -29,6 +30,8 @@ export interface PageHitInput {
   host?: string | null;
   country?: string | null;
   userEmail?: string | null;
+  sessionId?: string | null;
+  clientVid?: string | null;
 }
 
 interface PageHitRow {
@@ -50,6 +53,8 @@ interface PageHitRow {
   visitor_id: string;
   user_email: string | null;
   is_admin: number;
+  session_id: string | null;
+  client_vid: string | null;
 }
 
 let buffer: PageHitRow[] = [];
@@ -122,6 +127,8 @@ export function recordPageHit(input: PageHitInput): void {
     visitor_id: stableVisitorId(input.ip, input.ua),
     user_email: input.userEmail ?? null,
     is_admin: input.userEmail && ADMIN_EMAILS.includes(input.userEmail.toLowerCase()) ? 1 : 0,
+    session_id: input.sessionId ?? null,
+    client_vid: input.clientVid ?? null,
   });
 }
 
@@ -133,9 +140,9 @@ export async function flushPageHits(): Promise<void> {
       buffer = [];
       const client = getClient();
       const stmts: InStatement[] = rows.map((r) => ({
-        sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot, r.ip, r.ua, r.referrer, r.visitor_id, r.user_email, r.is_admin],
+        sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin, session_id, client_vid)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot, r.ip, r.ua, r.referrer, r.visitor_id, r.user_email, r.is_admin, r.session_id, r.client_vid],
       }));
       for (let i = 0; i < stmts.length; i += BATCH_CHUNK) {
         try {
@@ -182,6 +189,13 @@ export function registerPageHitRecorder(app: FastifyInstance, opts: { flush?: bo
         host: h.host as string | undefined,
         country,
       };
+      const minted = (req as any).bilkoIds as { visitorId: string; sessionId: string } | undefined;
+      const ids = minted ?? (() => {
+        const c = readSessionIds(h.cookie);
+        return { visitorId: c.visitorId, sessionId: c.sessionId };
+      })();
+      input.sessionId = ids.sessionId;
+      input.clientVid = ids.visitorId;
       const token = isBot(input.ua) ? null : sessionCookie(h.cookie);
       // Identity lookup runs detached: the response is already sent, and any
       // failure just records the hit anonymously.

@@ -199,3 +199,32 @@ describe('full request detail', () => {
     expect(await detail()).toHaveLength(1);
   });
 });
+
+describe('session identity columns', () => {
+  const SID = '11111111-1111-4111-8111-111111111111';
+  const VID = '22222222-2222-4222-8222-222222222222';
+
+  it('stores session_id and client_vid from the cookies', async () => {
+    await app.inject({
+      method: 'GET', url: '/projects/outdoor-hours/',
+      headers: { 'user-agent': CHROME, cookie: `bilko_sid=${SID}; bilko_vid=${VID}` },
+    });
+    await settle();
+    await flushPageHits();
+    const r = await dbAll<{ session_id: string | null; client_vid: string | null }>('SELECT session_id, client_vid FROM page_hits');
+    expect(r).toEqual([{ session_id: SID, client_vid: VID }]);
+  });
+
+  it('stores NULL for both with no cookie and no hook', async () => {
+    await app.inject({ method: 'GET', url: '/projects/outdoor-hours/', headers: { 'user-agent': CHROME } });
+    await settle();
+    await flushPageHits();
+    const r = await dbAll<{ session_id: string | null; client_vid: string | null }>('SELECT session_id, client_vid FROM page_hits');
+    expect(r).toEqual([{ session_id: null, client_vid: null }]);
+  });
+
+  it('initDb is idempotent', async () => {
+    await initDb();
+    await initDb();
+  });
+});

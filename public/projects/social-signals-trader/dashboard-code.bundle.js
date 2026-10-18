@@ -1498,6 +1498,102 @@ window.FEEDBACK_THREADS = {
   }]
 };
 
+/* ---- lib/telemetry.js ---- */
+/* telemetry.js — bilko.run observability events for the dashboard.
+ *
+ * The bilko.run host injects its own beacon into every page under
+ * /projects/<slug>/: it records page views (load + history navigation) and
+ * clicks on a/button/summary/[data-track], so buttons only need a kebab
+ * `data-track="<area>-<action>"` attribute. This module covers what that
+ * beacon cannot see: screens that change without a new path (every route here
+ * is a #hash, and the mobile Options Log tabs change no URL at all) and the
+ * named flows (explore / live / tip / feedback).
+ *
+ * Plain JS, no SDK dependency (the dashboard has no bundler — CLAUDE.md). The
+ * wire shape matches host-kit's track()/trackFlow(): POST
+ * /api/telemetry/event with { batch: [{ app, name, ts, props }] }; the server
+ * stamps the bilko_vid/bilko_sid session ids from the cookie. The body is sent
+ * as an application/json Blob — a bare string goes out as text/plain, which
+ * the endpoint does not parse (it would answer `ingested: 0`).
+ *
+ * PII: props carry route/screen names and step metadata only — never account
+ * numbers, balances, free text or anything a visitor typed. Keys matching
+ * host-kit's stripPII pattern are dropped here too, as a backstop.
+ *
+ * Fire-and-forget: never throws, never blocks render. When served off disk
+ * (file://) or the endpoint is unreachable, the beacon simply goes nowhere. */
+(function () {
+  var APP = "social-signals-trader";
+  var ENDPOINT = "/api/telemetry/event";
+  var NAME_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+  var PII_KEY_RE = /(email|password|token|key|ssn|card|cvv|apikey)/i;
+  function clean(props) {
+    var out = {};
+    if (!props || typeof props !== "object") return out;
+    for (var k in props) {
+      if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
+      if (PII_KEY_RE.test(k)) continue;
+      var v = props[k];
+      if (v === undefined || typeof v === "function") continue;
+      if (typeof v === "string") v = v.slice(0, 200);
+      out[k] = v;
+    }
+    return out;
+  }
+  function send(name, props) {
+    try {
+      if (location.protocol === "file:") return;
+      var p = clean(props);
+      if (p.path === undefined) p.path = location.pathname;
+      var body = JSON.stringify({
+        batch: [{
+          app: APP,
+          name: name,
+          ts: Date.now(),
+          props: p
+        }]
+      });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(ENDPOINT, new Blob([body], {
+          type: "application/json"
+        }));
+      } else if (window.fetch) {
+        fetch(ENDPOINT, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json"
+          },
+          body: body,
+          keepalive: true
+        }).catch(function () {});
+      }
+    } catch (e) {/* telemetry never breaks the dashboard */}
+  }
+  function trackFlow(flow, step, props) {
+    if (!NAME_RE.test(flow) || !NAME_RE.test(step)) return;
+    var p = clean(props);
+    p.flow = flow;
+    p.step = step;
+    send(flow + "." + step, p);
+  }
+
+  // Dedupe consecutive identical screens — a re-render or a hashchange that
+  // lands on the screen already showing is not a view change.
+  var lastScreen = null;
+  function screenView(screen) {
+    if (!NAME_RE.test(screen) || screen === lastScreen) return;
+    lastScreen = screen;
+    send("screen_view", {
+      screen: screen
+    });
+  }
+  window.BilkoTelemetry = {
+    track: send,
+    trackFlow: trackFlow,
+    screenView: screenView
+  };
+})();
+
 /* ---- lib/live-snapshot.js ---- */
 /* live-snapshot.js — fetch the live dashboard data from the bilko.run server and
  * overlay it onto window.* before the React app renders.
@@ -1569,7 +1665,14 @@ window.FEEDBACK_THREADS = {
       return false;
     });
   }
+
+  // bilko.run 'live' flow (lib/telemetry.js) — no-op if it didn't load.
+  function liveStep(step, props) {
+    var t = window.BilkoTelemetry;
+    if (t) t.trackFlow("live", step, props);
+  }
   window.__loadLiveSnapshot = function () {
+    liveStep("snapshot-requested");
     return fetch(ENDPOINT, {
       cache: "no-store"
     }).then(function (r) {
@@ -1590,6 +1693,9 @@ window.FEEDBACK_THREADS = {
         count: n,
         generatedAt: snap.generatedAt || null
       };
+      liveStep("snapshot-loaded", {
+        globals: n
+      });
       if (window.console) console.info("[live-snapshot] overlaid " + n + " globals from server");
       return window.__liveSnapshotMeta;
     }).catch(function (e) {
@@ -1605,6 +1711,10 @@ window.FEEDBACK_THREADS = {
           error: errMsg,
           fallbackLoaded: loaded
         };
+        liveStep("snapshot-failed", {
+          reason: errMsg.slice(0, 120),
+          fallbackLoaded: loaded
+        });
         if (window.console) {
           console.warn(loaded ? "[live-snapshot] using bundled data (" + errMsg + ")" : "[live-snapshot] NO DATA — live fetch failed (" + errMsg + ") and no usable fallback bundle is published");
         }
@@ -4875,7 +4985,9 @@ window.FEEDBACK_THREADS = {
         image: image,
         parentId: props.parentId
       });
+      feedbackStep("submit", target, isReply);
       submit(payload).then(function (result) {
+        feedbackStep(result && result.ok ? "submit-success" : "submit-queued", target, isReply);
         if (result && result.ok) {
           setStatus("success");
           setMessage((isReply ? "Thanks — reply sent." : "Thanks — feedback sent.") + answerHint);
@@ -4897,6 +5009,7 @@ window.FEEDBACK_THREADS = {
       onClick: onBackdropClick
     }, React.createElement("div", {
       className: "fb-modal",
+      "data-track-redact": "",
       role: "dialog",
       "aria-modal": "true",
       "aria-label": isReply ? "Reply in the thread " + label : "Leave feedback on " + label,
@@ -4923,6 +5036,7 @@ window.FEEDBACK_THREADS = {
         type: "button",
         key: t,
         className: "fb-chip" + (type === t ? " fb-chip--on" : ""),
+        "data-track": "feedback-type-" + t,
         "aria-pressed": type === t,
         onClick: function () {
           setType(t);
@@ -4965,16 +5079,32 @@ window.FEEDBACK_THREADS = {
       alt: "Attached screenshot"
     }), React.createElement("button", {
       type: "button",
+      "data-track": "feedback-remove-image",
       onClick: removeImage
     }, "Remove")) : null, React.createElement("div", {
       className: "fb-actions"
     }, React.createElement("button", {
       type: "button",
-      onClick: onBackdropClick
+      "data-track": "feedback-cancel",
+      onClick: function () {
+        feedbackStep("cancel", target, isReply);
+        onBackdropClick();
+      }
     }, "Cancel"), React.createElement("button", {
       type: "submit",
+      "data-track": "feedback-submit",
       disabled: !canSubmit
     }, status === "pending" ? "Sending…" : isReply ? "Send reply" : "Send feedback")))));
+  }
+
+  // bilko.run 'feedback' flow (lib/telemetry.js). Props carry the target KIND
+  // and reply/topic mode only — never the label, title or anything typed.
+  function feedbackStep(step, target, isReply) {
+    var t = window.BilkoTelemetry;
+    if (t) t.trackFlow("feedback", step, {
+      kind: target && target.kind,
+      reply: !!isReply
+    });
   }
   function FeedbackButton(props) {
     var target = props && props.target;
@@ -5004,8 +5134,10 @@ window.FEEDBACK_THREADS = {
       className: "feedback-btn" + (isReply || secondary ? " feedback-btn--reply" : ""),
       "aria-label": isReply ? "Reply in the thread " + target.label : "Leave feedback on " + target.label,
       "aria-expanded": open,
+      "data-track": isReply ? "feedback-reply-open" : "feedback-open",
       onClick: function (e) {
         e.stopPropagation();
+        feedbackStep("open-form", target, isReply);
         setOpen(true);
       }
     }, FeedbackIcon(),
@@ -5695,13 +5827,15 @@ function Header({
     label,
     onClick: () => jumpTo(id)
   }))];
-  var renderNavLinks = () => navLinks.map(({
+  // `area` keeps the data-track ids unique between the desktop and mobile navs.
+  var renderNavLinks = area => navLinks.map(({
     id,
     label,
     onClick
   }) => /*#__PURE__*/React.createElement("a", {
     key: id,
     href: `#${id}`,
+    "data-track": `${area}-${id}`,
     onClick: e => {
       e.preventDefault();
       onClick();
@@ -5711,6 +5845,7 @@ function Header({
     className: "header"
   }, /*#__PURE__*/React.createElement("div", {
     className: "brand",
+    "data-track": "nav-home",
     style: {
       cursor: "pointer"
     },
@@ -5725,7 +5860,7 @@ function Header({
     return /*#__PURE__*/React.createElement(React.Fragment, null, handle.slice(0, dot), /*#__PURE__*/React.createElement("span", null, handle.slice(dot)));
   })())), /*#__PURE__*/React.createElement("nav", {
     className: "nav"
-  }, renderNavLinks()), /*#__PURE__*/React.createElement("input", {
+  }, renderNavLinks("nav")), /*#__PURE__*/React.createElement("input", {
     type: "checkbox",
     id: "nav-toggle",
     className: "nav-toggle-input",
@@ -5733,16 +5868,21 @@ function Header({
   }), /*#__PURE__*/React.createElement("label", {
     htmlFor: "nav-toggle",
     className: "nav-toggle-btn",
-    "aria-label": "Toggle navigation"
+    "aria-label": "Toggle navigation",
+    "data-track": "nav-menu-toggle"
   }, /*#__PURE__*/React.createElement("span", {
     "aria-hidden": "true"
   }, "\u2630")), /*#__PURE__*/React.createElement("nav", {
     className: "nav-mobile"
-  }, renderNavLinks()), showBmc && /*#__PURE__*/React.createElement("a", {
+  }, renderNavLinks("nav-mobile")), showBmc && /*#__PURE__*/React.createElement("a", {
     className: "bmc-btn",
     href: bmcUrl,
     target: "_blank",
-    rel: "noreferrer"
+    rel: "noreferrer",
+    "data-track": "tip-header-coffee",
+    onClick: () => window.BilkoTelemetry?.trackFlow("tip", "click-tip", {
+      placement: "header"
+    })
   }, /*#__PURE__*/React.createElement("span", {
     className: "coffee"
   }, "\u2615"), " Buy me a coffee"));
@@ -6004,7 +6144,8 @@ function PerStrategyAttribution({
   return /*#__PURE__*/React.createElement("div", {
     className: "card per-strategy-attr"
   }, /*#__PURE__*/React.createElement("details", null, /*#__PURE__*/React.createElement("summary", {
-    className: "per-strategy-attr-summary"
+    className: "per-strategy-attr-summary",
+    "data-track": "attribution-toggle"
   }, /*#__PURE__*/React.createElement("span", {
     className: "psa-title"
   }, "by-strategy attribution"), /*#__PURE__*/React.createElement("span", {
@@ -6116,6 +6257,7 @@ function EquityChart({
   }, ["7D", "30D", "90D", "ALL"].map(t => /*#__PURE__*/React.createElement("button", {
     key: t,
     className: timeframe === t ? "active" : "",
+    "data-track": `equity-range-${t.toLowerCase()}`,
     onClick: () => setTimeframe(t)
   }, t)))), /*#__PURE__*/React.createElement("div", {
     className: "chart-wrap"
@@ -6525,6 +6667,7 @@ function TradesTable({
   }, ["ALL", "OPEN", "CLOSED", "WINS", "LOSSES"].map(f => /*#__PURE__*/React.createElement("button", {
     key: f,
     className: filter === f ? "active" : "",
+    "data-track": `trades-filter-${f.toLowerCase()}`,
     onClick: () => setFilter(f)
   }, f)))), /*#__PURE__*/React.createElement("div", {
     className: "card-body tight",
@@ -6587,7 +6730,13 @@ function TradesTable({
       target: "_blank",
       rel: "noreferrer",
       title: "Tip the trader",
-      onClick: e => e.stopPropagation()
+      "data-track": "tip-trade-row",
+      onClick: e => {
+        e.stopPropagation();
+        window.BilkoTelemetry?.trackFlow("tip", "click-tip", {
+          placement: "trade-row"
+        });
+      }
     }, "\u2615 tip")), /*#__PURE__*/React.createElement("td", {
       className: "dim"
     }, t.source), /*#__PURE__*/React.createElement("td", {
@@ -6744,6 +6893,7 @@ function SpreadRow({
   } = window.SpreadFormat;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("tr", {
     onClick: onToggle,
+    "data-track": "trades-row-expand",
     style: {
       cursor: "pointer"
     }
@@ -6987,6 +7137,10 @@ function FooterCTA({
     href: bmcUrl,
     target: "_blank",
     rel: "noreferrer",
+    "data-track": "tip-footer-coffee",
+    onClick: () => window.BilkoTelemetry?.trackFlow("tip", "click-tip", {
+      placement: "footer"
+    }),
     style: {
       padding: "12px 20px",
       fontSize: 13
@@ -7420,6 +7574,7 @@ function TradesPage() {
   }, ["ALL", "OPEN", "WINS", "LOSSES", "BIG"].map(f => /*#__PURE__*/React.createElement("button", {
     key: f,
     className: filter === f ? "active" : "",
+    "data-track": `tradespage-filter-${f.toLowerCase()}`,
     onClick: () => setFilter(f)
   }, f))))), /*#__PURE__*/React.createElement("div", {
     className: "card-body tight",
@@ -7511,6 +7666,7 @@ function SleeveActivation({
       marginBottom: 8
     }
   }, /*#__PURE__*/React.createElement("button", {
+    "data-track": "sleeves-toggle-dormant",
     onClick: () => setShowDormant(v => !v),
     style: {
       background: "none",
@@ -7703,6 +7859,7 @@ function UniverseCoverage({
       paddingTop: 10
     }
   }, /*#__PURE__*/React.createElement("button", {
+    "data-track": "coverage-toggle-signaled",
     onClick: () => setSignalOpen(o => !o),
     style: {
       background: "none",
@@ -7745,6 +7902,7 @@ function UniverseCoverage({
       marginTop: 6
     }
   }, /*#__PURE__*/React.createElement("button", {
+    "data-track": "coverage-toggle-gaps",
     onClick: () => setGapOpen(o => !o),
     style: {
       background: "none",
@@ -9232,6 +9390,7 @@ function OpenOrderRow({
   var right = facts.shortParsed ? facts.shortParsed.right : undefined;
   return /*#__PURE__*/React.createElement("tr", {
     className: "opt-row",
+    "data-track": "trade-log-open-detail",
     onClick: openDetail,
     tabIndex: 0,
     role: "link",
@@ -9359,6 +9518,7 @@ function TradeLogRow({
   };
   return /*#__PURE__*/React.createElement("tr", {
     className: `opt-row${nested ? " opt-row--nested" : ""}`,
+    "data-track": "trade-log-open-closed-detail",
     onClick: openDetail,
     tabIndex: 0,
     role: "link",
@@ -9909,6 +10069,7 @@ function TradeLogTable({
     key: f.key,
     type: "button",
     className: `opt-filter-btn${filter === f.key ? " opt-filter-btn--active" : ""}`,
+    "data-track": `trade-log-filter-${f.key}`,
     onClick: () => {
       setFilter(f.key);
       setPage(1);
@@ -9923,6 +10084,7 @@ function TradeLogTable({
     htmlFor: "opt-trade-log-group-by"
   }, "Group by:"), /*#__PURE__*/React.createElement("select", {
     id: "opt-trade-log-group-by",
+    "data-track": "trade-log-group-by",
     value: groupBy,
     onChange: e => {
       setGroupBy(e.target.value);
@@ -9993,11 +10155,13 @@ function TradeLogPagination({
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "opt-pagination-btn",
+    "data-track": "trade-log-page-first",
     onClick: () => onPageChange(1),
     disabled: atFirst
   }, "First"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "opt-pagination-btn",
+    "data-track": "trade-log-page-prev",
     onClick: () => onPageChange(page - 1),
     disabled: atFirst
   }, "Prev"), /*#__PURE__*/React.createElement("span", {
@@ -10006,11 +10170,13 @@ function TradeLogPagination({
   }, "Page ", page, " of ", pageCount), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "opt-pagination-btn",
+    "data-track": "trade-log-page-next",
     onClick: () => onPageChange(page + 1),
     disabled: atLast
   }, "Next"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "opt-pagination-btn",
+    "data-track": "trade-log-page-last",
     onClick: () => onPageChange(pageCount),
     disabled: atLast
   }, "Last")), /*#__PURE__*/React.createElement("div", {
@@ -10895,6 +11061,7 @@ function PositionFeedbackIndicator({
       type: "button",
       className: cls,
       title: `${label} — view on this trade's page`,
+      "data-track": "positions-open-feedback",
       onClick: e => {
         e.stopPropagation();
         location.hash = "trade/" + encodeURIComponent(tradeKeyValue);
@@ -11176,6 +11343,7 @@ function PositionsRow({
   var wideQuoteNote = (cells.conf || "").indexOf("⚠") !== -1 ? "⚠ Wide-quoted leg(s) on this row — this mark is the least trustworthy number in the table." : undefined;
   return /*#__PURE__*/React.createElement("tr", {
     className: openDetail ? "opt-row" : undefined,
+    "data-track": openDetail ? "positions-row-open-detail" : undefined,
     onClick: openDetail || undefined,
     tabIndex: openDetail ? 0 : undefined,
     role: openDetail ? "link" : undefined,
@@ -11377,6 +11545,7 @@ function PositionCard({
     className: "opts-pos-card"
   }, /*#__PURE__*/React.createElement("div", {
     className: openDetail ? "opts-pos-card-tap" : undefined,
+    "data-track": openDetail ? "positions-card-open-detail" : undefined,
     onClick: openDetail || undefined,
     role: openDetail ? "link" : undefined,
     tabIndex: openDetail ? 0 : undefined,
@@ -11456,6 +11625,7 @@ function PositionCard({
   })), openDetail && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "opts-pos-card-more",
+    "data-track": "positions-card-full-detail",
     onClick: openDetail
   }, "Full detail \u2192")));
 }
@@ -11815,6 +11985,7 @@ function AnalystRecommendationRow({
   return /*#__PURE__*/React.createElement("li", {
     className: `opts-action opts-action--watch${clickable ? " opts-action--clickable" : ""}`,
     onClick: go,
+    "data-track": clickable ? "analyst-open-trade" : undefined,
     role: clickable ? "button" : undefined,
     tabIndex: clickable ? 0 : undefined,
     onKeyDown: onKeyDown
@@ -12605,16 +12776,19 @@ function ModerationControls({
     type: "button",
     className: "fbt-mod-btn",
     disabled: disabled,
+    "data-track": "feedback-mod-unarchive",
     onClick: () => run("unarchive")
   }, "Unarchive") : /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "fbt-mod-btn",
     disabled: disabled,
+    "data-track": "feedback-mod-archive",
     onClick: () => run("archive")
   }, "Archive"), !confirmingDelete ? /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "fbt-mod-btn fbt-mod-btn--danger",
     disabled: disabled,
+    "data-track": "feedback-mod-delete",
     onClick: () => setConfirmingDelete(true)
   }, "Delete") : /*#__PURE__*/React.createElement("span", {
     className: "fbt-mod-confirm"
@@ -12622,10 +12796,12 @@ function ModerationControls({
     type: "button",
     className: "fbt-mod-btn fbt-mod-btn--danger",
     disabled: disabled,
+    "data-track": "feedback-mod-delete-confirm",
     onClick: () => run("delete")
   }, "Confirm"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "fbt-mod-btn",
+    "data-track": "feedback-mod-delete-cancel",
     onClick: () => setConfirmingDelete(false)
   }, "Cancel"))), routeNotDeployed && /*#__PURE__*/React.createElement("p", {
     className: "fbt-mod-note"
@@ -12798,6 +12974,7 @@ function ClampedBody({
   }, text), long && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "fbt-linklike fbt-clamp-toggle",
+    "data-track": "feedback-thread-show-more",
     onClick: () => setExpanded(v => !v)
   }, expanded ? "Show less" : "Show more"));
 }
@@ -12878,12 +13055,14 @@ function FeedbackThread({
   var title = thread.title || "(no title)";
   var stageLabel = STAGE_LABEL[thread.stage];
   return /*#__PURE__*/React.createElement("article", {
-    className: `fbt-thread fbt-thread--${status}`
+    className: `fbt-thread fbt-thread--${status}`,
+    "data-track-redact": true
   }, /*#__PURE__*/React.createElement("header", {
     className: "fbt-thread-head"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "fbt-thread-toggle",
+    "data-track": "feedback-thread-toggle",
     "aria-expanded": !collapsed,
     "aria-label": `${collapsed ? "Expand" : "Collapse"} thread: ${title}`,
     onClick: onToggleCollapse
@@ -12950,6 +13129,7 @@ function ThreadFilters({
       key: key,
       type: "button",
       className: `fbt-chip${active ? " fbt-chip--on" : ""}`,
+      "data-track": `feedback-filter-${key}`,
       "aria-pressed": active,
       disabled: count === 0,
       onClick: () => onChange(key)
@@ -13107,6 +13287,7 @@ function ThreadList({
   }, `No ${(FILTER_LABEL[filter] || "matching").toLowerCase()} topics.`, " ", /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "fbt-linklike",
+    "data-track": "feedback-filter-show-all",
     onClick: () => setFilter("all")
   }, "Show all")), showArchivedRedirect && /*#__PURE__*/React.createElement("p", {
     className: "fbt-empty fbt-empty--filtered"
@@ -13116,7 +13297,8 @@ function ThreadList({
     className: "fbt-archive-drawer",
     ref: archiveRef
   }, /*#__PURE__*/React.createElement("summary", {
-    className: "fbt-archive-summary"
+    className: "fbt-archive-summary",
+    "data-track": "feedback-archive-toggle"
   }, archived.length, " archived topic", archived.length === 1 ? "" : "s"), /*#__PURE__*/React.createElement("div", {
     className: "fbt-list fbt-list--archived"
   }, archived.map(renderThread))));
@@ -13725,6 +13907,7 @@ function ProposalRules({
     className: "prop-block-title"
   }, "Today\u2019s trading rules", /*#__PURE__*/React.createElement("button", {
     className: "prop-toggle",
+    "data-track": "proposals-rules-toggle",
     onClick: () => setOpen(!open)
   }, open ? "hide" : "show all")), /*#__PURE__*/React.createElement("ul", {
     className: "prop-rules"
@@ -14611,7 +14794,9 @@ function EmptyState({
     key: i
   }, /*#__PURE__*/React.createElement("span", null, label), /*#__PURE__*/React.createElement("b", null, value === undefined || value === null ? "—" : value)))), byTicker && byTicker.length > 0 && /*#__PURE__*/React.createElement("details", {
     className: "prop-funnel-byticker"
-  }, /*#__PURE__*/React.createElement("summary", null, "Per-ticker breakdown (", byTicker.length, " names)"), /*#__PURE__*/React.createElement("table", {
+  }, /*#__PURE__*/React.createElement("summary", {
+    "data-track": "proposals-ticker-breakdown"
+  }, "Per-ticker breakdown (", byTicker.length, " names)"), /*#__PURE__*/React.createElement("table", {
     className: "prop-funnel-byticker-table"
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Ticker"), /*#__PURE__*/React.createElement("th", null, "Priced"), /*#__PURE__*/React.createElement("th", null, "Selected"), /*#__PURE__*/React.createElement("th", null, "Proposed"))), /*#__PURE__*/React.createElement("tbody", null, byTicker.map(row => /*#__PURE__*/React.createElement("tr", {
     key: row.ticker
@@ -14661,6 +14846,7 @@ function ProposalPager({
   }, /*#__PURE__*/React.createElement("button", {
     className: "prop-pager-arrow",
     onClick: () => onGo(wrap(index - 1)),
+    "data-track": "proposals-pager-prev",
     "aria-label": "Previous proposal",
     title: "Previous proposal (\u2190)"
   }, "\u2039"), /*#__PURE__*/React.createElement("div", {
@@ -14674,6 +14860,7 @@ function ProposalPager({
       key: it.id || i,
       className: `prop-dot${i === index ? " prop-dot--on" : ""}${open ? " prop-dot--flagged" : ""} prop-dot--${state}`,
       onClick: () => onGo(i),
+      "data-track": "proposals-pager-dot",
       "aria-label": label,
       "aria-current": i === index ? "true" : undefined,
       title: label
@@ -14681,6 +14868,7 @@ function ProposalPager({
   })), /*#__PURE__*/React.createElement("button", {
     className: "prop-pager-arrow",
     onClick: () => onGo(wrap(index + 1)),
+    "data-track": "proposals-pager-next",
     "aria-label": "Next proposal",
     title: "Next proposal (\u2192)"
   }, "\u203A"), /*#__PURE__*/React.createElement("span", {
@@ -14853,6 +15041,7 @@ function ProposedTrades({
   }, "approvals as of ", whenPlanned(plan.approvalGeneratedAt)), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "prop-collapse-toggle",
+    "data-track": "proposals-collapse-toggle",
     onClick: toggle,
     "aria-expanded": expanded,
     "aria-controls": "proposed-trades-body",
@@ -14977,6 +15166,7 @@ function BackToTradeLog() {
   };
   return /*#__PURE__*/React.createElement("button", {
     onClick: goBack,
+    "data-track": "trade-detail-back",
     className: "optd-back",
     style: {
       background: "var(--surface-2)",
@@ -15459,7 +15649,8 @@ function CondorWingsTable({
     }, "Bought back", closeDate ? ` ${closeDate}` : "", close.realized_pnl != null ? /*#__PURE__*/React.createElement(React.Fragment, null, " — ", /*#__PURE__*/React.createElement("span", {
       className: close.realized_pnl >= 0 ? "up" : "down"
     }, money(close.realized_pnl))) : null, close.reason ? ` (${reasonPhrase(close.reason)})` : "", closeKey ? /*#__PURE__*/React.createElement(React.Fragment, null, " · ", /*#__PURE__*/React.createElement("a", {
-      href: `#trade/${encodeURIComponent(closeKey)}`
+      href: `#trade/${encodeURIComponent(closeKey)}`,
+      "data-track": "trade-detail-open-exit"
     }, "that exit")) : null) : /*#__PURE__*/React.createElement("span", {
       className: "optd-wing-status--open"
     }, facts.isClose ? "Closed with the position" : "Still open")));
@@ -15495,7 +15686,8 @@ function WhatWeDid({
   }, "A credit spread sells one option to collect cash up front, then buys a further-out option purely as insurance so the most we can lose is capped."), facts.isWingClose && /*#__PURE__*/React.createElement("p", {
     className: "optd-explainer"
   }, "This is the ", /*#__PURE__*/React.createElement("strong", null, facts.wing || "one", " wing"), " of an iron condor, bought back on its own.", facts.openedBy && /*#__PURE__*/React.createElement(React.Fragment, null, " ", /*#__PURE__*/React.createElement("a", {
-    href: `#trade/${encodeURIComponent(facts.openedBy)}`
+    href: `#trade/${encodeURIComponent(facts.openedBy)}`,
+    "data-track": "trade-detail-open-condor"
   }, "See the whole condor \u2192")), /*#__PURE__*/React.createElement(Help, {
     term: "wing"
   })), hasLegs ? /*#__PURE__*/React.createElement("ul", {
@@ -17507,6 +17699,7 @@ function TickerCard({
   }, LADDERS.map(l => /*#__PURE__*/React.createElement("button", {
     key: l.key,
     onClick: () => setTab(l.key),
+    "data-track": `worksheet-ladder-${l.key.replace(/_/g, "-")}`,
     title: l.hint,
     style: {
       fontSize: 11,
@@ -17627,7 +17820,8 @@ function MobileTabBar({
       className: `mob-tab${on ? " mob-tab--on" : ""}`,
       "aria-current": on ? "page" : undefined,
       title: t.hint,
-      onClick: () => setTab(t.key)
+      onClick: () => setTab(t.key),
+      "data-track": `mobile-tab-${t.key}`
     }, /*#__PURE__*/React.createElement("span", {
       className: "mob-tab-icon",
       "aria-hidden": "true"
@@ -17655,6 +17849,10 @@ function MobileOptionsPage({
     setTabRaw(t);
     window.scrollTo(0, 0);
   };
+  // The tabs change no URL — report each as a screen (lib/telemetry.js).
+  React.useEffect(() => {
+    window.BilkoTelemetry?.screenView(`options-${tab}`);
+  }, [tab]);
   var badges = {
     proposals: proposalsAwaitingCount()
   };
@@ -17757,6 +17955,7 @@ function TickerDetailsPage() {
     className: "opts-worksheet-input"
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => lookup(),
+    "data-track": "worksheet-get-options",
     disabled: busy || !input.trim(),
     className: "opts-worksheet-go",
     style: {
@@ -18455,6 +18654,33 @@ function getInitialPage() {
   // Paused tabs (strategies, macro, reddit, reports, methodology) land here too.
   return "options";
 }
+
+// bilko.run observability: every route is a #hash, which the host's path-only
+// page-view beacon can't tell apart, so each route change is reported as a
+// screen_view plus its step in the 'explore' flow (lib/telemetry.js).
+var ROUTE_SCREENS = {
+  options: "options-log",
+  dashboard: "dashboard",
+  trade: "trade-detail"
+};
+var lastReportedPage = null;
+function reportRoute() {
+  var t = window.BilkoTelemetry;
+  if (!t) return;
+  var page = getInitialPage();
+  var from = lastReportedPage;
+  lastReportedPage = page;
+  t.screenView(ROUTE_SCREENS[page] || page);
+  // A trade-detail hop to another trade is a new detail view; a ticker change
+  // inside the Options Log (#options/AAPL -> #options/MSFT) is not a new visit.
+  if (page === "trade") t.trackFlow("explore", "open-trade-detail", {
+    from
+  });else if (page === from) return;else if (page === "dashboard") t.trackFlow("explore", "view-equity", {
+    from
+  });else if (page === "options") t.trackFlow("explore", "view-trades", {
+    from
+  });
+}
 function App() {
   var [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   var [tf, setTf] = useState("90D");
@@ -18465,7 +18691,11 @@ function App() {
     window.scrollTo(0, 0);
   };
   React.useEffect(() => {
-    var onHash = () => setPageRaw(getInitialPage());
+    reportRoute();
+    var onHash = () => {
+      setPageRaw(getInitialPage());
+      reportRoute();
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -18558,7 +18788,11 @@ function App() {
     className: "bmc-floating",
     href: SITE.bmcUrl,
     target: "_blank",
-    rel: "noreferrer"
+    rel: "noreferrer",
+    "data-track": "tip-floating-coffee",
+    onClick: () => window.BilkoTelemetry?.trackFlow("tip", "click-tip", {
+      placement: "floating"
+    })
   }, /*#__PURE__*/React.createElement("span", null, "\u2615"), " Buy me a coffee"), /*#__PURE__*/React.createElement(TweaksPanel, {
     title: "Tweaks"
   }, /*#__PURE__*/React.createElement(TweakSection, {
@@ -18639,6 +18873,9 @@ function App() {
 function DataUnavailable({
   meta
 }) {
+  React.useEffect(() => {
+    window.BilkoTelemetry?.screenView("data-unavailable");
+  }, []);
   return /*#__PURE__*/React.createElement("main", {
     className: "shell",
     style: {
@@ -18664,6 +18901,7 @@ function DataUnavailable({
     }
   }, meta && meta.error || "no snapshot"), /*#__PURE__*/React.createElement("button", {
     type: "button",
+    "data-track": "live-retry",
     onClick: () => location.reload(),
     style: {
       marginTop: 20,

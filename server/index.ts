@@ -37,6 +37,7 @@ import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } 
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
 import { registerClickBeacon } from './click-beacon.js';
+import { registerSessionIdentity } from './session-identity.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -154,6 +155,10 @@ await app.register(compress, {
 // Per-route egress accounting. Registered before the routes so its onSend hook
 // sees every /api/* response.
 registerEgressMeter(app);
+
+// First-party visitor/session cookies (bilko_vid / bilko_sid) on HTML responses.
+// Registered before the recorder and beacon so they can read (req as any).bilkoIds.
+registerSessionIdentity(app);
 
 // Server-side page-hit recorder: every HTML document response (SPA shell, blog,
 // static-path apps) lands in page_hits; flushed on a timer and on app.close().

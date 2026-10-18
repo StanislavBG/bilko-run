@@ -6,7 +6,7 @@ export function PrivacyPage() {
   return (
     <section className="max-w-3xl mx-auto px-6 py-16 md:py-24">
       <h1 className="text-3xl font-extrabold text-warm-900 mb-2">Privacy Policy</h1>
-      <p className="text-sm text-warm-400 mb-10">Last updated: March 29, 2026</p>
+      <p className="text-sm text-warm-400 mb-10">Last updated: October 18, 2026</p>
 
       <div className="prose-warm space-y-8 text-warm-700 text-sm leading-relaxed">
         <div>
@@ -21,12 +21,23 @@ export function PrivacyPage() {
             <li><strong>Account data:</strong> Email address and name provided via Clerk (our authentication provider) when you sign in with Google or email.</li>
             <li><strong>Usage data:</strong> URLs you submit for analysis, scores generated, and credit balances.</li>
             <li><strong>Payment data:</strong> Processed by Stripe. We never see or store your card number. We store your email and Stripe customer ID for credit delivery.</li>
-            <li><strong>Analytics:</strong> Page views and funnel events (anonymized IP hash, tool used). No personal tracking cookies.</li>
+            <li><strong>Analytics:</strong> Page views, clicks, and funnel events (anonymized IP hash, tool used), tied together by two first-party cookies. See Cookies below.</li>
           </ul>
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">3. How We Use Your Data</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">3. Cookies</h2>
+          <p>bilko.run sets two first-party analytics cookies on every page. Yes, cookies. No, not the ad-tech kind.</p>
+          <ul className="list-disc pl-5 mt-2 space-y-1">
+            <li><strong>bilko_vid</strong> — a random visitor ID. Lasts 1 year.</li>
+            <li><strong>bilko_sid</strong> — a random session ID. Expires after 30 minutes idle.</li>
+          </ul>
+          <p className="mt-2">Their only job is first-party session analytics: stitching page views and clicks into sessions so the site's own admin dashboard can show where people land, where they go, and what they click. They are not shared with third parties and not used for ads.</p>
+          <p className="mt-2">Recorded against those IDs: page paths, the labels of buttons and links you click, and in-app events. Click labels are scrubbed of email addresses before they are stored. Clear your cookies and you get a fresh ID.</p>
+        </div>
+
+        <div>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">4. How We Use Your Data</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>To provide the service (analyzing pages, managing credits).</li>
             <li>To process payments via Stripe.</li>
@@ -37,12 +48,12 @@ export function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">4. Page Content</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">5. Page Content</h2>
           <p>When you submit a URL, we fetch the publicly accessible HTML of that page. We extract text content for AI analysis. <strong>We do not store your page content after analysis.</strong> Only the domain, score, grade, and roast line are retained.</p>
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">5. Third-Party Services</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">6. Third-Party Services</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li><strong>Clerk</strong> — Authentication. Manages sign-in, sessions, and user data. <a href="https://clerk.com/privacy" className="text-fire-600 underline" target="_blank" rel="noopener noreferrer">Clerk Privacy Policy</a></li>
             <li><strong>Stripe</strong> — Payment processing. Handles all financial transactions. <a href="https://stripe.com/privacy" className="text-fire-600 underline" target="_blank" rel="noopener noreferrer">Stripe Privacy Policy</a></li>
@@ -52,7 +63,7 @@ export function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">6. Your Rights</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">7. Your Rights</h2>
           <p>You can:</p>
           <ul className="list-disc pl-5 mt-1 space-y-1">
             <li>Request a copy of your data.</li>
@@ -64,22 +75,22 @@ export function PrivacyPage() {
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">7. Data Retention</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">8. Data Retention</h2>
           <p>Account data is retained while your account is active. Roast history (domain + score) is retained indefinitely for the Wall of Shame feature. Payment records are retained as required by law. You can request deletion at any time.</p>
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">8. Children</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">9. Children</h2>
           <p>bilko.run is not intended for users under 13. We do not knowingly collect data from children.</p>
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">9. Changes</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">10. Changes</h2>
           <p>We may update this policy. Changes will be posted on this page with an updated date. Continued use of the service constitutes acceptance.</p>
         </div>
 
         <div>
-          <h2 className="text-lg font-bold text-warm-900 mb-2">10. Contact</h2>
+          <h2 className="text-lg font-bold text-warm-900 mb-2">11. Contact</h2>
           <p>Questions? Email <strong>bilko@bilko.run</strong>.</p>
         </div>
       </div>

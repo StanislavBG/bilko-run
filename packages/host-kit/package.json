@@ -43,7 +43,6 @@
     "release": "changeset publish"
   },
   "peerDependencies": {
-    "@clerk/clerk-react": "^5.0.0",
     "@playwright/test": ">=1.40",
     "react": "^18.0.0"
   },

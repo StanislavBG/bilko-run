@@ -135,15 +135,21 @@ export function initAuth(): void {
   void loadClerk();
 }
 
+/** Current auth state, for non-React consumers. */
+export function getAuthState(): AuthState {
+  return state;
+}
+
+/** Subscribe to auth state changes; returns an unsubscribe function. */
+export function subscribeAuth(listener: (s: AuthState) => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function useAuth(): AuthState {
-  return useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
-    },
-    () => state,
-    () => IDLE_STATE,
-  );
+  return useSyncExternalStore(subscribeAuth, getAuthState, () => IDLE_STATE);
 }
 
 export async function openSignIn(): Promise<void> {

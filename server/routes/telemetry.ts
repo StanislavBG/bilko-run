@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { dbRun, dbGet } from '../db.js';
+import { readSessionIds } from '../session-identity.js';
 
 const MAX_BATCH = 50;
 const MAX_FIELD_BYTES = 4_000;
@@ -145,6 +146,24 @@ function admit(batch: unknown[], valid: (rec: Record<string, unknown>) => boolea
   }
   const charged = chargeQuotas(quotas);
   return charged.ok ? { ok: true, records } : charged;
+}
+
+// Browser records carry the same-origin bilko_vid/bilko_sid cookie ids when present, so
+// sibling apps still sending per-tab body ids join the site-wide session. Stamped before
+// admit() so the per-install quota is charged against the id that is actually stored.
+// Desktop clients send no cookie and keep their body ids.
+function batchOf(req: { body?: unknown; headers: { cookie?: string } }): unknown[] {
+  const body = req.body as { batch?: unknown[] } | null;
+  const batch = Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : [];
+  const ids = readSessionIds(req.headers.cookie);
+  if (!ids.sessionId && !ids.visitorId) return batch;
+  return batch.map((r) => {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return r;
+    const rec = { ...(r as Record<string, unknown>) };
+    if (ids.sessionId) rec.session_id = ids.sessionId;
+    if (ids.visitorId) rec.visitor_id = ids.visitorId;
+    return rec;
+  });
 }
 
 function sendThrottled(reply: FastifyReply, retryAfterSec: number) {
@@ -308,8 +327,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
   // No ALLOWED_EVENTS check; apps may track any event name via the SDK.
   app.post('/api/telemetry/event', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 1200)) return reply.code(429).send({ error: 'rate_limited' });
-    const body = req.body as { batch?: unknown[] } | null;
-    const admitted = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
+    const admitted = admit(batchOf(req));
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
     for (const e of admitted.records) {
       await dbRun(
@@ -330,10 +348,9 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
 
   app.post('/api/telemetry/log', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 600)) return reply.code(429).send({ error: 'rate_limited' });
-    const body = req.body as { batch?: unknown[] } | null;
     // Invalid levels are dropped silently, before they are charged to any quota.
     const admitted = admit(
-      Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : [],
+      batchOf(req),
       (l) => ALLOWED_LEVELS.has(String(l.level)),
     );
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
@@ -358,8 +375,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
 
   app.post('/api/telemetry/error', async (req, reply) => {
     if (!bumpAndCheck(ipKey(req as any), 300)) return reply.code(429).send({ error: 'rate_limited' });
-    const body = req.body as { batch?: unknown[] } | null;
-    const admitted = admit(Array.isArray(body?.batch) ? body!.batch!.slice(0, MAX_BATCH) : []);
+    const admitted = admit(batchOf(req));
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
     for (const e of admitted.records) {
       await dbRun(

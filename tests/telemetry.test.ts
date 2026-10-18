@@ -365,3 +365,41 @@ describe('Telemetry ingest — env discriminator', () => {
     expect((await dbAll<{ env: string }>(`SELECT env FROM app_installs WHERE app = 'env-app'`))[0].env).toBe('test');
   });
 });
+
+describe('Telemetry ingest — session cookie stamping', () => {
+  const SID = '11111111-1111-4111-8111-111111111111';
+  const VID = '22222222-2222-4222-8222-222222222222';
+  function injectCookie(url: string, body: unknown, cookie: string | undefined, ip: string) {
+    const headers: Record<string, string> = { 'content-type': 'application/json', 'x-forwarded-for': ip };
+    if (cookie) headers.cookie = cookie;
+    return app.inject({ method: 'POST', url, headers, body: JSON.stringify(body) });
+  }
+  const ev = (tool: string) => ({ app: tool, name: 'cookie_ev', session_id: 'body-sid', visitor_id: 'body-vid', props: {} });
+  const er = (tool: string) => ({ app: tool, version: '1.0.0', name: 'E', msg: 'm', session_id: 'body-sid', visitor_id: 'body-vid', ts: Date.now() });
+
+  it('cookie ids override body ids in funnel_events', async () => {
+    const res = await injectCookie('/api/telemetry/event', { batch: [ev('ck-ev1')] }, `bilko_sid=${SID}; bilko_vid=${VID}`, '10.1.0.1');
+    expect(res.statusCode).toBe(200);
+    const rows = await dbAll<{ session_id: string; visitor_id: string }>('SELECT session_id, visitor_id FROM funnel_events WHERE tool = ?', 'ck-ev1');
+    expect(rows).toEqual([{ session_id: SID, visitor_id: VID }]);
+  });
+
+  it('cookie ids override body ids in app_errors', async () => {
+    const res = await injectCookie('/api/telemetry/error', { batch: [er('ck-er1')] }, `bilko_sid=${SID}; bilko_vid=${VID}`, '10.1.0.2');
+    expect(res.statusCode).toBe(200);
+    const rows = await dbAll<{ session_id: string; visitor_id: string }>('SELECT session_id, visitor_id FROM app_errors WHERE app = ?', 'ck-er1');
+    expect(rows).toEqual([{ session_id: SID, visitor_id: VID }]);
+  });
+
+  it('keeps body ids when there is no cookie', async () => {
+    await injectCookie('/api/telemetry/event', { batch: [ev('ck-ev2')] }, undefined, '10.1.0.3');
+    const rows = await dbAll<{ session_id: string; visitor_id: string }>('SELECT session_id, visitor_id FROM funnel_events WHERE tool = ?', 'ck-ev2');
+    expect(rows).toEqual([{ session_id: 'body-sid', visitor_id: 'body-vid' }]);
+  });
+
+  it('ignores a malformed cookie value', async () => {
+    await injectCookie('/api/telemetry/error', { batch: [er('ck-er2')] }, 'bilko_sid=not-a-uuid; bilko_vid=zzz', '10.1.0.4');
+    const rows = await dbAll<{ session_id: string; visitor_id: string }>('SELECT session_id, visitor_id FROM app_errors WHERE app = ?', 'ck-er2');
+    expect(rows).toEqual([{ session_id: 'body-sid', visitor_id: 'body-vid' }]);
+  });
+});

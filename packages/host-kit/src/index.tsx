@@ -21,7 +21,7 @@ export interface Theme {
 // Telemetry — unified SDK (analytics + structured logs + error capture).
 // initTelemetry() wires batched sends; track() is always safe to call.
 
-export { initTelemetry, log, logError, track, flush } from './telemetry.js';
+export { initTelemetry, log, logError, track, trackFlow, flush } from './telemetry.js';
 
 // ─────────────────────────────────────────────────────────────
 // Game services — leaderboards, save state, achievements.

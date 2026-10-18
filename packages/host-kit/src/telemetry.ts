@@ -9,11 +9,17 @@
  * All sends are batched: at most one HTTP request per 5s per channel,
  * or on visibilitychange:hidden / pagehide / explicit flush().
  *
- * Falls back to fire-and-forget (pre-0.2.0 behavior) if initTelemetry
- * has not been called — so track() is always safe to use.
+ * If initTelemetry has not been called, track() auto-initializes (app derived
+ * from /projects/<slug>/) — so track() is always safe to use.
  */
 
 const HOST = 'https://bilko.run';
+const FLOW_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+function defaultEndpoint(): string {
+  const h = typeof location !== 'undefined' ? location.hostname : '';
+  return h === 'bilko.run' || h === 'www.bilko.run' ? '/api/telemetry' : `${HOST}/api/telemetry`;
+}
 const FLUSH_MS = 5_000;
 const MAX_BATCH = 50;
 const MAX_ERR_PER_KEY_PER_MIN = 3;
@@ -35,30 +41,51 @@ let buf: Buffered[] = [];
 let timer: ReturnType<typeof setInterval> | null = null;
 const errSeen = new Map<string, { count: number; windowStart: number }>();
 
-let _visitorId: string | null = null;
-function getVisitorId(): string {
-  if (_visitorId) return _visitorId;
-  try {
-    let v = localStorage.getItem('bilko_vid');
-    if (!v) { v = crypto.randomUUID(); localStorage.setItem('bilko_vid', v); }
-    _visitorId = v;
-    return v;
-  } catch { return 'anon'; }
+// Identity contract mirrors server/session-identity.ts (host repo). host-kit
+// cannot import server code, so the constants are duplicated here.
+const VID_COOKIE = 'bilko_vid';
+const SID_COOKIE = 'bilko_sid';
+const VID_MAX_AGE = 31_536_000;
+const SID_MAX_AGE = 1_800;
+const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function validId(v: string | null | undefined): string | null {
+  return v && ID_RE.test(v) ? v : null;
 }
 
-let _sessionId: string | null = null;
-function getSessionId(): string {
-  if (_sessionId) return _sessionId;
-  try {
-    _sessionId = sessionStorage.getItem('bilko_sid') ?? crypto.randomUUID();
-    sessionStorage.setItem('bilko_sid', _sessionId);
-    return _sessionId;
-  } catch { return 'anon'; }
+function readCookie(name: string): string | null {
+  for (const part of document.cookie.split(';')) {
+    const t = part.trim();
+    if (t.startsWith(`${name}=`)) return t.slice(name.length + 1);
+  }
+  return null;
 }
+
+function writeCookie(name: string, value: string, maxAge: number): void {
+  const secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${value}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+}
+
+function touchSession(): { vid: string; sid: string } {
+  try {
+    const cookieVid = validId(readCookie(VID_COOKIE));
+    let lsVid: string | null = null;
+    try { lsVid = validId(localStorage.getItem(VID_COOKIE)); } catch { /* storage blocked */ }
+    const vid = lsVid ?? cookieVid ?? crypto.randomUUID();
+    try { localStorage.setItem(VID_COOKIE, vid); } catch { /* storage blocked */ }
+    writeCookie(VID_COOKIE, vid, VID_MAX_AGE);
+    const sid = validId(readCookie(SID_COOKIE)) ?? crypto.randomUUID();
+    writeCookie(SID_COOKIE, sid, SID_MAX_AGE);
+    return { vid, sid };
+  } catch { return { vid: 'anon', sid: 'anon' }; }
+}
+
+function getVisitorId(): string { return touchSession().vid; }
+function getSessionId(): string { return touchSession().sid; }
 
 export function initTelemetry(opts: InitOpts): void {
   if (cfg) return; // idempotent
-  cfg = { sampleInfo: 0.1, endpoint: `${HOST}/api/telemetry`, ...opts };
+  cfg = { sampleInfo: 0.1, endpoint: defaultEndpoint(), ...opts };
   if (typeof window === 'undefined') return; // SSR no-op
   window.addEventListener('error', (e) => {
     logError(e.error ?? new Error(e.message), { source: e.filename, line: e.lineno, col: e.colno });
@@ -107,34 +134,31 @@ export function logError(err: Error, context?: Record<string, unknown>): void {
 }
 
 export function track(name: string, props?: Record<string, unknown>): void {
-  if (cfg) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!cfg) {
+      const m = /^\/projects\/([^/]+)\//.exec(location.pathname);
+      initTelemetry({ app: m ? m[1] : 'bilko', version: 'unknown' });
+    }
+    if (!cfg) return;
+    const p = { ...(props ?? {}) };
+    if (p.path === undefined) p.path = location.pathname;
+    const { vid, sid } = touchSession();
     buf.push({
       kind: 'event',
       payload: {
         app: cfg.app, name,
-        visitor_id: getVisitorId(), session_id: getSessionId(),
-        ts: Date.now(), props: stripPII(props ?? {}),
+        visitor_id: vid, session_id: sid,
+        ts: Date.now(), props: stripPII(p),
       },
     });
-    return;
-  }
-  // Backward compat: direct send (same behavior as host-kit 0.1.x track()).
-  if (typeof window === 'undefined') return;
-  try {
-    const body = JSON.stringify({
-      event: name,
-      tool: (props as Record<string, unknown> | undefined)?.tool ?? 'unknown',
-      path: window.location.pathname,
-      metadata: (props as Record<string, unknown> | undefined)?.metadata ?? null,
-      visitor_id: getVisitorId(),
-      session_id: getSessionId(),
-    });
-    const url = `${HOST}/api/analytics/event`;
-    if (navigator?.sendBeacon) {
-      if (navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
-    }
-    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+    if (buf.length >= MAX_BATCH) flush();
   } catch { /* never breaks the app */ }
+}
+
+export function trackFlow(flow: string, step: string, props?: Record<string, unknown>): void {
+  if (!FLOW_RE.test(flow) || !FLOW_RE.test(step)) return;
+  track(`${flow}.${step}`, { ...(props ?? {}), flow, step });
 }
 
 export function flush(): void {
@@ -189,6 +213,4 @@ export function _resetForTest(): void {
   buf = [];
   errSeen.clear();
   if (timer) { clearInterval(timer); timer = null; }
-  _visitorId = null;
-  _sessionId = null;
 }

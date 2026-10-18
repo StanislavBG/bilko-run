@@ -3,6 +3,7 @@ import { Ticker } from '../components/portfolio/Ticker.js';
 import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { SECTIONS, PORTFOLIO_PROJECTS, NOW_ITEMS } from '../data/portfolio.js';
 import { PUBLIC_SLUGS } from '../data/projectsView.js';
+import { trackFlow } from '../hooks/usePageView.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 // Only surface projects that are publicly listed on /projects (PUBLIC_SLUGS);
@@ -38,10 +39,12 @@ export function HomePage() {
             AI academy. Most are free or open source. Build logs on the blog.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
-            <button className="pf-btn" onClick={() => navigate('/projects')}>See the work →</button>
-            <button className="pf-btn ghost" onClick={() => navigate('/contact')}>Get in touch</button>
+            <button className="pf-btn" data-track="home-see-work" onClick={() => navigate('/projects')}>See the work →</button>
+            <button className="pf-btn ghost" data-track="home-contact" onClick={() => navigate('/contact')}>Get in touch</button>
             <a
               href="/coffee"
+              data-track="tip-coffee"
+              onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee', area: 'home' })}
               className="pf-btn ghost"
               style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
             >

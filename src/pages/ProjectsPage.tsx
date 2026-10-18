@@ -6,7 +6,7 @@ import { PROJECTS } from '../data/projectsRegistry.js';
 import { projectMetadataRows } from '../data/projectMetadata.js';
 import { HUB_CARDS, PUBLIC_CARDS, type HubCard } from '../data/projectsView.js';
 import { RING_DOTS, heroBox, pad3, ringOffset, ringStats, spineGeom, tickStyle } from '../data/projectsRing.js';
-import { track } from '../hooks/usePageView.js';
+import { track, trackFlow } from '../hooks/usePageView.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 /**
@@ -232,6 +232,7 @@ export function ProjectsPage() {
 
   function open() {
     if (!card?.href) return;
+    trackFlow('explore', 'open-project', { slug: card.slug });
     track('hub_open', { tool: card.slug, metadata: { type: card.type } });
     if (card.isInternal) navigate(card.href);
     else window.location.href = card.href;
@@ -277,6 +278,8 @@ export function ProjectsPage() {
                   type="button"
                   className="pr-spine"
                   aria-label={`Open ${c.name}`}
+                  data-track="project-select"
+                  data-track-slug={c.slug}
                   title={c.name}
                   tabIndex={g.hidden ? -1 : 0}
                   aria-hidden={g.hidden || undefined}
@@ -328,7 +331,7 @@ export function ProjectsPage() {
                       Full story
                     </button>
                     {card.href && card.status !== 'postponed' && (
-                      <button className="pr-btn pr-btn-primary" onClick={open}>
+                      <button className="pr-btn pr-btn-primary" data-track="project-open" data-track-slug={card.slug} onClick={open}>
                         {card.type === 'package' ? 'GitHub' : 'Open'} →
                       </button>
                     )}

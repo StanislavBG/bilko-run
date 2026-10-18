@@ -1,8 +1,13 @@
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { trackFlow } from '../hooks/usePageView.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export function PricingPage() {
   useDocumentTitle('Pricing — bilko.run');
+  useEffect(() => {
+    trackFlow('checkout', 'view-offer', { product: 'credits' });
+  }, []);
 
   return (
     <>
@@ -43,6 +48,8 @@ export function PricingPage() {
             </ul>
             <Link
               to="/projects"
+              data-track="buy-free"
+              onClick={() => trackFlow('checkout', 'click-buy', { product: 'credits', plan: 'free' })}
               className="block w-full py-3 text-center text-sm font-bold text-warm-600 bg-warm-50 hover:bg-warm-100 rounded-xl transition-colors"
             >
               Try for free
@@ -73,6 +80,8 @@ export function PricingPage() {
             </ul>
             <Link
               to="/projects"
+              data-track="buy-1-credit"
+              onClick={() => trackFlow('checkout', 'click-buy', { product: 'credits', plan: '1-credit' })}
               className="block w-full py-3 text-center text-sm font-bold text-fire-600 bg-fire-50 hover:bg-fire-100 rounded-xl transition-colors"
             >
               Try any tool
@@ -106,6 +115,8 @@ export function PricingPage() {
             </ul>
             <Link
               to="/projects"
+              data-track="buy-7-credits"
+              onClick={() => trackFlow('checkout', 'click-buy', { product: 'credits', plan: '7-credits' })}
               className="block w-full py-3 text-center text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-xl shadow-md shadow-fire-500/20 transition-all"
             >
               Try any tool
@@ -147,6 +158,7 @@ export function PricingPage() {
               </ul>
               <a
                 href="/projects/git-viewer/"
+                data-track="buy-git-viewer"
                 className="block w-full py-3 text-center text-sm font-bold text-fire-600 bg-fire-50 hover:bg-fire-100 rounded-xl transition-colors"
               >
                 Open Git Viewer

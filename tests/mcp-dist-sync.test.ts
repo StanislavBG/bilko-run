@@ -75,7 +75,9 @@ describe('mcp-host-server dist/ stays in sync with src/', () => {
     } finally {
       rmSync(outDir, { recursive: true, force: true });
     }
-  });
+    // A full in-process tsc compile of mcp-host-server/src takes ~6s on a
+    // loaded machine — over vitest's 5s default.
+  }, 30_000);
 
   it('node dist/server.js starts without a module-resolution or syntax error', async () => {
     const sdkPresent = existsSync(join(MCP_DIR, 'node_modules', '@modelcontextprotocol'));

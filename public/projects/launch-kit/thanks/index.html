@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/projects/launch-kit/assets/thanks-CflpiQ3S.js"></script>
-  <link rel="modulepreload" crossorigin href="/projects/launch-kit/assets/track-CuuduF7q.js">
+  <script type="module" crossorigin src="/projects/launch-kit/assets/thanks-BjfFqLNO.js"></script>
+  <link rel="modulepreload" crossorigin href="/projects/launch-kit/assets/track-Cj_9163N.js">
   <link rel="stylesheet" crossorigin href="/projects/launch-kit/assets/track-Bln4mtFD.css">
 </head>
 <body class="thanks">
@@ -24,11 +24,11 @@
       <p class="mono">T-0 · payment received</p>
       <h1>You're cleared for launch</h1>
       <ul class="facts">
-        <li>Receipt for <strong id="email"></strong></li>
+        <li data-track-redact>Receipt for <strong id="email"></strong></li>
         <li>Bilko Launch Kit v<span id="version"></span></li>
         <li>Downloads used: <span id="used"></span></li>
       </ul>
-      <a id="download" class="pill" href="#">Download the Launch Kit</a>
+      <a id="download" data-track="download-zip" class="pill" href="#">Download the Launch Kit</a>
       <h2>Install in 3 steps</h2>
       <ol>
         <li>Unzip the download.</li>
@@ -42,18 +42,18 @@
       <p class="mono">T-0 · limit reached</p>
       <h1>Download limit reached</h1>
       <p>This purchase has used all of its downloads. Sign in with your purchase email to download again.</p>
-      <button id="recover-limit" class="pill" type="button">Sign in to re-download</button>
+      <button id="recover-limit" data-track="download-recover-limit" class="pill" type="button">Sign in to re-download</button>
     </section>
 
     <section data-state="error" hidden>
       <p class="mono">T-0 · hold</p>
       <h1>We couldn't find that order</h1>
-      <p>The link may be incomplete or still processing. Try again in a minute, or <a data-help href="https://bilko.run/contact">contact us</a> and we will sort it out.</p>
-      <button id="recover" class="pill" type="button">Sign in to re-download</button>
+      <p>The link may be incomplete or still processing. Try again in a minute, or <a data-help data-track="thanks-help" href="https://bilko.run/contact">contact us</a> and we will sort it out.</p>
+      <button id="recover" data-track="download-recover" class="pill" type="button">Sign in to re-download</button>
     </section>
 
     <p id="recover-msg" class="note" role="status" hidden></p>
-    <a class="pill" href="/projects/launch-kit/">Back to the Launch Kit</a>
+    <a class="pill" data-track="thanks-back" href="/projects/launch-kit/">Back to the Launch Kit</a>
   </main>
 </body>
 </html>

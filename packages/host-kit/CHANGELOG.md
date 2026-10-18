@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0
+
+### Minor Changes
+
+- dcdd007: Drop the `@clerk/clerk-react` peer dependency — nothing in host-kit imports it (auth loads clerk-js from the host's Clerk Frontend API at runtime), so consumers no longer install the deprecated package. Add `getAuthState()` and `subscribeAuth(listener)` so non-React consumers can read and observe auth state; `useAuth` is now built on them.
+
+### Patch Changes
+
+- 2a23d46: README: install the unscoped `host-kit` (`^0.8.0`). The legacy `@bilkobibitkov/host-kit` stops at 0.7.2, which has no auth API.
+
 ## 0.8.0
 
 ### Minor Changes

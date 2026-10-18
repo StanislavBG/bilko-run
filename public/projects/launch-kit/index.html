@@ -8,18 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@400;500;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/projects/launch-kit/assets/main-CyFVt8Mq.js"></script>
-  <link rel="modulepreload" crossorigin href="/projects/launch-kit/assets/track-CuuduF7q.js">
+  <script type="module" crossorigin src="/projects/launch-kit/assets/main-DbwaZ60j.js"></script>
+  <link rel="modulepreload" crossorigin href="/projects/launch-kit/assets/track-Cj_9163N.js">
   <link rel="stylesheet" crossorigin href="/projects/launch-kit/assets/track-Bln4mtFD.css">
 </head>
 <body>
   <div class="rule" aria-hidden="true"></div>
   <header class="bar" data-section="nav">
-    <a class="brand" href="#top" aria-label="Bilko Launch Kit"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 21 7v10l-9 5-9-5V7z"/><path d="M12 12 3 7M12 12l9-5M12 12v10"/></svg><span>Launch Kit</span></a>
+    <a class="brand" data-track="nav-home" href="#top" aria-label="Bilko Launch Kit"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 21 7v10l-9 5-9-5V7z"/><path d="M12 12 3 7M12 12l9-5M12 12v10"/></svg><span>Launch Kit</span></a>
     <nav aria-label="Primary">
-      <a href="#inside">What's inside</a><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
+      <a data-track="nav-inside" href="#inside">What's inside</a><a data-track="nav-how" href="#how">How it works</a><a data-track="nav-pricing" href="#pricing">Pricing</a><a data-track="nav-faq" href="#faq">FAQ</a>
     </nav>
-    <a class="btn btn-sm" href="#pricing" data-buy>Get it — $9</a>
+    <a class="btn btn-sm" href="#pricing" data-buy data-track="buy-nav">Get it — $9</a>
   </header>
 
   <main id="top">
@@ -34,7 +34,7 @@
           <div class="cta-row">
             <span class="price-chip mono">$9 one-time</span>
             <div class="btn-wrapper">
-              <button id="buy" class="btn" type="button" data-buy>Get the Launch Kit — $9</button>
+              <button id="buy" class="btn" type="button" data-buy data-track="buy-hero">Get the Launch Kit — $9</button>
               <span class="dot dot-tl" aria-hidden="true"></span><span class="dot dot-tr" aria-hidden="true"></span><span class="dot dot-bl" aria-hidden="true"></span><span class="dot dot-br" aria-hidden="true"></span>
               <span class="line line-t" aria-hidden="true"></span><span class="line line-r" aria-hidden="true"></span><span class="line line-b" aria-hidden="true"></span><span class="line line-l" aria-hidden="true"></span>
             </div>
@@ -165,7 +165,7 @@
           <li>Refund within 14 days, no interrogation</li>
         </ul>
         <div class="btn-wrapper">
-          <a class="btn" href="#pricing" data-buy>Get the Launch Kit — $9</a>
+          <a class="btn" href="#pricing" data-buy data-track="buy-pricing">Get the Launch Kit — $9</a>
           <span class="dot dot-tl" aria-hidden="true"></span><span class="dot dot-tr" aria-hidden="true"></span><span class="dot dot-bl" aria-hidden="true"></span><span class="dot dot-br" aria-hidden="true"></span>
           <span class="line line-t" aria-hidden="true"></span><span class="line line-r" aria-hidden="true"></span><span class="line line-b" aria-hidden="true"></span><span class="line line-l" aria-hidden="true"></span>
         </div>
@@ -177,12 +177,12 @@
       <p class="mono eyebrow rule-eyebrow">FAQ</p>
       <h2>Questions, answered.</h2>
       <div class="faq">
-        <details><summary>What is a Claude skill?</summary><p>A folder with a <code>SKILL.md</code> file: plain-text instructions Claude loads when your request matches. There is nothing to compile or install beyond copying the folder.</p></details>
-        <details><summary>Which Claude products does it work with?</summary><p>Claude Code, Claude.ai (upload each skill as a zip in Settings → Skills) and the Agent SDK. Claude.ai can't write to your disk, so it hands you each output to save yourself.</p></details>
-        <details><summary>What do I get?</summary><p>A zip with the eight skills, a README and licence files. Each purchase includes 20 downloads, and you can re-download any time by signing in with your purchase email.</p></details>
-        <details><summary>What about refunds?</summary><p>Not useful to you? Contact us via <a href="https://bilko.run/contact">https://bilko.run/contact</a> within 14 days and we'll refund you.</p></details>
-        <details><summary>Does it phone home?</summary><p>No. The skills contain no telemetry. They read and write files in your own <code>.launch/</code> folder and that's it.</p></details>
-        <details><summary>Will it write things I can publish blind?</summary><p>It drafts. You edit and ship. Check every claim and number before it goes out.</p></details>
+        <details><summary data-track="faq-what-is-skill">What is a Claude skill?</summary><p>A folder with a <code>SKILL.md</code> file: plain-text instructions Claude loads when your request matches. There is nothing to compile or install beyond copying the folder.</p></details>
+        <details><summary data-track="faq-products">Which Claude products does it work with?</summary><p>Claude Code, Claude.ai (upload each skill as a zip in Settings → Skills) and the Agent SDK. Claude.ai can't write to your disk, so it hands you each output to save yourself.</p></details>
+        <details><summary data-track="faq-what-get">What do I get?</summary><p>A zip with the eight skills, a README and licence files. Each purchase includes 20 downloads, and you can re-download any time by signing in with your purchase email.</p></details>
+        <details><summary data-track="faq-refunds">What about refunds?</summary><p>Not useful to you? Contact us via <a data-track="faq-contact" href="https://bilko.run/contact">https://bilko.run/contact</a> within 14 days and we'll refund you.</p></details>
+        <details><summary data-track="faq-phone-home">Does it phone home?</summary><p>No. The skills contain no telemetry. They read and write files in your own <code>.launch/</code> folder and that's it.</p></details>
+        <details><summary data-track="faq-publish-blind">Will it write things I can publish blind?</summary><p>It drafts. You edit and ship. Check every claim and number before it goes out.</p></details>
       </div>
     </section>
 
@@ -190,7 +190,7 @@
       <h2>Stop polishing. Start launching.</h2>
       <p>Eight skills. One context file. Nine dollars.</p>
       <div class="btn-wrapper">
-        <a class="btn" href="#pricing" data-buy>Get the Launch Kit — $9</a>
+        <a class="btn" href="#pricing" data-buy data-track="buy-final">Get the Launch Kit — $9</a>
         <span class="dot dot-tl" aria-hidden="true"></span><span class="dot dot-tr" aria-hidden="true"></span><span class="dot dot-bl" aria-hidden="true"></span><span class="dot dot-br" aria-hidden="true"></span>
           <span class="line line-t" aria-hidden="true"></span><span class="line line-r" aria-hidden="true"></span><span class="line line-b" aria-hidden="true"></span><span class="line line-l" aria-hidden="true"></span>
       </div>
@@ -199,12 +199,12 @@
   </main>
 
   <footer class="foot" data-section="footer">
-    <div><b>Bilko Launch Kit</b><p class="mono">Part of <a href="https://bilko.run">bilko.run</a></p></div>
+    <div><b>Bilko Launch Kit</b><p class="mono">Part of <a data-track="footer-brand-bilko" href="https://bilko.run">bilko.run</a></p></div>
     <nav aria-label="Footer">
-      <a href="https://bilko.run">bilko.run</a>
-      <a href="/projects">Projects</a>
-      <a href="/privacy">Privacy</a>
-      <a href="/terms">Terms</a>
+      <a data-track="footer-bilko" href="https://bilko.run">bilko.run</a>
+      <a data-track="footer-projects" href="/projects">Projects</a>
+      <a data-track="footer-privacy" href="/privacy">Privacy</a>
+      <a data-track="footer-terms" href="/terms">Terms</a>
     </nav>
   </footer>
 </body>

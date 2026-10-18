@@ -6,6 +6,7 @@ import { formatBytes } from '../../lib/format.js';
 import { BandwidthPanel } from './BandwidthPanel.js';
 import { BlogCadencePanel } from './BlogCadencePanel.js';
 import { SessionsPanel } from './SessionsPanel.js';
+import { FlowsPanel } from './FlowsPanel.js';
 import { TrafficPanel } from './TrafficPanel.js';
 import { DriftBadge, type DriftStatus } from './DriftBadge.js';
 
@@ -215,6 +216,7 @@ export function ObservabilityPage() {
       </div>
 
       <SessionsPanel />
+      <FlowsPanel />
       <TrafficPanel />
 
       {error && <p className="text-red-500 text-sm">{error}</p>}

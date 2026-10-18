@@ -5,7 +5,7 @@ Shared React component kit used by bilko.run sibling apps.
 ## Install
 
 ```
-pnpm add host-kit@^0.8.0
+pnpm add host-kit@^0.9.0
 # peer dep:
 pnpm add react
 ```

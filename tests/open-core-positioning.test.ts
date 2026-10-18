@@ -208,18 +208,15 @@ describe('open-core positioning: the app is free and stays free, and so is the m
   });
 
   it('keeps every Clerk hook inside a quiet boundary, so a Clerk failure hides only the chip', () => {
-    // usePageView() calls Clerk's useUser without importing @clerk/clerk-react,
-    // so the import check above can't see it. Called at the top of the page it
-    // would bring back the whole-page "This tool hit a snag" on a Clerk failure.
+    // Nothing but the chip may call Clerk hooks; usePageView is gone entirely.
     const withPageView = PAGE_FILES.filter(f => stripComments(read(f)).includes('usePageView'));
-    expect(withPageView).toEqual([`${LANDING_DIR}/AccountChip.tsx`]);
+    expect(withPageView).toEqual([]);
     const page = stripComments(read(MARKETING_PAGE));
     for (const hook of ['useUser', 'useAuth', 'useClerk', 'useSession', 'usePageView']) {
       expect(page, `SessionManagerPage.tsx calls ${hook}`).not.toMatch(new RegExp(`\\b${hook}\\s*\\(`));
     }
     const chip = stripComments(read(`${LANDING_DIR}/AccountChip.tsx`));
     expect(chip).toMatch(/<QuietBoundary[^>]*>\s*<Chip\b/);
-    expect(chip).toMatch(/<QuietBoundary[^>]*>\s*<PageViewBeacon\b/);
     expect(chip).toMatch(/getDerivedStateFromError[\s\S]*?failed: true/);
     expect(chip).toMatch(/this\.state\.failed \? null/);
   });

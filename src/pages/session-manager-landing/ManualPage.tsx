@@ -16,7 +16,6 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from '
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { formatBytes } from '../../lib/format.js';
-import { usePageView } from '../../hooks/usePageView.js';
 import {
   fetchManualToc, fetchManualChapter, manualDownloadUrl,
   type ManualChapterBody, type ManualChapterUnavailable, type TokenGetter,
@@ -143,7 +142,6 @@ const PARTS_HREF = '/products/session-manager#parts';
 const BOOK_PAGE_COUNT = 3;
 
 export default function ManualPage() {
-  usePageView();
   usePageFonts();
   const { mode } = useLayoutMode();
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
-import { usePageView, track } from '../hooks/usePageView.js';
+import { track } from '../hooks/usePageView.js';
 import { useIsAdmin } from '../hooks/useAdmin.js';
 import { SECTIONS } from '../data/portfolio.js';
 import { CommandPalette } from './portfolio/CommandPalette.js';
@@ -17,7 +17,6 @@ function activeSectionPath(pathname: string): string {
 }
 
 export function Layout() {
-  usePageView();
   const isAdmin = useIsAdmin();
   const location = useLocation();
   const [cmdOpen, setCmdOpen] = useState(false);

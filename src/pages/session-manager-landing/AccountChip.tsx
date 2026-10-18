@@ -1,6 +1,5 @@
 import React from 'react';
 import { ClerkLoaded, SignedIn, SignedOut, SignInButton, useUser } from '@clerk/clerk-react';
-import { usePageView } from '../../hooks/usePageView.js';
 import { COPY } from './copy.js';
 
 /**
@@ -9,7 +8,7 @@ import { COPY } from './copy.js';
  * If ClerkProvider fails to initialise, App's ClerkErrorBoundary renders the
  * routes with no provider and every Clerk hook throws. Each Clerk consumer
  * here therefore sits inside its own tiny boundary that renders nothing on
- * error, so a Clerk outage hides the chip (and skips one page-view beacon)
+ * error, so a Clerk outage hides the chip
  * instead of replacing the whole landing page with "This tool hit a snag".
  */
 class QuietBoundary extends React.Component<{ name: string; children: React.ReactNode }, { failed: boolean }> {
@@ -23,20 +22,6 @@ class QuietBoundary extends React.Component<{ name: string; children: React.Reac
   render() {
     return this.state.failed ? null : this.props.children;
   }
-}
-
-function PageViewBeacon() {
-  usePageView();
-  return null;
-}
-
-/** Records the page view (it reads the Clerk user for its email field). */
-export function PageViewTracker() {
-  return (
-    <QuietBoundary name="page-view tracking">
-      <PageViewBeacon />
-    </QuietBoundary>
-  );
 }
 
 function SignedInChip({ compact }: { compact: boolean }) {

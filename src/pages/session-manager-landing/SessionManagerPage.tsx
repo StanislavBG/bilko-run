@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import type { ManualToc } from '../../../shared/manual-catalog.js';
 import '../../styles/session-manager-landing.css';
 import { bookNavigate, markBookPageReady, shouldInterceptClick } from './bookTurn.js';
-import { PageViewTracker } from './AccountChip.js';
 import { COPY, fill } from './copy.js';
 import { CopyButton } from './CopyButton.js';
 import { MacDownload, WindowsDownload, windowsAvailable } from './Downloads.js';
@@ -254,7 +253,6 @@ export default function SessionManagerPage() {
 
   return (
     <div ref={rootRef} className={`smlp-root smlp-root--${layout.mode}`} data-layout={layout.mode}>
-      <PageViewTracker />
       <div className="smlp-canvas" style={canvasStyle}>
         <Header compact={!canvas} allFree={allFree} current="landing" onLinkClick={e => onBookLinkClick(e, COPY.meta.manualHref)} />
         <main className="smlp-main">

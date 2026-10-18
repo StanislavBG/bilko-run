@@ -1,38 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
-import { useUser } from '@clerk/clerk-react';
-
 const API = import.meta.env.VITE_API_URL || '/api';
 
-const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
-type UtmKey = typeof UTM_KEYS[number];
-
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
-
-function getOrCaptureUtms(): Record<UtmKey, string | null> {
-  let stored: Record<string, string> = {};
-  try {
-    const raw = sessionStorage.getItem('bilko_utms');
-    if (raw) stored = JSON.parse(raw);
-  } catch { /* ignore */ }
-
-  const params = new URLSearchParams(window.location.search);
-  let changed = false;
-  for (const k of UTM_KEYS) {
-    const v = params.get(k);
-    if (v && !stored[k]) {
-      stored[k] = v;
-      changed = true;
-    }
-  }
-  if (changed) {
-    try { sessionStorage.setItem('bilko_utms', JSON.stringify(stored)); } catch { /* ignore */ }
-  }
-
-  const out = {} as Record<UtmKey, string | null>;
-  for (const k of UTM_KEYS) out[k] = stored[k] ?? null;
-  return out;
-}
+const VID_COOKIE = 'bilko_vid';
+const SID_COOKIE = 'bilko_sid';
+const VID_MAX_AGE_S = 31536000;
+const SID_IDLE_S = 1800;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function uuid(): string {
   try {
@@ -48,13 +20,31 @@ function uuid(): string {
   });
 }
 
+function readCookie(name: string): string {
+  for (const part of document.cookie.split(';')) {
+    const k = part.indexOf('=');
+    if (k > 0 && part.slice(0, k).trim() === name) {
+      const v = part.slice(k + 1).trim();
+      return UUID_RE.test(v) ? v : '';
+    }
+  }
+  return '';
+}
+
+function writeCookie(name: string, value: string, maxAge: number): void {
+  const secure = location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${value}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`;
+}
+
 export function getOrCreateVisitorId(): string {
   try {
-    let id = localStorage.getItem('bilko_vid');
-    if (!id) {
-      id = uuid();
-      localStorage.setItem('bilko_vid', id);
-    }
+    let id = readCookie(VID_COOKIE);
+    let legacy = '';
+    try { legacy = localStorage.getItem('bilko_vid') ?? ''; } catch { /* ignore */ }
+    if (UUID_RE.test(legacy)) id = legacy;
+    else if (!id) id = uuid();
+    writeCookie(VID_COOKIE, id, VID_MAX_AGE_S);
+    try { localStorage.setItem('bilko_vid', id); } catch { /* ignore */ }
     return id;
   } catch {
     return uuid();
@@ -63,14 +53,8 @@ export function getOrCreateVisitorId(): string {
 
 export function getOrCreateSessionId(): string {
   try {
-    const now = Date.now();
-    const last = parseInt(sessionStorage.getItem('bilko_sid_last') ?? '0', 10);
-    let id = sessionStorage.getItem('bilko_sid');
-    if (!id || !last || now - last > SESSION_TIMEOUT_MS) {
-      id = uuid();
-      sessionStorage.setItem('bilko_sid', id);
-    }
-    sessionStorage.setItem('bilko_sid_last', String(now));
+    const id = readCookie(SID_COOKIE) || uuid();
+    writeCookie(SID_COOKIE, id, SID_IDLE_S);
     return id;
   } catch {
     return uuid();
@@ -100,35 +84,4 @@ export function track(event: string, props?: { tool?: string; path?: string; met
       keepalive: true,
     }).catch(() => {});
   } catch { /* never fail */ }
-}
-
-/** Fire a page view on every route change. Sends email when authenticated. */
-export function usePageView() {
-  const location = useLocation();
-  const { user } = useUser();
-  const email = user?.primaryEmailAddress?.emailAddress ?? '';
-  const lastPathRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    // Dedup: skip StrictMode double-fires and re-fires triggered purely by email change.
-    if (lastPathRef.current === location.pathname) return;
-    lastPathRef.current = location.pathname;
-
-    const utms = getOrCaptureUtms();
-    const visitorId = getOrCreateVisitorId();
-    const sessionId = getOrCreateSessionId();
-    fetch(`${API}/analytics/pageview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        path: location.pathname,
-        referrer: document.referrer || '',
-        screen: `${window.innerWidth}x${window.innerHeight}`,
-        visitor_id: visitorId,
-        session_id: sessionId,
-        ...utms,
-        ...(email ? { email } : {}),
-      }),
-    }).catch(() => {});
-  }, [location.pathname, email]);
 }

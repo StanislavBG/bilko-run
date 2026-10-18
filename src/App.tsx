@@ -41,6 +41,7 @@ const TermsPage = lazyWithRetry(() => import('./pages/TermsPage.js').then(m => (
 const AdminPage = lazyWithRetry(() => import('./pages/AdminPage.js').then(m => ({ default: m.AdminPage })));
 const AdminCostPage = lazyWithRetry(() => import('./pages/AdminCostPage.js').then(m => ({ default: m.AdminCostPage })));
 const ObservabilityPage = lazyWithRetry(() => import('./pages/admin/ObservabilityPage.js').then(m => ({ default: m.ObservabilityPage })));
+const SessionViewPage = lazyWithRetry(() => import('./pages/admin/SessionViewPage.js').then(m => ({ default: m.SessionViewPage })));
 const SecretsPage = lazyWithRetry(() => import('./pages/admin/SecretsPage.js').then(m => ({ default: m.SecretsPage })));
 const ContactPage = lazyWithRetry(() => import('./pages/ContactPage.js').then(m => ({ default: m.ContactPage })));
 const PortfolioProjectDetailPage = lazyWithRetry(() => import('./pages/PortfolioProjectDetailPage.js').then(m => ({ default: m.PortfolioProjectDetailPage })));
@@ -205,6 +206,8 @@ function AppRoutes() {
             <Route path="/admin" element={lazyRoute(AdminPage)} />
             <Route path="/admin/cost" element={lazyRoute(AdminCostPage)} />
             <Route path="/admin/observability" element={lazyRoute(ObservabilityPage)} />
+            <Route path="/admin/sessions" element={lazyRoute(SessionViewPage)} />
+            <Route path="/admin/sessions/:id" element={lazyRoute(SessionViewPage)} />
             <Route path="/admin/secrets" element={lazyRoute(SecretsPage)} />
 
             {/* ── Portfolio sections ── */}

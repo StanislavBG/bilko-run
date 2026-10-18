@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 import { formatBytes } from '../../lib/format.js';
 import { BandwidthPanel } from './BandwidthPanel.js';
@@ -191,6 +191,9 @@ export function ObservabilityPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link to="/admin/sessions" className="text-xs font-semibold text-fire-600 hover:underline">
+            Session View
+          </Link>
           {openAlertCount > 0 && (
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
               {openAlertCount} alert{openAlertCount !== 1 ? 's' : ''}

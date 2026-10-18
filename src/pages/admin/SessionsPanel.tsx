@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { Link } from 'react-router-dom';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -181,8 +182,8 @@ export function SessionsPanel() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-warm-100">
-                {['Started', 'User', 'Landing → Exit', 'Apps', 'Pages', 'Clicks', 'Events', 'Errors', 'Duration'].map((h, i) => (
-                  <th key={h} className={`${TH} ${i >= 4 && i <= 7 ? 'text-right' : 'text-left'}`}>{h}</th>
+                {['Started', 'User', 'Landing → Exit', 'Apps', 'Pages', 'Clicks', 'Events', 'Errors', 'Duration', ''].map((h, i) => (
+                  <th key={h || 'link'} className={`${TH} ${i >= 4 && i <= 7 ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -212,10 +213,19 @@ export function SessionsPanel() {
                     {s.error_count.toLocaleString()}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-warm-700 whitespace-nowrap">{fmtMmSs(s.duration_ms)}</td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
+                    <Link
+                      to={`/admin/sessions/${encodeURIComponent(s.session_id)}`}
+                      onClick={e => e.stopPropagation()}
+                      className="font-semibold text-fire-600 hover:underline"
+                    >
+                      Open in Session View
+                    </Link>
+                  </td>
                 </tr>
               ))}
               {sessions.length === 0 && (
-                <tr><td colSpan={9} className="text-center py-8 text-warm-400 text-sm">No sessions in this window</td></tr>
+                <tr><td colSpan={10}className="text-center py-8 text-warm-400 text-sm">No sessions in this window</td></tr>
               )}
             </tbody>
           </table>
@@ -228,12 +238,20 @@ export function SessionsPanel() {
             <span className="text-xs font-bold text-warm-600 uppercase tracking-wide">
               Session journey <span className="font-mono normal-case" title={selected.session_id}>{shortId(selected.session_id)}</span>
             </span>
-            <button
-              onClick={() => { setSelected(null); setDetail(null); }}
-              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-warm-100 text-warm-600 hover:bg-warm-200"
-            >
-              Close ×
-            </button>
+            <div className="flex items-center gap-3">
+              <Link
+                to={`/admin/sessions/${encodeURIComponent(selected.session_id)}`}
+                className="text-xs font-semibold text-fire-600 hover:underline"
+              >
+                Open in Session View
+              </Link>
+              <button
+                onClick={() => { setSelected(null); setDetail(null); }}
+                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-warm-100 text-warm-600 hover:bg-warm-200"
+              >
+                Close ×
+              </button>
+            </div>
           </div>
           {detailError && <p className="text-red-500 text-sm px-4 py-3">{detailError}</p>}
           {detailLoading && <div className="text-warm-400 text-center py-8">Loading journey…</div>}

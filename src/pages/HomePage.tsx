@@ -3,7 +3,7 @@ import { Ticker } from '../components/portfolio/Ticker.js';
 import { navigateProject } from '../components/portfolio/navigateProject.js';
 import { SECTIONS, PORTFOLIO_PROJECTS, NOW_ITEMS } from '../data/portfolio.js';
 import { PUBLIC_SLUGS } from '../data/projectsView.js';
-import { trackFlow } from '../hooks/usePageView.js';
+import { trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 // Only surface projects that are publicly listed on /projects (PUBLIC_SLUGS);

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useEffect } from 'react';
-import { trackFlow } from '../hooks/usePageView.js';
+import { trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export function PricingPage() {

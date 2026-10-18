@@ -1,4 +1,4 @@
-import { trackFlow } from '../../hooks/usePageView.js';
+import { trackFlow } from '../../lib/telemetry.js';
 import type { MouseEvent } from 'react';
 import { AccountChip } from './AccountChip.js';
 import { COPY } from './copy.js';

@@ -6,7 +6,7 @@ import { bookNavigate, markBookPageReady, shouldInterceptClick } from './bookTur
 import { COPY, fill } from './copy.js';
 import { CopyButton } from './CopyButton.js';
 import { MacDownload, WindowsDownload, trackDownloadClick, windowsAvailable } from './Downloads.js';
-import { trackFlow } from '../../hooks/usePageView.js';
+import { trackFlow } from '../../lib/telemetry.js';
 import { Header } from './Header.js';
 import { FilmDialog } from './FilmDialog.js';
 import { Chevron } from './Chevron.js';

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { track } from '../hooks/usePageView.js';
+import { track } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import type { Project } from '../data/projectsRegistry.js';
 

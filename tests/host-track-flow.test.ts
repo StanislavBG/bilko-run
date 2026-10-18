@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 
 async function load() {
-  return import('../src/hooks/usePageView');
+  return import('../src/lib/telemetry');
 }
 
 const evt = () => JSON.parse(sent[0].body).batch[0];

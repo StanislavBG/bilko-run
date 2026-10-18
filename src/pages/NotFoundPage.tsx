@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { track } from '../hooks/usePageView.js';
+import { track } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 // All AI tools live as static-path siblings now; cross-promo to them needs a full

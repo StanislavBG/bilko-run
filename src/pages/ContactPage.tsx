@@ -1,6 +1,6 @@
 import { PageHeader } from '../components/portfolio/PageHeader.js';
 import { useRef } from 'react';
-import { trackFlow } from '../hooks/usePageView.js';
+import { trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export function ContactPage() {

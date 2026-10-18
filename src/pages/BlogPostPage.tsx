@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { BlogVideoPlayer } from '../components/BlogVideoPlayer.js';
 import { parseFigure, splitInlineLinks } from '../lib/blogMarkdown.js';
 import { useDocumentTitle, DEFAULT_DOCUMENT_TITLE } from '../hooks/useDocumentTitle.js';
-import { trackFlow } from '../hooks/usePageView.js';
+import { trackFlow } from '../lib/telemetry.js';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 

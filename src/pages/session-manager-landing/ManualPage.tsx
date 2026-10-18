@@ -16,7 +16,7 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from '
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { formatBytes } from '../../lib/format.js';
-import { trackFlow } from '../../hooks/usePageView.js';
+import { trackFlow } from '../../lib/telemetry.js';
 import {
   fetchManualToc, fetchManualChapter, manualDownloadUrl,
   type ManualChapterBody, type ManualChapterUnavailable, type TokenGetter,

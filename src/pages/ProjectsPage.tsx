@@ -6,7 +6,7 @@ import { PROJECTS } from '../data/projectsRegistry.js';
 import { projectMetadataRows } from '../data/projectMetadata.js';
 import { HUB_CARDS, PUBLIC_CARDS, type HubCard } from '../data/projectsView.js';
 import { RING_DOTS, heroBox, pad3, ringOffset, ringStats, spineGeom, tickStyle } from '../data/projectsRing.js';
-import { track, trackFlow } from '../hooks/usePageView.js';
+import { track, trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 /**

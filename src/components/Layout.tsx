@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
-import { track, trackFlow } from '../hooks/usePageView.js';
+import { track, trackFlow } from '../lib/telemetry.js';
 import { useIsAdmin } from '../hooks/useAdmin.js';
 import { SECTIONS } from '../data/portfolio.js';
 import { CommandPalette } from './portfolio/CommandPalette.js';

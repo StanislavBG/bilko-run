@@ -85,3 +85,50 @@ export function track(event: string, props?: { tool?: string; path?: string; met
     }).catch(() => {});
   } catch { /* never fail */ }
 }
+
+const FLOW_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const PII_RE = /(email|password|token|key|ssn|card|cvv|apikey)/i;
+const TELEMETRY_URL = '/api/telemetry/event';
+
+function stripPII(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) out[k] = PII_RE.test(k) ? '[redacted]' : v;
+  return out;
+}
+
+/** Send one host-kit-shaped telemetry event. Never throws. */
+function sendTelemetry(name: string, props: Record<string, unknown>): void {
+  try {
+    const body = JSON.stringify({
+      batch: [{
+        app: 'bilko',
+        name,
+        visitor_id: getOrCreateVisitorId(),
+        session_id: getOrCreateSessionId(),
+        ts: Date.now(),
+        props: { ...stripPII(props), path: location.pathname },
+      }],
+    });
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      const blob = new Blob([body], { type: 'application/json' });
+      if (navigator.sendBeacon(TELEMETRY_URL, blob)) return;
+    }
+    fetch(TELEMETRY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  } catch { /* never fail */ }
+}
+
+/** Primary-flow event, same shape as host-kit's trackFlow (name `${flow}.${step}`). */
+export function trackFlow(flow: string, step: string, props?: Record<string, unknown>): void {
+  if (!FLOW_RE.test(flow) || !FLOW_RE.test(step)) return;
+  sendTelemetry(`${flow}.${step}`, { ...(props ?? {}), flow, step });
+}
+
+/** Screen view event: name 'screen_view', props { screen, path }. */
+export function trackScreen(screen: string): void {
+  sendTelemetry('screen_view', { screen });
+}

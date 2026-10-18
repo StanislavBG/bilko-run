@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { authFetch, getAuthToken, hasSignedInCookie, __resetAuthForTests } from '../src/auth';
+import { authFetch, getAuthState, getAuthToken, hasSignedInCookie, initAuth, subscribeAuth, __resetAuthForTests } from '../src/auth';
 
 function clearCookies() {
   for (const c of document.cookie.split(';')) {
@@ -55,5 +55,18 @@ describe('auth', () => {
     expect(h.get('authorization')).toBe('Bearer jwt-123');
     expect(h.get('content-type')).toBe('application/json');
     expect(init.credentials).toBeUndefined();
+  });
+
+  it('getAuthState/subscribeAuth expose state without React', () => {
+    expect(getAuthState().status).toBe('idle');
+    const seen: string[] = [];
+    const unsubscribe = subscribeAuth((st) => seen.push(st.status));
+    initAuth();
+    expect(getAuthState().status).toBe('signed-out');
+    expect(seen).toEqual(['signed-out']);
+    unsubscribe();
+    __resetAuthForTests();
+    initAuth();
+    expect(seen).toEqual(['signed-out']);
   });
 });

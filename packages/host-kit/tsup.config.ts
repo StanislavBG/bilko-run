@@ -6,5 +6,5 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: false,
-  external: ['react', 'react-dom', '@clerk/clerk-react', '@playwright/test'],
+  external: ['react', 'react-dom', '@playwright/test'],
 });

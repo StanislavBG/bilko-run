@@ -6,8 +6,8 @@ Shared React component kit used by bilko.run sibling apps.
 
 ```
 pnpm add host-kit@^0.8.0
-# peer deps:
-pnpm add react @clerk/clerk-react
+# peer dep:
+pnpm add react
 ```
 
 ## Components

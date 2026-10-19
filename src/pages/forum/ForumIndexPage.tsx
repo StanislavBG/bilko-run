@@ -117,7 +117,7 @@ export function ForumIndexPage() {
           <div className="fm-threads-head">
             <div className="fm-threads-title">
               <h3>Threads</h3>
-              <Link to="/forum/new" className="fm-start">+ Start a thread</Link>
+              <Link to={board === 'all' ? '/forum/new' : `/forum/new?board=${board}`} className="fm-start">+ Start a thread</Link>
             </div>
             <div className="fm-filters" role="group" aria-label="Filter by board">
               {FILTERS.map(f => (

@@ -47,6 +47,7 @@ const ObservabilityPage = lazyWithRetry(() => import('./pages/admin/Observabilit
 const SessionViewPage = lazyWithRetry(() => import('./pages/admin/SessionViewPage.js').then(m => ({ default: m.SessionViewPage })));
 const SecretsPage = lazyWithRetry(() => import('./pages/admin/SecretsPage.js').then(m => ({ default: m.SecretsPage })));
 const ForumIndexPage = lazyWithRetry(() => import('./pages/forum/ForumIndexPage.js').then(m => ({ default: m.ForumIndexPage })));
+const ForumNewThreadPage = lazyWithRetry(() => import('./pages/forum/ForumNewThreadPage.js').then(m => ({ default: m.ForumNewThreadPage })));
 const ForumThreadPage = lazyWithRetry(() => import('./pages/forum/ForumThreadPage.js').then(m => ({ default: m.ForumThreadPage })));
 const ContactPage = lazyWithRetry(() => import('./pages/ContactPage.js').then(m => ({ default: m.ContactPage })));
 const PortfolioProjectDetailPage = lazyWithRetry(() => import('./pages/PortfolioProjectDetailPage.js').then(m => ({ default: m.PortfolioProjectDetailPage })));
@@ -219,6 +220,7 @@ function AppRoutes() {
             <Route path="/academy/*" element={<RedirectAcademyToCourse />} />
             <Route path="/contact" element={lazyRoute(ContactPage)} />
             <Route path="/forum" element={lazyRoute(ForumIndexPage)} />
+            <Route path="/forum/new" element={lazyRoute(ForumNewThreadPage)} />
             <Route path="/forum/t/:id" element={lazyRoute(ForumThreadPage)} />
             <Route path="/work/:id" element={lazyRoute(PortfolioProjectDetailPage)} />
 

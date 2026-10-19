@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignInButton, UserButton, useAuth } from '@clerk/clerk-react';
 import { track, trackFlow } from '../lib/telemetry.js';
 import { useIsAdmin } from '../hooks/useAdmin.js';
 import { NOW_ITEMS, SECTIONS } from '../data/portfolio.js';
 import { CommandPalette } from './portfolio/CommandPalette.js';
+import { fetchMe, type ForumMember } from '../lib/forumClient.js';
+import { useForumToast } from '../pages/forum/ForumToast.js';
+
+const HandleModal = lazy(() => import('../pages/forum/HandleModal.js').then(m => ({ default: m.HandleModal })));
 
 function activeSectionPath(pathname: string): string {
   if (pathname === '/' || pathname === '/home') return '/';
@@ -31,6 +35,25 @@ export function Layout() {
   const [nowFading, setNowFading] = useState(false);
   const pausedRef = useRef({ hover: false, focus: false });
   const isHome = location.pathname === '/';
+  const onForum = location.pathname.startsWith('/forum');
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const [member, setMember] = useState<ForumMember | null>(null);
+  const [handleOpen, setHandleOpen] = useState(false);
+  const { flash, toast } = useForumToast();
+
+  useEffect(() => {
+    if (!onForum || !isLoaded || !isSignedIn) { setMember(null); return; }
+    let live = true;
+    fetchMe(getToken).then(res => { if (live && res.ok) setMember(res.member); });
+    return () => { live = false; };
+  }, [onForum, isLoaded, isSignedIn, getToken]);
+
+  function onHandleSaved(next: ForumMember) {
+    const was = member?.handle;
+    setMember(next);
+    setHandleOpen(false);
+    flash(was && was !== next.handle ? `Renamed. Every post now says @${next.handle}.` : `You're @${next.handle}.`);
+  }
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -101,6 +124,16 @@ export function Layout() {
             </SignInButton>
           </SignedOut>
           <SignedIn>
+            {onForum && (
+              <button
+                type="button"
+                className={'bk-handle-chip' + (member ? '' : ' unset')}
+                title={member ? 'Change your handle' : undefined}
+                onClick={() => setHandleOpen(true)}
+              >
+                {member ? `@${member.handle} ✎` : 'Set handle'}
+              </button>
+            )}
             <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
           </SignedIn>
           {isAdmin && (
@@ -118,6 +151,19 @@ export function Layout() {
           </button>
         </div>
       </header>
+
+      {onForum && handleOpen && (
+        <Suspense fallback={null}>
+          <HandleModal
+            open
+            currentHandle={member?.handle ?? null}
+            pending={false}
+            onClose={() => setHandleOpen(false)}
+            onSaved={onHandleSaved}
+          />
+        </Suspense>
+      )}
+      {toast}
 
       {mobileOpen && (
         <div className="pf-mobile-menu" onClick={() => setMobileOpen(false)}>

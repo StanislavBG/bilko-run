@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { SignInButton, useAuth } from '@clerk/clerk-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle.js';
 import {
@@ -18,6 +18,7 @@ import {
   type ForumThread,
 } from '../../lib/forumClient.js';
 import { HandleModal } from './HandleModal.js';
+import { useForumToast } from './ForumToast.js';
 import { LogbookView } from './LogbookView.js';
 import '../../styles/forum.css';
 
@@ -51,19 +52,17 @@ export function ForumThreadPage() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<{ pending: boolean } | null>(null);
-  const [toast, setToast] = useState('');
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const { flash, toast } = useForumToast();
+  const location = useLocation();
+  useEffect(() => {
+    const m = (location.state as { flash?: string } | null)?.flash;
+    if (m) flash(m);
+  }, [location.state, flash]);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
 
   const isLog = id === 'log';
   useDocumentTitle(thread ? `${thread.title} · Forum · Bilko` : 'Forum · Bilko');
 
-  const flash = useCallback((msg: string) => {
-    setToast(msg);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), 2600);
-  }, []);
-  useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   useEffect(() => {
     if (isLog) { setState('ok'); return; }
@@ -305,7 +304,7 @@ export function ForumThreadPage() {
         onClose={() => setModal(null)}
         onSaved={m => void onHandleSaved(m)}
       />
-      {toast && <div className="fm-toast" role="status">{toast}</div>}
+      {toast}
     </div>
   );
 }

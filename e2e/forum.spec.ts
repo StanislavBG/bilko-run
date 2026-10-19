@@ -26,3 +26,9 @@ test('log-book reads signed out', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'I WAS HERE!' })).toBeVisible();
   await expect(page.getByText('Sign in to sign the book.')).toBeVisible();
 });
+
+test('new thread page signed out', async ({ page }) => {
+  await page.goto('/forum/new');
+  await expect(page.getByRole('heading', { name: 'Start a thread.' })).toBeVisible();
+  await expect(page.getByText('Sign in to start a thread.')).toBeVisible();
+});

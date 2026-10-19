@@ -36,22 +36,22 @@ function writeCookie(name: string, value: string, maxAge: number): void {
   document.cookie = `${name}=${value}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`;
 }
 
-export function getOrCreateVisitorId(): string {
+function getOrCreateVisitorId(): string {
   try {
     let id = readCookie(VID_COOKIE);
     let legacy = '';
-    try { legacy = localStorage.getItem('bilko_vid') ?? ''; } catch { /* ignore */ }
+    try { legacy = localStorage.getItem(VID_COOKIE) ?? ''; } catch { /* ignore */ }
     if (UUID_RE.test(legacy)) id = legacy;
     else if (!id) id = uuid();
     writeCookie(VID_COOKIE, id, VID_MAX_AGE_S);
-    try { localStorage.setItem('bilko_vid', id); } catch { /* ignore */ }
+    try { localStorage.setItem(VID_COOKIE, id); } catch { /* ignore */ }
     return id;
   } catch {
     return uuid();
   }
 }
 
-export function getOrCreateSessionId(): string {
+function getOrCreateSessionId(): string {
   try {
     const id = readCookie(SID_COOKIE) || uuid();
     writeCookie(SID_COOKIE, id, SID_IDLE_S);
@@ -59,6 +59,20 @@ export function getOrCreateSessionId(): string {
   } catch {
     return uuid();
   }
+}
+
+/** POST a JSON body: sendBeacon when available, else fetch keepalive. Errors are swallowed. */
+function send(url: string, body: string): void {
+  if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    const blob = new Blob([body], { type: 'application/json' });
+    if (navigator.sendBeacon(url, blob)) return;
+  }
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+    keepalive: true,
+  }).catch(() => {});
 }
 
 /** Fire a funnel event. Uses sendBeacon when available, fetch keepalive otherwise. */
@@ -72,23 +86,12 @@ export function track(event: string, props?: { tool?: string; path?: string; met
       visitor_id: getOrCreateVisitorId(),
       session_id: getOrCreateSessionId(),
     });
-    const url = `${API}/analytics/event`;
-    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      const blob = new Blob([body], { type: 'application/json' });
-      if (navigator.sendBeacon(url, blob)) return;
-    }
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      keepalive: true,
-    }).catch(() => {});
+    send(`${API}/analytics/event`, body);
   } catch { /* never fail */ }
 }
 
 const FLOW_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const PII_RE = /(email|password|token|key|ssn|card|cvv|apikey)/i;
-const TELEMETRY_URL = '/api/telemetry/event';
 
 function stripPII(obj: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -109,16 +112,7 @@ function sendTelemetry(name: string, props: Record<string, unknown>): void {
         props: { ...stripPII(props), path: location.pathname },
       }],
     });
-    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      const blob = new Blob([body], { type: 'application/json' });
-      if (navigator.sendBeacon(TELEMETRY_URL, blob)) return;
-    }
-    fetch(TELEMETRY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      keepalive: true,
-    }).catch(() => {});
+    send(`${API}/telemetry/event`, body);
   } catch { /* never fail */ }
 }
 
@@ -126,9 +120,4 @@ function sendTelemetry(name: string, props: Record<string, unknown>): void {
 export function trackFlow(flow: string, step: string, props?: Record<string, unknown>): void {
   if (!FLOW_RE.test(flow) || !FLOW_RE.test(step)) return;
   sendTelemetry(`${flow}.${step}`, { ...(props ?? {}), flow, step });
-}
-
-/** Screen view event: name 'screen_view', props { screen, path }. */
-export function trackScreen(screen: string): void {
-  sendTelemetry('screen_view', { screen });
 }

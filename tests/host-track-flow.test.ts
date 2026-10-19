@@ -22,7 +22,7 @@ async function load() {
 
 const evt = () => JSON.parse(sent[0].body).batch[0];
 
-describe('host trackFlow / trackScreen', () => {
+describe('host trackFlow', () => {
   it('sends the host-kit payload shape to /api/telemetry/event', async () => {
     const { trackFlow } = await load();
     trackFlow('download', 'click', { plan: 'x' });
@@ -52,13 +52,5 @@ describe('host trackFlow / trackScreen', () => {
     expect(p.email).toBe('[redacted]');
     expect(p.apiKey).toBe('[redacted]');
     expect(p.ok).toBe(1);
-  });
-
-  it('trackScreen sends screen_view', async () => {
-    const { trackScreen } = await load();
-    trackScreen('home');
-    const e = evt();
-    expect(e.name).toBe('screen_view');
-    expect(e.props).toEqual({ screen: 'home', path: '/pricing' });
   });
 });

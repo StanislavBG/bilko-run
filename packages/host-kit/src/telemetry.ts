@@ -16,13 +16,14 @@
 const HOST = 'https://bilko.run';
 const FLOW_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
+const FLUSH_MS = 5_000;
+const MAX_BATCH = 50;
+const MAX_ERR_PER_KEY_PER_MIN = 3;
+
 function defaultEndpoint(): string {
   const h = typeof location !== 'undefined' ? location.hostname : '';
   return h === 'bilko.run' || h === 'www.bilko.run' ? '/api/telemetry' : `${HOST}/api/telemetry`;
 }
-const FLUSH_MS = 5_000;
-const MAX_BATCH = 50;
-const MAX_ERR_PER_KEY_PER_MIN = 3;
 
 interface InitOpts {
   app: string;
@@ -66,22 +67,27 @@ function writeCookie(name: string, value: string, maxAge: number): void {
   document.cookie = `${name}=${value}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
 }
 
+function newId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.floor(Math.random() * 16);
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 function touchSession(): { vid: string; sid: string } {
   try {
     const cookieVid = validId(readCookie(VID_COOKIE));
     let lsVid: string | null = null;
     try { lsVid = validId(localStorage.getItem(VID_COOKIE)); } catch { /* storage blocked */ }
-    const vid = lsVid ?? cookieVid ?? crypto.randomUUID();
+    const vid = lsVid ?? cookieVid ?? newId();
     try { localStorage.setItem(VID_COOKIE, vid); } catch { /* storage blocked */ }
     writeCookie(VID_COOKIE, vid, VID_MAX_AGE);
-    const sid = validId(readCookie(SID_COOKIE)) ?? crypto.randomUUID();
+    const sid = validId(readCookie(SID_COOKIE)) ?? newId();
     writeCookie(SID_COOKIE, sid, SID_MAX_AGE);
     return { vid, sid };
   } catch { return { vid: 'anon', sid: 'anon' }; }
 }
-
-function getVisitorId(): string { return touchSession().vid; }
-function getSessionId(): string { return touchSession().sid; }
 
 export function initTelemetry(opts: InitOpts): void {
   if (cfg) return; // idempotent
@@ -118,11 +124,12 @@ export function logError(err: Error, context?: Record<string, unknown>): void {
   } else {
     errSeen.set(key, { count: 1, windowStart: now });
   }
+  const { vid, sid } = touchSession();
   buf.push({
     kind: 'error',
     payload: {
       app: cfg.app, version: cfg.version,
-      visitor_id: getVisitorId(), session_id: getSessionId(),
+      visitor_id: vid, session_id: sid,
       ts: now, msg: err.message, name: err.name,
       stack: err.stack ?? null,
       url: typeof location !== 'undefined' ? location.href : '',
@@ -181,11 +188,12 @@ export function flush(): void {
 function enqueueLog(level: 'info' | 'warn' | 'error', msg: string, fields?: Record<string, unknown>) {
   if (!cfg) return;
   if (level === 'info' && Math.random() > cfg.sampleInfo) return;
+  const { vid, sid } = touchSession();
   buf.push({
     kind: 'log',
     payload: {
       app: cfg.app, version: cfg.version, level, msg,
-      visitor_id: getVisitorId(), session_id: getSessionId(),
+      visitor_id: vid, session_id: sid,
       ts: Date.now(), fields: stripPII(fields ?? {}),
     },
   });

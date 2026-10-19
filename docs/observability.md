@@ -86,8 +86,8 @@ Keep it small: five flows with clean start/success pairs beat thirty loose event
 
 1. Open your app on bilko.run in a fresh tab and click through a flow.
 2. Open `/admin/observability` (admin sign-in).
-3. In **Sessions**, find your session (filter by app or path). The timeline shows pageviews, clicks (with your `data-track` names), events, logs and errors in order.
-4. In **Flows**, find `<flow>` under your app and check the step counts.
+3. In module **02 Sessions · journeys**, find your session (filter by app or path). The journey shows pageviews, clicks (with your `data-track` names), events, logs and errors in order.
+4. In module **03 App health**, click your app's tile to open the detail sheet and check the `<flow>` funnel step counts.
 
 No rows? Check that the request hit bilko.run (not localhost), that `flow` and `step` are kebab-case, and that the `/api/telemetry/*` calls in DevTools return 200 (a 429 means a quota; the SDK retries nothing, so slow down).
 

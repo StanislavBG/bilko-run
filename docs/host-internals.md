@@ -132,7 +132,7 @@ Implementation lives in `server/static-cache.ts`. It also rewrites every file's 
 
 ## Observability dashboard
 
-`/admin/observability` is the single ops view. It aggregates per-sibling:
+`/admin/observability` is the Observability Command console: a full-viewport view with 7 swappable modules (globe, sessions journeys, app health, traffic, audience, top clicks, bandwidth), a KPI strip and a ticker. Design source: `docs/design/observability-command/`. It aggregates per-sibling:
 
 - 24h traffic, errors, log warnings/errors
 - Synthetic monitor pass rate + load times (p50/p95)

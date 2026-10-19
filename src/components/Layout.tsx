@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 import { track, trackFlow } from '../lib/telemetry.js';
 import { useIsAdmin } from '../hooks/useAdmin.js';
-import { SECTIONS } from '../data/portfolio.js';
+import { NOW_ITEMS, SECTIONS } from '../data/portfolio.js';
 import { CommandPalette } from './portfolio/CommandPalette.js';
 
 function activeSectionPath(pathname: string): string {
@@ -16,11 +16,20 @@ function activeSectionPath(pathname: string): string {
   return pathname;
 }
 
+const NAV_SECTIONS = SECTIONS.filter(s => s.id !== 'home');
+
 export function Layout() {
   const isAdmin = useIsAdmin();
   const location = useLocation();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [nowIdx, setNowIdx] = useState(0);
+  const isHome = location.pathname === '/';
+
+  useEffect(() => {
+    const id = setInterval(() => setNowIdx(i => (i + 1) % NOW_ITEMS.length), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -41,50 +50,37 @@ export function Layout() {
 
   return (
     <div className="portfolio-shell">
-      <header className="pf-topbar">
-        <Link to="/" className="pf-brand" onClick={() => setMobileOpen(false)}>
-          <span className="pf-mark">B</span>
-          <span>Bilko Bibitkov</span>
+      <header className="bk-header">
+        <Link to="/" className="bk-brand" onClick={() => setMobileOpen(false)}>
+          <span className="bk-mark">B</span>
+          <span className="bk-brand-name">Bilko Bibitkov</span>
         </Link>
-        <nav>
-          {SECTIONS.map(s =>
-            s.href ? (
-              <a key={s.id} href={s.href} data-track={`nav-${s.id}`} className={activePath === s.path ? 'active' : ''}>
-                {s.label}
-              </a>
-            ) : (
-              <NavLink
-                key={s.id}
-                to={s.path}
-                data-track={`nav-${s.id}`}
-                className={() => (activePath === s.path ? 'active' : '')}
-                end={s.path === '/'}
-              >
-                {s.label}
-              </NavLink>
-            ),
-          )}
+        <nav className="bk-nav" aria-label="Primary">
+          {NAV_SECTIONS.map((s, i) => (
+            <NavLink
+              key={s.id}
+              to={s.path}
+              data-track={`nav-${s.id}`}
+              data-home-flip={s.id}
+              className={() => 'bk-pill-nav' + (activePath === s.path ? ' active' : '')}
+            >
+              <span className="bk-num">{String(i + 1).padStart(2, '0')}</span>
+              {s.label}
+            </NavLink>
+          ))}
         </nav>
-        <div className="pf-right">
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontFamily: 'var(--pf-font-mono)', fontSize: 11,
-            color: 'var(--pf-ink-3)', letterSpacing: '0.08em', textTransform: 'uppercase',
-          }}>
-            <span className="pf-status-dot"></span>
+        <div className="bk-right">
+          <span className="bk-online">
+            <span className="bk-online-dot"></span>
             Online
           </span>
-          <button className="pf-kbd" onClick={() => setCmdOpen(true)} title="Search (⌘K)">
+          <button className="bk-chip" onClick={() => setCmdOpen(true)} title="Search (⌘K)">
             <span>Search</span>
             <span style={{ opacity: 0.6 }}>⌘K</span>
           </button>
           <SignedOut>
             <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
-              <button
-                onClick={() => track('signin_click')}
-                className="pf-kbd"
-                style={{ borderColor: 'var(--pf-ink)', color: 'var(--pf-ink)' }}
-              >
+              <button onClick={() => track('signin_click')} className="bk-chip bk-chip-strong">
                 Sign in
               </button>
             </SignInButton>
@@ -94,16 +90,12 @@ export function Layout() {
           </SignedIn>
           {isAdmin && (
             <>
-              <NavLink to="/admin" className="pf-kbd" style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}>
-                Admin
-              </NavLink>
-              <NavLink to="/admin/observability" className="pf-kbd" style={{ color: 'var(--pf-accent)', borderColor: 'var(--pf-accent)' }}>
-                Observability
-              </NavLink>
+              <NavLink to="/admin" className="bk-chip bk-chip-accent">Admin</NavLink>
+              <NavLink to="/admin/observability" className="bk-chip bk-chip-accent">Observability</NavLink>
             </>
           )}
           <button
-            className="pf-kbd pf-mobile-trigger"
+            className="bk-chip pf-mobile-trigger"
             onClick={() => setMobileOpen(o => !o)}
             aria-label="Menu"
           >
@@ -143,34 +135,31 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <footer className="pf-footer">
-        <div className="pf-col">
-          <div className="pf-sig">Bilko <em>Bibitkov</em></div>
-          <div style={{ opacity: 0.7, maxWidth: 300 }}>
-            Relentless believer. Regular human. Building AI things from a small studio.
-          </div>
-          <div className="pf-meta-line">© {new Date().getFullYear()} · bilko.run</div>
+      <footer className="bk-bottombar">
+        <div className="bk-bb-left">
+          <span className="bk-bb-label">Currently →</span>
+          <span className="bk-bb-now" key={nowIdx}>{NOW_ITEMS[nowIdx]}</span>
         </div>
-        <div className="pf-col">
-          <h4>Sections</h4>
-          {SECTIONS.slice(0, 3).map(s => (
-            <Link key={s.id} to={s.path} data-track={`footer-${s.id}`}>{s.label}</Link>
-          ))}
+        <div className="bk-bb-center">
+          {isHome ? (
+            <Link to="/projects" data-home-flip="projects" data-track="home-flip-hint" className="bk-bb-hint">
+              <span className="bk-bb-arrow">↓</span> Scroll to flip into Projects · or press 1 · 2 · 3
+            </Link>
+          ) : (
+            <>
+              <Link to="/privacy" data-track="footer-privacy">Privacy</Link>
+              <Link to="/terms" data-track="footer-terms">Terms</Link>
+              <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" data-track="footer-github">GitHub</a>
+              <a href="mailto:bilko@bilko.run" data-track="footer-email">Email</a>
+            </>
+          )}
         </div>
-        <div className="pf-col">
-          <h4>More</h4>
-          {SECTIONS.slice(3).map(s => (
-            <Link key={s.id} to={s.path} data-track={`footer-${s.id}`}>{s.label}</Link>
-          ))}
-        </div>
-        <div className="pf-col">
-          <h4>Elsewhere</h4>
-          <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" data-track="footer-github">GitHub →</a>
-          <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" data-track="footer-twitter">Twitter →</a>
-          <a href="/coffee" data-track="tip-coffee" onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee', area: 'footer' })}>Buy me a coffee ☕ →</a>
-          <a href="mailto:bilko@bilko.run" data-track="footer-email">Email →</a>
-          <Link to="/privacy" data-track="footer-privacy">Privacy →</Link>
-          <Link to="/terms" data-track="footer-terms">Terms →</Link>
+        <div className="bk-bb-right">
+          <a href="/coffee" data-track="tip-coffee" className="bk-bb-coffee" onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee', area: 'footer' })}>Buy me a coffee →</a>
+          <span className="bk-bb-small">
+            <Link to="/privacy" data-track="footer-privacy">Privacy</Link>
+            <Link to="/terms" data-track="footer-terms">Terms</Link>
+          </span>
         </div>
       </footer>
 

@@ -20,20 +20,20 @@
     "public": true,
     "displayName": "Git Viewer",
     "listing": {
-      "detail": "A better front page for github.com/StanislavBG. Every public project in one place, a 12-month commit heatmap, streaks, and what each repo is about. It's here to show the work: a lot of projects, a lot of experiments, trying everything. Nothing to buy and nothing to sign up for.",
+      "detail": "A better front page for my GitHub. Every public project in one place, a 12-month commit heatmap, streaks, and what each repo is about. It's here to show the work: a lot of projects, a lot of experiments, trying everything. Nothing to buy and nothing to sign up for.",
       "metric": "65",
       "metricLabel": "public projects",
       "lang": "TypeScript",
-      "audience": "Anyone curious what Stanislav builds: collaborators, recruiters, fellow tinkerers.",
+      "audience": "Anyone curious what Bilko builds: collaborators, recruiters, fellow tinkerers.",
       "talkingPoints": [
-        "A front page for Stanislav's GitHub (github.com/StanislavBG): every public project in one place.",
+        "A front page for Bilko's GitHub: every public project in one place.",
         "A 12-month commit heatmap, streaks and activity across all repos, refreshed daily.",
         "Shows the range: games, AI tools, data projects, dev tools — a lot of work, trying everything.",
         "Free to browse. Nothing to buy, no sign-up."
       ],
       "offering": "showcase",
       "pricing": "free",
-      "callToAction": "Browse Stanislav's projects at https://stanislavbg.github.io/git-viewer/",
+      "callToAction": "Browse Bilko's projects at https://stanislavbg.github.io/git-viewer/",
       "avoidClaims": [
         "It is a product, SaaS or service you can buy, subscribe to or sign up for.",
         "It builds portfolios, résumés or project pages for other GitHub users.",

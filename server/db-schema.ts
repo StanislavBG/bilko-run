@@ -372,6 +372,49 @@ export const MIGRATIONS = [
     PRIMARY KEY (date, method, route)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_api_egress_daily_date ON api_egress_daily (date)`,
+  // Forum (server/services/forum.ts). All user text (handles, titles, bodies,
+  // log-book lines) is stored raw; the React client escapes it on render.
+  `CREATE TABLE IF NOT EXISTS forum_members (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    email        TEXT UNIQUE NOT NULL,
+    handle       TEXT NOT NULL,
+    handle_lc    TEXT UNIQUE NOT NULL,
+    created_at   INTEGER NOT NULL,
+    last_seen_at INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS forum_threads (
+    id              TEXT PRIMARY KEY,
+    kind            TEXT NOT NULL,
+    board           TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    lede            TEXT,
+    pinned          INTEGER NOT NULL DEFAULT 0,
+    starter_thread  INTEGER NOT NULL DEFAULT 0,
+    member_id       INTEGER NOT NULL,
+    views           INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL,
+    last_post_at    INTEGER NOT NULL,
+    hidden_at       INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS forum_posts (
+    id         TEXT PRIMARY KEY,
+    thread_id  TEXT NOT NULL,
+    member_id  INTEGER NOT NULL,
+    body       TEXT NOT NULL,
+    came       TEXT,
+    created_at INTEGER NOT NULL,
+    hidden_at  INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS forum_logbook (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id  INTEGER NOT NULL,
+    msg        TEXT NOT NULL,
+    from_place TEXT,
+    created_at INTEGER NOT NULL,
+    hidden_at  INTEGER
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_forum_posts_thread ON forum_posts (thread_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_forum_threads_pinned ON forum_threads (pinned, last_post_at)`,
   // Per-asset static egress, bucketed by exact URL — the per-file sibling of
   // api_egress_daily's static:<slug> rollup. Bounded to at most 51 rows per
   // (date, slug): top 50 paths by bytes, plus one folded-in '_rest' row for

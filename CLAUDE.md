@@ -120,6 +120,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 ### Backend Patterns (`server/`)
 - `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the shared gateway helpers: `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check/deduct), `askGeminiJson` (Gemini call + JSON parse), `toolErrorReply` (uniform error reply), plus `handleGenerateEndpoint` (inverse-mode generator). `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
 - `server/routes/blog.ts` — Blog CRUD (admin-only writes)
+- `server/routes/forum.ts` + `server/services/forum.ts` — site-level Forum at `/forum`, like the blog: public reads, Clerk + handle writes, admin hide
 - `server/routes/project-catalog.ts` — public `GET /api/projects` + read-only MCP at `/mcp` (the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
 - `server/routes/realtime.ts` + `server/realtime/relay.ts` — ticket endpoint and binary WebSocket input relay (`/api/realtime/rooms/:roomId`, ≤10 seats, in-memory, single instance)

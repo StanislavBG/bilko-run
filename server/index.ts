@@ -28,6 +28,7 @@ import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { registerCompGrantRoutes } from './routes/admin-comp-grants.js';
 import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
+import { registerForumRoutes } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
 import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
@@ -195,6 +196,7 @@ registerRealtimeRoutes(app);
 registerManualRoutes(app);
 registerCompGrantRoutes(app);
 registerProjectCatalogRoutes(app);
+registerForumRoutes(app);
 
 // Boot-time secret age check
 try {

@@ -4,7 +4,7 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<title>Escape Velocity</title>
-		<meta name="description" content="Escape Velocity: a keyboard-only spaceship game — an unhurried fogged galaxy to explore, and a survivors arena to warp into.">
+		<meta name="description" content="Escape Velocity: a keyboard-only spaceship game. Start on Mercury with a guided tutorial, shop at the Galaxy Café between planets and fight your way out of the Solar System.">
 		<style>
 html, body, #canvas {
 	margin: 0;
@@ -165,22 +165,38 @@ body {
 		<div id="overlay">
 			<div id="card">
 				<h1>Escape Velocity</h1>
-				<p id="tagline">An unhurried fogged galaxy to explore, and a survivors arena to warp into.</p>
-				<p id="controls-hint">A/D turn &middot; W/Space fly &middot; hold Space descend &middot; Esc menu</p>
-				<button id="play" type="button">Click to play</button>
+				<p id="tagline">A keyboard-only spaceship game: start on Mercury, shop at the Galaxy Café between planets and fight your way out of the Solar System.</p>
+				<p id="controls-hint">WASD fly &middot; Space dash &middot; 1–4 pick upgrades &middot; Esc menu</p>
+				<button id="play" type="button" data-track="title-play">Click to play</button>
 				<div id="loading" hidden>
 					<progress id="status-progress"></progress>
 					<p id="loading-text">Loading&hellip;</p>
 				</div>
 				<div id="status-notice" hidden></div>
 				<div id="cloud">
-					<button id="cloud-signin" type="button">Sign in to save progress across devices</button>
+					<button id="cloud-signin" type="button" data-track="title-cloud-signin">Sign in to save progress across devices</button>
 					<p id="cloud-status" hidden>Signed in &mdash; progress syncs to your bilko.run account</p>
 				</div>
 			</div>
 		</div>
 
 		<script>
+// bilko.run telemetry (Bilko docs/observability.md "Tagging taxonomy"): same-origin
+// beacon; the server stamps the bilko_vid/bilko_sid cookie ids. In-canvas screens and
+// the play flow are sent by the game's Telemetry class.
+window.evTrack = function (name, props) {
+	try {
+		const p = Object.assign({}, props || {}, { path: location.pathname });
+		const body = JSON.stringify({ batch: [{ app: 'escape-velocity', name: name, ts: Date.now(), props: p }] });
+		if (navigator.sendBeacon && navigator.sendBeacon('/api/telemetry/event', new Blob([body], { type: 'application/json' }))) return;
+		fetch('/api/telemetry/event', { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, keepalive: true }).catch(function () {});
+	} catch (e) {}
+};
+window.evTrackFlow = function (flow, step, props) {
+	window.evTrack(flow + '.' + step, Object.assign({}, props || {}, { flow: flow, step: step }));
+};
+window.evTrack('screen_view', { screen: 'title' });
+
 (function () {
 	const CLERK_SRC = 'https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
 	const CLERK_KEY = 'pk_live_Y2xlcmsuYmlsa28ucnVuJA';
@@ -247,6 +263,7 @@ body {
 
 	let version = 0;
 	let loadedOnce = false;
+	let signInPending = false;
 
 	async function fetchRemote() {
 		const r = await authFetch('GET');
@@ -269,8 +286,14 @@ body {
 			return !!(window.Clerk && window.Clerk.user);
 		},
 		signIn: async function () {
+			window.evTrackFlow('signin', 'start');
 			const clerk = await loadClerk();
-			if (clerk) clerk.openSignIn();
+			if (clerk) {
+				signInPending = true;
+				clerk.openSignIn();
+			} else {
+				window.evTrackFlow('signin', 'fail');
+			}
 		},
 		load: async function () {
 			try {
@@ -312,22 +335,29 @@ body {
 		const on = evCloud.signedIn();
 		cta.hidden = on;
 		note.hidden = !on;
+		if (on && signInPending) {
+			signInPending = false;
+			window.evTrackFlow('signin', 'success');
+		}
 	}
-	cta.addEventListener('click', function () { evCloud.signIn(); });
+	let listening = false;
+	function listen(clerk) {
+		if (!clerk || listening) return;
+		listening = true;
+		render();
+		clerk.addListener(render);
+	}
+	cta.addEventListener('click', function () { evCloud.signIn().then(function () { listen(window.Clerk); }); });
 	render();
 
 	if (hasSignedInCookie()) {
-		loadClerk().then(function (clerk) {
-			if (!clerk) return;
-			render();
-			clerk.addListener(render);
-		});
+		loadClerk().then(listen);
 	}
 }());
 		</script>
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":20744824,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":20746984,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -358,6 +388,7 @@ const engine = new Engine(GODOT_CONFIG);
 
 	function displayFailureNotice(err) {
 		console.error(err);
+		window.evTrack('screen_view', { screen: 'load-error' });
 		playButton.hidden = true;
 		loading.hidden = true;
 		if (err instanceof Error) {
@@ -381,6 +412,7 @@ const engine = new Engine(GODOT_CONFIG);
 			playButton.disabled = true;
 			playButton.hidden = true;
 			loading.hidden = false;
+			window.evTrack('screen_view', { screen: 'loading' });
 			if (window.evCloud && window.evCloud.hasSignedInCookie()) {
 				let timedOut = false;
 				try {
@@ -400,6 +432,7 @@ const engine = new Engine(GODOT_CONFIG);
 					window.evCloud.initialBlob = null;
 				}
 			}
+			const shellTitle = document.title;
 			engine.startGame({
 				'onProgress': function (current, total) {
 					if (current > 0 && total > 0) {
@@ -413,6 +446,7 @@ const engine = new Engine(GODOT_CONFIG);
 					}
 				},
 			}).then(() => {
+				document.title = shellTitle;
 				overlay.remove();
 				canvas.focus();
 			}, displayFailureNotice);

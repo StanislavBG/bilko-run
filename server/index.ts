@@ -33,7 +33,7 @@ import { registerRealtimeRoutes } from './routes/realtime.js';
 import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
 import { registerSecurityHeaders } from './security-headers.js';
 import { registerOgRoutes } from './og-routes.js';
-import { gitViewerOg } from './routes/tools/git-viewer.js';
+import { gitViewerOg, getGitViewerHealth } from './routes/tools/git-viewer.js';
 import { loadOgProjects, type OgProject } from './og-meta.js';
 import { loadBlogPosts } from './blog-posts.js';
 import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
@@ -217,6 +217,8 @@ try {
 app.get('/api/health', async () => ({
   status: 'alive',
   uptime: process.uptime(),
+  // Hosted Git Viewer builds: token presence (never the value) + GitHub budget.
+  gitViewer: getGitViewerHealth(),
 }));
 
 // In production, serve the Vite build

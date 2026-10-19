@@ -115,6 +115,24 @@ describe('forum routes', () => {
     expect((await call('GET', '/api/forum/me', ADMIN)).json().isHost).toBe(true);
   });
 
+  it('limits renames to 3 per day; first claim and failed renames do not count', async () => {
+    const bob = as('bob@example.com');
+    await giveHandle(ALICE, 'alice');
+    await giveHandle(bob, 'bobby');
+    // taken rename fails with 409 and does not count
+    for (let i = 0; i < 4; i++) {
+      expect((await call('POST', '/api/forum/handle', ALICE, { handle: 'bobby' })).statusCode).toBe(409);
+    }
+    // case-only change is not a rename
+    await giveHandle(ALICE, 'Alice');
+    for (const h of ['alice_1', 'alice_2', 'alice_3']) await giveHandle(ALICE, h);
+    const over = await call('POST', '/api/forum/handle', ALICE, { handle: 'alice_4' });
+    expect(over.statusCode).toBe(429);
+    expect(over.json().error).toBe('You can change your handle 3 times a day. Try again tomorrow.');
+    // another member is unaffected
+    await giveHandle(bob, 'bobby2');
+  });
+
   it('403 needs_handle for a signed-in user without a handle', async () => {
     const r = await call('POST', '/api/forum/logbook', ALICE, { msg: 'hi', from: 'x' });
     expect(r.statusCode).toBe(403);

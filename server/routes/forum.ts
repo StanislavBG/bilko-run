@@ -41,12 +41,14 @@ const WRITES_PER_DAY = 60;
 const CHECKS_PER_MINUTE = 30;
 const LOGBOOK_PAGE_MAX = 50;
 const MAP_CAP = 20_000;
+const RENAMES_PER_DAY = 3;
 
 // In-process abuse damping and presence. A restart resetting these is harmless.
 const lurkerSeen = new Map<string, number>(); // ipHash -> last forum GET
 const viewSeen = new Map<string, number>(); // `${ipHash}:${threadId}` -> last counted view
 const writeLog = new Map<number, number[]>(); // memberId -> write timestamps (last 24h)
 const checkLog = new Map<string, number[]>(); // ipHash -> handle-check timestamps
+const renameLog = new Map<number, number[]>(); // memberId -> successful rename timestamps (last 24h)
 
 function prune(map: Map<string, number>, windowMs: number, now: number): void {
   if (map.size <= MAP_CAP) return;
@@ -65,6 +67,17 @@ function writeLimited(memberId: number, now: number): boolean {
   writeLog.set(memberId, recent);
   if (writeLog.size > MAP_CAP) writeLog.clear();
   return false;
+}
+
+function recentRenames(memberId: number, now: number): number[] {
+  return (renameLog.get(memberId) ?? []).filter((t) => now - t < DAY_MS);
+}
+
+function recordRename(memberId: number, now: number): void {
+  const recent = recentRenames(memberId, now);
+  recent.push(now);
+  renameLog.set(memberId, recent);
+  if (renameLog.size > MAP_CAP) renameLog.clear();
 }
 
 function checkLimited(ipHash: string, now: number): boolean {
@@ -196,7 +209,14 @@ export function registerForumRoutes(app: FastifyInstance): void {
     if (!email) return;
     const handle = (req.body as { handle?: unknown } | null)?.handle;
     if (typeof handle !== 'string') return reply.status(400).send({ error: 'Pick a handle.' });
+    // Only a real rename (member already has a different handle) is throttled; first claim is free.
+    const existing = await getMemberByEmail(email);
+    const isRename = !!existing && normalizeHandle(handle) !== normalizeHandle(existing.handle);
+    if (existing && isRename && recentRenames(existing.id, Date.now()).length >= RENAMES_PER_DAY) {
+      return reply.status(429).send({ error: 'You can change your handle 3 times a day. Try again tomorrow.' });
+    }
     const r = await setHandle(email, handle);
+    if (r.ok && existing && isRename) recordRename(existing.id, Date.now());
     if (!r.ok) {
       if (r.error === 'taken') return reply.status(409).send({ error: suggest(handle.trim()) });
       return reply.status(400).send({ error: r.msg });

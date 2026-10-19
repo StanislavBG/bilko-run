@@ -176,8 +176,8 @@ export function CommandShell(props: CommandShellProps) {
   return (
     <div style={{ width: '100%', height: '100vh', overflow: 'auto', background: C.bg }}>
       <div style={rootStyle}>
-        <div style={{ flex: 'none', height: 38, display: 'flex', alignItems: 'center', gap: 14, padding: '0 2px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 'none', height: 38, display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden' }}>
             <div
               style={{
                 width: 26, height: 26, borderRadius: '50%', background: C.ink, color: C.bg, display: 'grid', placeItems: 'center',
@@ -190,10 +190,10 @@ export function CommandShell(props: CommandShellProps) {
               Bilko <span style={{ fontStyle: 'italic', color: C.orange }}>Bibitkov</span>
             </div>
             <div style={{ width: 1, height: 18, background: C.line }} />
-            <div style={{ font: `500 11px/1 ${FONT.mono}`, letterSpacing: '.22em', color: C.text }}>OBSERVABILITY</div>
-            <div style={{ font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint }}>{'// COMMAND'}</div>
+            <div style={{ font: `500 11px/1 ${FONT.mono}`, letterSpacing: '.22em', color: C.text, whiteSpace: 'nowrap' }}>OBSERVABILITY</div>
+            <div style={{ font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{'// COMMAND'}</div>
           </div>
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: 1, minWidth: 0 }} />
           {ctl('LAYOUT', (
             <Seg
               options={['RAILS', 'DOCK', 'WING'] as const}
@@ -208,7 +208,7 @@ export function CommandShell(props: CommandShellProps) {
             onClick={toggleMax}
             style={{
               border: `1px solid ${C.lineStrong}`, margin: 0, cursor: 'pointer', padding: '6px 10px', borderRadius: 3,
-              background: C.panel, color: C.text, font: labelBase, letterSpacing: '.12em',
+              background: C.panel, color: C.text, font: labelBase, letterSpacing: '.12em', whiteSpace: 'nowrap',
             }}
           >
             {max ? '⤡ RESTORE' : '⤢ FOCUS'}
@@ -221,7 +221,7 @@ export function CommandShell(props: CommandShellProps) {
           </div>
           <Link
             to="/admin/sessions"
-            style={{ font: labelBase, letterSpacing: '.12em', color: C.muted, textDecoration: 'none', border: `1px solid ${C.line}`, borderRadius: 3, padding: '6px 10px' }}
+            style={{ font: labelBase, letterSpacing: '.12em', color: C.muted, textDecoration: 'none', border: `1px solid ${C.line}`, borderRadius: 3, padding: '6px 10px', whiteSpace: 'nowrap' }}
           >
             SESSION VIEW
           </Link>
@@ -264,13 +264,13 @@ export function CommandShell(props: CommandShellProps) {
                 <div
                   style={{
                     flex: 'none', height: 28, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px',
-                    borderBottom: `1px solid ${C.line}`, font: labelBase, letterSpacing: '.14em', textTransform: 'uppercase', color: C.muted,
+                    borderBottom: `1px solid ${C.line}`, font: labelBase, letterSpacing: '.14em', textTransform: 'uppercase', color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden',
                   }}
                 >
                   <span style={{ color: C.orange }}>{m.num}</span>
-                  <span style={{ color: C.text }}>{m.title}</span>
-                  <span style={{ color: h?.tone === 'err' ? C.red : C.faint }}>{h?.sub ?? m.subtitle}</span>
-                  <span style={{ marginLeft: 'auto', color: C.faint }}>{hint}</span>
+                  <span style={{ flex: 'none', color: C.text }}>{m.title}</span>
+                  <span style={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: h?.tone === 'err' ? C.red : C.faint }}>{h?.sub ?? m.subtitle}</span>
+                  <span style={{ flex: 'none', marginLeft: 'auto', color: C.faint }}>{hint}</span>
                 </div>
                 <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
                   {render(m.key, stage)}

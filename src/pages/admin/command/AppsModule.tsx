@@ -21,6 +21,8 @@ export interface AppTile {
   statusTone: string;
 }
 
+const fmtCompact = (n: number): string => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
 const fmtLast = (ms: number): string => {
   const d = new Date(ms);
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
@@ -221,9 +223,9 @@ export function AppsModule({ stage, flows, obs }: { stage: boolean; flows: Sourc
 
   const selTile = sel ? tiles.find(t => t.name === sel) : undefined;
   const stat = (label: string, value: number, color: string = C.text) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span>{label}</span>
-      <span style={{ fontSize: 11.5, color }}>{fmtNum(value)}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+      <span style={{ whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ fontSize: 11, color, whiteSpace: 'nowrap', }} title={fmtNum(value)}>{fmtCompact(value)}</span>
     </div>
   );
   return (
@@ -244,7 +246,7 @@ export function AppsModule({ stage, flows, obs }: { stage: boolean; flows: Sourc
               <span style={{ font: `600 26px/1 ${FONT.sans}`, color: C.ink }}>{fmtNum(t.sessions)}</span>
               <span style={{ font: `400 9.5px/1 ${FONT.mono}`, color: C.muted }}>sessions</span>
             </div>
-            <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 4, font: `400 9px/1 ${FONT.mono}`, color: C.faint }}>
+            <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4,auto)', justifyContent: 'space-between', gap: 2, font: `400 9px/1 ${FONT.mono}`, color: C.faint }}>
               {stat('VIEW', t.views)}
               {stat('CLK', t.clicks)}
               {stat('EVT', t.events)}

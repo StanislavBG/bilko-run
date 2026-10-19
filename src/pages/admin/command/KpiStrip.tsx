@@ -26,22 +26,22 @@ function Tile({ tile }: { tile: KpiTile }) {
         background: err ? C.errBg : C.panel,
         border: `1px solid ${err ? C.errBorder : C.line}`,
         borderRadius: 3,
-        padding: '8px 12px',
+        padding: '8px 10px',
         display: 'flex',
         flexDirection: 'column',
         gap: 5,
         minWidth: 0,
       }}
     >
-      <span style={{ font: `500 9.5px/1 ${FONT.mono}`, letterSpacing: '.16em', color: err ? C.redSoft : C.muted }}>{tile.label}</span>
-      <div style={{ display: 'flex', alignItems: tile.spark ? 'flex-end' : 'baseline', gap: tile.spark ? 10 : 8 }}>
+      <span style={{ font: `500 9.5px/1 ${FONT.mono}`, letterSpacing: '.14em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: err ? C.redSoft : C.muted }}>{tile.label}</span>
+      <div style={{ display: 'flex', alignItems: tile.spark ? 'flex-end' : 'baseline', gap: tile.spark ? 8 : 6, minWidth: 0 }}>
         <span style={{ font: `600 24px/1 ${FONT.sans}`, color: err ? C.red : C.ink, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           {m ? <>{m[1]}<span style={{ fontSize: 13, color: C.muted }}> {m[2]}</span></> : tile.value}
         </span>
         {tile.spark && tile.spark.length > 0 ? (
           <Spark values={tile.spark} />
         ) : tile.sub ? (
-          <span style={{ font: `400 10px/1 ${FONT.mono}`, color: err ? C.redSoft : SUB_COLOR[tile.tone], whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+          <span title={tile.sub} style={{ font: `400 9.5px/1.3 ${FONT.mono}`, color: err ? C.redSoft : SUB_COLOR[tile.tone], whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
             {tile.sub}
           </span>
         ) : null}
@@ -91,25 +91,14 @@ function TickerItem({ r }: { r: RecentRow }) {
   );
 }
 
+/** Scrolling track only; CommandShell wraps it in the bordered bar with the RECENT HITS label and key hint. */
 export function Ticker({ recent }: { recent: RecentRow[] }) {
   ensureTickerStyle();
   const all = [...recent, ...recent];
+  if (recent.length === 0) return <span style={{ font: `400 10.5px/1 ${FONT.mono}`, color: C.faint }}>no hits in window</span>;
   return (
-    <div style={{ flex: 'none', height: 28, display: 'flex', alignItems: 'center', gap: 14, border: `1px solid ${C.line}`, borderRadius: 3, background: C.globe, padding: '0 10px', overflow: 'hidden' }}>
-      <span style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 7, font: `500 10px/1 ${FONT.mono}`, letterSpacing: '.16em', color: C.orange }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.orange, boxShadow: `0 0 8px ${C.orange}` }} />
-        RECENT HITS
-      </span>
-      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
-        {recent.length === 0 ? (
-          <span style={{ font: `400 10.5px/1 ${FONT.mono}`, color: C.faint }}>no hits in window</span>
-        ) : (
-          <div className="obs-ticker-track" style={{ display: 'flex', gap: 40, width: 'max-content' }}>
-            {all.map((r, i) => <TickerItem key={i} r={r} />)}
-          </div>
-        )}
-      </div>
-      <span style={{ flex: 'none', font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.08em', color: C.faint }}>1–7 SWAP · F FOCUS · ESC</span>
+    <div className="obs-ticker-track" style={{ display: 'flex', gap: 40, width: 'max-content' }}>
+      {all.map((r, i) => <TickerItem key={i} r={r} />)}
     </div>
   );
 }

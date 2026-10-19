@@ -3,7 +3,7 @@ import { useAdminFetch } from '../../../hooks/useAdmin.js';
 import { formatBytes } from '../../../lib/format.js';
 import { C, FONT, fmtMB, fmtNum } from './theme.js';
 import type { Source } from './useCommandData.js';
-import type { EgressAssetRow, EgressData } from './types.js';
+import type { AdminFetcher, EgressAssetRow, EgressData } from './types.js';
 
 const MB = 1024 * 1024;
 const COMPACT_N = 5;
@@ -11,7 +11,7 @@ const PROJECT_GRID = 'minmax(0,1fr) 52px 70px 56px';
 const ROUTE_GRID = '38px minmax(0,1fr) 52px 70px 56px';
 const ellipsis = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const;
 const headStyle = { display: 'grid', gap: 8, paddingBottom: 7, borderBottom: `1px solid ${C.line}`, font: `500 9.5px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint } as const;
-const rowStyle = { flex: 'none', position: 'relative', display: 'grid', gap: 8, alignItems: 'center', height: 25, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1 ${FONT.mono}`, color: C.text } as const;
+const rowStyle = { flex: 'none', position: 'relative', display: 'grid', gap: 8, alignItems: 'center', height: 25, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.text } as const;
 
 export interface EgressSegment { label: string; bytes: number; color: string; tooltip?: string }
 export interface EgressInsight {
@@ -81,8 +81,9 @@ function ShareBar({ segments, height }: { segments: EgressInsight['segments']; h
 
 const perColor = (perReq: number): string => (perReq >= MB ? C.amber : C.muted);
 
-export function BandwidthModule({ stage, egress, days }: { stage: boolean; egress: Source<EgressData>; days: number }) {
-  const adminFetch = useAdminFetch();
+export function BandwidthModule({ stage, egress, days, fetcher }: { stage: boolean; egress: Source<EgressData>; days: number; fetcher?: AdminFetcher }) {
+  const realFetch = useAdminFetch();
+  const adminFetch = fetcher ?? realFetch;
   const [selected, setSelected] = useState<string | null>(null);
   const [assets, setAssets] = useState<EgressAssetRow[] | null>(null);
   const [assetsError, setAssetsError] = useState(false);
@@ -132,12 +133,12 @@ export function BandwidthModule({ stage, egress, days }: { stage: boolean; egres
       <div style={{ position: 'absolute', inset: 0, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ font: `600 26px/1 ${FONT.sans}`, color: C.ink }}>{total.n}</span>
-          <span style={{ font: `400 10px/1 ${FONT.mono}`, color: C.muted }}>{total.unit} egress</span>
+          <span style={{ font: `400 10px/1.4 ${FONT.mono}`, color: C.muted }}>{total.unit} egress</span>
         </div>
         <ShareBar segments={insight.segments} height={8} />
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {top.map(r => (
-            <div key={r.slug} style={{ flex: 'none', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 64px', gap: 8, alignItems: 'center', height: 22, borderTop: `1px solid ${C.rule}`, font: `400 10.5px/1 ${FONT.mono}`, color: C.text }}>
+            <div key={r.slug} style={{ flex: 'none', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 64px', gap: 8, alignItems: 'center', height: 22, borderTop: `1px solid ${C.rule}`, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.text }}>
               <span style={ellipsis}>{r.slug}</span>
               <span style={{ textAlign: 'right', color: C.muted }}>{formatBytes(r.bytes)}</span>
             </div>
@@ -186,9 +187,9 @@ export function BandwidthModule({ stage, egress, days }: { stage: boolean; egres
                 <button type="button" onClick={back} style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', font: 'inherit', letterSpacing: 'inherit', color: C.orange }}>← BACK</button>
                 <span>TOP FILES</span><span style={{ color: C.text, ...ellipsis }}>{selected}</span>
               </div>
-              {assetsError && <div style={{ padding: 12, font: `400 10.5px/1 ${FONT.mono}`, color: C.redSoft }}>failed to load files</div>}
-              {!assetsError && assets === null && <div style={{ padding: 12, font: `400 10.5px/1 ${FONT.mono}`, color: C.faint }}>loading</div>}
-              {assets !== null && assets.length === 0 && <div style={{ padding: 12, font: `400 10.5px/1 ${FONT.mono}`, color: C.faint }}>no per-file data in window</div>}
+              {assetsError && <div style={{ padding: 12, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.redSoft }}>failed to load files</div>}
+              {!assetsError && assets === null && <div style={{ padding: 12, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.faint }}>loading</div>}
+              {assets !== null && assets.length === 0 && <div style={{ padding: 12, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.faint }}>no per-file data in window</div>}
               {assets?.map(a => (
                 <div key={a.path} style={{ ...rowStyle, gridTemplateColumns: 'minmax(0,1fr) 52px 70px', fontStyle: a.path === '_rest' ? 'italic' : 'normal' }}>
                   <span style={ellipsis}>{a.path === '_rest' ? 'everything else' : a.path}</span>

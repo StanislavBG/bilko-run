@@ -51,7 +51,7 @@ export function ClicksModule({ stage, traffic }: { stage: boolean; traffic: Sour
           <span>PAGE</span><span>ELEMENT</span><span>TARGET</span><span>CLICKS</span><span style={{ textAlign: 'right' }}>UV</span>
         </div>
         {rows.map((r, i) => (
-          <div key={`${r.path}|${r.tag}|${r.label}|${r.href}|${i}`} style={{ flex: 'none', display: 'grid', gridTemplateColumns: STAGE_GRID, gap: 12, alignItems: 'center', height: 32, borderBottom: `1px solid ${C.rule}`, font: `400 11px/1 ${FONT.mono}`, color: C.text }}>
+          <div key={`${r.path}|${r.tag}|${r.label}|${r.href}|${i}`} style={{ flex: 'none', display: 'grid', gridTemplateColumns: STAGE_GRID, gap: 12, alignItems: 'center', height: 32, borderBottom: `1px solid ${C.rule}`, font: `400 11px/1.4 ${FONT.mono}`, color: C.text }}>
             <span style={{ color: C.muted, ...ellipsis }}>{r.path}</span>
             <span style={{ color: C.ink, ...ellipsis }}>{elementOf(r)}</span>
             <span style={{ color: C.faint, ...ellipsis }}>{targetOf(r.href)}</span>
@@ -70,7 +70,7 @@ export function ClicksModule({ stage, traffic }: { stage: boolean; traffic: Sour
     <div style={{ position: 'absolute', inset: 0, padding: '8px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-around' }}>
       {rows.slice(0, COMPACT_N).map((r, i) => (
         <div key={`${r.path}|${r.tag}|${r.label}|${r.href}|${i}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', gap: 8, font: `400 10.5px/1 ${FONT.mono}` }}>
+          <div style={{ display: 'flex', gap: 8, font: `400 10.5px/1.4 ${FONT.mono}` }}>
             <span style={{ color: C.text, ...ellipsis }}>{elementOf(r)}</span>
             <span style={{ color: C.faint, flex: 1, ...ellipsis }}>{r.path}</span>
             <span style={{ color: C.ink }}>{fmtNum(r.clicks)}</span>

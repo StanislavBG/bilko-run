@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAdminFetch } from '../../../hooks/useAdmin.js';
 import { C, Donut, FONT, MonoLabel, fmtClock, fmtDay, fmtNum, type DonutSegment } from './theme.js';
 import type { Source } from './useCommandData.js';
-import type { TrafficData, VisitorRow, VisitorTimeline } from './types.js';
+import type { AdminFetcher, TrafficData, VisitorRow, VisitorTimeline } from './types.js';
 
 const PALETTE = [C.orange, C.slate, C.amber, C.green] as const;
 const TOP_N = 4;
@@ -51,10 +51,10 @@ function DonutCard({ title, d }: { title: string; d: DonutResult }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 22, padding: 16, background: C.well, border: `1px solid ${C.line}`, borderRadius: 3 }}>
       <Donut segments={d.segments} size={150} inset={18} center={`${d.topPct}%`} centerLabel={d.topLabel.toUpperCase()} />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9, font: `400 11px/1 ${FONT.mono}`, color: C.text }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9, font: `400 11px/1.4 ${FONT.mono}`, color: C.text }}>
         <MonoLabel color={C.muted}>{title}</MonoLabel>
-        {d.segments.map(s => (
-          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {d.segments.map((s, i) => (
+          <div key={`${s.label}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ width: 8, height: 8, background: s.color, flex: 'none' }} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
             <span style={{ marginLeft: 'auto' }}>{fmtNum(s.value)}</span>
@@ -65,8 +65,9 @@ function DonutCard({ title, d }: { title: string; d: DonutResult }) {
   );
 }
 
-function Timeline({ visitorId, days, onBack }: { visitorId: string; days: number; onBack: () => void }) {
-  const adminFetch = useAdminFetch();
+function Timeline({ visitorId, days, onBack, fetcher }: { visitorId: string; days: number; onBack: () => void; fetcher?: AdminFetcher }) {
+  const realFetch = useAdminFetch();
+  const adminFetch = fetcher ?? realFetch;
   const [tl, setTl] = useState<VisitorTimeline | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const latest = useRef(visitorId);
@@ -103,7 +104,7 @@ function Timeline({ visitorId, days, onBack }: { visitorId: string; days: number
           ← BACK
         </button>
         <MonoLabel color={C.muted}>VISITOR TIMELINE</MonoLabel>
-        <span title={visitorId} style={{ font: `400 10.5px/1 ${FONT.mono}`, color: C.orange }}>{shortId(visitorId)}</span>
+        <span title={visitorId} style={{ font: `400 10.5px/1.4 ${FONT.mono}`, color: C.orange }}>{shortId(visitorId)}</span>
       </div>
       <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
         {err && <Note color={C.redSoft}>{err}</Note>}
@@ -115,7 +116,7 @@ function Timeline({ visitorId, days, onBack }: { visitorId: string; days: number
               <span>TIME</span><span>KIND</span><span>PATH / LABEL</span><span style={{ textAlign: 'right' }}>STATUS</span>
             </div>
             {tl.events.map((e, i) => (
-              <div key={`${e.ts}:${i}`} style={{ display: 'grid', gridTemplateColumns: cols, gap: 10, alignItems: 'center', height: 25, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1 ${FONT.mono}`, color: C.text }}>
+              <div key={`${e.ts}:${i}`} style={{ display: 'grid', gridTemplateColumns: cols, gap: 10, alignItems: 'center', height: 25, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.text }}>
                 <span style={{ color: C.muted }}>{fmtDay(e.ts)} {fmtClock(new Date(e.ts))}</span>
                 <span style={{ color: e.kind === 'click' ? C.amber : C.muted }}>{e.kind}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -144,7 +145,7 @@ function VisitorTable({ rows, onPick }: { rows: VisitorRow[]; onPick: (id: strin
           <div
             key={v.visitorId}
             onClick={e => { e.stopPropagation(); onPick(v.visitorId); }}
-            style={{ display: 'grid', gridTemplateColumns: GRID, gap: 10, alignItems: 'center', height: 27, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1 ${FONT.mono}`, color: C.text, cursor: 'pointer' }}
+            style={{ display: 'grid', gridTemplateColumns: GRID, gap: 10, alignItems: 'center', height: 27, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.text, cursor: 'pointer' }}
           >
             <span title={v.visitorId} style={{ color: v.userEmail ? C.orange : C.text }}>{shortId(v.visitorId)}</span>
             <span style={{ color: C.muted }}>{v.ip ?? '—'}</span>
@@ -156,13 +157,13 @@ function VisitorTable({ rows, onPick }: { rows: VisitorRow[]; onPick: (id: strin
             <span style={{ textAlign: 'right', color: C.muted }}>{fmtSeen(v.lastSeen)}</span>
           </div>
         ))}
-        {rows.length === 0 && <div style={{ padding: 16, textAlign: 'center', font: `400 11px/1 ${FONT.mono}`, color: C.faint }}>NO VISITORS</div>}
+        {rows.length === 0 && <div style={{ padding: 16, textAlign: 'center', font: `400 11px/1.4 ${FONT.mono}`, color: C.faint }}>NO VISITORS</div>}
       </div>
     </div>
   );
 }
 
-function Stage({ t, days }: { t: TrafficData; days: number }) {
+function Stage({ t, days, fetcher }: { t: TrafficData; days: number; fetcher?: AdminFetcher }) {
   const [selected, setSelected] = useState<string | null>(null);
   const device = donutSegments(t.byDevice, 'device');
   const browser = donutSegments(t.byBrowser, 'browser');
@@ -173,7 +174,7 @@ function Stage({ t, days }: { t: TrafficData; days: number }) {
         <DonutCard title="BROWSERS" d={browser} />
       </div>
       {selected
-        ? <Timeline visitorId={selected} days={days} onBack={() => setSelected(null)} />
+        ? <Timeline visitorId={selected} days={days} onBack={() => setSelected(null)} fetcher={fetcher} />
         : <VisitorTable rows={t.visitors ?? []} onPick={setSelected} />}
     </div>
   );
@@ -189,14 +190,14 @@ function Compact({ t }: { t: TrafficData }) {
       {items.map(({ d }, i) => (
         <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <Donut segments={d.segments} size={84} inset={11} center={`${d.topPct}%`} />
-          <span style={{ font: `400 10px/1 ${FONT.mono}`, color: C.muted }}>{d.topLabel.toLowerCase()}</span>
+          <span style={{ font: `400 10px/1.4 ${FONT.mono}`, color: C.muted }}>{d.topLabel.toLowerCase()}</span>
         </div>
       ))}
     </div>
   );
 }
 
-export function AudienceModule({ stage, traffic, days }: { stage: boolean; traffic: Source<TrafficData>; days: number }) {
+export function AudienceModule({ stage, traffic, days, fetcher }: { stage: boolean; traffic: Source<TrafficData>; days: number; fetcher?: AdminFetcher }) {
   const t = traffic.data;
   if (!t) {
     if (traffic.error) return <Note color={C.redSoft}>{traffic.error}</Note>;
@@ -205,5 +206,5 @@ export function AudienceModule({ stage, traffic, days }: { stage: boolean; traff
   if (t.byDevice.length === 0 && t.byBrowser.length === 0 && (t.visitors ?? []).length === 0) {
     return <Note>no visitors in window</Note>;
   }
-  return stage ? <Stage t={t} days={days} /> : <Compact t={t} />;
+  return stage ? <Stage t={t} days={days} fetcher={fetcher} /> : <Compact t={t} />;
 }

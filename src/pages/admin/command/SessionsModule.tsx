@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { useAdminFetch } from '../../../hooks/useAdmin.js';
 import { buildSessionSteps, type Step } from '../../../lib/sessionSteps';
-import type { SessionDetail, SessionRow, SessionsList } from './types.js';
+import type { AdminFetcher, SessionDetail, SessionRow, SessionsList } from './types.js';
 import { C, FONT, Seg, fmtDay, fmtDur, MonoLabel } from './theme.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,10 +62,12 @@ const btn: CSSProperties = {
   color: C.text,
   font: `500 10.5px/1 ${FONT.mono}`,
   letterSpacing: '.1em',
+  whiteSpace: 'nowrap',
 };
 
-export function SessionsModule({ stage, days }: { stage: boolean; days: number }) {
-  const adminFetch = useAdminFetch();
+export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days: number; fetcher?: AdminFetcher }) {
+  const realFetch = useAdminFetch();
+  const adminFetch = fetcher ?? realFetch;
   const { user } = useUser();
   const myEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? null;
 
@@ -79,6 +81,8 @@ export function SessionsModule({ stage, days }: { stage: boolean; days: number }
   const [stepIdx, setStepIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>('1x');
+  const [fit, setFit] = useState(7);
+  const rowsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -167,11 +171,23 @@ export function SessionsModule({ stage, days }: { stage: boolean; days: number }
     return () => window.removeEventListener('keydown', onKey);
   }, [stage, togglePlay]);
 
+  // Compact view shows only the rows that fully fit its slot (no half-clipped last row).
+  const hasList = list !== null && list.length > 0;
+  useEffect(() => {
+    const el = rowsRef.current;
+    if (stage || !el) return;
+    const measure = () => setFit(Math.max(1, Math.floor(el.clientHeight / 24)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stage, hasList]);
+
   if (listErr && !list) return <Note color={C.redSoft}>{listErr}</Note>;
   if (!list) return <Note>loading</Note>;
 
   if (!stage) {
-    const top = list.slice(0, 7);
+    const top = list.slice(0, fit);
     return (
       <div style={{ position: 'absolute', inset: 0, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -182,7 +198,7 @@ export function SessionsModule({ stage, days }: { stage: boolean; days: number }
         {list.length === 0 ? (
           <Note>no sessions in window</Note>
         ) : (
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div ref={rowsRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {top.map(s => (
               <div key={s.session_id} style={{ flex: 'none', display: 'grid', gridTemplateColumns: '52px minmax(0,1fr) 40px', gap: 8, alignItems: 'center', height: 24, borderTop: `1px solid ${C.rule}`, font: `400 10.5px/1 ${FONT.mono}` }}>
                 <span style={{ color: C.muted }}>{fmtHM(s.started_at)}</span>
@@ -222,7 +238,7 @@ export function SessionsModule({ stage, days }: { stage: boolean; days: number }
               <div
                 key={s.session_id}
                 onClick={() => setSelId(s.session_id)}
-                style={{ flex: 'none', display: 'grid', gridTemplateColumns: '58px minmax(0,1fr) 46px', columnGap: 10, rowGap: 4, padding: '7px 8px', borderBottom: `1px solid ${C.rule}`, cursor: 'pointer', background: sel ? 'rgba(242,106,46,.08)' : 'transparent', boxShadow: sel ? `inset 2px 0 0 ${C.orange}` : 'none' }}
+                style={{ flex: 'none', display: 'grid', gridTemplateColumns: '48px minmax(0,1fr) 64px', columnGap: 8, rowGap: 4, padding: '7px 8px', borderBottom: `1px solid ${C.rule}`, cursor: 'pointer', background: sel ? 'rgba(242,106,46,.08)' : 'transparent', boxShadow: sel ? `inset 2px 0 0 ${C.orange}` : 'none' }}
               >
                 <span style={{ font: `400 10.5px/1.2 ${FONT.mono}`, color: C.muted }}>{fmtHM(s.started_at)}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -232,7 +248,7 @@ export function SessionsModule({ stage, days }: { stage: boolean; days: number }
                 <span style={{ font: `500 11px/1.2 ${FONT.mono}`, color: C.ink, textAlign: 'right' }}>{fmtDur(s.duration_ms)}</span>
                 <span style={{ font: `400 9.5px/1.2 ${FONT.mono}`, color: C.faint }}>{fmtDay(s.started_at)}</span>
                 <span style={{ font: `400 10.5px/1.2 ${FONT.mono}`, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{flowOf(s)}</span>
-                <span style={{ font: `400 9.5px/1.2 ${FONT.mono}`, color: C.muted, textAlign: 'right' }}>P{s.page_count} C{s.click_count} E{s.event_count}</span>
+                <span style={{ font: `400 9.5px/1.2 ${FONT.mono}`, color: C.muted, textAlign: 'right', whiteSpace: 'nowrap' }}>P{s.page_count} C{s.click_count} E{s.event_count}</span>
               </div>
             );
           })}
@@ -283,12 +299,12 @@ export function SessionsModule({ stage, days }: { stage: boolean; days: number }
                   <div style={{ font: `600 22px/1.15 ${FONT.sans}`, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cur.title}</div>
                   <div style={{ font: `400 11px/1.3 ${FONT.mono}`, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cur.detail || `on ${cur.path}`}</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <button type="button" style={btn} onClick={() => { setStepIdx(i => Math.max(0, i - 1)); setPlaying(false); }}>◂ PREV</button>
                   <button type="button" style={{ ...btn, padding: '7px 16px', border: `1px solid ${C.orange}`, background: C.orange, color: C.bg, fontWeight: 600 }} onClick={togglePlay}>{playing ? '❚❚ PAUSE' : '▶ PLAY'}</button>
                   <button type="button" style={btn} onClick={() => { setStepIdx(i => Math.min(last, i + 1)); setPlaying(false); }}>NEXT ▸</button>
                   <div style={{ marginLeft: 6 }}><Seg options={SPEEDS} value={speed} onChange={setSpeed} /></div>
-                  <span style={{ marginLeft: 'auto', font: `400 10px/1 ${FONT.mono}`, color: C.faint }}>SPACE play</span>
+                  <span style={{ marginLeft: 'auto', font: `400 10px/1 ${FONT.mono}`, color: C.faint, whiteSpace: 'nowrap' }}>SPACE play</span>
                 </div>
                 <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderTop: `1px solid ${C.line}` }}>
                   {steps.map(p => (

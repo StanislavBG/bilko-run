@@ -213,6 +213,9 @@ export interface ObservabilityData {
   generatedAt: number;
 }
 
+/** Injectable stand-in for useAdminFetch (the DEV preview serves fixtures through it). */
+export type AdminFetcher = (path: string, init?: RequestInit) => Promise<Response>;
+
 export type ModuleKey = 'globe' | 'sessions' | 'apps' | 'traffic' | 'audience' | 'clicks' | 'bandwidth';
 
 export const MODULES: { key: ModuleKey; num: string; title: string; subtitle: string }[] = [

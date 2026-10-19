@@ -39,7 +39,7 @@ function RankTable({ title, cols, rows, barColor }: {
         {cols.map(c => <span key={c.label} style={{ textAlign: 'right' }}>{c.label}</span>)}
       </div>
       {rows.map((r, i) => (
-        <div key={`${r.name}-${i}`} style={{ ...grid, flex: 'none', position: 'relative', alignItems: 'center', height: 24, font: `400 10.5px/1 ${FONT.mono}`, color: C.text, borderBottom: `1px solid ${C.rule}` }}>
+        <div key={`${r.name}-${i}`} style={{ ...grid, flex: 'none', position: 'relative', alignItems: 'center', height: 24, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.text, borderBottom: `1px solid ${C.rule}` }}>
           <UnderlineBar pct={r.frac * 100} color={barColor} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: r.probe ? C.redSoft : C.text }}>{r.name}</span>
           {r.vals.map((v, j) => (
@@ -79,7 +79,7 @@ function Stage({ t }: { t: TrafficData }) {
             {days.map((d, i) => (
               <div key={d.date} style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0, minWidth: 0 }}>
                 {!narrow && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', font: `400 10.5px/1 ${FONT.mono}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', font: `400 10.5px/1.4 ${FONT.mono}` }}>
                     <span style={{ color: C.ink }}>{fmtNum(d.hits)}</span>
                     <span style={{ color: C.amber }}>{fmtNum(d.visitors)} uv</span>
                   </div>
@@ -88,7 +88,7 @@ function Stage({ t }: { t: TrafficData }) {
                   <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: `${pct(d.hits, maxHits)}%`, background: C.orange, opacity: 0.9 }} />
                   <div style={{ position: 'absolute', left: narrow ? -1 : -5, right: narrow ? -1 : -5, bottom: `calc(${pct(d.visitors, maxUv)}% - 1px)`, height: 2, background: C.amber, boxShadow: '0 0 6px rgba(244,185,66,.6)' }} />
                 </div>
-                <span style={{ height: 10, font: `400 10px/1 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap', overflow: 'visible' }}>
+                <span style={{ height: 10, font: `400 10px/1.4 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap', overflow: 'visible' }}>
                   {i % labelEvery === 0 ? mmdd(d.date) : ''}
                 </span>
               </div>
@@ -130,8 +130,8 @@ function Compact({ t }: { t: TrafficData }) {
     <div style={{ position: 'absolute', inset: 0, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ font: `600 26px/1 ${FONT.sans}`, color: C.ink }}>{fmtNum(t.totals.hits)}</span>
-        <span style={{ font: `400 10px/1 ${FONT.mono}`, color: C.muted }}>hits · {t.days}d</span>
-        {top && <span style={{ marginLeft: 'auto', font: `400 10px/1 ${FONT.mono}`, color: C.amber, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{top.host} top ref</span>}
+        <span style={{ font: `400 10px/1.4 ${FONT.mono}`, color: C.muted }}>hits · {t.days}d</span>
+        {top && <span style={{ marginLeft: 'auto', font: `400 10px/1.4 ${FONT.mono}`, color: C.amber, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{top.host} top ref</span>}
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: `repeat(${days.length},minmax(0,1fr))`, gap: days.length > NARROW_AFTER ? 2 : 5 }}>
         {days.map(d => (

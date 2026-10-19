@@ -38,6 +38,9 @@ function lazyWithRetry<T extends React.ComponentType<any>>(factory: () => Promis
 const PricingPage = lazyWithRetry(() => import('./pages/PricingPage.js').then(m => ({ default: m.PricingPage })));
 const PrivacyPage = lazyWithRetry(() => import('./pages/PrivacyPage.js').then(m => ({ default: m.PrivacyPage })));
 const TermsPage = lazyWithRetry(() => import('./pages/TermsPage.js').then(m => ({ default: m.TermsPage })));
+const ObservabilityPreviewPage = import.meta.env.DEV
+  ? lazyWithRetry(() => import('./pages/admin/command/PreviewPage.js').then(m => ({ default: m.PreviewPage })))
+  : null;
 const AdminPage = lazyWithRetry(() => import('./pages/AdminPage.js').then(m => ({ default: m.AdminPage })));
 const AdminCostPage = lazyWithRetry(() => import('./pages/AdminCostPage.js').then(m => ({ default: m.AdminCostPage })));
 const ObservabilityPage = lazyWithRetry(() => import('./pages/admin/ObservabilityPage.js').then(m => ({ default: m.ObservabilityPage })));
@@ -243,6 +246,9 @@ function AppRoutes() {
 
           {/* Observability Command is a full-viewport console: outside <Layout /> so no site chrome. */}
           <Route path="/admin/observability" element={lazyRoute(ObservabilityPage)} />
+          {ObservabilityPreviewPage && (
+            <Route path="/admin/observability/preview" element={lazyRoute(ObservabilityPreviewPage)} />
+          )}
 
           {/* /app/* — legacy dashboard URLs redirect to canonical /products/* */}
           <Route path="/app" element={<RedirectAppToProducts />} />

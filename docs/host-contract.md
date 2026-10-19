@@ -575,6 +575,53 @@ Access all three from `host-kit`'s `useLeaderboard(slug, opts)`, `useSaveState<T
 
 Score submission is rate-limited to 60/hour per (user × game) and scores above `maxPlausibleScore` are rejected with 400. Optional HMAC: set `BILKO_GAME_HMAC_KEY`; the client signs `${slug}:${score}:${mode}:${ts}` and the server validates the `sig` field on POST.
 
+## Realtime relay
+
+A game-agnostic binary WebSocket relay for online team games, built for Game Academy's deterministic lockstep/rollback arenas (up to 5v5). The host never runs or parses a game. It authenticates the socket, assigns seats, and fans out small input frames. Code: `server/realtime/relay.ts` (socket) and `server/routes/realtime.ts` (ticket). Tests: `tests/realtime-relay.test.ts`.
+
+### Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST /api/realtime/ticket` | Required (Clerk Bearer) | Body `{ roomId }`, where `roomId` matches `[A-Za-z0-9_-]{1,64}`. Returns `{ ticket, expiresAt, path, limits }`. The ticket is single-use, lasts 30 s, and is bound to the caller's email and that room. Returns 400 for a bad `roomId`, 409 `room_full`, 503 `server_full` (500 rooms per instance), and 429 above 30 tickets/min per user. |
+| `GET wss://bilko.run/api/realtime/rooms/:roomId?ticket=<t>` | Ticket | WebSocket upgrade. A ticket is needed because browsers can't set `Authorization` on a WebSocket. The handshake is refused with 401 (missing, unknown, expired, reused or wrong-room ticket), 403 (an `Origin` other than `https://bilko.run` / `https://www.bilko.run`) or 404 (malformed room id). |
+
+The socket is same-origin, so the page CSP's `connect-src 'self'` already covers it.
+
+### Seats
+
+- A room has up to **10 seats**, ids `0..9`. The server assigns the lowest free one. An 11th user is closed with `4001 room_full`.
+- Seats belong to users (the ticket's email): **one seat per user per room**. If the same user connects again, they take over their own seat; the older socket is closed with `4000 superseded`. To test locally with two tabs, use two accounts.
+- When a client closes with code **1000**, its seat is freed immediately (`leave`). Any other disconnect **holds the seat for 10 s**: tab reload, network drop, heartbeat timeout, `1001`, or a bare `close()` (the server sees `1005`). During the hold, peers get `drop`. A new ticket for the same user and room within those 10 s gets the same seat back (`reconnect`). After 10 s the seat is freed (`leave`).
+
+### Frame format
+
+Binary frames carry relayed input. Text frames carry relay control messages (server → client only).
+
+| Direction | Layout |
+|---|---|
+| client → relay (binary) | `[u8 target][payload…]`, **≤ 64 bytes total**. `target`: `0xFF` = every other connected seat, `0..9` = that seat only, `0xFE` = echo back to the sender (an RTT probe; browsers can't send WS pings). |
+| relay → client (binary) | `[u8 senderSeat][payload…]`. The target byte is replaced by the sender's seat, so a peer can't spoof another seat. A broadcast is never echoed to its sender. A unicast to an empty, held or own seat is silently dropped. |
+| relay → client (text JSON) | `{type:'welcome', roomId, seat, peers:[{seat,connected}], maxSeats, maxFrameBytes, ratePerSec, seatHoldMs}` once on open. After that, `{type:'peer', event:'join'\|'drop'\|'reconnect'\|'leave', seat}`. |
+
+The payload is opaque to the relay. Versioning and encoding are the game's job (e.g. Academy's `arena-kit` codec).
+
+### Limits and close codes
+
+| Limit | Value | On violation |
+|---|---|---|
+| Frame size | 64 bytes, target byte included | close `1009`, seat freed |
+| Message rate | 120 msgs/s per socket (token bucket, 120 burst) | close `4002 rate_limited`, seat freed |
+| Frame kind | binary, ≥ 1 byte, target ∈ `0..9 ∪ {0xFE, 0xFF}` | close `4003`, seat freed |
+| Heartbeat | protocol ping every 15 s | an unanswered ping → terminated, seat held |
+| Deploy drain | on SIGTERM (`app.close()`) | every socket gets `1012` (Service Restart). Fetch a new ticket and reconnect. |
+
+### Deployment constraints
+
+- **Rooms live in one process's memory.** That is correct only while the service runs **one instance**. Scaling Render horizontally would split a room across instances. That would need room → instance routing (or a shared pub/sub) first.
+- A deploy drops every room (`1012`). Clients should reconnect with a fresh ticket and resync from their own state. The server keeps no input log.
+- The service must be on a non-sleeping Render tier. A sleeping instance kills live rooms and adds a cold start to the first ticket.
+
 ## Selling a downloadable web product
 
 A web product is a paid zip sold from a static-path landing page at `/projects/<slug>/`. Declared once in `shared/web-products.ts` (`WEB_PRODUCTS`); routes, the Stripe webhook and `/admin` → Products read from it. Slugs not in `WEB_PRODUCTS` (or failing the slug regex) return 404 on every route below.

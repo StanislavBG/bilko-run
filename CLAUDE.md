@@ -122,6 +122,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/routes/blog.ts` — Blog CRUD (admin-only writes)
 - `server/routes/project-catalog.ts` — public `GET /api/projects` + read-only MCP at `/mcp` (the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
+- `server/routes/realtime.ts` + `server/realtime/relay.ts` — ticket endpoint and binary WebSocket input relay (`/api/realtime/rooms/:roomId`, ≤10 seats, in-memory, single instance)
 - `server/routes/analytics.ts` — Page views + admin stats dashboard (`/api/analytics/event` is open to same-origin sibling apps for `track()`)
 - `server/db.ts` — Turso client, async helpers (`dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`), migrations, seed data
 - `server/db-schema.ts` — table/schema definitions (split out of `db.ts`)
@@ -141,6 +142,7 @@ Host code is framework by default — it should not know about one specific app.
 - Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
 - Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer, home hero and Session Manager header
 - Game config — `shared/game-config.ts`
+- Realtime input relay (Game Academy online play, game-agnostic) — `server/realtime/relay.ts`, `server/routes/realtime.ts`; contract in `docs/host-contract.md` → "Realtime relay"
 - Bilko Launch Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price id + release sha256 only; the paid zip lives in the private ~/Projects/Bilko-Launch-Kit repo and the web_product_releases table)
 - Git Viewer hosted portfolios — `server/routes/tools/git-viewer.ts` (`/api/git-viewer/u/:login`, `/api/git-viewer/claim`, in-process generation + daily refresh), the `git_viewer_profiles` table, `verifyClerkGitHubUser` in `server/clerk.ts`, and the `git_viewer` subscription tier (`STRIPE_PRICE_GITVIEWER`; `priceToPlanTier` → `git_viewer`, which sets `gitViewer` but never `isPro`). Generation uses the `@bilkobibitkov/git-viewer` library, loaded lazily
 - ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
@@ -169,7 +171,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-90 files, 1046 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+111 files, 1255 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

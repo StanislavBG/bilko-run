@@ -29,6 +29,8 @@ import { registerManualRoutes } from './routes/manual.js';
 import { registerCompGrantRoutes } from './routes/admin-comp-grants.js';
 import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
+import { registerRealtimeRoutes } from './routes/realtime.js';
+import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
 import { registerSecurityHeaders } from './security-headers.js';
 import { registerOgRoutes } from './og-routes.js';
 import { gitViewerOg } from './routes/tools/git-viewer.js';
@@ -189,6 +191,7 @@ registerAcademyRoutes(app);
 registerProjectDataRoutes(app);
 registerProjectFeedbackRoutes(app);
 registerSmRelayRoutes(app);
+registerRealtimeRoutes(app);
 registerManualRoutes(app);
 registerCompGrantRoutes(app);
 registerProjectCatalogRoutes(app);
@@ -302,11 +305,13 @@ registerProjectEventsRoutes(app);
 
 try {
   await app.listen({ port: PORT, host: '0.0.0.0' });
-  // Session Manager web-remote relay: claim WS upgrades on its path, same-origin.
-  // Returns false for any other path so future upgrade handlers can coexist.
+  // WebSocket upgrades, same-origin. Each handler claims only its own path and
+  // returns false otherwise: Session Manager web-remote relay, then the
+  // realtime input relay (/api/realtime/rooms/:roomId).
   app.server.on('upgrade', (req, socket, head) => {
     try {
-      const handled = smRelayHandleUpgrade(req, socket as any, head);
+      const handled = smRelayHandleUpgrade(req, socket as any, head)
+        || realtimeHandleUpgrade(req, socket as any, head);
       if (!handled) socket.destroy();
     } catch {
       socket.destroy();

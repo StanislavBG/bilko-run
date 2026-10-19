@@ -25,7 +25,7 @@
 
 /* Body styles only when inside .portfolio-shell so AI tool pages aren't affected */
 .portfolio-shell {
-  background: var(--pf-bg);
+  background: #f5f0e6;
   color: var(--pf-ink);
   font-family: var(--pf-font-ui);
   font-size: 15px;
@@ -42,58 +42,6 @@
 .portfolio-shell .pf-serif { font-family: var(--pf-font-display); font-weight: 400; letter-spacing: -0.01em; }
 .portfolio-shell .pf-eyebrow { font-family: var(--pf-font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pf-ink-3); }
 
-/* ============ Top bar ============ */
-.pf-topbar {
-  position: sticky; top: 0; z-index: 50;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 24px;
-  padding: 14px 28px;
-  background: color-mix(in oklab, var(--pf-bg) 88%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--pf-rule);
-}
-.pf-topbar .pf-brand {
-  display: flex; align-items: center; gap: 10px;
-  font-family: var(--pf-font-display);
-  font-size: 22px;
-  letter-spacing: -0.01em;
-  cursor: pointer;
-}
-.pf-topbar .pf-brand .pf-mark {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--pf-ink); color: var(--pf-bg);
-  display: grid; place-items: center;
-  font-family: var(--pf-font-display); font-size: 16px;
-  position: relative;
-}
-.pf-topbar .pf-brand .pf-mark::after {
-  content: ""; position: absolute; inset: -3px;
-  border: 1px solid var(--pf-accent); border-radius: 50%;
-  opacity: 0.6;
-}
-.pf-topbar nav { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
-.pf-topbar nav a {
-  padding: 8px 12px;
-  font-size: 13.5px;
-  color: var(--pf-ink-2);
-  position: relative;
-  border-radius: 3px;
-  transition: color var(--pf-motion-fast), background var(--pf-motion-fast);
-  cursor: pointer;
-}
-.pf-topbar nav a:hover { color: var(--pf-ink); background: var(--pf-bg-2); }
-.pf-topbar nav a.active { color: var(--pf-ink); }
-.pf-topbar nav a.active::after {
-  content: ""; position: absolute; left: 12px; right: 12px; bottom: 2px;
-  height: 2px; background: var(--pf-accent);
-  animation: pf-slide-in var(--pf-motion-med);
-}
-@keyframes pf-slide-in { from { transform: scaleX(0); transform-origin: left; } to { transform: scaleX(1); } }
-
-.pf-topbar .pf-right { display: flex; gap: 10px; align-items: center; }
 .pf-kbd {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 8px;
@@ -427,22 +375,6 @@
 .pf-proj-detail .pf-meta-strip > div { display: flex; flex-direction: column; gap: 4px; }
 .pf-proj-detail .pf-meta-strip .pf-k { color: var(--pf-ink-3); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
 
-/* ============ Footer ============ */
-.pf-footer {
-  margin-top: 80px;
-  border-top: 1px solid var(--pf-ink);
-  padding: 40px 28px;
-  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px;
-  font-size: 13px;
-  background: var(--pf-ink); color: var(--pf-bg);
-}
-.pf-footer h4 { font-family: var(--pf-font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--pf-bg) 60%, var(--pf-ink)); margin: 0 0 14px; }
-.pf-footer .pf-col a { display: block; padding: 4px 0; color: var(--pf-bg); transition: color var(--pf-motion-fast); cursor: pointer; }
-.pf-footer .pf-col a:hover { color: var(--pf-accent); }
-.pf-footer .pf-sig { font-family: var(--pf-font-display); font-size: 36px; line-height: 1; margin-bottom: 12px; }
-.pf-footer .pf-sig em { color: var(--pf-accent); font-style: italic; }
-.pf-footer .pf-meta-line { font-family: var(--pf-font-mono); font-size: 11px; color: color-mix(in oklab, var(--pf-bg) 50%, var(--pf-ink)); margin-top: 12px; letter-spacing: 0.06em; }
-
 /* ============ Command palette ============ */
 .pf-cmdk-overlay {
   position: fixed; inset: 0; z-index: 100;
@@ -527,10 +459,10 @@
 
 /* ── Projects Ring hub (/projects) ────────────────────────────────── */
 /* The `hub-route` body class is toggled by ProjectsPage: desktop fits the page
-   in the viewport (no page scroll, footer hidden); mobile scrolls normally. */
+   in the viewport (no page scroll, bottom bar pinned); mobile scrolls normally. */
 body.hub-route .portfolio-shell { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 body.hub-route main { flex: 1; min-height: 0; }
-body.hub-route .pf-footer { display: none; }
+body.hub-route .bk-header, body.hub-route .bk-bottombar { flex: none; }
 .pf-hub-toggle {
   cursor: pointer; border-color: var(--pf-rule-2); color: var(--pf-ink-2);
   background: transparent; white-space: nowrap;
@@ -573,15 +505,12 @@ body.hub-route .pf-footer { display: none; }
   /* Mobile: drop the fit-to-viewport constraint and scroll normally. */
   body.hub-route .portfolio-shell { height: auto; display: block; overflow: visible; }
   body.hub-route main { flex: none; }
-  body.hub-route .pf-footer { display: grid; }
   .pf-hub-actions { align-items: flex-start; }
   .pf-hub-meta { grid-template-columns: 1fr; row-gap: 0; }
   .pf-hub-meta dd { margin-bottom: 8px; }
 }
 
 @media (max-width: 900px) {
-  .pf-topbar { grid-template-columns: auto 1fr; gap: 12px; padding: 12px 16px; }
-  .pf-topbar nav { display: none; }
   .pf-mobile-trigger { display: inline-flex; }
   .pf-page { padding: 0 16px 60px; }
   .pf-hero { grid-template-columns: 1fr; gap: 30px; padding: 32px 0; }
@@ -589,5 +518,4 @@ body.hub-route .pf-footer { display: none; }
   .pf-proj-grid, .pf-contact { grid-template-columns: 1fr; }
   .pf-post-row { grid-template-columns: 80px 1fr; gap: 12px; }
   .pf-post-row .pf-tag, .pf-post-row .pf-read { display: none; }
-  .pf-footer { grid-template-columns: 1fr 1fr; gap: 24px; padding: 24px 16px; }
 }

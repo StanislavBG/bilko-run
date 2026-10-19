@@ -44,7 +44,7 @@ function Note({ color = C.faint, children }: { color?: string; children: ReactNo
   );
 }
 
-const shortId = (id: string): string => (id.length > 8 ? id.slice(0, 8) : id);
+const idPrefix = (id: string): string => (id.length > 8 ? id.slice(0, 8) : id);
 const fmtSeen = (ts: number): string => `${fmtDay(ts)} ${fmtClock(new Date(ts)).slice(0, 5)}`;
 
 function DonutCard({ title, d }: { title: string; d: DonutResult }) {
@@ -104,7 +104,7 @@ function Timeline({ visitorId, days, onBack, fetcher }: { visitorId: string; day
           ← BACK
         </button>
         <MonoLabel color={C.muted}>VISITOR TIMELINE</MonoLabel>
-        <span title={visitorId} style={{ font: `400 10.5px/1.4 ${FONT.mono}`, color: C.orange }}>{shortId(visitorId)}</span>
+        <span title={visitorId} style={{ font: `400 10.5px/1.4 ${FONT.mono}`, color: C.orange }}>{idPrefix(visitorId)}</span>
       </div>
       <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
         {err && <Note color={C.redSoft}>{err}</Note>}
@@ -147,7 +147,7 @@ function VisitorTable({ rows, onPick }: { rows: VisitorRow[]; onPick: (id: strin
             onClick={e => { e.stopPropagation(); onPick(v.visitorId); }}
             style={{ display: 'grid', gridTemplateColumns: GRID, gap: 10, alignItems: 'center', height: 27, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.text, cursor: 'pointer' }}
           >
-            <span title={v.visitorId} style={{ color: v.userEmail ? C.orange : C.text }}>{shortId(v.visitorId)}</span>
+            <span title={v.visitorId} style={{ color: v.userEmail ? C.orange : C.text }}>{idPrefix(v.visitorId)}</span>
             <span style={{ color: C.muted }}>{v.ip ?? '—'}</span>
             <span>{v.country ?? '—'}</span>
             <span style={{ color: C.muted }}>{v.device ?? '—'}</span>

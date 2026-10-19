@@ -620,7 +620,7 @@ The payload is opaque to the relay. Versioning and encoding are the game's job (
 
 - **Rooms live in one process's memory.** That is correct only while the service runs **one instance**. Scaling Render horizontally would split a room across instances. That would need room → instance routing (or a shared pub/sub) first.
 - A deploy drops every room (`1012`). Clients should reconnect with a fresh ticket and resync from their own state. The server keeps no input log.
-- The service must be on a non-sleeping Render tier. A sleeping instance kills live rooms and adds a cold start to the first ticket.
+- **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. One instance is what the in-memory rooms need. Free has a cost, though: the service spins down after 15 minutes without inbound traffic. The first ticket after an idle spell then waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move the service to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
 
 ## Selling a downloadable web product
 

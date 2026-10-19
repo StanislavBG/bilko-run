@@ -12,9 +12,13 @@
  * echoed back or stored. Wire field names on beacons and API bodies: visitor_id,
  * session_id.
  *
- * Server code reads ids via `readSessionIds(cookieHeader)` or `(req as any).bilkoIds`
+ * Two meanings of "visitor_id" exist in storage: in click_events/page_hits it is the
+ * server-computed IP+UA hash, while client_vid and page_views.visitor_id /
+ * sessions.visitor_id hold the bilko_vid cookie UUID.
+ *
+ * Server code reads ids via `readSessionIds(cookieHeader)` or `req.bilkoIds`
  * (set by the onRequest hook below). Client implementers (BEACON_JS, host-kit
- * telemetry.ts, src/hooks/usePageView.ts) should point here.
+ * telemetry.ts, src/lib/telemetry.ts) should point here.
  */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
@@ -31,6 +35,12 @@ export interface BilkoIds {
   sessionId: string;
   mintedVisitor: boolean;
   mintedSession: boolean;
+}
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    bilkoIds?: BilkoIds;
+  }
 }
 
 export function isValidId(v: unknown): v is string {
@@ -64,14 +74,15 @@ export function registerSessionIdentity(app: FastifyInstance): void {
       mintedVisitor: visitorId === null,
       mintedSession: sessionId === null,
     };
-    (req as any).bilkoIds = ids;
+    req.bilkoIds = ids;
   });
 
   app.addHook('onSend', async (req, reply, payload) => {
     if (req.method !== 'GET' || reply.statusCode !== 200) return payload;
-    if (req.url.startsWith('/api/')) return payload;
+    const pathname = req.url.split('?')[0];
+    if (pathname === '/api' || pathname.startsWith('/api/')) return payload;
     if (!String(reply.getHeader('content-type') ?? '').startsWith('text/html')) return payload;
-    const ids = (req as any).bilkoIds as BilkoIds | undefined;
+    const ids = req.bilkoIds;
     if (!ids) return payload;
 
     const fwd = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase();

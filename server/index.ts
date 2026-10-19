@@ -160,7 +160,7 @@ await app.register(compress, {
 registerEgressMeter(app);
 
 // First-party visitor/session cookies (bilko_vid / bilko_sid) on HTML responses.
-// Registered before the recorder and beacon so they can read (req as any).bilkoIds.
+// Registered before the recorder and beacon so they can read req.bilkoIds.
 registerSessionIdentity(app);
 
 // Server-side page-hit recorder: every HTML document response (SPA shell, blog,

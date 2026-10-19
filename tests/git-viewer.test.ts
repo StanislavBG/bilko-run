@@ -18,7 +18,7 @@ import { verifyClerkGitHubUser } from '../server/clerk.js';
 import { getActiveSubscriptionLive } from '../server/services/stripe.js';
 import {
   registerGitViewerRoutes, setPortfolioBuilder, drainGitViewerQueue, resetGitViewerState,
-  runGitViewerRefresh, failedTtlMs, isGitHubRateLimited, PLAN_LIMITS, NEW_BUILDS_PER_IP, SHOWCASE_LOGINS,
+  runGitViewerRefresh, failedTtlMs, getGitViewerHealth, checkGitHubRateBudget, isGitHubRateLimited, PLAN_LIMITS, NEW_BUILDS_PER_IP, SHOWCASE_LOGINS,
   type BuildPortfolio,
 } from '../server/routes/tools/git-viewer.js';
 
@@ -212,6 +212,57 @@ describe('GET /api/git-viewer/u/:login', () => {
        VALUES ('claimed', '', 'free', 0, 'c@x.com', 0)`,
     );
     expect((await get('claimed')).statusCode).toBe(202);
+  });
+
+  it('while GitHub is rate-limited, a stale cached profile is served without spending the budget on a rebuild', async () => {
+    build.mockRejectedValue(Object.assign(new Error('API rate limit exceeded'), {
+      status: 403,
+      response: { headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 900) } },
+    }));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await get('first');
+    await drainGitViewerQueue();
+    errSpy.mockRestore();
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES (?, ?, 'free', 2, 0)`,
+      'stale', '{"projects":[]}',
+    );
+    expect((await get('stale')).statusCode).toBe(200);
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledTimes(1); // only 'first'
+    expect(await runGitViewerRefresh()).toBe(0);
+    expect(getGitViewerHealth()).toMatchObject({ ok: false, newBuildsBlockedUntil: expect.any(String) });
+  });
+
+  it('health reports token presence and the checked GitHub budget, never the token', async () => {
+    vi.stubEnv('GITHUB_TOKEN', 'ghp_secret');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', {
+      status: 200, headers: { 'x-ratelimit-limit': '5000', 'x-ratelimit-remaining': '4990' },
+    }));
+    await checkGitHubRateBudget();
+    fetchSpy.mockRestore();
+    const health = getGitViewerHealth();
+    expect(health).toMatchObject({
+      githubToken: 'set', ok: true, newBuildsBlockedUntil: null,
+      githubBudget: { http: 200, limit: 5000, remaining: 4990 },
+    });
+    expect(JSON.stringify(health)).not.toContain('ghp_secret');
+  });
+
+  it('warns at boot when production runs without GITHUB_TOKEN', async () => {
+    vi.stubEnv('GITHUB_TOKEN', '');
+    vi.stubEnv('NODE_ENV', 'production');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', {
+      status: 200, headers: { 'x-ratelimit-limit': '60', 'x-ratelimit-remaining': '0' },
+    }));
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await checkGitHubRateBudget(true);
+    fetchSpy.mockRestore();
+    logSpy.mockRestore();
+    expect(warnSpy.mock.calls[0][0]).toContain('GITHUB_TOKEN is unset');
+    warnSpy.mockRestore();
+    expect(getGitViewerHealth()).toMatchObject({ githubToken: 'unset', ok: false, githubBudget: { limit: 60 } });
   });
 
   it('regenerates a free profile only once it is older than 24h', async () => {

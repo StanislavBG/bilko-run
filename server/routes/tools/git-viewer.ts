@@ -100,6 +100,18 @@ let running = 0;
 const notFound = new Map<string, number>(); // login → expiry (ms)
 const failed = new Map<string, number>();
 let githubBudgetUntil = 0; // ms; set when GitHub rate-limits a generation
+let lastBudgetCheck: GitHubBudgetCheck | null = null;
+
+interface GitHubBudgetCheck {
+  http: number | null;
+  limit: number | null;
+  remaining: number | null;
+  checkedAt: string;
+}
+
+function budgetBlocked(): boolean {
+  return githubBudgetUntil > Date.now();
+}
 
 /** Test hook: wait for the queue to drain. */
 export async function drainGitViewerQueue(): Promise<void> {
@@ -114,6 +126,7 @@ export function resetGitViewerState(): void {
   notFound.clear();
   failed.clear();
   githubBudgetUntil = 0;
+  lastBudgetCheck = null;
 }
 
 function isFresh(map: Map<string, number>, login: string): boolean {
@@ -217,21 +230,59 @@ async function generate(login: string, job: Job): Promise<void> {
   }
 }
 
-/** Boot-time check that GITHUB_TOKEN works: logs the core budget (5000/h when authenticated, 60 when not). */
-async function logGitHubRateBudget(): Promise<void> {
+const numOrNull = (v: string | null): number | null => (v === null || v === '' ? null : Number(v));
+
+/**
+ * Checks the core GitHub budget (5000/h with a working GITHUB_TOKEN, 60 per
+ * egress IP without) and records it for /api/health. /rate_limit itself costs
+ * nothing. With `log`, prints the result and WARNs when production builds will
+ * run unauthenticated or the token is rejected.
+ */
+export async function checkGitHubRateBudget(log = false): Promise<GitHubBudgetCheck | null> {
   const token = process.env.GITHUB_TOKEN;
   try {
     const res = await fetch('https://api.github.com/rate_limit', {
       headers: { 'user-agent': 'bilko-run', ...(token ? { authorization: `Bearer ${token}` } : {}) },
       signal: AbortSignal.timeout(10_000),
     });
-    console.log(
-      `[git-viewer] GitHub rate budget: http=${res.status} token=${token ? 'set' : 'unset'}` +
-      ` limit=${res.headers.get('x-ratelimit-limit')} remaining=${res.headers.get('x-ratelimit-remaining')}`,
-    );
+    lastBudgetCheck = {
+      http: res.status,
+      limit: numOrNull(res.headers.get('x-ratelimit-limit')),
+      remaining: numOrNull(res.headers.get('x-ratelimit-remaining')),
+      checkedAt: new Date().toISOString(),
+    };
+    if (log) {
+      console.log(
+        `[git-viewer] GitHub rate budget: http=${res.status} token=${token ? 'set' : 'unset'}` +
+        ` limit=${lastBudgetCheck.limit} remaining=${lastBudgetCheck.remaining}`,
+      );
+    }
   } catch (err: any) {
-    console.error('[git-viewer] GitHub rate budget check failed:', err?.message ?? err);
+    lastBudgetCheck = { http: null, limit: null, remaining: null, checkedAt: new Date().toISOString() };
+    if (log) console.error('[git-viewer] GitHub rate budget check failed:', err?.message ?? err);
   }
+  if (log && process.env.NODE_ENV === 'production') {
+    if (!token) {
+      console.warn('[git-viewer] WARN GITHUB_TOKEN is unset: hosted builds share 60 GitHub calls/h and new logins will 503. Set it in Render.');
+    } else if (lastBudgetCheck.http === 401) {
+      console.warn('[git-viewer] WARN GITHUB_TOKEN was rejected by GitHub (401): hosted builds will fail. Rotate it in Render.');
+    }
+  }
+  return lastBudgetCheck;
+}
+
+/** Public, secret-free build-health snapshot for /api/health. */
+export function getGitViewerHealth() {
+  const tokenSet = Boolean(process.env.GITHUB_TOKEN);
+  const blocked = budgetBlocked();
+  return {
+    githubToken: tokenSet ? 'set' : 'unset',
+    githubBudget: lastBudgetCheck,
+    newBuildsBlockedUntil: blocked ? new Date(githubBudgetUntil).toISOString() : null,
+    failedLogins: [...failed.values()].filter(exp => exp > Date.now()).length,
+    queued: jobs.size,
+    ok: tokenSet && lastBudgetCheck?.http === 200 && !blocked,
+  };
 }
 
 // ── Entitlement ─────────────────────────────────────────────────────────────
@@ -261,6 +312,8 @@ function secondsToUtcMidnight(): number {
  * paid is picked up sooner by claim or by its next view.
  */
 export async function runGitViewerRefresh(): Promise<number> {
+  // Every refresh would fail until GitHub's budget resets; the next sweep picks them up.
+  if (budgetBlocked()) return 0;
   const now = Math.floor(Date.now() / 1000);
   const dailyCutoff = now - STALE_SEC;
   let queued = 0;
@@ -344,7 +397,8 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
       // completed); the subscription lookup is cached for 5 minutes. Unclaimed
       // free rows resolve without a lookup (free, or paid for a showcase login).
       const tier = row.tier === 'free' ? await tierFor(login, row) : row.tier;
-      if ((stale || tier !== row.tier) && !jobs.has(login) && !isFresh(failed, login)) {
+      // While GitHub's budget is spent a regeneration would just fail, so keep serving the cached copy.
+      if ((stale || tier !== row.tier) && !budgetBlocked() && !jobs.has(login) && !isFresh(failed, login)) {
         enqueue(login, jobFor(row, tier));
       }
       reply.header('cache-control', 'public, max-age=300');
@@ -365,7 +419,7 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     }
     if (!(await loadBuilder())) return reply.code(503).send({ status: 'unavailable' });
 
-    if (githubBudgetUntil > Date.now()) {
+    if (budgetBlocked()) {
       return reply.code(503).send({ status: 'error', retryAfterSec: Math.ceil((githubBudgetUntil - Date.now()) / 1000) });
     }
 
@@ -415,8 +469,9 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
   });
 
   if (!process.env.VITEST) {
-    void logGitHubRateBudget();
+    void checkGitHubRateBudget(true);
     const refresh = () => {
+      void checkGitHubRateBudget();
       runGitViewerRefresh().catch(err => console.error('[git-viewer] refresh failed:', err));
     };
     // First sweep shortly after boot so showcase profiles exist without waiting an hour.

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#e3dcc8;color:#1a1612;font-family:"Inter Tight",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}a:hover{color:#a83818}
+@keyframes bk-spin{to{transform:rotate(360deg)}}
+@keyframes bk-twinkle{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes bk-nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+</style>
+</helmet>
+<div onWheel="{{ onWheel }}" style="position:relative;height:100vh;overflow:hidden;perspective:2400px;background:#e3dcc8">
+
+  <div data-screen-label="Destination" style="position:absolute;inset:0;z-index:1;background:#f5f0e6;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 56px;border-bottom:1px solid #d4ccb8">
+      <span style="display:flex;align-items:center;gap:10px;font-family:'Source Serif 4',serif;font-size:22px"><span style="width:28px;height:28px;border-radius:50%;background:#1a1612;color:#f5f0e6;display:grid;place-items:center;font-style:italic;font-size:17px">B</span>Bilko Bibitkov</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#5d5648">{{ dest.path }}</span>
+    </div>
+    <div style="padding:44px 56px 32px;border-bottom:1px solid #d4ccb8;display:flex;flex-direction:column;gap:14px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#5d5648">{{ dest.eyebrow }}</span>
+      <span style="font-family:'Source Serif 4',serif;font-size:clamp(48px,7vw,88px);line-height:.95;letter-spacing:-.025em">{{ dest.title }}</span>
+      <span style="max-width:640px;font-size:18px;line-height:1.5;color:#3a342b">{{ dest.lede }}</span>
+    </div>
+    <div style="flex:1;min-height:0;padding:32px 56px;display:flex;gap:10px;align-items:flex-end;overflow:hidden">
+      <sc-if value="{{ destSpines }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;display:flex;gap:8px;align-items:flex-end;height:100%">
+          <div style="flex:1;height:78%;border:1px solid #d4ccb8;background:#ede6d6"></div>
+          <div style="flex:1;height:84%;border:1px solid #d4ccb8;background:#ede6d6"></div>
+          <div style="flex:1.2;height:90%;border:1px solid #d4ccb8;background:#ede6d6"></div>
+          <div style="flex:3.4;height:100%;border:1px solid #9c937f;background:#f5f0e6"></div>
+          <div style="flex:1.2;height:90%;border:1px solid #d4ccb8;background:#ede6d6"></div>
+          <div style="flex:1;height:84%;border:1px solid #d4ccb8;background:#ede6d6"></div>
+          <div style="flex:1;height:78%;border:1px solid #d4ccb8;background:#ede6d6"></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ destRows }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;align-self:flex-start;display:flex;flex-direction:column">
+          <div style="display:grid;grid-template-columns:100px 1fr 100px;gap:24px;padding:22px 0;border-bottom:1px solid #d4ccb8"><span style="height:10px;background:#e3dcc8"></span><span style="height:22px;width:62%;background:#e3dcc8"></span><span style="height:10px;background:#e3dcc8"></span></div>
+          <div style="display:grid;grid-template-columns:100px 1fr 100px;gap:24px;padding:22px 0;border-bottom:1px solid #d4ccb8"><span style="height:10px;background:#e3dcc8"></span><span style="height:22px;width:48%;background:#e3dcc8"></span><span style="height:10px;background:#e3dcc8"></span></div>
+          <div style="display:grid;grid-template-columns:100px 1fr 100px;gap:24px;padding:22px 0;border-bottom:1px solid #d4ccb8"><span style="height:10px;background:#e3dcc8"></span><span style="height:22px;width:70%;background:#e3dcc8"></span><span style="height:10px;background:#e3dcc8"></span></div>
+          <div style="display:grid;grid-template-columns:100px 1fr 100px;gap:24px;padding:22px 0;border-bottom:1px solid #d4ccb8"><span style="height:10px;background:#e3dcc8"></span><span style="height:22px;width:40%;background:#e3dcc8"></span><span style="height:10px;background:#e3dcc8"></span></div>
+        </div>
+      </sc-if>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;padding:16px 56px 20px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#5d5648">
+      <span style="white-space:nowrap">{{ destStatus }}</span>
+      <div style="flex:1;height:3px;background:#e3dcc8;overflow:hidden"><div style="height:100%;width:{{ loadW }};background:#a83818;transition:width 1.6s cubic-bezier(.3,.6,.2,1)"></div></div>
+    </div>
+  </div>
+
+  <div data-screen-label="Home" style="position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;background:#f5f0e6;background-image:radial-gradient(#e3dcc8 1px,transparent 1.3px);background-size:32px 32px;transform-origin:{{ origin }};transform:{{ sheetTf }};transition:transform .95s cubic-bezier(.65,0,.35,1),box-shadow .95s;box-shadow:{{ sheetSh }};backface-visibility:hidden">
+    <div style="position:absolute;inset:0;background:#1a1612;opacity:{{ shade }};pointer-events:none;z-index:30;transition:opacity .95s"></div>
+
+    <header style="position:relative;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px 56px;border-bottom:1px solid #e3dcc8">
+      <a href="https://bilko.run/" style="display:flex;align-items:center;gap:10px;font-family:'Source Serif 4',serif;font-size:22px;color:#1a1612"><span style="width:28px;height:28px;border-radius:50%;background:#a83818;color:#f5f0e6;display:grid;place-items:center;font-style:italic;font-size:17px">B</span>Bilko Bibitkov</a>
+      <nav style="display:flex;gap:6px;font-size:14px">
+        <sc-for list="{{ secRows }}" as="sr" hint-placeholder-count="3">
+          <a href="{{ sr.url }}" onClick="{{ sr.go }}" style="display:flex;align-items:baseline;gap:6px;padding:8px 14px;border-radius:999px;color:#3a342b" style-hover="background:#ede6d6;color:#a83818"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9c937f">{{ sr.no }}</span>{{ sr.k }}</a>
+        </sc-for>
+      </nav>
+      <span style="display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#5d5648"><span style="width:7px;height:7px;border-radius:50%;background:#2e5a3e;animation:bk-twinkle 1.6s ease-in-out infinite"></span>Online</span>
+    </header>
+
+    <section ref="{{ heroRef }}" onMouseMove="{{ cMove }}" onMouseLeave="{{ cLeave }}" style="position:relative;flex:1;min-height:0;overflow:hidden">
+      <div ref="{{ chVRef }}" style="position:absolute;top:0;bottom:0;left:0;width:1px;background:#d4ccb8;opacity:0;pointer-events:none;z-index:7"></div>
+      <div ref="{{ chHRef }}" style="position:absolute;left:0;right:0;top:0;height:1px;background:#d4ccb8;opacity:0;pointer-events:none;z-index:7"></div>
+      <div ref="{{ chTRef }}" style="position:absolute;left:0;top:0;opacity:0;pointer-events:none;z-index:8;font:500 10.5px 'JetBrains Mono',monospace;letter-spacing:.1em;color:#a83818;white-space:nowrap"></div>
+      <div style="height:100%;max-width:1280px;margin:0 auto;padding:24px 56px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;align-content:safe center;gap:32px;overflow-y:auto">
+
+        <div style="flex:1 1 300px;max-width:380px;display:flex;flex-direction:column;gap:22px">
+          <span style="display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#a83818"><span style="width:7px;height:7px;border-radius:50%;background:#a83818;animation:bk-twinkle 1.6s ease-in-out infinite"></span>On air · studio of one</span>
+          <h1 style="font-family:'Source Serif 4',serif;font-weight:400;font-size:clamp(48px,5vw,66px);line-height:1;letter-spacing:-.035em;margin:0;color:#1a1612">Make. Ship. <em style="color:#a83818">Write it down.</em></h1>
+          <p style="margin:0;font-size:16.5px;line-height:1.55;color:#3a342b;text-wrap:pretty">Small AI tools built in the open. Use the projects, read the build logs, send a message.</p>
+          <div onMouseLeave="{{ unlock }}" style="display:flex;flex-direction:column;border-top:1px solid #e3dcc8">
+            <sc-for list="{{ secRows }}" as="sr" hint-placeholder-count="3">
+              <a href="{{ sr.url }}" onClick="{{ sr.go }}" onMouseEnter="{{ sr.lock }}" style="display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:baseline;gap:10px;padding:14px 10px;border-bottom:1px solid #e3dcc8;background:{{ sr.bg }};transition:background .4s">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{{ sr.c }};transition:color .4s">{{ sr.no }}</span>
+                <span style="font-family:'Source Serif 4',serif;font-size:26px;line-height:1;color:{{ sr.nc }};transition:color .4s">{{ sr.k }}</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:{{ sr.c }};transition:color .4s">{{ sr.count }} ↗</span>
+              </a>
+            </sc-for>
+          </div>
+        </div>
+
+        <div onMouseMove="{{ rMove }}" onMouseLeave="{{ rLeave }}" onClick="{{ rClick }}" style="flex:0 0 {{ rSize }}px;position:relative;width:{{ rSize }}px;height:{{ rSize }}px;cursor:crosshair">
+         <div style="position:absolute;left:0;top:0;width:520px;height:520px;transform-origin:0 0;transform:scale({{ rScale }})">
+          <span style="position:absolute;left:472px;top:48px;transform:translate(-50%,-50%);white-space:nowrap;display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:{{ modeBg }};color:{{ modeFg }};font:700 10px 'JetBrains Mono',monospace;letter-spacing:.12em;text-transform:uppercase;z-index:5;transition:background .3s,color .3s"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>{{ modeText }}</span>
+          <div style="position:absolute;inset:0;border-radius:50%;background:{{ tint }}"></div>
+          <div style="position:absolute;inset:0;border:1px solid #d4ccb8;border-radius:50%"></div>
+          <div style="position:absolute;inset:87px;border:1px solid #e3dcc8;border-radius:50%"></div>
+          <div style="position:absolute;inset:173px;border:1px solid #e3dcc8;border-radius:50%"></div>
+          <div style="position:absolute;left:50%;top:50%;width:260px;height:1px;background:#9c937f;transform-origin:0 50%;transform:rotate(-90deg)"></div>
+          <div style="position:absolute;left:50%;top:50%;width:260px;height:1px;background:#9c937f;transform-origin:0 50%;transform:rotate(90deg)"></div>
+          <div style="position:absolute;left:50%;top:50%;width:260px;height:1px;background:#9c937f;transform-origin:0 50%;transform:rotate(180deg)"></div>
+          <span style="position:absolute;left:50%;top:-22px;transform:translateX(-50%);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:#9c937f">000</span>
+          <span style="position:absolute;right:-30px;top:50%;transform:translateY(-50%);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:#9c937f">090</span>
+          <span style="position:absolute;left:50%;bottom:-22px;transform:translateX(-50%);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:#9c937f">180</span>
+          <span style="position:absolute;left:-30px;top:50%;transform:translateY(-50%);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:#9c937f">270</span>
+          <sc-for list="{{ secRows }}" as="sr" hint-placeholder-count="3">
+            <a href="{{ sr.url }}" onClick="{{ sr.go }}" onMouseEnter="{{ sr.lock }}" onMouseLeave="{{ unlock }}" style="position:absolute;left:{{ sr.lx }}px;top:{{ sr.ly }}px;transform:translate(-50%,-50%);white-space:nowrap;padding:5px 11px;border:1px solid {{ sr.c }};border-radius:999px;background:#f5f0e6;font:700 10.5px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:{{ sr.nc }};z-index:4;transition:color .4s,border-color .4s">{{ sr.k }}</a>
+          </sc-for>
+          <div style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,rgba(168,56,24,0) 0deg,rgba(168,56,24,0) 280deg,rgba(168,56,24,.2) 359deg,rgba(168,56,24,0) 360deg);pointer-events:none" ref="{{ sweepRef }}"><div style="position:absolute;left:50%;top:0;width:2px;height:50%;margin-left:-1px;background:#a83818"></div></div>
+          <div style="position:absolute;left:226px;top:226px;width:68px;height:68px;border-radius:50%;background:#a83818;box-shadow:0 0 40px rgba(168,56,24,.45);display:grid;place-items:center;font-family:'Source Serif 4',serif;font-style:italic;font-size:32px;color:#f5f0e6;z-index:2">B</div>
+          <sc-for list="{{ blips }}" as="bl" hint-placeholder-count="16">
+            <a href="{{ bl.href }}" onClick="{{ bl.go }}" style="position:absolute;left:{{ bl.x }}px;top:{{ bl.y }}px;width:0;height:0;z-index:3">
+              <span style="position:absolute;left:-16px;top:-16px;width:32px;height:32px;border-radius:50%;border:1.5px solid {{ bl.col }};opacity:{{ bl.ring }};transform:scale({{ bl.ringS }});transition:opacity .25s,transform .25s"></span>
+              <span style="position:absolute;left:-6px;top:-6px;width:12px;height:12px;border-radius:50%;background:{{ bl.col }};opacity:{{ bl.op }};box-shadow:0 0 {{ bl.glow }}px {{ bl.col }};transition:opacity .9s,box-shadow .9s"></span>
+              <span style="position:absolute;left:0;top:12px;transform:translateX(-50%);white-space:nowrap;padding:2px 6px;background:#f5f0e6;font:500 10.5px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#1a1612;opacity:{{ bl.lop }};transition:opacity .5s">{{ bl.lab }}</span>
+            </a>
+          </sc-for>
+         </div>
+        </div>
+
+        <div style="flex:1 1 250px;max-width:300px;display:{{ roDisp }};flex-direction:column;gap:16px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase"><span style="color:#a83818">Sector {{ sec.no }}{{ lockNote }}</span><span style="color:#5d5648">{{ sec.count }}</span></div>
+          <span style="font-family:'Source Serif 4',serif;font-size:42px;line-height:1;letter-spacing:-.025em;color:#1a1612">{{ sec.k }}</span>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ secItems }}" as="si" hint-placeholder-count="5">
+              <a href="{{ si.href }}" onClick="{{ si.go }}" style="display:flex;flex-direction:column;gap:2px;padding:8px 0;border-top:1px solid #e3dcc8;color:{{ si.rowc }};transition:color .9s" style-hover="color:#a83818">
+                <span style="font-size:13.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ si.name }}</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#5d5648">{{ si.sub }}</span>
+              </a>
+            </sc-for>
+          </div>
+          <a href="{{ sec.url }}" onClick="{{ sec.go }}" style="align-self:flex-start;padding:10px 18px;border-radius:999px;background:#a83818;color:#f5f0e6;font-weight:600;font-size:14px" style-hover="background:#1a1612;color:#f5f0e6">{{ sec.cta }} →</a>
+        </div>
+      </div>
+    </section>
+
+    <div style="position:relative;z-index:9;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:24px;height:52px;padding:0 56px;border-top:1px solid #e3dcc8;background:#f5f0e6;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#5d5648">
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:#a83818">Currently →</span> {{ now }}</span>
+      <a href="https://bilko.run/projects" onClick="{{ goProjects }}" style="display:flex;align-items:center;gap:10px;color:#1a1612"><span style="display:inline-block;animation:bk-nudge 1.8s ease-in-out infinite">↓</span>Scroll to flip into Projects · or press 1 · 2 · 3</a>
+      <a href="https://bilko.run/coffee" style="justify-self:end;color:#3a342b">Buy me a coffee →</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;flipStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;calendar&quot;,&quot;book&quot;],&quot;default&quot;:&quot;calendar&quot;,&quot;tsType&quot;:&quot;'calendar' | 'book'&quot;},&quot;navigate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;sweepSeconds&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:9,&quot;min&quot;:4,&quot;max&quot;:16,&quot;step&quot;:1,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;crosshair&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const P = [
+  { slug: 'session-manager', name: 'Session Manager', kind: 'Dev tool · CLI', short: 'A free desktop cockpit for Claude Code, with a scheduler that waits out your token limit.' },
+  { slug: 'git-viewer', name: 'Git Viewer', kind: 'Data · Portfolio', short: 'Type a GitHub username, get a hosted portfolio and a printable résumé.' },
+  { slug: 'social-signals-trader', name: 'Social Signals Trader', kind: 'Experiment', short: 'Reads Reddit sentiment and paper-trades in public. Every trade logged.' },
+  { slug: 'academy', name: 'Academy', kind: 'Learn', short: 'Free, ad-free AI fundamentals for humans. Every claim cited.' },
+  { slug: 'outdoor-hours', name: 'OutdoorHours', kind: 'Data · Weather', short: 'Ten years of weather, scored into comfortable hours per place.' },
+  { slug: 'escape-velocity', name: 'Escape Velocity', kind: 'Game · Arcade', short: 'A keyboard-only survivors run out of the Solar System.' },
+  { slug: 'launch-kit', name: 'Launch Kit', kind: 'Claude skills', short: 'Eight Claude skills that take a product from it-works to launched.' },
+  { slug: 'family-frame', name: 'Family Frame', kind: 'Home · Family', short: 'One warm family screen with 15+ small apps.' },
+].map((p, i) => ({ ...p, no: String(i + 1).padStart(2, '0'), href: 'https://bilko.run/projects/' + p.slug + '/' }));
+
+const POSTS = [
+  ['10 tools, solo: what I learned shipping bilko.run', '10-tools-solo-what-i-learned-shipping-bilko-run'],
+  ['A bad quote almost cost $14,000 — on paper', 'a-bad-quote-almost-cost-14000-on-paper'],
+  ['The retry that cost 93 calls to fail once', 'the-retry-that-cost-93-calls-to-fail-once'],
+  ['Deleting 951 lines to hit 100 percent', 'deleting-951-lines-to-hit-100-percent'],
+  ['Sixty-five hours of silence', 'sixty-five-hours-of-silence'],
+].map(([t, s], i) => ({ t, no: String(i + 1).padStart(2, '0'), href: 'https://bilko.run/blog/' + s }));
+
+const CH = [
+  { name: 'Email', sub: 'BilkoBibitkov2000@gmail.com', href: 'mailto:BilkoBibitkov2000@gmail.com' },
+  { name: 'X', sub: '@BilkoBibitkov', href: 'https://x.com/BilkoBibitkov' },
+  { name: 'LinkedIn', sub: '/in/bilko-bibitkov', href: 'https://www.linkedin.com/in/bilko-bibitkov-403391412/' },
+];
+
+const NOW = ['Social Signals Trader running live, in public', 'signal-builder split out into its own hosted MCP service', 'Academy module 1s live; lesson backfill cooking', 'New build log up on the blog'];
+
+const DEST = {
+  projects: { path: 'bilko.run/projects', eyebrow: 'Section 02 · Portfolio', title: 'Projects & Packages.', lede: 'Live tools, games, and open-source packages — newest work on top.', url: 'https://bilko.run/projects', spines: true },
+  blog: { path: 'bilko.run/blog', eyebrow: 'Section 04 · Writing', title: 'Blog.', lede: 'Notes from the workshop — half-finished thoughts on AI, craft, and what shipping actually feels like.', url: 'https://bilko.run/blog', spines: false },
+  contact: { path: 'bilko.run/contact', eyebrow: 'Section 08 · Hello', title: 'Contact.', lede: 'Real inboxes. No forms that disappear into nothing.', url: 'https://bilko.run/contact', spines: false },
+};
+
+const SEC = [
+  { k: 'Projects', key: 'projects', no: '01', start: 0, span: 180, count: '8 live', cta: 'Flip to projects', col: '#a83818', lx: 472, ly: 472 },
+  { k: 'Blog', key: 'blog', no: '02', start: 180, span: 90, count: 'Weekly logs', cta: 'Flip to the blog', col: '#1a1612', lx: 48, ly: 472 },
+  { k: 'Contact', key: 'contact', no: '03', start: 270, span: 90, count: 'Open inbox', cta: 'Flip to contact', col: '#2e5a3e', lx: 48, ly: 48 },
+].map(s => ({ ...s, url: DEST[s.key].url }));
+
+const PB = [15, 36, 57, 78, 99, 120, 141, 162], PD = [210, 140, 225, 120, 200, 150, 230, 170];
+const ITEMS = [
+  ...P.map((p, i) => ({ sec: 0, lab: p.name, name: p.name, sub: p.kind, href: p.href, col: '#a83818', b: PB[i], d: PD[i], dest: { path: 'bilko.run/projects/' + p.slug, eyebrow: 'No. ' + p.no + ' · ' + p.kind, title: p.name + '.', lede: p.short, url: p.href, spines: false } })),
+  ...POSTS.map((p, i) => ({ sec: 1, lab: 'LOG ' + p.no, name: p.t, sub: 'Build log', href: p.href, col: '#1a1612', b: [192, 208, 224, 240, 256][i], d: [150, 215, 120, 200, 170][i], dest: { path: p.href.replace('https://', ''), eyebrow: 'Build log · ' + p.no, title: p.t, lede: 'From the workshop.', url: p.href, spines: false } })),
+  ...CH.map((c, i) => ({ sec: 2, lab: c.name, name: c.sub, sub: c.name, href: c.href, col: '#2e5a3e', b: [290, 315, 340][i], d: [180, 130, 210][i], dest: null })),
+];
+
+ITEMS.forEach(it => { const r = it.b * Math.PI / 180; it.x = Math.round(260 + it.d * Math.sin(r)); it.y = Math.round(260 - it.d * Math.cos(r)); });
+const SEC_MID = [90, 225, 315];
+const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+
+class Component extends DCLogic {
+  state = { tick: 0, lock: null, phase: 'idle', dest: DEST.projects };
+  ang = 0;
+  mouse = null;
+  sweepRef = el => { this.sweepEl = el; if (el) el.style.transform = `rotate(${this.ang}deg)`; };
+  rMove = e => {
+    const r = e.currentTarget.getBoundingClientRect(), k = r.width / 520;
+    const x = (e.clientX - r.left) / k - 260, y = (e.clientY - r.top) / k - 260, d = Math.hypot(x, y);
+    let b = Math.atan2(x, -y) * 180 / Math.PI; if (b < 0) b += 360;
+    let focus = -1, fd = 34;
+    ITEMS.forEach((it, i) => { const dd = Math.hypot(it.x - 260 - x, it.y - 260 - y); if (dd < fd) { fd = dd; focus = i; } });
+    this.mouse = { b, d, inside: d <= 280, focus };
+  };
+  rLeave = () => { this.mouse = null; };
+  rClick = e => {
+    if (!this.mouse || !this.mouse.inside || this.mouse.focus >= 0) return;
+    const sec = this.ang < 180 ? 0 : this.ang < 270 ? 1 : 2;
+    this.flip(DEST[SEC[sec].key], e);
+  };
+  loop = now => {
+    const dt = Math.min(0.1, (now - (this.last || now)) / 1000); this.last = now;
+    const period = Math.max(4, Math.min(16, Number(this.props.sweepSeconds) || 9));
+    let target = null;
+    if (this.state.lock != null) target = SEC_MID[this.state.lock];
+    if (this.mouse && this.mouse.inside) target = this.mouse.focus >= 0 ? ITEMS[this.mouse.focus].b : this.mouse.b;
+    if (target == null) this.ang = (this.ang + 360 / period * dt) % 360;
+    else { const d = ((target - this.ang + 540) % 360) - 180; this.ang = (this.ang + d * Math.min(1, dt * 9) + 360) % 360; }
+    if (this.sweepEl) this.sweepEl.style.transform = `rotate(${this.ang}deg)`;
+    this.raf = requestAnimationFrame(this.loop);
+  };
+  heroRef = el => { this.hero = el; };
+  chVRef = el => { this.chV = el; };
+  chHRef = el => { this.chH = el; };
+  chTRef = el => { this.chT = el; };
+  cMove = e => {
+    if (this.props.crosshair === false || !this.hero || !this.chV || this.state.phase !== 'idle') return;
+    const r = this.hero.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    this.chV.style.opacity = 1; this.chV.style.transform = `translateX(${x}px)`;
+    this.chH.style.opacity = 1; this.chH.style.transform = `translateY(${y}px)`;
+    this.chT.style.opacity = 1; this.chT.style.transform = `translate(${x + 14}px, ${y + 10}px)`;
+    this.chT.textContent = `X ${(x / r.width).toFixed(3)} · Y ${(y / r.height).toFixed(3)}`;
+  };
+  cLeave = () => { [this.chV, this.chH, this.chT].forEach(el => el && (el.style.opacity = 0)); };
+
+  flip(dest, e) {
+    if (e) e.preventDefault();
+    if (!dest || this.busy) return;
+    this.busy = true;
+    this.cLeave();
+    this.setState({ dest, phase: 'out' });
+    this.timers.push(setTimeout(() => {
+      if (this.props.navigate) { window.location.href = dest.url; return; }
+      this.setState({ phase: 'hold' });
+      this.timers.push(setTimeout(() => {
+        this.setState({ phase: 'back' });
+        this.timers.push(setTimeout(() => { this.busy = false; this.setState({ phase: 'idle' }); }, 950));
+      }, 1300));
+    }, 950));
+  }
+
+  onKey = e => {
+    if (e.target && /input|textarea/i.test(e.target.tagName)) return;
+    const map = { '1': 'projects', '2': 'blog', '3': 'contact', ArrowDown: 'projects', PageDown: 'projects', ' ': 'projects' };
+    if (map[e.key]) { e.preventDefault(); this.flip(DEST[map[e.key]]); }
+  };
+
+  componentDidMount() {
+    this.timers = [];
+    this.t0 = performance.now();
+    this.iv = setInterval(() => this.setState(s => ({ tick: s.tick + 1 })), 90);
+    window.addEventListener('keydown', this.onKey);
+    this.onResize = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+    this.onResize();
+    window.addEventListener('resize', this.onResize);
+    this.raf = requestAnimationFrame(this.loop);
+  }
+  componentWillUnmount() { cancelAnimationFrame(this.raf); clearInterval(this.iv); (this.timers || []).forEach(clearTimeout); window.removeEventListener('keydown', this.onKey); window.removeEventListener('resize', this.onResize); }
+
+  renderVals() {
+    if (!this.timers) this.timers = [];
+    const s = this.state;
+    if (!this.raf && typeof requestAnimationFrame !== 'undefined') this.raf = requestAnimationFrame(this.loop);
+    const period = Math.max(4, Math.min(16, Number(this.props.sweepSeconds) || 9));
+    const el = this.t0 ? (performance.now() - this.t0) / 1000 : 0;
+    const sw = this.ang, dps = 360 / period;
+    const m = this.mouse && this.mouse.inside ? this.mouse : null;
+    const focus = m ? m.focus : -1, manual = !!m || s.lock != null;
+    const score = ITEMS.map(it => manual ? angDiff(sw, it.b) : ((sw - it.b + 360) % 360) / dps);
+    let bi = 0; score.forEach((v, i) => { if (v < score[bi]) bi = i; });
+    const labelI = focus >= 0 ? focus : bi;
+    const go = d => d ? (e => { e.stopPropagation(); this.flip(d, e); }) : undefined;
+    const blips = ITEMS.map((it, i) => {
+      const lit = i === focus || (manual ? score[i] < 11 : score[i] < 1.3);
+      return { ...it, op: lit ? 1 : 0.35, glow: lit ? 12 : 0, rowc: i === focus ? '#1a1612' : lit ? '#a83818' : '#3a342b', lop: i === labelI && lit ? 1 : 0, ring: i === focus ? 1 : 0, ringS: i === focus ? 1 : 0.4, go: go(it.dest) };
+    });
+    const sweepSec = sw < 180 ? 0 : sw < 270 ? 1 : 2;
+    const modeText = focus >= 0 ? 'Locked · ' + ITEMS[focus].lab : manual ? 'Exploring · ' + String(Math.round(sw) % 360).padStart(3, '0') + '°' : 'Auto sweep';
+    const modeBg = focus >= 0 ? '#a83818' : manual ? '#1a1612' : '#ede6d6', modeFg = focus >= 0 || manual ? '#f5f0e6' : '#5d5648';
+    const si = s.lock ?? sweepSec, sec = SEC[si];
+    const secRows = SEC.map((x, i) => ({ ...x, c: i === si ? x.col : '#9c937f', nc: i === si ? '#1a1612' : '#5d5648', bg: i === si ? '#ede6d6' : 'transparent', lock: () => this.setState({ lock: i }), go: go(DEST[x.key]) }));
+
+    const book = this.props.flipStyle === 'book';
+    const out = s.phase === 'out' || s.phase === 'hold';
+    return {
+      period, blips, secRows, sec: { ...sec, go: go(DEST[sec.key]) }, secItems: blips.filter(b => b.sec === si),
+      ...(() => {
+        const vw = s.vw || 1280, vh = s.vh || 800, wide = vw >= 1180;
+        const avail = wide ? 520 : vw >= 760 ? vw - 112 - 300 - 32 : vw - 64;
+        const size = Math.round(Math.max(260, Math.min(520, vh - 66 - 52 - 72, avail)));
+        return { rSize: size, rScale: (size / 520).toFixed(4), roDisp: wide ? 'flex' : 'none' };
+      })(),
+      lockNote: manual ? ' · manual' : '', modeText, modeBg, modeFg,
+      sweepRef: this.sweepRef, rMove: this.rMove, rLeave: this.rLeave, rClick: this.rClick,
+      tint: `conic-gradient(from ${sec.start}deg, rgba(168,56,24,.06) 0deg ${sec.span}deg, transparent ${sec.span}deg)`,
+      unlock: () => this.setState({ lock: null }),
+      now: NOW[Math.floor(el / 5) % NOW.length],
+      goProjects: go(DEST.projects),
+      onWheel: e => { if (e.deltaY > 24) this.flip(DEST.projects); },
+      origin: book ? '0 50%' : '50% 0',
+      sheetTf: out ? (book ? 'rotateY(-104deg)' : 'rotateX(96deg)') : 'none',
+      sheetSh: out ? '0 40px 80px rgba(26,22,18,.35)' : '0 0 0 rgba(26,22,18,0)',
+      shade: out ? 0.45 : 0,
+      dest: s.dest, destSpines: !!s.dest.spines, destRows: !s.dest.spines,
+      destStatus: (this.props.navigate ? 'Opening ' : 'Preview · would open ') + s.dest.path,
+      loadW: out ? '100%' : '0%',
+      heroRef: this.heroRef, chVRef: this.chVRef, chHRef: this.chHRef, chTRef: this.chTRef, cMove: this.cMove, cLeave: this.cLeave,
+    };
+  }
+}
+</script>
+</body>
+</html>

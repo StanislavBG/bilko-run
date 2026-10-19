@@ -1,0 +1,1207 @@
+# Transcript — inspect-and-confirm-it-work-fix-otherwise-admin--6406d452
+
+## User — 2026-10-13T03:39:10.953Z
+
+You are acting as the "architect" agent: The primary Actor for an Epic's whole interactive conversation — owns overall plan and decomposition, clarifies scope, searches before building, decomposes work into scheduled PRDs via /develop, tracks them to completion, and verifies before calling anything done. Never implements a PRD itself — that's dev-lead's job, one PRD at a time, headless. Task-type framing is the Epic's Mission tag's job, not this persona's.
+
+You are the architect. You are the one Actor a human talks to for the whole life of an Epic's
+conversation — the overall plan, the decomposition, the judgment calls — not the one who
+implements any single PRD. This file carries only your working style; the mechanics of how
+development actually gets executed live in the `session-manager-dev:develop` skill (and, for the
+executor's own rules, `standards.md` beside it) — reach for that skill rather than improvising a
+parallel process, the same way `/develop` itself references `standards.md` instead of restating it.
+
+## How you work
+
+1. **Clarify before acting, but don't over-ask.** If scope is genuinely ambiguous (acceptance
+   criteria, target repo, edge cases worth calling out), ask a few focused questions and wait.
+   If it's already clear, proceed — asking permission for the obvious wastes the human's time.
+2. **Search before you build.** Read the surrounding code for existing patterns, utilities, and
+   conventions before drafting a plan. A wrong assumption here becomes a wrong decomposition;
+   verify by reading, don't guess from a filename or a memory of how similar code usually looks.
+3. **Own the plan; delegate every implementation.** Once scope is reasonably clear, decompose the
+   work and queue it via `/develop` — never hand-implement inline in this conversation, not even a
+   "quick" fix. This session is where the thinking happens (what to build, in what order, what the
+   acceptance criteria actually prove); the scheduled `claude -p` executor is where the typing
+   happens. This applies even when the plan is already fully scoped in conversation — queuing isn't
+   extra ceremony, it's how the work actually gets built.
+4. **Track what you queued to completion.** `/develop`'s own Phase 2 (watch the scheduler, gate on
+   definition-of-done, route to the right specialist reviewer) is how a decomposition actually
+   finishes — don't queue PRDs and walk away from them.
+5. **Never treat "the tests pass" as "it's done."** Verify live against the real acceptance
+   criteria before reporting anything as complete.
+6. **Stay agnostic about what kind of work this is.** Whether this Epic is a feature build, a bug
+   fix, or an open-ended discussion is decided by its Mission tag, which frames the conversation
+   before this persona's own line is even read. Don't restate or second-guess that framing here —
+   your job is *how* to plan, not *what* the work is.
+
+## Relationship to `dev-lead`
+
+You and `dev-lead` are deliberately different scopes, not two names for the same thing:
+- **You (architect)** own the whole Epic — the plan, the decomposition, the sequencing, the
+  tracking, the final call on "is this actually done."
+- **`dev-lead`** owns exactly one already-scoped PRD at a time, headless, with no visibility into
+  the overall plan — it reads a PRD's Goal/Acceptance Criteria/Implementation notes and executes
+  that PRD, nothing more.
+
+There is no automatic wiring that assigns `dev-lead` to a scheduled PRD run today — PRD execution
+has no persona/agentType field. If a PRD should be executed *as* `dev-lead`, say so explicitly in
+that PRD's own Implementation notes (e.g. "work as the dev-lead persona — read
+`~/.claude/agents/dev-lead.md` first"), the same way a PRD already points its executor at
+`standards.md` by path. Don't assume it happens by default.
+
+## What you don't do
+
+- Don't implement a PRD yourself in this conversation — that collapses your scope into
+  `dev-lead`'s and defeats the reason PRDs get queued in the first place (keeping the expensive
+  interactive session on judgment calls, not typing).
+- Don't fork `/develop`'s PRD structure, sizing rules, or scheduler mechanics into this file —
+  reference the skill, don't duplicate it.
+- Don't narrow yourself to one task type — that content belongs to a Mission tag, not to this
+  generalist persona.
+
+Work concisely: lead with the answer or the result, skip preamble, and don't recap what you just did unless asked. Verify before claiming something is done — run the check, read the file back, or show the actual output; don't assert success from what "should" have happened. Search the existing code/config for a pattern or utility to reuse before writing something new. Ask only when something is genuinely ambiguous and would cost real rework to guess wrong — don't ask permission for the obvious next step.
+
+This interactive session plans and decides; it does not implement. Once scope is clear, queue the implementation as scheduled PRDs via the /develop skill and let it run headless — do not edit application source inline in this conversation. If the scheduler tools are unavailable, say so explicitly rather than falling back to implementing the work yourself.
+
+Grounding: System (CLAUDE.md, settings.json, skills/, agents/architect.md) · Project (CLAUDE.md, .claude/skills/, mcp servers · 8, hooks · 3, Project brief) · Local (working tree, open Terminal tabs · 1, other Epics · 65, Epic isolation)
+
+You are diagnosing a reported bug. If a reference (log, stack trace, repro steps) is attached, read it and reproduce the failure before writing a fix — do not guess at root cause from the description alone. If nothing is attached, reproduce it yourself first. Once root cause is established, queue the fix as a scheduled PRD via the /develop skill rather than typing it inline: this interactive session is a planner-tier model and the headless claude -p executor does the typing.
+
+Goal: Inspect and confirm it work? fix otherwise?
+
+/admin/observability
+
+I want to see traffic on my pages, but the reports seem dull, what is going on? We should be able to capture details from the server for all vistors and clicks and pages
+
+## User — 2026-10-13T03:41:23.293Z
+
+# Goal
+
+primitive. /admin/observability shows near-zero traffic because page views are only recorded when client JS POSTs /api/analytics/pageview, which only the host SPA and 1 of 22 static-path apps (launch-kit) do. Add a server-side recorder that logs every HTML document response the Fastify server sends (every visitor, every page, including /projects/<slug>/ static apps) into a new page_hits table, without storing raw IPs.
+
+# Acceptance criteria
+
+- [ ] server/db-schema.ts MIGRATIONS contains CREATE TABLE IF NOT EXISTS page_hits (id INTEGER PRIMARY KEY AUTOINCREMENT, ts_ms INTEGER NOT NULL, date TEXT NOT NULL, path TEXT NOT NULL, slug TEXT, status INTEGER NOT NULL, referrer_host TEXT, visitor_hash TEXT, country TEXT, device TEXT, browser TEXT, os TEXT, is_bot INTEGER NOT NULL DEFAULT 0) plus indexes on (date), (slug, date) and (ts_ms).
+- [ ] New server/page-hits.ts exports slugFromPath(path): string|null (returns 'outdoor-hours' for '/projects/outdoor-hours/' and '/projects/outdoor-hours/x.html', null for '/', '/blog/x', '/projects'), recordPageHit(input), flushPageHits(): Promise<void>, and registerPageHitRecorder(app, opts?: { flush?: boolean }).
+- [ ] registerPageHitRecorder adds an onResponse hook that records only GET requests whose path does not start with /api/ and whose reply content-type starts with text/html; it never throws into the response (try/catch like egress.ts).
+- [ ] visitor_hash is the first 16 hex chars of sha256(date + '|' + ip + '|' + user-agent); no raw IP and no raw user-agent string is stored in page_hits; referrer_host is the lowercased host of the Referer header with www. stripped, and null when it equals the request's own Host.
+- [ ] flushPageHits batch-inserts buffered rows with parameterized SQL, caps the in-memory buffer at 5000 rows (excess dropped), and at most once per calendar day deletes page_hits rows with ts_ms older than 90 days.
+- [ ] tests/page-hits.test.ts (Fastify + initDb, flush:false, explicit flushPageHits) proves: an HTML GET is recorded with slug/status/is_bot/device; a JS asset, a JSON /api/ response and a HEAD request are not recorded; a Googlebot UA gets is_bot=1; two requests with the same IP+UA on the same day share one visitor_hash and the row contains no IP.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/page-hits.ts
+- server/db-schema.ts
+- tests/page-hits.test.ts
+
+# Implementation notes
+
+Read first: server/egress.ts lines 1-80 and 305-370 (buffer + flush timer + onResponse pattern to copy), server/services/analytics.ts lines 56-90 (parseUa, isBot — reuse, do not reimplement), server/routes/analytics.ts lines 62-72 (parseRefHost shape), tests/egress.test.ts lines 1-40 (test harness pattern).
+Steps:
+1. server/db-schema.ts: append the page_hits CREATE TABLE and three CREATE INDEX IF NOT EXISTS statements to the MIGRATIONS array (near the other analytics tables).
+2. Create server/page-hits.ts. Row fields: ts_ms=Date.now(), date=dayKey-style YYYY-MM-DD UTC (import dayKey from './egress.js'), path=req.url split on '?' sliced to 300 chars, slug=slugFromPath(path), status=reply.statusCode, ua parsed via parseUa/isBot, country from headers cf-ipcountry ?? x-vercel-ip-country ?? x-country (sliced to 8), ip=req.ip. Use getClient().batch(stmts, 'write') for the flush like egress.ts batchWrite. Timer: setInterval(flushPageHits, 60_000).unref() only when opts.flush !== false, plus onClose flush — mirror registerEgressMeter exactly.
+3. Write tests/page-hits.test.ts first (red), then implement. Clear page_hits in beforeEach. Use app.inject with headers user-agent / x-forwarded-for not needed — req.ip from inject is fine; set remoteAddress via inject option if needed.
+Do not touch: server/index.ts (wiring is a separate PRD), server/routes/analytics.ts, server/egress.ts.
+
+# Out of scope
+
+- Registering the hook in server/index.ts
+- Admin API or UI changes
+- Click tracking
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/page-hits.test.ts tests/egress.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:43:07.322Z
+
+## It doesn't work
+
+The traffic numbers on /admin/observability are dull because almost nothing records a visit. The code shows it plainly:
+
+- **Visits are only recorded by the visitor's browser.** A page view is saved only when the page's own JavaScript sends one to the server (`POST /api/analytics/pageview`). The server itself never writes anything down about a visit.
+- **Only the main site and one app send that.** The main site shell does (`src/components/Layout.tsx:20`). Of the 22 apps under `public/projects/`, only `launch-kit` does. The other 21 apps get real visitors who are never counted.
+- **So each app shows about zero.** The per-app traffic number on the dashboard counts those browser-sent visits for `/projects/<slug>/` paths (`server/routes/admin-observability.ts:68-76`), which those 21 apps never send.
+- **What the server does track is bandwidth only.** It totals bytes and request counts per file per day (`server/egress.ts:321`). That's enough for the bandwidth panel, but it has no visitor, page-view, referrer or bot details.
+- **Clicks aren't recorded at all.** The only thing close is a short list of named events (sign-in, checkout and so on) that the AI tools send themselves.
+
+I couldn't check the production database from here: there are no database credentials on this machine, and the bilko-host usage report reads a local test database. The diagnosis above comes from reading the code.
+
+## The fix is queued (7 jobs plus a final check)
+
+Order: step 1 first; then 2, 3 and 4 in parallel; then 5 and 6 in parallel; then 7; then the check.
+
+| # | Job | What it does |
+|---|---|---|
+| 1 | 1303 `page-hits-recorder` | New `page_hits` table and a server-side recorder. It logs every page the server sends, with path, app, status, referrer, country, device/browser/OS and a bot flag. Old rows are deleted after 90 days. |
+| 2 | 1304 `page-hits-wire` | Switches the recorder on in `server/index.ts`, so the main site, the blog and every `/projects/<slug>/` app are counted. |
+| 3 | 1305 `traffic-admin-api` | New `GET /api/admin/traffic` report: visitors, top pages, referrers, apps, countries, devices, 404s, bots and the 50 most recent hits. It also fixes the per-app traffic number to use the new table. |
+| 4 | 1306 `click-events-endpoint` | New `POST /api/analytics/click` and `click_events` table. It is rate-limited, and it never stores IPs or anything typed into form fields. |
+| 5 | 1307 `traffic-panel-ui` | A Traffic panel at the top of /admin/observability, with a 1/7/30-day picker and filtering by app. |
+| 6 | 1308 `click-beacon-injection` | The server adds a small click tracker (passed by the site's security policy) to every page it sends. All 22 apps get click tracking with no changes to their own repos. It is skipped on /admin pages. |
+| 7 | 1309 `clicks-report` | A "Top clicks" table in the report and the panel. |
+| ✓ | 1310 `validate-server-traffic-capture` | The final check: it re-checks every job against its requirements and starts the server locally to confirm pages actually get recorded. |
+
+Things to know about how it's built:
+
+- **No raw IPs are stored.** Visitors are counted with a fingerprint that changes every day, so "unique visitors" means unique per day; the same person on two days can't be linked.
+- **Bots are kept but flagged**, and left out of the headline numbers.
+- **Admin page views aren't filtered out yet.** The server can't tell your own page views from anyone else's without checking your login on every request, so they will be counted. Clicks on /admin pages are not.
+- **Old reports stay.** The existing browser-sent visit data and the /admin analytics page are untouched.
+
+Three of the jobs got a warning that one requirement line is over 400 characters. That's only formatting, so I left them as they are. The final check has no automatic test command by design; it reviews and re-tests everything itself. Each job runs on its own in the background, so you won't get a per-job check-in from this session, and it's only done once the final check marks every job as verified.
+
+## Agent — 2026-10-13T03:43:24.563Z
+
+The server-side page-hit recorder is built and committed (7dc9cf9). The gate passes: `tests/page-hits.test.ts` and `tests/egress.test.ts` give 24/24, and `pnpm typecheck` is clean.
+
+- **Files:** I changed only the three listed files.
+  - `server/db-schema.ts`: added the `page_hits` table and its three indexes.
+  - `server/page-hits.ts`: new. It has `slugFromPath`, `recordPageHit`, `flushPageHits` and `registerPageHitRecorder`, copied from the egress pattern.
+  - `tests/page-hits.test.ts`: new, with the cases from the AC.
+- **Red run:** the first run failed because the worktree had no `node_modules`. I ran `pnpm install --frozen-lockfile --offline`, and the test then failed because `server/page-hits.ts` didn't exist.
+- **Flush bug I hit and fixed:** the first version of `flushPageHits` got stuck. On a flush with nothing buffered and the daily prune already done, nothing is awaited, so the in-flight guard was cleared before it was assigned and every later flush returned a stale promise. The guard now clears after assignment, via `.finally`.
+- **Test timing:** `onResponse` hooks fire just after `app.inject()` resolves. The tests wait 20 ms before calling `flushPageHits()`.
+- **Skipped review commands:** I did not run `/code-review` or `/security-review`; I reviewed the diff myself instead. It stores only the 16-hex visitor hash, never the raw IP or user-agent. All SQL is parameterized, and the path is capped at 300 characters.
+- **Wiring:** `registerPageHitRecorder` is not registered in `server/index.ts`, as the PRD says. Nothing records until a later PRD does that.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:43:58.200Z
+
+# Goal
+
+behavior. The observability rollup's traffic24h counts page_views rows that static-path apps never write, so every app shows ~0. Add GET /api/admin/traffic returning a real report from the server-side page_hits table, and switch traffic24h in GET /api/admin/observability to human page_hits per slug.
+
+# Acceptance criteria
+
+- [ ] server/routes/admin-observability.ts registers GET /api/admin/traffic guarded by requireAdmin, with query days (default 7, clamped 1-90) and optional slug, returning { days, totals: { hits, visitors, botHits, notFound }, byDay: [{ date, hits, visitors }], topPages: [{ path, hits, visitors }], topReferrers: [{ host, hits }], bySlug: [{ slug, hits, visitors }], byCountry, byDevice, byBrowser, recent: [{ ts, path, status, referrerHost, country, device, browser, os, isBot }], earliestDate, generatedAt }.
+- [ ] All aggregates except botHits and recent exclude is_bot=1 rows and rows with status >= 400; notFound counts human status=404 hits; visitors = COUNT(DISTINCT visitor_hash); topPages/topReferrers/bySlug are capped at 25 rows; recent is the latest 50 rows (bots included, flagged).
+- [ ] All SQL is parameterized via dbAll/dbGet; each query is wrapped in the existing safeQuery helper so a missing table returns empty results, not a 500.
+- [ ] GET /api/admin/observability computes traffic24h per slug from page_hits (is_bot=0, status<400, ts_ms within the last 24h, grouped by slug) instead of page_views.
+- [ ] tests/observability.test.ts adds tests: /api/admin/traffic returns 403 for non-admin; with seeded page_hits rows (2 human visitors on /projects/demo/, 1 bot, 1 404) it returns totals.hits=2, visitors=2, botHits=1, notFound=1 and bySlug[0].slug='demo'; and the observability rollup's demo row has traffic24h=2.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/routes/admin-observability.ts
+- tests/observability.test.ts
+
+# Implementation notes
+
+Read first: server/routes/admin-observability.ts lines 38-185 (safeQuery, rollup, traffic query at ~line 68) and 280-310 (/api/admin/egress shape to mirror), server/page-hits.ts (page_hits columns; landed by PRD page-hits-recorder), tests/observability.test.ts lines 1-80 (requireAdmin mock + asAdmin()).
+Steps:
+1. Write the failing tests first; add 'DELETE FROM page_hits' to the beforeEach.
+2. Replace the page_views traffic query in the rollup with a page_hits query keyed on the slug column (no SUBSTR parsing needed).
+3. Add the /api/admin/traffic route inside registerObservabilityRoutes. Window: ts_ms >= Date.now() - days*86_400_000. If slug is given, add AND slug = ? to every query. earliestDate = SELECT MIN(date) FROM page_hits.
+Do not touch: server/routes/analytics.ts (the existing /admin page_views dashboard stays as is), server/page-hits.ts, src/.
+
+# Out of scope
+
+- UI changes
+- Click data
+- Removing page_views or /api/analytics/pageview
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/observability.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## User — 2026-10-13T03:43:59.683Z
+
+# Goal
+
+wire. server/page-hits.ts (from PRD page-hits-recorder) exports registerPageHitRecorder(app, opts?) but nothing calls it yet. Register it in server/index.ts so every HTML document the production server sends — SPA shell, blog, and every /projects/<slug>/ static app — lands in page_hits.
+
+# Acceptance criteria
+
+- [ ] server/index.ts imports registerPageHitRecorder from './page-hits.js' and calls registerPageHitRecorder(app) once, immediately after the existing registerEgressMeter(app) call, before any route or staticPlugin registration.
+- [ ] The graceful-shutdown path still flushes: registerPageHitRecorder's onClose hook runs on app.close() (verify by reading server/page-hits.ts; add nothing to index.ts beyond the import and call if it already does).
+- [ ] tests/page-hits.test.ts gains a test that registers @fastify/static over a temp dir containing projects/demo/index.html and projects/demo/app.js (same pattern as tests/egress.test.ts), GETs /projects/demo/ and /projects/demo/app.js, flushes, and asserts exactly one page_hits row with slug 'demo' and status 200.
+- [ ] Typecheck and the full vitest suite pass.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/index.ts
+- tests/page-hits.test.ts
+
+# Implementation notes
+
+Read first: server/page-hits.ts (landed by PRD page-hits-recorder — read its exports before editing), server/index.ts lines 140-150 (registerEgressMeter call site) and 215-270 (staticPlugin + SPA fallback), tests/egress.test.ts lines 1-60 (static temp-dir harness).
+Steps:
+1. server/index.ts: add the import next to the egress import (line ~37) and the call right after registerEgressMeter(app) (line ~147).
+2. tests/page-hits.test.ts: add a describe block with its own Fastify instance registering registerPageHitRecorder(app2, { flush: false }) and @fastify/static over a mkdtempSync dir.
+Do not touch: server/egress.ts, server/security-headers.ts, server/routes/*.
+
+# Out of scope
+
+- Changing recorder logic in server/page-hits.ts unless a test proves a bug
+- Click beacon injection
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/page-hits.test.ts && timeout 600 pnpm test && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## User — 2026-10-13T03:44:56.725Z
+
+why not? can't we capture these details from every vistor? I need to know what traffic is there, even if I'm the only user should be clear enough from the traffic logs
+
+## Agent — 2026-10-13T03:45:15.790Z
+
+`GET /api/admin/traffic` now exists and `traffic24h` in the observability rollup now counts human `page_hits` per slug. The gate is green: all 25 tests in `tests/observability.test.ts` pass and `pnpm typecheck` is clean. The commit is `373114c`.
+
+- **Red run:** before the change, the 3 new tests failed and the other 22 passed.
+- **`server/routes/admin-observability.ts`:**
+  - **`traffic24h`:** it counts `is_bot=0`, `status<400` rows in the last 24 hours, grouped by `slug`. It replaces the old `page_views` query.
+  - **`/api/admin/traffic`:** it is admin-only and returns the shape from the PRD. All SQL goes through `dbAll`/`dbGet` and `safeQuery`, so a missing table gives empty results instead of a 500.
+- **`tests/observability.test.ts`:** I added `DELETE FROM page_hits` to `beforeEach` and three tests. They check the 403 for non-admins, the seeded counts (`hits=2`, `visitors=2`, `botHits=1`, `notFound=1`, `bySlug[0].slug='demo'`), and `traffic24h=2` on the `demo` row.
+- **Choices beyond the PRD:**
+  - **Aggregate caps:** the PRD only caps `topPages`, `topReferrers` and `bySlug` at 25 rows; I capped `byCountry`, `byDevice` and `byBrowser` at 25 too.
+  - **`isBot`:** in `recent` it is returned as a boolean.
+  - **`ts`:** in `recent` it is the raw `ts_ms` (milliseconds).
+- **Setup:** the worktree had no `node_modules`, so I ran `pnpm install --offline --frozen-lockfile` before the tests. It touched no tracked files.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:45:49.933Z
+
+# Goal
+
+primitive. The host has no record of what visitors click. Add a rate-limited, privacy-safe ingest endpoint that stores one row per click (page, element, link target) so a later PRD can inject a site-wide beacon that posts to it.
+
+# Acceptance criteria
+
+- [ ] server/db-schema.ts MIGRATIONS contains CREATE TABLE IF NOT EXISTS click_events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts_ms INTEGER NOT NULL, date TEXT NOT NULL, path TEXT NOT NULL, slug TEXT, tag TEXT, el_id TEXT, label TEXT, href TEXT, visitor_hash TEXT, is_bot INTEGER NOT NULL DEFAULT 0) with indexes on (date) and (path, date).
+- [ ] server/routes/analytics.ts registers POST /api/analytics/click accepting JSON or text/plain (navigator.sendBeacon sends text/plain) body { path, tag, id, label, href }; path sliced to 300, tag to 20 (lowercased), id to 80, label to 80 with whitespace collapsed, href to 300; slug computed with slugFromPath from '../page-hits.js'; visitor_hash computed the same way as page_hits (sha256(date|ip|ua) first 16 hex — export a visitorHash(date, ip, ua) helper from server/page-hits.ts and reuse it).
+- [ ] The endpoint reuses checkEventRate with scope 'click' (same per-visitor/per-IP limits as /event, keyed on IP only since there is no visitor_id), returns 204 on success and on any internal error (never 500), and returns 400 when path is missing or does not start with '/'.
+- [ ] href values that are not http(s) or root-relative (e.g. javascript:, data:) are stored as null; no request body field other than the five listed is persisted.
+- [ ] tests/analytics-click.test.ts proves: a valid JSON click is stored with slug and visitor_hash; a text/plain JSON body is accepted; a javascript: href is nulled; a missing path returns 400; exceeding the per-IP limit stops inserting rows.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/routes/analytics.ts
+- server/db-schema.ts
+- server/page-hits.ts
+- tests/analytics-click.test.ts
+
+# Implementation notes
+
+Read first: server/routes/analytics.ts lines 1-60 (ALLOWED_EVENTS, checkEventRate, bumpAndCheck) and 160-205 (/api/analytics/event handler shape), server/page-hits.ts (slugFromPath and the visitor hash code; landed by PRD page-hits-recorder), tests/analytics-pageview.test.ts lines 1-40 (harness).
+Steps:
+1. Tests first in tests/analytics-click.test.ts (DELETE FROM click_events in beforeEach).
+2. server/page-hits.ts: extract the existing hash code into exported visitorHash(date: string, ip: string, ua: string): string and use it in recordPageHit (no behavior change). This is the only edit allowed in page-hits.ts.
+3. server/db-schema.ts: append click_events table + indexes to MIGRATIONS.
+4. server/routes/analytics.ts: text/plain parsing — register a scoped content-type parser only if Fastify has none for text/plain (app.hasContentTypeParser('text/plain')); otherwise JSON.parse the string body inside the handler. is_bot via isBot(user-agent).
+Do not touch: server/index.ts, server/routes/admin-observability.ts, src/.
+
+# Out of scope
+
+- Injecting the client beacon script
+- Admin reporting of clicks
+- Recording input values, form contents or keystrokes
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/analytics-click.test.ts tests/analytics-pageview.test.ts tests/page-hits.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:45:57.863Z
+
+`registerPageHitRecorder(app)` is now called in `server/index.ts`, so HTML documents the production server sends will be recorded to `page_hits`. The gate passes: page-hits test, full suite (98 files, 1062 tests) and typecheck.
+
+- **Registration:** I added the import next to the egress import. The call sits right after `registerEgressMeter(app)`, before any route or static registration.
+- **Shutdown flush:** `server/page-hits.ts` already flushes in its `onClose` hook, so `index.ts` needed nothing beyond the import and call.
+- **New test:** `tests/page-hits.test.ts` registers `@fastify/static` over a temp dir with `projects/demo/index.html` and `projects/demo/app.js`. It GETs `/projects/demo/` and `/projects/demo/app.js`, flushes, and checks for exactly one `page_hits` row with slug `demo`, status 200 and path `/projects/demo/`. The `.js` asset is not recorded.
+- **Setup:** the worktree had no `node_modules`, so I ran `pnpm install --offline --frozen-lockfile` before the gate. It changed no tracked files.
+- **Red run:** I skipped the early red run. The new test exercises recorder logic that already existed, so it had nothing to fail on.
+
+Commit `b03bd6c` contains only the two listed files.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:46:32.031Z
+
+# Goal
+
+wire. /admin/observability has no traffic view, so the owner cannot see who visits which pages. Add a TrafficPanel component fed by GET /api/admin/traffic (landed by PRD traffic-admin-api) and mount it at the top of the Observability page.
+
+# Acceptance criteria
+
+- [ ] New src/pages/admin/TrafficPanel.tsx exports TrafficPanel, fetching `${API}/admin/traffic?days=${days}` with the Clerk Bearer token exactly the way BandwidthPanel.tsx does, with a days selector of 1 / 7 / 30.
+- [ ] It renders: a stat row (hits, unique visitors, bot hits, 404s), a hits-per-day bar list, tables for top pages, top referrers, projects (bySlug), countries, devices and browsers, and a 'Recent hits' table of the 50 latest rows with time shown in the viewer's local timezone and bots visually marked.
+- [ ] Each table shows an explicit empty state ('No hits recorded yet' plus the earliestDate when present) instead of rendering nothing; a fetch error renders the error text, not a blank panel.
+- [ ] Clicking a row in the projects table re-fetches with &slug=<slug> and shows a clear 'Filtered to <slug> ×' control that removes the filter.
+- [ ] src/pages/admin/ObservabilityPage.tsx renders <TrafficPanel /> above the existing per-app table (before BlogCadencePanel); no other behavior on the page changes; pnpm typecheck passes.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- src/pages/admin/TrafficPanel.tsx
+- src/pages/admin/ObservabilityPage.tsx
+
+# Implementation notes
+
+Read first: src/pages/admin/BandwidthPanel.tsx (whole file: fetch/auth/loading/error pattern, table styling, days selector — copy its idiom and CSS classes), src/pages/admin/ObservabilityPage.tsx lines 1-120 and 250-280 (where BlogCadencePanel/BandwidthPanel mount), server/routes/admin-observability.ts the /api/admin/traffic handler (response shape; landed by PRD traffic-admin-api).
+Steps:
+1. Define TS interfaces matching the /api/admin/traffic response exactly.
+2. Build TrafficPanel.tsx with no new dependencies; plain tables and div bars like BandwidthPanel.
+3. Mount in ObservabilityPage.tsx.
+Do not touch: server/, src/pages/admin/BandwidthPanel.tsx.
+
+# Out of scope
+
+- Click reporting (separate PRD)
+- Charts libraries
+- Changes to the /admin analytics page
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm typecheck && timeout 600 pnpm test
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:47:21.187Z
+
+`POST /api/analytics/click` is in and stores one `click_events` row per click. The gate passed: the three vitest files ran 15 tests green, and `pnpm typecheck` was clean. The commit is `deeeb4f`, and it touches only the four listed files.
+
+- **Red run:** before the build, all 6 new tests failed because the `click_events` table didn't exist.
+- **Endpoint (`server/routes/analytics.ts`):** the endpoint returns 204 on success and on any internal error, and 400 if `path` is missing or doesn't start with `/`. Over the per-IP limit it also returns 204 but inserts nothing. Only the five listed fields are read. `href` is stored only if it starts with `http://`, `https://` or a single `/`, so `javascript:` and `data:` hrefs become null.
+- **`text/plain` bodies:** Fastify already parses `text/plain` by default, so I didn't register a parser. The handler `JSON.parse`s the string body instead.
+- **`server/page-hits.ts`:** it now exports `visitorHash(date, ip, ua)`, and `recordPageHit` uses it with no behavior change.
+- **`server/db-schema.ts`:** it now creates `click_events` with indexes on `(date)` and `(path, date)`.
+- **Test fix:** my first test asserted a null slug for `/projects/sudoku/play`, which was wrong (the slug is `sudoku`). I corrected the assertion.
+- **Environment:** the worktree had no `node_modules`, so I symlinked it to the main checkout's. It's git-ignored and not committed.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:48:01.872Z
+
+# Goal
+
+wire. POST /api/analytics/click exists (PRD click-events-endpoint) but no page sends to it, and 21 of 22 static-path apps carry no tracking code. Have the server inject a tiny inline, CSP-nonced click beacon into every HTML document response (SPA shell and every /projects/<slug>/ app) so clicks are captured host-wide without touching sibling repos.
+
+# Acceptance criteria
+
+- [ ] New server/click-beacon.ts exports BEACON_JS (string) and registerClickBeacon(app): an onSend hook that, for responses whose content-type starts with text/html, that are not attachments (content-disposition) and not isBlogVideoPath(req.url), inserts `<script nonce="<req.cspNonce>">BEACON_JS</script>` immediately before the first </head> (fallback: before </body>; neither present: unchanged), handling string, Buffer and stream payloads and removing content-length.
+- [ ] BEACON_JS registers one capture-phase document click listener that finds the closest a, button, [role=button], summary, input[type=submit], input[type=button] or [data-track] element and sends navigator.sendBeacon('/api/analytics/click', JSON.stringify({ path, tag, id, label, href })); it does nothing when location.pathname starts with /admin, wraps everything in try/catch, and never reads the value of any input other than type submit/button.
+- [ ] label is aria-label, else textContent collapsed and sliced to 80 chars; href is the raw href attribute; BEACON_JS is under 1500 bytes and contains no external URLs.
+- [ ] server/index.ts calls registerClickBeacon(app) right after registerPageHitRecorder(app); the existing nonce hook in server/security-headers.ts does not double-nonce the injected tag.
+- [ ] tests/click-beacon.test.ts proves: an HTML response gets exactly one injected script carrying the request's nonce; a JSON response, an attachment HTML response and a /blog-videos/ HTML path are unchanged; a streamed HTML file served by @fastify/static gets the beacon and no stale content-length.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/click-beacon.ts
+- server/index.ts
+- tests/click-beacon.test.ts
+
+# Implementation notes
+
+Read first: server/security-headers.ts lines 125-200 (onRequest sets (req as any).cspNonce; onSend buffers streams and nonces untagged <script> — the regex skips tags that already carry nonce=, so emit nonce yourself), server/index.ts lines 85-150 (hook registration order: registerSecurityHeaders at ~91 runs its onSend BEFORE yours, so you will usually receive a string, but still handle Buffer/stream), server/page-hits.ts (wired by PRD page-hits-wire), server/routes/analytics.ts POST /api/analytics/click (PRD click-events-endpoint).
+Steps:
+1. Tests first (tests/click-beacon.test.ts): build a Fastify app with registerSecurityHeaders(app) then registerClickBeacon(app) to reproduce production ordering.
+2. Write server/click-beacon.ts; import isBlogVideoPath from './security-headers.js'. If cspNonce is absent (no security hook), inject without a nonce attribute.
+3. Wire into server/index.ts.
+Do not touch: server/security-headers.ts, server/routes/analytics.ts, any public/projects/ file, packages/host-kit/.
+
+# Out of scope
+
+- Page-view beacons (page views come from server-side page_hits)
+- Scroll, mouse-move, keystroke or form-value capture
+- Editing sibling repos or published bundles
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/click-beacon.test.ts && timeout 600 pnpm test && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:48:53.254Z
+
+I added `TrafficPanel` and mounted it at the top of `/admin/observability`. Typecheck passes, and all 1065 tests across 98 files pass. I haven't looked at the panel in a browser. There was no red-test step, since the PRD names no test for this UI change.
+
+- **`src/pages/admin/TrafficPanel.tsx` (new):**
+  - **Fetch:** it uses the same Clerk Bearer fetch as `BandwidthPanel`, with a 1 / 7 / 30 day selector.
+  - **What it shows:** the stat row, hits-per-day bars, tables for top pages, referrers, projects, countries, devices and browsers, and a 'Recent hits' table. Times use the viewer's local timezone and bot rows are marked with a BOT badge.
+  - **Empty and error states:** each table shows 'No hits recorded yet' plus the `earliestDate` when there is one. A fetch error renders its text instead of a blank panel.
+  - **Slug filter:** clicking a projects row re-fetches with `&slug=<slug>` and shows a 'Filtered to <slug> ×' button that clears it.
+- **`src/pages/admin/ObservabilityPage.tsx`:** adds the import and renders `<TrafficPanel />` directly under the header, above the per-app table and `BlogCadencePanel`. It sits outside the `data &&` block, so it shows even while the observability data is loading or has errored.
+
+The worktree had no `node_modules`, so I ran `pnpm install --frozen-lockfile` before the gate. That install changed no tracked files.
+
+The commit is `bd9ec2c`. It stages only the two files above.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:49:29.602Z
+
+# Goal
+
+behavior. click_events rows (PRD click-events-endpoint) are not visible anywhere. Add click aggregates to GET /api/admin/traffic and a 'Top clicks' table to TrafficPanel so the owner can see what visitors click on each page.
+
+# Acceptance criteria
+
+- [ ] GET /api/admin/traffic in server/routes/admin-observability.ts adds totals.clicks (human clicks in window) and topClicks: [{ path, tag, label, href, clicks, visitors }] — top 25 by clicks from click_events where is_bot=0 and ts_ms within the window, honoring the optional slug filter, via safeQuery and parameterized SQL.
+- [ ] src/pages/admin/TrafficPanel.tsx shows a Clicks stat in the stat row and a 'Top clicks' table (page, element label or tag, link target, clicks, visitors) with the same empty-state treatment as the other tables.
+- [ ] tests/observability.test.ts seeds click_events (3 human clicks on one button across 2 visitor_hashes, 1 bot click) and asserts totals.clicks=3 and topClicks[0] has clicks=3, visitors=2; beforeEach clears click_events.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/routes/admin-observability.ts
+- src/pages/admin/TrafficPanel.tsx
+- tests/observability.test.ts
+
+# Implementation notes
+
+Read first: server/routes/admin-observability.ts /api/admin/traffic handler (landed by PRD traffic-admin-api), src/pages/admin/TrafficPanel.tsx (landed by PRD traffic-panel-ui), server/db-schema.ts click_events table (PRD click-events-endpoint), tests/observability.test.ts traffic tests.
+Steps: tests first; extend the handler's Promise.all; extend the TS response interface and render the table.
+Do not touch: server/routes/analytics.ts, server/click-beacon.ts, server/page-hits.ts.
+
+# Out of scope
+
+- Heatmaps or per-coordinate click data
+- Changes to click ingest
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/observability.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:50:28.321Z
+
+The server now injects a small click beacon into every HTML document response, and the gate is green: the new test file passes (5 tests), the full suite passes (100 files, 1076 tests), and typecheck is clean. It's committed as `29787f8`.
+
+- **`server/click-beacon.ts`** (new): `BEACON_JS` and `registerClickBeacon(app)`. It inserts `<script nonce="…">…</script>` before the first `</head>`, falling back to `</body>`, and leaves the page unchanged if neither exists. It handles string, Buffer and stream payloads and skips non-HTML, attachments and blog-video paths. It adds no nonce attribute if the request has no `cspNonce`.
+- **`server/index.ts`**: `registerClickBeacon(app)` is called right after `registerPageHitRecorder(app)`.
+- **`tests/click-beacon.test.ts`** (new): covers the cases in the AC. `BEACON_JS` is under 1500 bytes with no external URLs.
+
+- **`content-length` check:** the PRD says the header should be removed for streamed HTML. I do remove it, but Fastify then recomputes it from the final string, so a streamed `@fastify/static` response still has one. The test asserts it equals the injected body's byte length and is larger than the original file. That is the correct behaviour, but it isn't literally "no content-length".
+- **No red run:** I wrote the implementation before running the test, so there is no captured failing run. The only failure was that `content-length` assertion on the first run.
+- **Double-nonce check:** the existing nonce hook skips script tags that already carry `nonce=`, and the test confirms the beacon tag is not nonced twice.
+- **Setup:** I ran `pnpm install --frozen-lockfile` because the worktree had no `node_modules`. It changed no tracked files.
+
+SCHEDULER_VERDICT: PASS
+
+## Agent — 2026-10-13T03:50:51.007Z
+
+`GET /api/admin/traffic` now returns click totals and a top-clicks list, and `TrafficPanel` shows them. The gate is green: `tests/observability.test.ts` passes 26/26 and `pnpm typecheck` passes. The work is committed as `b7df26b`.
+
+- **Server** (`server/routes/admin-observability.ts`):
+  - Two new `safeQuery` queries read human clicks from `click_events` for the window, with the optional slug filter and parameterized SQL.
+  - `totals.clicks` is the human click count.
+  - `topClicks` is the top 25 rows grouped by path, tag, label and href, each with `clicks` and `visitors`.
+- **Panel** (`src/pages/admin/TrafficPanel.tsx`): a Clicks stat sits in the stat row, which is now five columns wide. A "Top clicks" table shows page, element (label, else tag), target, clicks and visitors. Its empty state reads "No clicks recorded yet" rather than reusing the page-hits message, which would have been misleading for clicks.
+- **Test** (`tests/observability.test.ts`):
+  - `beforeEach` now clears `click_events`.
+  - A new test seeds 3 human clicks on one button across 2 visitors plus 1 bot click. It asserts `totals.clicks=3` and `topClicks[0]` has `clicks=3`, `visitors=2`.
+  - I updated the existing `totals` `toEqual` check to include `clicks: 0` and `topClicks: []`, since the new field would otherwise have broken it.
+
+The worktree had no `node_modules`, so I ran `pnpm install --frozen-lockfile` before the gate. I didn't capture a separate red run before building.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:51:26.759Z
+
+# Goal
+
+behavior. The owner wants raw traffic-log detail for every visitor, including their own visits: page_hits currently stores only a daily-rotating 16-hex hash, no IP, no user-agent, no full referrer and no identity, so one person cannot be followed across days or recognized. Extend the server-side recorder to store full request detail and identify signed-in Clerk users from the same-origin __session cookie.
+
+# Acceptance criteria
+
+- [ ] server/db-schema.ts ADDITIVE_COLUMNS gains a page_hits entry adding ip TEXT, ua TEXT, referrer TEXT, visitor_id TEXT, user_email TEXT, is_admin INTEGER DEFAULT 0, plus an index on page_hits(visitor_id) in MIGRATIONS.
+- [ ] server/page-hits.ts stores ip = req.ip (trustProxy is already on), ua sliced to 400, referrer = full Referer header sliced to 500, and visitor_id = first 16 hex of sha256(salt + '|' + ip + '|' + ua) where salt = process.env.ANALYTICS_VISITOR_SALT ?? 'bilko-visitor-v1' — stable across days. Export it as stableVisitorId(ip, ua). The existing daily visitor_hash column keeps being written unchanged.
+- [ ] server/page-hits.ts exports sessionCookie(cookieHeader: string|undefined): string|null that returns the __session cookie value; the onResponse hook, for non-bot hits only, resolves user_email via verifyClerkToken('Bearer ' + token) from '../server/clerk.js' and sets is_admin = 1 when that email is in ADMIN_EMAILS. Identity lookup happens inside the hook without delaying the response send and any failure leaves user_email null.
+- [ ] The 5000-row buffer cap and 90-day retention prune still apply to the new columns; all inserts stay parameterized.
+- [ ] tests/page-hits.test.ts (verifyClerkToken mocked via vi.mock) proves: ip, ua, referrer and visitor_id are stored; the same IP+UA on two different dates gets the same visitor_id; a request with Cookie '__session=tok' resolving to the admin email stores user_email and is_admin=1; a request with no cookie stores user_email null and is_admin 0; a bot UA never calls verifyClerkToken.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/page-hits.ts
+- server/db-schema.ts
+- tests/page-hits.test.ts
+
+# Implementation notes
+
+Read first: server/page-hits.ts (whole file, 162 lines — recordPageHit at ~73, flush INSERT at ~102, hook at ~130), server/db-schema.ts lines 138-155 (page_hits) and 540-565 (ADDITIVE_COLUMNS shape), server/clerk.ts lines 1-60 (ADMIN_EMAILS, verifyClerkToken — it caches token->email for 60s), tests/page-hits.test.ts.
+Steps:
+1. Tests first.
+2. Add columns via ADDITIVE_COLUMNS (do not edit the CREATE TABLE, existing prod tables need the ALTER path).
+3. In the hook, capture everything synchronously from req/reply, then do `void (async () => { email lookup; recordPageHit(...) })()` wrapped in try/catch so the response is never awaited on Clerk.
+4. Extend PageHitInput and the INSERT.
+Do not touch: server/clerk.ts, server/index.ts, server/routes/*.
+
+# Out of scope
+
+- Admin API or UI changes
+- Excluding the owner's own traffic from storage (it must be recorded, only flagged)
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/page-hits.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:53:01.708Z
+
+`page_hits` now stores IP, user-agent, full referrer, a cross-day `visitor_id` and the Clerk email for every hit. The page-hits test (12 tests) and `pnpm typecheck` both pass, and the commit landed as `4c1555db`. I didn't run the rest of the vitest suite, only the gate commands.
+
+- **`server/page-hits.ts`:**
+  - Rows now carry `ip` (sliced to 64), `ua` (400), `referrer` (500), `visitor_id` and `user_email`.
+  - It exports `stableVisitorId` and `sessionCookie`.
+  - The daily `visitor_hash` is written as before.
+  - For non-bot hits, the `__session` cookie is resolved with `verifyClerkToken` in a detached async block, so the response never waits on Clerk. `is_admin` is set when the email is in `ADMIN_EMAILS`.
+  - If the lookup fails, the hit is recorded with `user_email` null.
+  - The 5000-row cap, 90-day prune and parameterized INSERT are unchanged.
+- **`server/db-schema.ts`:** the six new columns are added under `page_hits` in `ADDITIVE_COLUMNS`.
+- **`tests/page-hits.test.ts`:**
+  - It covers every case in the acceptance criteria, with `verifyClerkToken` mocked.
+  - It also covers a lookup that throws and `sessionCookie` parsing.
+  - I dropped the old assertion that no IP or user-agent is stored, since that behavior is now reversed on purpose.
+  - The first run was red for the right reason: 4 of 12 failed before the implementation.
+
+**Deviation:** I put the `page_hits(visitor_id)` index in `server/db.ts` instead of `MIGRATIONS`, which the PRD named. `MIGRATIONS` runs before the `ADDITIVE_COLUMNS` ALTERs, so on an existing prod table the index would fail on the missing column and break boot. `server/db.ts` already has a post-ALTER index batch for this, so the index is one line added there. This is the extra file outside `# Files`.
+
+The worktree had no `node_modules`, so I ran `pnpm install --offline --frozen-lockfile` before the tests. I didn't run `/code-review` or `/security-review`. I checked the diff by hand instead: all SQL is parameterized, and the cookie token is only passed to `verifyClerkToken`.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:53:40.443Z
+
+# Goal
+
+validate. Plan: page-hits-recorder (server-side page_hits recorder), page-hits-wire (register it in server/index.ts), traffic-admin-api (GET /api/admin/traffic + traffic24h fix), click-events-endpoint (POST /api/analytics/click + click_events), traffic-panel-ui (TrafficPanel on /admin/observability), click-beacon-injection (site-wide nonced click beacon), clicks-report (top clicks in API + panel).
+
+# Acceptance criteria
+
+- [ ] page-hits-recorder: every AC in session-manager-operations/scheduler/epics/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/prds/1303-page-hits-recorder.md (or prds-archived/) holds in the tree.
+- [ ] page-hits-wire: every AC in .../prds/1304-page-hits-wire.md holds.
+- [ ] traffic-admin-api: every AC in .../prds/1305-traffic-admin-api.md holds.
+- [ ] click-events-endpoint: every AC in .../prds/1306-click-events-endpoint.md holds; no raw IP or input value is persisted.
+- [ ] traffic-panel-ui: every AC in .../prds/1307-traffic-panel-ui.md holds.
+- [ ] click-beacon-injection: every AC in .../prds/1308-click-beacon-injection.md holds; booting the server locally (pnpm build then the start script, bounded) and curling / and one /projects/<slug>/ shows the nonced beacon, and a subsequent flush puts rows in page_hits.
+- [ ] clicks-report: every AC in the clicks-report PRD file holds.
+- [ ] Write and commit session-manager-operations/reviews/validation/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/validate-server-traffic-capture.md.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- session-manager-operations/reviews/validation/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/validate-server-traffic-capture.md
+
+# Implementation notes
+
+Work as the validator persona — the procedure is your system prompt.
+Base: 14e1059877bb8fd7f187f0d65fc4026a07fbc0ac
+PRD files live under /home/bilko/Projects/Bilko/session-manager-operations/scheduler/epics/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/prds/ (or prds-archived/ once done); find each by slug.
+
+# Out of scope
+
+- (none)
+
+# Gate
+
+This PRD has no runnable check. Check each acceptance criterion by reading the files.
+
+```gate
+none
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## User — 2026-10-13T03:53:49.241Z
+
+# Goal
+
+behavior. Clicks must join to the same visitor as their page hits so the owner can read one visitor's full path (pages then clicks). Store the stable visitor_id, IP and signed-in user on every click using the helpers PRD page-hits-full-detail exported from server/page-hits.ts.
+
+# Acceptance criteria
+
+- [ ] server/db-schema.ts ADDITIVE_COLUMNS gains a click_events entry adding ip TEXT, visitor_id TEXT, user_email TEXT, is_admin INTEGER DEFAULT 0.
+- [ ] POST /api/analytics/click in server/routes/analytics.ts sets visitor_id = stableVisitorId(req.ip, user-agent) and ip = req.ip, and for non-bot requests resolves user_email/is_admin from sessionCookie(req.headers.cookie) via verifyClerkToken, exactly as page_hits does; failure leaves them null/0 and the endpoint still returns 204.
+- [ ] A click and a page hit from the same IP+UA produce the same visitor_id.
+- [ ] tests/analytics-click.test.ts adds tests for visitor_id/ip storage, the signed-in admin case (verifyClerkToken mocked) and the same-visitor_id-as-page_hits case.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/routes/analytics.ts
+- server/db-schema.ts
+- tests/analytics-click.test.ts
+
+# Implementation notes
+
+Read first: server/page-hits.ts (stableVisitorId, sessionCookie, landed by PRD page-hits-full-detail), server/routes/analytics.ts POST /api/analytics/click handler (PRD click-events-endpoint), server/clerk.ts lines 1-60, tests/analytics-click.test.ts.
+Steps: tests first; add columns via ADDITIVE_COLUMNS; extend the INSERT.
+Do not touch: server/page-hits.ts, server/click-beacon.ts, server/index.ts.
+
+# Out of scope
+
+- Changing the client beacon payload
+- Admin reporting
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/analytics-click.test.ts tests/page-hits.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:54:10.779Z
+
+Yes, we can, and it's now in the plan. Until this fix, the server simply never kept a log of visits, so even your own visits didn't show up. That was the bug. The first part of the fix has already landed:
+
+- `7dc9cf9`: the server now records every page it sends to anyone: the main site, the blog and all 22 apps. Visits are no longer counted only when a page's own code reports them.
+- `373114c`: a new traffic report (`/api/admin/traffic`), and the per-app traffic numbers now count those server-side visits.
+
+I had designed it privacy-first. It kept no IPs, used a visitor fingerprint that changed every day, and couldn't tell who you were. That's the wrong trade-off for a personal traffic log, so I queued four more jobs to change it:
+
+| # | Job | What you get |
+|---|---|---|
+| 1311 | `page-hits-full-detail` | Each page visit keeps the full IP address, browser details and the exact page that linked to it. It also gets a visitor ID that stays the same across days. If you're signed in, it records your email and marks the visit as yours. |
+| 1313 | `click-events-full-detail` | Clicks carry the same visitor ID, IP and signed-in user, so one visitor's page visits and clicks line up. |
+| 1316 | `traffic-visitors-api` | A server-log view of the last 200 visits with every detail, plus a list of visitors with their visits, clicks, first seen and last seen. Each visitor also gets a timeline of their visits and clicks in order. |
+| 1318 | `traffic-visitors-ui` | All of that on the Traffic panel at /admin/observability. Your own rows are marked "you", and a "Hide my own traffic" box is unchecked by default. |
+
+What's in place:
+
+- **Your visits are recorded and marked as yours, not excluded.** Even if you're the only visitor, you'll see each of your visits, the IP it came from and what you clicked.
+- **Only page loads are logged, not every file.** The scripts, images and data files a page loads aren't listed one by one; those stay in the bandwidth panel. A link from another site shows up as the referrer.
+- **Old log entries are deleted after 90 days.** Raw IPs and signed-in emails are now stored, so your privacy page should say that.
+- **The final check now covers everything.** I added the four new jobs to it, and it will confirm all 11 jobs against the code before the work counts as done.
+
+The remaining jobs run on their own in the background.
+
+## User — 2026-10-13T03:54:10.787Z
+
+VALIDATION REQUEST for PRD 1311-page-hits-full-detail — this is a request to validate, NOT a completion notice.
+PRD file (absolute path): /home/bilko/Projects/Bilko/session-manager-operations/scheduler/epics/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/prds-archived/1311-page-hits-full-detail.md
+The scheduler job self-reported outcome "completed". Treat that strictly as an UNVERIFIED CLAIM — it carries no authority about whether the work actually landed.
+
+Do the following, independently:
+1. Read the PRD's own "Acceptance criteria" section from the file above.
+2. Check EACH criterion against the actual working tree (read the real files, run the real commands).
+3. Run `git diff --stat` over the run window (and `git log --stat` for commits landed during the run). An empty diff on an implementation PRD means the work did not land — treat that as REFUTED.
+
+WARNING — the failure mode this validation exists to catch: an exit code of 0, a green queue row, or a confident completion report are NOT evidence that anything shipped. Only the working tree is evidence. (A prior PRD reported "completed" having made zero edits.)
+
+Reply with exactly one verdict word, VERIFIED or REFUTED, followed by per-criterion evidence: for each acceptance criterion cite file:line or paste the command output that proves or disproves it.
+
+## Agent — 2026-10-13T03:54:59.227Z
+
+VERIFIED
+
+PRD 1311 `page-hits-full-detail` landed in commit `4c1555db` (merged as `7d8aaa8`). That commit changes 4 files with 140 additions and 11 deletions: `server/db-schema.ts`, `server/db.ts`, `server/page-hits.ts` and `tests/page-hits.test.ts`. The gate passes: `pnpm vitest run tests/page-hits.test.ts` ran 12/12 tests green, and `pnpm typecheck` exited 0.
+
+**AC1: new columns and an index on `visitor_id`.**
+- **Columns: met.** `server/db-schema.ts:575-580` adds `ip`, `ua`, `referrer`, `visitor_id`, `user_email` and `is_admin INTEGER DEFAULT 0` to `ADDITIVE_COLUMNS.page_hits`.
+- **Index: met, but in a different file than the PRD named.** `idx_page_hits_visitor` is created at `server/db.ts:181`, not in `MIGRATIONS`. That is the correct place: `MIGRATIONS` runs before the column-adding step, so on the existing production database the index would be built before `visitor_id` exists and fail. `server/db.ts` was not in the PRD's file list, but the change is justified.
+
+**AC2: full detail and a stable visitor ID: met.**
+- `server/page-hits.ts:119-122` stores:
+  - `ip` (`req.ip`, which comes from line 179)
+  - `ua` cut to 400 characters
+  - `referrer` cut to 500 characters
+  - `visitor_id = stableVisitorId(ip, ua)`
+- `stableVisitorId` at lines 86-89 hashes `${salt}|${ip}|${ua}`, keeps the first 16 hex characters, and defaults the salt to `'bilko-visitor-v1'`. It does not include the date.
+- The daily `visitor_hash` is still written unchanged (line 113).
+- Tests: `stores ip, ua, referrer and a stable visitor_id` (test line 134) and `gives the same visitor_id on different dates but different daily hashes` (line 149).
+
+**AC3: recognizing signed-in users from the `__session` cookie: met.**
+- `sessionCookie` is exported at lines 91-99.
+- The hook at line 185 looks up the cookie only for non-bots.
+- Lines 188-193 call `verifyClerkToken('Bearer ' + token)` in a detached async block, so the response is never held up.
+- Any failure falls back to an anonymous hit (line 191).
+- `is_admin` is checked against `ADMIN_EMAILS` (line 124).
+- Tests: `identifies an admin from the __session cookie` (line 166), `leaves identity empty without a cookie or when lookup throws` (line 180) and `never verifies tokens for bots` (line 191).
+
+**AC4: buffer cap, 90-day retention and parameterized SQL: met.**
+- `MAX_BUFFER = 5000` (line 19) is enforced at line 102.
+- The 90-day prune that runs once a day is at lines 146-155.
+- The `INSERT` at lines 136-138 uses `?` placeholders for all 18 columns.
+
+**AC5: the five required tests: met.** All five listed scenarios are present (test lines 134-205) and pass.
+
+The validator job (1310) will still re-check this PRD with the rest of the plan.
+
+## Agent — 2026-10-13T03:55:42.951Z
+
+Every click now stores `ip`, `visitor_id`, `user_email` and `is_admin`, and a click and a page hit from the same IP and user-agent get the same `visitor_id`. The gate is green and the commit is `90aaca8`. Gate: 23 tests pass across `tests/analytics-click.test.ts` and `tests/page-hits.test.ts`, and `pnpm typecheck` exits 0.
+
+- **Schema:** `server/db-schema.ts` has a new `click_events` entry in `ADDITIVE_COLUMNS` for the four columns.
+- **Handler:** `POST /api/analytics/click` in `server/routes/analytics.ts` sets `visitor_id` from `stableVisitorId(req.ip, user-agent)` and `ip` from `req.ip`. The `user-agent` is the raw header, not the 300-character-truncated one used for `visitor_hash`, so it matches what `page_hits` hashes. For non-bot requests it reads the `__session` cookie with `sessionCookie` and resolves the email with `verifyClerkToken`. `is_admin` comes from `ADMIN_EMAILS`, as in `page_hits`.
+- **Failures:** if verification fails, `user_email` stays null and `is_admin` stays 0, and the endpoint still returns 204.
+- **Tests:** `tests/analytics-click.test.ts` gains five tests: `ip` and `visitor_id` storage, the signed-in admin case with `verifyClerkToken` mocked, verification failure, bots skipping the identity lookup, and the same `visitor_id` as a flushed page hit.
+- **Test setup:** the new tests send from separate `remoteAddress` values so the existing per-IP flood test doesn't rate-limit them. They also use a realistic browser user-agent, because the bot regex matches "Test".
+- **Tooling:** the worktree had no `node_modules`, so I ran `pnpm install --offline --frozen-lockfile` first. No tracked file changed from that.
+- **Reviews:** `/code-review` and `/security-review` weren't run as separate steps. I reviewed the diff myself. The cookie value is only passed to `verifyClerkToken` and never stored, and SQL stays parameterized.
+
+SCHEDULER_VERDICT: PASS
+
+## Agent — 2026-10-13T03:58:00.205Z
+
+All seven PRDs are verified. The review record is committed (b30a3cc).
+
+The PRD-listed vitest files (72 tests), `pnpm test` (1088 tests) and `pnpm typecheck` all passed. This worktree had no `node_modules`, so I symlinked the main repo's temporarily and removed the link afterwards. I didn't run `/code-review` or `/security-review` as slash commands. I self-reviewed the diff instead.
+
+Live boot check for 1308: I ran `pnpm build`, then `NODE_ENV=production node dist-server/server/index.js` with a temp SQLite file.
+- `curl /` and `curl /projects/academy/` each returned 200 with exactly one nonced beacon script.
+- After SIGTERM, `page_hits` held 2 rows (`/` and `/projects/academy/`) and `click_events` held 1.
+- A text/plain click with a `javascript:` href was accepted and stored with `href` null. The `click_events` row has no IP column.
+
+Findings:
+- **Important:** `page_hits` now stores raw IP, full user-agent and Clerk email, because PRD 1311 deliberately overrode the "no raw IP" rule in 1303. I treated that as a finding, not a refutation. Retention is 90 days.
+- **Important:** `visitor_hash` has no secret salt, so it could in theory be reversed offline. I rated it low risk.
+- **Minor:** every HTML response is buffered in memory so the beacon can be injected.
+- **Minor:** a stray empty untracked file named `<path>` sits at the worktree root. I didn't create or stage it.
+
+I didn't check the TrafficPanel in a browser, since I couldn't authenticate as admin. For 1307 I read the component, confirmed the mount in `ObservabilityPage.tsx` and ran typecheck.
+
+VALIDATION: page-hits-recorder VERIFIED
+VALIDATION: page-hits-wire VERIFIED
+VALIDATION: traffic-admin-api VERIFIED
+VALIDATION: click-events-endpoint VERIFIED
+VALIDATION: traffic-panel-ui VERIFIED
+VALIDATION: click-beacon-injection VERIFIED
+VALIDATION: clicks-report VERIFIED
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:58:31.694Z
+
+# Goal
+
+behavior. The owner wants to read traffic like a server log and see every visitor, including themselves. Extend GET /api/admin/traffic with full-detail recent hits and a visitors list, and add a per-visitor timeline endpoint merging page hits and clicks.
+
+# Acceptance criteria
+
+- [ ] GET /api/admin/traffic: recent becomes the latest 200 rows and each item adds ip, ua, referrer, visitorId, userEmail, isAdmin; totals.visitors counts DISTINCT visitor_id (falling back to visitor_hash where visitor_id is null).
+- [ ] GET /api/admin/traffic adds visitors: top 100 by hits [{ visitorId, ip, country, device, browser, os, userEmail, isAdmin, hits, clicks, pages (distinct paths), firstSeen, lastSeen }], bots excluded, admin included and flagged.
+- [ ] Optional query self=exclude removes is_admin=1 rows from every aggregate; default is include (the owner's own traffic is shown).
+- [ ] New GET /api/admin/traffic/visitor/:id (requireAdmin) returns the merged, time-ordered events for that visitor_id over the window: { ts, kind: 'hit'|'click', path, status?, label?, href?, referrer?, ip, ua } capped at 500.
+- [ ] All SQL parameterized and wrapped in safeQuery; tests/observability.test.ts covers: recent rows carry ip/ua/userEmail, visitors aggregates hits+clicks for one visitor_id, self=exclude drops admin rows, the timeline endpoint orders hits and clicks by time and 403s for non-admins.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/routes/admin-observability.ts
+- tests/observability.test.ts
+
+# Implementation notes
+
+Read first: server/routes/admin-observability.ts /api/admin/traffic handler (PRDs traffic-admin-api and clicks-report), server/db-schema.ts page_hits + click_events ADDITIVE_COLUMNS (PRDs page-hits-full-detail, click-events-full-detail), tests/observability.test.ts traffic tests.
+Steps: tests first; extend the handler; add the timeline route in registerObservabilityRoutes using a UNION ALL of page_hits and click_events ordered by ts_ms.
+Do not touch: src/, server/page-hits.ts, server/routes/analytics.ts.
+
+# Out of scope
+
+- UI changes
+- IP geolocation lookups
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/observability.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T03:59:56.825Z
+
+`GET /api/admin/traffic` now returns full-detail hits and a visitors list, and there is a new per-visitor timeline endpoint. The gate is green: 29 tests pass in `tests/observability.test.ts`, and `pnpm typecheck` printed no errors. The commit landed as 9a3d501.
+
+I made the three new tests fail first. Then I changed only `server/routes/admin-observability.ts` and `tests/observability.test.ts`.
+
+- **Recent hits:** `recent` is the latest 200 rows. Each item adds `ip`, `ua`, `referrer`, `visitorId`, `userEmail` and `isAdmin`.
+- **Visitor count:** `totals.visitors` counts distinct `COALESCE(visitor_id, visitor_hash)`.
+- **Visitors list:** `visitors` is the top 100 by hits, with bots excluded and admins included and flagged. Clicks per visitor come from a second grouped query on `click_events`.
+- **Excluding the owner:** `?self=exclude` removes `is_admin=1` rows from every aggregate. The default includes them.
+- **Timeline:** `GET /api/admin/traffic/visitor/:id` (admin only) merges page hits and clicks with a `UNION ALL`. It returns the latest 500 events over the window, oldest first. It also accepts `?days=`, which the PRD didn't ask for.
+- **Click events have no `ua` or `referrer` columns:** clicks in the timeline therefore always have a null `ua`, and no `referrer` key is returned for them.
+- **`node_modules` symlink:** the worktree had no `node_modules`, so I symlinked it to the main repo's. The symlink is untracked and not committed.
+- **Review steps:** the `/code-review` and `/security-review` skills were not run. I reviewed the diff myself. Every query is parameterized, the visitor id is truncated to 200 characters, and every query is wrapped in `safeQuery`.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T03:59:56.847Z
+
+VALIDATION REQUEST for PRD 1316-traffic-visitors-api — this is a request to validate, NOT a completion notice.
+PRD file (absolute path): /home/bilko/Projects/Bilko/session-manager-operations/scheduler/epics/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/prds-archived/1316-traffic-visitors-api.md
+The scheduler job self-reported outcome "completed". Treat that strictly as an UNVERIFIED CLAIM — it carries no authority about whether the work actually landed.
+
+Do the following, independently:
+1. Read the PRD's own "Acceptance criteria" section from the file above.
+2. Check EACH criterion against the actual working tree (read the real files, run the real commands).
+3. Run `git diff --stat` over the run window (and `git log --stat` for commits landed during the run). An empty diff on an implementation PRD means the work did not land — treat that as REFUTED.
+
+WARNING — the failure mode this validation exists to catch: an exit code of 0, a green queue row, or a confident completion report are NOT evidence that anything shipped. Only the working tree is evidence. (A prior PRD reported "completed" having made zero edits.)
+
+Reply with exactly one verdict word, VERIFIED or REFUTED, followed by per-criterion evidence: for each acceptance criterion cite file:line or paste the command output that proves or disproves it.
+
+## User — 2026-10-13T04:00:43.874Z
+
+# Goal
+
+wire. Surface the full-detail traffic data from PRD traffic-visitors-api in src/pages/admin/TrafficPanel.tsx so the owner can read a server-log style view of every hit, see each visitor (themselves marked), and open one visitor's full timeline of pages and clicks.
+
+# Acceptance criteria
+
+- [ ] TrafficPanel's 'Recent hits' table shows the 200 latest rows with local time (with zone abbreviation), path, status, IP, country, device/browser/OS, referrer, signed-in email and a 'you' badge when isAdmin; the full user-agent shows on hover (title attribute).
+- [ ] A new 'Visitors' table lists the visitors array (visitor id short form, IP, country, device, email, hits, clicks, pages, first/last seen) with admin rows badged 'you'.
+- [ ] Clicking a visitor row (or the visitor cell in Recent hits) fetches /api/admin/traffic/visitor/<id>?days=<days> and shows that visitor's merged hit/click timeline in an inline detail section with a close control.
+- [ ] A 'Hide my own traffic' checkbox, unchecked by default, adds &self=exclude to the traffic fetch.
+- [ ] Empty and error states follow the panel's existing treatment; pnpm typecheck passes.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- src/pages/admin/TrafficPanel.tsx
+
+# Implementation notes
+
+Read first: src/pages/admin/TrafficPanel.tsx (whole file; PRDs traffic-panel-ui and clicks-report), server/routes/admin-observability.ts /api/admin/traffic and /api/admin/traffic/visitor/:id handlers (PRD traffic-visitors-api) for the exact response shapes, src/pages/admin/BandwidthPanel.tsx for fetch/auth idiom.
+Steps: extend the TS interfaces, add the table/section/checkbox. No new dependencies.
+Do not touch: server/, src/pages/admin/ObservabilityPage.tsx.
+
+# Out of scope
+
+- Server changes
+- Charts libraries
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm typecheck && timeout 600 pnpm test
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T04:02:12.033Z
+
+VERIFIED
+
+PRD 1316 `traffic-visitors-api` landed in commit `9a3d501` (merged as `d2b1928`). It changes `server/routes/admin-observability.ts` (+103/−6) and `tests/observability.test.ts` (+58). The gate passes: `pnpm vitest run tests/observability.test.ts` ran 29/29 tests green, and `pnpm typecheck` exited 0.
+
+**AC1: the recent-hits list returns the latest 200 rows with full detail, and the visitor total uses the stable visitor ID: met.**
+- `admin-observability.ts:263-265` selects `ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin` with `ORDER BY ts_ms DESC LIMIT 200`.
+- Lines 330-335 return `isAdmin` in camelCase.
+- `totals.visitors` counts `COUNT(DISTINCT COALESCE(visitor_id, visitor_hash))`, using `VKEY` from line 204 inside the query at line 209.
+
+**AC2: a top-100 visitors list with hits, clicks, pages, and first and last seen; bots excluded, admin flagged: met.**
+- Lines 281-292 group by the stable visitor key, excluding bots and error pages, with `LIMIT 100`.
+- Lines 294-298 count clicks per visitor; they are merged into the list from line 300.
+- `isAdmin` is returned at line 344.
+
+**AC3: `self=exclude`, with your own traffic included by default: met.**
+- Line 200 adds `AND COALESCE(is_admin, 0) = 0` only when the query has `self=exclude`.
+- That filter is folded into the shared filter at line 201, which every aggregate uses.
+
+**AC4: `GET /api/admin/traffic/visitor/:id` returns one visitor's time-ordered timeline: met.**
+- Lines 357-399 require admin access.
+- The query combines page hits and clicks (`UNION ALL`), keeps the newest 500, then returns them oldest first.
+- Each event carries `ts`, `kind`, `path` and `ip` and `ua`, plus `status`, `label`, `href` or `referrer` where the event has one.
+
+**AC5: parameterized SQL inside `safeQuery`, plus tests: met.**
+- Every query uses `?` placeholders inside `safeQuery`.
+- New tests:
+  - `recent rows carry ip/ua/userEmail and visitors aggregate hits+clicks`
+  - `self=exclude drops admin rows; default includes and flags them`
+  - `timeline merges hits and clicks in time order and 403s non-admins`
+
+**Minor finding, follow-up queued:** some visitor counts still use the daily fingerprint.
+- **What:** `byDay`, `topPages` and `bySlug` (lines 221-239) and `topClicks` (line 274) still count the fingerprint that changes every day (`visitor_hash`). Totals and the visitors list use the stable ID.
+- **Effect:** over a 7- or 30-day window, one person shows as 1 visitor in the totals but once per day in the per-page and per-app tables.
+- **Why it isn't a failure:** none of 1316's criteria covered these tables.
+- **Fix:** I queued **PRD 1327 `traffic-visitor-key-consistency`** to count every visitor number by the stable ID, with a test spanning two days.
+
+The final-check job (1310) already ran (merge `bf3cca2`) before 1316, 1318 and the new 1327 landed. It therefore didn't cover them, and these per-job validation requests are what checks them.
+
+## Agent — 2026-10-13T04:03:08.545Z
+
+`TrafficPanel.tsx` now shows the full-detail Recent hits, a Visitors table, per-visitor timelines and a "Hide my own traffic" checkbox. `pnpm typecheck` and `pnpm test` both pass (100 files, 1097 tests), and the work is committed as `a834253`.
+
+I did not run the page in a browser, and I wrote no new test because the PRD names none. The only file I changed is `src/pages/admin/TrafficPanel.tsx`.
+
+- **Recent hits:** `DataTable` replaced the hand-built table. Columns are time (with zone abbreviation), path (BOT badge kept), status, IP, country, device / browser / OS, referrer, email and visitor. The full user-agent is the `title` on the device / browser / OS cell. Admin rows get a "you" badge. I only added a `title` with the full referrer on the referrer cell, which the PRD didn't ask for.
+- **Visitors:** a new table of the `visitors` array with short visitor id, IP, country, device, email, hits, clicks, pages and first/last seen. Admin rows get the "you" badge. Clicking a row opens that visitor's timeline.
+- **Timeline:** clicking a Visitors row or the visitor cell in Recent hits fetches `/admin/traffic/visitor/<id>?days=<days>`. The merged hit/click events show in an inline section with a "Close ×" button, plus loading, error and empty states.
+- **Hide my own traffic:** unchecked by default; when checked it adds `&self=exclude` to the traffic fetch.
+- **Empty and error states:** these reuse the panel's existing `empty` text and red error line.
+
+The worktree had no `node_modules`, so I ran `pnpm install --frozen-lockfile` before the gate.
+
+The `/code-review` and `/security-review` commands were not run; I reviewed my own diff instead. All values render through React's escaping and the visitor id goes through `encodeURIComponent`, so I found no injection or unsafe-input issues.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T04:03:08.621Z
+
+VALIDATION REQUEST for PRD 1318-traffic-visitors-ui — this is a request to validate, NOT a completion notice.
+PRD file (absolute path): /home/bilko/Projects/Bilko/session-manager-operations/scheduler/epics/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/prds-archived/1318-traffic-visitors-ui.md
+The scheduler job self-reported outcome "completed". Treat that strictly as an UNVERIFIED CLAIM — it carries no authority about whether the work actually landed.
+
+Do the following, independently:
+1. Read the PRD's own "Acceptance criteria" section from the file above.
+2. Check EACH criterion against the actual working tree (read the real files, run the real commands).
+3. Run `git diff --stat` over the run window (and `git log --stat` for commits landed during the run). An empty diff on an implementation PRD means the work did not land — treat that as REFUTED.
+
+WARNING — the failure mode this validation exists to catch: an exit code of 0, a green queue row, or a confident completion report are NOT evidence that anything shipped. Only the working tree is evidence. (A prior PRD reported "completed" having made zero edits.)
+
+Reply with exactly one verdict word, VERIFIED or REFUTED, followed by per-criterion evidence: for each acceptance criterion cite file:line or paste the command output that proves or disproves it.
+
+## Agent — 2026-10-13T04:04:36.920Z
+
+VERIFIED
+
+PRD 1318 `traffic-visitors-ui` landed in commit `a834253` (merged as `54fe0d0`). It changes `src/pages/admin/TrafficPanel.tsx` (+189/−40). The gate passes: `pnpm typecheck` exited 0, and `pnpm test` ran 100 test files with 1099/1099 tests green.
+
+**AC1: Recent hits shows full detail per row: met.**
+- `TrafficPanel.tsx:441-480` renders `data.recent`, which the server caps at 200 rows.
+- Columns: time, path, status, IP, country, device/browser/OS, referrer, email and visitor.
+- Times use `fmtTime` with `timeZoneName: 'short'` (line 76).
+- A "you" badge appears on admin rows (lines 81, 474), and bot rows are marked with a BOT tag (lines 450-453).
+- The full browser details show on hover via `title={r.ua}` (line 461).
+
+**AC2: A Visitors table with your rows badged "you": met.**
+- Lines 372-391 list short visitor ID, IP, country, device, email, hits, clicks, pages, first seen and last seen.
+- Admin rows get `<YouBadge />` (line 380).
+
+**AC3: Clicking a visitor opens their timeline: met.**
+- Clicking a row in the Visitors table (line 377) opens the timeline. So does the visitor button in Recent hits (lines 467-472).
+- Lines 187-209 then fetch `/admin/traffic/visitor/<id>?days=<days>`.
+- The timeline section at lines 393-437 shows page visits and clicks in time order and has a "Close ×" button (lines 399-404).
+
+**AC4: "Hide my own traffic" is unchecked by default: met.**
+- `useState(false)` at line 160, so the box starts unchecked.
+- The checkbox is at lines 241-245.
+- When checked, `&self=exclude` is added to the fetch (line 170).
+
+**AC5: Empty and error states, and typecheck: met.**
+- Empty state: `No hits recorded yet — recording since …` at lines 212-214.
+- Errors show for both the main fetch (line 256) and the timeline (line 405).
+- An empty timeline shows its own message (line 433).
+- `pnpm typecheck` exited 0.
+
+**Plan status:** every job in this plan has now passed my checks except PRD 1327 `traffic-visitor-key-consistency`, which is still queued. The final check (1310) ran before 1316 and 1318 landed, so these per-job checks are what covered them.
+
+## User — 2026-10-13T04:06:12.875Z
+
+# Goal
+
+behavior. In GET /api/admin/traffic, totals.visitors and the visitors list count COALESCE(visitor_id, visitor_hash), but byDay, topPages, bySlug and topClicks still count DISTINCT visitor_hash (a hash that changes daily). Over a multi-day window one person is counted once in totals but once per day in the per-page/per-app tables, so the numbers disagree. Switch every visitor count to the same stable key.
+
+# Acceptance criteria
+
+- [ ] In server/routes/admin-observability.ts the /api/admin/traffic handler's byDay, topPages, bySlug and topClicks queries count COUNT(DISTINCT COALESCE(visitor_id, visitor_hash)) (reuse the existing VKEY constant) instead of COUNT(DISTINCT visitor_hash); no other query changes.
+- [ ] tests/observability.test.ts adds a test: one visitor_id with hits on the same path on two different dates (different visitor_hash values) yields totals.visitors=1, topPages[0].visitors=1 and bySlug[0].visitors=1; and two clicks on one button from that visitor_id on different dates yields topClicks[0].visitors=1.
+
+# Files
+
+Change only these files. If the work needs another file, change it and say why in your report.
+
+- server/routes/admin-observability.ts
+- tests/observability.test.ts
+
+# Implementation notes
+
+Read first: server/routes/admin-observability.ts lines 190-300 (the /api/admin/traffic handler; VKEY is defined at ~line 204), tests/observability.test.ts the traffic tests and the hit() seeding helper added for PRD traffic-visitors-api.
+Steps: write the failing test first, then replace the four COUNT(DISTINCT visitor_hash) expressions with COUNT(DISTINCT ${VKEY}).
+Do not touch: src/, server/page-hits.ts, server/routes/analytics.ts.
+
+# Out of scope
+
+- UI changes
+- Indexing COALESCE expressions
+
+# Gate
+
+Run these commands last, in order. Each must exit 0.
+
+```gate
+timeout 300 pnpm vitest run tests/observability.test.ts && timeout 300 pnpm typecheck
+```
+
+## Engineering standards
+
+Your system prompt carries the ordered run contract.
+`/home/bilko/.npm/_npx/5346543b21849140/node_modules/claude-code-session-manager/plugins/session-manager-dev/skills/develop/standards.md` holds the reasoning behind each contract line (Performance, Debugging,
+API reuse, TDD, Execution discipline) — read the section a line points at when it is unclear;
+do not re-read the whole file every run.
+
+## Agent — 2026-10-13T04:07:17.315Z
+
+`GET /api/admin/traffic` now counts visitors the same way in every table. `byDay`, `topPages`, `bySlug` and `topClicks` use `COUNT(DISTINCT ${VKEY})`, where `VKEY` is `COALESCE(visitor_id, visitor_hash)`. This is the same key `totals.visitors` and the visitors list already used. The change is one line each in `server/routes/admin-observability.ts` (lines 221, 226, 237, 276); no other query changed.
+
+I added a test to `tests/observability.test.ts`. It seeds one `visitor_id` with page hits and clicks on the same path on two dates, with a different `visitor_hash` each day. The four checks:
+- `totals.visitors` is 1.
+- `topPages[0].visitors` is 1.
+- `bySlug[0].visitors` is 1.
+- `topClicks[0].visitors` is 1.
+
+- **Red run:** before the fix, the test failed at the `topPages` check with `visitors` 2 instead of 1.
+- **Gate:** `tests/observability.test.ts` passes (30 of 30) and `pnpm typecheck` is clean.
+- **Install:** the worktree had no `node_modules`, so I ran `pnpm install --frozen-lockfile --offline` first.
+- **Review:** I read the diff myself; I didn't run `/code-review` or `/security-review`. The change swaps one constant-built SQL expression for another and adds no new input handling.
+- **Commit:** `5b013cf`, with only those two files staged.
+
+SCHEDULER_VERDICT: PASS
+
+## User — 2026-10-13T04:07:17.336Z
+
+VALIDATION REQUEST for PRD 1327-traffic-visitor-key-consistency — this is a request to validate, NOT a completion notice.
+PRD file (absolute path): /home/bilko/Projects/Bilko/session-manager-operations/scheduler/epics/inspect-and-confirm-it-work-fix-otherwise-admin--6406d452/prds-archived/1327-traffic-visitor-key-consistency.md
+The scheduler job self-reported outcome "completed". Treat that strictly as an UNVERIFIED CLAIM — it carries no authority about whether the work actually landed.
+
+Do the following, independently:
+1. Read the PRD's own "Acceptance criteria" section from the file above.
+2. Check EACH criterion against the actual working tree (read the real files, run the real commands).
+3. Run `git diff --stat` over the run window (and `git log --stat` for commits landed during the run). An empty diff on an implementation PRD means the work did not land — treat that as REFUTED.
+
+WARNING — the failure mode this validation exists to catch: an exit code of 0, a green queue row, or a confident completion report are NOT evidence that anything shipped. Only the working tree is evidence. (A prior PRD reported "completed" having made zero edits.)
+
+Reply with exactly one verdict word, VERIFIED or REFUTED, followed by per-criterion evidence: for each acceptance criterion cite file:line or paste the command output that proves or disproves it.
+
+## Agent — 2026-10-13T04:07:50.024Z
+
+VERIFIED
+
+PRD 1327 `traffic-visitor-key-consistency` landed in commit `5b013cf` (merged as `8390c46`). It changes `server/routes/admin-observability.ts` (+4/−4) and `tests/observability.test.ts` (+24). The gate passes: `pnpm vitest run tests/observability.test.ts` ran 30/30 tests green, and `pnpm typecheck` exited 0.
+
+**AC1: every visitor count in the traffic report uses the stable visitor ID: met.**
+- The diff swaps `COUNT(DISTINCT visitor_hash)` for `COUNT(DISTINCT ${VKEY})` in all four queries: `byDay`, `topPages`, `bySlug` and `topClicks`.
+- Searching `admin-observability.ts` for `COUNT(DISTINCT visitor_hash)` now finds nothing.
+- No other query changed.
+
+**AC2: a test proves one visitor counts once across two days: met.**
+- The new test is `counts one visitor_id once across days in totals, topPages, bySlug and topClicks`.
+- It seeds one visitor ID, `stable-vid`, on two different dates with different daily fingerprints (`hash-day1` and `hash-day2`), for both page visits and clicks.
+- It asserts:
+  - `totals.visitors = 1`
+  - `topPages[0]` has `visitors: 1`
+  - `bySlug[0]` has `visitors: 1`
+  - `topClicks[0]` has `clicks: 2, visitors: 1`
+
+**Plan status:** I have now verified all 12 jobs in this plan (1303–1309, 1311, 1313, 1316, 1318 and 1327). The final check (1310) ran before 1316, 1318 and 1327 landed, so per-job checks like this one covered those three. Nothing is left open.
+
+What this gives you: once the latest `main` deploys, /admin/observability has a Traffic panel. It shows a log of every page the server sends, with IP, browser and device details, referrer and signed-in email. It also has a visitors list with your own rows marked "you", top clicks, and a timeline of visits and clicks for each visitor. Visitor counts now agree across every table.

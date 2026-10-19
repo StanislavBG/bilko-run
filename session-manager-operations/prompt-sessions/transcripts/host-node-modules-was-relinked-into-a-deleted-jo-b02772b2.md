@@ -1,0 +1,41 @@
+# Transcript — host-node-modules-was-relinked-into-a-deleted-jo-b02772b2
+
+## User — 2026-10-19T04:54:38.035Z
+
+This session is INBOUND FEEDBACK from another project: Bilko-Academy (/home/bilko/Projects/Bilko-Academy, session adopt-bilko-run-observability-tagging-all-lesson-c078ac8a). It was raised while working on: Adopt bilko.run observability tagging: all lessons/pages, main buttons, learning flows. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.
+
+Goal: Host node_modules was relinked into a deleted job worktree, breaking the publish a11y gate
+
+## Why
+Publishing Academy on 2026-10-18 (~8:10 PM PDT) failed the a11y gate with "Playwright not installed". The cause: every top-level link in /home/bilko/Projects/Bilko/node_modules (37 of them, e.g. @playwright/test, fastify, vite, zod) pointed into ~/.local/state/session-manager/session-manager-job-worktrees/79378c73f24575a7/1377-cleanup-host-kit-telemetry/node_modules/.pnpm/..., a job worktree that no longer exists. Any process that loaded host dependencies fresh (publish gates, a restarted server) would fail. I repaired it with `CI=true pnpm install --frozen-lockfile` in the host repo (0 broken links remain), and the publish then passed all six gates. The same thing will happen again unless the cause is fixed.
+
+## Acceptance criteria
+- [ ] Find which step in job 1377-cleanup-host-kit-telemetry (or the worktree setup) rewrote the main checkout's node_modules links to worktree-relative targets
+- [ ] Running pnpm install inside a job/epic worktree whose node_modules is a symlink to the main checkout can no longer repoint the main checkout's links at the worktree
+- [ ] A check (e.g. before publish or in the a11y gate) reports dangling node_modules links clearly, instead of the misleading 'Playwright not installed'
+
+## Details
+Evidence: `ls -la node_modules/@playwright/test` in the host repo showed `-> ../../../../.local/state/session-manager/session-manager-job-worktrees/79378c73f24575a7/1377-cleanup-host-kit-telemetry/node_modules/.pnpm/@playwright+test@1.59.1/...` (dated Oct 18 20:00). `find node_modules -maxdepth 2 -type l ! -exec test -e {} \; -print` listed 37 dangling links. A plain `pnpm install` refused to run without a TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY); `CI=true pnpm install --frozen-lockfile` fixed it and re-ran host-kit's prepare step, rebuilding packages/host-kit/dist from the same source. Likely mechanism: session-manager worktrees symlink node_modules to the main checkout, so a pnpm install run inside the worktree writes links relative to the worktree into the shared directory. Gate code: mcp-host-server/src/gates/a11y.ts:78-102.
+
+Reference: /home/bilko/Projects/Bilko/mcp-host-server/src/gates/a11y.ts
+
+## Agent — 2026-10-19T05:08:27.366Z
+
+The report was correct, and all three acceptance criteria are now met. The fix is commit `ba8bd8fc`, on this epic branch only; I haven't pushed it to `main`.
+
+**1. What broke the main checkout.** Job `1377-cleanup-host-kit-telemetry` ran from 7:59 to 8:01 PM PDT. Its host-kit tests failed with a missing `@testing-library/react`, so the agent ran `CI=true pnpm install --frozen-lockfile --filter host-kit...` inside the job's worktree. That worktree's `node_modules` was a symlink to `/home/bilko/Projects/Bilko/node_modules`. pnpm installed through the link and rewrote every top-level link in the main checkout to point into the worktree, so they all broke when the worktree was deleted. I reproduced this in a scratch directory with pnpm 10.32.
+- **Why it can still happen:** Session Manager's source already stops symlinking `node_modules` for pnpm projects (commit `111355ed`, Oct 18 9:08 AM PDT). But the instance actually running is v0.119.0, started Oct 16 7:42 PM PDT, and it predates that fix. This epic worktree, created at 9:54 PM PDT tonight, also had the symlink.
+- **Extra finding:** a frozen install that fails because the lockfile doesn't match still deletes the shared links before it stops.
+
+**2. The guard.** A new root `.pnpmfile.cjs` stops any install, add, update, `--filter` or `--lockfile-only` run when `node_modules` is a symlink. It stops before pnpm touches anything, and the error says to remove the link and install again. `pnpm run`, `exec` and `test` are unaffected.
+- I checked it with the exact command job 1377 ran against a symlinked copy of this repo: it refused, and the link's target directory stayed empty.
+- **Lockfile:** pnpm now records a checksum of `.pnpmfile.cjs` in `pnpm-lock.yaml` (a one-line change, committed). Every future edit to the guard file needs a lockfile update in the same commit, or frozen installs, including on Render, will fail with `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`.
+
+**3. Clearer gate message.** When Playwright or axe-core can't be loaded, the a11y gate now checks for a broken link first. It names the link, where it points, how many top-level links are broken, and the repair command (`cd <root> && CI=true pnpm install --frozen-lockfile`). The check is in `mcp-host-server/src/gates/dangling-deps.ts` and is called from `a11y.ts`; I rebuilt `mcp-host-server/dist/` to match.
+
+**Checks:** typecheck passes and all 1264 tests pass, including the new `tests/dangling-node-modules.test.ts`. I updated the test count in `CLAUDE.md`. The main checkout currently has 0 broken links.
+
+**Also done:**
+- I replaced this worktree's symlink with its own `node_modules`, installed offline from the local pnpm store.
+- I deleted an empty, untracked file literally named `<path>` that appeared in the worktree. It isn't mine, and job 1377 also hit and removed one.
+- I sent a proposed bug session to session-manager (`running-session-manager-v0-119-0-started-oct-16--b03ffd82`). It asks for the fixed build to be released or restarted, a warning when a stale build is running, and detection of main-checkout links that point into worktrees. It only runs if someone approves it there. Until then, other pnpm projects on this machine are still exposed; Bilko is protected by the new guard.

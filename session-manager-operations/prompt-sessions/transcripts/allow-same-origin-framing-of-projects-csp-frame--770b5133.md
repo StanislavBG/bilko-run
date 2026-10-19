@@ -1,0 +1,48 @@
+# Transcript — allow-same-origin-framing-of-projects-csp-frame--770b5133
+
+## User — 2026-10-17T19:06:17.737Z
+
+This session is INBOUND FEEDBACK from another project: Bilko-Game-Academy (/home/bilko/Projects/Bilko-Game-Academy, session tell-me-a-summary-of-this-project-and-run-it-loc-9d48a074). It was raised while working on: Tell me a summary of this project and run it local to see it  What type of games can this project host?  Where is it hosted?  How does it handle persistence?   Overview of the project. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.
+
+Goal: Allow same-origin framing of /projects/* (CSP frame-ancestors 'self') so Game Academy can host engine games in an iframe
+
+## Why
+The owner wants Game Academy (/projects/game-academy/) to host games built in Godot (like escape-velocity) or Unity, as long as they follow an Academy protocol. Each engine game stays its own static-path slug with its own budget (escape-velocity is ~29.7 MB gz), and Game Academy loads it in a same-origin iframe, talking to it through a postMessage bridge. bilko.run currently sends `frame-ancestors 'none'` in a REPORT-ONLY CSP, so this works today, but it will break the moment that CSP is enforced.
+
+## Proposed plan
+1. For responses under /projects/<slug>/, use `frame-ancestors 'self'` instead of 'none' (both in report-only now and in any future enforced CSP).
+2. Keep 'none' for host pages outside /projects/ if desired.
+3. Add a test asserting /projects/escape-velocity/ carries frame-ancestors 'self'.
+
+## Acceptance criteria
+- [ ] curl -sI https://bilko.run/projects/escape-velocity/ shows frame-ancestors 'self' (not 'none')
+- [ ] No X-Frame-Options: DENY on /projects/* responses
+- [ ] Regression test covers it
+
+## Details
+Evidence 2026-10-17: `curl -sI https://bilko.run/projects/escape-velocity/` -> content-security-policy-report-only: ... frame-ancestors 'none'; cross-origin-opener-policy: same-origin; no COEP; no X-Frame-Options. Game Academy's Academy Bridge Protocol (docs/13 in Bilko-Game-Academy) relies on same-origin iframes only, never cross-origin.
+
+## Agent — 2026-10-17T19:10:26.169Z
+
+The report was right. `server/security-headers.ts` sent `frame-ancestors 'none'` on every page that uses the site's main CSP, `/projects/*` included. The fix is committed on this epic branch as `46006eb` and has not been merged to `main` or deployed.
+
+- **Fix:** I added `isStaticProjectPath()`. Anything under `/projects/` now gets `frame-ancestors 'self'`; every other host page keeps `'none'`. This applies whether the CSP is report-only (as now) or enforced via `BILKO_CSP_ENFORCE=1`.
+- **X-Frame-Options:** the Fastify server never sets it, so `/projects/*` responses don't send it. The only mention is `public/projects/session-manager/_headers` (`X-Frame-Options: DENY`). Nothing in `server/` reads that file, so I left it alone.
+- **Test:** a new case in `tests/security-headers.test.ts` checks that `/projects/escape-velocity/?v=1` gets `frame-ancestors 'self'` and no `X-Frame-Options`, and that `/test-html` and `/products/session-manager` still get `'none'`. The file's 15 tests pass and `pnpm typecheck` is clean; I didn't run the full test suite.
+- **Docs:** I added a "Same-origin framing only" rule to the `static-path` section of `docs/host-contract.md`.
+
+The first acceptance check, `curl -sI https://bilko.run/projects/escape-velocity/` showing `frame-ancestors 'self'`, will only pass once this branch is merged and Render redeploys.
+
+## User — 2026-10-17T23:29:33.444Z
+
+finish all and merge
+
+## Agent — 2026-10-17T23:45:11.024Z
+
+The change is merged to `main` and live on bilko.run; all three acceptance checks pass.
+
+- **Merge:** merge commit `fa28600`, on top of the latest `origin/main`, pushed to `StanislavBG/bilko-run` `main`. On the merged tree the full test suite passed (106 files, 1185 tests) and `pnpm typecheck` was clean.
+- **Live:** at 4:45 PM PDT, `curl -sI https://bilko.run/projects/escape-velocity/` returned `frame-ancestors 'self'` and no `X-Frame-Options` header. The home page `https://bilko.run/` still returns `frame-ancestors 'none'`.
+- **Regression test:** the new case in `tests/security-headers.test.ts` checks the `escape-velocity` path, and the full suite passed with it.
+
+Game Academy can now load engine games in a same-origin iframe, and that will keep working when the CSP is switched from report-only to enforced. I deleted the temporary merge worktree I made; the epic branch and this worktree are still there.

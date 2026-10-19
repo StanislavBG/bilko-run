@@ -1,0 +1,98 @@
+{
+  "session": {
+    "id": "live-bilko-host-registry-still-has-no-offering-p-456f236e",
+    "cwd": "/home/bilko/Projects/Bilko",
+    "goalText": "Live bilko-host registry still has no offering/pricing/callToAction for academy",
+    "claudeSessionId": "dc3d01ce-be76-4eb9-ac2c-0257abf54f28",
+    "status": "completed",
+    "createdAt": "2026-10-17T19:09:02.254Z",
+    "completedAt": "2026-10-18T18:12:29.463Z",
+    "tag": "bug",
+    "openingPrompt": "This session is INBOUND FEEDBACK from another project: Bilko-Academy (/home/bilko/Projects/Bilko-Academy, session sync-bilko-listing-json-with-the-live-listing-of-cc533d10). It was raised while working on: Sync bilko.listing.json with the live listing (offering/pricing/callToAction/avoidClaims) so the next publish doesn't wipe them. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.\n\nGoal: Live bilko-host registry still has no offering/pricing/callToAction for academy\n\n## Why\nAcademy synced bilko.listing.json with the marketing fields Bilko set on 2026-10-15 (commit 6abd311 in Bilko-Academy). But the running bilko-host MCP's get_project(\"academy\") on 2026-10-17 returns only audience, talkingPoints and shareImage. So the update_project_listing change, or commit ee742ec, never reached the live host. X marketing will keep skipping Academy until that's fixed.\n\n## Acceptance criteria\n- [ ] get_project academy returns offering, pricing, callToAction and avoidClaims\n- [ ] https://bilko.run/api/projects returns academy with non-empty offering, pricing and call_to_action\n\n## Details\nObserved 2026-10-17 via mcp bilko-host get_project slug=academy: the listing has only audience, talkingPoints and shareImage. Possible causes: the host process is running a stale registry and needs a restart or redeploy, or the edit landed in src/data/standalone-projects.json without going through the live host's store. Academy's bilko.listing.json now carries all four fields, so the next Academy publish (or an update_project_listing call) should fill them in. Worth checking the outdoor-hours entry too.",
+    "source": {
+      "producer": "cross-project-feedback",
+      "fromCwd": "/home/bilko/Projects/Bilko-Academy",
+      "fromEpicId": "sync-bilko-listing-json-with-the-live-listing-of-cc533d10"
+    },
+    "agentType": "architect",
+    "sections": [
+      {
+        "kind": "input",
+        "label": "Input",
+        "text": "This session is INBOUND FEEDBACK from another project: Bilko-Academy (/home/bilko/Projects/Bilko-Academy, session sync-bilko-listing-json-with-the-live-listing-of-cc533d10). It was raised while working on: Sync bilko.listing.json with the live listing (offering/pricing/callToAction/avoidClaims) so the next publish doesn't wipe them. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.",
+        "source": "/home/bilko/Projects/Bilko-Academy"
+      },
+      {
+        "kind": "goal",
+        "label": "Goal",
+        "text": "Goal: Live bilko-host registry still has no offering/pricing/callToAction for academy\n\n## Why\nAcademy synced bilko.listing.json with the marketing fields Bilko set on 2026-10-15 (commit 6abd311 in Bilko-Academy). But the running bilko-host MCP's get_project(\"academy\") on 2026-10-17 returns only audience, talkingPoints and shareImage. So the update_project_listing change, or commit ee742ec, never reached the live host. X marketing will keep skipping Academy until that's fixed.\n\n## Acceptance criteria\n- [ ] get_project academy returns offering, pricing, callToAction and avoidClaims\n- [ ] https://bilko.run/api/projects returns academy with non-empty offering, pricing and call_to_action\n\n## Details\nObserved 2026-10-17 via mcp bilko-host get_project slug=academy: the listing has only audience, talkingPoints and shareImage. Possible causes: the host process is running a stale registry and needs a restart or redeploy, or the edit landed in src/data/standalone-projects.json without going through the live host's store. Academy's bilko.listing.json now carries all four fields, so the next Academy publish (or an update_project_listing call) should fill them in. Worth checking the outdoor-hours entry too."
+      }
+    ],
+    "worktree": {
+      "dir": "/home/bilko/.local/state/session-manager/session-manager-epic-worktrees/79378c73f24575a7/live-bilko-host-registry-still-has-no-offering-p-456f236e",
+      "branch": "sm-epic/live-bilko-host-registry-still-has-no-offering-p-456f236e",
+      "baseCwd": "/home/bilko/Projects/Bilko",
+      "status": "merged"
+    }
+  },
+  "events": [
+    {
+      "id": "2ea8c2fb-81f2-4b05-8bb3-26d43f539511",
+      "promptSessionId": "live-bilko-host-registry-still-has-no-offering-p-456f236e",
+      "kind": "prompt",
+      "causedByEventId": null,
+      "at": "2026-10-17T19:09:02.254Z",
+      "text": "This session is INBOUND FEEDBACK from another project: Bilko-Academy (/home/bilko/Projects/Bilko-Academy, session sync-bilko-listing-json-with-the-live-listing-of-cc533d10). It was raised while working on: Sync bilko.listing.json with the live listing (offering/pricing/callToAction/avoidClaims) so the next publish doesn't wipe them. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.\n\nGoal: Live bilko-host registry still has no offering/pricing/callToAction for academy\n\n## Why\nAcademy synced bilko.listing.json with the marketing fields Bilko set on 2026-10-15 (commit 6abd311 in Bilko-Academy). But the running bilko-host MCP's get_project(\"academy\") on 2026-10-17 returns only audience, talkingPoints and shareImage. So the update_project_listing change, or commit ee742ec, never reached the live host. X marketing will keep skipping Academy until that's fixed.\n\n## Acceptance criteria\n- [ ] get_project academy returns offering, pricing, callToAction and avoidClaims\n- [ ] https://bilko.run/api/projects returns academy with non-empty offering, pricing and call_to_action\n\n## Details\nObserved 2026-10-17 via mcp bilko-host get_project slug=academy: the listing has only audience, talkingPoints and shareImage. Possible causes: the host process is running a stale registry and needs a restart or redeploy, or the edit landed in src/data/standalone-projects.json without going through the live host's store. Academy's bilko.listing.json now carries all four fields, so the next Academy publish (or an update_project_listing call) should fill them in. Worth checking the outdoor-hours entry too."
+    },
+    {
+      "kind": "response",
+      "causedByEventId": "2ea8c2fb-81f2-4b05-8bb3-26d43f539511",
+      "text": "The report is half right. The fields were never lost. The live site already serves them, and the stale data is a bug in how the bilko-host MCP reads the registry. I've fixed that here.\n\n**What I checked:**\n- **bilko.run is fine.** `https://bilko.run/api/projects` already returns academy with `offering: content`, `pricing: free`, `call_to_action` and all 5 `avoid_claims`. outdoor-hours has all four fields too. Commit `ee742ec` reached `origin/main` and Render deployed it.\n- **`get_project(\"academy\")` really does return only audience, talkingPoints and shareImage.** That's because the MCP's read tools read the registry file from the `~/Projects/Bilko` working folder, which only updates when someone pulls. It's 12 commits behind `origin/main` right now. Writes like `update_project_listing` and publishes push from a separate checkout, so reads never saw them.\n\n**The fix (commit `34ed1c4`):**\n- I added `mcp-host-server/src/registry-source.ts`. It fetches `origin/main` and reads the registry from there without touching the working folder. If it's offline or there's no remote, it falls back to the local file and says so in the output.\n- `get_project`, `list_projects` and the quick owner check at the start of `publish_static_project` now use it. I rebuilt `dist/`, added `tests/mcp-registry-source.test.ts` and updated the README.\n- Run against the real `~/Projects/Bilko`, the new reader returns academy's offering, pricing, callToAction and all 5 avoidClaims.\n- Typecheck passes, and the full suite passes (104 files, 1176 tests).\n\n**What's still open:**\n- The commit is on this epic branch only. I haven't merged it to `main` or pushed it.\n- The running bilko-host MCP keeps returning the old data until it's restarted after the fix is pulled into `~/Projects/Bilko`.\n- `~/Projects/Bilko` is still behind `origin/main`, and its working tree has uncommitted changes from other work. I left it alone because a pull could clash with those files.\n- Academy doesn't need to republish anythi…",
+      "id": "pevt-mvctvdjs-52",
+      "promptSessionId": "live-bilko-host-registry-still-has-no-offering-p-456f236e",
+      "at": "2026-10-17T20:07:09.400Z"
+    },
+    {
+      "kind": "response",
+      "causedByEventId": "pevt-mvctvdjs-52",
+      "text": "The fix is merged and pushed. A freshly started bilko-host MCP now returns academy's offering, pricing, callToAction and all 5 avoidClaims, so both acceptance criteria hold.\n\n- **Pushed:** I cherry-picked the fix onto `origin/main` and rebuilt `dist/`. Typecheck and the full suite passed (105 files, 1178 tests), and I pushed it as `ca6ed18` to `StanislavBG/bilko-run` `main`.\n- **Live site:** `https://bilko.run/api/projects` already returned academy and outdoor-hours with all four fields before this change. The site was never the problem.\n- **Main checkout:** I moved `~/Projects/Bilko` onto `origin/main`; the MCP runs from there.\n  - Its 3 local-only commits were older copies of work already on origin, and I saved them on the branch `backup/main-pre-sync-20261017`.\n  - The few uncommitted files that clashed with the update already matched origin exactly, so nothing was lost.\n  - The other sessions' uncommitted work (outdoor-hours data, session-manager-operations files, 695 files in all) is still there.\n- **Restart needed:** MCP clients that were already running keep the old code until they restart. Academy doesn't need to republish anything.",
+      "id": "pevt-mvd1erb1-10",
+      "promptSessionId": "live-bilko-host-registry-still-has-no-offering-p-456f236e",
+      "at": "2026-10-17T23:38:11.005Z"
+    },
+    {
+      "kind": "closed",
+      "causedByEventId": "pevt-mvd1erb1-10",
+      "id": "pevt-mve57rmd-68",
+      "promptSessionId": "live-bilko-host-registry-still-has-no-offering-p-456f236e",
+      "at": "2026-10-18T18:12:29.461Z"
+    }
+  ],
+  "transcript": "",
+  "archivedAt": "2026-10-18T18:12:29.463Z",
+  "status": "completed",
+  "cwd": "/home/bilko/Projects/Bilko",
+  "indexedAt": "2026-10-18T18:12:29.463Z",
+  "durableTurns": [
+    {
+      "role": "user",
+      "text": "This session is INBOUND FEEDBACK from another project: Bilko-Academy (/home/bilko/Projects/Bilko-Academy, session sync-bilko-listing-json-with-the-live-listing-of-cc533d10). It was raised while working on: Sync bilko.listing.json with the live listing (offering/pricing/callToAction/avoidClaims) so the next publish doesn't wipe them. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.\n\nGoal: Live bilko-host registry still has no offering/pricing/callToAction for academy\n\n## Why\nAcademy synced bilko.listing.json with the marketing fields Bilko set on 2026-10-15 (commit 6abd311 in Bilko-Academy). But the running bilko-host MCP's get_project(\"academy\") on 2026-10-17 returns only audience, talkingPoints and shareImage. So the update_project_listing change, or commit ee742ec, never reached the live host. X marketing will keep skipping Academy until that's fixed.\n\n## Acceptance criteria\n- [ ] get_project academy returns offering, pricing, callToAction and avoidClaims\n- [ ] https://bilko.run/api/projects returns academy with non-empty offering, pricing and call_to_action\n\n## Details\nObserved 2026-10-17 via mcp bilko-host get_project slug=academy: the listing has only audience, talkingPoints and shareImage. Possible causes: the host process is running a stale registry and needs a restart or redeploy, or the edit landed in src/data/standalone-projects.json without going through the live host's store. Academy's bilko.listing.json now carries all four fields, so the next Academy publish (or an update_project_listing call) should fill them in. Worth checking the outdoor-hours entry too.",
+      "at": "2026-10-17T19:15:18.022Z"
+    },
+    {
+      "role": "assistant",
+      "text": "The report is half right. The fields were never lost. The live site already serves them, and the stale data is a bug in how the bilko-host MCP reads the registry. I've fixed that here.\n\n**What I checked:**\n- **bilko.run is fine.** `https://bilko.run/api/projects` already returns academy with `offering: content`, `pricing: free`, `call_to_action` and all 5 `avoid_claims`. outdoor-hours has all four fields too. Commit `ee742ec` reached `origin/main` and Render deployed it.\n- **`get_project(\"academy\")` really does return only audience, talkingPoints and shareImage.** That's because the MCP's read tools read the registry file from the `~/Projects/Bilko` working folder, which only updates when someone pulls. It's 12 commits behind `origin/main` right now. Writes like `update_project_listing` and publishes push from a separate checkout, so reads never saw them.\n\n**The fix (commit `34ed1c4`):**\n- I added `mcp-host-server/src/registry-source.ts`. It fetches `origin/main` and reads the registry from there without touching the working folder. If it's offline or there's no remote, it falls back to the local file and says so in the output.\n- `get_project`, `list_projects` and the quick owner check at the start of `publish_static_project` now use it. I rebuilt `dist/`, added `tests/mcp-registry-source.test.ts` and updated the README.\n- Run against the real `~/Projects/Bilko`, the new reader returns academy's offering, pricing, callToAction and all 5 avoidClaims.\n- Typecheck passes, and the full suite passes (104 files, 1176 tests).\n\n**What's still open:**\n- The commit is on this epic branch only. I haven't merged it to `main` or pushed it.\n- The running bilko-host MCP keeps returning the old data until it's restarted after the fix is pulled into `~/Projects/Bilko`.\n- `~/Projects/Bilko` is still behind `origin/main`, and its working tree has uncommitted changes from other work. I left it alone because a pull could clash with those files.\n- Academy doesn't need to republish anything.",
+      "at": "2026-10-17T20:07:09.744Z"
+    },
+    {
+      "role": "user",
+      "text": "finish all and merge",
+      "at": "2026-10-17T23:29:10.208Z"
+    },
+    {
+      "role": "assistant",
+      "text": "The fix is merged and pushed. A freshly started bilko-host MCP now returns academy's offering, pricing, callToAction and all 5 avoidClaims, so both acceptance criteria hold.\n\n- **Pushed:** I cherry-picked the fix onto `origin/main` and rebuilt `dist/`. Typecheck and the full suite passed (105 files, 1178 tests), and I pushed it as `ca6ed18` to `StanislavBG/bilko-run` `main`.\n- **Live site:** `https://bilko.run/api/projects` already returned academy and outdoor-hours with all four fields before this change. The site was never the problem.\n- **Main checkout:** I moved `~/Projects/Bilko` onto `origin/main`; the MCP runs from there.\n  - Its 3 local-only commits were older copies of work already on origin, and I saved them on the branch `backup/main-pre-sync-20261017`.\n  - The few uncommitted files that clashed with the update already matched origin exactly, so nothing was lost.\n  - The other sessions' uncommitted work (outdoor-hours data, session-manager-operations files, 695 files in all) is still there.\n- **Restart needed:** MCP clients that were already running keep the old code until they restart. Academy doesn't need to republish anything.",
+      "at": "2026-10-17T23:38:11.012Z"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+# Transcript — npm-host-kit-0-7-2-is-missing-the-auth-api-inita-bad9063f
+
+## User — 2026-10-17T19:06:24.087Z
+
+This session is INBOUND FEEDBACK from another project: Bilko-Game-Academy (/home/bilko/Projects/Bilko-Game-Academy, session tell-me-a-summary-of-this-project-and-run-it-loc-9d48a074). It was raised while working on: Tell me a summary of this project and run it local to see it  What type of games can this project host?  Where is it hosted?  How does it handle persistence?   Overview of the project. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.
+
+Goal: npm host-kit@0.7.2 is missing the auth API (initAuth, authFetch, useAuth, openSignIn, signOut) that the repo's 0.7.2 source exports
+
+## Why
+The host contract tells static-path apps to use host-kit's authFetch/useAuth for Bearer auth, but the published npm package (both `host-kit` and `@bilkobibitkov/host-kit` 0.7.2) does not export them, while packages/host-kit in this repo at the same version does. Game Academy installed it from npm per the contract, and its sign-in build failed typecheck. Any sibling consuming host-kit from npm instead of file:../Bilko/packages/host-kit hits the same thing. Game Academy has worked around it with its own Clerk loader, so this isn't blocking it.
+
+## Acceptance criteria
+- [ ] A new host-kit version is published to npm whose dist/index.d.ts exports initAuth, useAuth, openSignIn, signOut, getAuthToken and authFetch
+- [ ] The version number is bumped (do not republish 0.7.2 contents under the same number)
+- [ ] The host contract names which npm package and minimum version carry the auth API
+
+## Details
+Evidence (2026-10-17): in a fresh install of npm host-kit 0.7.2, dist/index.d.ts exports GameShell, initTelemetry, useSaveState, ... but `grep -c initAuth dist/*.js` = 0. /home/bilko/Projects/Bilko/packages/host-kit (package.json version 0.7.2) dist/index.d.ts contains initAuth. tsc error in the consumer: Module '"host-kit"' has no exported member 'initAuth' / 'authFetch' / 'useAuth' / 'openSignIn' / 'signOut'.
+
+Reference: /home/bilko/Projects/Bilko/packages/host-kit/package.json
+Reference: /home/bilko/Projects/Bilko/packages/host-kit/src/auth.ts
+
+## Agent — 2026-10-17T19:17:03.982Z
+
+The report is correct, and all three acceptance criteria are now met.
+
+**The bug was real.** I downloaded both packages from npm. `host-kit@0.7.2` and `@bilkobibitkov/host-kit@0.7.2` contain no `initAuth` at all.
+
+**The new version was already published.** Another session (the "publish-host-kit-with-the-auth-exports…" Epic) put `host-kit@0.8.0` on npm today at 12:14 PM PDT, and it's now `latest`. I checked its `dist/index.d.ts`: it exports all six names (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`). That covers the first two criteria, so I didn't publish anything again.
+
+**The repo didn't match npm.** That Epic's release commit (version set to 0.8.0, changesets folded into the CHANGELOG) was never merged, so `main` still said 0.7.2. I've pushed that commit to `origin/main` along with my docs fix.
+
+**The docs were steering apps to the wrong package.** The host contract's telemetry and games sections, `docs/publishing-contract.md` and the host-kit README all still said to install `@bilkobibitkov/host-kit`. That's the old scoped name, and it stops at 0.7.2 with no auth, which is likely how Game Academy got the bad version. I changed:
+- **`docs/host-contract.md`:** new "Which host-kit to install" bullet saying to use the unscoped `host-kit` at version 0.8.0 or later (`^0.8.0` or `file:../Bilko/packages/host-kit`). It warns that 0.7.2 and the old scoped package have no auth API and their games hooks get a 401 on every call. I also renamed the other references.
+- **`docs/publishing-contract.md`:** the example now names the unscoped package.
+- **`packages/host-kit/README.md`:** install line is now `pnpm add host-kit@^0.8.0`. The README on the npm page only updates with the next release, so I added a patch changeset for it.
+
+Both commits are on `origin/main` (`2f8e663`, `2a23d46`). It was docs and version metadata only, with no code changes, so I ran just the dist-sync test, which passed. The other Epic's branch now has its release commit on `main` as well, so it can be closed.
+
+Not done: I didn't mark `@bilkobibitkov/host-kit` as deprecated on npm. That's a public change, so I left it for you. The command is `npm deprecate @bilkobibitkov/host-kit "Use host-kit@^0.8.0"`, and it can be undone.
+
+## User — 2026-10-17T23:29:18.319Z
+
+finish all and merge
+
+## Agent — 2026-10-17T23:40:27.220Z
+
+Everything is finished and merged into `origin/main`.
+
+- **Merged:** both commits are on `main`. `2f8e663` is the 0.8.0 release commit and `2a23d46` is the docs fix. `packages/host-kit/package.json` on `main` now says `0.8.0`, which matches npm, and CI passed on `2a23d46`.
+- **npm:** I marked `@bilkobibitkov/host-kit` as deprecated with the message "Renamed to host-kit. Use host-kit@^0.8.0 (has the auth API: initAuth/authFetch/useAuth)". Anyone who installs the old scoped name now gets that warning.
+- **This Epic's branch:** I didn't merge `main` back into it. The worktree has unrelated uncommitted changes (outdoor-hours data and session-manager operations files) that block the merge, and I left them alone because they aren't mine. Nothing on the branch is missing from `main`.
+- **Still open:** the corrected README only reaches the npm package page with the next host-kit release. A patch changeset is already queued for it.

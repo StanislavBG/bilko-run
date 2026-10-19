@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bilko — Project Home</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--fg:#e8eaf0;--mut:#9aa3b2;--acc:#7cc4ff;--bd:#272c36}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:980px;margin:0 auto;padding:48px 24px}
+h1{font-size:2.4rem;margin:0 0 8px}h2{font-size:1.2rem;margin:40px 0 12px;color:var(--acc);text-transform:uppercase;letter-spacing:.06em}
+p{margin:8px 0}.lead{font-size:1.15rem;color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px}
+.card h3{margin:0 0 6px;font-size:1rem}.card p{color:var(--mut);margin:0;font-size:.93rem}
+code,pre{font-family:ui-monospace,Menlo,monospace;font-size:.88rem}
+pre{background:#0a0c10;border:1px solid var(--bd);border-radius:8px;padding:14px;overflow:auto}
+code{background:#0a0c10;padding:1px 5px;border-radius:4px}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--bd);vertical-align:top;font-size:.93rem}th{color:var(--mut);font-weight:600}
+.tag{display:inline-block;border:1px solid var(--bd);border-radius:99px;padding:1px 10px;font-size:.78rem;color:var(--mut);margin-right:6px}
+</style></head><body><main>
+<span class="tag">bilko-run v1.0.0</span><span class="tag">MIT</span><span class="tag">private package</span>
+<h1>Bilko</h1>
+<p class="lead">The host platform behind <strong>bilko.run</strong>. Every tool is an independent app that borrows Bilko's auth, credits, component kit and brand chrome. Bilko itself is the framework, not a product.</p>
+
+<h2>Who it's for</h2>
+<div class="grid">
+<div class="card"><h3>Visitors</h3><p>People using the AI tools, games and courses published under bilko.run, plus the blog and projects portfolio.</p></div>
+<div class="card"><h3>Sibling-app builders</h3><p>Claude sessions working in sibling repos under <code>~/Projects/</code>. They register and publish apps through the <code>bilko-host</code> MCP and the <code>host-kit</code> SDK.</p></div>
+<div class="card"><h3>The operator</h3><p>Admin pages for analytics, cost, secrets, comp grants and observability.</p></div>
+</div>
+
+<h2>Key features</h2>
+<div class="grid">
+<div class="card"><h3>Static-path hosting contract</h3><p>Sibling apps are published into <code>public/projects/&lt;slug&gt;/</code> and served at <code>/projects/&lt;slug&gt;/</code>. The spec is in <code>docs/host-contract.md</code>. Three host kinds: <code>react-route</code>, <code>static-path</code>, <code>external-url</code>.</p></div>
+<div class="card"><h3>Project registry</h3><p>Schema-validated registry (<code>src/data/standalone-projects.json</code>, 27 entries today). It feeds the home page, <code>/projects</code> and ⌘K.</p></div>
+<div class="card"><h3>Shared auth &amp; credits</h3><p>Clerk JWT auth, Stripe token credits and one-time purchase tiers, and a shared wallet across tools.</p></div>
+<div class="card"><h3>AI-tool gateway</h3><p>Gemini-backed scoring endpoints in <code>server/routes/tools/</code> for StackAudit, LaunchGrader, AdScorer, HeadlineGrader, ThreadGrader, EmailForge, AudienceDecoder and PageRoast.</p></div>
+<div class="card"><h3>host-kit SDK</h3><p><code>packages/host-kit/</code>: <code>authFetch</code>/<code>useAuth</code>, games hooks, <code>SiteHeader</code>, <code>GameShell</code> and the <code>bilko-host-kit</code> manifest CLI.</p></div>
+<div class="card"><h3>bilko-host MCP</h3><p><code>mcp-host-server/</code> exposes register, publish, status, list and unregister tools for static projects, with publish gates.</p></div>
+<div class="card"><h3>Shared component kit</h3><p><code>src/components/tool-page/</code>: ToolHero, ScoreCard, SectionBreakdown, CompareLayout, Rewrites, CrossPromo.</p></div>
+<div class="card"><h3>Blog, analytics, ops</h3><p>Blog CRUD, page-view and event analytics, telemetry beacons, a synthetic monitor, cost monitor and sanity-QA scripts.</p></div>
+<div class="card"><h3>Session Manager surfaces</h3><p>Landing page, field manual, relay (<code>server/sm-relay/</code>) and project-feedback API. These are sanctioned app-specific host code.</p></div>
+</div>
+
+<h2>Tech stack</h2>
+<p>TypeScript. React 18 + Vite 6 + Tailwind v4 on the front end; Fastify 5 + Turso/libSQL (local SQLite fallback in dev) on the back end; Clerk; Stripe; Gemini REST. Deployed on Render from <code>StanislavBG/bilko-run</code> <code>main</code>. Package manager: pnpm 10; Node ≥18.</p>
+
+<h2>Structure</h2>
+<table>
+<tr><th>Path</th><th>What's there</th></tr>
+<tr><td><code>src/</code></td><td>React app: <code>pages/</code>, <code>components/</code>, <code>hooks/</code>, <code>data/</code> (registry, portfolio, workflows)</td></tr>
+<tr><td><code>server/</code></td><td>Fastify: <code>index.ts</code>, <code>db.ts</code>, <code>gemini.ts</code>, <code>clerk.ts</code>, <code>egress.ts</code>, <code>routes/</code>, <code>routes/tools/</code>, <code>services/</code>, <code>sm-relay/</code></td></tr>
+<tr><td><code>shared/</code></td><td>Code shared by client and server (e.g. game config)</td></tr>
+<tr><td><code>packages/host-kit/</code></td><td>Client SDK for static-path siblings (pnpm workspace package)</td></tr>
+<tr><td><code>mcp-host-server/</code></td><td>The bilko-host MCP (<code>src/</code>, committed <code>dist/</code>)</td></tr>
+<tr><td><code>public/projects/</code></td><td>Published sibling-app bundles. Fix the sibling repo, not this copy.</td></tr>
+<tr><td><code>docs/</code></td><td>host-contract, publishing-contract, deployment, host-internals, project-feedback-api, telemetry-beacons and more</td></tr>
+<tr><td><code>tests/</code>, <code>e2e/</code></td><td>53 vitest files in <code>tests/</code>; Playwright specs in <code>e2e/</code></td></tr>
+<tr><td><code>scripts/</code></td><td>Synthetic monitor, cost monitor, sanity-QA, blog cadence gates, Render deploy, <code>project-pages/</code> pipeline</td></tr>
+</table>
+
+<h2>How to run</h2>
+<pre>pnpm install
+pnpm dev          # Vite client + tsx-watched Fastify server
+pnpm build        # vite build + tsc server
+pnpm start        # node dist-server/server/index.js</pre>
+<p>Env vars (Clerk, Stripe, Gemini, Turso) are managed in the Render dashboard; dev falls back to local SQLite.</p>
+
+<h2>Key commands</h2>
+<table>
+<tr><td><code>pnpm test</code></td><td>vitest run</td></tr>
+<tr><td><code>pnpm typecheck</code></td><td>client and server <code>tsc --noEmit</code></td></tr>
+<tr><td><code>pnpm test:e2e</code></td><td>Playwright</td></tr>
+<tr><td><code>pnpm synthetic</code> / <code>cost-monitor</code> / <code>sanity-qa</code></td><td>Ops scripts</td></tr>
+<tr><td><code>pnpm --filter host-kit build|test|typecheck</code></td><td>Build and verify the SDK; then <code>pnpm install</code> in each consuming app</td></tr>
+<tr><td><code>pnpm build:project-pages-logic</code> / <code>build:project-pages</code></td><td>Build the Project Pages pipeline bundles (validate, select, render)</td></tr>
+</table>
+
+<h2>Ground rules</h2>
+<p>Push to <code>origin</code> (<code>StanislavBG/bilko-run</code>) <code>main</code> only. Each tool stays independent. New apps default to <code>static-path</code> in their own repo. SQL is always parameterized. Token-spending endpoints require <code>requireAuth</code>. Paid-tier entitlement comes only from the verified Clerk token. Any change to <code>mcp-host-server/src</code> needs a rebuilt, committed <code>dist/</code>.</p>
+
+<h2>Recent activity</h2>
+<p>Latest commits cover persisting sm-relay device tokens across redeploys, owner-set status and receipt-based public lookup in the project-feedback API, retiring the Python MCP-Host and re-slugging the TS server tile as <code>bilko-host</code>, and the Session Manager landing/field-manual book-turn UI.</p>
+</main></body></html>

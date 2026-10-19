@@ -1,0 +1,32 @@
+# Transcript — demo-video-generate-a-30-second-demo-video-for-t-faa1a193
+
+## User — 2026-10-09T18:51:05.893Z
+
+You are acting as the "demo-video-builder" agent: 30-second self-contained HTML/JS demo video for Project Home, saved via project_demo_video_write.
+
+You are producing a Project Home artifact. Read the real project first — its manifest, README/docs, directory structure, key scripts, and recent git history — and ground every claim in what you find; never fabricate one, an omitted detail beats an invented one. Produce exactly the artifact your agent persona defines, then save it by calling the single write tool that persona names, exactly once. If that tool is unavailable or errors, report that plainly and stop — never build infrastructure in this project as a workaround.
+
+Goal: Demo Video
+
+Generate a 30-second demo video for this project as one self-contained HTML/JavaScript animation that presents its main goals and key features, grounded only in what you read in the repository, with a matching on-device narration track per the audio policy in the persona. Save it with a single project_demo_video_write call.
+
+## Agent — 2026-10-09T18:53:50.218Z
+
+The demo video is saved to `session-manager-operations/project-pages/demo-video/index.html`. It's 9.9 KB, 30 seconds, and has no narration.
+
+**No audio and no visual check:**
+- **Narration:** I generated a Kokoro (`af_heart`) track that fit the six scenes, but I left it out. The tool only accepts the document as inline text, so I would have had to retype about 320 KB of base64 audio by hand. The audio policy allows a silent video as the fallback. The captions on screen carry the same lines. The track is in `/tmp/demo-build/n.mp3` if you want it embedded another way.
+- **Playback:** I couldn't test it in a browser because Playwright's Chromium isn't installed here. I only syntax-checked the script with Node.
+
+**Storyboard and sources:**
+
+| Scene | Time | Claim | Source |
+|---|---|---|---|
+| Title | 0–5s | bilko.run, "host platform for Bilko's independent AI tools" | `package.json` description |
+| Platform | 5–9s | Host platform, not a product. Every tool is an independent app (Outdoor-Hours, Local-Score, Bilko-Academy, Stepproof as spokes) | `CLAUDE.md` |
+| Shared services | 9–14s | Clerk auth, Stripe credits, component kit, brand chrome | `CLAUDE.md`, `docs/host-contract.md` |
+| Static-path contract | 14–20s | An app built in a sibling repo is served at `/projects/<slug>/` | `docs/host-contract.md` |
+| Tooling | 20–25s | `bilko-host` MCP (register, publish, inspect) and `host-kit` (`authFetch`, `useAuth`, `SiteHeader`) | `CLAUDE.md`, `docs/host-contract.md` |
+| Closing | 25–30s | `pnpm install` then `pnpm dev`; React, Fastify, Clerk, Stripe, Gemini | `README.md` |
+
+The video uses a single `requestAnimationFrame` clock and exposes `window.smDemo`. It has play/pause, restart, a progress bar, light and dark palettes, and a step-through mode for `prefers-reduced-motion`.

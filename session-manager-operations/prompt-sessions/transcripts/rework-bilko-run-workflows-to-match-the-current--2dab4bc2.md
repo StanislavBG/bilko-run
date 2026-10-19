@@ -74,3 +74,24 @@ The new https://bilko.run/workflows is live: it went out about 2 minutes after t
 ## User — 2026-10-04T19:36:24.494Z
 
 publish all local changes to git and live
+
+## Agent — 2026-10-04T20:03:57.657Z
+
+Most local changes are now pushed to `origin/main` and live on bilko.run. I deliberately held back some files the public repo shouldn't get; they're listed below.
+
+**Pushed** (from `~/Projects/Bilko`, after fast-forwarding to my earlier `/workflows` commit `a0e9370`):
+- **`98f3202` — Outdoor Hours data refresh through June 2026.** This updates the 4 summary files and the monthly hourly files, and adds the new `2026-06.json`. It was live about 2 minutes after the push: `last1m.json` on bilko.run matches the committed copy, `hourly/2026-06.json` returns 200, and `/workflows` still returns 200.
+- **`d8aa8ce` — Session Manager runtime state.** This covers the scheduler queue and history, the prompt-session index, 7 epic folders, 1 archived PRD and the new prompt-session records. Earlier commits saved the same kind of state, e.g. `d80e96c`. `bilko-run` is a public repo, so I scanned these files for API keys, tokens and passwords first; nothing turned up.
+
+**Not pushed (still on disk):**
+- `session-manager-operations/prompt-sessions/attachments/` is about 400K of screenshots pasted into sessions. Pushing them to a public repo is hard to undo, and I can't tell what's in them, so they're not pushed until you say so.
+- I left out scratch files: `check-blank.png`, `sm-prod-landing.png`, `.playwright-mcp/`, an empty file literally named `<path>`, an empty `data/manual/releases/1.0.0/figures/`, `session-manager-operations/logs/`, `ui-prefs/prefs.json`, the `prds/.reserved-*` placeholders, and `queue.json.corrupt-1789107557880`. None of them affect the live site.
+- The epic worktree still shows the same outdoor-hours and scheduler-state edits as uncommitted. Those copies weren't committed; the actual commits came from the main checkout. The worktree's own work is the `/workflows` commit `a0e9370`, which was already on `main` and live.
+
+## User — 2026-10-04T20:21:05.566Z
+
+local
+
+## Agent — 2026-10-04T20:21:12.075Z
+
+I left the screenshot attachments local, so nothing more was pushed. They stay in `session-manager-operations/prompt-sessions/attachments/` and aren't in git. Everything else from last time is still live on bilko.run: the `/workflows` rework (`a0e9370`), the Outdoor Hours data refresh (`98f3202`) and the scheduler and prompt-session state (`d8aa8ce`).

@@ -1,0 +1,112 @@
+# Transcript — hosted-git-viewer-api-git-viewer-u-login-503s-fo-25494e7d
+
+## User — 2026-10-13T02:39:24.261Z
+
+This session is INBOUND FEEDBACK from another project: signal-builder (/home/bilko/Projects/signal-builder, session is-this-real-below-was-written-by-an-agent-how-i-e9976c40). It was raised while working on: Is this real?  Below was written by an agent... how is this SAAS if everything happens on the local? Is this true?    Git Viewer takes your GitHub account and makes a portfolio page out of it, plus a résumé you can print. It's free and it's one of the tools on my site.  I made it for a spot a lot of. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.
+
+Goal: Hosted git-viewer: /api/git-viewer/u/<login> 503s for StanislavBG and torvalds (2 of 3 landing example logins)
+
+## Why
+The user is about to post publicly about git-viewer ("Your Git, your Résumé"). The live bilko.run landing offers three example buttons (StanislavBG, torvalds, gaearon). Two of them — including the owner's own portfolio — currently fail with "Portfolio generation failed — try again later", and stay failed for ~28 minutes. Anyone clicking through from the post sees a broken demo on first try.
+
+## Proposed plan
+1. Pull prod logs for '[git-viewer] generation failed for StanislavBG|torvalds' and read status / ratelimit-remaining / ratelimit-limit / token=set|unset.
+2. If token=unset or limit=60: set GITHUB_TOKEN in the prod env and confirm the boot-time 'GitHub rate budget' line shows limit=5000.
+3. If the token is set but the budget is exhausted by large accounts: cap per-generation API calls (repo count / commit pages, e.g. reuse the 5-page commit cap from git-viewer 0.1.1), and/or prefer the GraphQL contributionsCollection for the heatmap.
+4. Pre-generate/pin the three landing exampleLogins so the demo buttons never hit cold generation.
+
+## Acceptance criteria
+- [ ] curl https://bilko.run/api/git-viewer/u/StanislavBG returns 200 with status 'ready' (after at most a short 202 generating phase)
+- [ ] Same for torvalds and gaearon
+- [ ] Prod logs show token=set and ratelimit-limit=5000 on the git-viewer boot budget line
+- [ ] Clicking each landing example button on https://bilko.run/projects/git-viewer/ renders a portfolio, not the error state
+
+## Out of scope
+- Changing pricing/tiers
+- Front-end changes in the git-viewer repo beyond what the fix strictly needs
+
+## Details
+Symptom (observed 2026-10-12 ~7:30 PM PDT from this machine):
+
+GET https://bilko.run/api/git-viewer/u/torvalds -> 202 {"status":"generating","retryAfterSec":5}, then within ~10s -> 503 {"status":"error","retryAfterSec":1673}, counting down over 2 minutes of polling.
+GET https://bilko.run/api/git-viewer/u/StanislavBG -> 503 {"status":"error","retryAfterSec":1545}.
+GET https://bilko.run/api/git-viewer/u/gaearon -> 202 then 200 ready (small account works).
+
+A ~25-28 min retryAfter only comes from failedTtlMs() in server/routes/tools/git-viewer.ts when the GitHub error is 403/429 with x-ratelimit-remaining=0 (reset-based TTL); other errors get 5 min. So GitHub core rate budget is exhausted. Either GITHUB_TOKEN is unset in prod (60 req/h — one StanislavBG build alone exceeds that) or large accounts burn the 5000/h budget. I couldn't read prod logs from here; the generate() catch already logs token=set|unset and ratelimit-limit, so that line will disambiguate.
+
+Front end (git-viewer src/data/tenant.ts) maps 503 to 'Portfolio generation failed — try again later', which is what visitors see.
+
+exampleLogins = ['StanislavBG','torvalds','gaearon'] in git-viewer src/data/landing.ts.
+
+Reference: /home/bilko/Projects/Bilko/server/routes/tools/git-viewer.ts
+Reference: /home/bilko/Projects/git-viewer/src/data/landing.ts
+Reference: /home/bilko/Projects/git-viewer/src/data/tenant.ts
+Reference: /home/bilko/Projects/git-viewer/docs/prds/12-saas-self-serve.md
+
+## Agent — 2026-10-13T02:44:00.080Z
+
+The report is accurate: two of the three demo logins are broken on the live site. Nothing in this repo needs to change. The fix is one environment variable on Render, which only you can set.
+
+**What I checked against prod:**
+- `GET /api/git-viewer/u/StanislavBG` and `/u/torvalds` both return `503 {"status":"error","retryAfterSec":846}`. Both have the same countdown, so they're waiting on the same rate-limit reset.
+- `gaearon` returns `200 ready`.
+- In `server/routes/tools/git-viewer.ts:142`, a failure only waits this long when GitHub returns 403/429 with `x-ratelimit-remaining=0`. So the GitHub request budget is used up.
+
+**Why a missing token is the likely cause:** I ran one free-tier build per demo login locally, with a token, and counted the GitHub requests:
+
+| Login | Requests per build |
+|---|---|
+| StanislavBG | 53 |
+| torvalds | 59 |
+| gaearon | 26 |
+
+- **With a token** (5,000 requests/hour), about 85 builds an hour would be needed to run out. That doesn't fit tonight's traffic. So the plan's step 3 (capping requests per build) isn't needed.
+- **Without a token**, GitHub allows 60 requests/hour per IP address. Render's outgoing IP may be shared with other customers, so even less of that may be left. One StanislavBG or torvalds build uses nearly all of it, which matches what's happening.
+- The "5-page commit cap from 0.1.1" the plan mentions doesn't exist. npm only has `@bilkobibitkov/git-viewer` 0.1.0, which is what the host uses.
+
+I couldn't read prod logs or Render env vars from here: there's no Render CLI or API key on this machine.
+
+**What you need to do:**
+1. In the Render dashboard, look at the latest boot log line `[git-viewer] GitHub rate budget: ... token=… limit=…`. The site redeployed about 30 minutes before my check. `token=unset` or `limit=60` confirms the cause.
+2. Set `GITHUB_TOKEN` in the Render environment to a GitHub token with no scopes (read-only public access is enough). Then redeploy. The failure state is held in memory, so the restart clears the 503s straight away.
+3. Run `curl https://bilko.run/api/git-viewer/u/StanislavBG`, then the same for torvalds and gaearon. Each should go from 202 to 200 within about 80 seconds; torvalds is the slowest.
+
+The plan's step 4 (pre-generating the demo logins) isn't needed. Once a portfolio builds successfully it's saved in Turso and served from there. Stale copies keep being served while they rebuild in the background.
+
+On the original "is this SaaS if everything is local?" question: hosted portfolios are built on the bilko.run server, using the server's GitHub token, and saved in the database. They aren't generated on the visitor's machine.
+
+## User — 2026-10-13T02:45:20.806Z
+
+I dont know you decide
+
+## Agent — 2026-10-13T02:45:45.522Z
+
+My call is to set `GITHUB_TOKEN` on Render. You don't need to check the logs first, and nothing in the code needs changing.
+
+**Why that's the fix either way:** a build costs 26–59 GitHub requests, and a token gives 5,000 requests an hour. With a working token, the budget couldn't run out the way it is now. So either the token is missing, or the one that's there doesn't work, and setting a fresh one fixes both.
+
+As of 7:45 PM PDT, StanislavBG and torvalds still return 503 and gaearon still works. The errors clear on their own in about 8 minutes. Without a token, the next click uses up the budget again.
+
+**Steps (about 3 minutes):**
+1. **Create the token.** Go to https://github.com/settings/personal-access-tokens/new.
+   - Name it `bilko-run git-viewer` and set the expiration to 1 year.
+   - Under repository access, pick **Public repositories (read-only)**. Leave every permission unset.
+   - Click Generate and copy the token.
+2. **Add it to Render.** Open https://dashboard.render.com and go to the bilko-run service, then **Environment**.
+   - Add `GITHUB_TOKEN` with the token as its value, or replace the existing value if it's already there.
+   - Click **Save, rebuild, and deploy**.
+3. **Check it worked.** When the deploy finishes (about 5 minutes), the redeploy clears the stuck errors. Open https://bilko.run/projects/git-viewer/ and click StanislavBG, then torvalds. Each should show a portfolio within about 80 seconds the first time, then instantly after that, because finished portfolios are saved.
+
+I didn't use the GitHub token on this machine: it has wide permissions on your account and shouldn't go on a production server.
+
+## User — 2026-10-13T02:55:38.051Z
+
+I can't do that, no token to be saved cancel
+
+## Agent — 2026-10-13T02:55:44.799Z
+
+Cancelled. I made no changes: no code, no commits, nothing on Render.
+
+The demo is still broken for two of the three example logins. Without `GITHUB_TOKEN`, GitHub allows only 60 requests an hour from the server. One StanislavBG build (53 requests) or one torvalds build (59) uses up almost all of that, so those two buttons will keep showing "Portfolio generation failed" after each hourly reset. gaearon works because its build needs only 26 requests.
+
+If you post now, an option that needs no token is to swap the landing page's example buttons to small accounts like gaearon. That change belongs in the git-viewer repo (`src/data/landing.ts`), not here.

@@ -1,0 +1,33 @@
+# Transcript — share-image-bytes-count-against-the-gzip-budget--81aacc76
+
+## User — 2026-10-16T02:42:29.054Z
+
+This session is INBOUND FEEDBACK from another project: starry-night-2 (/home/bilko/Projects/starry-night-2, session design-a-hero-quality-share-image-listing-sharei-a86148e2). It was raised while working on: Design a hero-quality share image (listing.shareImage) — it is now your card's hero on bilko.run/projects. Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.
+
+Goal: share-image bytes count against the gzip budget gate, so a ≤5 MB shareImage can't be published by heavy apps
+
+## Why
+The host contract says listing.shareImage may be up to 5 MB, and the hero-image campaign asks every public project to ship a deliberate, high-quality one. But the publish `budget` gate sums the gzip size of every file in the bundle, og.png included, and PNGs barely compress further. escape-velocity's first try (a 400 KB truecolor hero) failed the budget gate. Its per-app budget leaves only ~107 KB of headroom, so it had to be cut to a 128-colour palette PNG (104 KB). That leaves ~5 KB of headroom for any future growth of the game build. Other near-budget apps will run into the same thing when they add their hero image.
+
+## Proposed plan
+1. Decide policy: exclude declared listing.icon/listing.shareImage files from the budget gate's gzip sum (they are already bounded by the share-assets gate), or add a fixed allowance for them.
+2. Implement it in the budget gate (mcp-host-server, app-budgets.ts / the gate's measure step) and note it in docs/host-contract.md under Publish gate and Custom share image.
+
+## Acceptance criteria
+- [ ] A bundle whose only over-budget bytes are a valid declared shareImage (≤5 MB, 1200x630) passes the budget gate, or the contract states clearly that share assets count against the budget.
+- [ ] host-contract.md matches the gate's behaviour.
+
+## Details
+Observed 2026-10-15 publishing escape-velocity (budget 29297 KB gz). The bundle without og.png measured ~29190 KB. With a 425 KB truecolor og.png the gate reported: "measured 29587.2 KB gz ... exceeds budget 29297 KB". It passed after quantizing og.png to 104 KB. Commit 264b8a2 in bilko-run is the published result.
+
+## Agent — 2026-10-16T02:56:37.579Z
+
+The report was right, and I've fixed it. The `budget` gate added up the gzip size of every file in the bundle, including the declared `og.png`. That image was already capped separately at 5 MB by the `share-assets` gate.
+
+**What changed** (pushed to `origin/main` as `193a115`):
+- **`mcp-host-server/src/gates/budget.ts`:** a declared `listing.icon` or `listing.shareImage` is now left out of the budget total, but only if it passes the `share-assets` checks. An undeclared or invalid PNG still counts, so the exemption can't be used to hide other bytes. When files are left out, the gate message says so ("excluding N share asset(s)").
+- **`mcp-host-server/src/gates/share-assets.ts`:** exports `validShareAssetFiles()` so the budget gate reuses the same checks.
+- **`docs/host-contract.md`:** the exemption is now documented under "Publish gate" and "Custom share image". The gate table also had two errors I fixed: it said there were five gates when there are six, and it left out `share-assets`, which can't be bypassed. The publish tool's description in `server.ts` had the same miscount and is fixed too.
+- **Tests:** four new cases in `tests/mcp-share-assets-gate.test.ts`: a heavy valid shareImage passes, the same file undeclared fails, a wrong-size one still counts, and other bundle bytes still count. `pnpm typecheck` is clean and the gate and dist-sync test files pass (44 tests). I didn't run the full suite. `mcp-host-server/dist/` is rebuilt and committed with the change.
+
+escape-velocity can now republish a full-colour `og.png` up to 5 MB without touching its budget. Its live copy is still the 104 KB palette version until it republishes. Your worktree's own changes (outdoor-hours JSON and session-manager files) were left alone and not committed.

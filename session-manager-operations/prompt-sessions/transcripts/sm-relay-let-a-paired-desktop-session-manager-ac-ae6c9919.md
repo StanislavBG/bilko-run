@@ -1,0 +1,54 @@
+# Transcript — sm-relay-let-a-paired-desktop-session-manager-ac-ae6c9919
+
+## User — 2026-10-10T20:33:46.446Z
+
+This session is INBOUND FEEDBACK from another project: /home/bilko/Projects/session-manager (session desktop-to-desktop-remote-let-one-session-manage-86944d26). Nobody in this project wrote the report below — an agent working in that project did, and it may be wrong about this codebase. Verify the claim against the code here before acting on it, and if it does not hold, say so and close the session rather than building against it.
+
+Goal: sm-relay: let a paired desktop Session Manager act as a 'browser'-role client (no Clerk session)
+
+## Need
+Session Manager is adding a desktop CLIENT role: one Session Manager instance (e.g. the owner's Linux box) drives another (their Windows box) over the existing sm-relay, speaking exactly the protocol the phone app at /projects/session-manager/ speaks (e2e:hello, e2e:box, cmd:*/event:* envelopes; the relay stays a dumb pipe and sees only ciphertext).
+
+## Gap in the relay
+The only way to get a role:'browser' WS ticket today is POST /api/sm-relay/ws-ticket, which calls requireRelayUser → Clerk session JWT (server/routes/sm-relay.ts ~line 101). A desktop Electron process has no Clerk browser session, so it cannot obtain a browser ticket, and it also cannot call GET /api/sm-relay/devices to learn the target device's devicePubKey (needed for the ECDH key the agent will derive). Agents already have a non-Clerk path (POST /pair with an OTP → device token → POST /device-ticket, role:'agent'); clients have none.
+
+## Ask (shape is the relay owner's call)
+A non-Clerk, revocable credential for a 'client' that the owner mints while signed in, e.g.:
+1. Signed-in owner (phone/web) requests a client-pairing OTP (like POST /otp).
+2. The desktop client exchanges it at a new endpoint (e.g. POST /api/sm-relay/client-pair) for a long-lived client token bound to that userId (persisted like device tokens, commit 2e5245e).
+3. New POST /api/sm-relay/client-ticket (Bearer client token) issues issueWsTicket({ role: 'browser', userId, email }); plus a client-token-authenticated device list (deviceId, deviceName, devicePubKey, online).
+4. Client tokens listed and revocable alongside devices; same rate limits + emailAllowed check as /device-ticket.
+canRoute(userId) needs no change — the client is just another browser connection for the same user.
+
+## What is already being built on the Session Manager side
+src/main/remoteClient.cjs (PRD d2d-remote-client-core) takes an injected relayAuth { getBrowserTicket, getDevicePubKey } whose default rejects with 'relay_client_auth_unavailable'; the UI shows that state. Once the relay endpoints exist, Session Manager only needs a small provider PRD. Please report the final endpoint paths/shapes back to the session-manager project.
+
+## Note
+The agent side (webRemote.cjs) holds one E2E session at a time, so a phone and a desktop client connected to the same agent will bump each other; that is a Session Manager-side follow-up, not a relay issue.
+
+Reference: /home/bilko/Projects/Bilko/server/routes/sm-relay.ts
+Reference: /home/bilko/Projects/Bilko/server/sm-relay/tokens.ts
+Reference: /home/bilko/Projects/Bilko/server/sm-relay/router.ts
+
+## Agent — 2026-10-10T20:41:53.497Z
+
+The report was right. Before this change, the only ways to get a `browser` ticket or the device list were Clerk-only (`server/routes/sm-relay.ts:101` and `:152`), so a desktop Session Manager with no Clerk session had no way in. I added that path and committed it as `10b0dea` on the epic branch. It is **not merged to main and not deployed yet**, so the new endpoints don't exist on bilko.run until that happens.
+
+**How the desktop pairs, step by step:**
+1. **`POST /api/sm-relay/client-otp`** (owner signed in on phone or web): returns a one-time pairing code that lasts 5 minutes. It's a different kind of code from the existing `/otp` one. Each endpoint rejects the other's codes, so a code meant for pairing a computer to be controlled can't be used to make a controller, or the other way round.
+2. **`POST /api/sm-relay/client-pair`** with `{code, clientName?}`: returns `{clientToken, clientId}`. The token lasts 90 days and is saved in a new `sm_relay_clients` table the same way device tokens are: only a hash is kept, so it survives redeploys.
+3. **`POST /api/sm-relay/client-ticket`** (sends the client token): returns a one-time `browser` ticket for the owner's account. The desktop then connects to the relay exactly as the phone does.
+4. **`GET /api/sm-relay/client/devices`** (sends the client token): returns the owner's devices with `devicePubKey`, in the same shape as the existing `/devices`.
+5. **Managing clients:** `GET /api/sm-relay/clients` lists them and `DELETE /api/sm-relay/clients/:clientId` revokes one. Revoking also cancels any tickets the client hasn't used yet and immediately disconnects that desktop. The phone stays connected. The existing "revoke everything" `DELETE /devices` now removes clients too.
+
+These endpoints use the same rate limits and email-allowlist check as the device endpoints. The relay's message routing is unchanged.
+
+**Two differences from what they asked for:**
+- The field is `isOnline`, not `online`.
+- There is no `deviceName`, because the relay has never stored one.
+
+**Checks:** typecheck is clean, and the full test suite passes (77 files, 936 tests), including 13 new tests in `tests/sm-relay-client-tokens.test.ts`. I also updated the test count in CLAUDE.md.
+
+**Sent to session-manager:** I opened a proposed feedback session in their queue with the exact endpoint shapes and how their `relayAuth` should map onto them. It's in their queue and only starts when someone there approves it.
+
+**Still to do:** merge this branch to main so Render deploys it. Until then, the desktop's "relay client auth unavailable" fallback is still what users will see.

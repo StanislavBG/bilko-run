@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { track, trackFlow, flush, initTelemetry, _resetForTest } from '../src/telemetry';
+import { track, trackFlow, logError, flush, initTelemetry, _resetForTest } from '../src/telemetry';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VID_A = '11111111-1111-4111-8111-111111111111';
@@ -96,6 +96,35 @@ describe('session identity cookies', () => {
     initTelemetry({ app: 't', version: '1' });
     track('x');
     expect(readCookie('bilko_vid')).toMatch(UUID_RE);
+  });
+});
+
+describe('touchSession call volume and id fallback', () => {
+  it('a single logError writes exactly 2 cookies', () => {
+    initTelemetry({ app: 't', version: '1' });
+    const desc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')!;
+    const writes: string[] = [];
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      get() { return desc.get!.call(document); },
+      set(v: string) { writes.push(v); desc.set!.call(document, v); },
+    });
+    try {
+      logError(new Error('boom'));
+    } finally {
+      delete (document as any).cookie;
+    }
+    expect(writes).toHaveLength(2);
+  });
+
+  it('produces a valid UUID visitor id when crypto.randomUUID is undefined', () => {
+    vi.stubGlobal('crypto', {});
+    initTelemetry({ app: 't', version: '1' });
+    track('x');
+    flush();
+    const ev = sent()[0].body.batch[0];
+    expect(ev.visitor_id).toMatch(UUID_RE);
+    expect(ev.session_id).toMatch(UUID_RE);
   });
 });
 

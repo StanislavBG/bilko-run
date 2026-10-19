@@ -3,6 +3,7 @@ import {
   RADAR_SECTORS, FLIP_DESTS, CHANNELS_RADAR, buildRadarItems, angDiff,
   sectorIndexAt, stepSweep, isLit, radarSize,
 } from '../src/data/homeRadar.js';
+import { PUBLIC_CARDS } from '../src/data/projectsView.js';
 
 const card = (i: number, over: Record<string, unknown> = {}) => ({
   slug: `proj-${i}`, name: `Proj ${i}`, category: 'Tool', blurb: `Blurb ${i}`,
@@ -50,7 +51,6 @@ describe('buildRadarItems', () => {
 describe('constants', () => {
   it('exposes sectors, dests and channels', () => {
     expect(RADAR_SECTORS.map(s => s.mid)).toEqual([90, 225, 315]);
-    expect(FLIP_DESTS.projects.url).toBe('/projects');
     expect(CHANNELS_RADAR).toHaveLength(3);
   });
 });
@@ -85,5 +85,13 @@ describe('math', () => {
     expect(radarSize(1600, 100).size).toBe(260);
     expect(radarSize(1179, 2000).showReadout).toBe(false);
     expect(radarSize(400, 2000).size).toBe(336);
+  });
+});
+
+describe('FLIP_DESTS.projects.url', () => {
+  it('targets the canonical first public project URL', () => {
+    expect(FLIP_DESTS.projects.url).toBe(
+      PUBLIC_CARDS.length > 0 ? `/projects?p=${PUBLIC_CARDS[0].slug}` : '/projects',
+    );
   });
 });

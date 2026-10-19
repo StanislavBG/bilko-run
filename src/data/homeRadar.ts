@@ -1,7 +1,7 @@
 // Pure data + math for the "Home Radar Flip" home page: sectors, radar blips
 // built from real projects/posts/channels, sweep stepping, lit scoring, sizing.
 // No React/DOM imports so it stays unit-testable.
-import type { HubCard } from './projectsView.js';
+import { PUBLIC_CARDS, type HubCard } from './projectsView.js';
 
 export interface FlipDest { key: string; path: string; eyebrow: string; title: string; lede: string; url: string; spa: boolean; spines: boolean; }
 export interface RadarSector { key: 'projects' | 'blog' | 'contact'; k: string; no: '01' | '02' | '03'; start: number; span: number; mid: number; cta: string; col: string; lx: number; ly: number; }
@@ -13,8 +13,11 @@ export const RADAR_SECTORS: readonly RadarSector[] = [
   { key: 'contact', k: 'Contact', no: '03', start: 270, span: 90, mid: 315, cta: 'Flip to contact', col: '#2e5a3e', lx: 48, ly: 48 },
 ];
 
+// Flip straight to the canonical URL the Projects page would rewrite to, so Back has nothing to bounce off.
+const PROJECTS_FLIP_URL = PUBLIC_CARDS.length > 0 ? `/projects?p=${PUBLIC_CARDS[0].slug}` : '/projects';
+
 export const FLIP_DESTS: Record<'projects' | 'blog' | 'contact', FlipDest> = {
-  projects: { key: 'projects', path: 'bilko.run/projects', eyebrow: 'Section 02 · Portfolio', title: 'Projects & Packages.', lede: 'Live tools, games, and open-source packages — newest work on top.', url: '/projects', spa: true, spines: true },
+  projects: { key: 'projects', path: 'bilko.run/projects', eyebrow: 'Section 02 · Portfolio', title: 'Projects & Packages.', lede: 'Live tools, games, and open-source packages — newest work on top.', url: PROJECTS_FLIP_URL, spa: true, spines: true },
   blog: { key: 'blog', path: 'bilko.run/blog', eyebrow: 'Section 04 · Writing', title: 'Blog.', lede: 'Notes from the workshop — half-finished thoughts on AI, craft, and what shipping actually feels like.', url: '/blog', spa: true, spines: false },
   contact: { key: 'contact', path: 'bilko.run/contact', eyebrow: 'Section 08 · Hello', title: 'Contact.', lede: 'Real inboxes. No forms that disappear into nothing.', url: '/contact', spa: true, spines: false },
 };

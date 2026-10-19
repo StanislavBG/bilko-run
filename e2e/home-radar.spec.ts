@@ -25,13 +25,14 @@ test.afterEach(({ page }) => {
 });
 
 const FLIP = { timeout: 3000 };
+const ON_PROJECTS = (u: URL) => u.pathname === '/projects';
 
 test('wheel and keys flip into the right page', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
   await page.mouse.move(400, 400);
   await page.mouse.wheel(0, 200);
-  await page.waitForURL('**/projects', FLIP);
+  await page.waitForURL(ON_PROJECTS, FLIP);
   await expect(page.locator('.pr-counter')).toBeVisible();
 
   await page.goto('/');
@@ -64,18 +65,36 @@ test('channel blips are plain links', async ({ page }) => {
   await expect(page.locator('[data-track="home-radar-x"]')).toHaveAttribute('href', 'https://x.com/BilkoBibitkov');
 });
 
-// BUG (product, follow-up): after flipping Home -> /projects, page.goBack() reaches '/'
-// for an instant, then the Projects page's ?p= URL sync re-writes the URL to
-// /projects?p=session-manager and the user is trapped on /projects. Un-fixme once fixed.
+async function expectUnflippedHome(page: Page) {
+  await page.waitForURL(u => u.pathname === '/', FLIP);
+  await page.waitForTimeout(1500);
+  expect(new URL(page.url()).pathname).toBe('/');
+  await expect(page.locator('body')).not.toHaveClass(/bk-flip-out/);
+  await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
+}
+
+// BLOCKED (needs ProjectsPage change): ProjectsPage's mount effect calls setSearchParams(..., { replace: true })
+// even when ?p= already matches (returning prev still navigates). When Back is pressed before that passive
+// effect runs (~45ms after the push), the browser has already traversed to '/', so the late replaceState
+// rewrites the Home entry to /projects?p=<slug> and the router re-renders Projects. Fix there: skip the
+// call when prev.get('p') === activeSlug. Un-fixme once ProjectsPage is allowed to change.
 test.fixme('back returns to an un-flipped home', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
   await page.keyboard.press('1');
-  await page.waitForURL('**/projects', FLIP);
+  await page.waitForURL(ON_PROJECTS, FLIP);
   await page.goBack();
-  await page.waitForURL(u => u.pathname === '/', FLIP);
-  await expect(page.locator('body')).not.toHaveClass(/bk-flip-out/);
+  await expectUnflippedHome(page);
+});
+
+test('back after the Projects page settles returns home', async ({ page }) => {
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
+  await page.keyboard.press('1');
+  await page.waitForURL(ON_PROJECTS, FLIP);
+  await page.waitForTimeout(1000);
+  await page.goBack();
+  await expectUnflippedHome(page);
 });
 
 test('same chrome on home, projects and contact', async ({ page }) => {
@@ -102,7 +121,7 @@ test.describe('reduced motion', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
     await page.keyboard.press('1');
-    await page.waitForURL('**/projects', { timeout: 1000 });
+    await page.waitForURL(ON_PROJECTS, { timeout: 1000 });
   });
 });
 

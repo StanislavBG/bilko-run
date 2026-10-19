@@ -98,7 +98,8 @@ body.bk-flip-armed .portfolio-shell::after {
   pointer-events: none; z-index: 30; transition: opacity .95s;
 }
 body.bk-flip-out .portfolio-shell {
-  transform: perspective(2400px) rotateY(-104deg);
+  /* Prototype puts perspective on the stage (vanishing point at viewport centre); the hinge is the left edge, so shift the perspective origin by 50vw. */
+  transform: translateX(50vw) perspective(2400px) translateX(-50vw) rotateY(-104deg);
   box-shadow: 0 40px 80px rgba(26,22,18,.35);
 }
 body.bk-flip-out .portfolio-shell::after { opacity: .45; }

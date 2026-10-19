@@ -7,6 +7,8 @@ settings:
 overrides:
   '@bilkobibitkov/ai-tool-kit': ^0.1.0
 
+pnpmfileChecksum: sha256-Sq/j5ytqMah8uaA/7k++4XWhfc4jJ0hia8iattXKqDM=
+
 importers:
 
   .:

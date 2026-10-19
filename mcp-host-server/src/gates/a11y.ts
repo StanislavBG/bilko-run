@@ -3,6 +3,10 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, extname, resolve, sep } from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { describeDanglingModule } from './dangling-deps.js';
+
+const HERE = fileURLToPath(new URL('.', import.meta.url));
 
 const MIME: Record<string, string> = {
   '.html': 'text/html',
@@ -87,7 +91,8 @@ export const a11yGate: Gate = async (ctx) => {
   // `@playwright/test` re-exports the same browser launchers, so try both.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chromium: any;
-  for (const mod of ['playwright', '@playwright/test', 'playwright-core']) {
+  const playwrightModules = ['playwright', '@playwright/test', 'playwright-core'];
+  for (const mod of playwrightModules) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pw: any = await import(/* @vite-ignore */ mod);
@@ -95,6 +100,8 @@ export const a11yGate: Gate = async (ctx) => {
     } catch { /* try the next candidate */ }
   }
   if (!chromium) {
+    const dangling = describeDanglingModule(playwrightModules, HERE);
+    if (dangling) return { name: 'a11y', status: 'fail', details: `Playwright unloadable: ${dangling}` };
     return {
       name: 'a11y', status: 'fail',
       details: 'Playwright not installed — run: pnpm add -D @playwright/test && pnpm exec playwright install chromium',
@@ -105,6 +112,8 @@ export const a11yGate: Gate = async (ctx) => {
   try {
     axePath = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
   } catch {
+    const dangling = describeDanglingModule(['axe-core'], HERE);
+    if (dangling) return { name: 'a11y', status: 'fail', details: `axe-core unloadable: ${dangling}` };
     return {
       name: 'a11y', status: 'fail',
       details: 'axe-core not installed — run: pnpm add -D axe-core',

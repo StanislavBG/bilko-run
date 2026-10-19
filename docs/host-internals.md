@@ -140,7 +140,7 @@ Implementation lives in `server/static-cache.ts`. It also rewrites every file's 
 - Bundle size + git sha
 - Open cost / synthetic / manifest alerts
 
-It is a read-only page over existing tables — no new ingest. To add a column, add a JOIN in `server/routes/admin-observability.ts`. Auto-refresh defaults to 30s (configurable to 1m, 5m, off).
+It is a read-only page over existing tables — no new ingest. To add a column, add a JOIN in `server/routes/admin-observability.ts`. Auto-refresh defaults to 5m (options 30s, 1m, 5m, off).
 
 Host-kit drift is computed against `BILKO_LATEST_HOST_KIT` env var (set via Render dashboard). Rows for siblings with no telemetry show `—` instead of `0` to avoid false "everything's broken" signals.
 

@@ -38,6 +38,7 @@ interface Row {
 
 interface ObservabilityResponse {
   rows: Row[];
+  globalAlerts?: { kind: string; details: string }[];
   latestKit: string | null;
   generatedAt: number;
 }
@@ -175,7 +176,7 @@ export function ObservabilityPage() {
     });
   }
 
-  const openAlertCount = data?.rows.reduce((acc, r) => acc + r.openAlerts.length, 0) ?? 0;
+  const openAlertCount = (data?.rows.reduce((acc, r) => acc + r.openAlerts.length, 0) ?? 0) + (data?.globalAlerts?.length ?? 0);
   const rows = sortedRows();
 
   return (

@@ -567,3 +567,34 @@ describe('GET /api/admin/traffic full detail', () => {
     expect(body.events[1]).toMatchObject({ label: 'Buy', href: '/go', ip: '1.2.3.4' });
   });
 });
+
+describe('aggregator — cost alerts', () => {
+  it('returns global alerts once and keeps per-row alerts to their own slug', async () => {
+    asAdmin();
+    await insertManifest('slug-a');
+    await insertManifest('slug-b');
+    const now = Math.floor(Date.now() / 1000);
+    await dbRun(
+      `INSERT INTO cost_alerts (alert_kind, app_slug, details_json, created_at) VALUES (?, NULL, ?, ?)`,
+      'global_spend', '{"g":1}', now,
+    );
+    await dbRun(
+      `INSERT INTO cost_alerts (alert_kind, app_slug, details_json, created_at) VALUES (?, ?, ?, ?)`,
+      'app_spend', 'slug-a', '{"a":1}', now,
+    );
+    const body = JSON.parse((await get('/api/admin/observability')).body);
+    const rowA = body.rows.find((r: any) => r.slug === 'slug-a');
+    const rowB = body.rows.find((r: any) => r.slug === 'slug-b');
+    expect(rowA.openAlerts).toHaveLength(1);
+    expect(rowA.openAlerts[0].kind).toBe('app_spend');
+    expect(rowB.openAlerts).toHaveLength(0);
+    expect(body.globalAlerts).toEqual([{ kind: 'global_spend', details: '{"g":1}' }]);
+  });
+});
+
+describe('blog-cadence auth gate', () => {
+  it('rejects unauthenticated request with 403', async () => {
+    const res = await get('/api/admin/blog-cadence');
+    expect(res.statusCode).toBe(403);
+  });
+});

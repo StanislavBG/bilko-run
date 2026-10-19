@@ -176,13 +176,17 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         },
         hostKitDrift: latestKit ? computeDrift(m.host_kit_version, latestKit) : 'unknown',
         openAlerts: alerts
-          .filter(a => a.app_slug === slug || a.app_slug === null)
+          .filter(a => a.app_slug === slug)
           .map(a => ({ kind: a.alert_kind, details: a.details_json })),
         latestError: latestErrMap.get(slug) ?? null,
       };
     });
 
-    return { env, rows, desktopApps, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
+    const globalAlerts = alerts
+      .filter(a => a.app_slug === null)
+      .map(a => ({ kind: a.alert_kind, details: a.details_json }));
+
+    return { env, rows, globalAlerts, desktopApps, latestKit, generatedAt: Math.floor(Date.now() / 1000) };
   });
 
   // Server-side traffic report from page_hits. Human aggregates exclude bots and

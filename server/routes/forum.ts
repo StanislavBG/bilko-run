@@ -97,19 +97,51 @@ const statusFor = (f: ForumFail) => (f.error === 'not_found' ? 404 : f.error ===
 
 const suggest = (h: string) => `@${h} is taken. Try @${h}_${10 + Math.floor(Math.random() * 90)}?`;
 
+const SEED_RETRY_MS = 60_000;
+const seedStatus: { seeded: boolean; error: string | null; attempts: number; lastAttemptAt: number | null } = {
+  seeded: false, error: null, attempts: 0, lastAttemptAt: null,
+};
+let seedInFlight = false;
+
+/** Seed state for /api/health. Error is the message only (no stack, no email). */
+export function getForumSeedHealth() {
+  return { ...seedStatus };
+}
+
+async function runSeed(): Promise<void> {
+  if (seedInFlight || seedStatus.seeded) return;
+  seedInFlight = true;
+  seedStatus.attempts++;
+  seedStatus.lastAttemptAt = Date.now();
+  try {
+    await ensureForumSeed(ADMIN_EMAILS[0]);
+    seedStatus.seeded = true;
+    seedStatus.error = null;
+  } catch (err) {
+    console.error('[forum] seed failed:', err);
+    seedStatus.error = err instanceof Error ? err.message : String(err);
+  } finally {
+    seedInFlight = false;
+  }
+}
+
+/** Lazy heal: at most one non-blocking retry per window while unseeded. */
+function maybeRetrySeed(now: number): void {
+  if (seedStatus.seeded || seedInFlight) return;
+  if (seedStatus.lastAttemptAt !== null && now - seedStatus.lastAttemptAt < SEED_RETRY_MS) return;
+  void runSeed();
+}
+
 export function registerForumRoutes(app: FastifyInstance): void {
   app.addHook('onReady', async () => {
-    try {
-      await ensureForumSeed(ADMIN_EMAILS[0]);
-    } catch (err) {
-      app.log.error({ err }, 'forum seed failed');
-    }
+    await runSeed();
   });
 
   // Lurker tracking: distinct hashed IPs that hit any forum GET.
   app.addHook('onRequest', async (req) => {
     if (req.method !== 'GET' || !req.url.startsWith('/api/forum/')) return;
     const now = Date.now();
+    maybeRetrySeed(now);
     lurkerSeen.set(hashIp(req.ip), now);
     prune(lurkerSeen, ONLINE_WINDOW_MS, now);
   });

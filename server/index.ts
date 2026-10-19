@@ -28,7 +28,7 @@ import { registerSmRelayRoutes } from './routes/sm-relay.js';
 import { registerManualRoutes } from './routes/manual.js';
 import { registerCompGrantRoutes } from './routes/admin-comp-grants.js';
 import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
-import { registerForumRoutes } from './routes/forum.js';
+import { registerForumRoutes, getForumSeedHealth } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
 import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
@@ -221,6 +221,7 @@ app.get('/api/health', async () => ({
   uptime: process.uptime(),
   // Hosted Git Viewer builds: token presence (never the value) + GitHub budget.
   gitViewer: getGitViewerHealth(),
+  forum: getForumSeedHealth(),
 }));
 
 // In production, serve the Vite build

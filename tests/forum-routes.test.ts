@@ -202,3 +202,44 @@ describe('forum routes', () => {
     for (const b of bodies) expect(b).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
   });
 });
+
+describe('forum seed health + lazy retry', () => {
+  it('reports a failed seed, then heals on a forum GET after the retry window', async () => {
+    vi.resetModules();
+    const real = await vi.importActual<typeof import('../server/services/forum.js')>('../server/services/forum.js');
+    const seed = vi.fn(real.ensureForumSeed).mockRejectedValueOnce(new Error('turso exploded'));
+    vi.doMock('../server/services/forum.js', () => ({ ...real, ensureForumSeed: seed }));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const routes = await import('../server/routes/forum.js');
+      const app2 = Fastify({ logger: false });
+      routes.registerForumRoutes(app2);
+      await app2.ready();
+
+      expect(routes.getForumSeedHealth()).toMatchObject({ seeded: false, error: 'turso exploded', attempts: 1 });
+      expect(errSpy).toHaveBeenCalledWith('[forum] seed failed:', expect.any(Error));
+
+      // Inside the window: no retry.
+      await app2.inject({ method: 'GET', url: '/api/forum/index' });
+      expect(seed).toHaveBeenCalledTimes(1);
+
+      // After the window: one retry fires and succeeds.
+      vi.setSystemTime(Date.now() + 61_000);
+      await dbRun('DELETE FROM forum_posts');
+      await dbRun('DELETE FROM forum_threads');
+      await dbRun('DELETE FROM forum_members');
+      await app2.inject({ method: 'GET', url: '/api/forum/index' });
+      await vi.waitFor(() => expect(routes.getForumSeedHealth().seeded).toBe(true));
+      expect(seed).toHaveBeenCalledTimes(2);
+      expect(routes.getForumSeedHealth()).toMatchObject({ seeded: true, error: null, attempts: 2 });
+
+      for (const id of ['log', 'brought', 'sm']) {
+        expect((await app2.inject({ method: 'GET', url: `/api/forum/threads/${id}` })).statusCode).toBe(200);
+      }
+      await app2.close();
+    } finally {
+      errSpy.mockRestore();
+      vi.doUnmock('../server/services/forum.js');
+    }
+  });
+});

@@ -15,20 +15,26 @@ export interface DonutResult {
   topLabel: string;
 }
 
-/** Top 4 rows by hits plus an 'other' bucket, colored from the README palette. */
+/** Top 4 named rows by hits plus one 'other' bucket (real 'other'/empty rows merge into it), colored from the README palette. */
 export function donutSegments<T extends { hits: number }>(rows: T[], key: keyof T & string): DonutResult {
-  const sorted = rows
-    .filter(r => r.hits > 0)
-    .sort((a, b) => b.hits - a.hits);
-  const segments: DonutSegment[] = sorted.slice(0, TOP_N).map((r, i) => ({
-    label: String(r[key] ?? 'unknown'),
+  const isOther = (r: T): boolean => {
+    const k = r[key];
+    return k == null || String(k).trim() === '' || String(k).trim().toLowerCase() === 'other';
+  };
+  const live = rows.filter(r => r.hits > 0);
+  const named = live.filter(r => !isOther(r)).sort((a, b) => b.hits - a.hits);
+  const segments: DonutSegment[] = named.slice(0, TOP_N).map((r, i) => ({
+    label: String(r[key]),
     value: r.hits,
     color: PALETTE[i],
   }));
-  const rest = sorted.slice(TOP_N).reduce((a, r) => a + r.hits, 0);
-  if (rest > 0) segments.push({ label: 'other', value: rest, color: C.sand });
+  const other =
+    named.slice(TOP_N).reduce((a, r) => a + r.hits, 0) +
+    live.filter(isOther).reduce((a, r) => a + r.hits, 0);
+  if (other > 0) segments.push({ label: 'other', value: other, color: C.sand });
   const total = segments.reduce((a, s) => a + s.value, 0);
-  const top = segments.reduce<DonutSegment | null>((m, s) => (!m || s.value > m.value ? s : m), null);
+  const top = segments.slice(0, named.length > 0 ? Math.min(named.length, TOP_N) : 0)
+    .reduce<DonutSegment | null>((m, s) => (!m || s.value > m.value ? s : m), null);
   return {
     segments,
     topPct: top && total > 0 ? Math.round((top.value / total) * 100) : 0,

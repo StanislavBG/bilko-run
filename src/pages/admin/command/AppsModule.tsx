@@ -21,7 +21,6 @@ export interface AppTile {
   statusTone: string;
 }
 
-const fmtCompact = (n: number): string => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
 const fmtLast = (ms: number): string => {
   const d = new Date(ms);
@@ -225,7 +224,7 @@ export function AppsModule({ stage, flows, obs }: { stage: boolean; flows: Sourc
   const stat = (label: string, value: number, color: string = C.text) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
       <span style={{ whiteSpace: 'nowrap' }}>{label}</span>
-      <span style={{ fontSize: 11, color, whiteSpace: 'nowrap', }} title={fmtNum(value)}>{fmtCompact(value)}</span>
+      <span style={{ fontSize: 11, color, whiteSpace: 'nowrap', }} title={fmtNum(value)}>{fmtNum(value)}</span>
     </div>
   );
   return (

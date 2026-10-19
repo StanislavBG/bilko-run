@@ -74,6 +74,7 @@ export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days:
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [list, setList] = useState<SessionRow[] | null>(null);
+  const [unfiltered, setUnfiltered] = useState<{ days: number; n: number } | null>(null);
   const [listErr, setListErr] = useState<string | null>(null);
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -99,7 +100,9 @@ export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days:
         if (!res.ok) { setListErr(`sessions failed (HTTP ${res.status})`); return; }
         const body = (await res.json()) as SessionsList;
         if (cancelled) return;
-        setList(Array.isArray(body?.sessions) ? body.sessions : []);
+        const rows = Array.isArray(body?.sessions) ? body.sessions : [];
+        if (!filterParam(debouncedQ)) setUnfiltered({ days, n: rows.length });
+        setList(rows);
       } catch {
         if (!cancelled) setListErr('network error');
       }
@@ -226,7 +229,7 @@ export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days:
             placeholder="filter · email, visitor id, app"
             style={{ flex: 1, minWidth: 0, height: 28, padding: '0 10px', background: C.well, border: `1px solid ${C.line}`, borderRadius: 3, color: C.text, font: `400 11px/1 ${FONT.mono}`, outline: 'none' }}
           />
-          <span style={{ font: `400 10px/1 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap' }}>{list.length} / {list.length}</span>
+          <span style={{ font: `400 10px/1 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap' }}>{list.length} / {unfiltered && unfiltered.days === days ? Math.max(unfiltered.n, list.length) : list.length}</span>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderTop: `1px solid ${C.line}`, position: 'relative' }}>
           {listErr && <div style={{ padding: 6, font: `400 10px/1.3 ${FONT.mono}`, color: C.redSoft }}>{listErr}</div>}

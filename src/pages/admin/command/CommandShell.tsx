@@ -102,6 +102,12 @@ export function CommandShell(props: CommandShellProps) {
   const [pos, setPos] = useState<Positions>(initial.pos ?? DEFAULT_POS);
   const [max, setMax] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [wide, setWide] = useState(() => window.innerWidth >= 1360);
+  useEffect(() => {
+    const onResize = () => setWide(window.innerWidth >= 1360);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Adopt the persisted window once; afterwards the prop is the source of truth.
   const onWindowRef = useRef(onWindow);
@@ -177,7 +183,7 @@ export function CommandShell(props: CommandShellProps) {
     <div style={{ width: '100%', height: '100vh', overflow: 'auto', background: C.bg }}>
       <div style={rootStyle}>
         <div style={{ flex: 'none', height: 38, display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden', flex: 'none' }}>
             <div
               style={{
                 width: 26, height: 26, borderRadius: '50%', background: C.ink, color: C.bg, display: 'grid', placeItems: 'center',
@@ -186,12 +192,12 @@ export function CommandShell(props: CommandShellProps) {
             >
               B
             </div>
-            <div style={{ font: `400 19px/1 ${FONT.serif}`, color: C.ink, letterSpacing: '-.01em' }}>
+            <div style={{ font: `400 19px/1 ${FONT.serif}`, color: C.ink, letterSpacing: '-.01em', whiteSpace: 'nowrap', flex: 'none' }}>
               Bilko <span style={{ fontStyle: 'italic', color: C.orange }}>Bibitkov</span>
             </div>
             <div style={{ width: 1, height: 18, background: C.line }} />
             <div style={{ font: `500 11px/1 ${FONT.mono}`, letterSpacing: '.22em', color: C.text, whiteSpace: 'nowrap' }}>OBSERVABILITY</div>
-            <div style={{ font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{'// COMMAND'}</div>
+            {wide && <div style={{ font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint, whiteSpace: 'nowrap', flex: 'none' }}>{'// COMMAND'}</div>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }} />
           {ctl('LAYOUT', (

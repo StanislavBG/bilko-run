@@ -137,8 +137,7 @@ export function HomePage() {
           <span className="hr-eyebrow"><span className="hr-dot" />On air · studio of one</span>
           <h1 className="hr-h1">Make. Ship. <em>Write it down.</em></h1>
           <p className="hr-lede">
-            Small AI tools, games and open-source packages — built one at a time, in public,
-            with a build log for every one that ships.
+            Small AI tools built in the open. Use the projects, read the build logs, send a message.
           </p>
           <div className="hr-rows" onMouseLeave={() => setLock(null)}>
             {RADAR_SECTORS.map((s, i) => (
@@ -171,7 +170,10 @@ export function HomePage() {
         />
         {dims.showReadout && (
           <div className="hr-readout">
-            <span className="hr-readout-no" style={{ color: sector.col }}>Sector {sector.no}</span>
+            <div className="hr-readout-top">
+              <span style={{ color: '#a83818' }}>Sector {sector.no}{lock !== null || focus !== null ? ' · manual' : ''}</span>
+              <span className="hr-readout-count">{counts[si]}</span>
+            </div>
             <h2 className="hr-readout-name">{sector.k}</h2>
             <div className="hr-items">
               {secItems.map(it => (
@@ -181,11 +183,11 @@ export function HomePage() {
                   className={`hr-item${focus === it.id ? ' is-focus' : lit.has(it.id) ? ' is-lit' : ''}`}
                   onClick={e => { if (it.dest) { e.preventDefault(); doFlip(it.dest); } }}
                 >
-                  <span>{it.name}</span>
+                  <span className="hr-item-name">{it.name}</span>
                   <small>{it.sub}</small>
                 </a>
               ))}
-              {si === 1 && secItems.length === 0 && <span className="hr-item">Weekly logs</span>}
+              {si === 1 && secItems.length === 0 && <span className="hr-item"><span className="hr-item-name">Weekly logs</span></span>}
             </div>
             <button type="button" className="hr-cta" data-track={`home-cta-${sector.key}`} onClick={() => doFlip(FLIP_DESTS[sector.key])}>
               {sector.cta} →

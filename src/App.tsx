@@ -205,7 +205,6 @@ function AppRoutes() {
             <Route path="/terms" element={lazyRoute(TermsPage)} />
             <Route path="/admin" element={lazyRoute(AdminPage)} />
             <Route path="/admin/cost" element={lazyRoute(AdminCostPage)} />
-            <Route path="/admin/observability" element={lazyRoute(ObservabilityPage)} />
             <Route path="/admin/sessions" element={lazyRoute(SessionViewPage)} />
             <Route path="/admin/sessions/:id" element={lazyRoute(SessionViewPage)} />
             <Route path="/admin/secrets" element={lazyRoute(SecretsPage)} />
@@ -241,6 +240,9 @@ function AppRoutes() {
             path="/products/session-manager/manual"
             element={lazyRoute(ManualPage)}
           />
+
+          {/* Observability Command is a full-viewport console: outside <Layout /> so no site chrome. */}
+          <Route path="/admin/observability" element={lazyRoute(ObservabilityPage)} />
 
           {/* /app/* — legacy dashboard URLs redirect to canonical /products/* */}
           <Route path="/app" element={<RedirectAppToProducts />} />

@@ -92,6 +92,35 @@ describe('admin sessions', () => {
     expect(none.json().sessions).toEqual([]);
   });
 
+  it('400s on an invalid app value', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/admin/sessions?app=bad%20slug' })).statusCode).toBe(400);
+  });
+
+  it('matches % and _ in the app filter literally', async () => {
+    const t = Date.now() - 30_000;
+    const S3 = '55555555-5555-4555-8555-555555555555';
+    const S4 = '66666666-6666-4666-8666-666666666666';
+    for (const [sid, p] of [[S3, '/projects/my_app/'], [S4, '/projects/myXapp/']]) {
+      await dbRun(
+        `INSERT INTO sessions (session_id, visitor_id, started_at, ended_at, page_count) VALUES (?, ?, ?, ?, 1)`,
+        sid, VID, t, t + 1000);
+      await dbRun(
+        `INSERT INTO page_views (path, referrer, date, session_id, created_at_ms) VALUES (?, 'ref', '2026-10-18', ?, ?)`,
+        p, sid, t);
+    }
+    const res = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=my_app' });
+    expect(res.json().sessions.map((s: any) => s.session_id)).toEqual([S3]);
+    const pct = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=my%25app' });
+    expect(pct.statusCode).toBe(400);
+  });
+
+  it('returns apps on the session detail from page views only', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID}` });
+    expect(res.json().apps).toEqual(['session-manager', 'sudoku']);
+    const none = await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID2}` });
+    expect(none.json().apps).toEqual([]);
+  });
+
   it('returns a merged ascending timeline', async () => {
     const res = await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID}` });
     expect(res.statusCode).toBe(200);

@@ -2,9 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { isValidId } from '../session-identity.js';
+import type { TimelineItem } from '../../shared/session-timeline.js';
 
 const TIMELINE_CAP = 1000;
-const SLUG_RE = /^[A-Za-z0-9_-]{1,100}$/;
+const APP_FILTER_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
 const APP_PATH_RE = /^\/(?:projects|products)\/([A-Za-z0-9_-]+)(?:[/?#]|$)/;
 
 interface SessionRow {
@@ -27,19 +28,13 @@ interface SessionRow {
   error_count: number;
 }
 
-export type TimelineItem =
-  | { ts: number; kind: 'view'; path: string; referrer: string | null }
-  | { ts: number; kind: 'click'; path: string; label: string | null; href: string | null; track_name: string | null }
-  | { ts: number; kind: 'event'; name: string; app: string | null; path: string | null; props: unknown }
-  | { ts: number; kind: 'error'; app: string; name: string | null; msg: string; url: string | null };
-
 function intParam(raw: string | undefined, def: number, min: number, max: number): number {
   const n = parseInt(raw ?? '', 10);
   if (!Number.isFinite(n)) return def;
   return Math.min(Math.max(n, min), max);
 }
 
-export function appSlugFromPath(path: string | null | undefined): string | null {
+function appSlugFromPath(path: string | null | undefined): string | null {
   if (!path) return null;
   const m = APP_PATH_RE.exec(path);
   return m ? m[1] : null;
@@ -50,8 +45,6 @@ function parseProps(raw: string | null): unknown {
   try { return JSON.parse(raw); } catch { return raw; }
 }
 
-const APP_FILTER_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
-
 interface AppAgg {
   sessions: Set<string>;
   views: number;
@@ -60,6 +53,27 @@ interface AppAgg {
   errors: number;
   errorSessions: Set<string>;
   lastSeen: number;
+}
+
+/** Distinct app slugs per session, derived from page views under /projects|products/<slug>. */
+async function appsForSessions(ids: string[]): Promise<Map<string, string[]>> {
+  const bySession = new Map<string, Set<string>>();
+  if (ids.length) {
+    const paths = await dbAll<{ session_id: string; path: string }>(
+      `SELECT DISTINCT session_id, path FROM page_views
+        WHERE session_id IN (${ids.map(() => '?').join(',')})
+          AND (path LIKE '/projects/%' OR path LIKE '/products/%')`,
+      ...ids,
+    );
+    for (const p of paths) {
+      const slug = appSlugFromPath(p.path);
+      if (!slug) continue;
+      let set = bySession.get(p.session_id);
+      if (!set) bySession.set(p.session_id, (set = new Set()));
+      set.add(slug);
+    }
+  }
+  return new Map([...bySession].map(([id, set]) => [id, [...set].sort()]));
 }
 
 function sqlUtc(ms: number): string {
@@ -201,17 +215,16 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     const params: (string | number)[] = [since];
     if (q.email) { where.push('s.email = ?'); params.push(String(q.email).slice(0, 320)); }
     if (q.visitor) { where.push('s.visitor_id = ?'); params.push(String(q.visitor).slice(0, 200)); }
-    if (q.app) {
-      if (!SLUG_RE.test(q.app)) return { sessions: [] };
+    if (q.app !== undefined) {
+      if (!APP_FILTER_RE.test(String(q.app))) return reply.status(400).send({ error: 'Invalid app.' });
+      const slug = String(q.app);
+      // '_' is a LIKE wildcard and the slug regex allows it, so escape it.
+      const esc = slug.replace(/_/g, '\\_');
       where.push(
         `EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = s.session_id AND
-           (pv.path LIKE ? OR pv.path = ? OR pv.path LIKE ?))`,
+           (pv.path LIKE ? ESCAPE '\\' OR pv.path = ? OR pv.path LIKE ? ESCAPE '\\'))`,
       );
-      // '_' is a LIKE wildcard; the slug regex allows it, so escape it.
-      const esc = q.app.replace(/_/g, '\\_');
-      params.push(`/projects/${esc}/%`, `/products/${q.app}`, `/products/${esc}/%`);
-      // ESCAPE clause must apply to each LIKE
-      where[where.length - 1] = where[where.length - 1].replace(/LIKE \?/g, "LIKE ? ESCAPE '\\'");
+      params.push(`/projects/${esc}/%`, `/products/${slug}`, `/products/${esc}/%`);
     }
     params.push(limit);
 
@@ -229,23 +242,7 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
       ...params,
     );
 
-    const appsBySession = new Map<string, Set<string>>();
-    if (rows.length) {
-      const ids = rows.map(r => r.session_id);
-      const paths = await dbAll<{ session_id: string; path: string }>(
-        `SELECT DISTINCT session_id, path FROM page_views
-          WHERE session_id IN (${ids.map(() => '?').join(',')})
-            AND (path LIKE '/projects/%' OR path LIKE '/products/%')`,
-        ...ids,
-      );
-      for (const p of paths) {
-        const slug = appSlugFromPath(p.path);
-        if (!slug) continue;
-        let set = appsBySession.get(p.session_id);
-        if (!set) appsBySession.set(p.session_id, (set = new Set()));
-        set.add(slug);
-      }
-    }
+    const appsBySession = await appsForSessions(rows.map(r => r.session_id));
 
     return {
       sessions: rows.map(r => ({
@@ -267,7 +264,7 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
         click_count: r.click_count,
         event_count: r.event_count,
         error_count: r.error_count,
-        apps: [...(appsBySession.get(r.session_id) ?? [])].sort(),
+        apps: appsBySession.get(r.session_id) ?? [],
       })),
     };
   });
@@ -306,6 +303,8 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
 
     if (!session && timeline.length === 0) return reply.status(404).send({ error: 'Session not found.' });
 
-    return { session: session ?? null, timeline };
+    const apps = (await appsForSessions([id])).get(id) ?? [];
+
+    return { session: session ?? null, timeline, apps };
   });
 }

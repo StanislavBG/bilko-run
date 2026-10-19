@@ -1,11 +1,9 @@
 // Pure helpers that turn the merged session timeline from
 // GET /api/admin/sessions/:id into numbered steps and page visits.
 
-export type TimelineItem =
-  | { ts: number; kind: 'view'; path: string; referrer: string | null }
-  | { ts: number; kind: 'click'; path: string; label: string | null; href: string | null; track_name: string | null }
-  | { ts: number; kind: 'event'; name: string; app: string | null; path: string | null; props: unknown }
-  | { ts: number; kind: 'error'; app: string; name: string | null; msg: string; url: string | null };
+import type { TimelineItem } from '../../shared/session-timeline';
+
+export type { TimelineItem };
 
 export interface Step {
   index: number;
@@ -29,6 +27,7 @@ export interface PageVisit {
 }
 
 const COLLAPSE_WINDOW_MS = 1000;
+const NO_PAGE = '(before first page)';
 
 export function buildSessionSteps(
   timeline: TimelineItem[],
@@ -59,9 +58,9 @@ export function buildSessionSteps(
       if (!current || current.path !== item.path) startPage(item.path, item.ts);
     } else if (item.kind === 'event') {
       if (item.path && (!current || current.path !== item.path)) startPage(item.path, item.ts);
-      else if (!current) startPage(item.app ?? '', item.ts);
+      else if (!current) startPage(NO_PAGE, item.ts);
     } else if (!current) {
-      startPage(item.url ?? item.app, item.ts);
+      startPage(NO_PAGE, item.ts);
     }
 
     const page = pages[pages.length - 1];

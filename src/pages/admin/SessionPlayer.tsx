@@ -2,11 +2,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { KeyboardEvent } from 'react';
 import { buildSessionSteps, filterSteps } from '../../lib/sessionSteps';
 import type { TimelineItem, Step } from '../../lib/sessionSteps';
+import { fmtMmSs } from '../../lib/format';
 
-const fmtMmSs = (ms: number) => {
-  const s = Math.max(0, Math.round(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-};
 
 const KIND_STYLE: Record<TimelineItem['kind'], string> = {
   view: 'bg-warm-100 text-warm-600 dark:bg-warm-800 dark:text-warm-300',
@@ -34,30 +31,47 @@ export function SessionPlayer({ timeline, startedAt, initialStep = 0, onStepChan
   const steps = useMemo(() => filterSteps(allSteps, mode), [allSteps, mode]);
   const last = Math.max(0, steps.length - 1);
 
-  const [rawIdx, setIdx] = useState(initialStep);
+  // Selection is an unfiltered Step.index; idx is its position in the filtered list
+  // (the nearest earlier visible step when the selected one is filtered out).
+  const [selected, setSelected] = useState(initialStep);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
-  const idx = Math.min(Math.max(0, rawIdx), last);
+  const idx = useMemo(() => {
+    if (steps.length === 0) return 0;
+    let pos = 0;
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].index <= selected) pos = i;
+      else break;
+    }
+    return pos;
+  }, [steps, selected]);
+  const setIdx = useCallback((update: number | ((i: number) => number)) => {
+    const next = typeof update === 'function' ? update(idx) : update;
+    const step = steps[Math.min(Math.max(0, next), last)];
+    if (step) setSelected(step.index);
+  }, [idx, steps, last]);
 
   const listRef = useRef<HTMLOListElement>(null);
   const activeRef = useRef<HTMLLIElement>(null);
   const onChangeRef = useRef(onStepChange);
   onChangeRef.current = onStepChange;
-  const prevIdx = useRef<number | null>(null);
+  const prevStep = useRef<number | null>(null);
+  const curIndex = steps[idx]?.index;
 
-  // Fire onStepChange on every change of the effective step (not on mount).
+  // Fire onStepChange (with the unfiltered Step.index) on every change of the effective step (not on mount).
   useEffect(() => {
-    if (prevIdx.current !== null && prevIdx.current !== idx) onChangeRef.current?.(idx);
-    prevIdx.current = idx;
-  }, [idx]);
+    if (curIndex === undefined) return;
+    if (prevStep.current !== null && prevStep.current !== curIndex) onChangeRef.current?.(curIndex);
+    prevStep.current = curIndex;
+  }, [curIndex]);
 
   // Auto-advance; the interval is cleared on unmount, pause, or reaching the end.
   useEffect(() => {
     if (!playing) return;
     if (idx >= last) { setPlaying(false); return; }
-    const timer = setInterval(() => setIdx(i => Math.min(i + 1, last)), 1000 / speed);
+    const timer = setInterval(() => setIdx(i => i + 1), 1000 / speed);
     return () => clearInterval(timer);
-  }, [playing, speed, idx, last]);
+  }, [playing, speed, idx, last, setIdx]);
 
   // Keep the active list item visible without scrolling the whole page.
   useEffect(() => {
@@ -70,7 +84,7 @@ export function SessionPlayer({ timeline, startedAt, initialStep = 0, onStepChan
     }
   }, [idx, steps]);
 
-  const go = useCallback((i: number) => setIdx(Math.min(Math.max(0, i), last)), [last]);
+  const go = useCallback((i: number) => setIdx(i), [setIdx]);
 
   const togglePlay = () => {
     if (!playing && idx >= last) setIdx(0);

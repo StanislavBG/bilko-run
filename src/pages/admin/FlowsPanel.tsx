@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { fmtTime } from '../../lib/format';
 
 const API = import.meta.env.VITE_API_URL || '/api';
 
@@ -16,9 +17,6 @@ interface AppHealth {
 interface FlowStep { step: string; sessions: number; first_seen_ms: number }
 interface Flow { app: string; flow: string; steps: FlowStep[]; total_sessions: number }
 interface FlowsResponse { apps: AppHealth[]; flows: Flow[] }
-
-const fmtTime = (ts: number) =>
-  ts > 0 ? new Date(ts).toLocaleString(undefined, { timeZoneName: 'short' }) : '—';
 
 const TH = 'px-4 py-3 text-xs font-bold text-warm-400 uppercase tracking-wide';
 const SELECT = 'px-2.5 py-1 text-xs rounded-lg border border-warm-200 bg-white text-warm-700';

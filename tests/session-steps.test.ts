@@ -71,6 +71,28 @@ describe('buildSessionSteps', () => {
   });
 });
 
+describe('pages for pathless events and errors', () => {
+  it('attaches an event with no path to the current page', () => {
+    const r = buildSessionSteps([
+      view(0, '/a'),
+      { ts: 10, kind: 'event', name: 'e', app: 'my-app', path: null, props: null },
+      { ts: 20, kind: 'error', app: 'my-app', name: null, msg: 'boom', url: 'https://x.test/a?q=1' },
+    ]);
+    expect(r.pages.map((p) => p.path)).toEqual(['/a']);
+    expect(r.steps.map((s) => s.pageIndex)).toEqual([0, 0, 0]);
+  });
+
+  it('uses one leading "(before first page)" page when no page exists yet', () => {
+    const r = buildSessionSteps([
+      { ts: 0, kind: 'event', name: 'e', app: 'my-app', path: null, props: null },
+      { ts: 10, kind: 'error', app: 'my-app', name: null, msg: 'boom', url: 'https://x.test/a?q=1' },
+      view(20, '/a'),
+    ]);
+    expect(r.pages.map((p) => p.path)).toEqual(['(before first page)', '/a']);
+    expect(r.steps.map((s) => s.pageIndex)).toEqual([0, 0, 1]);
+  });
+});
+
 describe('filterSteps', () => {
   it('keeps clicks and views in clicks mode', () => {
     const { steps } = buildSessionSteps([

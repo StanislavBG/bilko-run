@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<style>
+html,body{margin:0;height:100%;background:#0b0907;color:#e8e0cf;overflow:auto}
+*{box-sizing:border-box}
+a{color:#f26a2e}a:hover{color:#f4b942}
+input::placeholder{color:#6d6555}
+@keyframes obsTicker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+::view-transition-group(*){animation-duration:.42s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+::view-transition-old(root),::view-transition-new(root){animation:none}
+</style>
+</helmet>
+<div style="position:relative;width:100vw;height:100vh;min-width:1280px;min-height:760px;display:flex;flex-direction:column;gap:8px;padding:10px 12px;overflow:hidden;background-color:#0b0907;background-image:linear-gradient(rgba(245,240,230,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(245,240,230,.022) 1px,transparent 1px);background-size:32px 32px;font-family:'Inter Tight',system-ui,sans-serif">
+
+<!-- TOP BAR -->
+<div style="flex:none;height:38px;display:flex;align-items:center;gap:14px;padding:0 2px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="width:26px;height:26px;border-radius:50%;background:#f5f0e6;color:#0b0907;display:grid;place-items:center;font:600 14px/1 'Source Serif 4',Georgia,serif;box-shadow:0 0 0 2px #0b0907,0 0 0 3px #f26a2e">B</div>
+    <div style="font:400 19px/1 'Source Serif 4',Georgia,serif;color:#f5f0e6;letter-spacing:-.01em">Bilko <span style="font-style:italic;color:#f26a2e">Bibitkov</span></div>
+    <div style="width:1px;height:18px;background:#2a241c"></div>
+    <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#e8e0cf">OBSERVABILITY</div>
+    <div style="font:400 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555">// COMMAND</div>
+  </div>
+  <div style="flex:1"></div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">LAYOUT</span>
+    <div style="display:flex;gap:2px;padding:2px;border:1px solid #2a241c;border-radius:3px;background:#13100c">
+      <sc-for list="{{ layoutOpts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.on }}" style="border:0;margin:0;cursor:pointer;padding:5px 8px;border-radius:2px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.1em;background:{{ o.bg }};color:{{ o.fg }}">{{ o.label }}</button></sc-for>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">WINDOW</span>
+    <div style="display:flex;gap:2px;padding:2px;border:1px solid #2a241c;border-radius:3px;background:#13100c">
+      <sc-for list="{{ winOpts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.on }}" style="border:0;margin:0;cursor:pointer;padding:5px 8px;border-radius:2px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.1em;background:{{ o.bg }};color:{{ o.fg }}">{{ o.label }}</button></sc-for>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">REFRESH</span>
+    <div style="display:flex;gap:2px;padding:2px;border:1px solid #2a241c;border-radius:3px;background:#13100c">
+      <sc-for list="{{ refOpts }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.on }}" style="border:0;margin:0;cursor:pointer;padding:5px 8px;border-radius:2px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.1em;background:{{ o.bg }};color:{{ o.fg }}">{{ o.label }}</button></sc-for>
+    </div>
+  </div>
+  <button onClick="{{ toggleMax }}" style="border:1px solid #3a332a;margin:0;cursor:pointer;padding:6px 10px;border-radius:3px;background:#13100c;color:#e8e0cf;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em">{{ maxLabel }}</button>
+  <div style="display:flex;align-items:center;gap:7px;padding-left:4px">
+    <span style="width:7px;height:7px;border-radius:50%;background:#6fbf8a;box-shadow:0 0 8px #6fbf8a"></span>
+    <span style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6fbf8a">ONLINE</span>
+  </div>
+  <div style="font:500 13px/1 'JetBrains Mono',monospace;color:#f5f0e6;font-variant-numeric:tabular-nums;min-width:66px;text-align:right">{{ clock }}</div>
+</div>
+
+<!-- KPI STRIP -->
+<div style="flex:none;display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:8px">
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">HITS · 7D</span>
+    <div style="display:flex;align-items:flex-end;gap:10px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6;font-variant-numeric:tabular-nums">2,759</span>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:20px;flex:1"><sc-for list="{{ days }}" as="d" hint-placeholder-count="7"><div style="flex:1;height:{{ d.hm }};background:#f26a2e;opacity:.85"></div></sc-for></div></div>
+  </div>
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">UNIQUE VISITORS</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6">216</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">22 countries</span></div>
+  </div>
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">BOT HITS</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6">553</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#f4b942">20% of hits</span></div>
+  </div>
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">404S</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6">0</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#6fbf8a">clean</span></div>
+  </div>
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">CLICKS</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6">882</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">top · Next project</span></div>
+  </div>
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">APP SESSIONS</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6">100</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">20 apps</span></div>
+  </div>
+  <div style="background:#1a0f0b;border:1px solid rgba(255,90,74,.45);border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#ff8a7a">ERRORS</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#ff5a4a">20</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#ff8a7a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">session-manager</span></div>
+  </div>
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">EGRESS</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6">336<span style="font-size:13px;color:#9c937f"> MB</span></span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#f4b942;white-space:nowrap">79% one app</span></div>
+  </div>
+  <div style="background:#13100c;border:1px solid #2a241c;border-radius:3px;padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0">
+    <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">BLOG CADENCE</span>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px/1 'Inter Tight',sans-serif;color:#f5f0e6">2d</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#6fbf8a;white-space:nowrap">on cadence · ≤4d</span></div>
+  </div>
+</div>
+
+<!-- MAIN GRID -->
+<div style="flex:1;min-height:0;display:grid;gap:8px;grid-template-columns:{{ cols }};grid-template-rows:{{ rows }}">
+
+  <!-- 01 GLOBE -->
+  <div onClick="{{ go.globe }}" style="grid-column:{{ gc.globe }};grid-row:{{ gr.globe }};display:{{ dp.globe }};flex-direction:column;min-width:0;min-height:0;position:relative;background:#100d0a;border:1px solid #2a241c;border-radius:3px;overflow:hidden;view-transition-name:m-globe;cursor:{{ cur.globe }}">
+    <div style="flex:none;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #2a241c;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#9c937f"><span style="color:#f26a2e">01</span><span style="color:#e8e0cf">Globe</span><span style="color:#6d6555">traffic origin</span><span style="margin-left:auto;color:#6d6555">{{ hint.globe }}</span></div>
+    <div style="flex:1;min-height:0;position:relative">
+      <canvas ref="{{ canvasRef }}" style="position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none"></canvas>
+      <sc-if value="{{ st.globe }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;top:16px;left:18px;width:236px;display:flex;flex-direction:column;gap:6px;pointer-events:none">
+          <span style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">ORIGIN · 22 COUNTRIES</span>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px"><span style="font:600 40px/1 'Inter Tight',sans-serif;color:#f5f0e6">2,759</span><span style="font:400 11px/1 'JetBrains Mono',monospace;color:#9c937f">hits · 216 uv</span></div>
+          <sc-for list="{{ countries12 }}" as="c" hint-placeholder-count="12">
+            <div style="display:grid;grid-template-columns:24px minmax(0,1fr) 36px;gap:8px;align-items:center;font:400 11px/1 'JetBrains Mono',monospace;color:#e8e0cf;height:16px">
+              <span style="color:#9c937f">{{ c.code }}</span>
+              <div style="height:4px;background:#221d17"><div style="height:100%;width:{{ c.w }};background:#f26a2e"></div></div>
+              <span style="text-align:right;font-variant-numeric:tabular-nums">{{ c.hits }}</span>
+            </div>
+          </sc-for>
+          <span style="font:400 10px/1.4 'JetBrains Mono',monospace;color:#6d6555;margin-top:4px">+10 more · GB CN CA BR SI LT UA TW CH TR</span>
+        </div>
+        <div style="position:absolute;top:16px;right:18px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#9c937f">
+          <span>ARCS → ORIGIN · US-WEST</span>
+          <span style="color:#f4b942">PINGS {{ pingCount }}</span>
+          <span style="color:#6d6555">DRAG TO ROTATE</span>
+        </div>
+        <div style="position:absolute;bottom:14px;right:18px;display:flex;gap:16px;pointer-events:none;font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#f26a2e"></span>visitor origin</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;background:#6fbf8a"></span>origin server</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:14px;border-top:1px dashed #f4b942"></span>request path</span>
+        </div>
+        <div style="position:absolute;inset:0;border:1px solid rgba(242,106,46,.5);pointer-events:none;box-shadow:inset 0 0 60px rgba(242,106,46,.06)"></div>
+      </sc-if>
+      <sc-if value="{{ cp.globe }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:10px;bottom:8px;display:flex;flex-direction:column;gap:3px;pointer-events:none;font:400 10px/1 'JetBrains Mono',monospace;color:#e8e0cf">
+          <sc-for list="{{ countries3 }}" as="c" hint-placeholder-count="3"><span><span style="color:#9c937f">{{ c.code }}</span> {{ c.hits }}</span></sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- 02 SESSIONS -->
+  <div onClick="{{ go.sessions }}" style="grid-column:{{ gc.sessions }};grid-row:{{ gr.sessions }};display:{{ dp.sessions }};flex-direction:column;min-width:0;min-height:0;position:relative;background:#13100c;border:1px solid #2a241c;border-radius:3px;overflow:hidden;view-transition-name:m-sessions;cursor:{{ cur.sessions }}">
+    <div style="flex:none;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #2a241c;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#9c937f"><span style="color:#f26a2e">02</span><span style="color:#e8e0cf">Sessions</span><span style="color:#6d6555">journeys</span><span style="margin-left:auto;color:#6d6555">{{ hint.sessions }}</span></div>
+    <div style="flex:1;min-height:0;position:relative">
+      <sc-if value="{{ st.sessions }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;padding:12px;display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:12px">
+          <div style="display:flex;flex-direction:column;gap:8px;min-height:0">
+            <div style="display:flex;align-items:center;gap:10px">
+              <input value="{{ q }}" onChange="{{ onQ }}" placeholder="filter · email, visitor id, app" style="flex:1;min-width:0;height:28px;padding:0 10px;background:#0f0d0a;border:1px solid #2a241c;border-radius:3px;color:#e8e0cf;font:400 11px/1 'JetBrains Mono',monospace;outline:none">
+              <span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f;white-space:nowrap">{{ sessCount }}</span>
+            </div>
+            <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;border-top:1px solid #2a241c">
+              <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="11">
+                <div onClick="{{ s.pick }}" style="flex:none;display:grid;grid-template-columns:58px minmax(0,1fr) 46px;column-gap:10px;row-gap:4px;padding:7px 8px;border-bottom:1px solid #1f1a14;cursor:pointer;background:{{ s.bg }};box-shadow:{{ s.mark }}">
+                  <span style="font:400 10.5px/1.2 'JetBrains Mono',monospace;color:#9c937f">{{ s.t }}</span>
+                  <span style="display:flex;align-items:center;gap:6px;min-width:0"><span style="font:500 11px/1.2 'JetBrains Mono',monospace;color:#e8e0cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.u }}</span><sc-if value="{{ s.you }}"><span style="flex:none;font:600 8.5px/1 'JetBrains Mono',monospace;padding:2px 4px;border-radius:2px;background:rgba(242,106,46,.18);color:#f26a2e">YOU</span></sc-if></span>
+                  <span style="font:500 11px/1.2 'JetBrains Mono',monospace;color:#f5f0e6;text-align:right">{{ s.dur }}</span>
+                  <span style="font:400 9.5px/1.2 'JetBrains Mono',monospace;color:#6d6555">{{ s.day }}</span>
+                  <span style="font:400 10.5px/1.2 'JetBrains Mono',monospace;color:#9c937f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.flow }}</span>
+                  <span style="font:400 9.5px/1.2 'JetBrains Mono',monospace;color:#9c937f;text-align:right">{{ s.pc }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;min-height:0;background:#0f0d0a;border:1px solid #2a241c;border-radius:3px;padding:14px">
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px">
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">USER</span><span style="font:400 11px/1.2 'JetBrains Mono',monospace;color:#e8e0cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ j.user }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">STARTED</span><span style="font:400 11px/1.2 'JetBrains Mono',monospace;color:#e8e0cf">{{ j.started }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">DURATION</span><span style="font:400 11px/1.2 'JetBrains Mono',monospace;color:#e8e0cf">{{ j.dur }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">LANDING</span><span style="font:400 11px/1.2 'JetBrains Mono',monospace;color:#e8e0cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ j.land }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">EXIT</span><span style="font:400 11px/1.2 'JetBrains Mono',monospace;color:#e8e0cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ j.exit }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#6d6555">APP</span><span style="font:400 11px/1.2 'JetBrains Mono',monospace;color:#f4b942">{{ j.app }}</span></div>
+            </div>
+            <div style="position:relative;display:flex;justify-content:space-between;align-items:center;padding:8px 0">
+              <div style="position:absolute;left:7px;right:7px;top:50%;height:1px;background:#2a241c"></div>
+              <div style="position:absolute;left:7px;top:50%;height:1px;background:#f26a2e;width:{{ j.prog }}"></div>
+              <sc-for list="{{ j.steps }}" as="p" hint-placeholder-count="12"><button onClick="{{ p.go }}" title="{{ p.l }}" style="position:relative;width:14px;height:14px;margin:0;padding:0;cursor:pointer;border:1px solid {{ p.bc }};background:{{ p.nb }};border-radius:{{ p.rad }};box-shadow:{{ p.glow }}"></button></sc-for>
+            </div>
+            <div style="background:#1a1612;border:1px solid #2a241c;border-radius:3px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:10px;font:500 10.5px/1 'JetBrains Mono',monospace;color:#9c937f"><span style="color:#e8e0cf">STEP {{ j.cur.n }} / {{ j.total }}</span><span>{{ j.cur.t }}</span><span style="padding:3px 6px;border-radius:2px;background:{{ j.cur.kBg }};color:{{ j.cur.kFg }}">{{ j.cur.k }}</span></div>
+              <div style="font:600 22px/1.15 'Inter Tight',sans-serif;color:#f5f0e6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ j.cur.l }}</div>
+              <div style="font:400 11px/1.3 'JetBrains Mono',monospace;color:#9c937f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ j.cur.sub }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button onClick="{{ j.prev }}" style="margin:0;cursor:pointer;padding:7px 12px;border:1px solid #3a332a;border-radius:3px;background:transparent;color:#e8e0cf;font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em">◂ PREV</button>
+              <button onClick="{{ j.play }}" style="margin:0;cursor:pointer;padding:7px 16px;border:1px solid #f26a2e;border-radius:3px;background:#f26a2e;color:#0b0907;font:600 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em">{{ j.playLabel }}</button>
+              <button onClick="{{ j.next }}" style="margin:0;cursor:pointer;padding:7px 12px;border:1px solid #3a332a;border-radius:3px;background:transparent;color:#e8e0cf;font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em">NEXT ▸</button>
+              <div style="display:flex;gap:2px;padding:2px;border:1px solid #2a241c;border-radius:3px;margin-left:6px">
+                <sc-for list="{{ speedOpts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.on }}" style="border:0;margin:0;cursor:pointer;padding:5px 7px;border-radius:2px;font:500 10px/1 'JetBrains Mono',monospace;background:{{ o.bg }};color:{{ o.fg }}">{{ o.label }}</button></sc-for>
+              </div>
+              <span style="margin-left:auto;font:400 10px/1 'JetBrains Mono',monospace;color:#6d6555">SPACE play</span>
+            </div>
+            <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;border-top:1px solid #2a241c">
+              <sc-for list="{{ j.steps }}" as="p" hint-placeholder-count="12">
+                <div onClick="{{ p.go }}" style="flex:none;display:grid;grid-template-columns:22px 46px minmax(0,1fr) 44px;gap:8px;align-items:center;height:24px;padding:0 6px;cursor:pointer;background:{{ p.rowBg }};font:400 10.5px/1 'JetBrains Mono',monospace;color:{{ p.rowFg }}">
+                  <span style="color:#6d6555">{{ p.n }}</span>
+                  <span style="justify-self:start;padding:2px 5px;border-radius:2px;font-size:9.5px;background:{{ p.kBg }};color:{{ p.kFg }}">{{ p.k }}</span>
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.l }}</span>
+                  <span style="text-align:right;color:#6d6555">{{ p.t }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;border:1px solid rgba(242,106,46,.5);pointer-events:none"></div>
+      </sc-if>
+      <sc-if value="{{ cp.sessions }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 26px/1 'Inter Tight',sans-serif;color:#f5f0e6">100</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">sessions</span><span style="margin-left:auto;font:400 10px/1 'JetBrains Mono',monospace;color:#6fbf8a">last 19:01</span></div>
+          <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+            <sc-for list="{{ sessTop }}" as="s" hint-placeholder-count="6">
+              <div style="flex:none;display:grid;grid-template-columns:52px minmax(0,1fr) 40px;gap:8px;align-items:center;height:24px;border-top:1px solid #1f1a14;font:400 10.5px/1 'JetBrains Mono',monospace">
+                <span style="color:#9c937f">{{ s.t }}</span><span style="color:#e8e0cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.flow }}</span><span style="color:#f5f0e6;text-align:right">{{ s.dur }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- 03 APPS -->
+  <div onClick="{{ go.apps }}" style="grid-column:{{ gc.apps }};grid-row:{{ gr.apps }};display:{{ dp.apps }};flex-direction:column;min-width:0;min-height:0;position:relative;background:#13100c;border:1px solid #2a241c;border-radius:3px;overflow:hidden;view-transition-name:m-apps;cursor:{{ cur.apps }}">
+    <div style="flex:none;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #2a241c;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#9c937f"><span style="color:#f26a2e">03</span><span style="color:#e8e0cf">App health</span><span style="color:#ff5a4a">1 erroring</span><span style="margin-left:auto;color:#6d6555">{{ hint.apps }}</span></div>
+    <div style="flex:1;min-height:0;position:relative">
+      <sc-if value="{{ st.apps }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;padding:12px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:6px">
+          <sc-for list="{{ apps }}" as="p" hint-placeholder-count="20">
+            <div style="position:relative;background:{{ p.bg }};border:1px solid {{ p.bd }};border-radius:3px;padding:9px 11px;display:flex;flex-direction:column;gap:6px;min-width:0;min-height:0;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0"><span style="width:6px;height:6px;border-radius:50%;flex:none;background:{{ p.led }};box-shadow:0 0 6px {{ p.led }}"></span><span style="font:600 11px/1.2 'JetBrains Mono',monospace;color:#f5f0e6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</span></div>
+              <div style="display:flex;align-items:baseline;gap:6px"><span style="font:600 26px/1 'Inter Tight',sans-serif;color:#f5f0e6">{{ p.s }}</span><span style="font:400 9.5px/1 'JetBrains Mono',monospace;color:#9c937f">sessions</span></div>
+              <div style="margin-top:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;font:400 9px/1 'JetBrains Mono',monospace;color:#6d6555">
+                <div style="display:flex;flex-direction:column;gap:3px"><span>VIEW</span><span style="font-size:11.5px;color:#e8e0cf">{{ p.v }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:3px"><span>CLK</span><span style="font-size:11.5px;color:#e8e0cf">{{ p.c }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:3px"><span>EVT</span><span style="font-size:11.5px;color:#e8e0cf">{{ p.e }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:3px"><span>ERR</span><span style="font-size:11.5px;color:{{ p.errc }}">{{ p.err }}</span></div>
+              </div>
+              <span style="font:400 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ p.stc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.status }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;inset:0;border:1px solid rgba(242,106,46,.5);pointer-events:none"></div>
+      </sc-if>
+      <sc-if value="{{ cp.apps }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;padding:10px 12px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:4px">
+          <sc-for list="{{ apps }}" as="p" hint-placeholder-count="20">
+            <div style="background:{{ p.bg }};border:1px solid {{ p.bd }};border-radius:2px;padding:5px;display:flex;flex-direction:column;justify-content:space-between;min-width:0;overflow:hidden">
+              <span style="width:5px;height:5px;border-radius:50%;background:{{ p.led }};box-shadow:0 0 5px {{ p.led }}"></span>
+              <span style="font:500 8.5px/1.1 'JetBrains Mono',monospace;color:#e8e0cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- 04 TRAFFIC -->
+  <div onClick="{{ go.traffic }}" style="grid-column:{{ gc.traffic }};grid-row:{{ gr.traffic }};display:{{ dp.traffic }};flex-direction:column;min-width:0;min-height:0;position:relative;background:#13100c;border:1px solid #2a241c;border-radius:3px;overflow:hidden;view-transition-name:m-traffic;cursor:{{ cur.traffic }}">
+    <div style="flex:none;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #2a241c;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#9c937f"><span style="color:#f26a2e">04</span><span style="color:#e8e0cf">Traffic</span><span style="color:#6d6555">pages · referrers</span><span style="margin-left:auto;color:#6d6555">{{ hint.traffic }}</span></div>
+    <div style="flex:1;min-height:0;position:relative">
+      <sc-if value="{{ st.traffic }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;padding:14px 16px;display:grid;grid-template-rows:minmax(0,1.05fr) minmax(0,1fr);gap:16px">
+          <div style="display:flex;flex-direction:column;gap:10px;min-height:0">
+            <div style="display:flex;align-items:center;gap:16px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#9c937f"><span>HITS PER DAY</span><span style="display:flex;align-items:center;gap:6px;color:#6d6555"><span style="width:8px;height:8px;background:#f26a2e"></span>hits</span><span style="display:flex;align-items:center;gap:6px;color:#6d6555"><span style="width:10px;height:2px;background:#f4b942"></span>unique visitors</span><span style="margin-left:auto;color:#6d6555">PEAK 10-17 · 750</span></div>
+            <div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:14px">
+              <sc-for list="{{ days }}" as="d" hint-placeholder-count="7">
+                <div style="display:flex;flex-direction:column;gap:6px;min-height:0">
+                  <div style="display:flex;justify-content:space-between;font:400 10.5px/1 'JetBrains Mono',monospace"><span style="color:#f5f0e6">{{ d.hl }}</span><span style="color:#f4b942">{{ d.uv }} uv</span></div>
+                  <div style="flex:1;position:relative;background:#18140f;border-bottom:1px solid #3a332a">
+                    <div style="position:absolute;left:0;right:0;bottom:0;height:{{ d.h }};background:#f26a2e;opacity:.9"></div>
+                    <div style="position:absolute;left:-5px;right:-5px;bottom:{{ d.uh }};height:2px;background:#f4b942;box-shadow:0 0 6px rgba(244,185,66,.6)"></div>
+                  </div>
+                  <span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">{{ d.d }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:18px;min-height:0">
+            <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) 40px 34px;gap:8px;padding-bottom:6px;border-bottom:1px solid #2a241c;font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555"><span>TOP PAGES</span><span style="text-align:right">HITS</span><span style="text-align:right">UV</span></div>
+              <sc-for list="{{ pages }}" as="r" hint-placeholder-count="9">
+                <div style="flex:none;position:relative;display:grid;grid-template-columns:minmax(0,1fr) 40px 34px;gap:8px;align-items:center;height:24px;font:400 10.5px/1 'JetBrains Mono',monospace;color:#e8e0cf;border-bottom:1px solid #1f1a14">
+                  <div style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.w }};background:rgba(242,106,46,.55)"></div>
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ r.fg }}">{{ r.p }}</span><span style="text-align:right">{{ r.n }}</span><span style="text-align:right;color:#9c937f">{{ r.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:8px;padding-bottom:6px;border-bottom:1px solid #2a241c;font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555"><span>REFERRERS</span><span style="text-align:right">HITS</span></div>
+              <sc-for list="{{ refs }}" as="r" hint-placeholder-count="7">
+                <div style="flex:none;position:relative;display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:8px;align-items:center;height:24px;font:400 10.5px/1 'JetBrains Mono',monospace;color:#e8e0cf;border-bottom:1px solid #1f1a14">
+                  <div style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.w }};background:rgba(244,185,66,.6)"></div>
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.p }}</span><span style="text-align:right">{{ r.n }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) 34px 28px;gap:8px;padding-bottom:6px;border-bottom:1px solid #2a241c;font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555"><span>PROJECTS</span><span style="text-align:right">HITS</span><span style="text-align:right">UV</span></div>
+              <sc-for list="{{ projects }}" as="r" hint-placeholder-count="10">
+                <div style="flex:none;position:relative;display:grid;grid-template-columns:minmax(0,1fr) 34px 28px;gap:8px;align-items:center;height:24px;font:400 10.5px/1 'JetBrains Mono',monospace;color:#e8e0cf;border-bottom:1px solid #1f1a14">
+                  <div style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.w }};background:rgba(111,191,138,.55)"></div>
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.p }}</span><span style="text-align:right">{{ r.n }}</span><span style="text-align:right;color:#9c937f">{{ r.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;border:1px solid rgba(242,106,46,.5);pointer-events:none"></div>
+      </sc-if>
+      <sc-if value="{{ cp.traffic }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 26px/1 'Inter Tight',sans-serif;color:#f5f0e6">2,759</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">hits · 7d</span><span style="margin-left:auto;font:400 10px/1 'JetBrains Mono',monospace;color:#f4b942">linkedin top ref</span></div>
+          <div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px">
+            <sc-for list="{{ days }}" as="d" hint-placeholder-count="7">
+              <div style="display:flex;flex-direction:column;gap:4px;min-height:0">
+                <div style="flex:1;position:relative;background:#18140f"><div style="position:absolute;left:0;right:0;bottom:0;height:{{ d.hm }};background:#f26a2e"></div><div style="position:absolute;left:-2px;right:-2px;bottom:{{ d.uh }};height:2px;background:#f4b942"></div></div>
+                <span style="font:400 9px/1 'JetBrains Mono',monospace;color:#9c937f;text-align:center">{{ d.dd }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- 05 AUDIENCE -->
+  <div onClick="{{ go.audience }}" style="grid-column:{{ gc.audience }};grid-row:{{ gr.audience }};display:{{ dp.audience }};flex-direction:column;min-width:0;min-height:0;position:relative;background:#13100c;border:1px solid #2a241c;border-radius:3px;overflow:hidden;view-transition-name:m-audience;cursor:{{ cur.audience }}">
+    <div style="flex:none;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #2a241c;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#9c937f"><span style="color:#f26a2e">05</span><span style="color:#e8e0cf">Audience</span><span style="color:#6d6555">devices · visitors</span><span style="margin-left:auto;color:#6d6555">{{ hint.audience }}</span></div>
+    <div style="flex:1;min-height:0;position:relative">
+      <sc-if value="{{ st.audience }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;padding:14px 16px;display:grid;grid-template-rows:auto minmax(0,1fr);gap:16px">
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+            <div style="display:flex;align-items:center;gap:22px;padding:16px;background:#0f0d0a;border:1px solid #2a241c;border-radius:3px">
+              <div style="flex:none;width:150px;height:150px;border-radius:50%;position:relative;background:conic-gradient(#f26a2e 0 63.6%,#5d5648 63.6% 95.3%,#f4b942 95.3% 99.7%,#6fbf8a 99.7% 100%)"><div style="position:absolute;inset:18px;border-radius:50%;background:#0f0d0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font:600 26px/1 'Inter Tight',sans-serif;color:#f5f0e6">64%</span><span style="font:400 9.5px/1 'JetBrains Mono',monospace;color:#9c937f;letter-spacing:.12em">DESKTOP</span></div></div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:9px;font:400 11px/1 'JetBrains Mono',monospace;color:#e8e0cf">
+                <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">DEVICES</span>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#f26a2e"></span>desktop<span style="margin-left:auto">1,755</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#5d5648"></span>other<span style="margin-left:auto">875</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#f4b942"></span>mobile<span style="margin-left:auto">120</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#6fbf8a"></span>tablet<span style="margin-left:auto">9</span></div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:22px;padding:16px;background:#0f0d0a;border:1px solid #2a241c;border-radius:3px">
+              <div style="flex:none;width:150px;height:150px;border-radius:50%;position:relative;background:conic-gradient(#5d5648 0 49.7%,#f26a2e 49.7% 88.4%,#f4b942 88.4% 95%,#6fbf8a 95% 99.5%,#b8ae98 99.5% 100%)"><div style="position:absolute;inset:18px;border-radius:50%;background:#0f0d0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="font:600 26px/1 'Inter Tight',sans-serif;color:#f5f0e6">39%</span><span style="font:400 9.5px/1 'JetBrains Mono',monospace;color:#9c937f;letter-spacing:.12em">CHROME</span></div></div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:9px;font:400 11px/1 'JetBrains Mono',monospace;color:#e8e0cf">
+                <span style="font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#9c937f">BROWSERS</span>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#5d5648"></span>other<span style="margin-left:auto">1,370</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#f26a2e"></span>Chrome<span style="margin-left:auto">1,069</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#f4b942"></span>Firefox<span style="margin-left:auto">182</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#6fbf8a"></span>Safari<span style="margin-left:auto">124</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:#b8ae98"></span>Edge<span style="margin-left:auto">14</span></div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+            <div style="display:grid;grid-template-columns:86px 130px 34px 64px minmax(0,1fr) 46px 46px 92px;gap:10px;padding-bottom:7px;border-bottom:1px solid #2a241c;font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555"><span>VISITOR</span><span>IP</span><span>CC</span><span>DEVICE</span><span>EMAIL</span><span style="text-align:right">HITS</span><span style="text-align:right">PAGES</span><span style="text-align:right">LAST SEEN</span></div>
+            <sc-for list="{{ visitors }}" as="v" hint-placeholder-count="8">
+              <div style="flex:none;display:grid;grid-template-columns:86px 130px 34px 64px minmax(0,1fr) 46px 46px 92px;gap:10px;align-items:center;height:27px;border-bottom:1px solid #1f1a14;font:400 10.5px/1 'JetBrains Mono',monospace;color:#e8e0cf">
+                <span style="color:{{ v.idc }}">{{ v.id }}</span><span style="color:#9c937f">{{ v.ip }}</span><span>{{ v.cc }}</span><span style="color:#9c937f">{{ v.dev }}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9c937f">{{ v.em }}</span><span style="text-align:right">{{ v.hits }}</span><span style="text-align:right">{{ v.pages }}</span><span style="text-align:right;color:#9c937f">{{ v.last }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;border:1px solid rgba(242,106,46,.5);pointer-events:none"></div>
+      </sc-if>
+      <sc-if value="{{ cp.audience }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;padding:10px 12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:center">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+            <div style="width:84px;height:84px;border-radius:50%;position:relative;background:conic-gradient(#f26a2e 0 63.6%,#5d5648 63.6% 95.3%,#f4b942 95.3% 99.7%,#6fbf8a 99.7% 100%)"><div style="position:absolute;inset:11px;border-radius:50%;background:#13100c;display:grid;place-items:center;font:600 16px/1 'Inter Tight',sans-serif;color:#f5f0e6">64%</div></div>
+            <span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">desktop</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+            <div style="width:84px;height:84px;border-radius:50%;position:relative;background:conic-gradient(#5d5648 0 49.7%,#f26a2e 49.7% 88.4%,#f4b942 88.4% 95%,#6fbf8a 95% 99.5%,#b8ae98 99.5% 100%)"><div style="position:absolute;inset:11px;border-radius:50%;background:#13100c;display:grid;place-items:center;font:600 16px/1 'Inter Tight',sans-serif;color:#f5f0e6">39%</div></div>
+            <span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">chrome</span>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- 06 CLICKS -->
+  <div onClick="{{ go.clicks }}" style="grid-column:{{ gc.clicks }};grid-row:{{ gr.clicks }};display:{{ dp.clicks }};flex-direction:column;min-width:0;min-height:0;position:relative;background:#13100c;border:1px solid #2a241c;border-radius:3px;overflow:hidden;view-transition-name:m-clicks;cursor:{{ cur.clicks }}">
+    <div style="flex:none;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #2a241c;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#9c937f"><span style="color:#f26a2e">06</span><span style="color:#e8e0cf">Top clicks</span><span style="color:#6d6555">882 total</span><span style="margin-left:auto;color:#6d6555">{{ hint.clicks }}</span></div>
+    <div style="flex:1;min-height:0;position:relative">
+      <sc-if value="{{ st.clicks }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;padding:14px 16px;display:flex;flex-direction:column;overflow:hidden">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) 90px minmax(0,1.2fr) 50px;gap:12px;padding-bottom:8px;border-bottom:1px solid #2a241c;font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555"><span>PAGE</span><span>ELEMENT</span><span>TARGET</span><span>CLICKS</span><span style="text-align:right">UV</span></div>
+          <sc-for list="{{ clicks }}" as="r" hint-placeholder-count="15">
+            <div style="flex:none;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) 90px minmax(0,1.2fr) 50px;gap:12px;align-items:center;height:32px;border-bottom:1px solid #1f1a14;font:400 11px/1 'JetBrains Mono',monospace;color:#e8e0cf">
+              <span style="color:#9c937f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.p }}</span>
+              <span style="color:#f5f0e6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.el }}</span>
+              <span style="color:#6d6555">{{ r.tg }}</span>
+              <div style="display:flex;align-items:center;gap:8px"><div style="height:6px;width:{{ r.w }};background:#f26a2e;opacity:.85"></div><span>{{ r.n }}</span></div>
+              <span style="text-align:right;color:#9c937f">{{ r.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;inset:0;border:1px solid rgba(242,106,46,.5);pointer-events:none"></div>
+      </sc-if>
+      <sc-if value="{{ cp.clicks }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;padding:8px 12px;display:flex;flex-direction:column;justify-content:space-around">
+          <sc-for list="{{ clicksTop }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="display:flex;gap:8px;font:400 10.5px/1 'JetBrains Mono',monospace"><span style="color:#e8e0cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.el }}</span><span style="color:#6d6555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">{{ r.p }}</span><span style="color:#f5f0e6">{{ r.n }}</span></div>
+              <div style="height:3px;background:#1f1a14"><div style="height:100%;width:{{ r.w }};background:#f26a2e"></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- 07 BANDWIDTH -->
+  <div onClick="{{ go.bandwidth }}" style="grid-column:{{ gc.bandwidth }};grid-row:{{ gr.bandwidth }};display:{{ dp.bandwidth }};flex-direction:column;min-width:0;min-height:0;position:relative;background:#13100c;border:1px solid #2a241c;border-radius:3px;overflow:hidden;view-transition-name:m-bandwidth;cursor:{{ cur.bandwidth }}">
+    <div style="flex:none;height:28px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #2a241c;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#9c937f"><span style="color:#f26a2e">07</span><span style="color:#e8e0cf">Bandwidth</span><span style="color:#6d6555">egress</span><span style="margin-left:auto;color:#6d6555">{{ hint.bandwidth }}</span></div>
+    <div style="flex:1;min-height:0;position:relative">
+      <sc-if value="{{ st.bandwidth }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:baseline;gap:12px"><span style="font:600 34px/1 'Inter Tight',sans-serif;color:#f5f0e6">336.4<span style="font-size:15px;color:#9c937f"> MB</span></span><span style="font:400 11px/1.3 'JetBrains Mono',monospace;color:#f4b942">escape-velocity serves 79% of all bytes from 2% of requests — 1.9 MB per request.</span></div>
+          <div style="display:flex;height:46px;gap:2px">
+            <div style="flex:79.1;background:#f26a2e;display:flex;align-items:center;padding:0 12px;gap:10px;font:600 11px/1 'JetBrains Mono',monospace;color:#0b0907">escape-velocity<span style="font-weight:400">266.0 MB</span></div>
+            <div style="flex:17;background:#f4b942;display:flex;align-items:center;padding:0 8px;font:600 10px/1.1 'JetBrains Mono',monospace;color:#0b0907;overflow:hidden">_host 57.2</div>
+            <div style="flex:3.9;background:#5d5648" title="13 others · 13.2 MB"></div>
+          </div>
+          <div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+            <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) 52px 70px 56px;gap:8px;padding-bottom:7px;border-bottom:1px solid #2a241c;font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555"><span>PROJECT</span><span style="text-align:right">REQ</span><span style="text-align:right">BYTES</span><span style="text-align:right">/REQ</span></div>
+              <sc-for list="{{ bw }}" as="r" hint-placeholder-count="13">
+                <div style="flex:none;position:relative;display:grid;grid-template-columns:minmax(0,1fr) 52px 70px 56px;gap:8px;align-items:center;height:25px;border-bottom:1px solid #1f1a14;font:400 10.5px/1 'JetBrains Mono',monospace;color:#e8e0cf">
+                  <div style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.w }};background:rgba(242,106,46,.6)"></div>
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.p }}</span><span style="text-align:right;color:#9c937f">{{ r.req }}</span><span style="text-align:right">{{ r.b }}</span><span style="text-align:right;color:{{ r.pc }}">{{ r.per }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;min-height:0;overflow:hidden">
+              <div style="display:grid;grid-template-columns:38px minmax(0,1fr) 52px 70px 56px;gap:8px;padding-bottom:7px;border-bottom:1px solid #2a241c;font:500 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:#6d6555"><span>VERB</span><span>ROUTE</span><span style="text-align:right">REQ</span><span style="text-align:right">BYTES</span><span style="text-align:right">/REQ</span></div>
+              <sc-for list="{{ routes }}" as="r" hint-placeholder-count="13">
+                <div style="flex:none;position:relative;display:grid;grid-template-columns:38px minmax(0,1fr) 52px 70px 56px;gap:8px;align-items:center;height:25px;border-bottom:1px solid #1f1a14;font:400 10.5px/1 'JetBrains Mono',monospace;color:#e8e0cf">
+                  <div style="position:absolute;left:0;bottom:0;height:2px;width:{{ r.w }};background:rgba(244,185,66,.55)"></div>
+                  <span style="color:{{ r.mc }}">{{ r.m }}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.p }}</span><span style="text-align:right;color:#9c937f">{{ r.req }}</span><span style="text-align:right">{{ r.b }}</span><span style="text-align:right;color:{{ r.pc }}">{{ r.per }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;border:1px solid rgba(242,106,46,.5);pointer-events:none"></div>
+      </sc-if>
+      <sc-if value="{{ cp.bandwidth }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;padding:10px 12px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 26px/1 'Inter Tight',sans-serif;color:#f5f0e6">336</span><span style="font:400 10px/1 'JetBrains Mono',monospace;color:#9c937f">MB egress</span></div>
+          <div style="display:flex;height:8px;gap:2px"><div style="flex:79.1;background:#f26a2e"></div><div style="flex:17;background:#f4b942"></div><div style="flex:3.9;background:#5d5648"></div></div>
+          <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+            <sc-for list="{{ bwTop }}" as="r" hint-placeholder-count="5">
+              <div style="flex:none;display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:8px;align-items:center;height:22px;border-top:1px solid #1f1a14;font:400 10.5px/1 'JetBrains Mono',monospace;color:#e8e0cf"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.p }}</span><span style="text-align:right;color:#9c937f">{{ r.b }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div style="flex:none;height:28px;display:flex;align-items:center;gap:14px;border:1px solid #2a241c;border-radius:3px;background:#100d0a;padding:0 10px;overflow:hidden">
+  <span style="flex:none;display:flex;align-items:center;gap:7px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#f26a2e"><span style="width:6px;height:6px;border-radius:50%;background:#f26a2e;box-shadow:0 0 8px #f26a2e"></span>RECENT HITS</span>
+  <div style="flex:1;min-width:0;overflow:hidden;position:relative">{{ ticker }}</div>
+  <span style="flex:none;font:400 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#6d6555">1–7 SWAP · F FOCUS · ESC</span>
+</div>
+
+<div style="position:absolute;inset:0;pointer-events:none;z-index:40;display:{{ scanDisp }};background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px)"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;rails&quot;,&quot;dock&quot;,&quot;wing&quot;],&quot;default&quot;:&quot;rails&quot;,&quot;tsType&quot;:&quot;'rails'|'dock'|'wing'&quot;,&quot;section&quot;:&quot;Console&quot;},&quot;autorotate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Globe&quot;},&quot;simulateLive&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Globe&quot;},&quot;scanlines&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Console&quot;}}">
+class Component extends DCLogic {
+  MODS = ['globe','sessions','apps','traffic','audience','clicks','bandwidth'];
+  LAY = {
+    rails: { cols: '300px minmax(0,1fr) 340px', rows: 'repeat(3,minmax(0,1fr))', slots: { stage:['2','1 / 4'], l1:['1','1'], l2:['1','2'], l3:['1','3'], r1:['3','1'], r2:['3','2'], r3:['3','3'] } },
+    dock: { cols: 'repeat(6,minmax(0,1fr))', rows: 'minmax(0,1fr) 230px', slots: { stage:['1 / 7','1'], l1:['1','2'], l2:['2','2'], l3:['3','2'], r1:['4','2'], r2:['5','2'], r3:['6','2'] } },
+    wing: { cols: 'minmax(0,1fr) 300px 300px', rows: 'repeat(3,minmax(0,1fr))', slots: { stage:['1','1 / 4'], l1:['2','1'], l2:['2','2'], l3:['2','3'], r1:['3','1'], r2:['3','2'], r3:['3','3'] } },
+    max: { cols: 'minmax(0,1fr)', rows: 'minmax(0,1fr)', slots: { stage:['1','1'] } }
+  };
+  GEO = { US:[-98,39], NL:[5.3,52.1], KR:[127.8,36.5], PL:[19.1,52], IN:[78.9,21], AU:[134,-25], DE:[10.4,51.2], BE:[4.5,50.5], ID:[113.9,-0.8], SE:[15,62], FR:[2.2,46.6], SG:[103.8,1.35], GB:[-2,54], CN:[104,35], CA:[-106,56], BR:[-51.9,-14.2], SI:[14.9,46.1], LT:[23.9,55.2], UA:[31,49], TW:[121,23.7], CH:[8.2,46.8], TR:[35,39] };
+  HOME = [-122.4, 37.8];
+  D = {
+    countries: [['US',670],['NL',557],['KR',423],['PL',397],['IN',229],['AU',218],['DE',69],['BE',40],['ID',39],['SE',32],['FR',21],['SG',12],['GB',8],['CN',8],['CA',8],['BR',6],['SI',4],['LT',3],['UA',2],['TW',2],['CH',2],['TR',1]],
+    days: [['13',545,34],['14',552,68],['15',214,36],['16',415,40],['17',750,48],['18',276,46],['19',7,4]],
+    pages: [['/',393,136],['/wp-admin/install.php',68,2],['/projects/git-viewer/',67,3],['/projects/game-academy/',61,2],['/projects/session-manager/',49,7],['/projects/',38,12],['/icon.svg',32,4],['/products/session-manager',20,11],['/favicon.ico',17,9]],
+    refs: [['linkedin.com',7],['t.co',4],['accounts.google.com',4],['google.com',3],['google.com.hk',1],['facebook.com',1],['duckduckgo.com',1]],
+    projects: [['game-academy',93,2],['git-viewer',67,3],['session-manager',55,13],['escape-velocity',13,6],['launch-kit',13,3],['outdoor-hours',7,3],['social-signals-trader',5,2],['academy',4,4],['sudoku',2,1],['fizzpop',1,1]],
+    apps: [['session-manager',63,20,165,1519,20,'10/18 16:43'],['launch-kit',12,12,9,14,0,'10/17 09:49'],['game-academy',7,57,45,12,0,'10/18 14:45'],['escape-velocity',4,0,28,74,0,'10/16 23:37'],['academy',3,0,13,6,0,'10/15 09:48'],['outdoor-hours',1,2,35,0,0,'10/18 19:03'],['ad-scorer',1,0,0,1,0,'10/13 19:00'],['audience-decoder',1,0,0,1,0,'10/13 19:00'],['email-forge',1,0,0,1,0,'10/13 19:00'],['headline-grader',1,0,0,1,0,'10/13 19:00'],['launch-grader',1,0,0,1,0,'10/13 19:00'],['local-score',1,0,0,1,0,'10/13 18:59'],['page-roast',1,0,0,1,0,'10/13 18:59'],['stack-audit',1,0,0,1,0,'10/13 19:00'],['stepproof',1,0,0,1,0,'10/13 19:00'],['thread-grader',1,0,0,1,0,'10/13 19:00'],['fizzpop',0,0,8,0,0,'10/14 08:35'],['git-viewer',0,0,2,3,0,'10/16 23:14'],['social-signals-trader',0,0,7,0,0,'10/15 22:24'],['sudoku',0,0,6,0,0,'10/14 08:33']],
+    sessions: [
+      ['19:01:15','10/18','bilkobibitkov2000@gmail.com','/','/','outdoor-hours',5,8,0,'18:27'],
+      ['16:21:11','10/18','bilkobibitkov2000@gmail.com','/projects/session-manager/','/projects/session-manager/','session-manager',2,11,0,'21:59'],
+      ['14:44:25','10/18','c0417740…','/','/','',1,0,1,'0:00'],
+      ['11:44:52','10/18','c0417740…','/','/','',1,0,0,'0:00'],
+      ['11:33:00','10/18','c0417740…','/','/','',4,0,4,'8:27'],
+      ['11:08:14','10/18','bilkobibitkov2000@gmail.com','/','/projects','',3,0,0,'0:43'],
+      ['07:39:11','10/18','0f5a2ae6…','/','/projects/','',3,0,2,'0:11'],
+      ['07:39:08','10/18','0f5a2ae6…','/','/','',1,0,0,'0:00'],
+      ['21:39:26','10/17','bilkobibitkov2000@gmail.com','/','/projects','',2,0,5,'0:01'],
+      ['21:30:42','10/17','bilkobibitkov2000@gmail.com','/','/blog/the-family-screen-that-opens-your-mail-for-you','',3,0,0,'0:12'],
+      ['20:27:45','10/17','bilkobibitkov2000@gmail.com','/','/admin/observability','',3,0,0,'8:22']
+    ],
+    journey: [['view','/projects/session-manager/','+0:00','← https://bilko.run/projects?p=session-manager'],['click','Got it','+0:14'],['click','Bilko-Game-Academy · Bilko-Game…','+1:02'],['click','New session in Bilko-Game-Academy','+2:40'],['click','Dictate prompt','+4:05'],['click','Dictate prompt','+6:31'],['click','Dictate prompt','+9:12'],['click','Start','+11:48'],['click','Game Implementation feature · …','+14:20'],['click','Refresh','+17:55'],['click','Back','+20:41'],['click','Refresh','+21:59']],
+    clicks: [['/projects','Next project','—',58,4],['/projects','Previous project','—',52,4],['/projects/','Next project','—',48,1],['/projects/session-manager/','Refresh','—',39,2],['/projects/session-manager/','Got it','—',25,2],['/projects/session-manager/','Back','—',21,2],['/','Projects','/projects',20,6],['/projects/','Previous project','—',17,1],['/projects','Full story','—',14,5],['/projects/','Open Social Signals Trader','—',14,4],['/projects','Open Weather','—',12,4],['/projects/','Open Family Frame','—',12,3],['/projects','Open Git Viewer','—',11,2],['/projects','Open →','—',11,5],['/projects/','Open Session Manager','—',11,4]],
+    bw: [['escape-velocity',143,266.0,'1.9 MB'],['_host',4985,57.2,'12 KB'],['game-academy',520,5.0,'10 KB'],['session-manager',239,2.3,'10 KB'],['social-signals-trader',137,1.6,'12 KB'],['launch-kit',105,1.3,'13 KB'],['academy',59,0.994,'17 KB'],['git-viewer',115,0.749,'7 KB'],['outdoor-hours',20,0.326,'16 KB'],['fizzpop',31,0.294,'9 KB'],['sudoku',30,0.199,'7 KB'],['_other',104,0.125,'1 KB'],['mindswiffer',14,0.117,'8 KB']],
+    routes: [['GET','static:escape-velocity',131,266.0,'2.0 MB'],['GET','static:_host',4745,56.8,'12 KB'],['GET','static:game-academy',517,5.0,'10 KB'],['GET','static:session-manager',237,2.3,'10 KB'],['GET','/api/projects/:slug/snapshot',12,1.7,'147 KB'],['GET','static:social-signals-trader',137,1.6,'12 KB'],['GET','static:launch-kit',105,1.3,'13 KB'],['GET','static:academy',57,0.994,'17 KB'],['GET','static:git-viewer',115,0.749,'7 KB'],['GET','/api/git-viewer/u/:login',231,0.698,'3 KB'],['GET','/api/projects',208,0.497,'2 KB'],['GET','/api/blog',51,0.429,'8 KB'],['POST','static:_host',106,0.357,'3 KB']],
+    visitors: [['5ac9e226…','45.138.12.22','PL','desktop','—',394,329,'10/13 15:09'],['7b0fdf6a…','45.148.10.74','NL','desktop','—',343,343,'10/17 05:58'],['fcc63981…','50.47.212.159','US','desktop','bilkobibitkov2000@gmail.com',161,22,'10/18 19:03'],['8783349b…','20.214.147.109','KR','other','—',134,121,'10/17 16:31'],['75414094…','74.225.203.7','IN','other','—',127,124,'10/14 10:33'],['01b26763…','20.92.72.133','AU','other','—',119,119,'10/17 21:55'],['b19d2969…','20.194.17.163','KR','other','—',107,107,'10/15 20:34'],['a9c93b5b…','20.207.202.183','IN','other','—',101,99,'10/15 08:34']],
+    hits: [['19:03:00','/favicon.ico','US','desktop/Firefox/Linux',''],['19:02:59','/projects/outdoor-hours/','US','desktop/Firefox/Linux',''],['19:01:15','/','US','desktop/Firefox/Linux',''],['18:35:30','/wp-admin/install.php','DE','desktop/other','PROBE'],['18:25:34','/','US','desktop/other',''],['17:50:22','/projects/academy/','US','desktop/other','BOT'],['17:27:56','/projects/outdoor-hours/','US','desktop/Chrome/Linux',''],['17:27:12','/','US','desktop/other','']]
+  };
+  state = { pos: { globe:'stage', apps:'l1', traffic:'l2', audience:'l3', sessions:'r1', clicks:'r2', bandwidth:'r3' }, max:false, layout:null, win:'1D', refresh:'30S', sel:1, step:0, playing:false, speed:1, q:'', now:new Date(), pings:0 };
+
+  componentDidMount() {
+    this.rot = [98, -22]; this.pings = []; this.drag = null; this._acc = 0;
+    this.onKey = e => {
+      const tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA') return;
+      const i = '1234567'.indexOf(e.key);
+      if (i >= 0) this.focus(this.MODS[i]);
+      else if (e.key === 'f' || e.key === 'F') this.toggleMax();
+      else if (e.key === 'Escape' && this.state.max) this.toggleMax();
+      else if (e.key === ' ' && this.state.pos.sessions === 'stage') { e.preventDefault(); this.togglePlay(); }
+    };
+    window.addEventListener('keydown', this.onKey);
+    this._iv = setInterval(() => { if (this.props.simulateLive ?? true) this.addPing(); this.setState({ now: new Date(), pings: this.pings.length }); }, 1000);
+    this._play = setInterval(() => {
+      if (!this.state.playing) return;
+      this._acc += this.state.speed;
+      if (this._acc < 4) return; this._acc = 0;
+      const n = this.journey().length;
+      this.setState(s => s.step >= n - 1 ? { playing: false } : { step: s.step + 1 });
+    }, 250);
+    this.bootGlobe();
+    this._raf = requestAnimationFrame(this.frame);
+  }
+  componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._iv); clearInterval(this._play); clearTimeout(this._boot); window.removeEventListener('keydown', this.onKey); }
+
+  vt(patch) {
+    const go = () => new Promise(r => this.setState(patch, r));
+    if (document.startViewTransition) document.startViewTransition(go); else go();
+  }
+  focus(m) {
+    const pos = { ...this.state.pos }; if (pos[m] === 'stage') return;
+    const cur = Object.keys(pos).find(k => pos[k] === 'stage');
+    pos[cur] = pos[m]; pos[m] = 'stage';
+    this.vt({ pos });
+  }
+  toggleMax = () => this.vt({ max: !this.state.max });
+  togglePlay = () => { const n = this.journey().length; this.setState(s => ({ playing: !s.playing, step: (!s.playing && s.step >= n - 1) ? 0 : s.step })); };
+
+  addPing() {
+    const c = this.D.countries, tot = 2755; let r = Math.random() * tot, i = 0;
+    for (; i < c.length; i++) { r -= c[i][1]; if (r <= 0) break; }
+    this.pings.push({ i: Math.min(i, c.length - 1), t: performance.now() });
+    if (this.pings.length > 14) this.pings.shift();
+  }
+
+  bootGlobe() {
+    if (!(window.d3 && window.topojson)) { this._boot = setTimeout(() => this.bootGlobe(), 150); return; }
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json').then(r => r.json()).then(async topo => {
+      const land = topojson.feature(topo, topo.objects.land); this.land = land;
+      const dots = []; this.dots = dots; const step = 2;
+      for (let lat = -56; lat <= 82; lat += step) {
+        const n = Math.max(1, Math.round(360 * Math.cos(lat * Math.PI / 180) / step));
+        for (let i = 0; i < n; i++) { const lon = -180 + (i + 0.5) * 360 / n; if (d3.geoContains(land, [lon, lat])) dots.push([lon, lat]); }
+        if (lat % 8 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+    }).catch(() => {});
+  }
+
+  canvasRef = el => {
+    if (!el || el === this.canvas) return;
+    this.canvas = el;
+    el.addEventListener('pointerdown', e => { if (this.state.pos.globe !== 'stage') return; this.drag = { x: e.clientX, y: e.clientY, r: [...this.rot] }; el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointermove', e => { if (!this.drag) return; this.rot[0] = this.drag.r[0] + (e.clientX - this.drag.x) * 0.3; this.rot[1] = Math.max(-60, Math.min(60, this.drag.r[1] - (e.clientY - this.drag.y) * 0.3)); });
+    const up = () => { this.drag = null; }; el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  };
+
+  frame = now => {
+    this._raf = requestAnimationFrame(this.frame);
+    const c = this.canvas, d3 = window.d3; if (!c || !d3 || !c.isConnected) return;
+    const w = c.clientWidth, h = c.clientHeight; if (w < 10 || h < 10) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    const stage = this.state.pos.globe === 'stage', t = now / 1000;
+    if ((this.props.autorotate ?? true) && !this.drag) this.rot[0] += 0.05;
+    const r = stage ? Math.min(w * 0.33, h * 0.42) : Math.min(w, h) * 0.38;
+    const cx = stage ? Math.max(w * 0.58, 270 + r * 1.2) : w * 0.5, cy = h * (stage ? 0.5 : 0.47);
+    const proj = (this._proj || (this._proj = d3.geoOrthographic().clipAngle(90).precision(0.5))).scale(r).translate([cx, cy]).rotate([this.rot[0], this.rot[1]]);
+    const path = d3.geoPath(proj, ctx), center = [-this.rot[0], -this.rot[1]];
+    let g = ctx.createRadialGradient(cx, cy, r * 0.92, cx, cy, r * 1.4); g.addColorStop(0, 'rgba(242,106,46,0.16)'); g.addColorStop(1, 'rgba(242,106,46,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r * 1.4, 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * 0.04);
+    for (let k = 0; k < 120; k++) { const a = k / 120 * Math.PI * 2, R = r * 1.1, L = k % 10 === 0 ? 7 : 3; ctx.beginPath(); ctx.moveTo(Math.cos(a) * R, Math.sin(a) * R); ctx.lineTo(Math.cos(a) * (R + L), Math.sin(a) * (R + L)); ctx.strokeStyle = k % 10 === 0 ? 'rgba(242,106,46,.55)' : 'rgba(245,240,230,.10)'; ctx.lineWidth = 1; ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.18, -0.6, 0.5); ctx.strokeStyle = 'rgba(244,185,66,.35)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.18, 2.4, 3.2); ctx.stroke();
+    ctx.restore();
+    g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r); g.addColorStop(0, '#231d16'); g.addColorStop(1, '#0c0a08');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+    ctx.beginPath(); path(this._grat || (this._grat = d3.geoGraticule10())); ctx.strokeStyle = 'rgba(245,240,230,0.055)'; ctx.lineWidth = 0.6; ctx.stroke();
+    if (this.land) { ctx.beginPath(); path(this.land); ctx.fillStyle = 'rgba(245,240,230,0.03)'; ctx.fill(); }
+    if (this.dots) {
+      const ds = stage ? 1.7 : 1.2;
+      for (let i = 0; i < this.dots.length; i++) { const p = this.dots[i], dist = d3.geoDistance(p, center); if (dist > 1.53) continue; const xy = proj(p); ctx.fillStyle = 'rgba(232,224,207,' + (0.12 + 0.55 * Math.cos(dist)).toFixed(2) + ')'; ctx.fillRect(xy[0] - ds / 2, xy[1] - ds / 2, ds, ds); }
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.strokeStyle = 'rgba(242,106,46,.4)'; ctx.lineWidth = 1; ctx.stroke();
+    const C = this.D.countries;
+    ctx.lineWidth = stage ? 1.1 : 0.8; ctx.setLineDash([3, 5]); ctx.lineDashOffset = -t * 16;
+    for (let i = 0; i < 14; i++) { const ll = this.GEO[C[i][0]]; const wg = Math.sqrt(C[i][1] / 670); ctx.beginPath(); path({ type: 'LineString', coordinates: [ll, this.HOME] }); ctx.strokeStyle = 'rgba(244,185,66,' + (0.18 + 0.5 * wg).toFixed(2) + ')'; ctx.stroke(); }
+    ctx.setLineDash([]);
+    if (d3.geoDistance(this.HOME, center) < 1.5) { const [x, y] = proj(this.HOME); ctx.fillStyle = '#6fbf8a'; ctx.fillRect(x - 3.5, y - 3.5, 7, 7); ctx.strokeStyle = 'rgba(111,191,138,.5)'; ctx.strokeRect(x - 7, y - 7, 14, 14); if (stage) { ctx.fillStyle = '#6fbf8a'; ctx.font = '500 10px "JetBrains Mono", monospace'; ctx.fillText('ORIGIN', x + 11, y + 3); } }
+    ctx.font = '500 10px "JetBrains Mono", monospace';
+    C.forEach((cn, i) => {
+      const ll = this.GEO[cn[0]]; if (!ll || d3.geoDistance(ll, center) > 1.5) return;
+      const [x, y] = proj(ll), rr = (stage ? 2 : 1.4) + Math.sqrt(cn[1]) / (stage ? 5 : 8), ph = (t * 0.5 + i * 0.17) % 1;
+      ctx.beginPath(); ctx.arc(x, y, rr + ph * rr * 2.2, 0, 7); ctx.strokeStyle = 'rgba(242,106,46,' + (0.5 * (1 - ph)).toFixed(2) + ')'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fillStyle = 'rgba(242,106,46,0.88)'; ctx.fill();
+      if (stage && i < 10) { ctx.fillStyle = '#e8e0cf'; ctx.fillText(cn[0] + ' ' + cn[1], x + rr + 5, y + 3); }
+    });
+    const nowp = performance.now();
+    this.pings = this.pings.filter(p => nowp - p.t < 1600);
+    this.pings.forEach(p => { const ll = this.GEO[C[p.i][0]]; if (!ll || d3.geoDistance(ll, center) > 1.5) return; const a = (nowp - p.t) / 1600, [x, y] = proj(ll); ctx.beginPath(); ctx.arc(x, y, 4 + a * (stage ? 30 : 16), 0, 7); ctx.strokeStyle = 'rgba(244,185,66,' + (1 - a).toFixed(2) + ')'; ctx.lineWidth = 1.5; ctx.stroke(); });
+  };
+
+  journey() {
+    const S = this.state, s = this.D.sessions[S.sel];
+    if (S.sel === 1) return this.D.journey;
+    const [, , , land, exit, , pages, clicks, events, dur] = s;
+    const st = [['view', land, '+0:00']];
+    for (let i = 1; i < pages; i++) st.push(['view', i === pages - 1 ? exit : '/projects', '+' + i + ':00']);
+    for (let i = 0; i < Math.min(events, 4); i++) st.push(['event', 'client event', '']);
+    for (let i = 0; i < Math.min(clicks, 4); i++) st.push(['click', 'click', '']);
+    return st;
+  }
+
+  renderVals() {
+    const S = this.state, D = this.D, fmt = n => n.toLocaleString('en-US');
+    const layout = (S.layout || this.props.layout || 'rails').toLowerCase();
+    const L = S.max ? this.LAY.max : (this.LAY[layout] || this.LAY.rails);
+    const gc = {}, gr = {}, st = {}, cp = {}, dp = {}, go = {}, cur = {}, hint = {};
+    this.MODS.forEach((m, i) => {
+      const p = S.pos[m], slot = L.slots[p];
+      st[m] = p === 'stage'; cp[m] = !st[m]; dp[m] = slot ? 'flex' : 'none';
+      gc[m] = slot ? slot[0] : '1'; gr[m] = slot ? slot[1] : '1';
+      go[m] = () => this.focus(m); cur[m] = st[m] ? 'default' : 'pointer';
+      hint[m] = st[m] ? (S.max ? 'FOCUSED · ESC' : 'ON STAGE · F') : '[' + (i + 1) + '] ⤢';
+    });
+    const seg = (opts, curv, set) => opts.map(o => ({ label: o, bg: o === curv ? '#f26a2e' : 'transparent', fg: o === curv ? '#0b0907' : '#9c937f', on: e => { e && e.stopPropagation && e.stopPropagation(); set(o); } }));
+    const days = D.days.map(([d, h, u]) => ({ d: '10-' + d, dd: d, hl: fmt(h), uv: u, h: (h / 750 * 100) + '%', hm: Math.max(3, h / 750 * 100) + '%', uh: 'calc(' + (u / 68 * 100) + '% - 1px)' }));
+    const countries = D.countries.map(([code, hits]) => ({ code, hits: fmt(hits), w: (hits / 670 * 100) + '%' }));
+    const ql = S.q.trim().toLowerCase();
+    const sessions = D.sessions.map((s, i) => ({ s, i })).filter(({ s }) => !ql || (s[2] + ' ' + s[5] + ' ' + s[3] + ' ' + s[4]).toLowerCase().includes(ql)).map(({ s, i }) => {
+      const sel = i === S.sel;
+      return { t: s[0].slice(0, 5), day: s[1], u: s[2], you: s[2].startsWith('bilkobibitkov'), dur: s[9], flow: s[3] + ' → ' + s[4] + (s[5] ? '  · ' + s[5] : ''), pc: 'P' + s[6] + ' C' + s[7] + ' E' + s[8],
+        bg: sel ? 'rgba(242,106,46,.08)' : 'transparent', mark: sel ? 'inset 2px 0 0 #f26a2e' : 'none',
+        pick: e => { e.stopPropagation(); this.setState({ sel: i, step: 0, playing: false }); } };
+    });
+    const KC = { view: ['rgba(244,185,66,.14)', '#f4b942'], click: ['rgba(242,106,46,.16)', '#f26a2e'], event: ['rgba(111,191,138,.14)', '#6fbf8a'] };
+    const js = this.journey(), n = js.length, step = Math.min(S.step, n - 1), ss = D.sessions[S.sel];
+    let lastView = js[0][1];
+    const steps = js.map((x, i) => {
+      if (x[0] === 'view' && i <= step) lastView = x[1];
+      const past = i < step, on = i === step;
+      return { n: String(i + 1).padStart(2, '0'), k: x[0], l: x[1], t: x[2], kBg: KC[x[0]][0], kFg: KC[x[0]][1],
+        rowBg: on ? '#1f1a14' : 'transparent', rowFg: i <= step ? '#e8e0cf' : '#6d6555',
+        bc: on ? '#f26a2e' : past ? '#5d5648' : '#3a332a', nb: on ? '#f26a2e' : past ? '#5d5648' : '#0f0d0a',
+        rad: x[0] === 'view' ? '2px' : '50%', glow: on ? '0 0 0 3px rgba(242,106,46,.22), 0 0 12px rgba(242,106,46,.6)' : 'none',
+        go: e => { e.stopPropagation(); this.setState({ step: i, playing: false }); } };
+    });
+    const cs = steps[step], cj = js[step];
+    const j = { user: ss[2], started: ss[1] + ' ' + ss[0], dur: ss[9], land: ss[3], exit: ss[4], app: ss[5] || '—', total: String(n).padStart(2, '0'), steps,
+      prog: 'calc((100% - 14px) * ' + (n > 1 ? step / (n - 1) : 0).toFixed(3) + ')',
+      cur: { n: cs.n, t: cs.t, k: cs.k.toUpperCase(), kBg: cs.kBg, kFg: cs.kFg, l: cj[1], sub: cj[3] || (cj[0] === 'view' ? 'page view' : 'on ' + lastView) },
+      playLabel: S.playing ? '❚❚ PAUSE' : '▶ PLAY',
+      play: e => { e.stopPropagation(); this.togglePlay(); },
+      prev: e => { e.stopPropagation(); this.setState(s => ({ step: Math.max(0, s.step - 1), playing: false })); },
+      next: e => { e.stopPropagation(); this.setState(s => ({ step: Math.min(n - 1, s.step + 1), playing: false })); } };
+    const apps = D.apps.map(([name, s, v, c, e, err, last]) => {
+      const act = Math.min(1, Math.sqrt((s + v + c + e / 10) / 400)), recent = /^10\/1[678]/.test(last);
+      const led = err ? '#ff5a4a' : recent ? '#6fbf8a' : '#5d5648';
+      return { name, s, v: fmt(v), c: fmt(c), e: fmt(e), err, errc: err ? '#ff5a4a' : '#6d6555', led,
+        bg: err ? 'rgba(255,90,74,.10)' : 'rgba(242,106,46,' + (0.03 + 0.2 * act).toFixed(3) + ')', bd: err ? 'rgba(255,90,74,.55)' : '#2a241c',
+        status: (err ? err + ' ERRORS · ' : recent ? 'ACTIVE · ' : 'IDLE · ') + last, stc: err ? '#ff8a7a' : recent ? '#6fbf8a' : '#6d6555' };
+    });
+    const clicks = D.clicks.map(([p, el, tg, n2, v]) => ({ p, el, tg, n: n2, v, w: (n2 / 58 * 70) + '%' }));
+    const bw = D.bw.map(([p, req, mb, per]) => ({ p, req: fmt(req), b: mb >= 1 ? mb.toFixed(1) + ' MB' : Math.round(mb * 1000) + ' KB', per, pc: per.includes('MB') ? '#f4b942' : '#9c937f', w: (Math.sqrt(mb / 266) * 100) + '%' }));
+    const routes = D.routes.map(([m, p, req, mb, per]) => ({ m, mc: m === 'POST' ? '#f4b942' : '#6d6555', p, req: fmt(req), b: mb >= 1 ? mb.toFixed(1) + ' MB' : Math.round(mb * 1000) + ' KB', per, pc: per.includes('MB') || per === '147 KB' ? '#f4b942' : '#9c937f', w: (Math.sqrt(mb / 266) * 100) + '%' }));
+    if (!this._ticker) {
+      const item = (h, k) => React.createElement('span', { key: k, style: { display: 'inline-flex', gap: 10, alignItems: 'center', font: "400 10.5px/1 'JetBrains Mono', monospace", color: '#9c937f' } },
+        React.createElement('span', { style: { color: '#6d6555' } }, h[0]),
+        React.createElement('span', { style: { color: '#6fbf8a' } }, '200'),
+        React.createElement('span', { style: { color: h[4] ? '#f4b942' : '#e8e0cf' } }, h[1]),
+        React.createElement('span', null, h[2]),
+        React.createElement('span', { style: { color: '#6d6555' } }, h[3]),
+        h[4] ? React.createElement('span', { style: { padding: '2px 5px', borderRadius: 2, background: h[4] === 'BOT' ? 'rgba(244,185,66,.16)' : 'rgba(255,90,74,.16)', color: h[4] === 'BOT' ? '#f4b942' : '#ff8a7a', fontSize: 9 } }, h[4]) : null);
+      const all = D.hits.concat(D.hits);
+      this._ticker = React.createElement('div', { style: { display: 'flex', gap: 40, width: 'max-content', animation: 'obsTicker 50s linear infinite' } }, all.map((h, k) => item(h, k)));
+    }
+    return {
+      cols: L.cols, rows: L.rows, gc, gr, st, cp, dp, go, cur, hint,
+      layoutOpts: seg(['RAILS', 'DOCK', 'WING'], layout.toUpperCase(), o => this.vt({ layout: o.toLowerCase(), max: false })),
+      winOpts: seg(['1D', '7D', '30D'], S.win, o => this.setState({ win: o })),
+      refOpts: seg(['30S', '1M', '5M', 'OFF'], S.refresh, o => this.setState({ refresh: o })),
+      speedOpts: seg(['1x', '2x', '4x'], S.speed + 'x', o => this.setState({ speed: parseInt(o) })),
+      toggleMax: e => { e.stopPropagation(); this.toggleMax(); }, maxLabel: S.max ? '⤡ RESTORE' : '⤢ FOCUS',
+      clock: S.now.toLocaleTimeString('en-US', { hour12: false }),
+      days, countries12: countries.slice(0, 12), countries3: countries.slice(0, 3), pingCount: String(S.pings).padStart(2, '0'),
+      pages: D.pages.map(([p, n2, v]) => ({ p, n: n2, v, w: (n2 / 393 * 100) + '%', fg: p.includes('wp-admin') ? '#ff8a7a' : '#e8e0cf' })),
+      refs: D.refs.map(([p, n2]) => ({ p, n: n2, w: (n2 / 7 * 100) + '%' })),
+      projects: D.projects.map(([p, n2, v]) => ({ p, n: n2, v, w: (n2 / 93 * 100) + '%' })),
+      q: S.q, onQ: e => this.setState({ q: e.target.value }), sessCount: sessions.length + ' / ' + D.sessions.length,
+      sessions, sessTop: sessions.slice(0, 7), j, apps, clicks, clicksTop: clicks.slice(0, 6), bw, bwTop: bw.slice(0, 5), routes,
+      visitors: D.visitors.map(([id, ip, cc, dev, em, hits, pages, last]) => ({ id, ip, cc, dev, em, hits, pages, last, idc: em !== '—' ? '#f26a2e' : '#e8e0cf' })),
+      canvasRef: this.canvasRef, ticker: this._ticker,
+      scanDisp: (this.props.scanlines ?? true) ? 'block' : 'none'
+    };
+  }
+}
+</script>
+</body>
+</html>

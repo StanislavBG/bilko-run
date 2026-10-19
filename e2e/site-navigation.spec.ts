@@ -94,52 +94,74 @@ test('bottom bar is consistent', async ({ page }) => {
   }
 });
 
-test('bottom bar text is calm and readable', async ({ page, browser }) => {
-  const now = page.locator('.bk-bb-now');
-  const bar = page.locator('.bk-bottombar');
+// Time is driven only by page.clock. Long skips use fastForward (fires the interval once, no
+// per-frame animation cost); runFor then lets the 400ms fade swap run.
+const NOW_ROTATE_MS = 12000;
+const NOW_FADE_MS = 400;
 
-  await page.clock.install();
+async function openHomeWithClock(page: Page) {
+  await page.clock.install({ time: 0 });
+  await page.clock.pauseAt(1000);
   await page.goto('/');
-  const first = await now.innerText();
-  await page.clock.runFor(6000);
-  expect(await now.innerText()).toBe(first);
-  await page.clock.runFor(7000);
-  await expect(now).not.toHaveText(first);
+  const now = page.locator('.bk-bb-now');
+  await expect(now).not.toHaveText('');
+  return { now, first: (await now.textContent()) ?? '' };
+}
 
-  // Hover pauses rotation.
-  await bar.hover();
-  const held = await now.innerText();
-  await page.clock.runFor(30000);
-  expect(await now.innerText()).toBe(held);
-  await page.mouse.move(0, 300);
+test.describe('bottom bar text is calm and readable', () => {
+  test('rotates only after the 12s interval', async ({ page }) => {
+    const { now, first } = await openHomeWithClock(page);
+    await page.clock.fastForward(6000);
+    await expect(now).toHaveText(first);
+    await page.clock.fastForward(7000);
+    await page.clock.runFor(NOW_FADE_MS + 100);
+    await expect(now).not.toHaveText(first);
+  });
 
-  // Reduced motion: static first item.
-  const rm = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
-  const rmPage = await rm.newPage();
-  await rmPage.clock.install();
-  await rmPage.goto('/');
-  const rmFirst = await rmPage.locator('.bk-bb-now').innerText();
-  await rmPage.clock.runFor(30000);
-  expect(await rmPage.locator('.bk-bb-now').innerText()).toBe(rmFirst);
-  await rm.close();
+  test('hover pauses rotation', async ({ page }) => {
+    const { now, first } = await openHomeWithClock(page);
+    // Hover before any time passes so no tick can race it.
+    await page.locator('.bk-bottombar').hover();
+    await page.clock.fastForward(30000);
+    await page.clock.runFor(NOW_FADE_MS + 100);
+    await expect(now).toHaveText(first);
+  });
 
-  // Every item shown in full, bar stays 52px.
+  test('reduced motion keeps the first item static', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const { now, first } = await openHomeWithClock(page);
+    await page.clock.fastForward(30000);
+    await page.clock.runFor(NOW_FADE_MS + 100);
+    await expect(now).toHaveText(first);
+  });
+
   for (const width of [1280, 1440]) {
     for (const path of ['/', '/contact']) {
-      await page.setViewportSize({ width, height: width === 1280 ? 800 : 900 });
-      await page.goto(path);
-      const seen = new Set<string>();
-      for (let i = 0; i < 6 && seen.size < 4; i++) {
-        const text = await now.innerText();
-        if (!seen.has(text)) {
-          seen.add(text);
-          const m = await now.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth }));
-          expect(m.sw, `${path}@${width} "${text}"`).toBeLessThanOrEqual(m.cw);
-          expect((await bar.boundingBox())!.height).toBe(52);
+      test(`every item is shown in full and the bar stays 52px at ${width} on ${path}`, async ({ page }) => {
+        const now = page.locator('.bk-bb-now');
+        const bar = page.locator('.bk-bottombar');
+        await page.setViewportSize({ width, height: width === 1280 ? 800 : 900 });
+        await page.clock.install({ time: 0 });
+        await page.clock.pauseAt(1000);
+        await page.goto(path);
+        await expect(now).not.toHaveText('');
+        const seen = new Set<string>();
+        for (let i = 0; i < 6 && seen.size < 4; i++) {
+          const text = (await now.textContent()) ?? '';
+          if (!seen.has(text)) {
+            seen.add(text);
+            const m = await now.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth }));
+            expect(m.sw, `${path}@${width} "${text}"`).toBeLessThanOrEqual(m.cw);
+            expect((await bar.boundingBox())!.height).toBe(52);
+          }
+          if (seen.size < 4) {
+            await page.clock.fastForward(NOW_ROTATE_MS);
+            await page.clock.runFor(NOW_FADE_MS + 100);
+            await expect(now).not.toHaveText(text);
+          }
         }
-        await page.clock.runFor(12500);
-      }
-      expect(seen.size).toBe(4);
+        expect(seen.size).toBe(4);
+      });
     }
   }
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 import { track, trackFlow } from '../lib/telemetry.js';
@@ -16,6 +16,9 @@ function activeSectionPath(pathname: string): string {
   return pathname;
 }
 
+const NOW_ROTATE_MS = 12000;
+const NOW_FADE_MS = 400;
+
 const NAV_SECTIONS = SECTIONS.filter(s => s.id !== 'home');
 
 export function Layout() {
@@ -24,11 +27,22 @@ export function Layout() {
   const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [nowIdx, setNowIdx] = useState(0);
+  const [nowFading, setNowFading] = useState(false);
+  const pausedRef = useRef({ hover: false, focus: false });
   const isHome = location.pathname === '/';
 
   useEffect(() => {
-    const id = setInterval(() => setNowIdx(i => (i + 1) % NOW_ITEMS.length), 5000);
-    return () => clearInterval(id);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let swap: ReturnType<typeof setTimeout> | undefined;
+    const id = setInterval(() => {
+      if (pausedRef.current.hover || pausedRef.current.focus) return;
+      setNowFading(true);
+      swap = setTimeout(() => {
+        setNowIdx(i => (i + 1) % NOW_ITEMS.length);
+        setNowFading(false);
+      }, NOW_FADE_MS);
+    }, NOW_ROTATE_MS);
+    return () => { clearInterval(id); clearTimeout(swap); };
   }, []);
 
   useEffect(() => {
@@ -135,10 +149,16 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <footer className="bk-bottombar">
+      <footer
+        className="bk-bottombar"
+        onMouseEnter={() => { pausedRef.current.hover = true; }}
+        onMouseLeave={() => { pausedRef.current.hover = false; }}
+        onFocus={() => { pausedRef.current.focus = true; }}
+        onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) pausedRef.current.focus = false; }}
+      >
         <div className="bk-bb-left">
           <span className="bk-bb-label">Currently →</span>
-          <span className="bk-bb-now" key={nowIdx}>{NOW_ITEMS[nowIdx]}</span>
+          <span className={`bk-bb-now${nowFading ? ' is-fading' : ''}`}>{NOW_ITEMS[nowIdx]}</span>
         </div>
         <div className="bk-bb-center">
           {isHome ? (

@@ -93,3 +93,53 @@ test('bottom bar is consistent', async ({ page }) => {
     await expect(bar.getByText('Scroll to flip')).toHaveCount(path === '/' ? 1 : 0);
   }
 });
+
+test('bottom bar text is calm and readable', async ({ page, browser }) => {
+  const now = page.locator('.bk-bb-now');
+  const bar = page.locator('.bk-bottombar');
+
+  await page.clock.install();
+  await page.goto('/');
+  const first = await now.innerText();
+  await page.clock.runFor(6000);
+  expect(await now.innerText()).toBe(first);
+  await page.clock.runFor(7000);
+  await expect(now).not.toHaveText(first);
+
+  // Hover pauses rotation.
+  await bar.hover();
+  const held = await now.innerText();
+  await page.clock.runFor(30000);
+  expect(await now.innerText()).toBe(held);
+  await page.mouse.move(0, 300);
+
+  // Reduced motion: static first item.
+  const rm = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
+  const rmPage = await rm.newPage();
+  await rmPage.clock.install();
+  await rmPage.goto('/');
+  const rmFirst = await rmPage.locator('.bk-bb-now').innerText();
+  await rmPage.clock.runFor(30000);
+  expect(await rmPage.locator('.bk-bb-now').innerText()).toBe(rmFirst);
+  await rm.close();
+
+  // Every item shown in full, bar stays 52px.
+  for (const width of [1280, 1440]) {
+    for (const path of ['/', '/contact']) {
+      await page.setViewportSize({ width, height: width === 1280 ? 800 : 900 });
+      await page.goto(path);
+      const seen = new Set<string>();
+      for (let i = 0; i < 6 && seen.size < 4; i++) {
+        const text = await now.innerText();
+        if (!seen.has(text)) {
+          seen.add(text);
+          const m = await now.evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth }));
+          expect(m.sw, `${path}@${width} "${text}"`).toBeLessThanOrEqual(m.cw);
+          expect((await bar.boundingBox())!.height).toBe(52);
+        }
+        await page.clock.runFor(12500);
+      }
+      expect(seen.size).toBe(4);
+    }
+  }
+});

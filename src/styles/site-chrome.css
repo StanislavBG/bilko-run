@@ -47,16 +47,17 @@
 .portfolio-shell .bk-chip-accent { color: #a83818; border-color: #a83818; }
 
 .bk-bottombar {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px;
-  min-height: 52px; height: 52px; padding: 0 56px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 20px;
+  min-height: 52px; height: 52px; padding: 0 40px;
   background: #f5f0e6; border-top: 1px solid #e3dcc8;
   font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px;
-  letter-spacing: .1em; line-height: normal; text-transform: uppercase; color: #5d5648;
+  letter-spacing: .05em; line-height: normal; text-transform: uppercase; color: #5d5648;
 }
 .portfolio-shell .bk-bottombar a:hover { color: #a83818; }
 .bk-bb-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bk-bb-label { color: #a83818; white-space: nowrap; }
-.bk-bb-now { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-bb-now { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 1; transition: opacity .4s ease; }
+.bk-bb-now.is-fading { opacity: 0; }
 .bk-bb-center { display: flex; align-items: center; gap: 18px; }
 .portfolio-shell .bk-bb-hint { color: #1a1612; white-space: nowrap; }
 .portfolio-shell .bk-bb-hint:hover { color: #a83818; }
@@ -110,4 +111,5 @@ body.bk-flip-reset .portfolio-shell::after { transition: none !important; }
   body.bk-flip-armed .portfolio-shell,
   body.bk-flip-armed .portfolio-shell::after { transition: none !important; }
   .bk-online-dot, .bk-bb-arrow { animation: none; }
+  .bk-bb-now { transition: none; }
 }

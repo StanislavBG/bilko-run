@@ -119,6 +119,28 @@ test('same chrome on home, projects and contact', async ({ page }) => {
   expect(fits).toBe(true);
 });
 
+test('radar pauses while the readout is hovered', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
+  const sweepT = () => page.locator('[data-radar-sweep]').evaluate(el => getComputedStyle(el).transform);
+  const readout = page.locator('.hr-readout');
+  // Top edge, clear of the items (hovering an item deliberately swings the sweep).
+  await readout.hover({ position: { x: 20, y: 4 } });
+  await page.waitForTimeout(200); // let the pause land in the rAF loop
+  const t0 = await sweepT();
+  const name0 = await page.locator('.hr-readout-name').innerText();
+  await page.waitForTimeout(1500);
+  expect(await sweepT()).toBe(t0);
+  expect(await page.locator('.hr-readout-name').innerText()).toBe(name0);
+
+  await page.locator('.hr-readout .hr-item').first().hover();
+  await expect(page.getByText(/Locked ·/)).toBeVisible();
+
+  await page.locator('.hr-h1').hover();
+  await expect.poll(sweepT, { timeout: 1500 }).not.toBe(await sweepT());
+});
+
 test.describe('reduced motion', () => {
   test.use({ reducedMotion: 'reduce' });
   test('pressing 1 reaches /projects within 1s', async ({ page }) => {

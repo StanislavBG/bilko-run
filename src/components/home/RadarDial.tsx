@@ -10,6 +10,8 @@ export interface RadarDialProps {
   size: number;
   lockedSector: 0 | 1 | 2 | null;
   sweepSeconds?: number;
+  paused?: boolean;
+  highlightId?: string | null;
   onSectorChange: (i: 0 | 1 | 2) => void;
   onLitChange: (litIds: ReadonlySet<string>, focusId: string | null) => void;
   onLock: (i: 0 | 1 | 2) => void;
@@ -64,10 +66,13 @@ export function RadarDial(props: RadarDialProps) {
       const period = Math.max(4, Math.min(16, Number(p.sweepSeconds) || 9));
       const m = mouseRef.current;
       const inside = !!m && m.inside;
-      const focus = inside && m.focus >= 0 ? p.items[m.focus] : undefined;
+      const hl = !inside && p.highlightId ? p.items.find(it => it.id === p.highlightId) : undefined;
+      const focus = inside && m.focus >= 0 ? p.items[m.focus] : hl;
       const locked = p.lockedSector;
       let target: number | null = null;
+      if (p.paused) target = angRef.current;
       if (locked !== null) target = p.sectors[locked].mid;
+      if (hl) target = hl.b;
       if (inside) target = focus ? focus.b : m.b;
       const park = target === null && reduced;
       if (park) target = p.sectors[sectorIndexAt(angRef.current)].mid;
@@ -75,7 +80,7 @@ export function RadarDial(props: RadarDialProps) {
       angRef.current = ang;
       if (sweepRef.current) sweepRef.current.style.transform = `rotate(${ang}deg)`;
 
-      const manual = inside || locked !== null;
+      const manual = inside || locked !== null || !!hl;
       const lit = new Set<string>();
       let labelId: string | null = null;
       let best = Infinity;
@@ -179,6 +184,7 @@ export function RadarDial(props: RadarDialProps) {
         })}
         <div
           ref={sweepRef}
+          data-radar-sweep=""
           style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 0deg, rgba(168,56,24,0) 0deg, rgba(168,56,24,0) 280deg, rgba(168,56,24,.2) 359deg, rgba(168,56,24,0) 360deg)', pointerEvents: 'none', transform: `rotate(${angRef.current}deg)` }}
         >
           <div style={{ position: 'absolute', left: '50%', top: 0, width: 2, height: '50%', marginLeft: -1, background: '#a83818' }} />

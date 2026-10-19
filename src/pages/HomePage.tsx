@@ -26,6 +26,8 @@ export function HomePage() {
   const [lock, setLock] = useState<0 | 1 | 2 | null>(null);
   const [sweepSec, setSweepSec] = useState<0 | 1 | 2>(0);
   const [lit, setLit] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  const [paused, setPaused] = useState(false);
+  const [highlight, setHighlight] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [dims, setDims] = useState(() => radarSize(window.innerWidth, window.innerHeight));
 
@@ -162,6 +164,8 @@ export function HomePage() {
           sectors={RADAR_SECTORS}
           size={dims.size}
           lockedSector={lock}
+          paused={paused}
+          highlightId={highlight}
           onSectorChange={setSweepSec}
           onLitChange={(ids, f) => { setLit(ids); setFocus(f); }}
           onLock={setLock}
@@ -169,7 +173,13 @@ export function HomePage() {
           onFlip={doFlip}
         />
         {dims.showReadout && (
-          <div className="hr-readout">
+          <div
+            className="hr-readout"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => { setPaused(false); setHighlight(null); }}
+            onFocus={() => setPaused(true)}
+            onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPaused(false); }}
+          >
             <div className="hr-readout-top">
               <span style={{ color: '#a83818' }}>Sector {sector.no}{lock !== null || focus !== null ? ' · manual' : ''}</span>
               <span className="hr-readout-count">{counts[si]}</span>
@@ -181,6 +191,8 @@ export function HomePage() {
                   key={it.id}
                   href={it.href}
                   className={`hr-item${focus === it.id ? ' is-focus' : lit.has(it.id) ? ' is-lit' : ''}`}
+                  onMouseEnter={() => setHighlight(it.id)}
+                  onMouseLeave={() => setHighlight(null)}
                   onClick={e => { if (it.dest) { e.preventDefault(); doFlip(it.dest); } }}
                 >
                   <span className="hr-item-name">{it.name}</span>

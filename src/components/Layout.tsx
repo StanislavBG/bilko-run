@@ -13,6 +13,7 @@ function activeSectionPath(pathname: string): string {
   if (pathname.startsWith('/studio') || pathname.startsWith('/games')) return '/projects';
   if (pathname.startsWith('/blog')) return '/blog';
   if (pathname.startsWith('/contact')) return '/contact';
+  if (pathname.startsWith('/forum')) return '/forum';
   return pathname;
 }
 

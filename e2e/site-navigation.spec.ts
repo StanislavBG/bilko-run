@@ -5,11 +5,12 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const FLIP = { timeout: 3000 };
-const PAGES = ['/', '/projects', '/blog', '/contact'] as const;
+const PAGES = ['/', '/projects', '/blog', '/contact', '/forum'] as const;
 const PILLS = [
   { name: '01 Projects', path: '/projects' },
   { name: '02 Blog', path: '/blog' },
   { name: '03 Contact', path: '/contact' },
+  { name: '04 Forum', path: '/forum' },
 ] as const;
 
 const header = (page: Page) => page.locator('header.bk-header');

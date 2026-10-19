@@ -69,6 +69,7 @@ export const SECTIONS: readonly Section[] = [
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
+  { id: 'forum',     label: 'Forum',       path: '/forum',     icon: '❝', desc: 'Threads, hellos, and people who stick around.', tag: 'new' },
 ];
 
 export const CHANNELS: readonly Channel[] = [

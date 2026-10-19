@@ -1,188 +1,200 @@
-import { useNavigate } from 'react-router-dom';
-import { Ticker } from '../components/portfolio/Ticker.js';
-import { navigateProject } from '../components/portfolio/navigateProject.js';
-import { SECTIONS, PORTFOLIO_PROJECTS, NOW_ITEMS } from '../data/portfolio.js';
-import { PUBLIC_SLUGS } from '../data/projectsView.js';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { PUBLIC_CARDS } from '../data/projectsView.js';
+import {
+  FLIP_DESTS, RADAR_SECTORS, buildRadarItems, radarSize,
+  type FlipDest,
+} from '../data/homeRadar.js';
+import { RadarDial } from '../components/home/RadarDial.js';
+import { FlipDestination, useBookFlip } from '../components/home/BookFlip.js';
 import { trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import '../styles/home-radar.css';
 
-// Only surface projects that are publicly listed on /projects (PUBLIC_SLUGS);
-// keeps the homepage in sync with the hub so we never tease a delisted tool.
-const RECENT_BUILDS = PORTFOLIO_PROJECTS.filter(p => PUBLIC_SLUGS.has(p.id)).slice(0, 4);
+const API = import.meta.env.VITE_API_URL || '/api';
+const SPINE_LABELS = PUBLIC_CARDS.map(c => c.name);
+const SECTOR_KEYS = ['projects', 'blog', 'contact'] as const;
+const KEY_TO_SECTOR: Record<string, (typeof SECTOR_KEYS)[number]> = { '1': 'projects', '2': 'blog', '3': 'contact' };
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
+interface PostRef { slug: string; title: string }
 
 export function HomePage() {
-  const navigate = useNavigate();
-
   useDocumentTitle('Bilko Bibitkov — small AI tools');
 
-  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const { phase, dest, flip } = useBookFlip();
+  const [posts, setPosts] = useState<PostRef[]>([]);
+  const [lock, setLock] = useState<0 | 1 | 2 | null>(null);
+  const [sweepSec, setSweepSec] = useState<0 | 1 | 2>(0);
+  const [lit, setLit] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  const [focus, setFocus] = useState<string | null>(null);
+  const [dims, setDims] = useState(() => radarSize(window.innerWidth, window.innerHeight));
+
+  const hero = useRef<HTMLElement>(null);
+  const crossX = useRef<HTMLDivElement>(null);
+  const crossY = useRef<HTMLDivElement>(null);
+  const crossRead = useRef<HTMLDivElement>(null);
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+
+  const { items, counts } = useMemo(() => buildRadarItems({ projects: PUBLIC_CARDS, posts }), [posts]);
+  const si = lock ?? sweepSec;
+  const sector = RADAR_SECTORS[si];
+
+  useEffect(() => {
+    document.body.classList.add('hub-route');
+    return () => document.body.classList.remove('hub-route');
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API}/blog`)
+      .then(r => r.json())
+      .then(d => {
+        if (!alive || !Array.isArray(d)) return;
+        setPosts(d.slice(0, 5).filter((p): p is PostRef => typeof p?.slug === 'string' && typeof p?.title === 'string')
+          .map(p => ({ slug: p.slug, title: p.title })));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => setDims(radarSize(window.innerWidth, window.innerHeight));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const doFlip = useCallback((d: FlipDest) => {
+    trackFlow('explore', 'home-flip', { to: d.key });
+    flip(d);
+  }, [flip]);
+  const flipRef = useRef(doFlip);
+  flipRef.current = doFlip;
+
+  useEffect(() => {
+    const go = (key: (typeof SECTOR_KEYS)[number]) => flipRef.current(FLIP_DESTS[key]);
+    const onKey = (e: KeyboardEvent) => {
+      if (phaseRef.current !== 'idle' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target instanceof HTMLElement ? e.target : null;
+      if (t?.closest('input, textarea, [contenteditable=""], [contenteditable="true"]')) return;
+      if (KEY_TO_SECTOR[e.key]) { e.preventDefault(); go(KEY_TO_SECTOR[e.key]); return; }
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); go('projects'); return; }
+      if (e.key === ' ' || e.code === 'Space') {
+        if (t?.closest('a, button')) return;
+        e.preventDefault();
+        go('projects');
+      }
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (phaseRef.current !== 'idle' || e.deltaY <= 24) return;
+      e.preventDefault();
+      go('projects');
+    };
+    const onClick = (e: MouseEvent) => {
+      const el = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-home-flip]') : null;
+      const key = el?.dataset.homeFlip;
+      if (!key || !(key in FLIP_DESTS)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (phaseRef.current === 'idle') go(key as (typeof SECTOR_KEYS)[number]);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    document.addEventListener('click', onClick, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('wheel', onWheel);
+      document.removeEventListener('click', onClick, true);
+    };
+  }, []);
+
+  const onMove = (e: React.MouseEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    if (crossX.current) crossX.current.style.top = `${y}px`;
+    if (crossY.current) crossY.current.style.left = `${x}px`;
+    if (crossRead.current) {
+      crossRead.current.style.left = `${x + 10}px`;
+      crossRead.current.style.top = `${y + 8}px`;
+      crossRead.current.textContent = `X ${(x / r.width).toFixed(3)} · Y ${(y / r.height).toFixed(3)}`;
+    }
+    [crossX, crossY, crossRead].forEach(ref => ref.current?.classList.remove('hr-cross-hide'));
+  };
+  const onLeave = () => [crossX, crossY, crossRead].forEach(ref => ref.current?.classList.add('hr-cross-hide'));
+  const crossHide = phase !== 'idle' ? ' hr-cross-hide' : '';
+
+  const secItems = items.filter(it => it.sec === si);
+  const secCol = (s: number) => ({ '--hr-col': RADAR_SECTORS[s].col }) as CSSProperties;
 
   return (
-    <div className="pf-page">
-      <section className="pf-hero">
-        <div>
-          <h1>
-            <span style={{ display: 'block' }}>Small <span className="pf-accent">AI tools</span>,</span>
-            <span style={{ display: 'block' }}>one at a time.</span>
-          </h1>
-          <div className="pf-who">
-            <span>Studio of one</span>
-            <span className="pf-line"></span>
-            <span>est. 2024</span>
-          </div>
-          <p className="pf-blurb">
-            A handful of things that actually run. Trading bots that read
-            Reddit and trade in public. A weather report that tells you
-            whether to go outside. A live dashboard of everything on GitHub.
-            And the plumbing underneath — a session scheduler and an MCP
-            host that keep the whole studio shipping. Plus a free, ad-free
-            AI academy. Most are free or open source. Build logs on the blog.
+    <section ref={hero} className="hr-hero" onMouseMove={onMove} onMouseLeave={onLeave}>
+      <div ref={crossX} className={`hr-cross-x hr-cross-hide${crossHide}`} />
+      <div ref={crossY} className={`hr-cross-y hr-cross-hide${crossHide}`} />
+      <div ref={crossRead} className={`hr-cross-read hr-cross-hide${crossHide}`}>X 0.000 · Y 0.000</div>
+      <div className="hr-inner">
+        <div className="hr-left">
+          <span className="hr-eyebrow"><span className="hr-dot" />On air · studio of one</span>
+          <h1 className="hr-h1">Make. Ship. <em>Write it down.</em></h1>
+          <p className="hr-lede">
+            Small AI tools, games and open-source packages — built one at a time, in public,
+            with a build log for every one that ships.
           </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
-            <button className="pf-btn" data-track="home-see-work" onClick={() => navigate('/projects')}>See the work →</button>
-            <button className="pf-btn ghost" data-track="home-contact" onClick={() => navigate('/contact')}>Get in touch</button>
-            <a
-              href="/coffee"
-              data-track="tip-coffee"
-              onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee', area: 'home' })}
-              className="pf-btn ghost"
-              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-            >
-              Buy me a coffee ☕
-            </a>
+          <div className="hr-rows" onMouseLeave={() => setLock(null)}>
+            {RADAR_SECTORS.map((s, i) => (
+              <a
+                key={s.key}
+                href={FLIP_DESTS[s.key].url}
+                className={`hr-row${si === i ? ' is-on' : ''}`}
+                style={secCol(i)}
+                data-track={`home-sector-${s.key}`}
+                onMouseEnter={() => setLock(i as 0 | 1 | 2)}
+                onClick={e => { e.preventDefault(); doFlip(FLIP_DESTS[s.key]); }}
+              >
+                <span className="hr-row-no">{s.no}</span>
+                <span className="hr-row-name">{s.k}</span>
+                <span className="hr-row-count">{counts[i]} ↗</span>
+              </a>
+            ))}
           </div>
         </div>
-        <div className="pf-hero-side">
-          <div className="pf-portrait-card">
-            <div className="pf-portrait">
-              <svg viewBox="0 0 200 220" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
-                <defs>
-                  <pattern id="pf-hero-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="0.5" />
-                  </pattern>
-                </defs>
-                <rect width="200" height="220" fill="var(--pf-accent)" />
-                <rect width="200" height="220" fill="url(#pf-hero-grid)" />
-                {/* orbiting dots */}
-                <g style={{ transformOrigin: '100px 110px' }}>
-                  <circle cx="100" cy="40" r="4" fill="var(--pf-ink)">
-                    <animateTransform attributeName="transform" type="rotate" from="0 100 110" to="360 100 110" dur="14s" repeatCount="indefinite" />
-                  </circle>
-                  <circle cx="100" cy="60" r="2.5" fill="var(--pf-ink)" opacity="0.5">
-                    <animateTransform attributeName="transform" type="rotate" from="120 100 110" to="480 100 110" dur="22s" repeatCount="indefinite" />
-                  </circle>
-                  <circle cx="100" cy="20" r="3" fill="var(--pf-bg)">
-                    <animateTransform attributeName="transform" type="rotate" from="240 100 110" to="-120 100 110" dur="30s" repeatCount="indefinite" />
-                  </circle>
-                </g>
-                {/* center monogram */}
-                <circle cx="100" cy="110" r="44" fill="var(--pf-ink)" />
-                <circle cx="100" cy="110" r="50" fill="none" stroke="var(--pf-ink)" strokeWidth="1" strokeDasharray="2 4" />
-                <text x="100" y="124" textAnchor="middle" fontFamily="var(--pf-font-display)" fontSize="56" fill="var(--pf-bg)" fontStyle="italic">B</text>
-                {/* signal line */}
-                <g stroke="var(--pf-ink)" strokeWidth="1.2" fill="none">
-                  <path d="M 20 180 L 60 180 L 70 170 L 90 190 L 110 175 L 130 185 L 180 180" opacity="0.6">
-                    <animate
-                      attributeName="d"
-                      values="M 20 180 L 60 180 L 70 170 L 90 190 L 110 175 L 130 185 L 180 180;
-                              M 20 180 L 60 175 L 70 188 L 90 172 L 110 190 L 130 178 L 180 180;
-                              M 20 180 L 60 180 L 70 170 L 90 190 L 110 175 L 130 185 L 180 180"
-                      dur="6s"
-                      repeatCount="indefinite"
-                    />
-                  </path>
-                </g>
-                {/* corner ticks */}
-                <g stroke="var(--pf-ink)" strokeWidth="1.5" opacity="0.5">
-                  <path d="M 12 12 L 22 12 M 12 12 L 12 22" />
-                  <path d="M 188 12 L 178 12 M 188 12 L 188 22" />
-                  <path d="M 12 208 L 22 208 M 12 208 L 12 198" />
-                  <path d="M 188 208 L 178 208 M 188 208 L 188 198" />
-                </g>
-              </svg>
+        <RadarDial
+          items={items}
+          sectors={RADAR_SECTORS}
+          size={dims.size}
+          lockedSector={lock}
+          onSectorChange={setSweepSec}
+          onLitChange={(ids, f) => { setLit(ids); setFocus(f); }}
+          onLock={setLock}
+          onUnlock={() => setLock(null)}
+          onFlip={doFlip}
+        />
+        {dims.showReadout && (
+          <div className="hr-readout">
+            <span className="hr-readout-no" style={{ color: sector.col }}>Sector {sector.no}</span>
+            <h2 className="hr-readout-name">{sector.k}</h2>
+            <div className="hr-items">
+              {secItems.map(it => (
+                <a
+                  key={it.id}
+                  href={it.href}
+                  className={`hr-item${focus === it.id ? ' is-focus' : lit.has(it.id) ? ' is-lit' : ''}`}
+                  onClick={e => { if (it.dest) { e.preventDefault(); doFlip(it.dest); } }}
+                >
+                  <span>{it.name}</span>
+                  <small>{it.sub}</small>
+                </a>
+              ))}
+              {si === 1 && secItems.length === 0 && <span className="hr-item">Weekly logs</span>}
             </div>
-            <div className="pf-portrait-meta">
-              <div className="pf-mono" style={{ color: 'var(--pf-ink-3)' }}>Bilko Bibitkov</div>
-              <div className="pf-serif" style={{ fontSize: 22, lineHeight: 1.1, marginTop: 4 }}>
-                <em style={{ color: 'var(--pf-accent)' }}>Two dozen tools.</em><br />
-                Build logs on the blog.
-              </div>
-            </div>
+            <button type="button" className="hr-cta" data-track={`home-cta-${sector.key}`} onClick={() => doFlip(FLIP_DESTS[sector.key])}>
+              {sector.cta} →
+            </button>
           </div>
-          <div className="pf-now">
-            <div className="pf-now-label">
-              <span className="pf-status-dot"></span>
-              <span className="pf-mono" style={{ color: 'var(--pf-ink)' }}>Currently · {today}</span>
-            </div>
-            <ul>
-              {NOW_ITEMS.slice(0, 4).map((n, i) => <li key={i}>{n}</li>)}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <Ticker />
-
-      <section style={{ padding: '56px 0 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', marginBottom: 24 }}>
-          <div>
-            <div className="pf-eyebrow">Index · {SECTIONS.length} sections</div>
-            <h2 className="pf-serif" style={{ fontSize: 48, margin: '8px 0 0', fontWeight: 400, letterSpacing: '-0.015em' }}>
-              Pick a room.
-            </h2>
-          </div>
-          <div className="pf-mono" style={{ maxWidth: 280, color: 'var(--pf-ink-2)', textTransform: 'none', letterSpacing: 0, fontSize: 12, lineHeight: 1.5 }}>
-            Every page tells you what it is, why it exists, and what to do next.
-            Press <span style={{ color: 'var(--pf-ink)', fontWeight: 600 }}>⌘K</span> to jump anywhere.
-          </div>
-        </div>
-        <div className="pf-section-grid">
-          {SECTIONS.map((s, i) => (
-            <div key={s.id} className="pf-section-tile" onClick={() => navigate(s.path)}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="pf-tile-num">0{i + 1} / 0{SECTIONS.length}</span>
-                <span className="pf-tile-arrow">↗</span>
-              </div>
-              <span className="pf-tile-icon">{s.icon}</span>
-              <h3>{s.label}</h3>
-              <p>{s.desc}</p>
-              <div className="pf-tile-foot">
-                <span>{s.tag}</span>
-                <span>{s.path}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section style={{ padding: '56px 0 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 }}>
-          <h2 className="pf-serif" style={{ fontSize: 48, margin: 0, fontWeight: 400, letterSpacing: '-0.015em' }}>
-            Recent <em style={{ color: 'var(--pf-accent)', fontStyle: 'italic' }}>builds.</em>
-          </h2>
-          <a className="pf-mono" onClick={() => navigate('/projects')} style={{ cursor: 'pointer', color: 'var(--pf-ink)' }}>
-            All projects →
-          </a>
-        </div>
-        <div className="pf-proj-grid">
-          {RECENT_BUILDS.map((p, i) => (
-            <div key={p.id} className="pf-proj-card" onClick={() => navigateProject(navigate, p)}>
-              <div className={`pf-swatch ${p.color}`}></div>
-              <div className="pf-head">
-                <span className="pf-ord">No. 0{i + 1}</span>
-                <span className="pf-ord">{p.year}</span>
-              </div>
-              <div className="pf-kind">{p.kind}</div>
-              <h3>{p.name}</h3>
-              <p className="pf-blurb">{p.blurb}</p>
-              <div className="pf-foot">
-                <span className={`pf-status ${p.status.toLowerCase()}`}>{p.status}</span>
-                {p.tags.map(t => <span key={t} className="pf-chip">{t}</span>)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
+        )}
+      </div>
+      <FlipDestination dest={dest} phase={phase} spineLabels={SPINE_LABELS} />
+    </section>
   );
 }
+

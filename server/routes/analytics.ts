@@ -14,7 +14,7 @@ const ALLOWED_EVENTS = new Set([
   'paywall_shown', 'signin_click', 'signup_complete',
   'checkout_start', 'credit_spent',
   'result_copied', 'result_shared', 'cross_promo_click',
-  'free_limit_hit', 'not_found',
+  'free_limit_hit', 'not_found', 'page_view',
 ]);
 
 // Dual-key rate limiter (in-memory): both visitor_id AND IP must stay under cap.

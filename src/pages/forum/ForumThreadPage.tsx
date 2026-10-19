@@ -7,21 +7,18 @@ import {
   FORUM_CAME_VIA,
   FORUM_LIMITS,
   addPost,
-  fetchLogbook,
   fetchMe,
   fetchThread,
   forumAvatarColor,
-  formatEntryNo,
   formatForumWhen,
-  formatLogWhen,
   moderate,
-  type ForumLogEntry,
   type ForumMe,
   type ForumMember,
   type ForumPost,
   type ForumThread,
 } from '../../lib/forumClient.js';
 import { HandleModal } from './HandleModal.js';
+import { LogbookView } from './LogbookView.js';
 import '../../styles/forum.css';
 
 const boardName = (id: string) => FORUM_BOARDS.find(b => b.id === id)?.name ?? id;
@@ -39,29 +36,6 @@ function SignInPrompt({ title, text }: { title: string; text: string }) {
       <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
         <button type="button" className="fm-btn">Sign in</button>
       </SignInButton>
-    </div>
-  );
-}
-
-function Logbook() {
-  const [entries, setEntries] = useState<ForumLogEntry[] | null>(null);
-  useEffect(() => {
-    let live = true;
-    fetchLogbook().then(res => { if (live && res.ok) setEntries(res.entries); });
-    return () => { live = false; };
-  }, []);
-  if (!entries) return <p className="fm-status" role="status">Loading the log-book…</p>;
-  if (entries.length === 0) return <p className="fm-status">The book is blank. No. 0001 is still open.</p>;
-  return (
-    <div className="fm-logbook">
-      {entries.map(e => (
-        <div className="fm-logbook-row" key={e.id}>
-          <span className="fm-log-no">{formatEntryNo(e.no)}</span>
-          <span className="fm-logbook-name">@{e.handle}</span>
-          <span className="fm-logbook-msg">{e.msg}</span>
-          <span className="fm-logbook-when">{e.from ? `${e.from} · ` : ''}{formatLogWhen(e.at)}</span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -213,7 +187,13 @@ export function ForumThreadPage() {
         <p className="fm-lede">{lede}</p>
       </section>
 
-      {isLog && <Logbook />}
+      {isLog && (
+        <LogbookView
+          handle={handle}
+          flash={flash}
+          onHandleSaved={member => setMe(m => ({ signedIn: true, isHost: m?.isHost, member }))}
+        />
+      )}
 
       {thread && !isLog && (
         <>

@@ -20,3 +20,9 @@ test('thread page reads signed out', async ({ page }) => {
   await page.goto('/forum/t/brought');
   await expect(page.getByRole('heading', { name: /What brought you/ })).toBeVisible();
 });
+
+test('log-book reads signed out', async ({ page }) => {
+  await page.goto('/forum/t/log');
+  await expect(page.getByRole('heading', { name: 'I WAS HERE!' })).toBeVisible();
+  await expect(page.getByText('Sign in to sign the book.')).toBeVisible();
+});

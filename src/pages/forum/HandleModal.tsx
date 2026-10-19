@@ -7,6 +7,7 @@ import {
   validateHandle,
   type ForumMember,
 } from '../../lib/forumClient.js';
+import { FORUM_LIMITS } from '../../../shared/forum.js';
 
 interface Props {
   open: boolean;
@@ -98,7 +99,7 @@ export function HandleModal({ open, currentHandle, pending, pendingLabel, onClos
               value={value}
               onChange={e => { setValue(e.target.value.replace(/\s/g, '')); setServerError(''); }}
               onKeyDown={e => { if (e.key === 'Enter') void save(); }}
-              maxLength={24}
+              maxLength={FORUM_LIMITS.handleMax}
               placeholder="yourname"
               spellCheck={false}
               aria-label="Handle"

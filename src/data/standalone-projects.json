@@ -2,8 +2,8 @@
   {
     "slug": "git-viewer",
     "name": "Git Viewer",
-    "tagline": "My GitHub, as a front page: 65 public projects and a year of trying everything.",
-    "category": "Portfolio · Showcase",
+    "tagline": "Your Git, your Résumé — a portfolio and printable résumé from your GitHub, free in seconds",
+    "category": "Data · Portfolio",
     "status": "live",
     "year": 2026,
     "host": {
@@ -13,34 +13,35 @@
       "localPath": "~/Projects/git-viewer"
     },
     "tags": [
-      "Portfolio",
-      "Showcase",
-      "Free"
+      "Browser",
+      "Freemium"
     ],
     "public": true,
     "displayName": "Git Viewer",
     "listing": {
-      "detail": "A better front page for github.com/StanislavBG. Every public project in one place, a 12-month commit heatmap, streaks, and what each repo is about. It's here to show the work: a lot of projects, a lot of experiments, trying everything. Nothing to buy and nothing to sign up for.",
-      "metric": "65",
-      "metricLabel": "public projects",
+      "detail": "Type a GitHub username on bilko.run and get a hosted portfolio plus printable résumé, ranked by recency and activity. Free: your top project, rebuilt at most once a day when viewed. $5/mo: pick up to 12 repos, refreshed daily.",
+      "metric": "1 free · 12 paid",
+      "metricLabel": "repos per portfolio",
       "lang": "TypeScript",
-      "audience": "Anyone curious what Stanislav builds: collaborators, recruiters, fellow tinkerers.",
+      "audience": "Developers who want their GitHub activity to double as a portfolio.",
       "talkingPoints": [
-        "A front page for Stanislav's GitHub (github.com/StanislavBG): every public project in one place.",
-        "A 12-month commit heatmap, streaks and activity across all repos, refreshed daily.",
-        "Shows the range: games, AI tools, data projects, dev tools — a lot of work, trying everything.",
-        "Free to browse. Nothing to buy, no sign-up."
+        "Type your GitHub username at bilko.run/projects/git-viewer/ — no install, no signup to see it.",
+        "Turns your public GitHub repos into a portfolio page and a print-ready résumé.",
+        "Ranks repos by recency and activity.",
+        "Free shows your top project, rebuilt at most once a day when someone views it.",
+        "$5/mo lets you pick up to 12 repos and refreshes them daily."
       ],
-      "offering": "showcase",
-      "pricing": "free",
-      "callToAction": "Browse Stanislav's projects at https://stanislavbg.github.io/git-viewer/",
+      "offering": "saas",
+      "pricing": "freemium",
+      "callToAction": "Type your GitHub username at https://bilko.run/projects/git-viewer/",
       "avoidClaims": [
-        "It is a product, SaaS or service you can buy, subscribe to or sign up for.",
-        "It builds portfolios, résumés or project pages for other GitHub users.",
-        "It has a paid tier, a free tier, a subscription or any pricing.",
-        "It updates in real time when code is pushed (it refreshes once a day).",
-        "It is made or endorsed by GitHub."
-      ]
+        "Updates instantly when you push code",
+        "Shows every public repo on the free tier",
+        "Shows more than one project on the free tier",
+        "It is a local tool you have to install",
+        "Fully free with no paid tier"
+      ],
+      "shareImage": "/projects/git-viewer/og.png"
     }
   },
   {

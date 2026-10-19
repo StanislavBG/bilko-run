@@ -189,11 +189,7 @@ export function registerPageHitRecorder(app: FastifyInstance, opts: { flush?: bo
         host: h.host as string | undefined,
         country,
       };
-      const minted = (req as any).bilkoIds as { visitorId: string; sessionId: string } | undefined;
-      const ids = minted ?? (() => {
-        const c = readSessionIds(h.cookie);
-        return { visitorId: c.visitorId, sessionId: c.sessionId };
-      })();
+      const ids = req.bilkoIds ?? readSessionIds(h.cookie);
       input.sessionId = ids.sessionId;
       input.clientVid = ids.visitorId;
       const token = isBot(input.ua) ? null : sessionCookie(h.cookie);

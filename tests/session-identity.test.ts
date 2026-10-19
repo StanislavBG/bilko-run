@@ -31,10 +31,12 @@ beforeAll(async () => {
   registerSessionIdentity(app);
   app.get('/page', async (_req, reply) => reply.type('text/html').send(HTML));
   app.get('/api/page', async (_req, reply) => reply.type('text/html').send(HTML));
+  app.get('/apiary', async (_req, reply) => reply.type('text/html').send(HTML));
+  app.get('/api', async (_req, reply) => reply.type('text/html').send(HTML));
   app.get('/json', async () => ({ ok: true }));
   app.get('/with-cookie', async (_req, reply) =>
     reply.type('text/html').header('set-cookie', 'other=1; Path=/').send(HTML));
-  app.get('/ids', async (req) => (req as any).bilkoIds);
+  app.get('/ids', async (req) => req.bilkoIds);
   app.post('/post', async (_req, reply) => reply.type('text/html').send(HTML));
   await app.ready();
 });
@@ -114,6 +116,12 @@ describe('session identity', () => {
     expect(nf.statusCode).toBe(404);
     expect(setCookies(nf)).toEqual([]);
     expect(setCookies(await app.inject({ method: 'POST', url: '/post' }))).toEqual([]);
+  });
+
+  it('excludes exactly /api and /api/*, not look-alike paths', async () => {
+    expect(setCookies(await app.inject({ method: 'GET', url: '/api' }))).toEqual([]);
+    expect(setCookies(await app.inject({ method: 'GET', url: '/api?x=1' }))).toEqual([]);
+    expect(find(setCookies(await app.inject({ method: 'GET', url: '/apiary' })), VID_COOKIE)).toBeDefined();
   });
 
   it('preserves a Set-Cookie already set by the route', async () => {

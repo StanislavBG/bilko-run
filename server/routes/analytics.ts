@@ -94,7 +94,8 @@ function resolveIds(
 }
 
 export function registerAnalyticsRoutes(app: FastifyInstance): void {
-  // Fire-and-forget page view tracking — no cookies, no PII
+  // Fire-and-forget page view tracking. Reads the bilko_vid/bilko_sid cookies and the
+  // Clerk session (for the signed-in email); sets no cookies itself.
   app.post('/api/analytics/pageview', async (req, reply) => {
     try {
       let raw: unknown = req.body;

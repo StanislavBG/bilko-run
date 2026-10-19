@@ -25,6 +25,7 @@ import '../../styles/session-manager-landing.css';
 import '../../styles/session-manager-manual.css';
 import { Chevron } from './Chevron.js';
 import { Header } from './Header.js';
+import { trackDownloadClick } from './Downloads.js';
 import { COPY, fill } from './copy.js';
 import {
   bookNavigate, markBookPageReady, shouldInterceptClick,
@@ -35,7 +36,7 @@ import { MANUAL_TITLE, formatManualReleaseDate, type ManualToc } from '../../../
 /** Chapter requests from a visitor who isn't (or isn't yet known to be) signed in. */
 const NO_TOKEN: TokenGetter = async () => null;
 
-const trackAppDownload = () => trackFlow('download', 'click-download', { artifact: 'session-manager', platform: 'any' });
+const trackOpenDownloadPage = () => trackFlow('download', 'open-download-page', { artifact: 'session-manager', platform: 'any' });
 
 function isUnavailable(c: ManualChapterBody | ManualChapterUnavailable | null): c is ManualChapterUnavailable {
   return !!c && (c as ManualChapterUnavailable).locked === true;
@@ -231,7 +232,7 @@ export default function ManualPage() {
         <h1 className="smlm-title">{MANUAL_TITLE}</h1>
         <p className="smlm-summary">
           The first release is still being cut. Check back shortly — or get the app free from the{' '}
-          <a href="/products/session-manager" data-track="download-session-manager-app" onClick={trackAppDownload}>Session Manager page</a> — Mac and Windows installers, no terminal needed.
+          <a href="/products/session-manager" data-track="download-session-manager-app" onClick={trackOpenDownloadPage}>Session Manager page</a> — Mac and Windows installers, no terminal needed.
         </p>
       </main>
     ));
@@ -265,7 +266,7 @@ export default function ManualPage() {
         {toc.assets.length > 0 && (
           <div className="smlm-downloads">
             {toc.assets.map(a => (
-              <a key={a.id} href={manualDownloadUrl(a.id)} download data-track={`download-manual-${a.id}`} onClick={() => trackFlow('download', 'click-download', { artifact: 'session-manager', platform: a.id })} className="smlm-download">
+              <a key={a.id} href={manualDownloadUrl(a.id)} download data-track={`download-manual-${a.id}`} onClick={() => trackDownloadClick('session-manager-manual', a.id, toc.version)} className="smlm-download">
                 ↓ {a.label} <span className="smlm-download__size">({formatBytes(a.bytes)})</span>
               </a>
             ))}
@@ -274,7 +275,7 @@ export default function ManualPage() {
 
         <p className="smlm-appnote">
           The app itself is free too — get it from the{' '}
-          <a href="/products/session-manager" data-track="download-session-manager-app" onClick={trackAppDownload}>Session Manager page</a> — Mac and Windows installers, no terminal needed.
+          <a href="/products/session-manager" data-track="download-session-manager-app" onClick={trackOpenDownloadPage}>Session Manager page</a> — Mac and Windows installers, no terminal needed.
           This is the guide that teaches it.
         </p>
 

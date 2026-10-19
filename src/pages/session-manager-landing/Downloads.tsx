@@ -9,8 +9,8 @@ import { COPY } from './copy.js';
 const dl = COPY.priceTag.downloads;
 
 /** Fire-and-forget download-click telemetry. Links always point at the latest release. */
-export function trackDownloadClick(platform: string): void {
-  trackFlow('download', 'click-download', { artifact: 'session-manager', version: 'latest', platform });
+export function trackDownloadClick(artifact: string, platform: string, version = 'latest'): void {
+  trackFlow('download', 'click-download', { artifact, version, platform });
 }
 
 /** False until the GitHub release carries the Windows installer. */
@@ -37,7 +37,7 @@ function WindowsGlyph() {
 
 export function MacDownload({ className = '' }: { className?: string }) {
   return (
-    <a className={`smlp-dl ${className}`.trim()} href={dl.mac.href} download data-track="download-mac" onClick={() => trackDownloadClick('mac')}>
+    <a className={`smlp-dl ${className}`.trim()} href={dl.mac.href} download data-track="download-mac" onClick={() => trackDownloadClick('session-manager', 'mac')}>
       <AppleGlyph />
       <span>{dl.mac.label}</span>
     </a>
@@ -58,7 +58,7 @@ export function WindowsDownload({ className = '' }: { className?: string }) {
     );
   }
   return (
-    <a className={`smlp-dl ${className}`.trim()} href={dl.windows.href} download data-track="download-windows" onClick={() => trackDownloadClick('windows')}>
+    <a className={`smlp-dl ${className}`.trim()} href={dl.windows.href} download data-track="download-windows" onClick={() => trackDownloadClick('session-manager', 'windows')}>
       <WindowsGlyph />
       <span>{dl.windows.label}</span>
     </a>

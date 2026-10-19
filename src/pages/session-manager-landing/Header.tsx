@@ -34,7 +34,7 @@ export function Header({
           className="smlp-header__coffee"
           href={h.coffeeHref}
           data-track="tip-coffee"
-          onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee' })}
+          onClick={() => trackFlow('tip', 'click-tip', { product: 'coffee', area: 'sm-header' })}
         >{h.coffeeLink}</a>
         <a
           className="smlp-header__manual"

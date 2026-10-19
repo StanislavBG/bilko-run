@@ -138,7 +138,7 @@ function PriceTag() {
         </p>
         <div className="smlp-tag__install" role="group" aria-label={tag.aria.downloads}>
           <MacDownload />
-          <a className="smlp-dl__alt" href={dl.macIntel.href} download data-track="download-mac-intel" onClick={() => trackDownloadClick('mac-intel')}>
+          <a className="smlp-dl__alt" href={dl.macIntel.href} download data-track="download-mac-intel" onClick={() => trackDownloadClick('session-manager', 'mac-intel')}>
             {dl.macIntel.label}
           </a>
           <WindowsDownload />

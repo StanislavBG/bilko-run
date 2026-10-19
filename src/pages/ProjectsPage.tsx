@@ -278,8 +278,7 @@ export function ProjectsPage() {
                   type="button"
                   className="pr-spine"
                   aria-label={`Open ${c.name}`}
-                  data-track="project-select"
-                  data-track-slug={c.slug}
+                  data-track={`project-open-${c.slug}`.slice(0, 60)}
                   title={c.name}
                   tabIndex={g.hidden ? -1 : 0}
                   aria-hidden={g.hidden || undefined}
@@ -331,7 +330,7 @@ export function ProjectsPage() {
                       Full story
                     </button>
                     {card.href && card.status !== 'postponed' && (
-                      <button className="pr-btn pr-btn-primary" data-track="project-open" data-track-slug={card.slug} onClick={open}>
+                      <button className="pr-btn pr-btn-primary" data-track={`project-open-${card.slug}`.slice(0, 60)} onClick={open}>
                         {card.type === 'package' ? 'GitHub' : 'Open'} →
                       </button>
                     )}

@@ -33,6 +33,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), slimStandaloneRegistry()],
   server: {
     port: 3002,
+    watch: {
+      // The session-manager scheduler rewrites files here constantly; don't full-reload on them.
+      ignored: ['**/session-manager-operations/**'],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:4000',

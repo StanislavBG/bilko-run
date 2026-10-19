@@ -73,12 +73,7 @@ async function expectUnflippedHome(page: Page) {
   await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
 }
 
-// BLOCKED (needs ProjectsPage change): ProjectsPage's mount effect calls setSearchParams(..., { replace: true })
-// even when ?p= already matches (returning prev still navigates). When Back is pressed before that passive
-// effect runs (~45ms after the push), the browser has already traversed to '/', so the late replaceState
-// rewrites the Home entry to /projects?p=<slug> and the router re-renders Projects. Fix there: skip the
-// call when prev.get('p') === activeSlug. Un-fixme once ProjectsPage is allowed to change.
-test.fixme('back returns to an un-flipped home', async ({ page }) => {
+test('back returns to an un-flipped home', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Make\. Ship\./ })).toBeVisible();
   await page.keyboard.press('1');
@@ -95,6 +90,15 @@ test('back after the Projects page settles returns home', async ({ page }) => {
   await page.waitForTimeout(1000);
   await page.goBack();
   await expectUnflippedHome(page);
+});
+
+test('back from /projects entered via the header returns to the previous page', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/contact');
+  await page.locator('header').first().getByRole('link', { name: '01 Projects' }).click();
+  await page.goBack();
+  await page.waitForTimeout(1500);
+  expect(new URL(page.url()).pathname).toBe('/contact');
 });
 
 test('same chrome on home, projects and contact', async ({ page }) => {

@@ -222,13 +222,15 @@ export function ProjectsPage() {
 
   useEffect(() => {
     if (!activeSlug) return;
+    if (searchParams.get('p') === activeSlug) return;
+    if (window.location.pathname !== '/projects') return;
     setSearchParams(prev => {
       if (prev.get('p') === activeSlug) return prev;
       const next = new URLSearchParams(prev);
       next.set('p', activeSlug);
       return next;
     }, { replace: true });
-  }, [activeSlug, setSearchParams]);
+  }, [activeSlug, searchParams, setSearchParams]);
 
   function open() {
     if (!card?.href) return;

@@ -80,6 +80,220 @@ function MarkRotatedModal({
   );
 }
 
+interface ApiKeyRow {
+  id: number;
+  label: string | null;
+  prefix: string;
+  created_at: number;
+  expires_at: number;
+  last_used_at: number | null;
+  revoked_at: number | null;
+}
+
+export function keyStatus(
+  k: { revoked_at: number | null; expires_at: number },
+  nowSec: number,
+): 'active' | 'expired' | 'revoked' {
+  if (k.revoked_at !== null) return 'revoked';
+  if (k.expires_at <= nowSec) return 'expired';
+  return 'active';
+}
+
+function formatDate(epochSec: number): string {
+  return new Date(epochSec * 1000).toLocaleDateString();
+}
+
+function ApiKeysPanel({ enabled }: { enabled: boolean }) {
+  const adminFetch = useAdminFetch();
+  const { data, error: loadError, loading, reload } = useAdminResource<ApiKeyRow[]>('/admin/api-keys', { enabled });
+  const keys = data ?? [];
+  const [label, setLabel] = useState('');
+  const [ttlDays, setTtlDays] = useState(90);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const error = actionError ?? loadError;
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  async function create() {
+    setBusy(true);
+    try {
+      const res = await adminFetch('/admin/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label.trim() || undefined, ttlDays }),
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const body = (await res.json()) as { key: string };
+      setActionError(null);
+      setNewKey(body.key);
+      setCopied(false);
+      setLabel('');
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(k: ApiKeyRow) {
+    if (!window.confirm(`Revoke key ${k.prefix}…${k.label ? ` (${k.label})` : ''}? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      const res = await adminFetch(`/admin/api-keys/${k.id}/revoke`, { method: 'POST' });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      setActionError(null);
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    if (!newKey) return;
+    try {
+      await navigator.clipboard.writeText(newKey);
+      setCopied(true);
+    } catch {
+      setActionError('Copy failed — select the key and copy it manually.');
+    }
+  }
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-xl font-extrabold text-warm-900">Admin API keys</h2>
+        <p className="text-warm-500 text-sm mt-1">
+          Personal read-only keys for the bilko-host MCP. Keys cannot manage other keys.
+        </p>
+      </div>
+
+      {newKey && (
+        <div className="rounded-xl border border-fire-200 bg-fire-50 p-4 space-y-2">
+          <div className="flex gap-2">
+            <input
+              readOnly
+              value={newKey}
+              onFocus={e => e.currentTarget.select()}
+              className="flex-1 font-mono text-xs border border-warm-200 rounded-lg px-3 py-2 bg-white"
+            />
+            <button
+              onClick={copy}
+              className="px-3 py-2 text-xs font-semibold rounded-lg bg-fire-500 text-white hover:bg-fire-600 transition-colors"
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            <button
+              onClick={() => setNewKey(null)}
+              className="px-3 py-2 text-xs font-semibold rounded-lg bg-warm-100 text-warm-700 hover:bg-warm-200 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+          <p className="text-xs text-warm-600">Shown once. Put it in BILKO_ADMIN_KEY for the bilko-host MCP.</p>
+        </div>
+      )}
+
+      <form
+        onSubmit={e => { e.preventDefault(); void create(); }}
+        className="flex flex-wrap items-end gap-3"
+      >
+        <label className="text-xs font-semibold text-warm-500 space-y-1">
+          <span className="block">Label</span>
+          <input
+            value={label}
+            maxLength={80}
+            onChange={e => setLabel(e.target.value)}
+            placeholder="e.g. laptop MCP"
+            className="border border-warm-200 rounded-lg px-3 py-2 text-sm font-normal text-warm-900 focus:outline-none focus:ring-2 focus:ring-fire-400"
+          />
+        </label>
+        <label className="text-xs font-semibold text-warm-500 space-y-1">
+          <span className="block">Expires</span>
+          <select
+            value={ttlDays}
+            onChange={e => setTtlDays(Number(e.target.value))}
+            className="border border-warm-200 rounded-lg px-3 py-2 text-sm font-normal text-warm-900 bg-white focus:outline-none focus:ring-2 focus:ring-fire-400"
+          >
+            <option value={30}>30 days</option>
+            <option value={90}>90 days</option>
+            <option value={365}>365 days</option>
+          </select>
+        </label>
+        <button
+          type="submit"
+          disabled={busy}
+          className="px-4 py-2 text-sm font-semibold rounded-lg bg-fire-500 text-white hover:bg-fire-600 transition-colors disabled:opacity-50"
+        >
+          Create key
+        </button>
+      </form>
+
+      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {loading && <div className="text-warm-400 text-sm">Loading…</div>}
+
+      {!loading && (
+        <div className="overflow-x-auto rounded-xl border border-warm-200/60 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-warm-100 text-xs font-bold text-warm-400 uppercase tracking-wide">
+                <th className="text-left px-4 py-3">Prefix</th>
+                <th className="text-left px-4 py-3">Label</th>
+                <th className="text-left px-4 py-3">Created</th>
+                <th className="text-left px-4 py-3">Expires</th>
+                <th className="text-left px-4 py-3">Last used</th>
+                <th className="text-right px-4 py-3">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {keys.map(k => {
+                const status = keyStatus(k, nowSec);
+                return (
+                  <tr
+                    key={k.id}
+                    className={`border-b border-warm-50 ${status === 'active' ? '' : 'opacity-50'}`}
+                  >
+                    <td className="px-4 py-3"><code className="font-mono text-xs font-semibold text-warm-800">{k.prefix}…</code></td>
+                    <td className="px-4 py-3 text-warm-600 text-xs">{k.label ?? '—'}</td>
+                    <td className="px-4 py-3 text-warm-600 text-xs">{humanizeAgo(k.created_at)}</td>
+                    <td className="px-4 py-3 text-warm-600 text-xs">
+                      {formatDate(k.expires_at)}
+                      {status !== 'active' && <span className="ml-2 font-bold uppercase">{status}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-warm-600 text-xs">{humanizeAgo(k.last_used_at)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {status !== 'revoked' && (
+                        <button
+                          onClick={() => void revoke(k)}
+                          disabled={busy}
+                          className="px-3 py-1 text-xs font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {keys.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-warm-400 text-sm">
+                    No admin API keys yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function SecretsPage() {
   const { isLoaded } = useUser();
   const isAdmin = useIsAdmin();
@@ -206,6 +420,8 @@ export function SecretsPage() {
           </table>
         </div>
       )}
+
+      <ApiKeysPanel enabled={isAdmin} />
     </div>
   );
 }

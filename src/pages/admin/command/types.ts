@@ -213,6 +213,44 @@ export interface ObservabilityData {
   generatedAt: number;
 }
 
+/** One grouped error from GET /api/admin/observability/errors (timestamps are epoch seconds). */
+export interface ErrorGroup {
+  app: string;
+  signature: string;
+  name: string;
+  msg: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  versions: string[];
+  sampleUrl: string | null;
+  sampleId: number;
+}
+/** GET /api/admin/observability/errors */
+export interface ErrorGroupsData {
+  env: 'prod' | 'dev' | 'test' | 'all';
+  days: number;
+  app: string | null;
+  totals: { errors: number; groups: number };
+  groups: ErrorGroup[];
+}
+/** GET /api/admin/observability/errors/:id */
+export interface ErrorDetailData {
+  id: number;
+  app: string;
+  version: string | null;
+  name: string | null;
+  msg: string;
+  stack: string | null;
+  url: string | null;
+  ua: string | null;
+  visitor_id: string | null;
+  session_id: string | null;
+  context_json: unknown;
+  created_at: number;
+  env: string | null;
+}
+
 /** Injectable stand-in for useAdminFetch (the DEV preview serves fixtures through it). */
 export type AdminFetcher = (path: string, init?: RequestInit) => Promise<Response>;
 

@@ -11,7 +11,7 @@ import { SessionsModule } from './SessionsModule.js';
 import { TrafficModule, trafficSubtitle } from './TrafficModule.js';
 import { deriveKpis, deriveStatus } from './useCommandData.js';
 import type {
-  AdminFetcher, BlogCadence, EgressData, FlowsData, ModuleKey, ObservabilityData, RecentRow,
+  AdminFetcher, BlogCadence, EgressData, ErrorDetailData, ErrorGroupsData, FlowsData, ModuleKey, ObservabilityData, RecentRow,
   SessionDetail, SessionRow, TrafficData, VisitorTimeline,
 } from './types.js';
 
@@ -176,6 +176,28 @@ function visitorTimeline(id: string, days: number): VisitorTimeline {
   return { visitorId: id, days, events, generatedAt: NOW };
 }
 
+const SEC = Math.floor(NOW / 1000);
+const STACK = `TypeError: x is undefined
+    at render (app.js:120:14)
+    at update (app.js:88:3)
+    at HTMLButtonElement.onclick (app.js:41:9)`;
+const errorGroups = (app: string, days: number): ErrorGroupsData => ({
+  env: 'prod', days, app,
+  totals: { errors: 14, groups: 3 },
+  groups: [
+    { app, signature: 'TypeError|TypeError: x is undefined', name: 'TypeError', msg: 'x is undefined', count: 9, firstSeen: SEC - 80_000, lastSeen: SEC - 3_000, versions: ['1.4.0', '1.4.1'], sampleUrl: 'https://bilko.run/projects/' + app + '/', sampleId: 101 },
+    { app, signature: 'RangeError|', name: 'RangeError', msg: 'Invalid array length', count: 4, firstSeen: SEC - 50_000, lastSeen: SEC - 9_000, versions: ['1.4.1'], sampleUrl: null, sampleId: 102 },
+    { app, signature: 'Error|', name: 'Error', msg: 'Network request failed', count: 1, firstSeen: SEC - 20_000, lastSeen: SEC - 20_000, versions: [], sampleUrl: null, sampleId: 103 },
+  ],
+});
+const errorDetail = (id: number): ErrorDetailData => ({
+  id, app: 'session-manager', version: '1.4.1', name: id === 101 ? 'TypeError' : 'Error',
+  msg: id === 101 ? 'x is undefined' : 'Network request failed',
+  stack: id === 101 ? STACK : 'Error: Network request failed\n    at fetchAll (app.js:9:1)',
+  url: 'https://bilko.run/projects/session-manager/', ua: 'Mozilla/5.0 (X11; Linux x86_64) Firefox/131.0',
+  visitor_id: null, session_id: '00000000-0000-4000-8000-000000000001', context_json: null, created_at: SEC - 3_000, env: 'prod',
+});
+
 const json = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 /** Serves the self-fetching modules' endpoints from fixtures. */
@@ -186,6 +208,8 @@ export const previewFetcher: AdminFetcher = async (path) => {
   if (p === '/admin/sessions') return json({ sessions: sessionRows });
   if (p.startsWith('/admin/sessions/')) return json(sessionDetail(decodeURIComponent(p.slice('/admin/sessions/'.length))));
   if (p.startsWith('/admin/traffic/visitor/')) return json(visitorTimeline(decodeURIComponent(p.slice('/admin/traffic/visitor/'.length)), days));
+  if (p === '/admin/observability/errors') return json(errorGroups(url.searchParams.get('app') ?? 'app', days));
+  if (p.startsWith('/admin/observability/errors/')) return json(errorDetail(Number(p.slice('/admin/observability/errors/'.length))));
   if (p === '/admin/egress') {
     const slug = url.searchParams.get('slug');
     const e = egressFixture(days);
@@ -219,7 +243,7 @@ export function PreviewPage() {
     switch (key) {
       case 'globe': return <GlobeModule stage={stage} traffic={traffic.data} pingCountries={[]} />;
       case 'sessions': return <SessionsModule stage={stage} days={Math.min(30, days)} fetcher={previewFetcher} />;
-      case 'apps': return <AppsModule stage={stage} flows={flows} obs={obs} />;
+      case 'apps': return <AppsModule stage={stage} flows={flows} obs={obs} fetcher={previewFetcher} />;
       case 'traffic': return <TrafficModule stage={stage} traffic={traffic} />;
       case 'audience': return <AudienceModule stage={stage} traffic={traffic} days={days} fetcher={previewFetcher} />;
       case 'clicks': return <ClicksModule stage={stage} traffic={traffic} />;

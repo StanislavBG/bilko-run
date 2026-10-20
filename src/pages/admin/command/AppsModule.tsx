@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useAdminFetch } from '../../../hooks/useAdmin.js';
 import { DriftBadge } from '../DriftBadge.js';
 import { C, FONT, MonoLabel, fmtMB, fmtNum } from './theme.js';
 import type { Source } from './useCommandData.js';
-import type { Flow, FlowsData, ObservabilityData, ObservabilityRow } from './types.js';
+import type { AdminFetcher, ErrorDetailData, ErrorGroup, ErrorGroupsData, Flow, FlowsData, ObservabilityData, ObservabilityRow } from './types.js';
 
 const RECENT_MS = 48 * 3_600_000;
+
+export function errorGroupsPath(app: string, days: number, env?: string): string {
+  return `/admin/observability/errors?app=${encodeURIComponent(app)}&days=${days}${env ? `&env=${encodeURIComponent(env)}` : ''}`;
+}
 
 export interface AppTile {
   name: string;
@@ -120,6 +125,112 @@ function FunnelList({ flows }: { flows: Flow[] }) {
   );
 }
 
+const fmtSecs = (s: number): string => new Date(s * 1000).toLocaleString();
+
+function ErrorDetail({ id, fetcher }: { id: number; fetcher: AdminFetcher }) {
+  const [d, setD] = useState<ErrorDetailData | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const latest = useRef(id);
+  useEffect(() => {
+    latest.current = id;
+    setD(null);
+    setErr(null);
+    (async () => {
+      try {
+        const res = await fetcher(`/admin/observability/errors/${id}`);
+        if (!res.ok) throw new Error(`Failed to load error (HTTP ${res.status})`);
+        const body = (await res.json()) as ErrorDetailData;
+        if (latest.current === id) setD(body);
+      } catch (e) {
+        if (latest.current === id) setErr(e instanceof Error ? e.message : 'Network error');
+      }
+    })();
+    return () => {
+      if (latest.current === id) latest.current = -1;
+    };
+  }, [fetcher, id]);
+  if (err) return <span style={{ font: `400 10.5px/1.4 ${FONT.mono}`, color: C.redSoft }}>{err}</span>;
+  if (!d) return <span style={{ font: `400 10.5px/1.4 ${FONT.mono}`, color: C.faint }}>Loading…</span>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+      <span style={{ font: `600 11.5px/1.3 ${FONT.mono}`, color: C.redSoft, wordBreak: 'break-word' }}>{d.name ?? 'Error'}: {d.msg}</span>
+      <pre style={{ margin: 0, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre', padding: 8, background: C.well, border: `1px solid ${C.line}`, borderRadius: 2, font: `400 10px/1.4 ${FONT.mono}`, color: C.text }}>
+        {d.stack ?? '(no stack)'}
+      </pre>
+      <Fact label="URL">{d.url ?? '—'}</Fact>
+      <Fact label="Version">{d.version ?? '—'}</Fact>
+      <Fact label="User agent">{d.ua ?? '—'}</Fact>
+      <Fact label="Session id">{d.session_id ?? '—'}</Fact>
+    </div>
+  );
+}
+
+function ErrorsPanel({ app, fetcher }: { app: string; fetcher?: AdminFetcher }) {
+  const realFetch = useAdminFetch();
+  const adminFetch = fetcher ?? realFetch;
+  const [data, setData] = useState<ErrorGroupsData | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
+  const latest = useRef(app);
+
+  useEffect(() => {
+    latest.current = app;
+    setData(null);
+    setErr(null);
+    setOpen(null);
+    (async () => {
+      try {
+        const res = await adminFetch(errorGroupsPath(app, 1));
+        if (!res.ok) throw new Error(`Failed to load errors (HTTP ${res.status})`);
+        const body = (await res.json()) as ErrorGroupsData;
+        if (latest.current === app) setData(body);
+      } catch (e) {
+        if (latest.current === app) setErr(e instanceof Error ? e.message : 'Network error');
+      }
+    })();
+    return () => {
+      // Marks this response stale if the app changes (or on unmount).
+      if (latest.current === app) latest.current = '';
+    };
+  }, [adminFetch, app]);
+
+  const note = (color: string, text: string) => <span style={{ font: `400 10.5px/1.4 ${FONT.mono}`, color }}>{text}</span>;
+  if (open !== null) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setOpen(null); }}
+          style={{ alignSelf: 'flex-start', border: `1px solid ${C.line}`, background: C.panel, color: C.muted, cursor: 'pointer', padding: '5px 8px', borderRadius: 2, font: `500 10px/1 ${FONT.mono}`, letterSpacing: '.1em' }}
+        >
+          ← BACK
+        </button>
+        <ErrorDetail id={open} fetcher={adminFetch} />
+      </div>
+    );
+  }
+  if (err) return note(C.redSoft, err);
+  if (!data) return note(C.faint, 'Loading…');
+  if (data.groups.length === 0) return note(C.faint, 'No errors in the last 24h');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {data.groups.map((g: ErrorGroup) => (
+        <button
+          key={`${g.signature}:${g.sampleId}`}
+          type="button"
+          onClick={e => { e.stopPropagation(); setOpen(g.sampleId); }}
+          style={{ textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4, padding: '7px 9px', background: C.card, border: `1px solid ${C.line}`, borderRadius: 2, color: 'inherit', minWidth: 0 }}
+        >
+          <span style={{ font: `600 10.5px/1.3 ${FONT.mono}`, color: C.redSoft, wordBreak: 'break-word' }}>{g.name}: {g.msg}</span>
+          <span style={{ font: `400 9.5px/1.3 ${FONT.mono}`, color: C.faint, wordBreak: 'break-word' }}>
+            ×{fmtNum(g.count)} · last {fmtSecs(g.lastSeen)}{g.versions.length > 0 ? ` · v${g.versions.join(', v')}` : ''}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ManifestFacts({ row }: { row: ObservabilityRow | undefined }) {
   if (!row) {
     return <span style={{ font: `400 10.5px/1.4 ${FONT.mono}`, color: C.faint }}>No manifest for this app.</span>;
@@ -137,13 +248,6 @@ function ManifestFacts({ row }: { row: ObservabilityRow | undefined }) {
       </Fact>
       <Fact label="Load avg / max">{ms(syn.loadP50)} / {ms(syn.loadP95)}</Fact>
       <div style={{ gridColumn: '1 / -1' }}>
-        <Fact label="Latest error">
-          {row.latestError
-            ? <span style={{ color: C.redSoft }}>{row.latestError.msg} · {new Date(row.latestError.ts).toLocaleString()}</span>
-            : '—'}
-        </Fact>
-      </div>
-      <div style={{ gridColumn: '1 / -1' }}>
         <Fact label={`Open alerts (${row.openAlerts.length})`}>
           {row.openAlerts.length === 0
             ? '—'
@@ -154,7 +258,7 @@ function ManifestFacts({ row }: { row: ObservabilityRow | undefined }) {
   );
 }
 
-function DetailSheet({ tile, flows, row, onClose }: { tile: AppTile; flows: Flow[]; row: ObservabilityRow | undefined; onClose: () => void }) {
+function DetailSheet({ tile, flows, row, fetcher, onClose }: { tile: AppTile; flows: Flow[]; row: ObservabilityRow | undefined; fetcher?: AdminFetcher; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
@@ -191,12 +295,16 @@ function DetailSheet({ tile, flows, row, onClose }: { tile: AppTile; flows: Flow
           <MonoLabel>Manifest · synthetic · drift</MonoLabel>
           <ManifestFacts row={row} />
         </div>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <MonoLabel>Errors · 24h</MonoLabel>
+          <ErrorsPanel app={tile.name} fetcher={fetcher} />
+        </div>
       </div>
     </div>
   );
 }
 
-export function AppsModule({ stage, flows, obs }: { stage: boolean; flows: Source<FlowsData>; obs: Source<ObservabilityData> }) {
+export function AppsModule({ stage, flows, obs, fetcher }: { stage: boolean; flows: Source<FlowsData>; obs: Source<ObservabilityData>; fetcher?: AdminFetcher }) {
   const [sel, setSel] = useState<string | null>(null);
   const [nowMs] = useState(() => Date.now());
   const tiles = useMemo(() => appTiles(flows.data, obs.data, nowMs), [flows.data, obs.data, nowMs]);
@@ -260,6 +368,7 @@ export function AppsModule({ stage, flows, obs }: { stage: boolean; flows: Sourc
           tile={selTile}
           flows={(flows.data?.flows ?? []).filter(f => f.app === selTile.name)}
           row={obs.data?.rows.find(r => r.slug === selTile.name)}
+          fetcher={fetcher}
           onClose={() => setSel(null)}
         />
       )}

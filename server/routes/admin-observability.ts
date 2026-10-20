@@ -263,9 +263,10 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         country: string | null; device: string; browser: string; os: string; is_bot: number;
         ip: string | null; ua: string | null; referrer: string | null; visitor_id: string | null;
         visitor_hash: string | null; user_email: string | null; is_admin: number | null;
+        session_id: string | null;
       }>(
         `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, is_bot,
-                ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin
+                ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin, session_id
            FROM page_hits WHERE ts_ms >= ?${slugSql} ORDER BY ts_ms DESC LIMIT 200`,
         since, ...slugArgs,
       ), []),
@@ -336,6 +337,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         visitorId: r.visitor_id ?? r.visitor_hash,
         userEmail: r.user_email,
         isAdmin: r.is_admin === 1,
+        sessionId: r.session_id ?? null,
       })),
       visitors: visitorRows.map(v => ({
         visitorId: v.vid,

@@ -33,6 +33,7 @@ export interface RecentRow {
   visitorId: string | null;
   userEmail: string | null;
   isAdmin: boolean;
+  sessionId?: string | null;
 }
 export interface VisitorRow {
   visitorId: string;

@@ -516,6 +516,17 @@ describe('GET /api/admin/traffic full detail', () => {
     expect(body.visitors[0]).toMatchObject({ visitorId: 'vid1', ip: '1.2.3.4', userEmail: 'x@y.com', hits: 2, clicks: 1, pages: 2, isAdmin: false });
   });
 
+  it('recent rows carry sessionId (null when absent)', async () => {
+    asAdmin();
+    const now = Date.now();
+    await hit({ ts: now - 5000, path: '/a' });
+    await dbRun(`UPDATE page_hits SET session_id = 's-123' WHERE path = '/a'`);
+    await hit({ ts: now - 6000, path: '/b' });
+    const body = JSON.parse((await get('/api/admin/traffic')).body);
+    expect(body.recent[0].sessionId).toBe('s-123');
+    expect(body.recent[1].sessionId).toBeNull();
+  });
+
   it('counts one visitor_id once across days in totals, topPages, bySlug and topClicks', async () => {
     asAdmin();
     const now = Date.now();

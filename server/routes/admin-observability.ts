@@ -402,6 +402,111 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     };
   });
 
+  // Grouped error list: what an app's errors actually are, not just a count.
+  // Admin-only; error stacks/URLs are never public.
+  app.get('/api/admin/observability/errors', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+
+    const q = req.query as { app?: string; days?: string; limit?: string; env?: string };
+    const env = parseEnvSelector(q.env);
+    const ev = envPredicate(env);
+    const appName = q.app ? String(q.app).slice(0, 60) : '';
+    const days = Math.min(Math.max(parseInt(q.days || '1', 10) || 1, 1), 90);
+    const limit = Math.min(Math.max(parseInt(q.limit || '50', 10) || 50, 1), 200);
+    const since = Math.floor(Date.now() / 1000) - days * 86_400;
+
+    const SIG = `COALESCE(name, 'Error') || '|' || SUBSTR(COALESCE(stack, ''), 1, 80)`;
+    const where = `created_at > ? AND ${ev.sql}${appName ? ' AND app = ?' : ''}`;
+    const whereArgs: (string | number)[] = [since, ...ev.args, ...(appName ? [appName] : [])];
+
+    const groupRows = await dbAll<{
+      app: string; signature: string; name: string; msg: string; count: number;
+      firstSeen: number; lastSeen: number; sampleId: number;
+    }>(
+      `SELECT app, ${SIG} AS signature, COALESCE(name, 'Error') AS name,
+              MIN(msg) AS msg, COUNT(*) AS count,
+              MIN(created_at) AS firstSeen, MAX(created_at) AS lastSeen,
+              MAX(id) AS sampleId
+         FROM app_errors
+        WHERE ${where}
+        GROUP BY app, signature
+        ORDER BY count DESC, lastSeen DESC
+        LIMIT ?`,
+      ...whereArgs, limit,
+    );
+
+    const totalRow = await dbGet<{ errors: number; groups: number }>(
+      `SELECT COUNT(*) AS errors, COUNT(DISTINCT app || char(0) || ${SIG}) AS groups
+         FROM app_errors WHERE ${where}`,
+      ...whereArgs,
+    );
+
+    const versionRows = await dbAll<{ app: string; signature: string; version: string }>(
+      `SELECT DISTINCT app, ${SIG} AS signature, version
+         FROM app_errors WHERE version IS NOT NULL AND ${where}`,
+      ...whereArgs,
+    );
+    const versionsByGroup = new Map<string, string[]>();
+    for (const v of versionRows) {
+      const key = `${v.app}\u0000${v.signature}`;
+      const list = versionsByGroup.get(key);
+      if (list) list.push(v.version); else versionsByGroup.set(key, [v.version]);
+    }
+
+    const sampleUrls = new Map<number, string | null>();
+    if (groupRows.length > 0) {
+      const ids = groupRows.map((g) => Number(g.sampleId));
+      const rows = await dbAll<{ id: number; url: string | null }>(
+        `SELECT id, url FROM app_errors WHERE id IN (${ids.map(() => '?').join(',')})`,
+        ...ids,
+      );
+      for (const r of rows) sampleUrls.set(Number(r.id), r.url);
+    }
+
+    return {
+      env,
+      days,
+      app: appName || null,
+      totals: { errors: Number(totalRow?.errors ?? 0), groups: Number(totalRow?.groups ?? 0) },
+      groups: groupRows.map((g) => ({
+        app: g.app,
+        signature: g.signature,
+        name: g.name,
+        msg: g.msg,
+        count: Number(g.count),
+        firstSeen: Number(g.firstSeen),
+        lastSeen: Number(g.lastSeen),
+        versions: (versionsByGroup.get(`${g.app}\u0000${g.signature}`) ?? []).sort(),
+        sampleUrl: sampleUrls.get(Number(g.sampleId)) ?? null,
+        sampleId: Number(g.sampleId),
+      })),
+    };
+  });
+
+  app.get('/api/admin/observability/errors/:id', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+
+    const raw = (req.params as { id: string }).id;
+    if (!/^\d+$/.test(raw)) return reply.status(400).send({ error: 'id must be an integer' });
+    const id = parseInt(raw, 10);
+
+    const row = await dbGet<Record<string, unknown> & { context_json: string | null }>(
+      `SELECT id, app, version, name, msg, stack, url, ua, visitor_id, session_id,
+              context_json, created_at, env
+         FROM app_errors WHERE id = ?`,
+      id,
+    );
+    if (!row) return reply.status(404).send({ error: 'Not found' });
+
+    let context: unknown = row.context_json;
+    if (typeof row.context_json === 'string') {
+      try { context = JSON.parse(row.context_json); } catch { /* keep raw string */ }
+    }
+    return { ...row, id: Number(row.id), created_at: Number(row.created_at), context_json: context };
+  });
+
   // Desktop-app panel: installs are a slowly-changing dimension (app_installs),
   // not an event stream, so the rollups here are GROUP BYs over one row per
   // machine. Separate route from the per-app observability rollup above because

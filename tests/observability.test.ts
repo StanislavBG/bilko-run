@@ -598,3 +598,95 @@ describe('blog-cadence auth gate', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describe('GET /api/admin/observability/errors', () => {
+  const now = () => Math.floor(Date.now() / 1000);
+  async function insertError(o: {
+    app?: string; name?: string | null; stack?: string | null; msg?: string;
+    version?: string | null; env?: string | null; ageSec?: number; url?: string | null;
+    context?: string | null;
+  } = {}) {
+    await dbRun(
+      `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, session_id, context_json, created_at, env)
+       VALUES (?, ?, ?, ?, ?, ?, 'ua-test', 'sess-1', ?, ?, ?)`,
+      o.app ?? 'alpha', o.version === undefined ? '1.0.0' : o.version,
+      o.name === undefined ? 'TypeError' : o.name, o.msg ?? 'boom',
+      o.stack === undefined ? 'at foo (a.js:1)' : o.stack, o.url ?? '/x',
+      o.context === undefined ? null : o.context,
+      now() - (o.ageSec ?? 10), o.env === undefined ? null : o.env,
+    );
+  }
+
+  it('returns 403 without admin on both endpoints', async () => {
+    expect((await get('/api/admin/observability/errors')).statusCode).toBe(403);
+    expect((await get('/api/admin/observability/errors/1')).statusCode).toBe(403);
+  });
+
+  it('groups by signature with counts, versions, and ordering', async () => {
+    asAdmin();
+    await insertError({ version: '1.0.0' });
+    await insertError({ version: '1.1.0' });
+    await insertError({ version: '1.1.0' });
+    await insertError({ name: 'RangeError', stack: 'at bar (b.js:2)', msg: 'range' });
+    const res = await get('/api/admin/observability/errors');
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.env).toBe('prod');
+    expect(body.days).toBe(1);
+    expect(body.totals).toEqual({ errors: 4, groups: 2 });
+    expect(body.groups).toHaveLength(2);
+    const [g1, g2] = body.groups;
+    expect(g1).toMatchObject({ app: 'alpha', name: 'TypeError', count: 3, sampleUrl: '/x' });
+    expect(g1.signature).toBe('TypeError|at foo (a.js:1)');
+    expect(g1.versions.sort()).toEqual(['1.0.0', '1.1.0']);
+    expect(typeof g1.sampleId).toBe('number');
+    expect(g2).toMatchObject({ name: 'RangeError', count: 1 });
+  });
+
+  it('filters by app and env (NULL env counts as prod)', async () => {
+    asAdmin();
+    await insertError({ app: 'alpha', env: null });
+    await insertError({ app: 'beta', env: 'prod' });
+    await insertError({ app: 'beta', env: 'dev' });
+    const byApp = (await get('/api/admin/observability/errors?app=beta')).json();
+    expect(byApp.app).toBe('beta');
+    expect(byApp.totals.errors).toBe(1);
+    const prod = (await get('/api/admin/observability/errors')).json();
+    expect(prod.totals.errors).toBe(2);
+    const dev = (await get('/api/admin/observability/errors?env=dev')).json();
+    expect(dev.totals.errors).toBe(1);
+    expect(dev.groups[0].app).toBe('beta');
+  });
+
+  it('respects the days window', async () => {
+    asAdmin();
+    await insertError({ ageSec: 2 * 86_400 });
+    expect((await get('/api/admin/observability/errors')).json().totals.errors).toBe(0);
+    expect((await get('/api/admin/observability/errors?days=3')).json().totals.errors).toBe(1);
+  });
+
+  it('treats an injection-style app value as a literal', async () => {
+    asAdmin();
+    await insertError();
+    const res = await get(`/api/admin/observability/errors?app=${encodeURIComponent("x' OR '1'='1")}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().groups).toEqual([]);
+  });
+
+  it('detail: 400 for bad id, 404 for unknown, full row with parsed context', async () => {
+    asAdmin();
+    await insertError({ context: '{"k":1}' });
+    const list = (await get('/api/admin/observability/errors')).json();
+    const id = list.groups[0].sampleId;
+    expect((await get('/api/admin/observability/errors/abc')).statusCode).toBe(400);
+    expect((await get('/api/admin/observability/errors/999999')).statusCode).toBe(404);
+    const ok = await get(`/api/admin/observability/errors/${id}`);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({
+      id, app: 'alpha', stack: 'at foo (a.js:1)', url: '/x', ua: 'ua-test',
+      session_id: 'sess-1', version: '1.0.0', context_json: { k: 1 },
+    });
+    expect(ok.json()).toHaveProperty('created_at');
+    expect(ok.json()).toHaveProperty('env');
+  });
+});

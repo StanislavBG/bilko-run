@@ -19,6 +19,8 @@
  *   - publish_static_project     → copies built dist/ into host's public/projects/<slug>/
  *   - status                     → host git status (uncommitted files, last 5 commits)
  *   - usage_report               → per-project egress (bytes/requests), no Clerk JWT needed
+ *   - errors_report              → grouped app_errors report (read-only), no Clerk JWT needed
+ *   - error_detail               → one app_errors row by id (read-only)
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -37,7 +39,8 @@ import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables } from './db.js';
+import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables, hostDbSource } from './db.js';
+import { errorsReport, errorDetail } from './errors-report.js';
 import { runGates, gateSummary } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
@@ -552,6 +555,7 @@ server.registerTool('usage_report', {
             return ok(JSON.stringify({
                 empty: true,
                 explanation: 'api_egress_daily has no rows in this database. Either this is a fresh/local dev DB that has never seen traffic, or the egress meter has not flushed yet (60s interval). This is not an error.',
+                database: hostDbSource(),
                 window: { requestedDays: days },
                 static: [],
                 api: [],
@@ -576,11 +580,15 @@ server.registerTool('usage_report', {
         });
         const out = {
             empty: false,
+            database: hostDbSource(),
             window: { requestedDays: days, sinceDate: since, throughDate: through },
             earliestDateInTable: earliestDate,
             static: staticRows.map(withRate),
             api: apiRows.map(withRate),
             notes: [
+                ...(hostDbSource() === 'local'
+                    ? ['These numbers come from the local dev database, not bilko.run, because TURSO_DATABASE_URL is unset.']
+                    : []),
                 'Capacity signal, not Render billing — measured at the origin, not the CDN edge.',
                 'Under-reports by up to the flush interval (60s) on every process restart.',
                 'static:_host absorbs some top-level static dirs that belong to real projects (e.g. outdoor-hours\' data tree, /apps/, /session-manager-operations/) — treat _host as inflated until that attribution gap is fixed in a follow-up.',
@@ -588,6 +596,43 @@ server.registerTool('usage_report', {
             ],
         };
         return ok(JSON.stringify(out, null, 2));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 8) errors_report ───────────────────────────────────────────────────────
+server.registerTool('errors_report', {
+    title: 'Grouped app_errors report',
+    description: 'Read-only. Reads app_errors through this MCP\'s own Turso client — no Clerk JWT, no browser. Returns errors grouped by app + signature over a trailing window (default 1 day), with counts, first/last seen, versions and a sample. env defaults to prod. The top-level `database` field says which DB was read: `local` means the local dev DB, not bilko.run (TURSO_DATABASE_URL is unset).',
+    inputSchema: {
+        days: z.number().int().default(1).describe('Trailing window in days. Default 1.'),
+        app: z.string().optional().describe('Restrict to one app slug.'),
+        env: z.enum(['prod', 'dev', 'test', 'all']).default('prod').describe('Environment filter. Default prod.'),
+        limit: z.number().int().optional().describe('Max groups to return.'),
+    },
+}, async ({ days, app, env, limit }) => {
+    try {
+        const report = await errorsReport({ days, app, env, limit });
+        return ok(JSON.stringify({ database: hostDbSource(), ...report }, null, 2));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 9) error_detail ────────────────────────────────────────────────────────
+server.registerTool('error_detail', {
+    title: 'One app_errors row',
+    description: 'Read-only. Reads one app_errors row by id through this MCP\'s own Turso client — no Clerk JWT. The top-level `database` field says which DB was read: `local` means the local dev DB, not bilko.run.',
+    inputSchema: {
+        id: z.number().int().positive().describe('app_errors row id.'),
+    },
+}, async ({ id }) => {
+    try {
+        const detail = await errorDetail(id);
+        if (!detail)
+            return err(`error ${id} not found`);
+        return ok(JSON.stringify({ database: hostDbSource(), ...detail }, null, 2));
     }
     catch (e) {
         return err(e.message);

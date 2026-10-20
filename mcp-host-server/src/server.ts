@@ -19,8 +19,8 @@
  *   - publish_static_project     → copies built dist/ into host's public/projects/<slug>/
  *   - status                     → host git status (uncommitted files, last 5 commits)
  *   - usage_report               → per-project egress (bytes/requests), no Clerk JWT needed
- *   - errors_report              → grouped app_errors report (read-only), no Clerk JWT needed
- *   - error_detail               → one app_errors row by id (read-only)
+ *   - errors_report              → grouped app_errors report via bilko.run admin API (BILKO_ADMIN_KEY, read-only)
+ *   - error_detail               → one app_errors row by id via admin API (read-only)
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -42,7 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { ManifestSchema } from './manifest-schema.js';
 import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables, hostDbSource } from './db.js';
-import { errorsReport, errorDetail } from './errors-report.js';
+import { errorsReport, errorDetail, baseUrl } from './errors-report.js';
 import { runGates, gateSummary, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
@@ -698,7 +698,7 @@ server.registerTool(
   {
     title: 'Grouped app_errors report',
     description:
-      'Read-only. Reads app_errors through this MCP\'s own Turso client — no Clerk JWT, no browser. Returns errors grouped by app + signature over a trailing window (default 1 day), with counts, first/last seen, versions and a sample. env defaults to prod. The top-level `database` field says which DB was read: `local` means the local dev DB, not bilko.run (TURSO_DATABASE_URL is unset).',
+      'Read-only. Calls the bilko.run admin API (GET /api/admin/observability/errors) with BILKO_ADMIN_KEY (a read-only personal admin key from /admin/secrets). Returns errors grouped by app + signature over a trailing window (default 1 day), with counts, first/last seen, versions and a sample. env defaults to prod. The top-level `source` field is the base URL queried.',
     inputSchema: {
       days: z.number().int().default(1).describe('Trailing window in days. Default 1.'),
       app: z.string().optional().describe('Restrict to one app slug.'),
@@ -709,7 +709,7 @@ server.registerTool(
   async ({ days, app, env, limit }) => {
     try {
       const report = await errorsReport({ days, app, env, limit });
-      return ok(JSON.stringify({ database: hostDbSource(), ...report }, null, 2));
+      return ok(JSON.stringify({ source: baseUrl(), ...report }, null, 2));
     } catch (e: unknown) {
       return err((e as Error).message);
     }
@@ -722,7 +722,7 @@ server.registerTool(
   {
     title: 'One app_errors row',
     description:
-      'Read-only. Reads one app_errors row by id through this MCP\'s own Turso client — no Clerk JWT. The top-level `database` field says which DB was read: `local` means the local dev DB, not bilko.run.',
+      'Read-only. Calls the bilko.run admin API (GET /api/admin/observability/errors/:id) with BILKO_ADMIN_KEY (a read-only personal admin key from /admin/secrets). The top-level `source` field is the base URL queried.',
     inputSchema: {
       id: z.number().int().positive().describe('app_errors row id.'),
     },
@@ -731,7 +731,7 @@ server.registerTool(
     try {
       const detail = await errorDetail(id);
       if (!detail) return err(`error ${id} not found`);
-      return ok(JSON.stringify({ database: hostDbSource(), ...detail }, null, 2));
+      return ok(JSON.stringify({ source: baseUrl(), ...detail }, null, 2));
     } catch (e: unknown) {
       return err((e as Error).message);
     }

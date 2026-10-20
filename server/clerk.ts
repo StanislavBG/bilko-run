@@ -70,14 +70,40 @@ export async function requireAuth(req: any, reply: any): Promise<string | null> 
   return email;
 }
 
-/** Require admin user. Returns email or sends 403 and returns null. */
-export async function requireAdmin(req: any, reply: any): Promise<string | null> {
+/**
+ * Require admin user via a real Clerk session only (no API keys). Returns email or sends
+ * 403 and returns null. Use for anything that mints or manages credentials.
+ */
+export async function requireAdminSession(req: any, reply: any): Promise<string | null> {
   const email = await verifyClerkToken(req.headers.authorization);
   if (!email || !ADMIN_EMAILS.includes(email.toLowerCase())) {
     reply.status(403).send({ error: 'Admin access required.' });
     return null;
   }
   return email;
+}
+
+/**
+ * Require admin user. Accepts a Clerk session, or a personal admin API key
+ * (`Bearer bka_...`) for read-only (GET/HEAD) requests. Returns email or sends 403 and returns null.
+ */
+export async function requireAdmin(req: any, reply: any): Promise<string | null> {
+  const header: string | undefined = req.headers.authorization;
+  if (header?.startsWith('Bearer bka_')) {
+    // Lazy import: the service imports ADMIN_EMAILS from this module.
+    const { verifyAdminApiKey } = await import('./services/admin-api-keys.js');
+    const email = await verifyAdminApiKey(header.slice(7));
+    if (!email) {
+      reply.status(403).send({ error: 'Admin access required.' });
+      return null;
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      reply.status(403).send({ error: 'Admin API keys are read-only.' });
+      return null;
+    }
+    return email;
+  }
+  return requireAdminSession(req, reply);
 }
 
 /**

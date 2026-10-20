@@ -9,6 +9,11 @@ const HOST_ROOT = resolve(__dirname, '..', '..');
 
 let _db: Client | null = null;
 
+/** Which database the MCP reads: 'turso' when TURSO_DATABASE_URL is set, else the local dev SQLite file. */
+export function hostDbSource(): 'turso' | 'local' {
+  return process.env.TURSO_DATABASE_URL ? 'turso' : 'local';
+}
+
 export function getHostDb(): Client {
   if (!_db) {
     const url = process.env.TURSO_DATABASE_URL;

@@ -38,6 +38,11 @@ describe('mcp errors-report', () => {
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
+  it('hostDbSource reports turso when TURSO_DATABASE_URL is set', async () => {
+    const { hostDbSource } = await import('../mcp-host-server/src/db.js');
+    expect(hostDbSource()).toBe('turso');
+  });
+
   it('groups by app and signature with counts', async () => {
     const r = await mod.errorsReport({ days: 1 });
     expect(r.totals).toEqual({ errors: 4, groups: 3 });

@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { C, FONT, fmtClock } from './theme.js';
 import type { KpiTile, Tone } from './useCommandData.js';
 import type { RecentRow } from './types.js';
@@ -58,16 +60,40 @@ export function KpiStrip({ tiles }: { tiles: KpiTile[] }) {
   );
 }
 
+export type TickerSpeed = 'crawl' | 'slow' | 'normal';
+
+const SECONDS_PER_ITEM: Record<TickerSpeed, number> = { crawl: 8, slow: 4, normal: 2 };
+const TICKER_MIN_SECONDS = 60;
+const TICKER_SPEED_KEY = 'obs.tickerSpeed';
+const TICKER_SPEEDS: TickerSpeed[] = ['crawl', 'slow', 'normal'];
+
+/** Loop duration: scales with item count so the per-item crawl rate stays readable. */
+export function tickerDurationSeconds(count: number, speed: TickerSpeed): number {
+  return Math.max(TICKER_MIN_SECONDS, count * SECONDS_PER_ITEM[speed]);
+}
+
+export function parseTickerSpeed(raw: string | null): TickerSpeed {
+  return raw === 'slow' || raw === 'normal' || raw === 'crawl' ? raw : 'crawl';
+}
+
+function readStoredSpeed(): TickerSpeed {
+  if (typeof window === 'undefined') return 'crawl';
+  try { return parseTickerSpeed(window.localStorage.getItem(TICKER_SPEED_KEY)); } catch { return 'crawl'; }
+}
+
 const TICKER_CSS =
   '@keyframes obsTicker{from{transform:translateX(0)}to{transform:translateX(-50%)}}' +
-  '.obs-ticker-track{animation:obsTicker 50s linear infinite}' +
+  '.obs-ticker-track{animation-name:obsTicker;animation-timing-function:linear;animation-iteration-count:infinite}' +
+  '.obs-ticker-track:hover,.obs-ticker-track:focus-within{animation-play-state:paused}' +
+  '.obs-ticker-link:hover{text-decoration:underline}' +
   '@media (prefers-reduced-motion: reduce){.obs-ticker-track{animation:none}}';
 
 /** Keyframes are injected once into <head>, not rendered per component instance. */
 function ensureTickerStyle(): void {
-  if (typeof document === 'undefined' || document.getElementById('obs-ticker-style')) return;
+  if (typeof document === 'undefined' || document.getElementById('obs-ticker-style-v2')) return;
+  document.getElementById('obs-ticker-style')?.remove();
   const el = document.createElement('style');
-  el.id = 'obs-ticker-style';
+  el.id = 'obs-ticker-style-v2';
   el.textContent = TICKER_CSS;
   document.head.appendChild(el);
 }
@@ -75,8 +101,8 @@ function ensureTickerStyle(): void {
 function TickerItem({ r }: { r: RecentRow }) {
   const bad = r.status >= 400;
   const badge = r.isBot ? 'BOT' : bad ? String(r.status) : null;
-  return (
-    <span style={{ display: 'inline-flex', gap: 10, alignItems: 'center', font: `400 10.5px/1 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap' }}>
+  const body = (
+    <>
       <span style={{ color: C.faint }}>{fmtClock(new Date(r.ts))}</span>
       <span style={{ color: bad ? C.red : C.green }}>{r.status}</span>
       <span style={{ color: r.isBot ? C.amber : C.text }}>{r.path}</span>
@@ -87,18 +113,55 @@ function TickerItem({ r }: { r: RecentRow }) {
           {badge}
         </span>
       )}
-    </span>
+    </>
+  );
+  const style = { display: 'inline-flex', gap: 10, alignItems: 'center', font: `400 10.5px/1 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap' } as const;
+  if (r.sessionId) {
+    return (
+      <Link className="obs-ticker-link" to={`/admin/sessions/${encodeURIComponent(r.sessionId)}`} title="Open session" style={{ ...style, textDecoration: 'none' }}>
+        {body}
+      </Link>
+    );
+  }
+  return <span title="No session recorded" style={style}>{body}</span>;
+}
+
+function SpeedControl({ speed, onChange }: { speed: TickerSpeed; onChange: (s: TickerSpeed) => void }) {
+  return (
+    <div style={{ flex: 'none', display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 10, font: `500 9px/1 ${FONT.mono}`, letterSpacing: '.14em', background: C.panel, position: 'relative', zIndex: 1 }}>
+      {TICKER_SPEEDS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onChange(s)}
+          aria-pressed={speed === s}
+          style={{ all: 'unset', cursor: 'pointer', color: speed === s ? C.orange : C.faint, textTransform: 'uppercase' }}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
   );
 }
 
-/** Scrolling track only; CommandShell wraps it in the bordered bar with the RECENT HITS label and key hint. */
+/** Scrolling track plus speed control; CommandShell wraps it in the bordered bar with the RECENT HITS label and key hint. */
 export function Ticker({ recent }: { recent: RecentRow[] }) {
   ensureTickerStyle();
+  const [speed, setSpeed] = useState<TickerSpeed>(readStoredSpeed);
+  const choose = (s: TickerSpeed) => {
+    setSpeed(s);
+    try { window.localStorage.setItem(TICKER_SPEED_KEY, s); } catch { /* storage unavailable */ }
+  };
   const all = [...recent, ...recent];
   if (recent.length === 0) return <span style={{ font: `400 10.5px/1 ${FONT.mono}`, color: C.faint }}>no hits in window</span>;
   return (
-    <div className="obs-ticker-track" style={{ display: 'flex', gap: 40, width: 'max-content' }}>
-      {all.map((r, i) => <TickerItem key={i} r={r} />)}
+    <div style={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        <div className="obs-ticker-track" style={{ display: 'flex', gap: 40, width: 'max-content', animationDuration: `${tickerDurationSeconds(all.length, speed)}s` }}>
+          {all.map((r, i) => <TickerItem key={i} r={r} />)}
+        </div>
+      </div>
+      <SpeedControl speed={speed} onChange={choose} />
     </div>
   );
 }

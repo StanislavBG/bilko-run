@@ -611,6 +611,19 @@ export const MIGRATIONS = [
     uploaded_at INTEGER NOT NULL,
     PRIMARY KEY (slug, version)
   )`,
+  // Personal admin API keys (server/services/admin-api-keys.ts): only the sha256 is stored.
+  `CREATE TABLE IF NOT EXISTS admin_api_keys (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    email        TEXT NOT NULL,
+    label        TEXT,
+    key_hash     TEXT NOT NULL UNIQUE,
+    key_prefix   TEXT NOT NULL,
+    created_at   INTEGER NOT NULL,
+    expires_at   INTEGER NOT NULL,
+    last_used_at INTEGER,
+    revoked_at   INTEGER
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_admin_api_keys_hash ON admin_api_keys(key_hash)`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

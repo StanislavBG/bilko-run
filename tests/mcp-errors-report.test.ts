@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { errorsReport, errorDetail } from '../mcp-host-server/src/errors-report.js';
+import { errorsReport, errorDetail, adminGet, mapEgressToUsage } from '../mcp-host-server/src/errors-report.js';
 
 const KEY = 'bka_supersecretkeyvalue';
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -76,5 +76,48 @@ describe('mcp errors-report (admin API client)', () => {
     expect(e.message).toMatch(/500/);
     expect(e.message.length).toBeLessThan(400);
     expect(e.message).not.toContain(KEY);
+  });
+  it('adminGet joins base URL and path as given', async () => {
+    process.env.BILKO_BASE_URL = 'http://localhost:3000/';
+    fetchMock.mockResolvedValue(res(200, { ok: 1 }));
+    expect(await adminGet('/api/admin/egress?days=3')).toEqual({ ok: 1 });
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3000/api/admin/egress?days=3');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: `Bearer ${KEY}` });
+  });
+
+  it('adminGet returns null on 404', async () => {
+    fetchMock.mockResolvedValue(res(404, {}));
+    expect(await adminGet('/api/admin/egress?days=1')).toBeNull();
+  });
+});
+
+describe('mapEgressToUsage', () => {
+  it('maps bySlug to static and non-static rows to api, with bytesPerRequest', () => {
+    const out = mapEgressToUsage(
+      {
+        earliestDate: '2026-10-01',
+        bySlug: [{ slug: 'alpha', requests: 4, bytes: 1000, bytesPerRequest: 250 }, { slug: 'beta', requests: 0, bytes: 0 }],
+        rows: [
+          { method: 'GET', route: 'static:alpha', requests: 4, bytes: 1000, bytesPerRequest: 250 },
+          { method: 'GET', route: '/api/projects', requests: 3, bytes: 10, bytesPerRequest: 3 },
+        ],
+      },
+      7,
+    ) as Record<string, any>;
+    expect(out.window).toEqual({ requestedDays: 7 });
+    expect(out.earliestDateInTable).toBe('2026-10-01');
+    expect(out.static).toEqual([
+      { slug: 'alpha', requests: 4, bytes: 1000, bytesPerRequest: 250 },
+      { slug: 'beta', requests: 0, bytes: 0, bytesPerRequest: 0 },
+    ]);
+    expect(out.api).toEqual([{ method: 'GET', route: '/api/projects', requests: 3, bytes: 10, bytesPerRequest: 3 }]);
+    expect(Array.isArray(out.notes)).toBe(true);
+  });
+
+  it('tolerates a missing/garbage body', () => {
+    const out = mapEgressToUsage(null, 2) as Record<string, any>;
+    expect(out.static).toEqual([]);
+    expect(out.api).toEqual([]);
+    expect(out.earliestDateInTable).toBeNull();
   });
 });

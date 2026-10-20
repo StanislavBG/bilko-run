@@ -6,10 +6,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Layout after compile: mcp-host-server/dist/db.js → ../../ = repo root
 const HOST_ROOT = resolve(__dirname, '..', '..');
 let _db = null;
-/** Which database the MCP reads: 'turso' when TURSO_DATABASE_URL is set, else the local dev SQLite file. */
-export function hostDbSource() {
-    return process.env.TURSO_DATABASE_URL ? 'turso' : 'local';
-}
 export function getHostDb() {
     if (!_db) {
         const url = process.env.TURSO_DATABASE_URL;

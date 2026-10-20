@@ -41,8 +41,8 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { ManifestSchema } from './manifest-schema.js';
-import { getHostDb, mcpRun, mcpGet, mcpAll, ensureGateTables, hostDbSource } from './db.js';
-import { errorsReport, errorDetail, baseUrl } from './errors-report.js';
+import { getHostDb, mcpRun, ensureGateTables } from './db.js';
+import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage } from './errors-report.js';
 import { runGates, gateSummary, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
@@ -600,92 +600,25 @@ server.registerTool(
 
 // 7) usage_report ────────────────────────────────────────────────────────
 //
-// Query shape mirrors server/egress.ts's topEgress() (host repo, not this
-// package — mcp-host-server has its own tsconfig/rootDir and no fastify
-// dependency, so it reads the same table directly instead of importing
-// across packages). If that SQL changes, update this too.
-const STATIC_ROUTE_PREFIX = 'static:';
-
-function dayKey(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
+// Reads the bilko.run admin API (GET /api/admin/egress), not a database, so
+// the numbers are always the live host's — never a local dev DB's.
 server.registerTool(
   'usage_report',
   {
     title: 'Per-project egress/usage report',
     description:
-      'Reads api_egress_daily directly through this MCP\'s own Turso client — no Clerk JWT, no browser, safe for cron/headless callers. Returns per-project static-asset egress (bytes out + request count, sorted by bytes descending, with bytesPerRequest) over a trailing window (default 7 days), plus the raw /api/* route rows reported separately (those are route *patterns*, not resolved to a project slug). ' +
-      'IMPORTANT: these are capacity-signal numbers measured at the origin server, NOT Render billing figures — Render bills at the edge/CDN layer, which can differ. They also under-report by up to the in-process flush interval (60s) on every process restart, because the egress buffer is in-memory until flushed. ' +
-      'static:_host and static:_other are surfaced explicitly rather than filtered out: _host currently absorbs top-level static dirs that belong to real projects but aren\'t served under /projects/<slug>/ (e.g. OutdoorHours\' large hourly-data tree at top-level /outdoor-hours/, plus /apps/ and /session-manager-operations/) — so _host is not purely host chrome today. _other is traffic to an unrecognised /projects/<x>/ slug. Also reports the earliest date present in the table so a caller can tell "no traffic in this window" apart from "metering only started on <date>".',
+      'Read-only. Calls the bilko.run admin API (GET /api/admin/egress) with BILKO_ADMIN_KEY (a read-only personal admin key from /admin/secrets). Returns per-project static-asset egress (bytes out + request count, sorted by bytes descending, with bytesPerRequest) over a trailing window (default 7 days), plus the /api/* route rows reported separately (those are route *patterns*, not resolved to a project slug). The top-level `source` field is the base URL queried. ' +
+      'IMPORTANT: these are capacity-signal numbers measured at the origin server, NOT Render billing figures — Render bills at the edge/CDN layer, which can differ. They also under-report by up to the in-process flush interval (60s) on every process restart. ' +
+      'static:_host and static:_other are surfaced explicitly rather than filtered out: _host currently absorbs top-level static dirs that belong to real projects but aren\'t served under /projects/<slug>/ — so _host is not purely host chrome today. _other is traffic to an unrecognised /projects/<x>/ slug. Also reports the earliest date present in the table so a caller can tell "no traffic in this window" apart from "metering only started on <date>".',
     inputSchema: {
-      days: z.number().int().positive().default(7).describe('Trailing window size in days. Default 7.'),
+      days: z.number().int().positive().default(7).describe('Trailing window size in days. Default 7 (host caps at 90).'),
     },
   },
   async ({ days }) => {
     try {
-      const earliestRow = await mcpGet<{ earliest: string | null }>(
-        `SELECT MIN(date) AS earliest FROM api_egress_daily`,
-      );
-      const earliestDate = earliestRow?.earliest ?? null;
-
-      if (!earliestDate) {
-        return ok(JSON.stringify({
-          empty: true,
-          explanation:
-            'api_egress_daily has no rows in this database. Either this is a fresh/local dev DB that has never seen traffic, or the egress meter has not flushed yet (60s interval). This is not an error.',
-          database: hostDbSource(),
-          window: { requestedDays: days },
-          static: [],
-          api: [],
-        }, null, 2));
-      }
-
-      const since = dayKey(Date.now() - days * 86_400_000);
-      const through = dayKey(Date.now());
-
-      const staticRows = await mcpAll<{ slug: string; requests: number; bytes: number }>(
-        `SELECT SUBSTR(route, ${STATIC_ROUTE_PREFIX.length + 1}) AS slug,
-                SUM(requests) AS requests, SUM(bytes) AS bytes
-           FROM api_egress_daily
-          WHERE date >= ? AND route LIKE 'static:%'
-          GROUP BY slug
-          ORDER BY bytes DESC`,
-        [since],
-      );
-
-      const apiRows = await mcpAll<{ method: string; route: string; requests: number; bytes: number }>(
-        `SELECT method, route, SUM(requests) AS requests, SUM(bytes) AS bytes
-           FROM api_egress_daily
-          WHERE date >= ? AND route NOT LIKE 'static:%'
-          GROUP BY method, route
-          ORDER BY bytes DESC`,
-        [since],
-      );
-
-      const withRate = <T extends { requests: number; bytes: number }>(r: T) => ({
-        ...r,
-        bytesPerRequest: r.requests ? Math.round(r.bytes / r.requests) : 0,
-      });
-
-      const out = {
-        empty: false,
-        database: hostDbSource(),
-        window: { requestedDays: days, sinceDate: since, throughDate: through },
-        earliestDateInTable: earliestDate,
-        static: staticRows.map(withRate),
-        api: apiRows.map(withRate),
-        notes: [
-          ...(hostDbSource() === 'local'
-            ? ['These numbers come from the local dev database, not bilko.run, because TURSO_DATABASE_URL is unset.']
-            : []),
-          'Capacity signal, not Render billing — measured at the origin, not the CDN edge.',
-          'Under-reports by up to the flush interval (60s) on every process restart.',
-          'static:_host absorbs some top-level static dirs that belong to real projects (e.g. outdoor-hours\' data tree, /apps/, /session-manager-operations/) — treat _host as inflated until that attribution gap is fixed in a follow-up.',
-          '`api` rows are route PATTERNS (e.g. "/api/projects/:slug/feedback"), not resolved per-project — they are not folded into the per-slug `static` numbers.',
-        ],
-      };
-      return ok(JSON.stringify(out, null, 2));
+      const body = await adminGet(`/api/admin/egress?days=${days}`);
+      if (!body) return err('bilko.run returned 404 for /api/admin/egress');
+      return ok(JSON.stringify(mapEgressToUsage(body, days), null, 2));
     } catch (e: unknown) {
       return err((e as Error).message);
     }

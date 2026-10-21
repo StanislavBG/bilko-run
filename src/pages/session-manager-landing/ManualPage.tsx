@@ -25,6 +25,7 @@ import '../../styles/session-manager-landing.css';
 import '../../styles/session-manager-manual.css';
 import { Chevron } from './Chevron.js';
 import { Header } from './Header.js';
+import { SignInPrompt } from './SignInPrompt.js';
 import { trackDownloadClick } from './Downloads.js';
 import { COPY, fill } from './copy.js';
 import {
@@ -272,6 +273,8 @@ export default function ManualPage() {
             ))}
           </div>
         )}
+
+        <SignInPrompt source="manual" variant="inline" />
 
         <p className="smlm-appnote">
           The app itself is free too — get it from the{' '}

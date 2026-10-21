@@ -9,6 +9,7 @@ import { MacDownload, WindowsDownload, trackDownloadClick, windowsAvailable } fr
 import { trackFlow } from '../../lib/telemetry.js';
 import { Header } from './Header.js';
 import { FilmDialog } from './FilmDialog.js';
+import { SignInPrompt } from './SignInPrompt.js';
 import { Chevron } from './Chevron.js';
 import {
   useBodyOverflowLock,
@@ -338,6 +339,8 @@ export default function SessionManagerPage() {
           </nav>
         )}
       </div>
+      {/* Outside the scaled canvas: a fixed corner card in canvas mode, inline after the content in reflow. */}
+      <SignInPrompt source="session-manager" variant={canvas ? 'corner' : 'inline'} />
       <FilmDialog
         open={filmOpen}
         onClose={closeFilm}

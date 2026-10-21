@@ -2295,3 +2295,119 @@ html[data-book-turn='back']::view-transition-old(root) {
     animation: smlp-book-fade-in 150ms linear both;
   }
 }
+
+/* ── Sign-in-for-updates prompt (SignInPrompt.tsx) ──────────────────────────
+   Never modal: inline in the flow, or a small fixed corner card on the canvas
+   layout (outside the scaled canvas, below the film dialog). */
+
+.smlp-root .smlp-signin {
+  position: relative;
+  max-width: 560px;
+  padding: 14px 40px 14px 16px;
+  background: var(--smlp-card);
+  border: 2px solid var(--smlp-ink);
+  border-radius: 10px;
+  box-shadow: 3px 3px 0 var(--smlp-ink);
+  font-family: var(--smlp-sans);
+  color: var(--smlp-body);
+}
+
+.smlp-root .smlp-signin--inline {
+  margin: 16px auto 24px;
+}
+
+.smlp-root--reflow > .smlp-signin--inline {
+  margin: 0 max(16px, env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 600px) {
+  .smlp-root--reflow > .smlp-signin--inline {
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+.smlm-root .smlp-signin--inline {
+  margin: 16px 0 0;
+}
+
+.smlp-root .smlp-signin--corner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+  max-width: 320px;
+}
+
+.smlp-root .smlp-signin__title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--smlp-ink);
+}
+
+.smlp-root .smlp-signin__body {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--smlp-muted);
+}
+
+.smlp-root .smlp-signin__consent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.smlp-root .smlp-signin__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.smlp-root .smlp-signin__cta,
+.smlp-root .smlp-signin__later,
+.smlp-root .smlp-signin__close {
+  font: inherit;
+  cursor: pointer;
+}
+
+.smlp-root .smlp-signin__cta {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--smlp-ink);
+  background: var(--smlp-mustard);
+  border: 2px solid var(--smlp-ink);
+  border-radius: 999px;
+}
+
+.smlp-root .smlp-signin__later {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--smlp-muted);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+}
+
+.smlp-root .smlp-signin__close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--smlp-muted);
+  background: none;
+  border: 0;
+}
+
+.smlp-root .smlp-signin__cta:focus-visible,
+.smlp-root .smlp-signin__later:focus-visible,
+.smlp-root .smlp-signin__close:focus-visible {
+  outline: 2px solid var(--smlp-rust);
+  outline-offset: 2px;
+}

@@ -19,6 +19,7 @@ export function PrivacyPage() {
           <p>We collect the minimum data needed to operate:</p>
           <ul className="list-disc pl-5 mt-2 space-y-1">
             <li><strong>Account data:</strong> Email address and name provided via Clerk (our authentication provider) when you sign in with Google or email.</li>
+            <li><strong>Sign-in updates:</strong> If you sign in from a "sign in for updates" prompt (Session Manager, its Field Manual, Human For Hire), we record which page you came from and whether you ticked "Send me occasional updates" (off unless you tick it), with the time you ticked it. Email <strong>bilko@bilko.run</strong> to turn it off.</li>
             <li><strong>Usage data:</strong> URLs you submit for analysis, scores generated, and credit balances.</li>
             <li><strong>Payment data:</strong> Processed by Stripe. We never see or store your card number. We store your email and Stripe customer ID for credit delivery.</li>
             <li><strong>Analytics:</strong> Page views, clicks, and funnel events (anonymized IP hash, tool used), tied together by two first-party cookies. See Cookies below.</li>

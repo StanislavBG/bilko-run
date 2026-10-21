@@ -123,6 +123,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/routes/forum.ts` + `server/services/forum.ts` — site-level Forum at `/forum`, like the blog: public reads, Clerk + handle writes, admin hide
 - `server/routes/project-catalog.ts` — public `GET /api/projects` + read-only MCP at `/mcp` (the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
+- `server/routes/signin-capture.ts` + `shared/signin-capture.ts` — "sign in for updates" capture: source page + opt-in consent per account, admin signups view + CSV (`/admin` → Signups); contract in `docs/host-contract.md` → "Sign-in capture"
 - `server/routes/realtime.ts` + `server/realtime/relay.ts` — ticket endpoint and binary WebSocket input relay (`/api/realtime/rooms/:roomId`, ≤10 seats, in-memory, single instance)
 - `server/routes/analytics.ts` — Page views + admin stats dashboard (`/api/analytics/event` is open to same-origin sibling apps for `track()`)
 - `server/db.ts` — Turso client, async helpers (`dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`), migrations, seed data
@@ -172,7 +173,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-127 files, 1397 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+132 files, 1467 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

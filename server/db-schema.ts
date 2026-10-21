@@ -624,6 +624,16 @@ export const MIGRATIONS = [
     revoked_at   INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_admin_api_keys_hash ON admin_api_keys(key_hash)`,
+  // One row per account that signed in from a "sign in for updates" prompt.
+  // source is the first page it came from and is never overwritten; consent is
+  // the opt-in "send me occasional updates" box (default off), consent_at epoch ms.
+  `CREATE TABLE IF NOT EXISTS signin_captures (
+    email      TEXT PRIMARY KEY,
+    source     TEXT NOT NULL,
+    consent    INTEGER NOT NULL DEFAULT 0,
+    consent_at INTEGER,
+    created_at INTEGER NOT NULL
+  )`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

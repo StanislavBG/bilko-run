@@ -194,6 +194,10 @@ describe('service products', () => {
   it('pageSlug must be a valid slug', () => {
     expect(validateWebProducts([{ ...svc, pageSlug: 'human-for-hire' }])).toEqual([]);
     expect(validateWebProducts([{ ...svc, pageSlug: '../x' }]).join()).toContain('pageSlug');
+    expect(validateWebProducts([{ ...svc, pageSlug: 'launch-kit/agent-factory-kit' }])).toEqual([]);
+    for (const bad of ['a/b/c', 'a//b', '/a', 'a/', 'a/../b']) {
+      expect(validateWebProducts([{ ...svc, pageSlug: bad }]).join()).toContain('pageSlug');
+    }
   });
 
   it('foundingCouponEnvVar format and requires foundingDisplayPrice', () => {
@@ -248,8 +252,15 @@ describe('includes and preview', () => {
       'Bilko Agent Factory Kit', 'wp_agent_factory_kit', 'STRIPE_PRICE_WP_AGENT_FACTORY_KIT', '$19', 20,
     ]);
     expect(k.defaultPriceId).toBeUndefined();
-    expect(k.release).toBeNull();
-    expect(k.preview).toBeNull();
+    expect(k.release).toEqual({
+      version: '1.0.0', filename: 'bilko-agent-factory-kit-1.0.0.zip', bytes: 60099,
+      sha256: 'c5fe49c81d94ab91e561bdb2be7f63e38a2dfd233e3f1ea636f8f33d77b0db08',
+    });
+    expect(k.preview).toEqual({
+      version: '1.0.0', filename: 'agent-factory-kit-preview-1.0.0.zip', bytes: 3392,
+      sha256: '9a21261fee8f61821b3ba7a9c01bb57c16771eaa33fd4a1e1bc4edee01d56e3d',
+    });
+    expect(productPageSlug(k)).toBe('launch-kit/agent-factory-kit');
     expect(webProductBySlug('hfh-factory-setup')!.includes).toEqual(['agent-factory-kit']);
   });
 

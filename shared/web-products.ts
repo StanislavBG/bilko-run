@@ -42,7 +42,8 @@ export interface WebProduct {
   kind?: 'download' | 'service';
   /** 'one_time' (default) or 'month' (recurring; services only) */
   billing?: 'one_time' | 'month';
-  /** landing page slug when several products share one page; default slug */
+  /** landing page path under /projects/ when it differs from slug: one slug, or two
+   *  joined by '/' for a page nested in another project's bundle; default slug */
   pageSlug?: string;
   /** env var holding the Stripe coupon id for the founding price, STRIPE_COUPON_WP_* */
   foundingCouponEnvVar?: string;
@@ -127,8 +128,19 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     priceEnvVar: 'STRIPE_PRICE_WP_AGENT_FACTORY_KIT',
     displayPrice: '$19',
     downloadLimit: 20,
-    release: null,
-    preview: null,
+    release: {
+      version: '1.0.0',
+      filename: 'bilko-agent-factory-kit-1.0.0.zip',
+      bytes: 60099,
+      sha256: 'c5fe49c81d94ab91e561bdb2be7f63e38a2dfd233e3f1ea636f8f33d77b0db08',
+    },
+    pageSlug: 'launch-kit/agent-factory-kit',
+    preview: {
+      version: '1.0.0',
+      filename: 'agent-factory-kit-preview-1.0.0.zip',
+      bytes: 3392,
+      sha256: '9a21261fee8f61821b3ba7a9c01bb57c16771eaa33fd4a1e1bc4edee01d56e3d',
+    },
   },
 ];
 
@@ -142,6 +154,12 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
 
 export function isValidWebProductSlug(slug: unknown): slug is string {
   return typeof slug === 'string' && SLUG_RE.test(slug);
+}
+
+/** One slug, or two joined by '/' (a page nested in another project's bundle). */
+function isValidPageSlug(path: string): boolean {
+  const parts = path.split('/');
+  return parts.length <= 2 && parts.every(isValidWebProductSlug);
 }
 
 export function isValidCheckoutSessionId(id: unknown): id is string {
@@ -222,7 +240,7 @@ export function validateWebProducts(list: readonly WebProduct[]): string[] {
     }
     if (isService && p.release !== null) problems.push(`${tag} service release must be null`);
     if (p.billing === 'month' && !isService) problems.push(`${tag} billing month is for services only`);
-    if (p.pageSlug !== undefined && !isValidWebProductSlug(p.pageSlug)) {
+    if (p.pageSlug !== undefined && !isValidPageSlug(p.pageSlug)) {
       problems.push(`${tag} invalid pageSlug`);
     }
     if (p.foundingCouponEnvVar !== undefined) {

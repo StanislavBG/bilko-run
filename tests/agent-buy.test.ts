@@ -1,5 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import Fastify from 'fastify';
+
+const OLD_ENV = process.env;
 
 const sessionsCreate = vi.fn();
 const couponsRetrieve = vi.fn();
@@ -34,7 +36,8 @@ function get(app: Awaited<ReturnType<typeof buildApp>>, url: string, headers: Re
 }
 
 describe('GET /buy/:offerId', () => {
-  const OLD_ENV = process.env;
+  afterEach(() => { process.env = OLD_ENV; });
+  afterAll(() => { process.env = OLD_ENV; });
 
   beforeEach(() => {
     vi.clearAllMocks();

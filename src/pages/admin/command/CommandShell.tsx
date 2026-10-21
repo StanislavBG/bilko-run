@@ -159,7 +159,7 @@ export function CommandShell(props: CommandShellProps) {
     width: '100vw',
     height: '100vh',
     minWidth: 1280,
-    minHeight: 760,
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     gap: 8,

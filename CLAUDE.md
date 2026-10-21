@@ -121,7 +121,8 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/routes/tools/` — One file per AI tool. `_shared.ts` holds the rate limiter, IP hashing, usage tracking, and the shared gateway helpers: `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check/deduct), `askGeminiJson` (Gemini call + JSON parse), `toolErrorReply` (uniform error reply), plus `handleGenerateEndpoint` (inverse-mode generator). `index.ts` is the barrel that registers all tools. To extract a tool to a sibling repo, lift its file + the page; no other server changes required.
 - `server/routes/blog.ts` — Blog CRUD (admin-only writes)
 - `server/routes/forum.ts` + `server/services/forum.ts` — site-level Forum at `/forum`, like the blog: public reads, Clerk + handle writes, admin hide
-- `server/routes/project-catalog.ts` — public `GET /api/projects` + read-only MCP at `/mcp` (the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
+- `server/routes/project-catalog.ts` — public `GET /api/projects` + `GET /api/offers` + MCP at `/mcp` (read-only `list_projects`/`get_project`/`list_offers`, plus the paid `roast_page` behind a `bkk_` agent key; the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
+- Agent storefront — `shared/agent-offers.ts` (offer data), `server/routes/agent-buy.ts` (`/buy/:offerId`), `server/routes/agent-storefront.ts` (`/llms.txt`), `server/routes/agent-keys.ts` + `server/services/agent-api-keys.ts` (`bkk_` keys); contract in `docs/host-contract.md` → "Agent-facing surfaces"
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
 - `server/routes/realtime.ts` + `server/realtime/relay.ts` — ticket endpoint and binary WebSocket input relay (`/api/realtime/rooms/:roomId`, ≤10 seats, in-memory, single instance)
 - `server/routes/analytics.ts` — Page views + admin stats dashboard (`/api/analytics/event` is open to same-origin sibling apps for `track()`)
@@ -138,7 +139,7 @@ Paid zips sold from a static-path landing page. Declared in `shared/web-products
 
 Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
 
-- AI-tool gateway routes — `server/routes/tools/`
+- AI-tool gateway routes — `server/routes/tools/` (includes the PageRoast `roast_page` MCP tool, `server/routes/tools/page-roast.ts`, registered on the `/mcp` catalog server)
 - Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
 - Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
 - Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer, home hero and Session Manager header

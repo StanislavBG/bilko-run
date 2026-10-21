@@ -269,6 +269,54 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
 
 Implemented in `server/routes/project-catalog.ts`; tests in `tests/project-catalog.test.ts`.
 
+## Agent-facing surfaces
+
+bilko.run treats AI agents as a customer segment: they can discover what is for sale, read the project catalog, and buy, without a browser session. All of it is derived from data, not hand-written per surface.
+
+| Method | Path | Auth | Returns |
+|---|---|---|---|
+| GET | `/llms.txt` | none | Plain-text storefront for LLMs: offers with prices and `/buy` links, public projects, and the agent endpoints below. `server/routes/agent-storefront.ts` |
+| GET | `/api/offers` | none | JSON `{ offers: [...] }`: `id`, `name`, `summary`, `whatYouGet`, `price`, `amount`, `currency`, `billing`, `pageUrl`, `buyUrl`, `howToBuy`. `Cache-Control: public, max-age=300`. |
+| GET | `/api/projects` | none | The public project catalog (see "Public project catalog"), each project with its `offers` (`id`, `price`, `buyUrl`). |
+| POST | `/mcp` | none for catalog tools; `Authorization: Bearer bkk_...` for `roast_page` | Stateless streamable-HTTP MCP server. Tools: `list_projects`, `get_project(slug)`, `list_offers` (all read-only, same data as the JSON routes) and `roast_page(url)` (paid, 1 credit; returns an `isError` result with the buy link when the key is missing or invalid). |
+| GET | `/buy/:offerId` | none | Creates a Stripe Checkout session for the offer and 302-redirects to it. Unknown id: 404 listing valid ids. Search/AI crawlers and HEAD get a static page with the price and the link instead of a session. Rate limited (10/min/IP); 503 when Checkout is unavailable. |
+| POST | `/api/agent-keys` | Clerk session | Mints a `bkk_` key, returned once (`key`, `prefix`, `id`). 409 at 10 active keys. |
+| GET | `/api/agent-keys` | Clerk session | Lists the caller's keys (prefix, label, timestamps; never the secret). |
+| DELETE | `/api/agent-keys/:id` | Clerk session | Revokes one of the caller's keys. |
+
+### Offers
+
+Every paid offer lives in one file, `shared/agent-offers.ts` (`AGENT_OFFERS`): `id`, name, summary, `whatYouGet`, `amountCents`, `billing` (`one_time` | `month`), `pageUrl`, `buyUrl`, a `source` pointing at the existing catalog (`web_product` slug in `shared/web-products.ts`, or `price_catalog` type in `shared/product-catalog.ts`), and `agentKey` (true when the purchase yields a `bkk_` key). `amountCents` is not in `PRICE_CATALOG`, so it must match the price shown on the app's page and Stripe. Current offers: `launch-kit` ($9), `git-viewer` ($5/month), `pageroast-credits-7` ($5), `pageroast-credit-1` ($1).
+
+**To add an offer:** add an entry to `AGENT_OFFERS` (and the underlying web product or price-catalog entry if it is new). That one edit flows to `/llms.txt`, `GET /api/offers`, the `list_offers` MCP tool, the `offers` on each project in `/api/projects` and `list_projects`/`get_project`, the JSON-LD on the offer's page, and `/buy/<id>`.
+
+**JSON-LD:** when a page's path equals an offer's `pageUrl` path, the server injects a `<script type="application/ld+json">` block with one schema.org `Product` + `Offer` per offer (price, currency, `url` = `buyUrl`; monthly offers add a `UnitPriceSpecification` with `billingDuration: P1M`). Pages that already declare a `Product` are left alone. Implemented in `server/offer-jsonld.ts`, wired in `server/og-routes.ts`.
+
+### Agent keys (`bkk_`)
+
+- A `bkk_` key identifies a bilko.run account (by email) to the agent surfaces. It is minted either by the account owner via `POST /api/agent-keys` (Clerk session) or revealed once on the checkout success page after buying an offer with `agentKey: true`. Only a hash is stored; the secret is shown once.
+- Keys are accepted only on `/mcp`, and the only thing they can do is call `roast_page`, which spends 1 credit from the owner's balance through the same `creditGate` path as the web app. A key never grants admin, never passes `requireAuth`, and cannot mint or revoke keys, so a leaked key can spend only that account's credits.
+- Max 10 active keys per account. Implemented in `server/services/agent-api-keys.ts`, `server/routes/agent-keys.ts`.
+
+### Visitor classes
+
+`classifyVisitor` (`server/services/analytics.ts`) tags every page hit with one of six classes, checked in this order:
+
+| Class | Who |
+|---|---|
+| `api_client` | MCP calls and requests carrying a known bot id |
+| `ai_user_agent` | An AI assistant fetching on behalf of a user (ChatGPT-User, Claude-User, Perplexity-User, ...) |
+| `ai_crawler` | AI training/indexing crawlers (GPTBot, ClaudeBot, CCBot, ...) |
+| `search_crawler` | Search engines and link unfurlers (Googlebot, Bingbot, Slackbot, ...) |
+| `script` | Empty user agent, curl/wget/HTTP libraries, headless browsers, generic bot/spider/crawler |
+| `human` | Everything else (undeclared bots with browser UAs land here) |
+
+They show up in the admin traffic panel (`/admin`, backed by `GET /api/admin/traffic`) and in the `bilko-host` MCP `traffic_report` tool (`byClass`, `topPagesByClass`). Hits to `/mcp`, `/llms.txt`, `/api/offers` and `/buy/*` are recorded as page hits so agent interest is measurable.
+
+### robots.txt
+
+`public/robots.txt` keeps `/api/` private but explicitly allows `/mcp`, `/llms.txt`, `/api/offers` and `/api/projects` (longest match wins). It disallows `/buy/` because each GET creates a Checkout session; agents acting for a user follow buy links directly.
+
 ## URL canonicalization
 
 - `/products/<slug>` is the canonical path for every `react-route` app.

@@ -2,6 +2,14 @@ User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /app/
+# Agent-facing surfaces stay crawlable (longest match beats Disallow: /api/).
+Allow: /mcp
+Allow: /llms.txt
+Allow: /api/offers
+Allow: /api/projects
+# /buy/<offer> mints a Stripe Checkout session per request; crawlers must not trigger it.
+# Agents acting for a user follow buy links directly.
+Disallow: /buy/
 # Boat Shooter is unpublished for now — its 116 MB of sprites was the bulk of
 # our Render egress. Keep crawlers from re-requesting the path.
 Disallow: /projects/game-academy/

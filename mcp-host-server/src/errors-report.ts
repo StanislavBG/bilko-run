@@ -145,6 +145,8 @@ export function mapTrafficToReport(body: unknown, days: number, excludeSelf = fa
     byDay: rows(b.byDay),
     topPages: rows(b.topPages),
     byProject: rows(b.bySlug),
+    byClass: rows(b.byClass),
+    topPagesByClass: rows(b.topPagesByClass),
     topReferrers: rows(b.topReferrers),
     byCountry: rows(b.byCountry),
     byDevice: rows(b.byDevice),
@@ -157,7 +159,7 @@ export function mapTrafficToReport(body: unknown, days: number, excludeSelf = fa
     notes: [
       '`visitors.human` counts a salted IP+user-agent hash (page_hits.visitor_id), NOT the bilko_vid cookie. One person on two devices counts twice; many people behind one NAT with the same browser count once.',
       '`visitors.bilkoVidCookie` counts bilko_vid cookie UUIDs. Clients that drop cookies (most crawlers) mint a new one on every request, so this over-counts non-browser traffic.',
-      'Bots are UA-flagged only (is_bot). Undeclared bots with browser UAs land in `human`; `humanSingleHit` is the main signal for them.',
+      'Visitors are classified into six classes: human, search_crawler, ai_crawler, ai_user_agent, api_client, script. `byClass` covers all classes, so its hits sum to all non-error hits; `visitors.human` stays human-only. Undeclared bots with browser UAs still land in `human`; `humanSingleHit` is the main signal for them.',
       'Human aggregates exclude status >= 400. Hits are HTML documents only, not assets or API calls.',
       excludeSelf ? 'Excludes the owner\'s own signed-in visits (is_admin rows).' : 'Includes the owner\'s own visits (is_admin rows); pass excludeSelf to drop them.',
       'A window that starts before `metricValidSince.visitors` only covers the days since then. page_hits keeps 90 days; the host caps the window at 90.',

@@ -593,7 +593,7 @@ server.registerTool('error_detail', {
 // 10) traffic_report ─────────────────────────────────────────────────────
 server.registerTool('traffic_report', {
     title: 'Visitor traffic report',
-    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/traffic) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for a trailing window: human vs bot visitors and hits (bots are UA-flagged), human visitors seen only once (undeclared-bot/bounce signal), bilko_vid cookie uniques, per-page and per-project hits + uniques, top referrers, countries, devices, and the date each metric became valid. ' +
+    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/traffic) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for a trailing window: human vs bot visitors and hits (bots are UA-flagged), human visitors seen only once (undeclared-bot/bounce signal), bilko_vid cookie uniques, per-page and per-project hits + uniques, a per-visitor-class breakdown (`byClass`, `topPagesByClass`: human, search_crawler, ai_crawler, ai_user_agent, api_client, script), top referrers, countries, devices, and the date each metric became valid. ' +
         'Visitors are a salted IP+user-agent hash, not a cookie. Per-visitor IP/UA/email rows are omitted. The top-level `source` field is the base URL queried.',
     inputSchema: {
         days: z.number().int().positive().default(30).describe('Trailing window in days. Default 30 (host caps at 90).'),

@@ -216,6 +216,22 @@ describe('mcp traffic_report', () => {
     expect(json).not.toContain('a@b.c');
   });
 
+  it('passes through byClass and topPagesByClass', () => {
+    const byClass = [{ class: 'human', hits: 900, visitors: 400 }, { class: 'ai_crawler', hits: 60, visitors: 5 }];
+    const topPagesByClass = [{ path: '/', class: 'ai_crawler', hits: 30, visitors: 3 }];
+    const r = mapTrafficToReport({ ...BODY, byClass, topPagesByClass }, 30) as Record<string, any>;
+    expect(r.byClass).toEqual(byClass);
+    expect(r.topPagesByClass).toEqual(topPagesByClass);
+    expect(r.notes.join(' ')).toContain('ai_user_agent');
+    expect(r.notes.join(' ')).not.toContain('UA-flagged only');
+  });
+
+  it('yields [] for byClass/topPagesByClass from an older host', () => {
+    const r = mapTrafficToReport(BODY, 30) as Record<string, any>;
+    expect(r.byClass).toEqual([]);
+    expect(r.topPagesByClass).toEqual([]);
+  });
+
   it('tolerates an empty body without NaN', () => {
     const r = mapTrafficToReport({}, 7) as Record<string, any>;
     expect(r.split).toEqual({ botHitPct: 0, botVisitorPct: 0, humanSingleHitPct: 0 });

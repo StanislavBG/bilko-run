@@ -77,7 +77,10 @@ describe('webhook web-product orders', () => {
     vi.clearAllMocks();
     process.env = { ...OLD_ENV, NODE_ENV: 'test' };
     delete process.env.STRIPE_WEBHOOK_SECRET;
+    // singleFork shares one process across files: another file (agent-buy) can leak these price vars.
     delete process.env.STRIPE_PRICE_WP_DEMO_PACK;
+    delete process.env.STRIPE_PRICE_WP_HFH_FRACTIONAL;
+    delete process.env.STRIPE_PRICE_WP_HFH_SESSION;
     listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_wp_demo' } }] });
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });

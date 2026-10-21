@@ -4,6 +4,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { registerProjectCatalogRoutes } from '../server/routes/project-catalog.js';
 import { PUBLIC_CARDS, HUB_CARDS } from '../src/data/projectsView.js';
 import { PROJECTS } from '../src/data/projectsRegistry.js';
+import { AGENT_OFFERS, formatPrice } from '../shared/agent-offers.js';
 
 const app = Fastify();
 
@@ -153,9 +154,9 @@ describe('registry-owned audience / talking_points', () => {
 });
 
 describe('offers for agents', () => {
-  const IDS = ['launch-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1'];
+  const IDS = AGENT_OFFERS.map(o => o.id);
 
-  it('list_offers over POST /mcp returns the 4 offers with buy URLs', async () => {
+  it('list_offers over POST /mcp returns every AGENT_OFFERS entry with buy URLs', async () => {
     const res = await mcp({ method: 'tools/call', params: { name: 'list_offers', arguments: {} } });
     const data = JSON.parse(res.result.content[0].text);
     expect(data.offers.map((o: { id: string }) => o.id)).toEqual(IDS);
@@ -167,6 +168,15 @@ describe('offers for agents', () => {
     const kit = data.offers.find((o: { id: string }) => o.id === 'launch-kit');
     expect(kit.price).toBe('$9');
     expect(kit.amount).toBe(9);
+
+    for (const id of ['hfh-unstick', 'hfh-factory-setup', 'hfh-fractional']) {
+      const offer = data.offers.find((o: { id: string }) => o.id === id);
+      expect(offer, id).toBeDefined();
+      expect(offer.buyUrl).toBe(`https://bilko.run/buy/${id}`);
+      expect(offer.price).toBe(formatPrice(AGENT_OFFERS.find(o => o.id === id)!));
+    }
+    const fractional = data.offers.find((o: { id: string }) => o.id === 'hfh-fractional');
+    expect(fractional.price).toBe('$750/month');
   });
 
   it('carries the offer on its project entry and [] elsewhere', async () => {

@@ -9,7 +9,7 @@ describe('agent offers', () => {
     const ids = AGENT_OFFERS.map(o => o.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
-    expect(ids).toEqual(['launch-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
+    expect(ids).toEqual(['launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
       'hfh-unstick', 'hfh-factory-setup', 'hfh-fractional']);
   });
 
@@ -42,6 +42,16 @@ describe('agent offers', () => {
     expect(offerById('nope')).toBeUndefined();
     expect(offerById('pageroast-credits-7')!.agentKey).toBe(true);
     expect(offerById('git-viewer')!.whatYouGet).toMatch(/same email/i);
+  });
+
+  it('lists the agent factory kit with honest copy', () => {
+    const o = offerById('agent-factory-kit')!;
+    expect(o.source).toEqual({ kind: 'web_product', slug: 'agent-factory-kit' });
+    expect(webProductBySlug('agent-factory-kit', WEB_PRODUCTS)).toBeDefined();
+    expect(o.buyUrl).toBe('https://bilko.run/buy/agent-factory-kit');
+    const text = JSON.stringify(o);
+    expect(text).not.toMatch(/by anthropic|official/i);
+    expect(text).not.toMatch(/guarantee/i);
   });
 
   it('never leaks the owner real name in offer text', () => {

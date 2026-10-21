@@ -722,6 +722,13 @@ Live mode holds real buyers only. Owner/agent testing never creates live session
 6. **Thanks page** at `/projects/<slug>/thanks/`: read `session_id` from the query, call `GET …/order?session_id=` to show status and then `GET …/download?session_id=` for the file. If the link is lost or the session id is missing, offer sign-in (Clerk) and call `GET …/account-download` with the Bearer token.
 7. **Monitor** in `/admin` → Products (views, checkout starts, orders, revenue, downloads, release stored).
 
+### Bundled and preview products
+
+Two optional `WebProduct` fields on download products (validated by `validateWebProducts`):
+
+- `includes: string[]` — slugs of other download products delivered with this purchase. Example: the Agent Factory Setup service (`hfh-factory-setup`) has `includes: ['agent-factory-kit']`, so its buyers get the Kit. `GET /api/web-products/:slug/order` then returns an `included` array of `{ slug, name, downloadUrl }` (only entries whose release exists), each `downloadUrl` being `/api/web-products/<included-slug>/download?session_id=…`.
+- `preview: { version, filename, bytes, sha256 } | null` — a free preview zip, pinned by sha256 like `release`. Signed-in visitors (Clerk Bearer, no purchase) fetch it with `GET /api/web-products/:slug/preview` (401 not signed in, 404 not stored). Upload it with `PUT /api/web-products/:slug/releases/:version?kind=preview`; it is stored under the reserved slug `<slug>--preview`. `GET /api/web-products/:slug` reports `previewAvailable`.
+
 ### Selling a bookable service
 
 A web product with `kind: 'service'` sells a booking instead of a zip: no `release` (must be `null`), no download routes. Several offers can share one landing page.

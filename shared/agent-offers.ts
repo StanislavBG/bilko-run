@@ -50,6 +50,20 @@ export const AGENT_OFFERS: readonly AgentOffer[] = [
     agentKey: false,
   },
   {
+    id: 'agent-factory-kit',
+    name: 'Bilko Agent Factory Kit',
+    summary: 'A downloadable kit of agent personas and templates for Session Manager / Claude Code users, sold as a one-time purchase.',
+    whatYouGet:
+      'One zip download after checkout: agent personas, a PRD template, a standards template, a validator prompt and scheduler recipes. Made for Session Manager and Claude Code users.',
+    amountCents: 1900,
+    currency: 'usd',
+    billing: 'one_time',
+    pageUrl: `${SITE}/projects/agent-factory-kit/`,
+    buyUrl: buy('agent-factory-kit'),
+    source: { kind: 'web_product', slug: 'agent-factory-kit' },
+    agentKey: false,
+  },
+  {
     id: 'git-viewer',
     name: 'Git Viewer Portfolio',
     summary: 'A hosted, auto-refreshed portfolio page built from your GitHub activity.',

@@ -624,6 +624,20 @@ export const MIGRATIONS = [
     revoked_at   INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_admin_api_keys_hash ON admin_api_keys(key_hash)`,
+  // Customer agent API keys (server/services/agent-api-keys.ts): only the sha256 is stored.
+  `CREATE TABLE IF NOT EXISTS agent_api_keys (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    email               TEXT NOT NULL,
+    label               TEXT,
+    key_hash            TEXT NOT NULL UNIQUE,
+    key_prefix          TEXT NOT NULL,
+    created_at          INTEGER NOT NULL,
+    last_used_at        INTEGER,
+    revoked_at          INTEGER,
+    checkout_session_id TEXT UNIQUE
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_api_keys_hash ON agent_api_keys(key_hash)`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_api_keys_email ON agent_api_keys(email)`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

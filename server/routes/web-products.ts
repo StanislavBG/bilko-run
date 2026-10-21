@@ -4,13 +4,13 @@ import { ADMIN_EMAILS, verifyClerkToken } from '../clerk.js';
 import { dbGet, dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import {
-  countSessionDownloads, findOrder, getRelease, hasOrderForEmail, recordDownload, recordOrder,
+  countLiveOrders, countSessionDownloads, findOrder, getRelease, hasOrderForEmail, recordDownload, recordOrder,
   storeRelease,
   type WebProductOrder,
 } from '../services/web-products.js';
 import {
   MAX_RELEASE_BYTES, WEB_PRODUCTS, isValidCheckoutSessionId, isValidReleaseVersion, isValidWebProductSlug,
-  resolveWebProductPriceId, webProductBySlug, type WebProduct,
+  productBilling, productKind, productPageSlug, resolveWebProductPriceId, webProductBySlug, type WebProduct,
 } from '../../shared/web-products.js';
 
 const RATE_WINDOW_MS = 60_000;
@@ -42,7 +42,7 @@ function maskEmail(email: string): string {
   return `${email[0]}***${email.slice(at)}`;
 }
 
-type Resolved =
+export type Resolved =
   | { status: 'paid'; order: WebProductOrder }
   | { status: 'unpaid' }
   | { status: 'not_found' };
@@ -82,7 +82,7 @@ async function ipSeenAsAdmin(ip: string): Promise<boolean> {
   }
 }
 
-async function resolvePaidOrder(product: WebProduct, sessionId: string): Promise<Resolved> {
+export async function resolvePaidOrder(product: WebProduct, sessionId: string): Promise<Resolved> {
   const existing = await findOrder(product.slug, sessionId);
   if (existing) return { status: 'paid', order: existing };
 
@@ -135,6 +135,74 @@ async function resolvePaidOrder(product: WebProduct, sessionId: string): Promise
   };
 }
 
+export interface CheckoutParamsInput {
+  owner: boolean;
+  ownerIp: boolean;
+  priceId: string;
+  testCents: number | null;
+  publicUrl: string;
+  couponId?: string;
+}
+
+/** Stripe Checkout create params for a web product (shared by the checkout route and /buy). */
+export function buildWebProductCheckoutParams(
+  product: WebProduct,
+  { owner, ownerIp, priceId, testCents, publicUrl, couponId }: CheckoutParamsInput,
+): Record<string, any> {
+  const monthly = productBilling(product) === 'month';
+  const page = productPageSlug(product);
+  const metadata: Record<string, string> = { web_product: product.slug };
+  if (owner) metadata.test = 'true';
+  if (ownerIp) metadata.owner_ip = 'true';
+  return {
+    mode: monthly ? 'subscription' : 'payment',
+    line_items: owner
+      ? [{
+        price_data: {
+          currency: 'usd',
+          unit_amount: testCents!,
+          product_data: { name: `${product.name} (test)` },
+          ...(monthly ? { recurring: { interval: 'month' } } : {}),
+        },
+        quantity: 1,
+      }]
+      : [{ price: priceId, quantity: 1 }],
+    ...(monthly ? {} : { customer_creation: 'always' }),
+    // Stripe forbids discounts together with allow_promotion_codes.
+    ...(couponId ? { discounts: [{ coupon: couponId }] } : { allow_promotion_codes: true }),
+    // Abandoned-checkout recovery: on expiry Stripe mints a recovery URL.
+    // Stripe only emails it when promotional consent is collected, which
+    // errors until the Checkout ToS is accepted in the Dashboard
+    // (settings/checkout) — so consent is opt-in via env, not hardcoded.
+    ...(process.env.STRIPE_CHECKOUT_PROMO_CONSENT === '1' ? { consent_collection: { promotions: 'auto' as const } } : {}),
+    after_expiration: { recovery: { enabled: true, allow_promotion_codes: true } },
+    metadata,
+    success_url: `${publicUrl}/projects/${page}/thanks/?session_id={CHECKOUT_SESSION_ID}&offer=${product.slug}`,
+    cancel_url: `${publicUrl}/projects/${page}/?checkout=cancel`,
+  };
+}
+
+/** Founding coupon id for the mode, if its env var is set and Stripe says it is still valid. */
+async function foundingCoupon(
+  product: WebProduct, stripe: any, owner: boolean,
+): Promise<{ id: string; remaining: number | null } | null> {
+  const envVar = product.foundingCouponEnvVar;
+  if (!envVar) return null;
+  const id = process.env[owner ? `${envVar}_TEST` : envVar];
+  if (!id || !stripe) return null;
+  try {
+    const coupon = await stripe.coupons.retrieve(id);
+    if (!coupon?.valid) return null;
+    const remaining = typeof coupon.max_redemptions === 'number'
+      ? Math.max(0, coupon.max_redemptions - (coupon.times_redeemed ?? 0))
+      : null;
+    return { id, remaining };
+  } catch (err: any) {
+    console.error('[web-products] founding coupon lookup failed:', err?.message);
+    return null;
+  }
+}
+
 export function registerWebProductRoutes(
   app: FastifyInstance,
   opts: { products?: readonly WebProduct[] } = {},
@@ -149,6 +217,23 @@ export function registerWebProductRoutes(
     if (!product) {
       reply.status(404);
       return { error: 'Not found' };
+    }
+    if (productKind(product) === 'service') {
+      const sold = product.maxOrders !== undefined && (await countLiveOrders(product.slug)) >= product.maxOrders;
+      const stripe = getStripe();
+      const coupon = await foundingCoupon(product, stripe, false);
+      return {
+        slug: product.slug,
+        name: product.name,
+        displayPrice: product.displayPrice,
+        kind: 'service',
+        billing: productBilling(product),
+        pageSlug: productPageSlug(product),
+        foundingDisplayPrice: product.foundingDisplayPrice ?? null,
+        foundingRemaining: coupon?.remaining ?? null,
+        soldOut: sold,
+        available: !!resolveWebProductPriceId(product, process.env) && !!stripe,
+      };
     }
     let available = false;
     if (product.release) {
@@ -192,35 +277,24 @@ export function registerWebProductRoutes(
     const q = req.query as { dryRun?: string } | undefined;
     if (q?.dryRun === '1') return { ok: true, dryRun: true, url: null };
 
+    if (product.maxOrders !== undefined && (await countLiveOrders(product.slug)) >= product.maxOrders) {
+      reply.status(409);
+      return { error: 'sold_out' };
+    }
+
     const ownerIp = !owner && await ipSeenAsAdmin(req.ip);
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
     try {
-      const metadata: Record<string, string> = { web_product: product.slug };
-      if (owner) metadata.test = 'true';
-      if (ownerIp) metadata.owner_ip = 'true';
-      const session = await stripe.checkout.sessions.create({
-        mode: 'payment',
-        line_items: owner
-          ? [{ price_data: { currency: 'usd', unit_amount: testCents!, product_data: { name: `${product.name} (test)` } }, quantity: 1 }]
-          : [{ price: priceId, quantity: 1 }],
-        customer_creation: 'always',
-        allow_promotion_codes: true,
-        // Abandoned-checkout recovery: on expiry Stripe mints a recovery URL.
-        // Stripe only emails it when promotional consent is collected, which
-        // errors until the Checkout ToS is accepted in the Dashboard
-        // (settings/checkout) — so consent is opt-in via env, not hardcoded.
-        ...(process.env.STRIPE_CHECKOUT_PROMO_CONSENT === '1' ? { consent_collection: { promotions: 'auto' as const } } : {}),
-        after_expiration: { recovery: { enabled: true, allow_promotion_codes: true } },
-        metadata,
-        success_url: `${publicUrl}/projects/${product.slug}/thanks/?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${publicUrl}/projects/${product.slug}/?checkout=cancel`,
-      });
+      const coupon = await foundingCoupon(product, stripe, owner);
+      const session = await stripe.checkout.sessions.create(buildWebProductCheckoutParams(product, {
+        owner, ownerIp, priceId, testCents, publicUrl, couponId: coupon?.id,
+      }) as any);
       if (!owner) {
         try {
           await dbRun(
             'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin) VALUES (?, ?, ?, ?, ?)',
             'checkout_start', hashIp(req.ip), product.slug,
-            JSON.stringify({ path: `/projects/${product.slug}/` }), ownerIp ? 1 : 0,
+            JSON.stringify({ path: `/projects/${productPageSlug(product)}/` }), ownerIp ? 1 : 0,
           );
         } catch (err: any) {
           console.error('[web-products] funnel insert failed:', err?.message);
@@ -239,6 +313,10 @@ export function registerWebProductRoutes(
   async function authorize(req: any, reply: any): Promise<{ product: WebProduct; order: WebProductOrder; sessionId: string } | null> {
     const product = lookup(req.params?.slug);
     if (!product) {
+      reply.status(404).send({ error: 'Not found' });
+      return null;
+    }
+    if (productKind(product) === 'service') {
       reply.status(404).send({ error: 'Not found' });
       return null;
     }

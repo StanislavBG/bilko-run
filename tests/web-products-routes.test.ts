@@ -9,12 +9,14 @@ const sessionsCreate = vi.fn();
 const sessionsRetrieve = vi.fn();
 const testCreate = vi.fn();
 const testRetrieve = vi.fn();
+const couponsRetrieve = vi.fn();
+const testCouponsRetrieve = vi.fn();
 const testMode = vi.hoisted(() => ({ configured: true, ownerEmail: null as string | null }));
 
 vi.mock('../server/services/stripe.js', () => ({
-  getStripe: () => ({ checkout: { sessions: { create: sessionsCreate, retrieve: sessionsRetrieve } } }),
+  getStripe: () => ({ checkout: { sessions: { create: sessionsCreate, retrieve: sessionsRetrieve } }, coupons: { retrieve: couponsRetrieve } }),
   getStripeTest: () => (testMode.configured
-    ? { checkout: { sessions: { create: testCreate, retrieve: testRetrieve } } }
+    ? { checkout: { sessions: { create: testCreate, retrieve: testRetrieve } }, coupons: { retrieve: testCouponsRetrieve } }
     : null),
 }));
 
@@ -68,6 +70,8 @@ beforeEach(() => {
   sessionsRetrieve.mockReset();
   testCreate.mockReset();
   testRetrieve.mockReset();
+  couponsRetrieve.mockReset();
+  testCouponsRetrieve.mockReset();
   testMode.configured = true;
   testMode.ownerEmail = null;
 });
@@ -107,7 +111,7 @@ describe('web product routes', () => {
     expect(arg.allow_promotion_codes).toBe(true);
     expect(arg.metadata).toEqual({ web_product: product.slug });
     expect(arg.success_url).toBe(
-      `https://bilko.run/projects/${product.slug}/thanks/?session_id={CHECKOUT_SESSION_ID}`,
+      `https://bilko.run/projects/${product.slug}/thanks/?session_id={CHECKOUT_SESSION_ID}&offer=${product.slug}`,
     );
     expect(arg.cancel_url).toBe(`https://bilko.run/projects/${product.slug}/?checkout=cancel`);
     expect(arg.after_expiration).toEqual({ recovery: { enabled: true, allow_promotion_codes: true } });
@@ -248,5 +252,132 @@ describe('web product routes', () => {
     expect((await app.inject({ url })).statusCode).toBe(200);
     expect(await countSessionDownloads(product.slug, 'cs_test_download1234567')).toBe(2);
     expect((await app.inject({ url })).statusCode).toBe(429);
+  });
+});
+
+describe('service products', () => {
+  const svc = (over: Partial<WebProduct> = {}): WebProduct => ({
+    slug: 'svc-fixture', name: 'Svc Fixture', productKey: 'wp_svc_fixture',
+    priceEnvVar: 'STRIPE_PRICE_WP_SVC_FIXTURE', defaultPriceId: 'price_svc',
+    displayPrice: '$750', downloadLimit: 0, release: null, kind: 'service',
+    billing: 'month', pageSlug: 'svc-page', ...over,
+  });
+  async function appFor(p: WebProduct) {
+    const { registerWebProductRoutes } = await import('../server/routes/web-products.js');
+    const app = Fastify();
+    registerWebProductRoutes(app, { products: [p] });
+    return app;
+  }
+  let ipSeq = 0;
+  const post = (app: any, p: WebProduct) =>
+    app.inject({ method: 'POST', url: `/api/web-products/${p.slug}/checkout`, remoteAddress: `10.9.0.${++ipSeq}` });
+
+  it('builds subscription params on the shared page', async () => {
+    const { buildWebProductCheckoutParams } = await import('../server/routes/web-products.js');
+    const p = svc();
+    const params: any = buildWebProductCheckoutParams(p, {
+      owner: false, ownerIp: false, priceId: 'price_svc', testCents: 75000, publicUrl: 'https://bilko.run',
+    });
+    expect(params.mode).toBe('subscription');
+    expect(params.customer_creation).toBeUndefined();
+    expect(params.line_items).toEqual([{ price: 'price_svc', quantity: 1 }]);
+    expect(params.success_url).toBe('https://bilko.run/projects/svc-page/thanks/?session_id={CHECKOUT_SESSION_ID}&offer=svc-fixture');
+    expect(params.cancel_url).toBe('https://bilko.run/projects/svc-page/?checkout=cancel');
+    expect(params.metadata).toEqual({ web_product: 'svc-fixture' });
+  });
+
+  it('owner test sessions use inline recurring price_data', async () => {
+    testMode.ownerEmail = 'bilkobibitkov2000@gmail.com';
+    testCreate.mockResolvedValue({ url: 'https://t/x' });
+    const p = svc();
+    const res = await (await appFor(p)).inject({
+      method: 'POST', url: `/api/web-products/${p.slug}/checkout`,
+      headers: { authorization: 'Bearer jwt.owner' },
+    });
+    expect(res.statusCode).toBe(200);
+    const arg = testCreate.mock.calls[0][0];
+    expect(arg.mode).toBe('subscription');
+    expect(arg.line_items[0].price_data.recurring).toEqual({ interval: 'month' });
+    expect(arg.line_items[0].price_data.unit_amount).toBe(75000);
+    expect(arg.customer_creation).toBeUndefined();
+  });
+
+  it('applies a valid founding coupon and drops allow_promotion_codes', async () => {
+    process.env.STRIPE_COUPON_WP_SVC = 'coupon_live';
+    try {
+      couponsRetrieve.mockResolvedValue({ id: 'coupon_live', valid: true });
+      sessionsCreate.mockResolvedValue({ url: 'https://c/x' });
+      const p = svc({ billing: 'one_time', foundingCouponEnvVar: 'STRIPE_COUPON_WP_SVC', foundingDisplayPrice: '$125' });
+      const res = await post(await appFor(p), p);
+      expect(res.statusCode).toBe(200);
+      const arg = sessionsCreate.mock.calls[0][0];
+      expect(couponsRetrieve).toHaveBeenCalledWith('coupon_live');
+      expect(arg.mode).toBe('payment');
+      expect(arg.discounts).toEqual([{ coupon: 'coupon_live' }]);
+      expect(arg.allow_promotion_codes).toBeUndefined();
+    } finally {
+      delete process.env.STRIPE_COUPON_WP_SVC;
+    }
+  });
+
+  it('falls back to full price when the coupon is invalid or errors', async () => {
+    process.env.STRIPE_COUPON_WP_SVC = 'coupon_live';
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const p = svc({ billing: 'one_time', foundingCouponEnvVar: 'STRIPE_COUPON_WP_SVC', foundingDisplayPrice: '$125' });
+      sessionsCreate.mockResolvedValue({ url: 'https://c/x' });
+      couponsRetrieve.mockResolvedValueOnce({ id: 'coupon_live', valid: false });
+      expect((await post(await appFor(p), p)).statusCode).toBe(200);
+      let arg = sessionsCreate.mock.calls[0][0];
+      expect(arg.discounts).toBeUndefined();
+      expect(arg.allow_promotion_codes).toBe(true);
+      couponsRetrieve.mockRejectedValueOnce(new Error('boom'));
+      expect((await post(await appFor(p), p)).statusCode).toBe(200);
+      arg = sessionsCreate.mock.calls[1][0];
+      expect(arg.discounts).toBeUndefined();
+      expect(arg.allow_promotion_codes).toBe(true);
+    } finally {
+      err.mockRestore();
+      delete process.env.STRIPE_COUPON_WP_SVC;
+    }
+  });
+
+  it('409 sold_out at the order cap without calling Stripe; GET reports it', async () => {
+    const p = svc({ slug: 'svc-capped', productKey: 'wp_svc_capped', maxOrders: 1 });
+    await recordOrder({ checkoutSessionId: 'cs_test_ignoredTestOrder1', slug: p.slug, email: 'a@b.co', amountTotal: 1, currency: 'usd', paymentStatus: 'paid' });
+    sessionsCreate.mockResolvedValue({ url: 'https://c/x' });
+    const app = await appFor(p);
+    expect((await post(app, p)).statusCode).toBe(200); // test-mode order does not count
+    await recordOrder({ checkoutSessionId: 'cs_live_realOrderNumber1', slug: p.slug, email: 'a@b.co', amountTotal: 1, currency: 'usd', paymentStatus: 'paid' });
+    sessionsCreate.mockClear();
+    const res = await post(app, p);
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: 'sold_out' });
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    const info = await app.inject({ url: `/api/web-products/${p.slug}` });
+    expect(info.json()).toMatchObject({ soldOut: true, available: true });
+  });
+
+  it('GET returns the service shape', async () => {
+    process.env.STRIPE_COUPON_WP_SVC = 'coupon_live';
+    try {
+      couponsRetrieve.mockResolvedValue({ id: 'coupon_live', valid: true, max_redemptions: 5, times_redeemed: 2 });
+      const p = svc({ slug: 'svc-shape', productKey: 'wp_svc_shape', foundingCouponEnvVar: 'STRIPE_COUPON_WP_SVC', foundingDisplayPrice: '$125' });
+      const res = await (await appFor(p)).inject({ url: `/api/web-products/${p.slug}` });
+      expect(res.json()).toMatchObject({
+        kind: 'service', billing: 'month', pageSlug: 'svc-page',
+        foundingDisplayPrice: '$125', foundingRemaining: 3, soldOut: false, available: true,
+      });
+    } finally {
+      delete process.env.STRIPE_COUPON_WP_SVC;
+    }
+  });
+
+  it('service download/order routes 404', async () => {
+    const p = svc({ slug: 'svc-dl', productKey: 'wp_svc_dl' });
+    const app = await appFor(p);
+    const sid = 'cs_live_abcdefghij12345';
+    expect((await app.inject({ url: `/api/web-products/${p.slug}/download?session_id=${sid}` })).statusCode).toBe(404);
+    expect((await app.inject({ url: `/api/web-products/${p.slug}/order?session_id=${sid}` })).statusCode).toBe(404);
   });
 });

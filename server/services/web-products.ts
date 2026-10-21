@@ -140,3 +140,12 @@ export async function getRelease(slug: string, version: string): Promise<StoredR
   releaseCache.set(key, rel);
   return rel;
 }
+
+/** Paid orders for a slug, excluding owner test-mode sessions (cs_test_*). Drives the order cap. */
+export async function countLiveOrders(slug: string): Promise<number> {
+  const row = await dbGet<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM web_product_orders WHERE slug = ? AND checkout_session_id NOT LIKE 'cs\\_test\\_%' ESCAPE '\\'",
+    slug,
+  );
+  return Number(row?.n ?? 0);
+}

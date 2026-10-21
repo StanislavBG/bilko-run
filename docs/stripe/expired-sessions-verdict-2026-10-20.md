@@ -18,3 +18,7 @@ Not anonymous (owner, by email/ref): 10-12 20:47 BG Labs Pro (`bilkobibitkov2000
 **Bottom line:** every Launch Kit expiry since launch was the owner or an owner agent. There is no evidence yet of a real Launch Kit buyer abandoning. The three coffee sessions are the only possibly-real abandoners.
 
 Prevention landed 2026-10-20: owner checkouts go to Stripe test mode, `?dryRun=1` for smokes, live key refused outside production, recovery enabled. See `docs/host-contract.md` → "Stripe live vs test".
+
+## Catalog cleanup (owner-confirmed 2026-10-20/21)
+
+Archived live products: Stepproof Suite, Stepproof Pro, Preflight Enterprise, Preflight Team, ContentGrade Pro, [Subscription] Query Flow, [ARCHIVE] Background Labs. None had active subscriptions except [ARCHIVE] Background Labs: two $1/mo owner test subscriptions (cus_U2u4cOSQCrPdrB), canceled first. Kept: Git Viewer (both), Launch Kit, coffee, Session Manager, AudienceDecoder, PageRoast, BG Labs Basic/Pro/Enterprise.

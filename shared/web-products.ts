@@ -52,6 +52,10 @@ export interface WebProduct {
   maxOrders?: number;
   /** bookable sessions included per purchase (or per month when billed monthly) */
   sessionsPerMonth?: number;
+  /** slugs of download products this purchase also entitles */
+  includes?: readonly string[];
+  /** free sign-in preview zip, pinned by sha256 like release; downloads only */
+  preview?: WebProductRelease | null;
 }
 
 /** Hard cap on a stored release zip. */
@@ -100,6 +104,7 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     foundingDisplayPrice: '$125',
     foundingCouponEnvVar: 'STRIPE_COUPON_WP_HFH_FOUNDING',
     sessionsPerMonth: 1,
+    includes: ['agent-factory-kit'],
   },
   {
     slug: 'hfh-fractional',
@@ -114,6 +119,16 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     pageSlug: 'human-for-hire',
     maxOrders: 2,
     sessionsPerMonth: 2,
+  },
+  {
+    slug: 'agent-factory-kit',
+    name: 'Bilko Agent Factory Kit',
+    productKey: 'wp_agent_factory_kit',
+    priceEnvVar: 'STRIPE_PRICE_WP_AGENT_FACTORY_KIT',
+    displayPrice: '$19',
+    downloadLimit: 20,
+    release: null,
+    preview: null,
   },
 ];
 
@@ -162,6 +177,14 @@ export function productBilling(p: WebProduct): 'one_time' | 'month' {
 
 export function productPageSlug(p: WebProduct): string {
   return p.pageSlug ?? p.slug;
+}
+
+/** Products whose purchase also entitles the given download slug. */
+export function productsIncluding(
+  slug: string,
+  list: readonly WebProduct[] = WEB_PRODUCTS,
+): WebProduct[] {
+  return list.filter((p) => p.includes?.includes(slug));
 }
 
 export function webProductForPriceId(
@@ -214,14 +237,23 @@ export function validateWebProducts(list: readonly WebProduct[]): string[] {
     if (p.sessionsPerMonth !== undefined && !isIntInRange(p.sessionsPerMonth, 1, 100)) {
       problems.push(`${tag} sessionsPerMonth must be an integer in 1..100`);
     }
-    const r = p.release;
-    if (r) {
-      if (!isValidReleaseVersion(r.version)) problems.push(`${tag} release version invalid`);
-      if (!FILENAME_RE.test(r.filename)) problems.push(`${tag} release filename invalid`);
+    for (const [label, r] of [['release', p.release], ['preview', p.preview]] as const) {
+      if (!r) continue;
+      if (!isValidReleaseVersion(r.version)) problems.push(`${tag} ${label} version invalid`);
+      if (!FILENAME_RE.test(r.filename)) problems.push(`${tag} ${label} filename invalid`);
       if (!isIntInRange(r.bytes, 1, MAX_RELEASE_BYTES)) {
-        problems.push(`${tag} release bytes must be an integer in 1..${MAX_RELEASE_BYTES}`);
+        problems.push(`${tag} ${label} bytes must be an integer in 1..${MAX_RELEASE_BYTES}`);
       }
-      if (!SHA256_RE.test(r.sha256)) problems.push(`${tag} release sha256 invalid`);
+      if (!SHA256_RE.test(r.sha256)) problems.push(`${tag} ${label} sha256 invalid`);
+    }
+    if (p.preview && isService) problems.push(`${tag} preview is for download products only`);
+    for (const slug of p.includes ?? []) {
+      const target = list.find((q) => q.slug === slug);
+      if (slug === p.slug) problems.push(`${tag} includes cannot include itself`);
+      else if (!target) problems.push(`${tag} includes unknown product ${slug}`);
+      else if (productKind(target) !== 'download') {
+        problems.push(`${tag} includes ${slug} must be a download product`);
+      }
     }
   }
   return problems;

@@ -8,6 +8,7 @@ import {
   productBilling,
   productKind,
   productPageSlug,
+  productsIncluding,
   resolveWebProductPriceId,
   validateWebProducts,
   webProductBySlug,
@@ -40,7 +41,7 @@ const list = [demo, other];
 describe('catalog constants', () => {
   it('has the 5 MiB cap and a valid catalog', () => {
     expect(MAX_RELEASE_BYTES).toBe(5 * 1024 * 1024);
-    expect(WEB_PRODUCTS).toHaveLength(4);
+    expect(WEB_PRODUCTS).toHaveLength(5);
     expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
   });
 
@@ -234,5 +235,70 @@ describe('service products', () => {
     const blob = JSON.stringify(WEB_PRODUCTS).toLowerCase();
     expect(blob).not.toContain('stanislav');
     expect(blob).not.toContain('gmail');
+  });
+});
+
+describe('includes and preview', () => {
+  const pv = { version: '1.0.0', filename: 'demo-preview-1.0.0.zip', bytes: 100, sha256: SHA };
+  const bundle: WebProduct = { ...svc, includes: ['demo-pack'] };
+
+  it('declares the agent-factory-kit product', () => {
+    const k = webProductBySlug('agent-factory-kit')!;
+    expect([k.name, k.productKey, k.priceEnvVar, k.displayPrice, k.downloadLimit]).toEqual([
+      'Bilko Agent Factory Kit', 'wp_agent_factory_kit', 'STRIPE_PRICE_WP_AGENT_FACTORY_KIT', '$19', 20,
+    ]);
+    expect(k.defaultPriceId).toBeUndefined();
+    expect(k.release).toBeNull();
+    expect(k.preview).toBeNull();
+    expect(webProductBySlug('hfh-factory-setup')!.includes).toEqual(['agent-factory-kit']);
+  });
+
+  it('includes: valid slug of a download product passes', () => {
+    expect(validateWebProducts([demo, bundle])).toEqual([]);
+  });
+
+  it('includes: unknown slug fails', () => {
+    const msgs = validateWebProducts([{ ...svc, includes: ['nope'] }]);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toContain('[svc-one] includes');
+  });
+
+  it('includes: service target fails', () => {
+    const svc2: WebProduct = { ...svc, slug: 'svc-two', productKey: 'wp_svc_two', priceEnvVar: 'STRIPE_PRICE_WP_SVC_TWO' };
+    const msgs = validateWebProducts([svc2, { ...svc, includes: ['svc-two'] }]);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toContain('download');
+  });
+
+  it('includes: self-include fails', () => {
+    const msgs = validateWebProducts([{ ...demo, includes: ['demo-pack'] }]);
+    expect(msgs.join()).toContain('[demo-pack] includes');
+    expect(msgs.join()).toContain('itself');
+  });
+
+  it('preview: valid download preview passes', () => {
+    expect(validateWebProducts([{ ...demo, preview: pv }])).toEqual([]);
+    expect(validateWebProducts([{ ...demo, preview: null }])).toEqual([]);
+  });
+
+  it('preview: bad fields fail with one problem each', () => {
+    const msgs = validateWebProducts([
+      { ...demo, preview: { version: '1.0', filename: 'x.tar', bytes: 0, sha256: 'ABC' } },
+    ]);
+    expect(msgs).toHaveLength(4);
+    for (const m of msgs) expect(m).toContain('[demo-pack] preview');
+  });
+
+  it('preview: not allowed on services', () => {
+    const msgs = validateWebProducts([{ ...svc, preview: pv }]);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toContain('preview');
+  });
+
+  it('productsIncluding returns products whose includes contains the slug', () => {
+    const l = [demo, bundle, other];
+    expect(productsIncluding('demo-pack', l)).toEqual([bundle]);
+    expect(productsIncluding('other', l)).toEqual([]);
+    expect(productsIncluding('agent-factory-kit').map((p) => p.slug)).toEqual(['hfh-factory-setup']);
   });
 });

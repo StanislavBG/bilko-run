@@ -153,6 +153,15 @@ describe('/checkout/success product resolution', () => {
     await app.close();
   });
 
+  it('redirects a shared-page service product to its page slug with the offer param', async () => {
+    sessionsRetrieve.mockResolvedValue({ payment_status: 'paid', mode: 'subscription', metadata: { web_product: 'hfh-fractional' } });
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe(`/projects/human-for-hire/thanks/?session_id=${SESSION_ID}&offer=hfh-fractional`);
+    await app.close();
+  });
+
   it('shows the generic thank-you and mints no license when the price cannot be resolved', async () => {
     listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_unknown_999' } }] });
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

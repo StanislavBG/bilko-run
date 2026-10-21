@@ -16,7 +16,7 @@ import {
   entryForPriceId,
   type PriceType,
 } from '../../shared/product-catalog.js';
-import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId } from '../../shared/web-products.js';
+import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug } from '../../shared/web-products.js';
 import { recordOrder } from '../services/web-products.js';
 
 /**
@@ -229,7 +229,8 @@ export function registerStripeRoutes(app: FastifyInstance): void {
               currency: data.currency ?? null,
               paymentStatus: data.payment_status,
             });
-            if (stripeCustomerId) {
+            // Subscription-mode (monthly service) orders are not one-time purchases.
+            if (stripeCustomerId && data.mode !== 'subscription') {
               await saveOneTimePurchase({
                 email: wpEmail,
                 stripe_customer_id: stripeCustomerId,
@@ -395,7 +396,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       const wpMeta = (session.metadata as Record<string, string> | null)?.web_product;
       const wpProduct = typeof wpMeta === 'string' ? webProductBySlug(wpMeta, WEB_PRODUCTS) : undefined;
       if (wpProduct) {
-        return reply.redirect(`/projects/${wpProduct.slug}/thanks/?session_id=${encodeURIComponent(sessionId)}`, 302);
+        return reply.redirect(`/projects/${productPageSlug(wpProduct)}/thanks/?session_id=${encodeURIComponent(sessionId)}&offer=${encodeURIComponent(wpProduct.slug)}`, 302);
       }
 
       if (session.payment_status !== 'paid') {

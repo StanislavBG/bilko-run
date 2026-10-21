@@ -15,6 +15,16 @@ vi.mock('../shared/web-products.js', async (orig) => {
       slug: 'demo-pack', name: 'Demo Pack', productKey: 'wp_demo_pack',
       priceEnvVar: 'STRIPE_PRICE_WP_DEMO_PACK', defaultPriceId: 'price_wp_demo',
       displayPrice: '$9', downloadLimit: 5, release: null,
+    }, {
+      slug: 'hfh-fractional', name: 'HFH Fractional', productKey: 'wp_hfh_fractional',
+      priceEnvVar: 'STRIPE_PRICE_WP_HFH_FRACTIONAL', defaultPriceId: 'price_wp_frac',
+      displayPrice: '$250', downloadLimit: 0, release: null,
+      kind: 'service', billing: 'month', pageSlug: 'human-for-hire',
+    }, {
+      slug: 'hfh-session', name: 'HFH Session', productKey: 'wp_hfh_session',
+      priceEnvVar: 'STRIPE_PRICE_WP_HFH_SESSION', defaultPriceId: 'price_wp_sess',
+      displayPrice: '$150', downloadLimit: 0, release: null,
+      kind: 'service', pageSlug: 'human-for-hire',
     }],
   };
 });
@@ -125,7 +135,30 @@ describe('webhook web-product orders', () => {
     const res = await app.inject({ method: 'GET', url: '/checkout/success?session_id=cs_test_wp1' });
     await app.close();
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toBe('/projects/demo-pack/thanks/?session_id=cs_test_wp1');
+    expect(res.headers.location).toBe('/projects/demo-pack/thanks/?session_id=cs_test_wp1&offer=demo-pack');
+  });
+
+  it('redirects a shared-page service product to its page slug with the offer', async () => {
+    retrieve.mockResolvedValue({ payment_status: 'paid', metadata: { web_product: 'hfh-fractional' } });
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/checkout/success?session_id=cs_test_wp1' });
+    await app.close();
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('/projects/human-for-hire/thanks/?session_id=cs_test_wp1&offer=hfh-fractional');
+  });
+
+  it('records a subscription-mode service session and skips saveOneTimePurchase', async () => {
+    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_wp_frac' } }] });
+    expect(await post({ mode: 'subscription', subscription: 'sub_1', customer: 'cus_1', metadata: { web_product: 'hfh-fractional' } })).toBe(200);
+    expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ slug: 'hfh-fractional', email: 'buyer@test.com', paymentStatus: 'paid' }));
+    expect(saveOneTimePurchase).not.toHaveBeenCalled();
+  });
+
+  it('records a one-time service session and still calls saveOneTimePurchase', async () => {
+    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_wp_sess' } }] });
+    expect(await post({ customer: 'cus_1', metadata: { web_product: 'hfh-session' } })).toBe(200);
+    expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ slug: 'hfh-session' }));
+    expect(saveOneTimePurchase).toHaveBeenCalledWith(expect.objectContaining({ product_key: 'wp_hfh_session' }));
   });
 
   it('does not redirect for an unknown metadata slug', async () => {

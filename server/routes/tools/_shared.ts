@@ -6,6 +6,7 @@ import { getActiveSubscriptionLive, hasPurchased } from '../../services/stripe.j
 import { verifyClerkToken, requireAuth, ADMIN_EMAILS } from '../../clerk.js';
 import { getTokenBalance, grantFreeTokens, hasTokenAccount } from '../../services/tokens.js';
 import { parseJsonResponse } from '../../utils.js';
+import { verifyAgentApiKey } from '../../services/agent-api-keys.js';
 
 // ── Tier limits ──────────────────────────────────────
 export const FREE_TIER_LIMIT = 3;
@@ -233,8 +234,19 @@ export async function creditGate(
   reply: FastifyReply,
   opts: { endpoint: string; cost: number; calls?: number },
 ): Promise<{ email: string; ipHash: string; isPro: boolean } | null> {
-  const email = await requireAuth(req, reply);
-  if (!email) return null;
+  let email: string | null;
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer bkk_')) {
+    // Customer agent key: only the paid-tool gate accepts it (requireAuth stays Clerk-only).
+    email = await verifyAgentApiKey(authHeader.slice('Bearer '.length));
+    if (!email) {
+      reply.status(401).send({ error: 'Invalid API key.' });
+      return null;
+    }
+  } else {
+    email = await requireAuth(req, reply);
+    if (!email) return null;
+  }
   const ipHash = hashIp(req.ip);
 
   const costLimit = await enforceCallLimits(

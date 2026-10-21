@@ -22,6 +22,7 @@
  *   - errors_report              → grouped app_errors report via bilko.run admin API (BILKO_ADMIN_KEY, read-only)
  *   - error_detail               → one app_errors row by id via admin API (read-only)
  *   - traffic_report             → visitors, bot/human split, top pages/referrers via admin API (read-only)
+ *   - funnel_report              → per-UTM revenue funnel (visits → paid → booked) via admin API (read-only)
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -41,7 +42,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { getHostDb, mcpRun, ensureGateTables } from './db.js';
-import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, trafficReport } from './errors-report.js';
+import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, trafficReport, funnelReport } from './errors-report.js';
 import { runGates, gateSummary } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
@@ -603,6 +604,22 @@ server.registerTool('traffic_report', {
 }, async ({ days, slug, excludeSelf }) => {
     try {
         return ok(JSON.stringify(await trafficReport({ days, slug, excludeSelf }), null, 2));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 11) funnel_report ──────────────────────────────────────────────────────
+server.registerTool('funnel_report', {
+    title: 'Per-UTM revenue funnel',
+    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/funnel) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for sessions that landed with the given utm_source since a date: visits (sessions), sign_ins, checkout_start, paid (visitors) and booked (service bookings). Admin and bot traffic are excluded. The top-level `source` field is the base URL queried.',
+    inputSchema: {
+        utmSource: z.string().min(1).describe('utm_source to attribute, e.g. "burrow".'),
+        since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Start date YYYY-MM-DD (UTC). Host default: 7 days ago.'),
+    },
+}, async ({ utmSource, since }) => {
+    try {
+        return ok(JSON.stringify(await funnelReport({ utmSource, since }), null, 2));
     }
     catch (e) {
         return err(e.message);

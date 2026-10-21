@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { errorsReport, errorDetail, adminGet, mapEgressToUsage, resolveAdminKey, trafficReport, mapTrafficToReport } from '../mcp-host-server/src/errors-report.js';
+import { errorsReport, errorDetail, adminGet, mapEgressToUsage, resolveAdminKey, trafficReport, mapTrafficToReport, funnelReport } from '../mcp-host-server/src/errors-report.js';
 
 const KEY = 'bka_supersecretkeyvalue';
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -241,5 +241,27 @@ describe('mcp traffic_report', () => {
   it('throws on 404', async () => {
     fetchMock.mockResolvedValue(res(404, {}));
     await expect(trafficReport({ days: 30 })).rejects.toThrow(/404/);
+  });
+});
+
+describe('mcp funnel_report', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    process.env.BILKO_ADMIN_KEY = KEY;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.BILKO_ADMIN_KEY;
+  });
+
+  it('queries /api/admin/funnel with utm_source and since, and returns integer stages', async () => {
+    fetchMock.mockResolvedValue(res(200, { since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 'x' }));
+    const r = await funnelReport({ utmSource: 'burrow', since: '2026-10-14' });
+    const u = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(u.pathname).toBe('/api/admin/funnel');
+    expect(Object.fromEntries(u.searchParams)).toEqual({ utm_source: 'burrow', since: '2026-10-14' });
+    expect(r).toMatchObject({ since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 0 });
   });
 });

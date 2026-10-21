@@ -127,6 +127,23 @@ describe('web product routes', () => {
     expect(testCreate).not.toHaveBeenCalled();
   });
 
+  it('records session ids and the Stripe session id on checkout_start for UTM attribution', async () => {
+    sessionsCreate.mockResolvedValue({ id: 'cs_attr_1', url: 'https://checkout.stripe.test/x' });
+    const vid = '11111111-1111-4111-8111-111111111111';
+    const sid = '22222222-2222-4222-8222-222222222222';
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: `/api/web-products/${product.slug}/checkout`,
+      headers: { cookie: `bilko_vid=${vid}; bilko_sid=${sid}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const rows = await dbAll<{ visitor_id: string; session_id: string; metadata: string }>(
+      `SELECT visitor_id, session_id, metadata FROM funnel_events WHERE event = 'checkout_start' AND visitor_id = ?`, vid);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].session_id).toBe(sid);
+    expect(JSON.parse(rows[0].metadata).checkout_session_id).toBe('cs_attr_1');
+  });
+
   it('dryRun=1 checks wiring without creating a Stripe session', async () => {
     const app = await buildApp();
     const before = await checkoutStarts();

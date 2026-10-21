@@ -465,6 +465,52 @@ describe('GET /api/admin/traffic', () => {
   });
 });
 
+describe('GET /api/admin/traffic byClass', () => {
+  async function insertClassHit(path: string, visitor: string, cls: string | null, isBot: number, status = 200) {
+    await insertHit({ path, slug: null, visitor, isBot, status });
+    await dbRun(
+      `UPDATE page_hits SET visitor_class = ? WHERE visitor_hash = ? AND path = ?`,
+      cls, visitor, path,
+    );
+  }
+
+  it('breaks hits down by visitor class, zero-filled, NULL derived from is_bot', async () => {
+    asAdmin();
+    await insertClassHit('/p', 'h1', 'human', 0);
+    await insertClassHit('/p', 'h2', 'human', 0);
+    await insertClassHit('/p', 'ai1', 'ai_crawler', 1);
+    await insertClassHit('/q', 'ai1', 'ai_crawler', 1);
+    await insertClassHit('/p', 'api1', 'api_client', 1);
+    await insertClassHit('/q', 'old1', null, 1);
+    await insertClassHit('/q', 'old2', null, 0);
+    await insertClassHit('/err', 'h3', 'human', 0, 404);
+    const body = JSON.parse((await get('/api/admin/traffic')).body);
+
+    expect(body.byClass.map((c: { class: string }) => c.class)).toEqual(
+      ['human', 'search_crawler', 'ai_crawler', 'ai_user_agent', 'api_client', 'script'],
+    );
+    const by = Object.fromEntries(body.byClass.map((c: { class: string; hits: number; visitors: number }) => [c.class, c]));
+    expect(by.human).toEqual({ class: 'human', hits: 3, visitors: 3 });
+    expect(by.ai_crawler).toEqual({ class: 'ai_crawler', hits: 2, visitors: 1 });
+    expect(by.api_client).toEqual({ class: 'api_client', hits: 1, visitors: 1 });
+    expect(by.script).toEqual({ class: 'script', hits: 1, visitors: 1 });
+    expect(by.search_crawler).toEqual({ class: 'search_crawler', hits: 0, visitors: 0 });
+    const sum = body.byClass.reduce((n: number, c: { hits: number }) => n + c.hits, 0);
+    expect(sum).toBe(7);
+
+    const tp = body.topPagesByClass as { path: string; class: string; hits: number; visitors: number }[];
+    expect(tp).toContainEqual({ path: '/p', class: 'human', hits: 2, visitors: 2 });
+    expect(tp).toContainEqual({ path: '/q', class: 'ai_crawler', hits: 1, visitors: 1 });
+    expect(tp).toContainEqual({ path: '/q', class: 'script', hits: 1, visitors: 1 });
+    expect(tp.some(r => r.path === '/err')).toBe(false);
+
+    const rc = Object.fromEntries(body.recent.map((r: { visitorId: string; visitorClass: string }) => [r.visitorId, r.visitorClass]));
+    expect(rc.ai1).toBe('ai_crawler');
+    expect(rc.old1).toBe('script');
+    expect(rc.old2).toBe('human');
+  });
+});
+
 describe('GET /api/admin/traffic clicks', () => {
   async function insertClick(visitor: string, isBot = 0) {
     const now = Date.now();

@@ -7,6 +7,7 @@ import { requireAdmin } from '../clerk.js';
 import { parseEnvSelector, envPredicate } from './telemetry.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
 import { flushEgress, topEgress, topEgressBySlug, topStaticAssets, earliestEgressDate, dayKey } from '../egress.js';
+import { VISITOR_CLASSES } from '../services/analytics.js';
 
 type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
 
@@ -207,6 +208,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const human = `ts_ms >= ? AND is_bot = 0 AND status < 400${slugSql}`;
     const VKEY = 'COALESCE(visitor_id, visitor_hash)';
     const humanArgs = [since, ...slugArgs];
+    // All visitor classes (agents included); legacy NULL-class rows derive from is_bot.
+    const CLASS_SQL = "COALESCE(visitor_class, CASE WHEN is_bot = 1 THEN 'script' ELSE 'human' END)";
+    const allClasses = `ts_ms >= ? AND status < 400${slugSql}`;
 
     const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest, clickTotal, topClicks, visitorRows, visitorClicks] = await Promise.all([
       safeQuery(() => dbGet<{ hits: number; visitors: number }>(
@@ -263,10 +267,11 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         country: string | null; device: string; browser: string; os: string; is_bot: number;
         ip: string | null; ua: string | null; referrer: string | null; visitor_id: string | null;
         visitor_hash: string | null; user_email: string | null; is_admin: number | null;
-        session_id: string | null;
+        session_id: string | null; visitor_class: string;
       }>(
         `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, is_bot,
-                ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin, session_id
+                ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin, session_id,
+                ${CLASS_SQL} AS visitor_class
            FROM page_hits WHERE ts_ms >= ?${slugSql} ORDER BY ts_ms DESC LIMIT 200`,
         since, ...slugArgs,
       ), []),
@@ -302,6 +307,25 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         since, ...slugArgs,
       ), []),
     ]);
+    const [classRows, classPageRows] = await Promise.all([
+      safeQuery(() => dbAll<{ cls: string; hits: number; visitors: number }>(
+        `SELECT ${CLASS_SQL} AS cls, COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors
+           FROM page_hits WHERE ${allClasses} GROUP BY cls`,
+        since, ...slugArgs,
+      ), []),
+      safeQuery(() => dbAll<{ path: string; cls: string; hits: number; visitors: number }>(
+        `SELECT path, ${CLASS_SQL} AS cls, COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors
+           FROM page_hits WHERE ${allClasses} GROUP BY path, cls ORDER BY hits DESC LIMIT 100`,
+        since, ...slugArgs,
+      ), []),
+    ]);
+    const classMap = new Map(classRows.map(r => [r.cls, r]));
+    const byClass = VISITOR_CLASSES.map(c => ({
+      class: c as string,
+      hits: classMap.get(c)?.hits ?? 0,
+      visitors: classMap.get(c)?.visitors ?? 0,
+    }));
+    const topPagesByClass = classPageRows.map(r => ({ path: r.path, class: r.cls, hits: r.hits, visitors: r.visitors }));
     const clicksByVisitor = new Map(visitorClicks.map(c => [c.vid, c.n]));
 
     // Real-vs-bot signals: bot visitors (UA-flagged), human visitors seen exactly
@@ -337,6 +361,8 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       },
       byDay,
       topPages,
+      byClass,
+      topPagesByClass,
       topReferrers,
       bySlug,
       byCountry,
@@ -360,6 +386,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         userEmail: r.user_email,
         isAdmin: r.is_admin === 1,
         sessionId: r.session_id ?? null,
+        visitorClass: r.visitor_class,
       })),
       visitors: visitorRows.map(v => ({
         visitorId: v.vid,

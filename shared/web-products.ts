@@ -1,6 +1,6 @@
 /**
- * Single source of truth for "web products": paid downloads sold at
- * /projects/<slug>/. The Stripe price id is resolved from an env var first,
+ * Single source of truth for "web products": paid downloads or bookable
+ * services sold at /projects/<slug>/. The Stripe price id is resolved from an env var first,
  * then from a committed default. The release bytes are stored server-side
  * (never in the repo, which is public) and pinned by sha256 so the server can
  * verify what it serves.
@@ -38,6 +38,20 @@ export interface WebProduct {
   downloadLimit: number;
   /** null until a release has been uploaded */
   release: WebProductRelease | null;
+  /** 'download' (zip, default) or 'service' (bookable, no zip) */
+  kind?: 'download' | 'service';
+  /** 'one_time' (default) or 'month' (recurring; services only) */
+  billing?: 'one_time' | 'month';
+  /** landing page slug when several products share one page; default slug */
+  pageSlug?: string;
+  /** env var holding the Stripe coupon id for the founding price, STRIPE_COUPON_WP_* */
+  foundingCouponEnvVar?: string;
+  /** human founding price shown on the page, e.g. '$125' */
+  foundingDisplayPrice?: string;
+  /** cap on total orders; unlimited when absent */
+  maxOrders?: number;
+  /** bookable sessions included per purchase (or per month when billed monthly) */
+  sessionsPerMonth?: number;
 }
 
 /** Hard cap on a stored release zip. */
@@ -59,6 +73,48 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
       sha256: '40506573c3855d6412fc64d8718e9f74b24fa873da1e2991e708ea0581ffd7c5',
     },
   },
+  {
+    slug: 'hfh-unstick',
+    name: 'Unstick my agents',
+    productKey: 'wp_hfh_unstick',
+    priceEnvVar: 'STRIPE_PRICE_WP_HFH_UNSTICK',
+    displayPrice: '$75',
+    downloadLimit: 0,
+    release: null,
+    kind: 'service',
+    billing: 'one_time',
+    pageSlug: 'human-for-hire',
+    sessionsPerMonth: 1,
+  },
+  {
+    slug: 'hfh-factory-setup',
+    name: 'Agent Factory Setup',
+    productKey: 'wp_hfh_factory_setup',
+    priceEnvVar: 'STRIPE_PRICE_WP_HFH_FACTORY_SETUP',
+    displayPrice: '$225',
+    downloadLimit: 0,
+    release: null,
+    kind: 'service',
+    billing: 'one_time',
+    pageSlug: 'human-for-hire',
+    foundingDisplayPrice: '$125',
+    foundingCouponEnvVar: 'STRIPE_COUPON_WP_HFH_FOUNDING',
+    sessionsPerMonth: 1,
+  },
+  {
+    slug: 'hfh-fractional',
+    name: 'Fractional Agent Ops',
+    productKey: 'wp_hfh_fractional',
+    priceEnvVar: 'STRIPE_PRICE_WP_HFH_FRACTIONAL',
+    displayPrice: '$750',
+    downloadLimit: 0,
+    release: null,
+    kind: 'service',
+    billing: 'month',
+    pageSlug: 'human-for-hire',
+    maxOrders: 2,
+    sessionsPerMonth: 2,
+  },
 ];
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
@@ -66,6 +122,7 @@ const SESSION_ID_RE = /^cs_(live|test)_[A-Za-z0-9]{10,250}$/;
 const VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
 const PRICE_ENV_RE = /^STRIPE_PRICE_WP_[A-Z0-9_]+$/;
 const FILENAME_RE = /^[A-Za-z0-9._-]+\.zip$/;
+const COUPON_ENV_RE = /^STRIPE_COUPON_WP_[A-Z0-9_]+$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 
 export function isValidWebProductSlug(slug: unknown): slug is string {
@@ -93,6 +150,18 @@ export function resolveWebProductPriceId(
   env: Record<string, string | undefined>,
 ): string | undefined {
   return env[product.priceEnvVar] || product.defaultPriceId;
+}
+
+export function productKind(p: WebProduct): 'download' | 'service' {
+  return p.kind ?? 'download';
+}
+
+export function productBilling(p: WebProduct): 'one_time' | 'month' {
+  return p.billing ?? 'one_time';
+}
+
+export function productPageSlug(p: WebProduct): string {
+  return p.pageSlug ?? p.slug;
 }
 
 export function webProductForPriceId(
@@ -124,8 +193,26 @@ export function validateWebProducts(list: readonly WebProduct[]): string[] {
     if (!PRICE_ENV_RE.test(p.priceEnvVar)) {
       problems.push(`${tag} priceEnvVar must match ${PRICE_ENV_RE}`);
     }
-    if (!isIntInRange(p.downloadLimit, 1, 100)) {
-      problems.push(`${tag} downloadLimit must be an integer in 1..100`);
+    const isService = productKind(p) === 'service';
+    if (!isIntInRange(p.downloadLimit, isService ? 0 : 1, 100)) {
+      problems.push(`${tag} downloadLimit must be an integer in ${isService ? 0 : 1}..100`);
+    }
+    if (isService && p.release !== null) problems.push(`${tag} service release must be null`);
+    if (p.billing === 'month' && !isService) problems.push(`${tag} billing month is for services only`);
+    if (p.pageSlug !== undefined && !isValidWebProductSlug(p.pageSlug)) {
+      problems.push(`${tag} invalid pageSlug`);
+    }
+    if (p.foundingCouponEnvVar !== undefined) {
+      if (!COUPON_ENV_RE.test(p.foundingCouponEnvVar)) {
+        problems.push(`${tag} foundingCouponEnvVar must match ${COUPON_ENV_RE}`);
+      }
+      if (!p.foundingDisplayPrice) problems.push(`${tag} foundingCouponEnvVar requires foundingDisplayPrice`);
+    }
+    if (p.maxOrders !== undefined && !isIntInRange(p.maxOrders, 1, 100)) {
+      problems.push(`${tag} maxOrders must be an integer in 1..100`);
+    }
+    if (p.sessionsPerMonth !== undefined && !isIntInRange(p.sessionsPerMonth, 1, 100)) {
+      problems.push(`${tag} sessionsPerMonth must be an integer in 1..100`);
     }
     const r = p.release;
     if (r) {

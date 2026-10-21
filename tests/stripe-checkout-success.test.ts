@@ -42,6 +42,11 @@ vi.mock('../server/db.js', () => ({
   dbRun: async () => {},
 }));
 
+const mintAgentApiKey = vi.fn();
+vi.mock('../server/services/agent-api-keys.js', () => ({
+  mintAgentApiKey: (...a: unknown[]) => mintAgentApiKey(...a),
+}));
+
 async function buildApp() {
   const { registerStripeRoutes } = await import('../server/routes/stripe.js');
   const app = Fastify();
@@ -193,6 +198,81 @@ describe('/checkout/success product resolution', () => {
     expect(errSpy).toHaveBeenCalledTimes(1);
     expect(String(errSpy.mock.calls[0][0])).toContain(SESSION_ID);
     errSpy.mockRestore();
+    await app.close();
+  });
+});
+
+describe('/checkout/success agent key', () => {
+  const OLD_ENV = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...OLD_ENV, STRIPE_PRICE_TOKENS: 'price_pr7_123' };
+    sessionsRetrieve.mockResolvedValue({
+      id: SESSION_ID,
+      mode: 'payment',
+      payment_status: 'paid',
+      client_reference_id: 'buyer@test.com',
+      metadata: { agent_key: '1' },
+    });
+    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_pr7_123' } }] });
+  });
+
+  it('mints and shows a bkk_ key once, with no-store headers', async () => {
+    mintAgentApiKey.mockResolvedValue({ id: 1, key: 'bkk_abcDEF123', prefix: 'bkk_abcDEF12' });
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+    expect(res.statusCode).toBe(200);
+    expect(mintAgentApiKey).toHaveBeenCalledWith('buyer@test.com', 'PageRoast credits', { checkoutSessionId: SESSION_ID });
+    expect(res.body).toContain('bkk_abcDEF123');
+    expect(res.body).toMatch(/only once/i);
+    expect(res.body).toContain("curl -X POST https://bilko.run/api/demos/page-roast");
+    expect(res.body).toContain('https://bilko.run/mcp');
+    expect(res.body).toContain('roast_page');
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+    await app.close();
+  });
+
+  it('on a repeat visit says the key was already shown and mints nothing new', async () => {
+    mintAgentApiKey.mockResolvedValue({ alreadyMinted: true });
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatch(/already shown/i);
+    expect(res.body).toContain('POST /api/agent-keys');
+    expect(res.body).not.toContain('bkk_');
+    expect(mintAgentApiKey).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it('never 5xxs when minting fails', async () => {
+    mintAgentApiKey.mockRejectedValue(new Error('limit'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('Thanks for your support');
+    errSpy.mockRestore();
+    await app.close();
+  });
+
+  it('leaves non-agent sessions unchanged', async () => {
+    sessionsRetrieve.mockResolvedValue({ id: SESSION_ID, mode: 'payment', payment_status: 'paid', client_reference_id: 'buyer@test.com', metadata: {} });
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+    expect(res.statusCode).toBe(200);
+    expect(mintAgentApiKey).not.toHaveBeenCalled();
+    expect(res.headers['cache-control']).not.toBe('private, no-store');
+    await app.close();
+  });
+
+  it('escapes the key text', async () => {
+    mintAgentApiKey.mockResolvedValue({ id: 1, key: 'bkk_<script>x</script>', prefix: 'bkk_<script>' });
+    const app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
+    expect(res.body).not.toContain('<script>x</script>');
+    expect(res.body).toContain('bkk_&lt;script&gt;');
     await app.close();
   });
 });

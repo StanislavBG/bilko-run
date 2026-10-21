@@ -8,6 +8,7 @@ import {
 } from '../services/stripe.js';
 import { creditTokens, grantFreeTokens, hasTokenAccount } from '../services/tokens.js';
 import { dbRun } from '../db.js';
+import { mintAgentApiKey } from '../services/agent-api-keys.js';
 import {
   PRODUCT_KEYS,
   COFFEE_PAYMENT_LINK_DEFAULT,
@@ -433,6 +434,38 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       }
 
       const title = 'Thanks for your support 🎉';
+
+      // Agent-buy sessions (GET /buy/pageroast-*) get an agent API key, shown once.
+      const isAgentBuy = (session.metadata as Record<string, string> | null)?.agent_key === '1'
+        && productKey === PRODUCT_KEYS.PAGEROAST_TOKENS;
+      if (isAgentBuy) {
+        let keyHtml: string;
+        try {
+          const minted = await mintAgentApiKey(email, 'PageRoast credits', { checkoutSessionId: session.id });
+          if ('alreadyMinted' in minted) {
+            keyHtml = `<p>Your agent API key was already shown for this purchase. To mint a new one, <code>POST /api/agent-keys</code> while signed in.</p>`;
+          } else {
+            const k = escHtml(minted.key);
+            const curl = `curl -X POST https://bilko.run/api/demos/page-roast -H 'Authorization: Bearer ${k}' -H 'content-type: application/json' -d '{"url":"https://example.com"}'`;
+            const mcp = escHtml(JSON.stringify({
+              mcpServers: { bilko: { url: 'https://bilko.run/mcp', headers: { Authorization: `Bearer ${minted.key}` } } },
+            }, null, 2));
+            keyHtml = `
+        <p>Your agent API key (<strong>shown only once</strong> — copy it now):</p>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;overflow-x:auto">${k}</pre>
+        <p>Call the API directly:</p>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${curl}</pre>
+        <p>Or add this to your MCP client config and call the tool <code>roast_page</code>:</p>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;overflow-x:auto">${mcp}</pre>`;
+          }
+        } catch (err: any) {
+          console.error('[checkout_success] agent key mint failed for session', sessionId, ':', err.message);
+          keyHtml = `<p style="font-size:0.9em;color:#888">We couldn't create an agent API key automatically — create one while signed in via <code>POST /api/agent-keys</code>.</p>`;
+        }
+        reply.type('text/html').header('Cache-Control', 'private, no-store').header('Referrer-Policy', 'no-referrer');
+        return successHtml(title, `
+        <p>Your payment is confirmed for <strong>${escHtml(email)}</strong>. Thank you!</p>${keyHtml}`);
+      }
 
       // The Field Manual is free as of 2.0.1, so nothing sells it any more. A
       // session_manager payment reaching this page is a late or in-flight one:

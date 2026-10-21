@@ -11,6 +11,7 @@ import { registerStripeRoutes } from './routes/stripe.js';
 import { registerWebProductRoutes } from './routes/web-products.js';
 import { registerAgentBuyRoutes } from './routes/agent-buy.js';
 import { registerAgentStorefrontRoutes } from './routes/agent-storefront.js';
+import { registerAgentKeyRoutes } from './routes/agent-keys.js';
 import { registerAdminWebProductRoutes } from './routes/admin-web-products.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerBlogRoutes } from './routes/blog.js';
@@ -180,6 +181,7 @@ registerStripeRoutes(app);
 registerWebProductRoutes(app);
 registerAgentBuyRoutes(app);
 registerAgentStorefrontRoutes(app);
+registerAgentKeyRoutes(app);
 registerAdminWebProductRoutes(app);
 registerBlogRoutes(app, {
   videosRoot: isProd ? join(distPath, 'blog-videos') : join(process.cwd(), 'public', 'blog-videos'),

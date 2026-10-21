@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { initDb, dbRun, dbAll } from '../server/db.js';
-import { registerPageHitRecorder, flushPageHits, slugFromPath, stableVisitorId, sessionCookie, recordPageHit } from '../server/page-hits.js';
+import { registerPageHitRecorder, flushPageHits, slugFromPath, stableVisitorId, sessionCookie, recordPageHit, backfillVisitorClass } from '../server/page-hits.js';
 
 const app = Fastify({ logger: false });
 registerPageHitRecorder(app, { flush: false });
@@ -20,6 +20,9 @@ registerPageHitRecorder(app, { flush: false });
 app.get('/projects/outdoor-hours/', async (_req, reply) => reply.type('text/html').send('<html></html>'));
 app.get('/app.js', async (_req, reply) => reply.type('application/javascript').send('1'));
 app.get('/api/thing', async () => ({ ok: true }));
+app.get('/api/other', async () => ({ ok: true }));
+app.post('/mcp', async () => ({ ok: true }));
+app.get('/llms.txt', async (_req, reply) => reply.type('text/plain').send('hi'));
 
 interface Row {
   path: string; slug: string | null; status: number; visitor_hash: string | null;
@@ -226,5 +229,51 @@ describe('session identity columns', () => {
   it('initDb is idempotent', async () => {
     await initDb();
     await initDb();
+  });
+});
+
+describe('visitor class', () => {
+  const cls = () => dbAll<{ path: string; visitor_class: string | null; is_bot: number }>('SELECT path, visitor_class, is_bot FROM page_hits ORDER BY id');
+
+  it('stores ai_user_agent for a ChatGPT-User HTML hit', async () => {
+    await app.inject({ method: 'GET', url: '/projects/outdoor-hours/', headers: { 'user-agent': 'Mozilla/5.0 ChatGPT-User/1.0' } });
+    await settle();
+    await flushPageHits();
+    expect(await cls()).toEqual([{ path: '/projects/outdoor-hours/', visitor_class: 'ai_user_agent', is_bot: 1 }]);
+  });
+
+  it('records POST /mcp as api_client', async () => {
+    await app.inject({ method: 'POST', url: '/mcp', headers: { 'user-agent': CHROME }, payload: {} });
+    await settle();
+    await flushPageHits();
+    expect(await cls()).toEqual([{ path: '/mcp', visitor_class: 'api_client', is_bot: 1 }]);
+  });
+
+  it('records /llms.txt but not other JSON api requests', async () => {
+    await app.inject({ method: 'GET', url: '/llms.txt', headers: { 'user-agent': CHROME } });
+    await app.inject({ method: 'GET', url: '/api/other', headers: { 'user-agent': CHROME } });
+    await settle();
+    await flushPageHits();
+    const r = await cls();
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ path: '/llms.txt', visitor_class: 'human', is_bot: 0 });
+  });
+
+  it('uses x-bot-id as api_client', async () => {
+    await app.inject({ method: 'GET', url: '/llms.txt', headers: { 'user-agent': CHROME, 'x-bot-id': 'agent-1' } });
+    await settle();
+    await flushPageHits();
+    expect((await cls())[0].visitor_class).toBe('api_client');
+  });
+
+  it('backfillVisitorClass fills NULL rows from ua', async () => {
+    const ins = (ua: string) => dbRun(
+      "INSERT INTO page_hits (ts_ms, date, path, status, visitor_hash, device, browser, os, ua) VALUES (1, '2026-01-01', '/', 200, 'h', 'd', 'b', 'o', ?)", ua);
+    await ins('Mozilla/5.0 ChatGPT-User/1.0');
+    await ins(CHROME);
+    expect(await backfillVisitorClass()).toBe(2);
+    const r = await dbAll<{ visitor_class: string }>('SELECT visitor_class FROM page_hits ORDER BY id');
+    expect(r.map((x) => x.visitor_class)).toEqual(['ai_user_agent', 'human']);
+    expect(await backfillVisitorClass()).toBe(0);
   });
 });

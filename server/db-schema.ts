@@ -645,6 +645,7 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['is_admin', 'INTEGER DEFAULT 0'],
     ['session_id', 'TEXT'],
     ['client_vid', 'TEXT'],
+    ['visitor_class', 'TEXT'],
   ],
   page_views: [
     ['email', 'TEXT'],

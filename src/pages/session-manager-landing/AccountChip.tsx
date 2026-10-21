@@ -1,9 +1,11 @@
 import React from 'react';
 import { ClerkLoaded, SignedIn, SignedOut, SignInButton, useUser } from '@clerk/clerk-react';
 import { COPY } from './copy.js';
+import { signinSourceForPath } from '../../../shared/signin-capture.js';
+import { markPendingSignin } from './signinCapture.js';
 
 /**
- * The only file on this page that touches Clerk.
+ * The header's Clerk consumer (SignInPrompt.tsx is the page's only other one).
  *
  * If ClerkProvider fails to initialise, App's ClerkErrorBoundary renders the
  * routes with no provider and every Clerk hook throws. Each Clerk consumer
@@ -11,7 +13,7 @@ import { COPY } from './copy.js';
  * error, so a Clerk outage hides the chip
  * instead of replacing the whole landing page with "This tool hit a snag".
  */
-class QuietBoundary extends React.Component<{ name: string; children: React.ReactNode }, { failed: boolean }> {
+export class QuietBoundary extends React.Component<{ name: string; children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
@@ -39,6 +41,12 @@ function SignedInChip({ compact }: { compact: boolean }) {
   );
 }
 
+/** A header sign-in on a capture page counts as a capture from that page (consent stays off). */
+function markHeaderSignin() {
+  const source = signinSourceForPath(window.location.pathname);
+  if (source) markPendingSignin(source, false);
+}
+
 function Chip({ compact }: { compact: boolean }) {
   return (
     <ClerkLoaded>
@@ -47,7 +55,7 @@ function Chip({ compact }: { compact: boolean }) {
       </SignedIn>
       <SignedOut>
         <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
-          <button type="button" className="smlp-chip smlp-chip--signin">
+          <button type="button" className="smlp-chip smlp-chip--signin" onClick={markHeaderSignin}>
             {COPY.header.account.signIn}
           </button>
         </SignInButton>

@@ -670,6 +670,20 @@ The payload is opaque to the relay. Versioning and encoding are the game's job (
 - A deploy drops every room (`1012`). Clients should reconnect with a fresh ticket and resync from their own state. The server keeps no input log.
 - **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. One instance is what the in-memory rooms need. Free has a cost, though: the service spins down after 15 minutes without inbound traffic. The first ticket after an idle spell then waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move the service to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
 
+## Sign-in capture ("sign in for updates")
+
+Owner decision 2026-10-20. A capture page may show an inline, dismissable (never modal) prompt offering bilko.run sign-in for updates. Nothing on the page may require it. Capture pages and their `source` values live in `shared/signin-capture.ts`: `session-manager` (`/products/session-manager`), `manual` (`/products/session-manager/manual`), `human-for-hire` (`/projects/human-for-hire/`). Adding a page means adding it there.
+
+| Endpoint | Auth | What it does |
+|---|---|---|
+| `POST /api/signin-capture` `{ source, consent }` | Clerk Bearer (`requireAuth`) | Records the account's first `source` (never overwritten). `consent: true` (the literal) sets the "send me occasional updates" flag with a timestamp. Anything else leaves it unchanged, so consent defaults off and is never revoked here. The first capture writes a `signin_completed` funnel event. |
+| `GET /api/admin/signups?days=N` | `requireAdmin` | Signups and consent by source, latest 500 rows, and the prompt funnel for the window. |
+| `GET /api/admin/signups.csv` | `requireAdmin` | Every row as a CSV attachment. |
+
+Funnel events: the page sends `prompt_shown` and `prompt_dismissed` through `POST /api/analytics/event` with `tool: <source>`. The server writes `signin_completed`.
+
+**From a `static-path` page** (Human For Hire): signed out, show the prompt with the consent checkbox unticked. Remember a dismissal in `localStorage`. On "Sign in", store `{ source, consent }`, then call host-kit `openSignIn()`. Once signed in, `authFetch('/api/signin-capture', { method: 'POST', body })` with the stored values. The in-repo reference is `src/pages/session-manager-landing/SignInPrompt.tsx`. Copy stays in the Bilko persona. Collect only: nothing sends email yet.
+
 ## Selling a downloadable web product
 
 A web product is a paid zip sold from a static-path landing page at `/projects/<slug>/`. Declared once in `shared/web-products.ts` (`WEB_PRODUCTS`); routes, the Stripe webhook and `/admin` → Products read from it. Slugs not in `WEB_PRODUCTS` (or failing the slug regex) return 404 on every route below.

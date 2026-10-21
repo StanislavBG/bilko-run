@@ -202,9 +202,13 @@ describe('open-core positioning: the app is free and stays free, and so is the m
     expect(withSignIn).toEqual([`${LANDING_DIR}/AccountChip.tsx`]);
     const chip = prose(read(`${LANDING_DIR}/AccountChip.tsx`));
     expect(chip).not.toMatch(/checkout|Checkout|stripe|Stripe/);
-    // Only the chip touches Clerk, so a Clerk outage can't blank the page.
+    // Only the chip and the sign-in-for-updates prompt (owner decision
+    // 2026-10-20) touch Clerk, so a Clerk outage can't blank the page.
     const clerkImporters = PAGE_FILES.filter(f => read(f).includes('@clerk/clerk-react'));
-    expect(clerkImporters).toEqual([`${LANDING_DIR}/AccountChip.tsx`]);
+    expect(clerkImporters.sort()).toEqual([`${LANDING_DIR}/AccountChip.tsx`, `${LANDING_DIR}/SignInPrompt.tsx`]);
+    const prompt = stripComments(read(`${LANDING_DIR}/SignInPrompt.tsx`));
+    expect(prompt).not.toMatch(/checkout|Checkout|stripe|Stripe/);
+    expect(prompt).toMatch(/<QuietBoundary[^>]*>\s*<Prompt\b/);
   });
 
   it('keeps every Clerk hook inside a quiet boundary, so a Clerk failure hides only the chip', () => {

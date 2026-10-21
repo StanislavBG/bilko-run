@@ -15,6 +15,8 @@ const ALLOWED_EVENTS = new Set([
   'checkout_start', 'credit_spent',
   'result_copied', 'result_shared', 'cross_promo_click',
   'free_limit_hit', 'not_found', 'page_view',
+  // Sign-in capture prompt. `signin_completed` is server-written by /api/signin-capture.
+  'prompt_shown', 'prompt_dismissed',
 ]);
 
 // Dual-key rate limiter (in-memory): both visitor_id AND IP must stay under cap.

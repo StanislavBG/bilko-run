@@ -124,6 +124,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/routes/project-catalog.ts` — public `GET /api/projects` + `GET /api/offers` + MCP at `/mcp` (read-only `list_projects`/`get_project`/`list_offers`, plus the paid `roast_page` behind a `bkk_` agent key; the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
 - Agent storefront — `shared/agent-offers.ts` (offer data), `server/routes/agent-buy.ts` (`/buy/:offerId`), `server/routes/agent-storefront.ts` (`/llms.txt`), `server/routes/agent-keys.ts` + `server/services/agent-api-keys.ts` (`bkk_` keys); contract in `docs/host-contract.md` → "Agent-facing surfaces"
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
+- `server/routes/signin-capture.ts` + `shared/signin-capture.ts` — "sign in for updates" capture: source page + opt-in consent per account, admin signups view + CSV (`/admin` → Signups); contract in `docs/host-contract.md` → "Sign-in capture"
 - `server/routes/realtime.ts` + `server/realtime/relay.ts` — ticket endpoint and binary WebSocket input relay (`/api/realtime/rooms/:roomId`, ≤10 seats, in-memory, single instance)
 - `server/routes/analytics.ts` — Page views + admin stats dashboard (`/api/analytics/event` is open to same-origin sibling apps for `track()`)
 - `server/db.ts` — Turso client, async helpers (`dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`), migrations, seed data
@@ -173,7 +174,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-127 files, 1397 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+132 files, 1467 tests (counted via `pnpm vitest run`; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

@@ -66,11 +66,11 @@ describe('GET /api/projects', () => {
 });
 
 describe('public MCP at /mcp', () => {
-  it('exposes only the three read-only tools', async () => {
+  it('exposes the three read-only catalog tools plus the paid roast_page', async () => {
     const res = await mcp({ method: 'tools/list', params: {} });
     const tools = res.result.tools as { name: string; annotations?: { readOnlyHint?: boolean } }[];
-    expect(tools.map(t => t.name).sort()).toEqual(['get_project', 'list_offers', 'list_projects']);
-    for (const t of tools) expect(t.annotations?.readOnlyHint).toBe(true);
+    expect(tools.map(t => t.name).sort()).toEqual(['get_project', 'list_offers', 'list_projects', 'roast_page']);
+    for (const t of tools.filter(t => t.name !== 'roast_page')) expect(t.annotations?.readOnlyHint).toBe(true);
   });
 
   it('list_projects returns the same public slugs as the JSON route', async () => {

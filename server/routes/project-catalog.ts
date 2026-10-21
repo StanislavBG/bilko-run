@@ -3,6 +3,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
 import { buildCatalog, findCatalogProject } from '../../src/data/projectCatalog.js';
+import { registerPageRoastMcpTool } from './tools/page-roast.js';
+import { hashIp } from './tools/_shared.js';
+import { verifyAgentApiKey } from '../services/agent-api-keys.js';
 import { AGENT_OFFERS, formatPrice } from '../../shared/agent-offers.js';
 
 /**
@@ -48,7 +51,7 @@ export function buildOffersPayload() {
   };
 }
 
-export function buildCatalogMcpServer(): McpServer {
+export function buildCatalogMcpServer(auth?: { email: string | null; ipHash: string; invalidKey?: boolean }): McpServer {
   const server = new McpServer({ name: 'bilko-run-projects', version: '1.0.0' });
 
   server.registerTool(
@@ -93,6 +96,8 @@ export function buildCatalogMcpServer(): McpServer {
     async () => json(buildOffersPayload()),
   );
 
+  registerPageRoastMcpTool(server, auth ?? { email: null, ipHash: hashIp('unknown') });
+
   return server;
 }
 
@@ -113,7 +118,15 @@ export function registerProjectCatalogRoutes(app: FastifyInstance): void {
   // (via @hono/node-server) waits to drain a body Fastify already read, then
   // calls destroySoon() on the socket, which drops keep-alive connections.
   app.post('/mcp', async (req, reply) => {
-    const server = buildCatalogMcpServer();
+    // Agent key is optional: catalog tools are public; only roast_page needs it.
+    const authHeader = req.headers.authorization;
+    let email: string | null = null;
+    let invalidKey = false;
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer bkk_')) {
+      email = await verifyAgentApiKey(authHeader.slice('Bearer '.length));
+      invalidKey = !email;
+    }
+    const server = buildCatalogMcpServer({ email, ipHash: hashIp(req.ip), invalidKey });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

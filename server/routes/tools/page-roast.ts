@@ -2,8 +2,81 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun } from '../../db.js';
 import { getTokenBalance, deductToken, refundTokens } from '../../services/tokens.js';
 import { requireAuth } from '../../clerk.js';
-import { creditGate, toolErrorReply } from './_shared.js';
+import { creditGate, toolErrorReply, enforceCallLimits, isAdminEmail } from './_shared.js';
+import { getActiveSubscriptionLive } from '../../services/stripe.js';
+import { grantFreeTokens, hasTokenAccount } from '../../services/tokens.js';
 import { roastPage } from '@bilkobibitkov/page-roast';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+
+const BUY_URL = 'https://bilko.run/buy/pageroast-credits-7';
+
+function mcpError(text: string) {
+  return { isError: true, content: [{ type: 'text' as const, text }] };
+}
+
+/** Registers the paid `roast_page` tool on the catalog MCP server. Mirrors POST /api/demos/page-roast. */
+export function registerPageRoastMcpTool(
+  server: McpServer,
+  auth: { email: string | null; ipHash: string; invalidKey?: boolean },
+): void {
+  server.registerTool(
+    'roast_page',
+    {
+      title: 'Roast a landing page',
+      description:
+        `Brutally honest conversion audit of a public landing page URL (scores, grade, roast). Costs 1 credit from the owner of the API key sent as "Authorization: Bearer bkk_...". Get a key by buying credits at ${BUY_URL}.`,
+      inputSchema: { url: z.string().min(1).max(2000) },
+      annotations: { readOnlyHint: false, openWorldHint: true },
+    },
+    async ({ url }) => {
+      const email = auth.email;
+      if (!email) {
+        return mcpError(
+          `${auth.invalidKey ? 'Invalid API key. ' : 'API key required. '}roast_page costs 1 credit. Buy credits and get a key at ${BUY_URL}, then send "Authorization: Bearer bkk_...".`,
+        );
+      }
+      const rawUrl = url.trim();
+      if (!rawUrl) return mcpError('URL is required.');
+
+      const limit = await enforceCallLimits(
+        { userEmail: email, ipHash: auth.ipHash, isAdmin: isAdminEmail(email), appSlug: 'page-roast' },
+        1,
+      );
+      if (!limit.ok) return mcpError(limit.reason);
+
+      if (!(await hasTokenAccount(email))) await grantFreeTokens(email);
+      const sub = await getActiveSubscriptionLive(email);
+      const isPro = sub.isPro;
+
+      let balance: number;
+      if (isPro) { balance = await getTokenBalance(email); } else {
+        const deducted = await deductToken(email, 1, 'page_roast_mcp');
+        if (!deducted.success) return mcpError(`No credits remaining. Buy credits at ${BUY_URL}.`);
+        balance = deducted.balance;
+      }
+
+      try {
+        const result = await roastPage({ url: rawUrl, apiKey: process.env.GEMINI_API_KEY!, mode: 'score' });
+        const parsed = result.scores!;
+        try {
+          const parsedUrl = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`);
+          const domain = parsedUrl.hostname.replace(/^www\./, '');
+          await dbRun('INSERT INTO roast_history (url, score, grade, roast) VALUES (?, ?, ?, ?)', domain, parsed.total_score, parsed.grade, parsed.roast);
+          await dbRun('INSERT INTO user_roasts (email, url, score, grade, roast, result_json) VALUES (?, ?, ?, ?, ?, ?)',
+            email, rawUrl, parsed.total_score, parsed.grade, parsed.roast, JSON.stringify(parsed),
+          );
+        } catch { /* best effort */ }
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ ...parsed, usage: { balance, gated: false } }, null, 2) }] };
+      } catch (err: any) {
+        if (!isPro) await refundTokens(email, 1, 'page_roast_mcp_refund').catch((e) => console.error('refund_failed', e));
+        if (err?.code === 'SSRF') return mcpError('Invalid URL.');
+        console.error('page_roast_mcp', err);
+        return mcpError('page_roast failed. Please try again.');
+      }
+    },
+  );
+}
 
 const STATS_TTL_MS = 60_000;
 

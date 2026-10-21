@@ -8,6 +8,36 @@ const NARROW_AFTER = 14;
 
 export const trafficSubtitle = (): string => 'pages · referrers';
 
+const CLASS_ORDER = ['human', 'search_crawler', 'ai_crawler', 'ai_user_agent', 'api_client', 'script'];
+const CLASS_LABEL: Record<string, string> = {
+  human: 'Human',
+  search_crawler: 'Search crawler',
+  ai_crawler: 'AI crawler',
+  ai_user_agent: 'AI agent (for a person)',
+  api_client: 'API/MCP client',
+  script: 'Script',
+};
+
+export interface ClassRow { name: string; vals: string[]; frac: number; top: string | null }
+
+/** One row per visitor class, busiest first. Empty when the API predates byClass. */
+export function classRows(t: TrafficData): ClassRow[] {
+  const by = t.byClass ?? [];
+  const max = by.reduce((m, r) => Math.max(m, r.hits), 0);
+  const rank = (c: string): number => { const i = CLASS_ORDER.indexOf(c); return i < 0 ? CLASS_ORDER.length : i; };
+  return [...by]
+    .sort((a, b) => b.hits - a.hits || rank(a.class) - rank(b.class))
+    .map(r => {
+      const top = (t.topPagesByClass ?? []).filter(p => p.class === r.class).sort((a, b) => b.hits - a.hits)[0];
+      return {
+        name: CLASS_LABEL[r.class] ?? r.class,
+        vals: [fmtNum(r.hits), fmtNum(r.visitors)],
+        frac: max > 0 ? r.hits / max : 0,
+        top: top?.path ?? null,
+      };
+    });
+}
+
 const mmdd = (date: string): string => date.slice(5, 10);
 
 function Note({ color = C.faint, children }: { color?: string; children: ReactNode }) {
@@ -64,6 +94,7 @@ function Stage({ t }: { t: TrafficData }) {
   const maxPage = pages.reduce((m, r) => Math.max(m, r.hits), 0);
   const maxRef = refs.reduce((m, r) => Math.max(m, r.hits), 0);
   const maxProj = projects.reduce((m, r) => Math.max(m, r.hits), 0);
+  const classes = classRows(t);
 
   return (
     <>
@@ -95,7 +126,7 @@ function Stage({ t }: { t: TrafficData }) {
             ))}
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr)', gap: 18, minHeight: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: classes.length ? 'minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.5fr)' : 'minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr)', gap: 18, minHeight: 0 }}>
           <RankTable
             title="TOP PAGES"
             cols={[{ label: 'HITS', width: 40 }, { label: 'UV', width: 34 }]}
@@ -114,6 +145,14 @@ function Stage({ t }: { t: TrafficData }) {
             rows={projects.map(r => ({ name: r.slug, vals: [fmtNum(r.hits), fmtNum(r.visitors)], frac: maxProj ? r.hits / maxProj : 0 }))}
             barColor="rgba(111,191,138,.55)"
           />
+          {classes.length > 0 && (
+            <RankTable
+              title="VISITOR CLASS"
+              cols={[{ label: 'HITS', width: 34 }, { label: 'UNIQ', width: 30 }]}
+              rows={classes.map(r => ({ name: r.top ? `${r.name} · ${r.top}` : r.name, vals: r.vals, frac: r.frac }))}
+              barColor="rgba(150,130,230,.55)"
+            />
+          )}
         </div>
       </div>
       <div style={{ position: 'absolute', inset: 0, border: `1px solid ${C.stageOutline}`, pointerEvents: 'none' }} />
@@ -126,6 +165,7 @@ function Compact({ t }: { t: TrafficData }) {
   const maxHits = days.reduce((m, d) => Math.max(m, d.hits), 0);
   const maxUv = days.reduce((m, d) => Math.max(m, d.visitors), 0);
   const top = t.topReferrers[0];
+  const classes = classRows(t);
   return (
     <div style={{ position: 'absolute', inset: 0, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -146,6 +186,11 @@ function Compact({ t }: { t: TrafficData }) {
           </div>
         ))}
       </div>
+      {classes.length > 0 && (
+        <div title="visitor class: hits" style={{ font: `400 10px/1.4 ${FONT.mono}`, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {classes.map(r => `${r.name} ${r.vals[0]}`).join(' · ')}
+        </div>
+      )}
     </div>
   );
 }

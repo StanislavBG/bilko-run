@@ -73,7 +73,7 @@ function trafficFixture(days: number): TrafficData {
     const [device, browser = 'other', os = 'other'] = dev.split('/');
     return {
       ts: hms(t, '10/18'), path, status: flag === 'PROBE' ? 404 : 200, referrerHost: null, country, device, browser, os,
-      isBot: flag === 'BOT', ip: null, ua: null, referrer: null, visitorId: null, userEmail: null, isAdmin: false,
+      isBot: flag === 'BOT', visitorClass: flag === 'BOT' ? 'ai_crawler' : 'human', ip: null, ua: null, referrer: null, visitorId: null, userEmail: null, isAdmin: false,
     };
   });
   return {
@@ -87,6 +87,22 @@ function trafficFixture(days: number): TrafficData {
     byDevice: [{ device: 'desktop', hits: 1620 }, { device: 'other', hits: 790 }, { device: 'mobile', hits: 410 }, { device: 'tablet', hits: 35 }],
     byBrowser: [{ browser: 'other', hits: 1500 }, { browser: 'Chrome', hits: 760 }, { browser: 'Firefox', hits: 310 }, { browser: 'Safari', hits: 190 }, { browser: 'Edge', hits: 95 }],
     topClicks: CLICKS.map(([path, label, href, clicks, visitors]) => ({ path, tag: 'button', label, href: href === '—' ? null : href, clicks, visitors })),
+    byClass: [
+      { class: 'human', hits: 1980, visitors: 112 },
+      { class: 'search_crawler', hits: 410, visitors: 6 },
+      { class: 'ai_crawler', hits: 260, visitors: 9 },
+      { class: 'ai_user_agent', hits: 84, visitors: 11 },
+      { class: 'api_client', hits: 61, visitors: 4 },
+      { class: 'script', hits: 120, visitors: 7 },
+    ],
+    topPagesByClass: [
+      { path: '/', class: 'human', hits: 640, visitors: 80 },
+      { path: '/robots.txt', class: 'search_crawler', hits: 150, visitors: 3 },
+      { path: '/blog', class: 'ai_crawler', hits: 90, visitors: 5 },
+      { path: '/projects', class: 'ai_user_agent', hits: 30, visitors: 6 },
+      { path: '/mcp', class: 'api_client', hits: 40, visitors: 3 },
+      { path: '/wp-login.php', class: 'script', hits: 55, visitors: 4 },
+    ],
     recent,
     visitors: VISITORS.map(([id, ip, country, device, email, hits, pages, last]) => ({
       visitorId: id, ip, country, device, browser: null, os: null, userEmail: email === '—' ? null : email, isAdmin: false,

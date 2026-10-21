@@ -34,6 +34,7 @@ export interface RecentRow {
   userEmail: string | null;
   isAdmin: boolean;
   sessionId?: string | null;
+  visitorClass?: string;
 }
 export interface VisitorRow {
   visitorId: string;
@@ -63,6 +64,8 @@ export interface TrafficData {
   byDevice: DeviceRow[];
   byBrowser: BrowserRow[];
   topClicks: ClickRow[];
+  byClass?: { class: string; hits: number; visitors: number }[];
+  topPagesByClass?: { path: string; class: string; hits: number; visitors: number }[];
   recent: RecentRow[];
   visitors: VisitorRow[];
   earliestDate: string | null;

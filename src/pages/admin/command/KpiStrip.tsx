@@ -98,9 +98,24 @@ function ensureTickerStyle(): void {
   document.head.appendChild(el);
 }
 
+const CLASS_TAG: Record<string, string> = {
+  ai_user_agent: 'AI',
+  ai_crawler: 'CRAWL',
+  search_crawler: 'SEARCH',
+  api_client: 'API',
+  script: 'SCRIPT',
+};
+
+/** Short class tag for a recent hit; BOT when only isBot is known, null for humans. */
+export function classBadge(r: { visitorClass?: string; isBot: boolean }): string | null {
+  if (r.visitorClass && r.visitorClass !== 'human') return CLASS_TAG[r.visitorClass] ?? 'BOT';
+  return r.isBot ? 'BOT' : null;
+}
+
 function TickerItem({ r }: { r: RecentRow }) {
   const bad = r.status >= 400;
-  const badge = r.isBot ? 'BOT' : bad ? String(r.status) : null;
+  const tag = classBadge(r);
+  const badge = tag ?? (bad ? String(r.status) : null);
   const body = (
     <>
       <span style={{ color: C.faint }}>{fmtClock(new Date(r.ts))}</span>
@@ -109,7 +124,7 @@ function TickerItem({ r }: { r: RecentRow }) {
       <span>{r.country ?? '—'}</span>
       <span style={{ color: C.faint }}>{r.device}/{r.browser}/{r.os}</span>
       {badge && (
-        <span style={{ padding: '2px 5px', borderRadius: 2, background: r.isBot ? 'rgba(244,185,66,.16)' : 'rgba(255,90,74,.16)', color: r.isBot ? C.amber : C.redSoft, fontSize: 9 }}>
+        <span style={{ padding: '2px 5px', borderRadius: 2, background: tag ? 'rgba(244,185,66,.16)' : 'rgba(255,90,74,.16)', color: tag ? C.amber : C.redSoft, fontSize: 9 }}>
           {badge}
         </span>
       )}

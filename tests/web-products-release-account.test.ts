@@ -131,3 +131,59 @@ describe('account download', () => {
     expect(res.rawPayload.equals(BYTES)).toBe(true);
   });
 });
+
+describe('account download via an including product', () => {
+  const host: WebProduct = {
+    slug: 'acct-host',
+    name: 'Account Host',
+    productKey: 'wp_acct_host',
+    priceEnvVar: 'STRIPE_PRICE_WP_ACCT_HOST',
+    defaultPriceId: 'price_acct_host',
+    displayPrice: '$225',
+    downloadLimit: 0,
+    release: null,
+    kind: 'service',
+    billing: 'one_time',
+    pageSlug: 'acct-host-page',
+    includes: [product.slug],
+  };
+  const emailByTokenExtra: Record<string, string> = { 'tok-host-order': 'hostorder@example.com', 'tok-host-comp': 'hostcomp@example.com' };
+
+  beforeAll(async () => {
+    Object.assign(emailByToken, emailByTokenExtra);
+    await initDb();
+    await storeRelease(product, '1.0.0', BYTES).catch(() => undefined);
+    await recordOrder({
+      checkoutSessionId: 'cs_test_acct_host_1', slug: host.slug, email: 'HostOrder@Example.com',
+      amountTotal: 22500, currency: 'usd', paymentStatus: 'paid',
+    });
+    await dbRun(
+      'INSERT INTO stripe_one_time_purchases (email, stripe_customer_id, stripe_payment_intent_id, product_key) VALUES (?, ?, ?, ?)',
+      'hostcomp@example.com', 'cus_hostcomp', 'pi_hostcomp_acct', host.productKey,
+    );
+  });
+
+  async function hostApp() {
+    const { registerWebProductRoutes } = await import('../server/routes/web-products.js');
+    const app = Fastify();
+    registerWebProductRoutes(app, { products: [product, host] });
+    return app;
+  }
+  const get = (app: Awaited<ReturnType<typeof hostApp>>, token: string) =>
+    app.inject({ url: `/api/web-products/${product.slug}/account-download`, headers: { authorization: `Bearer ${token}` } });
+
+  it('200 for an email with an order of the including product', async () => {
+    const res = await get(await hostApp(), 'tok-host-order');
+    expect(res.statusCode).toBe(200);
+    expect(res.rawPayload.equals(BYTES)).toBe(true);
+  });
+
+  it('200 for an email with a purchase row of the including product', async () => {
+    expect((await get(await hostApp(), 'tok-host-comp')).statusCode).toBe(200);
+  });
+
+  it('402 for a non-buyer, and 402 when the host is not registered as including', async () => {
+    expect((await get(await hostApp(), 'tok-other')).statusCode).toBe(402);
+    expect((await get(await buildApp(), 'tok-host-order')).statusCode).toBe(402);
+  });
+});

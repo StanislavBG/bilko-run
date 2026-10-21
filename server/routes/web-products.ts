@@ -10,7 +10,7 @@ import {
 } from '../services/web-products.js';
 import {
   MAX_RELEASE_BYTES, WEB_PRODUCTS, isValidCheckoutSessionId, isValidReleaseVersion, isValidWebProductSlug,
-  productBilling, productKind, productPageSlug, resolveWebProductPriceId, webProductBySlug, type WebProduct,
+  productBilling, productKind, productPageSlug, productsIncluding, resolveWebProductPriceId, webProductBySlug, type WebProduct,
 } from '../../shared/web-products.js';
 
 const RATE_WINDOW_MS = 60_000;
@@ -316,7 +316,7 @@ export function registerWebProductRoutes(
       reply.status(404).send({ error: 'Not found' });
       return null;
     }
-    if (productKind(product) === 'service') {
+    if (productKind(product) === 'service' && !product.includes?.length) {
       reply.status(404).send({ error: 'Not found' });
       return null;
     }
@@ -329,11 +329,26 @@ export function registerWebProductRoutes(
       reply.status(429).send({ error: 'Too many requests. Try again in a minute.' });
       return null;
     }
-    let result: Resolved;
-    try {
-      result = await resolvePaidOrder(product, sessionId);
-    } catch (err: any) {
-      if (!(err instanceof StripeUnavailable)) console.error('[web-products] verify failed:', err?.message);
+    // A paid session of the product itself, or of any product that includes it, entitles the download.
+    let result: Resolved = { status: 'not_found' };
+    let failure: unknown = null;
+    for (const candidate of [product, ...productsIncluding(product.slug, products)]) {
+      let r: Resolved;
+      try {
+        r = await resolvePaidOrder(candidate, sessionId);
+      } catch (err) {
+        failure ??= err;
+        continue;
+      }
+      if (r.status === 'paid') {
+        result = r;
+        failure = null;
+        break;
+      }
+      if (r.status === 'unpaid') result = r;
+    }
+    if (failure) {
+      if (!(failure instanceof StripeUnavailable)) console.error('[web-products] verify failed:', (failure as Error)?.message);
       reply.status(502).send({ error: 'Could not verify the order. Try again shortly.' });
       return null;
     }
@@ -354,7 +369,16 @@ export function registerWebProductRoutes(
     if (!auth) return reply;
     const { product, order, sessionId } = auth;
     const decl = product.release;
+    const included = product.includes
+      ? product.includes.flatMap((slug) => {
+        const inc = lookup(slug);
+        return inc?.release
+          ? [{ slug: inc.slug, name: inc.name, downloadUrl: `/api/web-products/${inc.slug}/download?session_id=${sessionId}` }]
+          : [];
+      })
+      : undefined;
     return {
+      ...(included ? { included } : {}),
       paid: true,
       slug: product.slug,
       name: product.name,
@@ -446,9 +470,14 @@ export function registerWebProductRoutes(
     }
     const email = await verifyClerkToken(req.headers.authorization);
     if (!email) return reply.status(401).send({ error: 'Sign in required.' });
-    if (!(await hasOrderForEmail(product.slug, email)) && !(await hasPurchased(email, product.productKey))) {
-      return reply.status(402).send({ paid: false });
+    let entitled = false;
+    for (const p of [product, ...productsIncluding(product.slug, products)]) {
+      if ((await hasOrderForEmail(p.slug, email)) || (await hasPurchased(email, p.productKey))) {
+        entitled = true;
+        break;
+      }
     }
+    if (!entitled) return reply.status(402).send({ paid: false });
     const release = product.release ? await getRelease(product.slug, product.release.version) : null;
     if (!release || !product.release) {
       return reply.status(404).send({ error: 'Release not available' });

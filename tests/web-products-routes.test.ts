@@ -381,3 +381,86 @@ describe('service products', () => {
     expect((await app.inject({ url: `/api/web-products/${p.slug}/order?session_id=${sid}` })).statusCode).toBe(404);
   });
 });
+
+describe('included downloads', () => {
+  const HOST_PRICE = 'price_fixture_host';
+  const host: WebProduct = {
+    slug: 'route-host',
+    name: 'Route Host',
+    productKey: 'wp_route_host',
+    priceEnvVar: 'STRIPE_PRICE_WP_ROUTE_HOST',
+    defaultPriceId: HOST_PRICE,
+    displayPrice: '$225',
+    downloadLimit: 0,
+    release: null,
+    kind: 'service',
+    billing: 'one_time',
+    pageSlug: 'route-host-page',
+    includes: [product.slug],
+  };
+  const other: WebProduct = { ...host, slug: 'route-other', name: 'Route Other', productKey: 'wp_route_other', priceEnvVar: 'STRIPE_PRICE_WP_ROUTE_OTHER', defaultPriceId: 'price_fixture_other', includes: undefined };
+
+  async function app2(list: WebProduct[]) {
+    const { registerWebProductRoutes } = await import('../server/routes/web-products.js');
+    const a = Fastify();
+    registerWebProductRoutes(a, { products: list });
+    return a;
+  }
+  const hostSession = (over: Record<string, unknown> = {}) => paidSession({
+    metadata: { web_product: host.slug },
+    line_items: { data: [{ price: { id: HOST_PRICE } }] },
+    ...over,
+  });
+
+  it('serves the included zip for a paid session of the including product, counted against the included slug', async () => {
+    sessionsRetrieve.mockResolvedValue(hostSession());
+    const app = await app2([product, host]);
+    const sid = 'cs_live_includeddl00001';
+    const res = await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=${sid}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.rawPayload.equals(BYTES)).toBe(true);
+    expect(await countSessionDownloads(product.slug, sid)).toBe(1);
+    await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=${sid}` });
+    expect((await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=${sid}` })).statusCode).toBe(429);
+  });
+
+  it('order of the including product lists included downloads', async () => {
+    sessionsRetrieve.mockResolvedValue(hostSession());
+    const app = await app2([product, host]);
+    const sid = 'cs_live_includedord0001';
+    const res = await app.inject({ url: `/api/web-products/${host.slug}/order?session_id=${sid}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().included).toEqual([
+      { slug: product.slug, name: product.name, downloadUrl: `/api/web-products/${product.slug}/download?session_id=${sid}` },
+    ]);
+  });
+
+  it('included is [] when the included product has no release; plain products keep their shape', async () => {
+    sessionsRetrieve.mockResolvedValue(hostSession());
+    const app = await app2([{ ...product, release: null }, host]);
+    const res = await app.inject({ url: `/api/web-products/${host.slug}/order?session_id=cs_live_includednor0001` });
+    expect(res.json().included).toEqual([]);
+    sessionsRetrieve.mockResolvedValue(paidSession());
+    const plain = await (await app2([product, host])).inject({ url: `/api/web-products/${product.slug}/order?session_id=cs_live_plainshape00001` });
+    expect(plain.json()).not.toHaveProperty('included');
+  });
+
+  it('unpaid and unknown sessions of the including product keep 402 / 404', async () => {
+    const app = await app2([product, host]);
+    sessionsRetrieve.mockResolvedValue(hostSession({ payment_status: 'unpaid' }));
+    expect((await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=cs_live_includedunp0001` })).statusCode).toBe(402);
+    sessionsRetrieve.mockRejectedValue(Object.assign(new Error('x'), { code: 'resource_missing' }));
+    expect((await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=cs_live_includedunk0001` })).statusCode).toBe(404);
+  });
+
+  it('a session of a product that does not include S cannot download S', async () => {
+    sessionsRetrieve.mockResolvedValue(hostSession({
+      metadata: { web_product: other.slug },
+      line_items: { data: [{ price: { id: 'price_fixture_other' } }] },
+    }));
+    const app = await app2([product, host, other]);
+    const res = await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=cs_live_notincluded0001` });
+    expect(res.statusCode).toBe(404);
+  });
+});
+

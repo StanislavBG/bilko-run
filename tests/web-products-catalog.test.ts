@@ -5,6 +5,9 @@ import {
   isValidCheckoutSessionId,
   isValidReleaseVersion,
   isValidWebProductSlug,
+  productBilling,
+  productKind,
+  productPageSlug,
   resolveWebProductPriceId,
   validateWebProducts,
   webProductBySlug,
@@ -37,7 +40,7 @@ const list = [demo, other];
 describe('catalog constants', () => {
   it('has the 5 MiB cap and a valid catalog', () => {
     expect(MAX_RELEASE_BYTES).toBe(5 * 1024 * 1024);
-    expect(WEB_PRODUCTS).toHaveLength(1);
+    expect(WEB_PRODUCTS).toHaveLength(4);
     expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
   });
 
@@ -148,5 +151,88 @@ describe('validateWebProducts', () => {
     expect(validateWebProducts([{ ...demo, release: { ...r, bytes: 0 } }])).toHaveLength(1);
     expect(validateWebProducts([{ ...demo, release: { ...r, bytes: 1.5 } }])).toHaveLength(1);
     expect(validateWebProducts([{ ...demo, release: { ...r, bytes: MAX_RELEASE_BYTES } }])).toEqual([]);
+  });
+});
+
+const svc: WebProduct = {
+  slug: 'svc-one',
+  name: 'Service One',
+  productKey: 'wp_svc_one',
+  priceEnvVar: 'STRIPE_PRICE_WP_SVC_ONE',
+  displayPrice: '$75',
+  downloadLimit: 0,
+  release: null,
+  kind: 'service',
+};
+
+describe('service products', () => {
+  it('helper defaults', () => {
+    expect(productKind(demo)).toBe('download');
+    expect(productKind(svc)).toBe('service');
+    expect(productBilling(demo)).toBe('one_time');
+    expect(productBilling({ ...svc, billing: 'month' })).toBe('month');
+    expect(productPageSlug(demo)).toBe('demo-pack');
+    expect(productPageSlug({ ...svc, pageSlug: 'human-for-hire' })).toBe('human-for-hire');
+  });
+
+  it('service: release null and downloadLimit 0 ok; release present fails', () => {
+    expect(validateWebProducts([svc])).toEqual([]);
+    expect(validateWebProducts([{ ...svc, release: demo.release }]).join()).toContain('release');
+    expect(validateWebProducts([{ ...svc, downloadLimit: 101 }])).toHaveLength(1);
+  });
+
+  it('download products still need downloadLimit 1..100', () => {
+    expect(validateWebProducts([{ ...demo, downloadLimit: 0 }])).toHaveLength(1);
+  });
+
+  it('billing month only on services', () => {
+    expect(validateWebProducts([{ ...svc, billing: 'month' }])).toEqual([]);
+    expect(validateWebProducts([{ ...demo, billing: 'month' }]).join()).toContain('billing');
+  });
+
+  it('pageSlug must be a valid slug', () => {
+    expect(validateWebProducts([{ ...svc, pageSlug: 'human-for-hire' }])).toEqual([]);
+    expect(validateWebProducts([{ ...svc, pageSlug: '../x' }]).join()).toContain('pageSlug');
+  });
+
+  it('foundingCouponEnvVar format and requires foundingDisplayPrice', () => {
+    const ok = { ...svc, foundingCouponEnvVar: 'STRIPE_COUPON_WP_X', foundingDisplayPrice: '$1' };
+    expect(validateWebProducts([ok])).toEqual([]);
+    expect(validateWebProducts([{ ...ok, foundingCouponEnvVar: 'COUPON_X' }]).join()).toContain('foundingCouponEnvVar');
+    expect(validateWebProducts([{ ...ok, foundingDisplayPrice: undefined }]).join()).toContain('foundingDisplayPrice');
+  });
+
+  it('maxOrders and sessionsPerMonth are integers 1..100', () => {
+    expect(validateWebProducts([{ ...svc, maxOrders: 2, sessionsPerMonth: 2 }])).toEqual([]);
+    expect(validateWebProducts([{ ...svc, maxOrders: 0 }]).join()).toContain('maxOrders');
+    expect(validateWebProducts([{ ...svc, maxOrders: 1.5 }]).join()).toContain('maxOrders');
+    expect(validateWebProducts([{ ...svc, sessionsPerMonth: 101 }]).join()).toContain('sessionsPerMonth');
+  });
+
+  it('declares the three Human For Hire offers', () => {
+    const u = webProductBySlug('hfh-unstick')!;
+    const f = webProductBySlug('hfh-factory-setup')!;
+    const m = webProductBySlug('hfh-fractional')!;
+    expect([u.name, u.displayPrice, u.sessionsPerMonth]).toEqual(['Unstick my agents', '$75', 1]);
+    expect([f.name, f.displayPrice, f.foundingDisplayPrice, f.foundingCouponEnvVar]).toEqual([
+      'Agent Factory Setup', '$225', '$125', 'STRIPE_COUPON_WP_HFH_FOUNDING',
+    ]);
+    expect([m.name, m.displayPrice, m.billing, m.maxOrders, m.sessionsPerMonth]).toEqual([
+      'Fractional Agent Ops', '$750', 'month', 2, 2,
+    ]);
+    for (const p of [u, f, m]) {
+      expect(productKind(p)).toBe('service');
+      expect(productPageSlug(p)).toBe('human-for-hire');
+      expect(p.release).toBeNull();
+      expect(p.downloadLimit).toBe(0);
+      expect(p.defaultPriceId).toBeUndefined();
+    }
+  });
+
+  it('persona rule: no owner name or email in the catalog', () => {
+    expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
+    const blob = JSON.stringify(WEB_PRODUCTS).toLowerCase();
+    expect(blob).not.toContain('stanislav');
+    expect(blob).not.toContain('gmail');
   });
 });

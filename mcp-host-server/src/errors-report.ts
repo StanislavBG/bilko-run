@@ -177,3 +177,23 @@ export async function trafficReport(opts: { days: number; slug?: string; exclude
   if (!body) throw new Error('bilko.run returned 404 for /api/admin/traffic');
   return mapTrafficToReport(body, opts.days, !!opts.excludeSelf);
 }
+
+/** GET /api/admin/funnel: per-UTM revenue funnel (visits → sign_ins → checkout_start → paid → booked). */
+export async function funnelReport(opts: { utmSource: string; since?: string }): Promise<Record<string, unknown>> {
+  const p = new URLSearchParams();
+  p.set('utm_source', opts.utmSource);
+  if (opts.since) p.set('since', opts.since);
+  const body = await adminGet(`/api/admin/funnel?${p.toString()}`);
+  if (!body) throw new Error('bilko.run returned 404 for /api/admin/funnel');
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  return {
+    source: baseUrl(),
+    since: typeof b.since === 'string' ? b.since : null,
+    utm_source: typeof b.utm_source === 'string' ? b.utm_source : opts.utmSource,
+    visits: num(b.visits),
+    sign_ins: num(b.sign_ins),
+    checkout_start: num(b.checkout_start),
+    paid: num(b.paid),
+    booked: num(b.booked),
+  };
+}

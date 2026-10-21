@@ -313,6 +313,10 @@ Every paid offer lives in one file, `shared/agent-offers.ts` (`AGENT_OFFERS`): `
 
 They show up in the admin traffic panel (`/admin`, backed by `GET /api/admin/traffic`) and in the `bilko-host` MCP `traffic_report` tool (`byClass`, `topPagesByClass`). Hits to `/mcp`, `/llms.txt`, `/api/offers` and `/buy/*` are recorded as page hits so agent interest is measurable.
 
+### UTM revenue funnel
+
+`GET /api/admin/funnel?utm_source=<src>&since=YYYY-MM-DD` (`requireAdmin`, so read-only `bka_` keys work; `since` defaults to 7 days ago) returns `{since, utm_source, visits, sign_ins, checkout_start, paid, booked}` as integers. Attribution is first-touch: a visitor counts when one of their sessions since `since` landed with that `utm_source` (case-insensitive). `visits` counts sessions; `sign_ins`, `checkout_start` and `paid` count visitors; `booked` counts service bookings. Web-product `checkout_start` rows carry the `bilko_vid`/`bilko_sid` cookies and the Stripe checkout session id, which is how orders and bookings join back to the visit (or by the visitor's signed-in email). Admin and bot traffic are excluded unless `exclude_self=0` / `include_bots=1`. Burrow consumes it; the `bilko-host` MCP exposes it as `funnel_report`.
+
 ### robots.txt
 
 `public/robots.txt` keeps `/api/` private but explicitly allows `/mcp`, `/llms.txt`, `/api/offers` and `/api/projects` (longest match wins). It disallows `/buy/` because each GET creates a Checkout session; agents acting for a user follow buy links directly.
@@ -739,7 +743,7 @@ A web product with `kind: 'service'` sells a booking instead of a zip: no `relea
 |---|---|
 | `kind` | `'download'` (default) or `'service'` |
 | `billing` | `'one_time'` (default) or `'month'` (recurring; services only) |
-| `pageSlug` | landing page slug when offers share one page; defaults to `slug` |
+| `pageSlug` | landing page path when it differs from `slug`: one slug, or `<project>/<page>` for a page nested in another bundle (e.g. `launch-kit/agent-factory-kit`); defaults to `slug` |
 | `foundingCouponEnvVar` / `foundingDisplayPrice` | `STRIPE_COUPON_WP_*` env var holding the founding-price coupon id, and the price shown for it |
 | `maxOrders` | cap on live orders, integer 1–100 |
 | `sessionsPerMonth` | bookable sessions included per purchase (per month when billed monthly) |

@@ -303,6 +303,16 @@ describe('service products', () => {
     expect(params.metadata).toEqual({ web_product: 'svc-fixture' });
   });
 
+  it('nested pageSlug points success and cancel at the nested page', async () => {
+    const { buildWebProductCheckoutParams } = await import('../server/routes/web-products.js');
+    const p: WebProduct = { ...svc(), kind: 'download', billing: undefined, pageSlug: 'launch-kit/agent-factory-kit' };
+    const params: any = buildWebProductCheckoutParams(p, {
+      owner: false, ownerIp: false, priceId: 'price_x', testCents: 1900, publicUrl: 'https://bilko.run',
+    });
+    expect(params.success_url).toBe('https://bilko.run/projects/launch-kit/agent-factory-kit/thanks/?session_id={CHECKOUT_SESSION_ID}&offer=svc-fixture');
+    expect(params.cancel_url).toBe('https://bilko.run/projects/launch-kit/agent-factory-kit/?checkout=cancel');
+  });
+
   it('owner test sessions use inline recurring price_data', async () => {
     testMode.ownerEmail = 'bilkobibitkov2000@gmail.com';
     testCreate.mockResolvedValue({ url: 'https://t/x' });

@@ -743,7 +743,7 @@ A web product with `kind: 'service'` sells a booking instead of a zip: no `relea
 |---|---|
 | `kind` | `'download'` (default) or `'service'` |
 | `billing` | `'one_time'` (default) or `'month'` (recurring; services only) |
-| `pageSlug` | landing page slug when offers share one page; defaults to `slug` |
+| `pageSlug` | landing page path when it differs from `slug`: one slug, or `<project>/<page>` for a page nested in another bundle (e.g. `launch-kit/agent-factory-kit`); defaults to `slug` |
 | `foundingCouponEnvVar` / `foundingDisplayPrice` | `STRIPE_COUPON_WP_*` env var holding the founding-price coupon id, and the price shown for it |
 | `maxOrders` | cap on live orders, integer 1–100 |
 | `sessionsPerMonth` | bookable sessions included per purchase (per month when billed monthly) |

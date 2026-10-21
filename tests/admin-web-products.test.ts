@@ -18,6 +18,7 @@ vi.mock('../server/clerk.js', async (importOriginal) => {
 
 import { registerAdminWebProductRoutes } from '../server/routes/admin-web-products.js';
 import type { WebProduct } from '../shared/web-products.js';
+import { claimSlot } from '../server/services/service-bookings.js';
 
 const product: WebProduct = {
   slug: 'fixture-skills',
@@ -29,8 +30,19 @@ const product: WebProduct = {
   release: { version: '1.0.0', filename: 'fixture.zip', sha256: 'a'.repeat(64), bytes: 3 } as any,
 };
 
+const service: WebProduct = {
+  slug: 'fixture-service',
+  name: 'Fixture Service',
+  productKey: 'wp_fixture_service',
+  priceEnvVar: 'STRIPE_PRICE_WP_FIXTURE_SERVICE',
+  displayPrice: '$99',
+  downloadLimit: 0,
+  release: null,
+  kind: 'service',
+} as any;
+
 const app = Fastify({ logger: false });
-registerAdminWebProductRoutes(app, { products: [product] });
+registerAdminWebProductRoutes(app, { products: [product, service] });
 
 const DAY = 86400000;
 const dayStr = (ago: number) => new Date(Date.now() - ago * DAY).toISOString().slice(0, 10);
@@ -44,7 +56,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   adminOk.value = true;
-  for (const t of ['page_views', 'funnel_events', 'web_product_orders', 'web_product_downloads', 'web_product_releases']) {
+  for (const t of ['page_views', 'funnel_events', 'web_product_orders', 'web_product_downloads', 'web_product_releases', 'service_bookings']) {
     await dbRun(`DELETE FROM ${t}`);
   }
   const pv = (path: string, ago: number, visitor: string, bot: number) =>
@@ -103,7 +115,7 @@ describe('GET /api/admin/web-products', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.days).toBe(7);
-    expect(body.products).toHaveLength(1);
+    expect(body.products).toHaveLength(2);
     const p = body.products[0];
     expect(p).toMatchObject({
       slug: 'fixture-skills', name: 'Fixture Skills', displayPrice: '$9', version: '1.0.0', releaseStored: true,
@@ -140,6 +152,27 @@ describe('GET /api/admin/web-products', () => {
     expect((await app.inject({ method: 'GET', url: '/api/admin/web-products?days=9999' })).json().days).toBe(365);
     expect((await app.inject({ method: 'GET', url: '/api/admin/web-products?days=0' })).json().days).toBe(1);
     expect((await app.inject({ method: 'GET', url: '/api/admin/web-products' })).json().days).toBe(30);
+  });
+
+  it('service entries carry upcoming bookings and a null release; downloads are unchanged', async () => {
+    const upcoming = Date.now() + DAY;
+    const stale = Date.now() - 3 * DAY;
+    const claim = (n: string, startMs: number) => claimSlot({
+      pageSlug: 'fixture-service', slug: 'fixture-service', checkoutSessionId: `cs_live_${n.repeat(12)}`,
+      startMs, endMs: startMs + 1800000, email: 'Buyer@T.dev', intake: { goal: n }, sessionsPerMonth: 10,
+    });
+    expect((await claim('a', upcoming)).status).toBe('ok');
+    expect((await claim('b', stale)).status).toBe('ok');
+    const body = (await app.inject({ method: 'GET', url: '/api/admin/web-products' })).json();
+    const svc = body.products.find((e: any) => e.slug === 'fixture-service');
+    expect(svc.release).toBeNull();
+    expect(svc.bookings).toEqual([{
+      slug: 'fixture-service', startMs: upcoming, endMs: upcoming + 1800000,
+      email: 'buyer@t.dev', intake: { goal: 'a' }, createdAt: expect.any(Number),
+    }]);
+    const dl = body.products.find((e: any) => e.slug === 'fixture-skills');
+    expect(dl).not.toHaveProperty('bookings');
+    expect(dl).not.toHaveProperty('release');
   });
 
   it('reports nulls and zeros for a product with no activity', async () => {

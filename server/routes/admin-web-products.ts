@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
-import { WEB_PRODUCTS, type WebProduct } from '../../shared/web-products.js';
+import { WEB_PRODUCTS, productKind, productPageSlug, type WebProduct } from '../../shared/web-products.js';
+import { listBookings } from '../services/service-bookings.js';
 
 const DAY_MS = 86400000;
 
@@ -73,7 +74,19 @@ export function registerAdminWebProductRoutes(
       ]);
       const outcome = (e: string) => outcomes.find((o) => o.event === e)?.n ?? 0;
 
+      // Services have no zip: show upcoming bookings (and intake) instead, so the owner
+      // sees them even when email is not configured.
+      const serviceExtra = productKind(p) === 'service'
+        ? {
+          release: null,
+          bookings: (await listBookings({ pageSlug: productPageSlug(p), fromMs: Date.now() - DAY_MS })).map((b) => ({
+            slug: b.slug, startMs: b.slotStartMs, endMs: b.slotEndMs, email: b.email, intake: b.intake, createdAt: b.createdAt,
+          })),
+        }
+        : {};
+
       entries.push({
+        ...serviceExtra,
         slug: p.slug,
         name: p.name,
         displayPrice: p.displayPrice,

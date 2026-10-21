@@ -304,6 +304,28 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     ]);
     const clicksByVisitor = new Map(visitorClicks.map(c => [c.vid, c.n]));
 
+    // Real-vs-bot signals: bot visitors (UA-flagged), human visitors seen exactly
+    // once (likely undeclared crawlers or bounces), and bilko_vid cookie uniques
+    // (client_vid; only populated since the cookie shipped).
+    const [botVisitorsRow, singleHitRow, cookieRow, cookieSince] = await Promise.all([
+      safeQuery(() => dbGet<{ n: number }>(
+        `SELECT COUNT(DISTINCT ${VKEY}) AS n FROM page_hits WHERE ts_ms >= ? AND is_bot = 1${slugSql}`,
+        since, ...slugArgs,
+      ), undefined),
+      safeQuery(() => dbGet<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM (SELECT ${VKEY} AS vid FROM page_hits WHERE ${human}
+          GROUP BY vid HAVING COUNT(*) = 1)`,
+        ...humanArgs,
+      ), undefined),
+      safeQuery(() => dbGet<{ n: number }>(
+        `SELECT COUNT(DISTINCT client_vid) AS n FROM page_hits WHERE ${human} AND client_vid IS NOT NULL`,
+        ...humanArgs,
+      ), undefined),
+      safeQuery(() => dbGet<{ d: string | null }>(
+        `SELECT MIN(date) AS d FROM page_hits WHERE client_vid IS NOT NULL`,
+      ), undefined),
+    ]);
+
     return {
       days,
       totals: {
@@ -354,6 +376,12 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         firstSeen: v.first_seen,
         lastSeen: v.last_seen,
       })),
+      quality: {
+        botVisitors: botVisitorsRow?.n ?? 0,
+        singleHitVisitors: singleHitRow?.n ?? 0,
+        cookieVisitors: cookieRow?.n ?? 0,
+        cookieSince: cookieSince?.d ?? null,
+      },
       earliestDate: earliest?.d ?? null,
       generatedAt: Math.floor(Date.now() / 1000),
     };

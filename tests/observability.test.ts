@@ -450,6 +450,18 @@ describe('GET /api/admin/traffic', () => {
     expect(body.topClicks).toEqual([]);
     expect(body.bySlug[0].slug).toBe('demo');
     expect(body.recent.length).toBe(4);
+    expect(body.quality).toEqual({ botVisitors: 1, singleHitVisitors: 2, cookieVisitors: 0, cookieSince: null });
+  });
+
+  it('quality counts single-hit visitors and bilko_vid cookie uniques', async () => {
+    asAdmin();
+    await seedTraffic();
+    await insertHit({ path: '/b', slug: null, visitor: 'v1' });
+    await dbRun(`UPDATE page_hits SET client_vid = 'c1' WHERE visitor_hash = 'v1'`);
+    const body = JSON.parse((await get('/api/admin/traffic')).body);
+    expect(body.quality.singleHitVisitors).toBe(1);
+    expect(body.quality.cookieVisitors).toBe(1);
+    expect(body.quality.cookieSince).toBe(new Date(Date.now() - 60_000).toISOString().slice(0, 10));
   });
 });
 

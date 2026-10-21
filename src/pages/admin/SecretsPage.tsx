@@ -194,7 +194,7 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
               Dismiss
             </button>
           </div>
-          <p className="text-xs text-warm-600">Shown once. Put it in BILKO_ADMIN_KEY for the bilko-host MCP.</p>
+          <p className="text-xs text-warm-600">Shown once. Save it to ~/.config/bilko-host/admin-key (mode 600) or BILKO_ADMIN_KEY for the bilko-host MCP.</p>
         </div>
       )}
 

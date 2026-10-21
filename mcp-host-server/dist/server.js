@@ -21,6 +21,7 @@
  *   - usage_report               → per-project egress (bytes/requests), no Clerk JWT needed
  *   - errors_report              → grouped app_errors report via bilko.run admin API (BILKO_ADMIN_KEY, read-only)
  *   - error_detail               → one app_errors row by id via admin API (read-only)
+ *   - traffic_report             → visitors, bot/human split, top pages/referrers via admin API (read-only)
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -40,7 +41,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { getHostDb, mcpRun, ensureGateTables } from './db.js';
-import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage } from './errors-report.js';
+import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, trafficReport } from './errors-report.js';
 import { runGates, gateSummary } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
@@ -535,7 +536,7 @@ server.registerTool('status', {
 // the numbers are always the live host's — never a local dev DB's.
 server.registerTool('usage_report', {
     title: 'Per-project egress/usage report',
-    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/egress) with BILKO_ADMIN_KEY (a read-only personal admin key from /admin/secrets). Returns per-project static-asset egress (bytes out + request count, sorted by bytes descending, with bytesPerRequest) over a trailing window (default 7 days), plus the /api/* route rows reported separately (those are route *patterns*, not resolved to a project slug). The top-level `source` field is the base URL queried. ' +
+    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/egress) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key; a read-only personal key from /admin/secrets). Returns per-project static-asset egress (bytes out + request count, sorted by bytes descending, with bytesPerRequest) over a trailing window (default 7 days), plus the /api/* route rows reported separately (those are route *patterns*, not resolved to a project slug). The top-level `source` field is the base URL queried. ' +
         'IMPORTANT: these are capacity-signal numbers measured at the origin server, NOT Render billing figures — Render bills at the edge/CDN layer, which can differ. They also under-report by up to the in-process flush interval (60s) on every process restart. ' +
         'static:_host and static:_other are surfaced explicitly rather than filtered out: _host currently absorbs top-level static dirs that belong to real projects but aren\'t served under /projects/<slug>/ — so _host is not purely host chrome today. _other is traffic to an unrecognised /projects/<x>/ slug. Also reports the earliest date present in the table so a caller can tell "no traffic in this window" apart from "metering only started on <date>".',
     inputSchema: {
@@ -555,7 +556,7 @@ server.registerTool('usage_report', {
 // 8) errors_report ───────────────────────────────────────────────────────
 server.registerTool('errors_report', {
     title: 'Grouped app_errors report',
-    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/observability/errors) with BILKO_ADMIN_KEY (a read-only personal admin key from /admin/secrets). Returns errors grouped by app + signature over a trailing window (default 1 day), with counts, first/last seen, versions and a sample. env defaults to prod. The top-level `source` field is the base URL queried.',
+    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/observability/errors) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key; a read-only personal key from /admin/secrets). Returns errors grouped by app + signature over a trailing window (default 1 day), with counts, first/last seen, versions and a sample. env defaults to prod. The top-level `source` field is the base URL queried.',
     inputSchema: {
         days: z.number().int().default(1).describe('Trailing window in days. Default 1.'),
         app: z.string().optional().describe('Restrict to one app slug.'),
@@ -574,7 +575,7 @@ server.registerTool('errors_report', {
 // 9) error_detail ────────────────────────────────────────────────────────
 server.registerTool('error_detail', {
     title: 'One app_errors row',
-    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/observability/errors/:id) with BILKO_ADMIN_KEY (a read-only personal admin key from /admin/secrets). The top-level `source` field is the base URL queried.',
+    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/observability/errors/:id) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key; a read-only personal key from /admin/secrets). The top-level `source` field is the base URL queried.',
     inputSchema: {
         id: z.number().int().positive().describe('app_errors row id.'),
     },
@@ -584,6 +585,24 @@ server.registerTool('error_detail', {
         if (!detail)
             return err(`error ${id} not found`);
         return ok(JSON.stringify({ source: baseUrl(), ...detail }, null, 2));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 10) traffic_report ─────────────────────────────────────────────────────
+server.registerTool('traffic_report', {
+    title: 'Visitor traffic report',
+    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/traffic) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for a trailing window: human vs bot visitors and hits (bots are UA-flagged), human visitors seen only once (undeclared-bot/bounce signal), bilko_vid cookie uniques, per-page and per-project hits + uniques, top referrers, countries, devices, and the date each metric became valid. ' +
+        'Visitors are a salted IP+user-agent hash, not a cookie. Per-visitor IP/UA/email rows are omitted. The top-level `source` field is the base URL queried.',
+    inputSchema: {
+        days: z.number().int().positive().default(30).describe('Trailing window in days. Default 30 (host caps at 90).'),
+        slug: z.string().optional().describe('Restrict to one /projects/<slug>/ app.'),
+        excludeSelf: z.boolean().default(false).describe("Drop the owner's own signed-in visits."),
+    },
+}, async ({ days, slug, excludeSelf }) => {
+    try {
+        return ok(JSON.stringify(await trafficReport({ days, slug, excludeSelf }), null, 2));
     }
     catch (e) {
         return err(e.message);

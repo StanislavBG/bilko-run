@@ -88,6 +88,17 @@ That's it. Render redeploys after step 4 and 5; bilko.run/projects/<slug>/ goes 
 | `BILKO_PUBLISH_CHECKOUT` | No | Absolute path to the dedicated git checkout the server uses for every mutating call (commit + push happen here, never in your working tree). Defaults to `~/.local/state/bilko-host/publish-checkout`; missing parent directories are created on first use. |
 | `TURSO_DATABASE_URL` | No | Turso database URL for manifest rows and publish-override audit logs. |
 | `TURSO_AUTH_TOKEN` | No | Auth token paired with `TURSO_DATABASE_URL`. |
+| `BILKO_ADMIN_KEY` | For `usage_report` / `errors_report` / `error_detail` / `traffic_report` | Personal read-only admin API key (`bka_...`), minted at https://bilko.run/admin/secrets. Sent as `Authorization: Bearer` to the bilko.run admin API. Wins over the key file. |
+| `BILKO_ADMIN_KEY_FILE` | No | Key file read when `BILKO_ADMIN_KEY` is unset. Defaults to `~/.config/bilko-host/admin-key`. Must be mode `0600` (refused otherwise). |
+| `BILKO_BASE_URL` | No | Base URL of the host the admin API is called on. Defaults to `https://bilko.run`. |
+
+**Admin key (one human step).** Signed in as admin, open https://bilko.run/admin/secrets → *Admin API keys* → create a key and copy the `bka_...` value (shown once). Then:
+
+```sh
+mkdir -p ~/.config/bilko-host && (umask 077; cat > ~/.config/bilko-host/admin-key)   # paste the key, Enter, Ctrl-D
+```
+
+No restart needed: the key is read on every admin call. This keeps the key out of `~/.claude.json`.
 
 Without `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` set, the server's DB writes (manifest upserts, `publish_overrides` audit rows) fall back to a local SQLite file at `data/contentgrade.db` relative to the server's working directory — fine for a local/dev MCP session, but it means those writes aren't visible to the production host's `/admin` dashboards. Set both vars to write to the same Turso instance the deployed host uses.
 
@@ -101,5 +112,3 @@ Without `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` set, the server's DB writes (man
 - **One publisher per slug.** `publish_static_project` atomically swaps the new build in for `public/projects/<slug>/`. A second publisher targeting the same slug overwrites the first's bytes on its next publish — even if it ships only a sub-directory the first bundle doesn't contain. A slug's static prefix must have exactly one owning publisher; see "One publisher per `/projects/<slug>/` prefix" in the [host contract](../docs/host-contract.md).
 - All commits use the message format `registry: add <slug> (<name>)`, `registry: remove <slug>`, `listing: update <slug>`, or `publish: <slug> build`.
 - Pushes go to `origin` (StanislavBG/bilko-run) only. `content-grade` (Content-Grade/Content-Grade) is a separate, unrelated project with diverged history — the server never pushes there, per the host's CLAUDE.md rule.
-| `BILKO_ADMIN_KEY` | For `errors_report` / `error_detail` | Personal read-only admin API key (`bka_...`), minted at https://bilko.run/admin/secrets. Sent as `Authorization: Bearer` to the bilko.run admin API. |
-| `BILKO_BASE_URL` | No | Base URL of the host the admin API is called on. Defaults to `https://bilko.run`. |

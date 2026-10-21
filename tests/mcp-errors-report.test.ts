@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { errorsReport, errorDetail, adminGet, mapEgressToUsage } from '../mcp-host-server/src/errors-report.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { errorsReport, errorDetail, adminGet, mapEgressToUsage, resolveAdminKey, trafficReport, mapTrafficToReport } from '../mcp-host-server/src/errors-report.js';
 
 const KEY = 'bka_supersecretkeyvalue';
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -13,11 +16,14 @@ describe('mcp errors-report (admin API client)', () => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     process.env.BILKO_ADMIN_KEY = KEY;
+    // Never fall through to a real key file on the dev machine.
+    process.env.BILKO_ADMIN_KEY_FILE = join(tmpdir(), 'bilko-host-no-such-key-file');
     delete process.env.BILKO_BASE_URL;
   });
   afterEach(() => {
     vi.unstubAllGlobals();
     delete process.env.BILKO_ADMIN_KEY;
+    delete process.env.BILKO_ADMIN_KEY_FILE;
     delete process.env.BILKO_BASE_URL;
   });
 
@@ -52,7 +58,7 @@ describe('mcp errors-report (admin API client)', () => {
 
   it('throws a clear error when the key is missing, without fetching', async () => {
     delete process.env.BILKO_ADMIN_KEY;
-    await expect(errorsReport({ days: 1 })).rejects.toThrow(/BILKO_ADMIN_KEY is not set/);
+    await expect(errorsReport({ days: 1 })).rejects.toThrow(/BILKO_ADMIN_KEY is not set and no key file at .*bilko-host-no-such-key-file/);
     await expect(errorDetail(1)).rejects.toThrow(/https:\/\/bilko\.run\/admin\/secrets/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -119,5 +125,105 @@ describe('mapEgressToUsage', () => {
     expect(out.static).toEqual([]);
     expect(out.api).toEqual([]);
     expect(out.earliestDateInTable).toBeNull();
+  });
+});
+
+describe('mcp admin key resolution', () => {
+  let dir: string;
+  let file: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'bilko-key-'));
+    file = join(dir, 'admin-key');
+    process.env.BILKO_ADMIN_KEY_FILE = file;
+    delete process.env.BILKO_ADMIN_KEY;
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env.BILKO_ADMIN_KEY;
+    delete process.env.BILKO_ADMIN_KEY_FILE;
+  });
+
+  it('reads a 0600 key file when the env var is unset, trimming whitespace', () => {
+    writeFileSync(file, `${KEY}\n`, { mode: 0o600 });
+    expect(resolveAdminKey()).toBe(KEY);
+  });
+
+  it('env var wins over the key file', () => {
+    writeFileSync(file, 'bka_fromfile', { mode: 0o600 });
+    process.env.BILKO_ADMIN_KEY = KEY;
+    expect(resolveAdminKey()).toBe(KEY);
+  });
+
+  it('refuses a key file readable by group/other, without echoing the key', () => {
+    writeFileSync(file, KEY, { mode: 0o644 });
+    expect(() => resolveAdminKey()).toThrow(/chmod 600/);
+    try { resolveAdminKey(); } catch (e) { expect((e as Error).message).not.toContain(KEY); }
+  });
+
+  it('names both options when neither is present (missing or empty file)', () => {
+    expect(() => resolveAdminKey()).toThrow(/BILKO_ADMIN_KEY.*admin\/secrets.*mode 0600/);
+    writeFileSync(file, '  \n', { mode: 0o600 });
+    expect(() => resolveAdminKey()).toThrow(/no key file/);
+  });
+});
+
+describe('mcp traffic_report', () => {
+  const BODY = {
+    days: 30,
+    totals: { hits: 900, visitors: 400, botHits: 100, notFound: 12, clicks: 30 },
+    byDay: [{ date: '2026-10-19', hits: 50, visitors: 20 }],
+    topPages: [{ path: '/', hits: 300, visitors: 200 }],
+    topReferrers: [{ host: 'x.com', hits: 40 }],
+    bySlug: [{ slug: 'session-manager', hits: 100, visitors: 60 }],
+    byCountry: [{ country: 'US', hits: 500 }],
+    byDevice: [], byBrowser: [], topClicks: [],
+    recent: [{ ip: '9.9.9.9', ua: 'secret-ua', userEmail: 'a@b.c' }],
+    visitors: [{ visitorId: 'v', ip: '9.9.9.9' }],
+    quality: { botVisitors: 100, singleHitVisitors: 300, cookieVisitors: 350, cookieSince: '2026-10-18' },
+    earliestDate: '2026-10-12',
+  };
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    process.env.BILKO_ADMIN_KEY = KEY;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.BILKO_ADMIN_KEY;
+  });
+
+  it('queries /api/admin/traffic with days, slug and self=exclude', async () => {
+    fetchMock.mockResolvedValue(res(200, BODY));
+    await trafficReport({ days: 30, slug: 'demo', excludeSelf: true });
+    const u = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(u.pathname).toBe('/api/admin/traffic');
+    expect(Object.fromEntries(u.searchParams)).toEqual({ days: '30', slug: 'demo', self: 'exclude' });
+  });
+
+  it('maps visitors, bot/human split, pages, referrers and metric dates; drops PII rows', () => {
+    const r = mapTrafficToReport(BODY, 30) as Record<string, any>;
+    expect(r.visitors).toEqual({ human: 400, bot: 100, humanSingleHit: 300, humanMultiHit: 100, bilkoVidCookie: 350 });
+    expect(r.hits).toEqual({ human: 900, bot: 100, notFound: 12, clicks: 30 });
+    expect(r.split).toEqual({ botHitPct: 10, botVisitorPct: 20, humanSingleHitPct: 75 });
+    expect(r.topPages[0]).toEqual({ path: '/', hits: 300, visitors: 200 });
+    expect(r.byProject[0].slug).toBe('session-manager');
+    expect(r.topReferrers[0]).toEqual({ host: 'x.com', hits: 40 });
+    expect(r.metricValidSince).toEqual({ visitors: '2026-10-12', bilkoVidCookie: '2026-10-18' });
+    const json = JSON.stringify(r);
+    expect(json).not.toContain('9.9.9.9');
+    expect(json).not.toContain('secret-ua');
+    expect(json).not.toContain('a@b.c');
+  });
+
+  it('tolerates an empty body without NaN', () => {
+    const r = mapTrafficToReport({}, 7) as Record<string, any>;
+    expect(r.split).toEqual({ botHitPct: 0, botVisitorPct: 0, humanSingleHitPct: 0 });
+    expect(r.metricValidSince).toEqual({ visitors: null, bilkoVidCookie: null });
+  });
+
+  it('throws on 404', async () => {
+    fetchMock.mockResolvedValue(res(404, {}));
+    await expect(trafficReport({ days: 30 })).rejects.toThrow(/404/);
   });
 });

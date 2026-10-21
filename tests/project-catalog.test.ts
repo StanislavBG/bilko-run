@@ -13,7 +13,7 @@ beforeAll(async () => {
 });
 afterAll(() => app.close());
 
-const FIELDS = ['slug', 'name', 'tagline', 'category', 'status', 'url', 'tags', 'detail', 'audience', 'talking_points', 'offering', 'pricing', 'call_to_action', 'avoid_claims', 'share_image_url'].sort();
+const FIELDS = ['slug', 'name', 'tagline', 'category', 'status', 'url', 'tags', 'detail', 'audience', 'talking_points', 'offering', 'pricing', 'call_to_action', 'avoid_claims', 'share_image_url', 'offers'].sort();
 const NON_PUBLIC = HUB_CARDS.filter(c => c.type === 'project' && !c.isPublic).map(c => c.slug);
 
 async function mcp(body: object) {
@@ -66,10 +66,10 @@ describe('GET /api/projects', () => {
 });
 
 describe('public MCP at /mcp', () => {
-  it('exposes only the two read-only tools', async () => {
+  it('exposes only the three read-only tools', async () => {
     const res = await mcp({ method: 'tools/list', params: {} });
     const tools = res.result.tools as { name: string; annotations?: { readOnlyHint?: boolean } }[];
-    expect(tools.map(t => t.name).sort()).toEqual(['get_project', 'list_projects']);
+    expect(tools.map(t => t.name).sort()).toEqual(['get_project', 'list_offers', 'list_projects']);
     for (const t of tools) expect(t.annotations?.readOnlyHint).toBe(true);
   });
 
@@ -149,5 +149,40 @@ describe('registry-owned audience / talking_points', () => {
       vi.doUnmock('../src/data/projectsRegistry.js');
       vi.resetModules();
     }
+  });
+});
+
+describe('offers for agents', () => {
+  const IDS = ['launch-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1'];
+
+  it('list_offers over POST /mcp returns the 4 offers with buy URLs', async () => {
+    const res = await mcp({ method: 'tools/call', params: { name: 'list_offers', arguments: {} } });
+    const data = JSON.parse(res.result.content[0].text);
+    expect(data.offers.map((o: { id: string }) => o.id)).toEqual(IDS);
+    for (const o of data.offers) {
+      expect(o.buyUrl).toBe(`https://bilko.run/buy/${o.id}`);
+      expect(o.currency).toBe('USD');
+      expect(o.howToBuy).toContain(o.buyUrl);
+    }
+    const kit = data.offers.find((o: { id: string }) => o.id === 'launch-kit');
+    expect(kit.price).toBe('$9');
+    expect(kit.amount).toBe(9);
+  });
+
+  it('carries the offer on its project entry and [] elsewhere', async () => {
+    const res = await mcp({ method: 'tools/call', params: { name: 'get_project', arguments: { slug: 'launch-kit' } } });
+    const got = JSON.parse(res.result.content[0].text);
+    expect(got.offers).toEqual([{ id: 'launch-kit', price: '$9', buyUrl: 'https://bilko.run/buy/launch-kit' }]);
+    const list = (await app.inject({ method: 'GET', url: '/api/projects' })).json().projects as { slug: string; offers: unknown[] }[];
+    expect(list.find(p => p.slug === 'git-viewer')!.offers).toHaveLength(1);
+    expect(list.filter(p => p.offers.length === 0).length).toBeGreaterThan(0);
+  });
+
+  it('GET /api/offers matches list_offers', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/offers' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=300');
+    const viaMcp = JSON.parse((await mcp({ method: 'tools/call', params: { name: 'list_offers', arguments: {} } })).result.content[0].text);
+    expect(res.json()).toEqual(viaMcp);
   });
 });

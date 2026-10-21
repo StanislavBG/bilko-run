@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
 import { buildCatalog, findCatalogProject } from '../../src/data/projectCatalog.js';
+import { AGENT_OFFERS, formatPrice } from '../../shared/agent-offers.js';
 
 /**
  * Public project catalog: exactly the cards an anonymous visitor sees on
@@ -18,6 +19,35 @@ function json(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 }
 
+function offersForSlug(slug: string) {
+  return AGENT_OFFERS
+    .filter(o => new URL(o.pageUrl).pathname === `/projects/${slug}/`)
+    .map(o => ({ id: o.id, price: formatPrice(o), buyUrl: o.buyUrl }));
+}
+
+function enrichedCatalog() {
+  const catalog = buildCatalog();
+  return { ...catalog, projects: catalog.projects.map(p => ({ ...p, offers: offersForSlug(p.slug) })) };
+}
+
+export function buildOffersPayload() {
+  return {
+    offers: AGENT_OFFERS.map(o => ({
+      id: o.id,
+      name: o.name,
+      summary: o.summary,
+      whatYouGet: o.whatYouGet,
+      price: formatPrice(o),
+      amount: o.amountCents / 100,
+      currency: 'USD',
+      billing: o.billing,
+      pageUrl: o.pageUrl,
+      buyUrl: o.buyUrl,
+      howToBuy: `Open ${o.buyUrl} in a browser to pay via Stripe Checkout.`,
+    })),
+  };
+}
+
 export function buildCatalogMcpServer(): McpServer {
   const server = new McpServer({ name: 'bilko-run-projects', version: '1.0.0' });
 
@@ -26,11 +56,11 @@ export function buildCatalogMcpServer(): McpServer {
     {
       title: 'List public projects',
       description:
-        'Returns every project publicly listed on https://bilko.run/projects, in page order, with how to talk about each (audience, talking_points). Same data as GET https://bilko.run/api/projects.',
+        'Returns every project publicly listed on https://bilko.run/projects, in page order, with how to talk about each (audience, talking_points) and any paid offers (id, price, buyUrl). Same data as GET https://bilko.run/api/projects.',
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => json(buildCatalog()),
+    async () => json(enrichedCatalog()),
   );
 
   server.registerTool(
@@ -47,8 +77,20 @@ export function buildCatalogMcpServer(): McpServer {
       if (!project) {
         return { isError: true, content: [{ type: 'text' as const, text: `Project "${slug}" not found.` }] };
       }
-      return json(project);
+      return json({ ...project, offers: offersForSlug(project.slug) });
     },
+  );
+
+  server.registerTool(
+    'list_offers',
+    {
+      title: 'List paid offers',
+      description:
+        'Returns everything for sale on https://bilko.run: id, price, what you get, and a buyUrl to open in a browser to pay via Stripe Checkout. Same data as GET https://bilko.run/api/offers.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async () => json(buildOffersPayload()),
   );
 
   return server;
@@ -57,7 +99,12 @@ export function buildCatalogMcpServer(): McpServer {
 export function registerProjectCatalogRoutes(app: FastifyInstance): void {
   app.get('/api/projects', async (_req, reply) => {
     reply.header('Cache-Control', CACHE_CONTROL);
-    return buildCatalog();
+    return enrichedCatalog();
+  });
+
+  app.get('/api/offers', async (_req, reply) => {
+    reply.header('Cache-Control', CACHE_CONTROL);
+    return buildOffersPayload();
   });
 
   // Stateless streamable HTTP with plain JSON replies: a fresh server +

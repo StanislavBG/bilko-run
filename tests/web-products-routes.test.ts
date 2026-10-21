@@ -94,7 +94,7 @@ describe('web product routes', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.json()).toEqual({
-      slug: product.slug, name: product.name, displayPrice: '$9', version: '1.0.0', available: true,
+      slug: product.slug, name: product.name, displayPrice: '$9', version: '1.0.0', available: true, previewAvailable: false,
     });
   });
 

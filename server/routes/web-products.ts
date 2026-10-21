@@ -36,6 +36,9 @@ function rateOk(key: string, limit: number): boolean {
   return entry.count <= limit;
 }
 
+/** Reserved storage slug for a product's preview zip; never a catalog product. */
+const previewSlug = (product: WebProduct): string => `${product.slug}--preview`;
+
 function maskEmail(email: string): string {
   const at = email.indexOf('@');
   if (at < 1) return '***';
@@ -236,6 +239,8 @@ export function registerWebProductRoutes(
       };
     }
     let available = false;
+    const previewAvailable = !!product.preview
+      && !!(await getRelease(previewSlug(product), product.preview.version));
     if (product.release) {
       const stored = await getRelease(product.slug, product.release.version);
       available = !!stored && !!resolveWebProductPriceId(product, process.env) && !!getStripe();
@@ -246,6 +251,7 @@ export function registerWebProductRoutes(
       displayPrice: product.displayPrice,
       version: product.release?.version ?? null,
       available,
+      previewAvailable,
     };
   });
 
@@ -442,7 +448,16 @@ export function registerWebProductRoutes(
         return { error: 'Too many requests. Try again in a minute.' };
       }
       const body = req.body;
-      const result = Buffer.isBuffer(body) ? await storeRelease(product, version, body) : 'mismatch';
+      const isPreview = (req.query as { kind?: string } | undefined)?.kind === 'preview';
+      if (isPreview && !product.preview) {
+        reply.status(404);
+        return { error: 'Not found' };
+      }
+      const target = isPreview
+        ? { ...product, slug: previewSlug(product), release: product.preview ?? null }
+        : product;
+      const decl = target.release;
+      const result = Buffer.isBuffer(body) ? await storeRelease(target, version, body) : 'mismatch';
       if (result === 'undeclared') {
         reply.status(404);
         return { error: 'Not found' };
@@ -456,7 +471,7 @@ export function registerWebProductRoutes(
         return { error: 'Release already stored.' };
       }
       reply.status(201);
-      return { stored: true, sha256: product.release!.sha256, bytes: product.release!.bytes };
+      return { stored: true, sha256: decl!.sha256, bytes: decl!.bytes };
     });
   });
 
@@ -496,5 +511,33 @@ export function registerWebProductRoutes(
       .header('Cache-Control', 'private, no-store')
       .header('X-Content-Type-Options', 'nosniff')
       .send(release.content);
+  });
+
+  // Free sign-in preview: any signed-in visitor, no purchase needed.
+  app.get('/api/web-products/:slug/preview', async (req, reply) => {
+    const product = lookup((req.params as { slug?: string }).slug);
+    if (!product) return reply.status(404).send({ error: 'Not found' });
+    if (!rateOk(`wp-preview:${req.ip}`, DELIVERY_LIMIT)) {
+      return reply.status(429).send({ error: 'Too many requests. Try again in a minute.' });
+    }
+    const email = await verifyClerkToken(bearerOrSessionCookie(req));
+    if (!email) return reply.status(401).send({ error: 'Sign in required.' });
+    const decl = product.preview;
+    const stored = decl ? await getRelease(previewSlug(product), decl.version) : null;
+    if (!decl || !stored) return reply.status(404).send({ error: 'Preview not available' });
+    await recordDownload({
+      slug: previewSlug(product),
+      version: decl.version,
+      checkoutSessionId: null,
+      email,
+      via: 'preview',
+      ipHash: hashIp(req.ip),
+    });
+    return reply
+      .header('Content-Type', 'application/zip')
+      .header('Content-Disposition', `attachment; filename="${stored.filename}"`)
+      .header('Cache-Control', 'private, no-store')
+      .header('X-Content-Type-Options', 'nosniff')
+      .send(stored.content);
   });
 }

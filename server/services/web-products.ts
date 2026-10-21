@@ -55,7 +55,7 @@ export interface RecordDownloadInput {
   version: string;
   checkoutSessionId: string | null;
   email: string | null;
-  via: 'session' | 'account';
+  via: 'session' | 'account' | 'preview';
   ipHash: string | null;
 }
 

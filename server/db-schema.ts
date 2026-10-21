@@ -611,6 +611,21 @@ export const MIGRATIONS = [
     uploaded_at INTEGER NOT NULL,
     PRIMARY KEY (slug, version)
   )`,
+  // Service bookings (server/services/service-bookings.ts): a paid checkout session
+  // claims one open slot; UNIQUE(page_slug, slot_start_ms) makes a slot claimable once.
+  `CREATE TABLE IF NOT EXISTS service_bookings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    page_slug           TEXT NOT NULL,
+    slug                TEXT NOT NULL,
+    checkout_session_id TEXT NOT NULL,
+    slot_start_ms       INTEGER NOT NULL,
+    slot_end_ms         INTEGER NOT NULL,
+    email               TEXT NOT NULL,
+    intake_json         TEXT NOT NULL,
+    created_at          INTEGER NOT NULL,
+    UNIQUE(page_slug, slot_start_ms)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_service_bookings_session ON service_bookings(checkout_session_id)`,
   // Personal admin API keys (server/services/admin-api-keys.ts): only the sha256 is stored.
   `CREATE TABLE IF NOT EXISTS admin_api_keys (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

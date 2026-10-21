@@ -1,27 +1,34 @@
-# bilko.run traffic review: 30 days to 2026-10-20
+# bilko.run traffic review: 30-day window to 2026-10-21
 
-**Status: blocked. A human has to mint the admin key.** No `bka_...` key exists on this machine. `BILKO_ADMIN_KEY` is unset and `~/.config/bilko-host/admin-key` is missing, so `traffic_report` cannot reach `/api/admin/traffic`. The ~5,000-visitor figure is still **unverified**.
+**Status: done.** Pulled 2026-10-21 with `traffic_report { days: 30, excludeSelf: true }`. The admin key is at `~/.config/bilko-host/admin-key` (mode 600).
 
-## Unblock (Stanislav, about 1 minute)
+**Headline: the ~5,000-visitor figure does not hold.** The server has 9 days of data (2026-10-13 to 2026-10-21). In that window it saw **273 visitors whose user agent looks like a real browser**, which is about 30 per day. 62% of the visitors that are not UA-flagged as bots loaded exactly one page. Referrals are close to zero.
 
-1. Sign in as admin. Open https://bilko.run/admin/secrets → *Admin API keys* → **Create key**. Copy the `bka_...` value. It is shown only once.
-2. `mkdir -p ~/.config/bilko-host && (umask 077; cat > ~/.config/bilko-host/admin-key)`, then paste the key, press Enter, then Ctrl-D.
-3. In any Claude session, run `mcp__bilko-host__traffic_report { "days": 30, "excludeSelf": true }`. Paste the numbers into the table below.
-
-No MCP restart is needed for the key, because it is read on every call. The `traffic_report` tool does appear only after the bilko-host MCP server restarts, i.e. in a new Claude session.
-
-## Results (to fill in)
+## Results (window 2026-10-13 to 2026-10-21, own visits excluded)
 
 | Metric | Value |
 |---|---|
-| Human visitors (IP+UA) | — |
-| Bot visitors / bot hit % | — |
-| Human single-hit visitors (%) | — |
-| bilko_vid cookie uniques | — |
-| Top 5 pages | — |
-| Top 5 projects | — |
-| Top 5 referrers | — |
-| `metricValidSince` (visitors / cookie) | — |
+| Browser-class visitors (`byClass.human`) | **273** (2,292 hits) |
+| Not UA-flagged as bots (`visitors.human`) | 317 (3,323 hits). This still includes `script`-class traffic. |
+| Visitors flagged as bots | 141 (1,143 hits). 25.6% of hits, 30.8% of visitors. |
+| Visitors in other classes | script 109 (1,839 hits) · search crawlers 49 · AI crawlers 12 · AI user agents 9 |
+| Single-hit share of `visitors.human` | 198 of 317 (62.5%) |
+| bilko_vid cookie uniques (since 2026-10-18) | 343 |
+| Visitors per day | 34, 67, 36, 40, 48, 46, 83, 44, 17 (the last day is partial) |
+| Top pages (visitors) | `/` 197 · `/projects/` 15 · `/products/session-manager` 11 · `/projects/session-manager/` 9 · `/projects/git-viewer/` 7 |
+| Top projects (visitors) | session-manager 15 · git-viewer 7 · escape-velocity 6 · launch-kit 4 · academy 4 · game-academy, outdoor-hours, social-signals-trader 3 each |
+| Referrers (hits) | linkedin.com 7 · google.com 4 · accounts.google.com 4 (sign-in) · t.co 2 · google.com.hk, facebook.com, duckduckgo.com 1 each. **No reddit.** |
+| Top countries (hits) | US 709 · PL 600 · NL 561 · KR 423 · AU 232 · IN 230 |
+| Clicks | 518 (1,235 with your own visits included) |
+| `metricValidSince` | visitors 2026-10-13 · cookie 2026-10-18 |
+
+## What it means
+
+- **Real reach is about 30 to 80 people a day, nearly all of whom land on `/` and leave.** Per-project pages get single-digit visitors. Nothing on bilko.run currently gets enough traffic to judge demand for it.
+- **Referrals barely register.** Burrow's X replies show up as `t.co`, with 2 hits in 9 days. LinkedIn is the largest referrer at 7. Google brings 4. Reddit brings none. Most traffic arrives with no referrer at all (direct visits, apps, or bots).
+- **Much of the "human" bucket is scanners.** `/wp-admin/install.php` (94 hits), `/.env`, `/wp-login.php` and random `*.php` probes are all in the top 25. The country mix also points to hosting providers: PL, NL and KR together outweigh the US.
+- **The npm signal is consistent with this.** `claude-code-session-manager` shows 9,440 downloads in 30 days, but only 15 visitors reached the Session Manager pages. Those downloads are mostly mirrors and CI, not people.
+- **Next data need:** UTM-tagged links on every outbound post. `funnel_report` already exists to measure them, and the current referrer counts are too small to tell channels apart.
 
 ## Read these numbers with care
 

@@ -80,9 +80,43 @@ export function parseUa(ua: string): { device: string; browser: string; os: stri
 
 // ── Bot detection ──────────────────────────────────────────────────────────
 
-const BOT_RE = /bot|spider|crawler|bingbot|googlebot|facebookexternalhit|slackbot|curl|wget|python-requests|node-fetch|headless|whatsapp|linkedinbot|twitterbot|slurp/i;
+export type VisitorClass =
+  | 'human'
+  | 'search_crawler'
+  | 'ai_crawler'
+  | 'ai_user_agent'
+  | 'api_client'
+  | 'script';
+
+export const VISITOR_CLASSES: readonly VisitorClass[] = [
+  'human',
+  'search_crawler',
+  'ai_crawler',
+  'ai_user_agent',
+  'api_client',
+  'script',
+];
+
+// Checked in this order so specific agent tokens win over the generic bot|spider|crawler fallback.
+const RE_AI_USER_AGENT = /chatgpt-user|claude-user|perplexity-user|oai-searchbot|claude-searchbot|claude-web|mistralai-user|duckassistbot/i;
+const RE_AI_CRAWLER = /gptbot|claudebot|anthropic-ai|ccbot|google-extended|perplexitybot|bytespider|applebot-extended|meta-externalagent|amazonbot|cohere-ai/i;
+const RE_SEARCH_CRAWLER = /googlebot|bingbot|duckduckbot|yandexbot|baiduspider|applebot|slurp|facebookexternalhit|slackbot|twitterbot|linkedinbot|whatsapp|discordbot/i;
+const RE_SCRIPT = /curl|wget|python-requests|python-httpx|aiohttp|node-fetch|axios|undici|go-http-client|okhttp|headlesschrome|playwright|puppeteer|phantomjs|bot|spider|crawler/i;
+
+export function classifyVisitor(
+  ua: string,
+  opts?: { botId?: string | null; mcp?: boolean },
+): VisitorClass {
+  if (opts?.mcp || opts?.botId) return 'api_client';
+  if (!ua) return 'script';
+  if (RE_AI_USER_AGENT.test(ua)) return 'ai_user_agent';
+  if (RE_AI_CRAWLER.test(ua)) return 'ai_crawler';
+  if (RE_SEARCH_CRAWLER.test(ua)) return 'search_crawler';
+  if (RE_SCRIPT.test(ua)) return 'script';
+  return 'human';
+}
 
 export function isBot(ua: string): boolean {
   if (!ua) return false;
-  return BOT_RE.test(ua);
+  return classifyVisitor(ua) !== 'human';
 }

@@ -150,8 +150,14 @@ export function registerServiceBookingRoutes(
 
     let emailed = false;
     try {
+      const base = (process.env.PUBLIC_URL || 'https://bilko.run').replace(/\/+$/, '');
+      const included = (product.includes ?? []).flatMap((slug) => {
+        const inc = webProductBySlug(slug, products);
+        if (!inc || !inc.release) return [];
+        return [{ name: inc.name, url: `${base}/api/web-products/${inc.slug}/download?session_id=${sessionId}` }];
+      });
       const confirmation = bookingConfirmationEmail({
-        offerName: product.name, startMs: slot.startMs, timeZone: open!.config.timeZone, meetingLink, icsContent: ics,
+        offerName: product.name, startMs: slot.startMs, timeZone: open!.config.timeZone, meetingLink, icsContent: ics, included,
       });
       const recipients = [...new Set([order.email, intake.contact].filter(Boolean).map((e) => e.toLowerCase()))];
       const results = await Promise.all(recipients.map((to) => sendMail({ to, ...confirmation })));

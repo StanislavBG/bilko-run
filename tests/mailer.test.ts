@@ -108,6 +108,26 @@ describe('bookingConfirmationEmail', () => {
   });
 });
 
+describe('bookingConfirmationEmail included downloads', () => {
+  const base = { offerName: 'Setup', startMs: START, timeZone: 'UTC', meetingLink: '', icsContent: 'x' };
+
+  it('is byte-identical without included', () => {
+    expect(bookingConfirmationEmail({ ...base, included: [] })).toEqual(bookingConfirmationEmail(base));
+  });
+
+  it('lists name and url in text and escaped html, persona only', () => {
+    const m = bookingConfirmationEmail({
+      ...base,
+      included: [{ name: 'Kit <b>', url: 'https://bilko.run/api/web-products/k/download?session_id=cs_1&x=2' }],
+    });
+    expect(m.text).toContain('Kit <b>: https://bilko.run/api/web-products/k/download?session_id=cs_1&x=2');
+    expect(m.html).toContain('Kit &lt;b&gt;');
+    expect(m.html).toContain('session_id=cs_1&amp;x=2');
+    expect(`${m.text}${m.html}`.toLowerCase()).not.toContain('stanislav');
+    expect(m.text.trim().endsWith('Bilko')).toBe(true);
+  });
+});
+
 describe('bookingNoticeEmail', () => {
   it('has subject and every intake field', () => {
     const m = bookingNoticeEmail({ offerName: 'Agent Ops Hour', startMs: START, buyerEmail: 'buyer@x.test', intake: INTAKE });

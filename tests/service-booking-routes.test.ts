@@ -34,8 +34,13 @@ const product: WebProduct = {
   sessionsPerMonth: 1,
 };
 const download: WebProduct = { ...product, slug: 'dl-fixture', kind: 'download', pageSlug: undefined };
+const REL = { version: '1.0.0', filename: 'kit.zip', bytes: 10, sha256: 'a'.repeat(64) } as unknown as NonNullable<WebProduct['release']>;
+const kit: WebProduct = { ...download, slug: 'kit-fixture', name: 'Kit Fixture', release: REL };
+const kitNoRel: WebProduct = { ...download, slug: 'kit-norel', name: 'No Release Kit', release: null };
+const bundle: WebProduct = { ...product, slug: 'hfh-bundle', includes: ['kit-fixture', 'kit-norel'] };
 
 const sid = (n: string) => `cs_live_${n.padEnd(12, 'x')}`;
+const S_BUNDLE = sid('bundle');
 const S_HAPPY = sid('happy');
 const S_OTHER = sid('other');
 const S_MAILFAIL = sid('mailfail');
@@ -47,10 +52,10 @@ const INTAKE = { repo: 'https://github.com/acme/app', broken: 'agents loop', don
 const slotsNow = () => generateSlots(SERVICE_SLOT_CONFIG['human-for-hire'], Date.now());
 
 let ipN = 0;
-async function buildApp() {
+async function buildApp(products: WebProduct[] = [product, download]) {
   const { registerServiceBookingRoutes } = await import('../server/routes/service-bookings.js');
   const app = Fastify();
-  registerServiceBookingRoutes(app, { products: [product, download] });
+  registerServiceBookingRoutes(app, { products });
   return app;
 }
 const book = (app: any, session: string, body: unknown, slug = product.slug) =>
@@ -69,6 +74,13 @@ beforeAll(async () => {
       amountTotal: 7500, currency: 'usd', paymentStatus: 'paid',
     });
   }
+});
+
+beforeAll(async () => {
+  await recordOrder({
+    checkoutSessionId: S_BUNDLE, slug: bundle.slug, email: 'jane@example.com',
+    amountTotal: 7500, currency: 'usd', paymentStatus: 'paid',
+  });
 });
 
 beforeEach(() => {
@@ -113,6 +125,18 @@ describe('service booking routes', () => {
     expect(tos).toContain('BilkoBibitkov2000@gmail.com');
     const blob = JSON.stringify(sendMailMock.mock.calls) + JSON.stringify(body);
     expect(blob.toLowerCase()).not.toContain('stanislav');
+  });
+
+  it('includes kit download links for products with includes, omitting unreleased ones', async () => {
+    const app = await buildApp([bundle, kit, kitNoRel]);
+    const res = await book(app, S_BUNDLE, { startMs: slotsNow()[6].startMs, intake: INTAKE }, bundle.slug);
+    expect(res.statusCode).toBe(200);
+    const mail = sendMailMock.mock.calls.map((c) => c[0]).find((m) => m.to === 'jane@example.com');
+    const url = `https://bilko.run/api/web-products/kit-fixture/download?session_id=${S_BUNDLE}`;
+    expect(mail.text).toContain(`Kit Fixture: ${url}`);
+    expect(mail.html).toContain(url);
+    expect(mail.text).not.toContain('kit-norel');
+    expect(mail.html).not.toContain('No Release Kit');
   });
 
   it('409s a double claim of the same slot', async () => {

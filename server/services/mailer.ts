@@ -88,15 +88,18 @@ export function bookingConfirmationEmail(p: {
   timeZone: string;
   meetingLink: string;
   icsContent: string;
+  included?: Array<{ name: string; url: string }>;
 }): { subject: string; text: string; html: string; attachments: MailAttachment[] } {
   const when = formatPt(p.startMs);
   const link = p.meetingLink.trim() ? `Meeting link: ${p.meetingLink.trim()}` : MEETING_FALLBACK;
   const subject = `Booked: ${p.offerName} ${when}`;
+  const included = p.included ?? [];
   const text = [
     `You're booked: ${p.offerName}.`,
     `When: ${when}`,
     link,
     'The calendar invite is attached.',
+    ...(included.length ? ['', 'Included with your order:', ...included.map((i) => `${i.name}: ${i.url}`)] : []),
     '',
     'Bilko',
   ].join('\n');
@@ -105,6 +108,11 @@ export function bookingConfirmationEmail(p: {
     `<p>When: ${escapeHtml(when)}</p>` +
     `<p>${escapeHtml(link)}</p>` +
     '<p>The calendar invite is attached.</p>' +
+    (included.length
+      ? '<p>Included with your order:</p><ul>' +
+        included.map((i) => `<li>${escapeHtml(i.name)}: ${escapeHtml(i.url)}</li>`).join('') +
+        '</ul>'
+      : '') +
     '<p>Bilko</p>';
   return {
     subject,

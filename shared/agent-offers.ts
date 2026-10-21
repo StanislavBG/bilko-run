@@ -32,6 +32,7 @@ export interface AgentOffer {
 }
 
 const SITE = 'https://bilko.run';
+const HFH_PAGE = `${SITE}/projects/human-for-hire/`;
 const buy = (id: string): string => `${SITE}/buy/${id}`;
 
 export const AGENT_OFFERS: readonly AgentOffer[] = [
@@ -87,6 +88,49 @@ export const AGENT_OFFERS: readonly AgentOffer[] = [
     buyUrl: buy('pageroast-credit-1'),
     source: { kind: 'price_catalog', priceType: 'pageroast_token_single' },
     agentKey: true,
+  },
+  {
+    id: 'hfh-unstick',
+    name: 'Unstick my agents',
+    summary: 'A one-off working session where Bilko gets your stuck AI agent setup moving again.',
+    whatYouGet:
+      'One booked session, after checkout, to diagnose and unblock your agent workflow. Best effort; no guaranteed results.',
+    amountCents: 7500,
+    currency: 'usd',
+    billing: 'one_time',
+    pageUrl: HFH_PAGE,
+    buyUrl: buy('hfh-unstick'),
+    source: { kind: 'web_product', slug: 'hfh-unstick' },
+    agentKey: false,
+  },
+  {
+    id: 'hfh-factory-setup',
+    name: 'Agent Factory Setup',
+    summary:
+      'Bilko sets up a working agent factory for you. Founding price $125 for the first 3 buyers, then $225.',
+    whatYouGet:
+      'A hands-on setup of your agent pipeline, delivered through a booked session after checkout. The $125 founding price applies automatically to the first 3 buyers while it lasts. Best effort; no guaranteed results.',
+    amountCents: 22500,
+    currency: 'usd',
+    billing: 'one_time',
+    pageUrl: HFH_PAGE,
+    buyUrl: buy('hfh-factory-setup'),
+    source: { kind: 'web_product', slug: 'hfh-factory-setup' },
+    agentKey: false,
+  },
+  {
+    id: 'hfh-fractional',
+    name: 'Fractional Agent Ops',
+    summary: 'Monthly ongoing help running and tuning your AI agents. Limited seats.',
+    whatYouGet:
+      'Two booked sessions each month plus ongoing agent-ops help, billed monthly and cancellable. Limited to 2 clients. Best effort; no guaranteed results.',
+    amountCents: 75000,
+    currency: 'usd',
+    billing: 'month',
+    pageUrl: HFH_PAGE,
+    buyUrl: buy('hfh-fractional'),
+    source: { kind: 'web_product', slug: 'hfh-fractional' },
+    agentKey: false,
   },
 ];
 

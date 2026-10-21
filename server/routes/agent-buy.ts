@@ -5,7 +5,9 @@ import { hashIp } from './tools/_shared.js';
 import { classifyVisitor } from '../services/analytics.js';
 import { AGENT_OFFERS, formatPrice, offerById, type AgentOffer } from '../../shared/agent-offers.js';
 import { entryForPriceType } from '../../shared/product-catalog.js';
-import { resolveWebProductPriceId, webProductBySlug } from '../../shared/web-products.js';
+import { buildWebProductCheckoutParams } from './web-products.js';
+import { countLiveOrders } from '../services/web-products.js';
+import { resolveWebProductPriceId, webProductBySlug, type WebProduct } from '../../shared/web-products.js';
 
 const RATE_WINDOW_MS = 60_000;
 const SESSION_LIMIT = 10;
@@ -57,21 +59,24 @@ function resolvePrice(offer: AgentOffer, env: Record<string, string | undefined>
   return entry ? env[entry.envVar] || entry.defaultPriceId : undefined;
 }
 
+/** Founding coupon id when its env var is set and Stripe says it is still valid. */
+async function foundingCouponId(product: WebProduct, stripe: any): Promise<string | undefined> {
+  const id = product.foundingCouponEnvVar ? process.env[product.foundingCouponEnvVar] : undefined;
+  if (!id) return undefined;
+  try {
+    const coupon = await stripe.coupons.retrieve(id);
+    return coupon?.valid ? id : undefined;
+  } catch (err: any) {
+    console.error('[agent-buy] founding coupon lookup failed:', err?.message);
+    return undefined;
+  }
+}
+
 function sessionParams(offer: AgentOffer, priceId: string, publicUrl: string): Record<string, unknown> {
   const lineItems = [{ price: priceId, quantity: 1 }];
-  if (offer.source.kind === 'web_product') {
-    const slug = offer.source.slug;
-    return {
-      mode: 'payment',
-      line_items: lineItems,
-      customer_creation: 'always',
-      allow_promotion_codes: true,
-      metadata: { web_product: slug, agent_buy: offer.id },
-      success_url: `${publicUrl}/projects/${slug}/thanks/?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${publicUrl}/projects/${slug}/?checkout=cancel`,
-    };
-  }
-  const mode = entryForPriceType(offer.source.priceType)?.mode ?? 'payment';
+  const mode = offer.source.kind === 'price_catalog'
+    ? entryForPriceType(offer.source.priceType)?.mode ?? 'payment'
+    : 'payment';
   return {
     mode,
     line_items: lineItems,
@@ -114,7 +119,22 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
     let url: string | null | undefined;
     try {
-      const session = await stripe.checkout.sessions.create(sessionParams(offer, priceId, publicUrl) as any);
+      let params: Record<string, unknown>;
+      if (offer.source.kind === 'web_product') {
+        const product = webProductBySlug(offer.source.slug)!;
+        if (product.maxOrders !== undefined && (await countLiveOrders(product.slug)) >= product.maxOrders) {
+          return sendHtml(reply, 409, page('Sold out',
+            `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
+        }
+        const base = buildWebProductCheckoutParams(product, {
+          owner: false, ownerIp: false, priceId, testCents: null, publicUrl,
+          couponId: await foundingCouponId(product, stripe),
+        });
+        params = { ...base, metadata: { ...base.metadata, agent_buy: offer.id } };
+      } else {
+        params = sessionParams(offer, priceId, publicUrl);
+      }
+      const session = await stripe.checkout.sessions.create(params as any);
       url = session.url;
     } catch (err: any) {
       console.error('[agent-buy] checkout failed:', err?.message);

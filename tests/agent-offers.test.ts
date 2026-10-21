@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AGENT_OFFERS, offerById, formatPrice } from '../shared/agent-offers';
-import { WEB_PRODUCTS, webProductBySlug } from '../shared/web-products';
+import { WEB_PRODUCTS, webProductBySlug, productBilling } from '../shared/web-products';
+import { displayPriceCents } from '../server/routes/web-products';
 import { entryForPriceType } from '../shared/product-catalog';
 
 describe('agent offers', () => {
@@ -8,7 +9,8 @@ describe('agent offers', () => {
     const ids = AGENT_OFFERS.map(o => o.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
-    expect(ids).toEqual(['launch-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1']);
+    expect(ids).toEqual(['launch-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
+      'hfh-unstick', 'hfh-factory-setup', 'hfh-fractional']);
   });
 
   it('uses https://bilko.run/buy/<id> for every buyUrl', () => {
@@ -20,7 +22,8 @@ describe('agent offers', () => {
       if (o.source.kind !== 'web_product') continue;
       const p = webProductBySlug(o.source.slug, WEB_PRODUCTS);
       expect(p).toBeDefined();
-      expect(p!.displayPrice).toBe(`$${o.amountCents / 100}`);
+      expect(o.amountCents).toBe(displayPriceCents(p!.displayPrice));
+      expect(o.billing).toBe(productBilling(p!));
     }
   });
 
@@ -39,5 +42,11 @@ describe('agent offers', () => {
     expect(offerById('nope')).toBeUndefined();
     expect(offerById('pageroast-credits-7')!.agentKey).toBe(true);
     expect(offerById('git-viewer')!.whatYouGet).toMatch(/same email/i);
+  });
+
+  it('never leaks the owner real name in offer text', () => {
+    for (const o of AGENT_OFFERS) {
+      expect(JSON.stringify(o).toLowerCase()).not.toContain('stanislav');
+    }
   });
 });

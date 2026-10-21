@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 
 const sessionsCreate = vi.fn();
+const couponsRetrieve = vi.fn();
+const dbGet = vi.fn(async (..._a: unknown[]): Promise<unknown> => undefined);
 let stripeAvailable = true;
 
 vi.mock('../server/services/stripe.js', () => ({
-  getStripe: () => (stripeAvailable ? { checkout: { sessions: { create: sessionsCreate } } } : null),
+  getStripe: () => (stripeAvailable ? { checkout: { sessions: { create: sessionsCreate } }, coupons: { retrieve: couponsRetrieve } } : null),
   getStripeTest: () => null,
   hasPurchased: async () => false,
 }));
@@ -13,7 +15,7 @@ vi.mock('../server/services/stripe.js', () => ({
 const dbRun = vi.fn(async () => {});
 vi.mock('../server/db.js', () => ({
   dbRun,
-  dbGet: async () => undefined,
+  dbGet,
 }));
 
 const HUMAN_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
@@ -44,7 +46,12 @@ describe('GET /buy/:offerId', () => {
       STRIPE_PRICE_TOKEN_SINGLE: 'price_token_1',
       STRIPE_PRICE_WP_LAUNCH_KIT: 'price_launch_kit',
       STRIPE_PRICE_GITVIEWER: 'price_git_viewer',
+      STRIPE_PRICE_WP_HFH_FACTORY_SETUP: 'price_hfh_factory',
+      STRIPE_PRICE_WP_HFH_FRACTIONAL: 'price_hfh_fractional',
+      STRIPE_COUPON_WP_HFH_FOUNDING: 'coupon_founding',
     };
+    dbGet.mockResolvedValue(undefined);
+    couponsRetrieve.mockResolvedValue({ id: 'coupon_founding', valid: true });
     sessionsCreate.mockResolvedValue({ id: 'cs_test_abc', url: 'https://checkout.stripe.com/c/pay/cs_test_abc' });
   });
 
@@ -60,9 +67,54 @@ describe('GET /buy/:offerId', () => {
       customer_creation: 'always',
       allow_promotion_codes: true,
       metadata: { web_product: 'launch-kit', agent_buy: 'launch-kit' },
-      success_url: 'https://bilko.run/projects/launch-kit/thanks/?session_id={CHECKOUT_SESSION_ID}',
+      success_url: 'https://bilko.run/projects/launch-kit/thanks/?session_id={CHECKOUT_SESSION_ID}&offer=launch-kit',
       cancel_url: 'https://bilko.run/projects/launch-kit/?checkout=cancel',
     }));
+    await app.close();
+  });
+
+  it('hfh-fractional creates a subscription-mode session', async () => {
+    const app = await buildApp();
+    const res = await get(app, '/buy/hfh-fractional');
+    expect(res.statusCode).toBe(302);
+    const params = sessionsCreate.mock.calls[0][0];
+    expect(params).toMatchObject({
+      mode: 'subscription',
+      line_items: [{ price: 'price_hfh_fractional', quantity: 1 }],
+      metadata: { web_product: 'hfh-fractional', agent_buy: 'hfh-fractional' },
+    });
+    expect(params).not.toHaveProperty('customer_creation');
+    await app.close();
+  });
+
+  it('hfh-factory-setup applies the founding coupon when valid', async () => {
+    const app = await buildApp();
+    await get(app, '/buy/hfh-factory-setup');
+    const params = sessionsCreate.mock.calls[0][0];
+    expect(params.mode).toBe('payment');
+    expect(params.discounts).toEqual([{ coupon: 'coupon_founding' }]);
+    expect(params).not.toHaveProperty('allow_promotion_codes');
+    await app.close();
+  });
+
+  it('hfh-factory-setup falls back to promotion codes when the coupon is invalid', async () => {
+    couponsRetrieve.mockResolvedValue({ id: 'coupon_founding', valid: false });
+    const app = await buildApp();
+    await get(app, '/buy/hfh-factory-setup');
+    const params = sessionsCreate.mock.calls[0][0];
+    expect(params).not.toHaveProperty('discounts');
+    expect(params.allow_promotion_codes).toBe(true);
+    await app.close();
+  });
+
+  it('a sold-out service (maxOrders reached) renders Sold out and creates no session', async () => {
+    dbGet.mockResolvedValue({ n: 2 });
+    const app = await buildApp();
+    const res = await get(app, '/buy/hfh-fractional');
+    expect(res.statusCode).toBe(409);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.body).toContain('Sold out');
+    expect(sessionsCreate).not.toHaveBeenCalled();
     await app.close();
   });
 

@@ -46,6 +46,7 @@
     "synthetic": "tsx scripts/synthetic-monitor.ts",
     "cost-monitor": "tsx scripts/cost-monitor.ts",
     "sanity-qa": "tsx scripts/sanity-qa.ts",
+    "admin-key:mint": "tsx scripts/mint-admin-key.ts",
     "build:project-pages-logic": "node scripts/project-pages/build-logic.mjs",
     "build:project-pages": "node scripts/project-pages/build-renderer.mjs"
   },

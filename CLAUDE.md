@@ -134,7 +134,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/utils.ts` — `parseJsonResponse` (shared Gemini output parser)
 
 ### Web products (paid downloads)
-Paid zips sold from a static-path landing page. Declared in `shared/web-products.ts` (`WEB_PRODUCTS`: price id, release version/filename/bytes/sha256); public + delivery + content-addressed upload routes in `server/routes/web-products.ts`; admin metrics (`/admin` → Products) in `server/routes/admin-web-products.ts`; order/release/download storage in `server/services/web-products.ts`. The Stripe webhook dispatches on `metadata.web_product`. Endpoint table and the new-product playbook: the "Selling a downloadable web product" section of [`docs/host-contract.md`](docs/host-contract.md).
+Paid zips sold from a static-path landing page. Declared in `shared/web-products.ts` (`WEB_PRODUCTS`: price id, release version/filename/bytes/sha256); public + delivery + content-addressed upload routes in `server/routes/web-products.ts`; admin metrics (`/admin` → Products) in `server/routes/admin-web-products.ts`; order/release/download storage in `server/services/web-products.ts`. The Stripe webhook dispatches on `metadata.web_product`. Entries with `kind: 'service'` sell bookable sessions instead of a zip (subscription billing, founding coupon, order cap, slot booking in `server/routes/service-bookings.ts`). Endpoint table and the new-product playbook: the "Selling a downloadable web product" section of [`docs/host-contract.md`](docs/host-contract.md).
 
 ### Sanctioned app-specific host code
 
@@ -147,6 +147,7 @@ Host code is framework by default — it should not know about one specific app.
 - Game config — `shared/game-config.ts`
 - Realtime input relay (Game Academy online play, game-agnostic) — `server/realtime/relay.ts`, `server/routes/realtime.ts`; contract in `docs/host-contract.md` → "Realtime relay"
 - Bilko Launch Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price id + release sha256 only; the paid zip lives in the private ~/Projects/Bilko-Launch-Kit repo and the web_product_releases table)
+- Human For Hire service — its `WEB_PRODUCTS`/`AGENT_OFFERS` entries and the `'human-for-hire'` entry in `shared/service-slots.ts` (the generic booking code in `server/routes/service-bookings.ts`, `server/services/service-bookings.ts` and `server/services/mailer.ts` is framework)
 - Git Viewer hosted portfolios — `server/routes/tools/git-viewer.ts` (`/api/git-viewer/u/:login`, `/api/git-viewer/claim`, in-process generation + daily refresh), the `git_viewer_profiles` table, `verifyClerkGitHubUser` in `server/clerk.ts`, and the `git_viewer` subscription tier (`STRIPE_PRICE_GITVIEWER`; `priceToPlanTier` → `git_viewer`, which sets `gitViewer` but never `isPro`). Generation uses the `@bilkobibitkov/git-viewer` library, loaded lazily
 - ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
 

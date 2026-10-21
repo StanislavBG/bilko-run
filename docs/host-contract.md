@@ -722,6 +722,48 @@ Live mode holds real buyers only. Owner/agent testing never creates live session
 6. **Thanks page** at `/projects/<slug>/thanks/`: read `session_id` from the query, call `GET …/order?session_id=` to show status and then `GET …/download?session_id=` for the file. If the link is lost or the session id is missing, offer sign-in (Clerk) and call `GET …/account-download` with the Bearer token.
 7. **Monitor** in `/admin` → Products (views, checkout starts, orders, revenue, downloads, release stored).
 
+### Selling a bookable service
+
+A web product with `kind: 'service'` sells a booking instead of a zip: no `release` (must be `null`), no download routes. Several offers can share one landing page.
+
+**`WebProduct` service fields** (all optional; validated by `validateWebProducts`):
+
+| Field | Meaning |
+|---|---|
+| `kind` | `'download'` (default) or `'service'` |
+| `billing` | `'one_time'` (default) or `'month'` (recurring; services only) |
+| `pageSlug` | landing page slug when offers share one page; defaults to `slug` |
+| `foundingCouponEnvVar` / `foundingDisplayPrice` | `STRIPE_COUPON_WP_*` env var holding the founding-price coupon id, and the price shown for it |
+| `maxOrders` | cap on live orders, integer 1–100 |
+| `sessionsPerMonth` | bookable sessions included per purchase (per month when billed monthly) |
+
+**Checkout** (`POST /api/web-products/:slug/checkout`) differs from downloads as follows:
+- `billing: 'month'` → Stripe `mode: subscription`; one-time services stay `payment`.
+- Founding coupon: when `foundingCouponEnvVar` is set, the env var (or `<VAR>_TEST` for owner test-mode sessions) holds a Stripe coupon id. If Stripe says it is still valid, the session gets `discounts: [{ coupon }]` (and no `allow_promotion_codes`); an exhausted or unset coupon silently falls back to full price. `GET /api/web-products/:slug` reports `foundingRemaining` (coupon redemptions left, `null` if unlimited/unknown).
+- `maxOrders`: once live orders reach the cap, checkout returns 409 `{ error: 'sold_out' }` and `GET` reports `soldOut: true`. The same cap applies to `/buy/:offerId`.
+- Success URL: `/projects/<pageSlug>/thanks/?session_id=…&offer=<slug>`; cancel: `/projects/<pageSlug>/?checkout=cancel`. `/stripe/success` redirects to the same shape.
+- `GET /api/web-products/:slug` for a service returns `{ slug, name, displayPrice, kind, billing, pageSlug, foundingDisplayPrice, foundingRemaining, soldOut, available }`.
+
+**Booking endpoints** (slot rules per page live in `shared/service-slots.ts`, keyed by `pageSlug`):
+
+| Endpoint | Auth | Success | Errors |
+|---|---|---|---|
+| `GET /api/services/:pageSlug/slots` | none | 200 `{ timeZone, durationMinutes, slots: [{ startMs, endMs }] }` — open (unclaimed) slots; `no-store` | 404 unknown page |
+| `POST /api/web-products/:slug/booking?session_id=cs_…` body `{ startMs, intake }` | possession of the paid Checkout session id (verified against Stripe) | 200 `{ booking: { startMs, endMs }, icsUrl, emailed }` — claims the slot atomically, emails the buyer (and intake contact) a confirmation with `.ics` and notifies `BILKO_INBOX` | 400 bad session id / body · 402 not paid · 404 unknown service / order · 409 `slot_unavailable` or `limit` (sessions used up) · 429 · 502 Stripe unreachable |
+| `GET /api/web-products/:slug/booking.ics?session_id=cs_…` | same | 200 `text/calendar` for the session's latest booking | 400 · 402 · 404 no booking · 429 · 502 |
+
+Mail failures never fail a booking (`emailed: false`).
+
+**Env vars:**
+
+| Var | Purpose |
+|---|---|
+| `STRIPE_PRICE_WP_HFH_*` | Human For Hire price ids (`UNSTICK`, `FACTORY_SETUP`, `FRACTIONAL`), same override rule as other `STRIPE_PRICE_WP_*` |
+| `STRIPE_COUPON_WP_*` (+ `_TEST`) | founding-price coupon ids, live and test mode |
+| `RESEND_API_KEY`, `MAIL_FROM` | transactional mail via Resend; unset → bookings still succeed, nothing is sent |
+| `BILKO_INBOX` | address that receives booking notices; also the `.ics` organizer address (falls back to `noreply@bilko.run` when unset) |
+| `HFH_MEETING_LINK` | meeting URL put in the confirmation email and `.ics`; unset → "Bilko will email the meeting link" |
+
 ## Why this contract exists
 
 The AI tools were originally built as one product with one codebase. They've grown into independent products that happen to share a host. This contract makes that explicit, so:

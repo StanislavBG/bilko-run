@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { entryForPriceType, entryForPriceId, PRODUCT_KEYS, COFFEE_PAYMENT_LINK_DEFAULT } from '../shared/product-catalog.js';
 
@@ -80,6 +80,10 @@ describe('product catalog: publictrades_coffee', () => {
 describe('GET /coffee', () => {
   const OLD_ENV = process.env;
 
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...OLD_ENV };
@@ -112,6 +116,10 @@ describe('GET /coffee', () => {
 
 describe('webhook: checkout.session.completed for publictrades_coffee', () => {
   const OLD_ENV = process.env;
+
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -152,6 +160,10 @@ describe('webhook: checkout.session.completed for publictrades_coffee', () => {
 describe('/checkout/success for publictrades_coffee', () => {
   const OLD_ENV = process.env;
   const SESSION_ID = 'cs_test_coffee';
+
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();

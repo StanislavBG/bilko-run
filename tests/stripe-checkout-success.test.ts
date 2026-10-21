@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { entryForPriceType, PRODUCT_KEYS } from '../shared/product-catalog.js';
 
@@ -69,6 +69,10 @@ describe('product catalog: session_manager', () => {
 describe('create-checkout-session: the Field Manual is free', () => {
   const OLD_ENV = process.env;
 
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = {
@@ -126,6 +130,10 @@ describe('create-checkout-session: the Field Manual is free', () => {
 
 describe('/checkout/success product resolution', () => {
   const OLD_ENV = process.env;
+
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -214,6 +222,10 @@ describe('/checkout/success product resolution', () => {
 describe('/checkout/success agent key', () => {
   const OLD_ENV = process.env;
 
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...OLD_ENV, STRIPE_PRICE_TOKENS: 'price_pr7_123' };
@@ -287,9 +299,15 @@ describe('/checkout/success agent key', () => {
 });
 
 describe('retired ContentGrade surfaces', () => {
+  const OLD_ENV = process.env;
+
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...process.env, STRIPE_PRICE_PUBLICTRADES_COFFEE: 'price_coffee_123' };
+    process.env = { ...OLD_ENV, STRIPE_PRICE_PUBLICTRADES_COFFEE: 'price_coffee_123' };
   });
 
   it('redirects /upgrade to / with a 302', async () => {

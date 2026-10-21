@@ -1,15 +1,26 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import Fastify from 'fastify';
-import { initDb } from '../server/db.js';
+import { initDb, dbAll } from '../server/db.js';
 import { recordOrder, storeRelease, countSessionDownloads } from '../server/services/web-products.js';
 import type { WebProduct } from '../shared/web-products.js';
 
 const sessionsCreate = vi.fn();
 const sessionsRetrieve = vi.fn();
+const testCreate = vi.fn();
+const testRetrieve = vi.fn();
+const testMode = vi.hoisted(() => ({ configured: true, ownerEmail: null as string | null }));
 
 vi.mock('../server/services/stripe.js', () => ({
   getStripe: () => ({ checkout: { sessions: { create: sessionsCreate, retrieve: sessionsRetrieve } } }),
+  getStripeTest: () => (testMode.configured
+    ? { checkout: { sessions: { create: testCreate, retrieve: testRetrieve } } }
+    : null),
+}));
+
+vi.mock('../server/clerk.js', async (orig) => ({
+  ...(await orig<typeof import('../server/clerk.js')>()),
+  verifyClerkToken: async (h: string | undefined) => (h ? testMode.ownerEmail : null),
 }));
 
 const BYTES = Buffer.from([0x50, 0x4b, 0x03, 0x04, 9, 8, 7, 255, 0, 128]);
@@ -55,7 +66,14 @@ beforeAll(async () => {
 beforeEach(() => {
   sessionsCreate.mockReset();
   sessionsRetrieve.mockReset();
+  testCreate.mockReset();
+  testRetrieve.mockReset();
+  testMode.configured = true;
+  testMode.ownerEmail = null;
 });
+
+const checkoutStarts = async () =>
+  (await dbAll<{ n: number }>(`SELECT COUNT(*) AS n FROM funnel_events WHERE event = 'checkout_start' AND tool = ?`, product.slug))[0].n;
 
 describe('web product routes', () => {
   it('404s unknown slug and 400s a malformed session id', async () => {
@@ -92,15 +110,90 @@ describe('web product routes', () => {
       `https://bilko.run/projects/${product.slug}/thanks/?session_id={CHECKOUT_SESSION_ID}`,
     );
     expect(arg.cancel_url).toBe(`https://bilko.run/projects/${product.slug}/?checkout=cancel`);
+    expect(arg.after_expiration).toEqual({ recovery: { enabled: true, allow_promotion_codes: true } });
+    // Opt-in: consent_collection 400s until the Checkout ToS is accepted.
+    expect(arg.consent_collection).toBeUndefined();
+    process.env.STRIPE_CHECKOUT_PROMO_CONSENT = '1';
+    try {
+      await app.inject({ method: 'POST', url: `/api/web-products/${product.slug}/checkout` });
+      expect(sessionsCreate.mock.calls[1][0].consent_collection).toEqual({ promotions: 'auto' });
+    } finally {
+      delete process.env.STRIPE_CHECKOUT_PROMO_CONSENT;
+    }
+    expect(testCreate).not.toHaveBeenCalled();
+  });
+
+  it('dryRun=1 checks wiring without creating a Stripe session', async () => {
+    const app = await buildApp();
+    const before = await checkoutStarts();
+    const res = await app.inject({ method: 'POST', url: `/api/web-products/${product.slug}/checkout?dryRun=1` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, dryRun: true, url: null });
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    expect(await checkoutStarts()).toBe(before);
+  });
+
+  it('routes a signed-in owner to Stripe test mode and logs no funnel row', async () => {
+    testMode.ownerEmail = 'bilkobibitkov2000@gmail.com';
+    testCreate.mockResolvedValue({ url: 'https://checkout.stripe.test/t' });
+    const app = await buildApp();
+    const before = await checkoutStarts();
+    const res = await app.inject({
+      method: 'POST', url: `/api/web-products/${product.slug}/checkout`,
+      headers: { cookie: 'foo=1; __session=jwt.owner' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    const arg = testCreate.mock.calls[0][0];
+    expect(arg.metadata).toEqual({ web_product: product.slug, test: 'true' });
+    expect(arg.line_items[0].price_data.unit_amount).toBe(900);
+    expect(await checkoutStarts()).toBe(before);
+  });
+
+  it('refuses an owner checkout when test mode is not configured (never falls back to live)', async () => {
+    testMode.ownerEmail = 'bilkobibitkov2000@gmail.com';
+    testMode.configured = false;
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: `/api/web-products/${product.slug}/checkout`,
+      headers: { authorization: 'Bearer jwt.owner' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it('a non-admin signed-in user still gets a live session', async () => {
+    testMode.ownerEmail = 'someone@example.com';
+    sessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.test/x' });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST', url: `/api/web-products/${product.slug}/checkout`,
+      headers: { authorization: 'Bearer jwt.user' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(testCreate).not.toHaveBeenCalled();
+    expect(sessionsCreate).toHaveBeenCalledOnce();
+  });
+
+  it('delivers a test-mode order only via the test client and the server-set test marker', async () => {
+    const app = await buildApp();
+    const id = 'cs_test_ownerFixture1234567890';
+    testRetrieve.mockResolvedValue(paidSession({ metadata: { web_product: product.slug }, line_items: { data: [] } }));
+    const unmarked = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=${id}` });
+    expect(unmarked.statusCode).toBe(404);
+    testRetrieve.mockResolvedValue(paidSession({ metadata: { web_product: product.slug, test: 'true' }, line_items: { data: [] } }));
+    const res = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=${id}` });
+    expect(res.statusCode).toBe(200);
+    expect(sessionsRetrieve).not.toHaveBeenCalled();
   });
 
   it('order paid via DB row, with masked email', async () => {
     await recordOrder({
-      checkoutSessionId: 'cs_test_dbrow12345', slug: product.slug, email: 'jane@example.com',
+      checkoutSessionId: 'cs_live_dbrow12345', slug: product.slug, email: 'jane@example.com',
       amountTotal: 900, currency: 'usd', paymentStatus: 'paid',
     });
     const app = await buildApp();
-    const res = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=cs_test_dbrow12345` });
+    const res = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=cs_live_dbrow12345` });
     expect(res.statusCode).toBe(200);
     expect(sessionsRetrieve).not.toHaveBeenCalled();
     expect(res.json()).toEqual({
@@ -113,11 +206,11 @@ describe('web product routes', () => {
   it('order paid via Stripe fallback is then recorded', async () => {
     sessionsRetrieve.mockResolvedValue(paidSession());
     const app = await buildApp();
-    const url = `/api/web-products/${product.slug}/order?session_id=cs_test_fallback123`;
+    const url = `/api/web-products/${product.slug}/order?session_id=cs_live_fallback123`;
     const res = await app.inject({ url });
     expect(res.statusCode).toBe(200);
     expect(res.json().email).toBe('j***@example.com');
-    expect(sessionsRetrieve).toHaveBeenCalledWith('cs_test_fallback123', { expand: ['line_items'] });
+    expect(sessionsRetrieve).toHaveBeenCalledWith('cs_live_fallback123', { expand: ['line_items'] });
     const again = await app.inject({ url });
     expect(again.statusCode).toBe(200);
     expect(sessionsRetrieve).toHaveBeenCalledTimes(1);
@@ -126,7 +219,7 @@ describe('web product routes', () => {
   it('402s an unpaid session', async () => {
     sessionsRetrieve.mockResolvedValue(paidSession({ status: 'open', payment_status: 'unpaid' }));
     const app = await buildApp();
-    const res = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=cs_test_unpaid1234` });
+    const res = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=cs_live_unpaid1234` });
     expect(res.statusCode).toBe(402);
     expect(res.json()).toEqual({ paid: false });
   });
@@ -134,7 +227,7 @@ describe('web product routes', () => {
   it("rejects another product's session", async () => {
     sessionsRetrieve.mockResolvedValue(paidSession({ metadata: { web_product: 'other-product' } }));
     const app = await buildApp();
-    const res = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=cs_test_other12345` });
+    const res = await app.inject({ url: `/api/web-products/${product.slug}/order?session_id=cs_live_other12345` });
     expect(res.statusCode).toBe(404);
   });
 

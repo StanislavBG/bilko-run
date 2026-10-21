@@ -4,12 +4,38 @@ import { entryForPriceType } from '../../shared/product-catalog.js';
 
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 let _stripe: Stripe | null = null;
+let _stripeTest: Stripe | null = null;
+
+/**
+ * A live key outside production is how ~25 localhost "dev" checkouts ended up
+ * in the live Stripe account (2026-03). Dev and tests get no live client unless
+ * STRIPE_ALLOW_LIVE_IN_DEV=1 is set on purpose; use a sk_test_ key instead.
+ */
+export function liveKeyBlocked(key: string | undefined, env: Record<string, string | undefined> = process.env): boolean {
+  return !!key?.startsWith('sk_live_') && env.NODE_ENV !== 'production' && env.STRIPE_ALLOW_LIVE_IN_DEV !== '1';
+}
 
 export function getStripe(): Stripe | null {
   if (!_stripe && stripeKey) {
+    if (liveKeyBlocked(stripeKey)) {
+      console.warn('[stripe] live key refused outside production (set STRIPE_ALLOW_LIVE_IN_DEV=1 to override)');
+      return null;
+    }
     _stripe = new Stripe(stripeKey, { apiVersion: '2024-12-18.acacia' as any });
   }
   return _stripe;
+}
+
+/**
+ * Test-mode (or sandbox) client for owner checkouts, from STRIPE_TEST_SECRET_KEY.
+ * Only sk_test_ keys are accepted so owner tests can never land in live mode.
+ */
+export function getStripeTest(): Stripe | null {
+  const key = process.env.STRIPE_TEST_SECRET_KEY;
+  if (!_stripeTest && key?.startsWith('sk_test_')) {
+    _stripeTest = new Stripe(key, { apiVersion: '2024-12-18.acacia' as any });
+  }
+  return _stripeTest;
 }
 
 export function isStripeConfigured(): boolean {

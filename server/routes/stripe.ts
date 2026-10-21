@@ -23,6 +23,20 @@ import { recordOrder } from '../services/web-products.js';
  * billing-portal return). Anything not on PUBLIC_URL's origin falls back, so a
  * Stripe-hosted page can never bounce a customer off-site.
  */
+
+/** funnel_events row for a web-product checkout outcome (expired / recovered). */
+async function recordCheckoutOutcome(event: 'checkout_expired' | 'checkout_recovered', slug: string, session: any): Promise<void> {
+  try {
+    await dbRun(
+      'INSERT INTO funnel_events (event, tool, metadata) VALUES (?, ?, ?)',
+      event, slug,
+      JSON.stringify({ session: session.id, recovered_from: session.recovered_from ?? null, hasRecoveryUrl: !!session.after_expiration?.recovery?.url }),
+    );
+  } catch (err: any) {
+    console.error(`[stripe_webhook] ${event} insert failed:`, err?.message);
+  }
+}
+
 export function safeUrl(raw: string | undefined, fallback: string): string {
   if (!raw) return fallback;
   const allowedOrigin = new URL(process.env.PUBLIC_URL || 'https://bilko.run').origin;
@@ -222,6 +236,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
                 product_key: webProduct.productKey,
               });
             }
+            if (data.recovered_from) await recordCheckoutOutcome('checkout_recovered', webProduct.slug, data);
           }
         } else if (data.mode === 'subscription' && email && stripeCustomerId) {
           let planTier = 'pro';
@@ -291,6 +306,14 @@ export function registerStripeRoutes(app: FastifyInstance): void {
               email,
             );
           } catch { /* analytics best-effort */ }
+        }
+      } else if (event.type === 'checkout.session.expired') {
+        // Abandoned web-product checkouts feed the admin funnel. Owner/test
+        // sessions are skipped so the funnel only counts real visitors.
+        const wpSlug = typeof data.metadata?.web_product === 'string' ? data.metadata.web_product : '';
+        const meta = data.metadata ?? {};
+        if (wpSlug && webProductBySlug(wpSlug, WEB_PRODUCTS) && meta.test !== 'true' && meta.owner_ip !== 'true') {
+          await recordCheckoutOutcome('checkout_expired', wpSlug, data);
         }
       } else if (event.type === 'customer.subscription.updated') {
         await updateSubscriptionPeriod(data.id, data.status, data.current_period_end);

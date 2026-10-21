@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { getStripe, hasPurchased } from '../services/stripe.js';
-import { verifyClerkToken } from '../clerk.js';
-import { dbRun } from '../db.js';
+import { getStripe, getStripeTest, hasPurchased } from '../services/stripe.js';
+import { ADMIN_EMAILS, verifyClerkToken } from '../clerk.js';
+import { dbGet, dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import {
   countSessionDownloads, findOrder, getRelease, hasOrderForEmail, recordDownload, recordOrder,
@@ -49,11 +49,46 @@ type Resolved =
 
 class StripeUnavailable extends Error {}
 
+/** `$9` / `$9.50` → cents. Test-mode sessions use inline price_data built from it. */
+export function displayPriceCents(displayPrice: string): number | null {
+  const m = /^\$(\d{1,5})(?:\.(\d{2}))?$/.exec(displayPrice.trim());
+  return m ? Number(m[1]) * 100 + Number(m[2] ?? 0) : null;
+}
+
+function bearerOrSessionCookie(req: any): string | undefined {
+  const header: string | undefined = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) return header;
+  const cookie: string = req.headers.cookie ?? '';
+  const m = /(?:^|;\s*)__session=([^;]+)/.exec(cookie);
+  return m ? `Bearer ${decodeURIComponent(m[1])}` : undefined;
+}
+
+/** Signed-in owner (Clerk header or same-origin __session cookie). */
+async function isOwnerRequest(req: any): Promise<boolean> {
+  const email = await verifyClerkToken(bearerOrSessionCookie(req));
+  return !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
+/** Signed-out owner: this IP produced an admin page hit in the last 30 days. */
+async function ipSeenAsAdmin(ip: string): Promise<boolean> {
+  try {
+    const row = await dbGet<{ n: number }>(
+      'SELECT 1 AS n FROM page_hits WHERE ip = ? AND is_admin = 1 AND ts_ms >= ? LIMIT 1',
+      ip, Date.now() - 30 * 86_400_000,
+    );
+    return !!row;
+  } catch {
+    return false;
+  }
+}
+
 async function resolvePaidOrder(product: WebProduct, sessionId: string): Promise<Resolved> {
   const existing = await findOrder(product.slug, sessionId);
   if (existing) return { status: 'paid', order: existing };
 
-  const stripe = getStripe();
+  // Owner test checkouts live in Stripe test mode; their ids say so.
+  const isTest = sessionId.startsWith('cs_test_');
+  const stripe = isTest ? getStripeTest() : getStripe();
   const priceId = resolveWebProductPriceId(product, process.env);
   if (!stripe || !priceId) throw new StripeUnavailable('stripe or price unconfigured');
 
@@ -70,7 +105,11 @@ async function resolvePaidOrder(product: WebProduct, sessionId: string): Promise
   const paidOk = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
   if (session.status !== 'complete' || !paidOk) return { status: 'unpaid' };
   const items: any[] = session.line_items?.data ?? [];
-  if (!items.some((li) => li?.price?.id === priceId)) return { status: 'not_found' };
+  // Test sessions carry inline price_data (no live price id in test mode), so
+  // they are matched on the server-set test marker instead.
+  if (isTest ? session.metadata?.test !== 'true' : !items.some((li) => li?.price?.id === priceId)) {
+    return { status: 'not_found' };
+  }
 
   const email: string = (session.customer_details?.email ?? session.customer_email ?? '').trim().toLowerCase();
   const input = {
@@ -135,32 +174,57 @@ export function registerWebProductRoutes(
       reply.status(429);
       return { error: 'Too many requests. Try again in a minute.' };
     }
-    const stripe = getStripe();
+    const owner = await isOwnerRequest(req);
+    const stripe = owner ? getStripeTest() : getStripe();
     const priceId = resolveWebProductPriceId(product, process.env);
+    const testCents = displayPriceCents(product.displayPrice);
+    if (owner && (!stripe || !testCents)) {
+      // Live mode is reserved for real buyers; never fall back to it for the owner.
+      reply.status(409);
+      return { error: 'Owner checkouts run in Stripe test mode, which is not configured (STRIPE_TEST_SECRET_KEY).' };
+    }
     if (!stripe || !priceId) {
       reply.status(503);
       return { error: 'Checkout is not available right now.' };
     }
+    // Deploy smokes: prove the route, price and Stripe client are wired without
+    // creating a live session that later shows up as an abandoned checkout.
+    const q = req.query as { dryRun?: string } | undefined;
+    if (q?.dryRun === '1') return { ok: true, dryRun: true, url: null };
 
+    const ownerIp = !owner && await ipSeenAsAdmin(req.ip);
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
     try {
+      const metadata: Record<string, string> = { web_product: product.slug };
+      if (owner) metadata.test = 'true';
+      if (ownerIp) metadata.owner_ip = 'true';
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: owner
+          ? [{ price_data: { currency: 'usd', unit_amount: testCents!, product_data: { name: `${product.name} (test)` } }, quantity: 1 }]
+          : [{ price: priceId, quantity: 1 }],
         customer_creation: 'always',
         allow_promotion_codes: true,
-        metadata: { web_product: product.slug },
+        // Abandoned-checkout recovery: on expiry Stripe mints a recovery URL.
+        // Stripe only emails it when promotional consent is collected, which
+        // errors until the Checkout ToS is accepted in the Dashboard
+        // (settings/checkout) — so consent is opt-in via env, not hardcoded.
+        ...(process.env.STRIPE_CHECKOUT_PROMO_CONSENT === '1' ? { consent_collection: { promotions: 'auto' as const } } : {}),
+        after_expiration: { recovery: { enabled: true, allow_promotion_codes: true } },
+        metadata,
         success_url: `${publicUrl}/projects/${product.slug}/thanks/?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${publicUrl}/projects/${product.slug}/?checkout=cancel`,
       });
-      try {
-        await dbRun(
-          'INSERT INTO funnel_events (event, ip_hash, tool, metadata) VALUES (?, ?, ?, ?)',
-          'checkout_start', hashIp(req.ip), product.slug,
-          JSON.stringify({ path: `/projects/${product.slug}/` }),
-        );
-      } catch (err: any) {
-        console.error('[web-products] funnel insert failed:', err?.message);
+      if (!owner) {
+        try {
+          await dbRun(
+            'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin) VALUES (?, ?, ?, ?, ?)',
+            'checkout_start', hashIp(req.ip), product.slug,
+            JSON.stringify({ path: `/projects/${product.slug}/` }), ownerIp ? 1 : 0,
+          );
+        } catch (err: any) {
+          console.error('[web-products] funnel insert failed:', err?.message);
+        }
       }
       return { url: session.url };
     } catch (err: any) {

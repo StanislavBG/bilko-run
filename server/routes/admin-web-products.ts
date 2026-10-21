@@ -23,6 +23,11 @@ export function registerAdminWebProductRoutes(
     const days = Number.isFinite(rawDays) ? Math.min(365, Math.max(1, rawDays)) : 30;
     const sinceMs = Date.now() - days * DAY_MS;
     const sinceDate = new Date(sinceMs).toISOString().slice(0, 10);
+    // Owner traffic is excluded unless exclude_self=0. Test-mode (cs_test_)
+    // orders and downloads are never counted: they are owner tests by construction.
+    const excludeSelf = String((req.query as { exclude_self?: unknown })?.exclude_self ?? '1') !== '0';
+    const selfSql = excludeSelf ? ' AND COALESCE(is_admin, 0) = 0' : '';
+    const NOT_TEST = " AND checkout_session_id NOT LIKE 'cs\\_test\\_%' ESCAPE '\\'";
 
     const entries = [];
     const daily: Array<{ date: string; slug: string; views: number; checkoutStarts: number; orders: number; downloads: number }> = [];
@@ -30,37 +35,43 @@ export function registerAdminWebProductRoutes(
     for (const p of products) {
       const pattern = likePrefix(p.slug);
       const [views, checkouts, orders, downloads, lastOrder, lastDownload, release,
-        viewsByDay, checkoutsByDay, ordersByDay, downloadsByDay] = await Promise.all([
+        viewsByDay, checkoutsByDay, ordersByDay, downloadsByDay, outcomes] = await Promise.all([
         dbGet<{ views: number; visitors: number }>(
           `SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM page_views
-           WHERE date >= ? AND path LIKE ? ESCAPE '\\' AND COALESCE(is_bot, 0) = 0`, sinceDate, pattern),
+           WHERE date >= ? AND path LIKE ? ESCAPE '\\' AND COALESCE(is_bot, 0) = 0${selfSql}`, sinceDate, pattern),
         dbGet<{ n: number }>(
-          `SELECT COUNT(*) AS n FROM funnel_events WHERE event = 'checkout_start' AND tool = ? AND date(created_at) >= ?`,
+          `SELECT COUNT(*) AS n FROM funnel_events WHERE event = 'checkout_start' AND tool = ? AND date(created_at) >= ?${selfSql}`,
           p.slug, sinceDate),
         dbGet<{ n: number; revenue: number }>(
-          `SELECT COUNT(*) AS n, COALESCE(SUM(amount_total), 0) AS revenue FROM web_product_orders WHERE slug = ? AND created_at >= ?`,
+          `SELECT COUNT(*) AS n, COALESCE(SUM(amount_total), 0) AS revenue FROM web_product_orders WHERE slug = ? AND created_at >= ?${NOT_TEST}`,
           p.slug, sinceMs),
         dbGet<{ n: number; sessions: number }>(
-          `SELECT COUNT(*) AS n, COUNT(DISTINCT checkout_session_id) AS sessions FROM web_product_downloads WHERE slug = ? AND created_at >= ?`,
+          `SELECT COUNT(*) AS n, COUNT(DISTINCT checkout_session_id) AS sessions FROM web_product_downloads WHERE slug = ? AND created_at >= ?${NOT_TEST}`,
           p.slug, sinceMs),
-        dbGet<{ t: number | null }>(`SELECT MAX(created_at) AS t FROM web_product_orders WHERE slug = ?`, p.slug),
-        dbGet<{ t: number | null }>(`SELECT MAX(created_at) AS t FROM web_product_downloads WHERE slug = ?`, p.slug),
+        dbGet<{ t: number | null }>(`SELECT MAX(created_at) AS t FROM web_product_orders WHERE slug = ?${NOT_TEST}`, p.slug),
+        dbGet<{ t: number | null }>(`SELECT MAX(created_at) AS t FROM web_product_downloads WHERE slug = ?${NOT_TEST}`, p.slug),
         p.release
           ? dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM web_product_releases WHERE slug = ? AND version = ?`, p.slug, p.release.version)
           : Promise.resolve(null),
         dbAll<{ d: string; n: number }>(
           `SELECT date AS d, COUNT(*) AS n FROM page_views
-           WHERE date >= ? AND path LIKE ? ESCAPE '\\' AND COALESCE(is_bot, 0) = 0 GROUP BY date`, sinceDate, pattern),
+           WHERE date >= ? AND path LIKE ? ESCAPE '\\' AND COALESCE(is_bot, 0) = 0${selfSql} GROUP BY date`, sinceDate, pattern),
         dbAll<{ d: string; n: number }>(
           `SELECT date(created_at) AS d, COUNT(*) AS n FROM funnel_events
-           WHERE event = 'checkout_start' AND tool = ? AND date(created_at) >= ? GROUP BY d`, p.slug, sinceDate),
+           WHERE event = 'checkout_start' AND tool = ? AND date(created_at) >= ?${selfSql} GROUP BY d`, p.slug, sinceDate),
         dbAll<{ d: string; n: number }>(
           `SELECT date(created_at / 1000, 'unixepoch') AS d, COUNT(*) AS n FROM web_product_orders
-           WHERE slug = ? AND created_at >= ? GROUP BY d`, p.slug, sinceMs),
+           WHERE slug = ? AND created_at >= ?${NOT_TEST} GROUP BY d`, p.slug, sinceMs),
         dbAll<{ d: string; n: number }>(
           `SELECT date(created_at / 1000, 'unixepoch') AS d, COUNT(*) AS n FROM web_product_downloads
-           WHERE slug = ? AND created_at >= ? GROUP BY d`, p.slug, sinceMs),
+           WHERE slug = ? AND created_at >= ?${NOT_TEST} GROUP BY d`, p.slug, sinceMs),
+        // Written by the Stripe webhook, which already skips owner/test sessions.
+        dbAll<{ event: string; n: number }>(
+          `SELECT event, COUNT(*) AS n FROM funnel_events
+           WHERE event IN ('checkout_expired', 'checkout_recovered') AND tool = ? AND date(created_at) >= ? GROUP BY event`,
+          p.slug, sinceDate),
       ]);
+      const outcome = (e: string) => outcomes.find((o) => o.event === e)?.n ?? 0;
 
       entries.push({
         slug: p.slug,
@@ -71,6 +82,8 @@ export function registerAdminWebProductRoutes(
         views: views?.views ?? 0,
         uniqueVisitors: views?.visitors ?? 0,
         checkoutStarts: checkouts?.n ?? 0,
+        checkoutsExpired: outcome('checkout_expired'),
+        checkoutsRecovered: outcome('checkout_recovered'),
         orders: orders?.n ?? 0,
         revenueCents: orders?.revenue ?? 0,
         downloads: downloads?.n ?? 0,
@@ -92,6 +105,6 @@ export function registerAdminWebProductRoutes(
       daily.push(...[...rows.values()].sort((a, b) => a.date.localeCompare(b.date)));
     }
 
-    return { days, products: entries, daily };
+    return { days, excludeSelf, products: entries, daily };
   });
 }

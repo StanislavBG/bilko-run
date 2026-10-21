@@ -15,6 +15,8 @@ interface WebProductEntry {
   views: number;
   uniqueVisitors: number;
   checkoutStarts: number;
+  checkoutsExpired: number;
+  checkoutsRecovered: number;
   orders: number;
   revenueCents: number;
   downloads: number;
@@ -103,6 +105,8 @@ function ProductCard({ p }: { p: WebProductEntry }) {
       </div>
 
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-warm-700">
+        <span>Expired checkouts: <span className="font-bold text-warm-900">{p.checkoutsExpired}</span></span>
+        <span>Recovered: <span className="font-bold text-warm-900">{p.checkoutsRecovered}</span></span>
         <span>Revenue: <span className="font-bold text-warm-900">{dollars(p.revenueCents)}</span></span>
         <span>Last order: <span className="font-medium">{formatPt(p.lastOrderAt)}</span></span>
         <span>Last download: <span className="font-medium">{formatPt(p.lastDownloadAt)}</span></span>
@@ -111,8 +115,10 @@ function ProductCard({ p }: { p: WebProductEntry }) {
   );
 }
 
-export function WebProductsTab({ days }: TabProps) {
-  const { data, error, loading } = useAdminResource<WebProductsResponse>(`/admin/web-products?days=${days}`);
+export function WebProductsTab({ days, excludeSelf }: TabProps) {
+  const { data, error, loading } = useAdminResource<WebProductsResponse>(
+    `/admin/web-products?days=${days}&exclude_self=${excludeSelf ? '1' : '0'}`,
+  );
   if (!data) return <LoadingState loading={loading} error={error} label="web products" />;
   if (data.products.length === 0) {
     return <div className="text-warm-400 text-center py-12">No web products yet</div>;
@@ -120,6 +126,9 @@ export function WebProductsTab({ days }: TabProps) {
   const nameBySlug = new Map(data.products.map(p => [p.slug, p.name]));
   return (
     <div className="space-y-6">
+      <p className="text-xs text-warm-500">
+        Stripe test-mode orders are never counted. {excludeSelf ? 'Owner views and checkout starts are excluded.' : 'Owner traffic is included.'}
+      </p>
       {data.products.map(p => <ProductCard key={p.slug} p={p} />)}
 
       <div className="bg-white rounded-xl border border-warm-200/60 p-5">

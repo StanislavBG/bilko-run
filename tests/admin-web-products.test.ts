@@ -63,6 +63,12 @@ beforeEach(async () => {
   await fe('fixture-skills', 20);
   await fe('other', 0);
   await fe('fixture-skills', 0, 'page_view');
+  await fe('fixture-skills', 0, 'checkout_expired');
+  await fe('fixture-skills', 1, 'checkout_expired');
+  await fe('fixture-skills', 1, 'checkout_recovered');
+  // Owner traffic: an admin page view and an owner-IP checkout start.
+  await dbRun('INSERT INTO page_views (path, date, visitor_id, is_bot, is_admin) VALUES (?, ?, ?, 0, 1)', '/projects/fixture-skills/', dayStr(0), 'owner');
+  await dbRun('INSERT INTO funnel_events (event, tool, created_at, is_admin) VALUES (?, ?, ?, 1)', 'checkout_start', 'fixture-skills', ts(0));
 
   const order = (id: string, ago: number, amount: number, slug = 'fixture-skills') =>
     dbRun('INSERT INTO web_product_orders (checkout_session_id, slug, email, amount_total, currency, payment_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -71,6 +77,7 @@ beforeEach(async () => {
   await order('cs_2', 1.5, 900);
   await order('cs_old', 40, 900);
   await order('cs_other', 0.5, 500, 'other');
+  await order('cs_test_owner1', 0.5, 900);
 
   const dl = (session: string, ago: number) =>
     dbRun('INSERT INTO web_product_downloads (slug, version, checkout_session_id, via, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -78,6 +85,7 @@ beforeEach(async () => {
   await dl('cs_1', 0.5);
   await dl('cs_1', 0.4);
   await dl('cs_2', 1.5);
+  await dl('cs_test_owner1', 0.5);
 
   await dbRun('INSERT INTO web_product_releases (slug, version, filename, sha256, bytes, content, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     'fixture-skills', '1.0.0', 'fixture.zip', 'a'.repeat(64), 3, Buffer.from('zip'), Date.now());
@@ -104,6 +112,14 @@ describe('GET /api/admin/web-products', () => {
     });
     expect(p.lastOrderAt).toBeGreaterThan(0);
     expect(p.lastDownloadAt).toBeGreaterThan(0);
+    expect(p).toMatchObject({ checkoutsExpired: 2, checkoutsRecovered: 1 });
+    expect(body.excludeSelf).toBe(true);
+  });
+
+  it('exclude_self=0 counts owner views and checkout starts, but never test-mode orders', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7&exclude_self=0' });
+    const p = res.json().products[0];
+    expect(p).toMatchObject({ views: 4, checkoutStarts: 3, orders: 2, revenueCents: 1800, downloads: 3 });
   });
 
   it('returns a daily series for the window', async () => {

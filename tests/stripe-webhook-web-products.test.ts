@@ -5,6 +5,7 @@ const listLineItems = vi.fn();
 const retrieve = vi.fn();
 const saveOneTimePurchase = vi.fn(async () => {});
 const recordOrder = vi.fn(async () => {});
+const dbRun = vi.fn(async (..._args: unknown[]) => {});
 
 vi.mock('../shared/web-products.js', async (orig) => {
   const actual = await orig<typeof import('../shared/web-products.js')>();
@@ -38,7 +39,7 @@ vi.mock('../server/services/stripe.js', () => ({
 vi.mock('../server/services/tokens.js', () => ({
   creditTokens: async () => {}, grantFreeTokens: async () => {}, hasTokenAccount: async () => true,
 }));
-vi.mock('../server/db.js', () => ({ dbRun: async () => {} }));
+vi.mock('../server/db.js', () => ({ dbRun }));
 
 async function build() {
   const { registerStripeRoutes } = await import('../server/routes/stripe.js');
@@ -133,5 +134,35 @@ describe('webhook web-product orders', () => {
     const res = await app.inject({ method: 'GET', url: '/checkout/success?session_id=cs_test_wp1' });
     await app.close();
     expect(res.statusCode).toBe(402);
+  });
+
+  async function expire(metadata: Record<string, string>) {
+    const app = await build();
+    const res = await app.inject({
+      method: 'POST', url: '/api/stripe/webhook',
+      payload: { type: 'checkout.session.expired', data: { object: { id: 'cs_live_exp1', metadata } } },
+    });
+    await app.close();
+    return res.statusCode;
+  }
+  const funnelCalls = (event: string) => dbRun.mock.calls.filter((c) => String(c[0]).includes('funnel_events') && c[1] === event);
+
+  it('records a real visitor\'s expired web-product checkout for the funnel', async () => {
+    expect(await expire({ web_product: 'demo-pack' })).toBe(200);
+    expect(funnelCalls('checkout_expired')).toHaveLength(1);
+    expect(funnelCalls('checkout_expired')[0][2]).toBe('demo-pack');
+  });
+
+  it('skips owner and test-mode expirations and unknown products', async () => {
+    await expire({ web_product: 'demo-pack', test: 'true' });
+    await expire({ web_product: 'demo-pack', owner_ip: 'true' });
+    await expire({ web_product: 'nope' });
+    expect(funnelCalls('checkout_expired')).toHaveLength(0);
+  });
+
+  it('records a recovered checkout when a completed session came from a recovery link', async () => {
+    expect(await post({ recovered_from: 'cs_live_exp1' })).toBe(200);
+    expect(recordOrder).toHaveBeenCalledOnce();
+    expect(funnelCalls('checkout_recovered')).toHaveLength(1);
   });
 });

@@ -672,6 +672,8 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['version', 'TEXT'],
     // Deployment environment ('prod' | 'dev' | 'test'); only telemetry ingest writes it.
     ['env', 'TEXT'],
+    // 1 = the owner (web-products checkout_start from an IP with admin page hits).
+    ['is_admin', 'INTEGER DEFAULT 0'],
   ],
   app_logs: [['env', 'TEXT']],
   app_errors: [['env', 'TEXT']],

@@ -20,6 +20,78 @@ const EV_EPIC = 'epic.create';
 // funnel_events.version existed still attribute.
 const FUNNEL_VERSION = `COALESCE(version, json_extract(metadata, '$.appVersion'))`;
 
+// Installs that are not real users. Unpackaged e2e runs report Electron's own
+// version (e.g. '42.11.10') because app.getVersion() falls back to it; stubs and
+// probes report '0.0.0-<tag>'; a few early rows report ''. Session Manager is
+// 0.x, so any major >= 30 is an Electron version. NULL is "unknown", kept.
+// `col` is a trusted SQL literal, never user input.
+function testVersionSql(col: string): string {
+  return `COALESCE((${col} = '' OR ${col} LIKE '0.0.0-%'`
+    + ` OR CAST(SUBSTR(${col}, 1, INSTR(${col}, '.') - 1) AS INTEGER) >= 30), 0)`;
+}
+
+// The owner's own install(s), dropped when exclude_self is on (the default, as
+// on every other admin tab). Kept server-side so the id never ships in the
+// client bundle; SM_OWNER_INSTALL_IDS (comma-separated) overrides.
+const DEFAULT_OWNER_INSTALL_IDS = ['9c6b8ecd-b3da-400d-b795-0c0c32504731'];
+const MAX_EXCLUDED = 50;
+const INSTALL_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
+const PREFIX_LEN = 8;
+const PER_INSTALL_LIMIT = 100;
+
+function parseIdList(raw: unknown): string[] {
+  const parts = (Array.isArray(raw) ? raw : [raw])
+    .filter((v): v is string => typeof v === 'string')
+    .flatMap((v) => v.split(','))
+    .map((v) => v.trim())
+    .filter((v) => INSTALL_ID_RE.test(v));
+  return [...new Set(parts)].slice(0, MAX_EXCLUDED);
+}
+
+function ownerInstallIds(): string[] {
+  const fromEnv = parseIdList(process.env.SM_OWNER_INSTALL_IDS ?? '');
+  return fromEnv.length > 0 ? fromEnv : DEFAULT_OWNER_INSTALL_IDS;
+}
+
+type Filter = { sql: string; args: unknown[] };
+
+function andAll(parts: Filter[]): Filter {
+  return { sql: parts.map((p) => `(${p.sql})`).join(' AND '), args: parts.flatMap((p) => p.args) };
+}
+
+function notInList(col: string, ids: string[]): Filter {
+  if (ids.length === 0) return { sql: '1 = 1', args: [] };
+  return { sql: `COALESCE(${col}, '') NOT IN (${ids.map(() => '?').join(', ')})`, args: ids };
+}
+
+// app_installs rows: env + real version + not excluded.
+function installFilter(env: Filter, includeTest: boolean, excluded: string[]): Filter {
+  return andAll([
+    env,
+    includeTest ? { sql: '1 = 1', args: [] } : { sql: `NOT ${testVersionSql('app_version')}`, args: [] },
+    notInList('install_id', excluded),
+  ]);
+}
+
+// Event/log/error rows: env + the row's own version is real + its install is
+// not a test install + not excluded. Both checks are needed: a row carries its
+// own version, but rows written before that stamp only link via visitor_id.
+function rowFilter(
+  env: Filter, includeTest: boolean, excluded: string[], visitorCol: string, versionExpr: string,
+): Filter {
+  const parts: Filter[] = [env];
+  if (!includeTest) {
+    parts.push({ sql: `NOT ${testVersionSql(versionExpr)}`, args: [] });
+    parts.push({
+      sql: `COALESCE(${visitorCol}, '') NOT IN (SELECT install_id FROM app_installs
+              WHERE app = ? AND ${testVersionSql('app_version')})`,
+      args: [APP],
+    });
+  }
+  parts.push(notInList(visitorCol, excluded));
+  return andAll(parts);
+}
+
 async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
 }
@@ -64,13 +136,27 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
     const query = req.query as Record<string, unknown> | undefined;
     const days = clampDays(query?.days);
     const env = parseEnvSelector(query?.env);
+    const includeTest = String(query?.includeTest ?? '0') === '1';
+    const excludeSelf = String(query?.exclude_self ?? '1') !== '0';
+    const excluded = [
+      ...new Set([...(excludeSelf ? ownerInstallIds() : []), ...parseIdList(query?.excludeInstall)]),
+    ];
     const ev = envPredicate(env);
     const evE = envPredicate(env, 'e.env');
+    const instF = installFilter(ev, includeTest, excluded);
+    const evtF = rowFilter(ev, includeTest, excluded, 'visitor_id', FUNNEL_VERSION);
+    const errF = rowFilter(ev, includeTest, excluded, 'visitor_id', 'version');
+    const errEF = rowFilter(evE, includeTest, excluded, 'e.visitor_id', 'e.version');
+    const logF = errF;
     const now = Math.floor(Date.now() / 1000);
     const since = now - days * 86_400;
     const since7 = now - 7 * 86_400;
+    const since14 = now - 14 * 86_400;
     const since30 = now - 30 * 86_400;
-    const sinceIso = new Date(since * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    const toIso = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    const sinceIso = toIso(since);
+    const since7Iso = toIso(since7);
+    const since14Iso = toIso(since14);
 
     const [
       installTotals,
@@ -84,6 +170,9 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       issuePlatforms,
       errorsByVersion,
       errorsDaily,
+      perInstallRows,
+      perInstallUsage,
+      perInstallErrors,
     ] = await Promise.all([
       // ---- installs -------------------------------------------------------
       // app_installs is the upsert written by POST /api/telemetry/install,
@@ -96,33 +185,33 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN last_seen_at  > ? THEN 1 ELSE 0 END) AS active7,
                 SUM(CASE WHEN last_seen_at  > ? THEN 1 ELSE 0 END) AS active30,
                 SUM(CASE WHEN first_seen_at > ? THEN 1 ELSE 0 END) AS new7
-         FROM app_installs WHERE app = ? AND ${ev.sql}`,
-        since7, since30, since7, APP, ...ev.args,
+         FROM app_installs WHERE app = ? AND ${instF.sql}`,
+        since7, since30, since7, APP, ...instF.args,
       ), null),
 
       safeQuery(() => dbAll<{ version: string | null; installs: number; active7: number }>(
         `SELECT app_version AS version,
                 COUNT(*) AS installs,
                 SUM(CASE WHEN last_seen_at > ? THEN 1 ELSE 0 END) AS active7
-         FROM app_installs WHERE app = ? AND ${ev.sql}
+         FROM app_installs WHERE app = ? AND ${instF.sql}
          GROUP BY app_version
          ORDER BY installs DESC
          LIMIT 50`,
-        since7, APP, ...ev.args,
+        since7, APP, ...instF.args,
       ), []),
 
       safeQuery(() => dbAll<{ platform: string | null; arch: string | null; installs: number }>(
         `SELECT platform, arch, COUNT(*) AS installs
-         FROM app_installs WHERE app = ? AND ${ev.sql}
+         FROM app_installs WHERE app = ? AND ${instF.sql}
          GROUP BY platform, arch
          ORDER BY installs DESC
          LIMIT 50`,
-        APP, ...ev.args,
+        APP, ...instF.args,
       ), []),
 
       safeQuery(() => dbAll<{ total_mem_mb: number | null; cpu_count: number | null }>(
-        `SELECT total_mem_mb, cpu_count FROM app_installs WHERE app = ? AND ${ev.sql}`,
-        APP, ...ev.args,
+        `SELECT total_mem_mb, cpu_count FROM app_installs WHERE app = ? AND ${instF.sql}`,
+        APP, ...instF.args,
       ), []),
 
       // ---- usage ----------------------------------------------------------
@@ -135,11 +224,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN event = ? THEN 1 ELSE 0 END) AS epics,
                 COUNT(DISTINCT visitor_id) AS installsSeen
          FROM funnel_events
-         WHERE tool = ? AND created_at > ? AND ${ev.sql}
+         WHERE tool = ? AND created_at > ? AND ${evtF.sql}
          GROUP BY date
          ORDER BY date DESC
          LIMIT ?`,
-        EV_LAUNCH, EV_SESSION, EV_EPIC, APP, sinceIso, ...ev.args, days,
+        EV_LAUNCH, EV_SESSION, EV_EPIC, APP, sinceIso, ...evtF.args, days,
       ), []),
 
       safeQuery(() => dbAll<{ version: string | null; launches: number; sessions: number }>(
@@ -147,11 +236,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN event = ? THEN 1 ELSE 0 END) AS launches,
                 SUM(CASE WHEN event = ? THEN 1 ELSE 0 END) AS sessions
          FROM funnel_events
-         WHERE tool = ? AND created_at > ? AND ${ev.sql}
+         WHERE tool = ? AND created_at > ? AND ${evtF.sql}
          GROUP BY version
          ORDER BY launches DESC
          LIMIT 50`,
-        EV_LAUNCH, EV_SESSION, APP, sinceIso, ...ev.args,
+        EV_LAUNCH, EV_SESSION, APP, sinceIso, ...evtF.args,
       ), []),
 
       // ---- issues ---------------------------------------------------------
@@ -171,11 +260,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 MIN(created_at) AS firstSeen,
                 MAX(created_at) AS lastSeen
          FROM app_errors
-         WHERE app = ? AND created_at > ? AND ${ev.sql}
+         WHERE app = ? AND created_at > ? AND ${errF.sql}
          GROUP BY signature
          ORDER BY installsAffected DESC, occurrences DESC
          LIMIT ?`,
-        APP, since, ...ev.args, ISSUE_LIMIT,
+        APP, since, ...errF.args, ISSUE_LIMIT,
       ), []),
 
       safeQuery(() => dbAll<{ signature: string; version: string | null }>(
@@ -183,8 +272,8 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 COALESCE(name, 'Error') || '|' || SUBSTR(COALESCE(stack, ''), 1, 80) AS signature,
                 version
          FROM app_errors
-         WHERE app = ? AND created_at > ? AND version IS NOT NULL AND ${ev.sql}`,
-        APP, since, ...ev.args,
+         WHERE app = ? AND created_at > ? AND version IS NOT NULL AND ${errF.sql}`,
+        APP, since, ...errF.args,
       ), []),
 
       // Real platform, not a UA guess: every beacon stamps platform into
@@ -202,9 +291,9 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
          FROM app_errors e
          LEFT JOIN app_installs i
                 ON i.install_id = e.visitor_id AND i.app = e.app
-         WHERE e.app = ? AND e.created_at > ? AND ${evE.sql}
+         WHERE e.app = ? AND e.created_at > ? AND ${errEF.sql}
          GROUP BY signature, platform`,
-        APP, since, ...evE.args,
+        APP, since, ...errEF.args,
       ), []),
 
       // ---- errors ---------------------------------------------------------
@@ -216,11 +305,11 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN level = 'warn'  THEN 1 ELSE 0 END) AS warns,
                 COUNT(DISTINCT visitor_id) AS installsAffected
          FROM app_logs
-         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${ev.sql}
+         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${logF.sql}
          GROUP BY version
          ORDER BY errors DESC
          LIMIT 50`,
-        APP, since, ...ev.args,
+        APP, since, ...logF.args,
       ), []),
 
       safeQuery(() => dbAll<{ date: string; errors: number; warns: number }>(
@@ -228,11 +317,55 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
                 SUM(CASE WHEN level = 'error' THEN 1 ELSE 0 END) AS errors,
                 SUM(CASE WHEN level = 'warn'  THEN 1 ELSE 0 END) AS warns
          FROM app_logs
-         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${ev.sql}
+         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${logF.sql}
          GROUP BY date
          ORDER BY date DESC
          LIMIT ?`,
-        APP, since, ...ev.args, days,
+        APP, since, ...logF.args, days,
+      ), []),
+
+      // ---- per install ----------------------------------------------------
+      // funnel_events.visitor_id and app_errors.visitor_id ARE the install id.
+      // Last 7d vs the 7d before it, independent of ?days.
+      safeQuery(() => dbAll<{
+        install_id: string; app_version: string | null; platform: string | null; arch: string | null;
+        first_seen_at: number; last_seen_at: number;
+      }>(
+        `SELECT install_id, app_version, platform, arch, first_seen_at, last_seen_at
+         FROM app_installs WHERE app = ? AND ${instF.sql}
+         ORDER BY last_seen_at DESC
+         LIMIT ?`,
+        APP, ...instF.args, PER_INSTALL_LIMIT,
+      ), []),
+
+      safeQuery(() => dbAll<{
+        visitor_id: string;
+        launches7: number; sessions7: number; epics7: number;
+        launchesPrev: number; sessionsPrev: number; epicsPrev: number;
+      }>(
+        `SELECT visitor_id,
+                SUM(CASE WHEN event = ? AND created_at >  ? THEN 1 ELSE 0 END) AS launches7,
+                SUM(CASE WHEN event = ? AND created_at >  ? THEN 1 ELSE 0 END) AS sessions7,
+                SUM(CASE WHEN event = ? AND created_at >  ? THEN 1 ELSE 0 END) AS epics7,
+                SUM(CASE WHEN event = ? AND created_at <= ? THEN 1 ELSE 0 END) AS launchesPrev,
+                SUM(CASE WHEN event = ? AND created_at <= ? THEN 1 ELSE 0 END) AS sessionsPrev,
+                SUM(CASE WHEN event = ? AND created_at <= ? THEN 1 ELSE 0 END) AS epicsPrev
+         FROM funnel_events
+         WHERE tool = ? AND created_at > ? AND visitor_id IS NOT NULL AND ${evtF.sql}
+         GROUP BY visitor_id`,
+        EV_LAUNCH, since7Iso, EV_SESSION, since7Iso, EV_EPIC, since7Iso,
+        EV_LAUNCH, since7Iso, EV_SESSION, since7Iso, EV_EPIC, since7Iso,
+        APP, since14Iso, ...evtF.args,
+      ), []),
+
+      safeQuery(() => dbAll<{ visitor_id: string; errors7: number; errorsPrev: number }>(
+        `SELECT visitor_id,
+                SUM(CASE WHEN created_at >  ? THEN 1 ELSE 0 END) AS errors7,
+                SUM(CASE WHEN created_at <= ? THEN 1 ELSE 0 END) AS errorsPrev
+         FROM app_errors
+         WHERE app = ? AND created_at > ? AND visitor_id IS NOT NULL AND ${errF.sql}
+         GROUP BY visitor_id`,
+        since7, since7, APP, since14, ...errF.args,
       ), []),
     ]);
 
@@ -251,10 +384,38 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       if (!best || row.n > best.n) topPlatformBySig.set(row.signature, { platform, n: row.n });
     }
 
+    const usageById = new Map(perInstallUsage.map((r) => [r.visitor_id, r]));
+    const errorsById = new Map(perInstallErrors.map((r) => [r.visitor_id, r]));
+    // Privacy contract: only a short prefix of the anonymous install id leaves
+    // the server — enough to tell rows apart, not to address an install.
+    const perInstall = perInstallRows.map((r) => {
+      const u = usageById.get(r.install_id);
+      const e = errorsById.get(r.install_id);
+      return {
+        id: r.install_id.slice(0, PREFIX_LEN),
+        version: r.app_version ?? 'unknown',
+        platform: r.platform ?? 'unknown',
+        arch: r.arch ?? 'unknown',
+        firstSeen: r.first_seen_at ?? 0,
+        lastSeen: r.last_seen_at ?? 0,
+        last7: {
+          launches: u?.launches7 ?? 0, sessions: u?.sessions7 ?? 0,
+          epics: u?.epics7 ?? 0, errors: e?.errors7 ?? 0,
+        },
+        prev7: {
+          launches: u?.launchesPrev ?? 0, sessions: u?.sessionsPrev ?? 0,
+          epics: u?.epicsPrev ?? 0, errors: e?.errorsPrev ?? 0,
+        },
+      };
+    });
+
     return {
       generatedAt: now,
       windowDays: days,
       env,
+      includeTest,
+      excludeSelf,
+      excludedInstalls: excluded.length,
       installs: {
         total: installTotals?.total ?? 0,
         active7: installTotals?.active7 ?? 0,
@@ -315,6 +476,7 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
           .reverse()
           .map((r) => ({ date: r.date, errors: r.errors ?? 0, warns: r.warns ?? 0 })),
       },
+      perInstall,
     };
   });
 }

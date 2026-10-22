@@ -332,6 +332,116 @@ describe('GET /api/admin/session-manager/usage', () => {
     expect(all.installs.total).toBe(3);
   });
 
+  it('drops Electron-version, 0.0.0-* and empty-version installs unless ?includeTest=1', async () => {
+    asAdmin();
+    await addInstall('real', { version: '0.119.1' });
+    await addInstall('e2e', { version: '42.11.10' });
+    await addInstall('stub', { version: '0.0.0-stub' });
+    await addInstall('probe', { version: '0.0.0-probe' });
+    await addInstall('blank', { version: '' });
+    // Legacy error row with no version: attributed via the install it came from.
+    await dbRun(
+      `INSERT INTO app_errors (app, version, name, msg, stack, visitor_id, context_json, created_at)
+       VALUES (?, NULL, 'E2eOnly', 'm', 'at e2e', 'e2e', '{}', ?)`,
+      APP, now - 600,
+    );
+    await addError({ name: 'RealError', stack: 'at real', visitor: 'real', version: '0.119.1' });
+    await addError({ name: 'StubError', stack: 'at stub', visitor: 'nobody', version: '0.0.0-stub' });
+    await dbRun(
+      `INSERT INTO funnel_events (event, tool, visitor_id, version) VALUES ('app.launch', ?, 'e2e', '42.11.10')`,
+      APP,
+    );
+    await dbRun(
+      `INSERT INTO funnel_events (event, tool, visitor_id, version) VALUES ('app.launch', ?, 'real', '0.119.1')`,
+      APP,
+    );
+    await dbRun(
+      `INSERT INTO app_logs (app, version, level, msg, visitor_id, created_at)
+       VALUES (?, '42.11.10', 'error', 'm', 'e2e', ?)`,
+      APP, now - 600,
+    );
+
+    const def = (await get()).json();
+    expect(def.includeTest).toBe(false);
+    expect(def.installs.total).toBe(1);
+    expect(def.installs.byVersion.map((r: any) => r.version)).toEqual(['0.119.1']);
+    expect(def.issues.map((i: any) => i.name)).toEqual(['RealError']);
+    expect(def.usage.daily[0].launches).toBe(1);
+    expect(def.errors.byVersion).toEqual([]);
+    expect(def.perInstall).toHaveLength(1);
+
+    const all = (await get('/api/admin/session-manager/usage?includeTest=1')).json();
+    expect(all.includeTest).toBe(true);
+    expect(all.installs.total).toBe(5);
+    expect(all.issues.map((i: any) => i.name).sort()).toEqual(['E2eOnly', 'RealError', 'StubError']);
+    expect(all.usage.daily[0].launches).toBe(2);
+    expect(all.errors.byVersion).toHaveLength(1);
+  });
+
+  it('?excludeInstall= and exclude_self drop those installs from every section', async () => {
+    asAdmin();
+    const owner = '9c6b8ecd-b3da-400d-b795-0c0c32504731';
+    for (const id of ['keep', 'drop1', 'drop2', owner]) {
+      await addInstall(id);
+      await addError({ name: `Err-${id}`, stack: `at ${id}`, visitor: id });
+      await dbRun(`INSERT INTO funnel_events (event, tool, visitor_id) VALUES ('app.launch', ?, ?)`, APP, id);
+      await dbRun(
+        `INSERT INTO app_logs (app, version, level, msg, visitor_id, created_at)
+         VALUES (?, '0.81.0', 'error', 'm', ?, ?)`,
+        APP, id, now - 600,
+      );
+    }
+
+    // Owner is excluded by default (exclude_self defaults on).
+    const def = (await get()).json();
+    expect(def.excludeSelf).toBe(true);
+    expect(def.installs.total).toBe(3);
+
+    const b = (await get('/api/admin/session-manager/usage?excludeInstall=drop1,drop2,bad%20id')).json();
+    expect(b.installs.total).toBe(1);
+    expect(b.issues.map((i: any) => i.name)).toEqual(['Err-keep']);
+    expect(b.usage.daily[0]).toMatchObject({ launches: 1, installsSeen: 1 });
+    expect(b.errors.byVersion[0]).toMatchObject({ errors: 1, installsAffected: 1 });
+    expect(b.perInstall.map((r: any) => r.id)).toEqual(['keep']);
+
+    const withSelf = (await get('/api/admin/session-manager/usage?exclude_self=0')).json();
+    expect(withSelf.excludeSelf).toBe(false);
+    expect(withSelf.installs.total).toBe(4);
+  });
+
+  it('returns perInstall rows with an 8-char prefix and 7d vs prior-7d counts', async () => {
+    asAdmin();
+    const id = 'f5adeb4a-1111-2222-3333-444455556666';
+    await addInstall(id, { version: '0.117.0', platform: 'darwin', arch: 'arm64', first: now - 20 * 86_400 });
+    const iso = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    const ev = (event: string, ago: number) => dbRun(
+      `INSERT INTO funnel_events (event, tool, visitor_id, version, created_at) VALUES (?, ?, ?, '0.117.0', ?)`,
+      event, APP, id, iso(now - ago),
+    );
+    await ev('app.launch', 3_600);
+    await ev('app.launch', 2 * 86_400);
+    await ev('session.open', 3_600);
+    await ev('app.launch', 10 * 86_400);
+    await ev('epic.create', 10 * 86_400);
+    await ev('app.launch', 20 * 86_400);  // outside both windows
+    await addError({ name: 'A', stack: 'at a', visitor: id, version: '0.117.0', created: now - 600 });
+    await addError({ name: 'B', stack: 'at b', visitor: id, version: '0.117.0', created: now - 9 * 86_400 });
+
+    const res = await get();
+    const { perInstall } = res.json();
+    expect(perInstall).toEqual([{
+      id: 'f5adeb4a',
+      version: '0.117.0',
+      platform: 'darwin',
+      arch: 'arm64',
+      firstSeen: now - 20 * 86_400,
+      lastSeen: now - 3_600,
+      last7: { launches: 2, sessions: 1, epics: 0, errors: 1 },
+      prev7: { launches: 1, sessions: 0, epics: 1, errors: 1 },
+    }]);
+    expect(res.payload).not.toContain(id);
+  });
+
   it('returns no field that could carry PII', async () => {
     asAdmin();
     await addInstall('i1');

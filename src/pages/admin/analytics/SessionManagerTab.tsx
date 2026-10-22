@@ -15,6 +15,8 @@ interface UsageResponse {
   generatedAt: number;
   windowDays: number;
   env?: string;
+  includeTest?: boolean;
+  excludeSelf?: boolean;
   installs: {
     total: number;
     active7: number;
@@ -43,6 +45,23 @@ interface UsageResponse {
     byVersion: Array<{ version: string; errors: number; warns: number; installsAffected: number }>;
     daily: Array<{ date: string; errors: number; warns: number }>;
   };
+  perInstall?: Array<{
+    id: string;
+    version: string;
+    platform: string;
+    arch: string;
+    firstSeen: number;
+    lastSeen: number;
+    last7: InstallCounts;
+    prev7: InstallCounts;
+  }>;
+}
+
+interface InstallCounts { launches: number; sessions: number; epics: number; errors: number }
+
+// "12 / 4" — last 7d against the 7d before it.
+function vsPrev(cur: number, prev: number): string {
+  return `${cur} / ${prev}`;
 }
 
 const PT_FORMAT = new Intl.DateTimeFormat('en-US', {
@@ -116,10 +135,12 @@ function Table({
   );
 }
 
-export function SessionManagerTab({ days }: TabProps) {
+export function SessionManagerTab({ days, excludeSelf }: TabProps) {
   const [env, setEnv] = useState<Env>('prod');
+  const [includeTest, setIncludeTest] = useState(false);
   const { data, error, loading } = useAdminResource<UsageResponse>(
-    `/admin/session-manager/usage?days=${days}&env=${env}`,
+    `/admin/session-manager/usage?days=${days}&env=${env}`
+      + `&exclude_self=${excludeSelf ? '1' : '0'}&includeTest=${includeTest ? '1' : '0'}`,
   );
 
   const picker = (
@@ -136,6 +157,10 @@ export function SessionManagerTab({ days }: TabProps) {
           {e}
         </button>
       ))}
+      <label className="flex items-center gap-1.5 ml-4 text-xs font-semibold text-warm-600">
+        <input type="checkbox" checked={includeTest} onChange={e => setIncludeTest(e.target.checked)} />
+        Include test installs
+      </label>
     </div>
   );
 
@@ -169,6 +194,38 @@ export function SessionManagerTab({ days }: TabProps) {
         <Kpi label={`Epics (${data.windowDays}d)`} value={sum('epics')} />
         <Kpi label="Median machine" value={machine} />
       </div>
+
+      <Panel title="Installs (last 7d / prior 7d)">
+        <Table
+          headers={[
+            { label: 'Install' },
+            { label: 'Version' },
+            { label: 'Platform' },
+            { label: 'First seen' },
+            { label: 'Last seen' },
+            { label: 'Launches', right: true },
+            { label: 'Sessions', right: true },
+            { label: 'Epics', right: true },
+            { label: 'Errors', right: true },
+          ]}
+          rows={(data.perInstall ?? []).map(r => [
+            <code key="id" className="text-xs">{r.id}</code>,
+            r.version,
+            `${r.platform}/${r.arch}`,
+            formatPtSeconds(r.firstSeen),
+            formatPtSeconds(r.lastSeen),
+            vsPrev(r.last7.launches, r.prev7.launches),
+            vsPrev(r.last7.sessions, r.prev7.sessions),
+            vsPrev(r.last7.epics, r.prev7.epics),
+            vsPrev(r.last7.errors, r.prev7.errors),
+          ])}
+          empty="No installs yet"
+        />
+        <p className="text-xs text-warm-400 mt-3">
+          {excludeSelf ? 'Owner install excluded.' : 'Owner install included.'}{' '}
+          {includeTest ? 'Test installs included.' : 'Test installs (Electron-version, 0.0.0-*, empty) excluded.'}
+        </p>
+      </Panel>
 
       <Panel title="Installs by version">
         <Table

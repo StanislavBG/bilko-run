@@ -3,6 +3,7 @@ import { getStripe } from '../services/stripe.js';
 import { dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import { classifyVisitor } from '../services/analytics.js';
+import { MENU_ITEMS, WALLET_TOPUP_CENTS } from '../../shared/bilko-menu.js';
 import { formatPrice, offerById, type AgentOffer } from '../../shared/agent-offers.js';
 import { entryForPriceType } from '../../shared/product-catalog.js';
 import { buildWebProductCheckoutParams } from './web-products.js';
@@ -64,6 +65,28 @@ async function foundingCouponId(product: WebProduct, stripe: any): Promise<strin
   }
 }
 
+function topupParams(offer: AgentOffer & { source: { kind: 'wallet_topup'; cents: number } }, publicUrl: string): Record<string, unknown> {
+  const cents = offer.source.cents;
+  return {
+    mode: 'payment',
+    line_items: [{ price_data: { currency: 'usd', unit_amount: cents, product_data: { name: offer.name } }, quantity: 1 }],
+    customer_creation: 'always',
+    metadata: { wallet_topup: String(cents), agent_buy: offer.id, agent_key: '1' },
+    success_url: `${publicUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${offer.pageUrl}?checkout=cancel`,
+  };
+}
+
+function menuInstructions(offer: AgentOffer): string {
+  const id = offer.source.kind === 'menu' ? offer.source.itemId : offer.id;
+  const item = MENU_ITEMS.find((i) => i.id === id);
+  const topups = WALLET_TOPUP_CENTS.map((c) => `<a href="/buy/credits-${c / 100}">${esc(`$${c / 100}`)}</a>`).join(' · ');
+  return `<p>${esc(offer.summary)}</p><p>${esc(offer.whatYouGet)}</p><p>Price: ${esc(formatPrice(offer))} in Bilko Credits.</p>`
+    + `<p>Top up your wallet: ${topups}. A top-up gives you a bkk_ agent key.</p>`
+    + `<p>To order, POST <code>https://bilko.run/api/menu/${esc(id)}/order</code> with your bkk_ key`
+    + `${item?.intake.length ? ` and fields: ${item.intake.map((f) => esc(f.key)).join(', ')}` : ''}, or use the MCP tool <code>order_menu_item</code>.</p>`;
+}
+
 function sessionParams(offer: AgentOffer, priceId: string, publicUrl: string): Record<string, unknown> {
   const lineItems = [{ price: priceId, quantity: 1 }];
   const mode = offer.source.kind === 'price_catalog'
@@ -93,6 +116,10 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     // Never take money for something that cannot be delivered (e.g. a download whose zip is not stored).
     const notYet = () => sendHtml(reply, 503, page('Not available yet',
       `<p>${esc(offer.name)} is not on sale yet. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
+
+    if (offer.source.kind === 'menu') {
+      return sendHtml(reply, 200, page(offer.name, menuInstructions(offer)));
+    }
 
     const ua = String(req.headers['user-agent'] ?? '');
     const cls = classifyVisitor(ua);
@@ -131,6 +158,8 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
           couponId: await foundingCouponId(product, stripe),
         });
         params = { ...base, metadata: { ...base.metadata, agent_buy: offer.id } };
+      } else if (offer.source.kind === 'wallet_topup') {
+        params = topupParams(offer as any, publicUrl);
       } else {
         params = sessionParams(offer, priceId!, publicUrl);
       }

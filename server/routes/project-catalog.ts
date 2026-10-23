@@ -50,7 +50,10 @@ export function buildOffersPayload(offers: readonly AgentOffer[] = AGENT_OFFERS)
       billing: o.billing,
       pageUrl: o.pageUrl,
       buyUrl: o.buyUrl,
-      howToBuy: `Open ${o.buyUrl} in a browser to pay via Stripe Checkout.`,
+      payWith: o.payWith,
+      howToBuy: o.payWith === 'credits'
+        ? `Pay with Bilko Credits: top up at https://bilko.run/buy/credits-5 (or credits-3 / credits-10), then POST https://bilko.run/api/menu/${o.source.kind === 'menu' ? o.source.itemId : o.id}/order with a bkk_ key, or use the MCP tool order_menu_item. Details: ${o.buyUrl}`
+        : `Open ${o.buyUrl} in a browser to pay via Stripe Checkout.`,
     })),
   };
 }

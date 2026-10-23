@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { AGENT_OFFERS, offerById, formatPrice } from '../shared/agent-offers';
 import { WEB_PRODUCTS, webProductBySlug, productBilling, productPageSlug } from '../shared/web-products';
 import { displayPriceCents } from '../server/routes/web-products';
+import { MENU_ITEMS, WALLET_TOPUP_CENTS } from '../shared/bilko-menu';
 import { entryForPriceType } from '../shared/product-catalog';
 
 describe('agent offers', () => {
@@ -9,7 +10,11 @@ describe('agent offers', () => {
     const ids = AGENT_OFFERS.map(o => o.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
-    expect(ids).toEqual(['launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1']);
+    expect(ids).toEqual([
+      'launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
+      'credits-3', 'credits-5', 'credits-10',
+      'ask-bilko', 'claude-md-review', 'prd-review', 'agent-postmortem', 'repo-audit', 'live-call',
+    ]);
   });
 
   it('uses https://bilko.run/buy/<id> for every buyUrl', () => {
@@ -58,5 +63,31 @@ describe('agent offers', () => {
     for (const o of AGENT_OFFERS) {
       expect(JSON.stringify(o).toLowerCase()).not.toContain('stanislav');
     }
+  });
+
+  it('generates top-up and menu offers from bilko-menu', () => {
+    for (const cents of WALLET_TOPUP_CENTS) {
+      const o = offerById(`credits-${cents / 100}`)!;
+      expect(o.source).toEqual({ kind: 'wallet_topup', cents });
+      expect(o.amountCents).toBe(cents);
+      expect(o.payWith).toBe('stripe');
+      expect(o.agentKey).toBe(true);
+      expect(o.pageUrl).toBe('https://bilko.run/pricing');
+    }
+    for (const item of MENU_ITEMS) {
+      const o = offerById(item.id);
+      if (item.kind === 'download') {
+        expect(o?.source.kind).not.toBe('menu');
+        continue;
+      }
+      expect(o!.source).toEqual({ kind: 'menu', itemId: item.id });
+      expect(o!.amountCents).toBe(item.priceCents);
+      expect(o!.payWith).toBe('credits');
+      expect(o!.pageUrl).toBe('https://bilko.run/pricing');
+    }
+    for (const o of AGENT_OFFERS) {
+      expect(o.payWith).toBe(o.source.kind === 'menu' ? 'credits' : 'stripe');
+    }
+    expect(offerById('agent-factory-kit')!.whatYouGet).toMatch(/\$3 of Bilko Credits/);
   });
 });

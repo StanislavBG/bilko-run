@@ -90,11 +90,14 @@ describe('offers are listed only when they can be bought and delivered', () => {
     await a.close();
   });
 
-  it('lists nothing when Stripe is not configured', async () => {
+  it('lists only credit-priced menu offers when Stripe is not configured', async () => {
     stripeAvailable = false;
     stored.add('agent-factory-kit@1.0.0');
     const a = await app();
-    expect((await a.inject({ method: 'GET', url: '/api/offers' })).json().offers).toEqual([]);
+    const offers = (await a.inject({ method: 'GET', url: '/api/offers' })).json().offers as { id: string; payWith: string }[];
+    expect(offers.length).toBeGreaterThan(0);
+    expect(offers.every((o) => o.payWith === 'credits')).toBe(true);
+    expect(offers.map((o) => o.id)).toContain('ask-bilko');
     await a.close();
   });
 
@@ -150,5 +153,22 @@ describe('isOfferAvailable: price requirement by billing', () => {
     const m = await load(product({ kind: 'service', billing: 'month' }), true);
     expect(m.isOfferPriced(offer, {})).toBe(false);
     expect(m.isOfferPriced(offer, { STRIPE_PRICE_WP_X: 'price_1' })).toBe(true);
+  });
+});
+
+describe('isOfferAvailable: credits offers', () => {
+  it('top-ups need Stripe; menu offers are always available', async () => {
+    vi.resetModules();
+    let stripe: object | null = null;
+    vi.doMock('../server/services/stripe.js', () => ({ getStripe: () => stripe }));
+    const m = await import('../server/services/offer-availability.js');
+    const { offerById } = await import('../shared/agent-offers.js');
+    const topup = offerById('credits-5')!;
+    const menu = offerById('ask-bilko')!;
+    expect(await m.isOfferAvailable(topup)).toBe(false);
+    expect(await m.isOfferAvailable(menu)).toBe(true);
+    stripe = {};
+    expect(await m.isOfferAvailable(topup)).toBe(true);
+    expect(await m.isOfferAvailable(menu)).toBe(true);
   });
 });

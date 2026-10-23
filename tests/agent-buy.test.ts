@@ -84,6 +84,35 @@ describe('GET /buy/:offerId', () => {
     await app.close();
   });
 
+  it('credits-5 creates a $5 wallet top-up checkout', async () => {
+    const app = await buildApp();
+    const res = await get(app, '/buy/credits-5');
+    expect(res.statusCode).toBe(302);
+    expect(sessionsCreate).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'payment',
+      line_items: [{ price_data: { currency: 'usd', unit_amount: 500, product_data: { name: 'Bilko Credits ($5)' } }, quantity: 1 }],
+      customer_creation: 'always',
+      metadata: { wallet_topup: '500', agent_buy: 'credits-5', agent_key: '1' },
+      success_url: 'https://bilko.run/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+    }));
+    await app.close();
+  });
+
+  it('menu item returns instructions HTML and creates no session', async () => {
+    const app = await buildApp();
+    const res = await get(app, '/buy/ask-bilko');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.body).toContain('$0.50');
+    expect(res.body).toContain('/buy/credits-3');
+    expect(res.body).toContain('/buy/credits-10');
+    expect(res.body).toContain('https://bilko.run/api/menu/ask-bilko/order');
+    expect(res.body).toContain('bkk_');
+    expect(res.body).toContain('order_menu_item');
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('retired hfh-unstick offer returns 404 and creates no session', async () => {
     const app = await buildApp();
     const res = await get(app, '/buy/hfh-unstick');

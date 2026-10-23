@@ -58,7 +58,7 @@ export const AGENT_OFFERS: readonly AgentOffer[] = [
     amountCents: 1900,
     currency: 'usd',
     billing: 'one_time',
-    pageUrl: `${SITE}/projects/agent-factory-kit/`,
+    pageUrl: `${SITE}/projects/launch-kit/agent-factory-kit/`,
     buyUrl: buy('agent-factory-kit'),
     source: { kind: 'web_product', slug: 'agent-factory-kit' },
     agentKey: false,

@@ -1,5 +1,11 @@
 import Fastify from 'fastify';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+
+// Offers that cannot be bought now (no price, or an unstored zip) get no JSON-LD.
+const unavailable = vi.hoisted(() => new Set<string>());
+vi.mock('../server/services/offer-availability.js', () => ({
+  availableOffers: async (offers: { id: string }[]) => offers.filter(o => !unavailable.has(o.id)),
+}));
 import { registerSecurityHeaders } from '../server/security-headers.js';
 import { registerOgRoutes } from '../server/og-routes.js';
 import { loadOgProjects } from '../server/og-meta.js';
@@ -62,6 +68,16 @@ describe('offer JSON-LD', () => {
     expect(block.match(/<\/script>/g)).toHaveLength(1);
     expect(block).not.toContain('<script>alert');
     expect(JSON.parse(block.replace(/^<script[^>]*>|<\/script>$/g, ''))[0].description).toBe(o.summary);
+  });
+
+  it('skips offers that cannot be bought now', async () => {
+    unavailable.add('launch-kit');
+    try {
+      const res = await app.inject({ method: 'GET', url: '/projects/launch-kit/' });
+      expect(blocks(res.body)).toEqual([]);
+    } finally {
+      unavailable.delete('launch-kit');
+    }
   });
 
   it('injectJsonLd is a no-op without </head>', () => {

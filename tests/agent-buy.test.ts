@@ -53,7 +53,7 @@ describe('GET /buy/:offerId', () => {
       STRIPE_PRICE_WP_HFH_FRACTIONAL: 'price_hfh_fractional',
       STRIPE_COUPON_WP_HFH_FOUNDING: 'coupon_founding',
     };
-    dbGet.mockResolvedValue(undefined);
+    dbGet.mockImplementation(async (sql: unknown) => (String(sql).includes('web_product_releases') ? { ok: 1 } : undefined));
     couponsRetrieve.mockResolvedValue({ id: 'coupon_founding', valid: true });
     sessionsCreate.mockResolvedValue({ id: 'cs_test_abc', url: 'https://checkout.stripe.com/c/pay/cs_test_abc' });
   });

@@ -118,6 +118,21 @@ export async function storeRelease(
   return 'stored';
 }
 
+// Stored releases are immutable (stored once, never replaced), so only hits are cached.
+const storedKeys = new Set<string>();
+
+/** True when the release bytes are stored, without loading them. */
+export async function isReleaseStored(slug: string, version: string): Promise<boolean> {
+  const key = cacheKey(slug, version);
+  if (storedKeys.has(key) || releaseCache.has(key)) return true;
+  const row = await dbGet(
+    'SELECT 1 AS ok FROM web_product_releases WHERE slug = ? AND version = ?',
+    slug, version,
+  );
+  if (row) storedKeys.add(key);
+  return !!row;
+}
+
 export async function getRelease(slug: string, version: string): Promise<StoredRelease | null> {
   const key = cacheKey(slug, version);
   const hit = releaseCache.get(key);

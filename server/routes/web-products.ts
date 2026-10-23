@@ -9,6 +9,7 @@ import {
   storeRelease,
   type WebProductOrder,
 } from '../services/web-products.js';
+import { isDeliverable } from '../services/offer-availability.js';
 import {
   MAX_RELEASE_BYTES, WEB_PRODUCTS, isValidCheckoutSessionId, isValidReleaseVersion, isValidWebProductSlug,
   productBilling, productKind, productPageSlug, productsIncluding, resolveWebProductPriceId, webProductBySlug, type WebProduct,
@@ -278,6 +279,11 @@ export function registerWebProductRoutes(
     if (!stripe || !priceId) {
       reply.status(503);
       return { error: 'Checkout is not available right now.' };
+    }
+    // Never take money for a zip that is not stored (the product's own, or one a service includes).
+    if (!(await isDeliverable(product, products))) {
+      reply.status(503);
+      return { error: 'not_available_yet' };
     }
     // Deploy smokes: prove the route, price and Stripe client are wired without
     // creating a live session that later shows up as an abandoned checkout.

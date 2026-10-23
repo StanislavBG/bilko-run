@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { buildCatalog } from '../../src/data/projectCatalog.js';
-import { AGENT_OFFERS, formatPrice } from '../../shared/agent-offers.js';
+import { AGENT_OFFERS, formatPrice, type AgentOffer } from '../../shared/agent-offers.js';
+import { availableOffers } from '../services/offer-availability.js';
+import type { ListOffers } from './project-catalog.js';
 
 /**
  * /llms.txt (llmstxt.org): what bilko.run is, every public project, every paid
- * offer with price + buy link, and the machine endpoints. Built per request
- * from AGENT_OFFERS and the project catalog so it cannot drift.
+ * offer that can be bought now with price + buy link, and the machine endpoints.
+ * Built per request from the available AGENT_OFFERS and the project catalog so it cannot drift.
  */
 
 const CACHE_CONTROL = 'public, max-age=300';
@@ -13,8 +15,8 @@ const SITE = 'https://bilko.run';
 
 const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
-export function buildLlmsTxt(): string {
-  const buy = AGENT_OFFERS.map(
+export function buildLlmsTxt(offers: readonly AgentOffer[] = AGENT_OFFERS): string {
+  const buy = offers.map(
     o => `- [${o.name} — ${formatPrice(o)}](${o.buyUrl}): ${oneLine(o.summary)} ${oneLine(o.whatYouGet)}`,
   );
   const projects = buildCatalog().projects.map(
@@ -43,11 +45,15 @@ export function buildLlmsTxt(): string {
   ].join('\n');
 }
 
-export function registerAgentStorefrontRoutes(app: FastifyInstance): void {
+export function registerAgentStorefrontRoutes(
+  app: FastifyInstance,
+  opts: { listOffers?: ListOffers } = {},
+): void {
+  const listOffers = opts.listOffers ?? availableOffers;
   app.get('/llms.txt', async (_req, reply) => {
     reply
       .header('Content-Type', 'text/plain; charset=utf-8')
       .header('Cache-Control', CACHE_CONTROL);
-    return buildLlmsTxt();
+    return buildLlmsTxt(await listOffers());
   });
 }

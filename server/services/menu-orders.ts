@@ -86,8 +86,23 @@ export async function placeMenuOrder(input: {
   const debit = await debitWallet(email, item.priceCents, `menu:${item.id}`, `menu:${ref}`);
   if (!debit.ok) return { status: 'insufficient_credits', balanceCents: debit.balanceCents };
 
+  const refundDebit = () =>
+    refundWallet(email, item.priceCents, `menu-refund:${item.id}`, `refund:${ref}`);
+
+  let order: MenuOrder;
   try {
-    if (item.kind === 'download') {
+    order = await insertOrder({
+      ref, itemId: item.id, email, priceCents: item.priceCents, kind: item.kind, intake,
+      status: item.kind === 'download' ? 'delivered' : 'queued', via: input.via, day,
+    });
+  } catch (err) {
+    await refundDebit();
+    throw err;
+  }
+
+  if (item.kind === 'download') {
+    // Order row first; the entitlement is only granted once the order exists.
+    try {
       await recordOrder({
         checkoutSessionId: `wallet_${ref}`,
         slug: item.downloadSlug ?? item.id,
@@ -96,16 +111,13 @@ export async function placeMenuOrder(input: {
         currency: 'usd',
         paymentStatus: 'paid',
       });
+    } catch (err) {
+      await refundDebit();
+      await transition(order.id, ['delivered'], 'refunded');
+      throw err;
     }
-    const order = await insertOrder({
-      ref, itemId: item.id, email, priceCents: item.priceCents, kind: item.kind, intake,
-      status: item.kind === 'download' ? 'delivered' : 'queued', via: input.via, day,
-    });
-    return { status: 'ok', order, balanceCents: debit.balanceCents };
-  } catch (err) {
-    await refundWallet(email, item.priceCents, `menu-refund:${item.id}`, `refund:${ref}`);
-    throw err;
   }
+  return { status: 'ok', order, balanceCents: debit.balanceCents };
 }
 
 async function transition(
@@ -135,8 +147,7 @@ export function markDelivered(id: number, body: string) {
 export async function refundOrder(id: number): Promise<MenuOrder | null> {
   const order = await getOrder(id);
   if (!order || (order.status !== 'queued' && order.status !== 'drafted')) return null;
-  const updated = await transition(id, ['queued', 'drafted'], 'refunded');
-  if (!updated) return null;
+  // Credit first (idempotent on ref), then flip status: a crash between the two is finished by a retry.
   await refundWallet(order.email, order.price_cents, `menu-refund:${order.item_id}`, `refund:${order.ref}`);
-  return updated;
+  return transition(id, ['queued', 'drafted'], 'refunded');
 }

@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { dbRun, dbGet, initDb } from '../server/db.js';
+import * as wallet from '../server/services/wallet.js';
+import * as products from '../server/services/web-products.js';
 import { creditWallet, getWalletCents } from '../server/services/wallet.js';
 import { hasOrderForEmail } from '../server/services/web-products.js';
 import { MENU_DAILY_ASYNC_CAP } from '../shared/bilko-menu.js';
@@ -11,6 +13,7 @@ const E = 'buyer@test.com';
 const ask = (email = E) => placeMenuOrder({ email, itemId: 'ask-bilko', intake: { question: 'Why?' }, via: 'web' });
 
 beforeAll(async () => { await initDb(); });
+afterEach(() => { vi.restoreAllMocks(); });
 beforeEach(async () => {
   await dbRun('DELETE FROM menu_orders');
   await dbRun('DELETE FROM wallet_transactions');
@@ -94,5 +97,37 @@ describe('order state changes', () => {
     expect(await refundOrder(o.id)).toBeNull();
     expect(await getWalletCents(E)).toBe(500);
     expect(await setDraft(o.id, 'late')).toBeNull();
+  });
+
+  it('refundWallet failure then retry credits exactly once and ends refunded', async () => {
+    const o = await queued();
+    vi.spyOn(wallet, 'refundWallet').mockRejectedValueOnce(new Error('boom'));
+    await expect(refundOrder(o.id)).rejects.toThrow('boom');
+    expect((await getOrder(o.id))?.status).toBe('queued');
+    expect(await getWalletCents(E)).toBe(450);
+    expect((await refundOrder(o.id))?.status).toBe('refunded');
+    expect(await getWalletCents(E)).toBe(500);
+    expect(await refundOrder(o.id)).toBeNull();
+    expect(await getWalletCents(E)).toBe(500);
+  });
+
+  it('finishes a half-done refund (credit present, status not moved) without a second credit', async () => {
+    const o = await queued();
+    await wallet.refundWallet(E, o.price_cents, 'x', `refund:${o.ref}`);
+    expect((await refundOrder(o.id))?.status).toBe('refunded');
+    expect(await getWalletCents(E)).toBe(500);
+  });
+});
+
+describe('kit order failure', () => {
+  it('recordOrder failure leaves no entitlement, wallet whole, order refunded', async () => {
+    await creditWallet(E, 500, 'topup', 't1');
+    vi.spyOn(products, 'recordOrder').mockRejectedValueOnce(new Error('rec fail'));
+    await expect(placeMenuOrder({ email: E, itemId: 'agent-factory-kit', intake: {}, via: 'web' })).rejects.toThrow('rec fail');
+    expect(await dbGet('SELECT 1 FROM web_product_orders WHERE email = ?', E)).toBeFalsy();
+    expect(await getWalletCents(E)).toBe(500);
+    const orders = await listOrdersForEmail(E);
+    expect(orders).toHaveLength(1);
+    expect(orders[0].status).toBe('refunded');
   });
 });

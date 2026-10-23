@@ -40,7 +40,7 @@ export const SERVICE_SLOT_CONFIG: Record<string, SlotConfig> = {
       { weekday: 3, time: '18:30' },
       { weekday: 4, time: '18:30' },
     ],
-    durationMinutes: 90,
+    durationMinutes: 30,
     horizonDays: 21,
     minLeadHours: 24,
   },

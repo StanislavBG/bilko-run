@@ -9,7 +9,7 @@ describe('generateSlots', () => {
     const slots = generateSlots(cfg, NOW);
     expect(slots).toHaveLength(9);
     for (let i = 1; i < slots.length; i++) expect(slots[i].startMs).toBeGreaterThan(slots[i - 1].startMs);
-    expect(slots[0].endMs - slots[0].startMs).toBe(90 * 60_000);
+    expect(slots[0].endMs - slots[0].startMs).toBe(30 * 60_000);
   });
 
   it('excludes slots inside the minimum lead time', () => {

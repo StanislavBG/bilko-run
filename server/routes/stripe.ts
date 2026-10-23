@@ -18,6 +18,9 @@ import {
 } from '../../shared/product-catalog.js';
 import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug, productBilling } from '../../shared/web-products.js';
 import { recordOrder } from '../services/web-products.js';
+import { creditWallet } from '../services/wallet.js';
+import { pppBonusCents } from '../../shared/ppp-bonus.js';
+import { WALLET_TOPUP_CENTS } from '../../shared/bilko-menu.js';
 
 /**
  * Same-origin guard for caller-supplied redirect URLs (checkout success/cancel,
@@ -206,7 +209,34 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         const wpSlug = typeof data.metadata?.web_product === 'string' ? data.metadata.web_product : '';
         const webProduct = wpSlug ? webProductBySlug(wpSlug, WEB_PRODUCTS) : undefined;
 
-        if (webProduct) {
+        // Wallet top-ups are handled first and never fall through to the generic branches.
+        if (typeof data.metadata?.wallet_topup === 'string' && data.metadata.wallet_topup) {
+          const cents = Number(data.metadata.wallet_topup);
+          const walletEmail = ((data.metadata.wallet_email ?? data.customer_details?.email ?? '') as string).trim().toLowerCase();
+          const centsOk = (WALLET_TOPUP_CENTS as readonly number[]).includes(cents);
+          const paid = data.payment_status === 'paid';
+          if (!paid || !centsOk || data.amount_subtotal !== cents || !walletEmail) {
+            console.error(
+              `[stripe_webhook] wallet top-up session ${data.id} not credited — ` +
+              `payment_status=${data.payment_status} centsAllowed=${centsOk} subtotalMatch=${data.amount_subtotal === cents} ` +
+              `email=${walletEmail ? 'present' : 'missing'}`,
+            );
+          } else {
+            // Stripe API failures here throw to the outer catch -> 500 -> Stripe retries.
+            let country: string | null = null;
+            if (data.payment_intent) {
+              const pi: any = await stripe.paymentIntents.retrieve(data.payment_intent as string, { expand: ['latest_charge'] });
+              country = pi?.latest_charge?.payment_method_details?.card?.country ?? null;
+            }
+            if (!country) country = data.customer_details?.address?.country ?? null;
+            await creditWallet(walletEmail, cents, 'topup', 'topup:' + data.id);
+            const bonus = pppBonusCents(country, cents);
+            if (bonus > 0) {
+              const cc = String(country).trim().toUpperCase();
+              await creditWallet(walletEmail, bonus, 'ppp_bonus:' + cc, 'ppp:' + data.id);
+            }
+          }
+        } else if (webProduct) {
           const paidOk = data.payment_status === 'paid' || data.payment_status === 'no_payment_required';
           let priceOk = false;
           if (paidOk) {
@@ -404,6 +434,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         return reply.redirect(`/projects/${productPageSlug(wpProduct)}/thanks/?session_id=${encodeURIComponent(sessionId)}&offer=${encodeURIComponent(wpProduct.slug)}`, 302);
       }
 
+      const walletTopup = (session.metadata as Record<string, string> | null)?.wallet_topup;
+      const isWalletTopup = typeof walletTopup === 'string' && walletTopup !== '';
+
       if (session.payment_status !== 'paid') {
         reply.type('text/html').status(402);
         return successHtml('Payment pending', '<p>Your payment has not completed yet. Please wait a moment and refresh.</p>');
@@ -420,7 +453,9 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       // No license key is ever minted: subscription sessions (legacy ContentGrade)
       // and unresolved prices both get the generic thank-you page.
       let productKey: string | null = null;
-      if (session.mode === 'subscription') {
+      if (isWalletTopup) {
+        // Wallet top-up: no product line item to resolve.
+      } else if (session.mode === 'subscription') {
         console.error(`[checkout_success] subscription-mode session ${sessionId} — showing generic thank-you`);
       } else {
         try {
@@ -440,6 +475,38 @@ export function registerStripeRoutes(app: FastifyInstance): void {
       }
 
       const title = 'Thanks for your support 🎉';
+
+      // Wallet top-ups bought through /buy get an agent API key, shown once.
+      if (isWalletTopup) {
+        let keyHtml = '';
+        if ((session.metadata as Record<string, string> | null)?.agent_key === '1') {
+          try {
+            const minted = await mintAgentApiKey(((session.metadata as Record<string, string>).wallet_email || email).trim().toLowerCase(), 'Bilko Credits', { checkoutSessionId: session.id });
+            if ('alreadyMinted' in minted) {
+              keyHtml = `<p>Your agent API key was already shown for this purchase. To mint a new one, <code>POST /api/agent-keys</code> while signed in.</p>`;
+            } else {
+              const k = escHtml(minted.key);
+              const curl = `curl https://bilko.run/api/wallet -H 'Authorization: Bearer ${k}'`;
+              const mcp = escHtml(JSON.stringify({
+                mcpServers: { bilko: { url: 'https://bilko.run/mcp', headers: { Authorization: `Bearer ${minted.key}` } } },
+              }, null, 2));
+              keyHtml = `
+        <p>Your agent API key (<strong>shown only once</strong> — copy it now):</p>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;overflow-x:auto">${k}</pre>
+        <p>Check your balance (<code>GET https://bilko.run/api/wallet</code>):</p>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;overflow-x:auto;white-space:pre-wrap">${curl}</pre>
+        <p>Or add this to your MCP client config:</p>
+        <pre style="background:#111;color:#7fff7f;padding:16px;border-radius:6px;overflow-x:auto">${mcp}</pre>`;
+            }
+          } catch (err: any) {
+            console.error('[checkout_success] agent key mint failed for session', sessionId, ':', err.message);
+            keyHtml = `<p style="font-size:0.9em;color:#888">We couldn't create an agent API key automatically — create one while signed in via <code>POST /api/agent-keys</code>.</p>`;
+          }
+        }
+        reply.type('text/html').header('Cache-Control', 'private, no-store').header('Referrer-Policy', 'no-referrer');
+        return successHtml(title, `
+        <p>Your Bilko Credits top-up is confirmed for <strong>${escHtml(email)}</strong>. Credits appear in your wallet shortly. Thank you!</p>${keyHtml}`);
+      }
 
       // Agent-buy sessions (GET /buy/pageroast-*) get an agent API key, shown once.
       const isAgentBuy = (session.metadata as Record<string, string> | null)?.agent_key === '1'

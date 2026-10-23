@@ -170,13 +170,10 @@ describe('offers for agents', () => {
     expect(kit.amount).toBe(9);
 
     for (const id of ['hfh-unstick', 'hfh-factory-setup', 'hfh-fractional']) {
-      const offer = data.offers.find((o: { id: string }) => o.id === id);
-      expect(offer, id).toBeDefined();
-      expect(offer.buyUrl).toBe(`https://bilko.run/buy/${id}`);
-      expect(offer.price).toBe(formatPrice(AGENT_OFFERS.find(o => o.id === id)!));
+      expect(data.offers.find((o: { id: string }) => o.id === id), id).toBeUndefined();
     }
-    const fractional = data.offers.find((o: { id: string }) => o.id === 'hfh-fractional');
-    expect(fractional.price).toBe('$750/month');
+    const kitOffer = data.offers.find((o: { id: string }) => o.id === 'agent-factory-kit');
+    expect(kitOffer.price).toBe('$3');
   });
 
   it('carries the offer on its project entry and [] elsewhere', async () => {

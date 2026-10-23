@@ -114,7 +114,10 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
 
     const stripe = getStripe();
     const priceId = resolvePrice(offer, process.env);
-    if (!stripe || !priceId) return unavailable();
+    const oneTimeWebProduct = offer.source.kind === 'web_product'
+      && (webProductBySlug(offer.source.slug)?.billing ?? 'one_time') === 'one_time';
+    // One-time web products charge amountCents inline; only catalog offers and monthly products need a price id.
+    if (!stripe || (!priceId && !oneTimeWebProduct)) return unavailable();
 
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
     let url: string | null | undefined;
@@ -127,12 +130,12 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
             `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
         }
         const base = buildWebProductCheckoutParams(product, {
-          owner: false, ownerIp: false, priceId, testCents: null, publicUrl,
+          owner: false, ownerIp: false, priceId: priceId ?? undefined, testCents: null, publicUrl,
           couponId: await foundingCouponId(product, stripe),
         });
         params = { ...base, metadata: { ...base.metadata, agent_buy: offer.id } };
       } else {
-        params = sessionParams(offer, priceId, publicUrl);
+        params = sessionParams(offer, priceId!, publicUrl);
       }
       const session = await stripe.checkout.sessions.create(params as any);
       url = session.url;

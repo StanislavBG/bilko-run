@@ -49,9 +49,6 @@ describe('GET /buy/:offerId', () => {
       STRIPE_PRICE_TOKEN_SINGLE: 'price_token_1',
       STRIPE_PRICE_WP_LAUNCH_KIT: 'price_launch_kit',
       STRIPE_PRICE_GITVIEWER: 'price_git_viewer',
-      STRIPE_PRICE_WP_HFH_FACTORY_SETUP: 'price_hfh_factory',
-      STRIPE_PRICE_WP_HFH_FRACTIONAL: 'price_hfh_fractional',
-      STRIPE_COUPON_WP_HFH_FOUNDING: 'coupon_founding',
     };
     dbGet.mockResolvedValue(undefined);
     couponsRetrieve.mockResolvedValue({ id: 'coupon_founding', valid: true });
@@ -76,47 +73,21 @@ describe('GET /buy/:offerId', () => {
     await app.close();
   });
 
-  it('hfh-fractional creates a subscription-mode session', async () => {
+  it('agent-factory-kit charges $3 inline even when its price env var is unset', async () => {
+    delete process.env.STRIPE_PRICE_WP_AGENT_FACTORY_KIT;
     const app = await buildApp();
-    const res = await get(app, '/buy/hfh-fractional');
+    const res = await get(app, '/buy/agent-factory-kit');
     expect(res.statusCode).toBe(302);
     const params = sessionsCreate.mock.calls[0][0];
-    expect(params).toMatchObject({
-      mode: 'subscription',
-      line_items: [{ price: 'price_hfh_fractional', quantity: 1 }],
-      metadata: { web_product: 'hfh-fractional', agent_buy: 'hfh-fractional' },
-    });
-    expect(params).not.toHaveProperty('customer_creation');
-    await app.close();
-  });
-
-  it('hfh-factory-setup applies the founding coupon when valid', async () => {
-    const app = await buildApp();
-    await get(app, '/buy/hfh-factory-setup');
-    const params = sessionsCreate.mock.calls[0][0];
     expect(params.mode).toBe('payment');
-    expect(params.discounts).toEqual([{ coupon: 'coupon_founding' }]);
-    expect(params).not.toHaveProperty('allow_promotion_codes');
+    expect(params.line_items).toEqual([{ price_data: { currency: 'usd', unit_amount: 300, product_data: { name: 'Bilko Agent Factory Kit' } }, quantity: 1 }]);
     await app.close();
   });
 
-  it('hfh-factory-setup falls back to promotion codes when the coupon is invalid', async () => {
-    couponsRetrieve.mockResolvedValue({ id: 'coupon_founding', valid: false });
+  it('retired hfh-unstick offer returns 404 and creates no session', async () => {
     const app = await buildApp();
-    await get(app, '/buy/hfh-factory-setup');
-    const params = sessionsCreate.mock.calls[0][0];
-    expect(params).not.toHaveProperty('discounts');
-    expect(params.allow_promotion_codes).toBe(true);
-    await app.close();
-  });
-
-  it('a sold-out service (maxOrders reached) renders Sold out and creates no session', async () => {
-    dbGet.mockResolvedValue({ n: 2 });
-    const app = await buildApp();
-    const res = await get(app, '/buy/hfh-fractional');
-    expect(res.statusCode).toBe(409);
-    expect(res.headers['content-type']).toContain('text/html');
-    expect(res.body).toContain('Sold out');
+    const res = await get(app, '/buy/hfh-unstick');
+    expect(res.statusCode).toBe(404);
     expect(sessionsCreate).not.toHaveBeenCalled();
     await app.close();
   });

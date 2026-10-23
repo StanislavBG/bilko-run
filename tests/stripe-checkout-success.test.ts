@@ -162,11 +162,11 @@ describe('/checkout/success product resolution', () => {
   });
 
   it('redirects a shared-page service product to its page slug with the offer param', async () => {
-    sessionsRetrieve.mockResolvedValue({ payment_status: 'paid', mode: 'subscription', metadata: { web_product: 'hfh-fractional' } });
+    sessionsRetrieve.mockResolvedValue({ payment_status: 'paid', mode: 'payment', metadata: { web_product: 'agent-factory-kit' } });
     const app = await buildApp();
     const res = await app.inject({ method: 'GET', url: `/checkout/success?session_id=${SESSION_ID}` });
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toBe(`/projects/human-for-hire/thanks/?session_id=${SESSION_ID}&offer=hfh-fractional`);
+    expect(res.headers.location).toBe(`/projects/launch-kit/agent-factory-kit/thanks/?session_id=${SESSION_ID}&offer=agent-factory-kit`);
     await app.close();
   });
 

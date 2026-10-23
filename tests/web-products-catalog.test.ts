@@ -42,7 +42,7 @@ const list = [demo, other];
 describe('catalog constants', () => {
   it('has the 5 MiB cap and a valid catalog', () => {
     expect(MAX_RELEASE_BYTES).toBe(5 * 1024 * 1024);
-    expect(WEB_PRODUCTS).toHaveLength(5);
+    expect(WEB_PRODUCTS).toHaveLength(2);
     expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
   });
 
@@ -225,24 +225,8 @@ describe('service products', () => {
     expect(validateWebProducts([{ ...svc, sessionsPerMonth: 101 }]).join()).toContain('sessionsPerMonth');
   });
 
-  it('declares the three Human For Hire offers', () => {
-    const u = webProductBySlug('hfh-unstick')!;
-    const f = webProductBySlug('hfh-factory-setup')!;
-    const m = webProductBySlug('hfh-fractional')!;
-    expect([u.name, u.displayPrice, u.sessionsPerMonth]).toEqual(['Unstick my agents', '$75', 1]);
-    expect([f.name, f.displayPrice, f.foundingDisplayPrice, f.foundingCouponEnvVar]).toEqual([
-      'Agent Factory Setup', '$225', '$125', 'STRIPE_COUPON_WP_HFH_FOUNDING',
-    ]);
-    expect([m.name, m.displayPrice, m.billing, m.maxOrders, m.sessionsPerMonth]).toEqual([
-      'Fractional Agent Ops', '$750', 'month', 2, 2,
-    ]);
-    for (const p of [u, f, m]) {
-      expect(productKind(p)).toBe('service');
-      expect(productPageSlug(p)).toBe('human-for-hire');
-      expect(p.release).toBeNull();
-      expect(p.downloadLimit).toBe(0);
-      expect(p.defaultPriceId).toBeUndefined();
-    }
+  it('no Human For Hire ladder products remain', () => {
+    expect(WEB_PRODUCTS.filter((p) => p.slug.startsWith('hfh-'))).toEqual([]);
   });
 
   it('persona rule: no owner name or email in the catalog', () => {
@@ -260,7 +244,7 @@ describe('includes and preview', () => {
   it('declares the agent-factory-kit product', () => {
     const k = webProductBySlug('agent-factory-kit')!;
     expect([k.name, k.productKey, k.priceEnvVar, k.displayPrice, k.downloadLimit]).toEqual([
-      'Bilko Agent Factory Kit', 'wp_agent_factory_kit', 'STRIPE_PRICE_WP_AGENT_FACTORY_KIT', '$19', 20,
+      'Bilko Agent Factory Kit', 'wp_agent_factory_kit', 'STRIPE_PRICE_WP_AGENT_FACTORY_KIT', '$3', 20,
     ]);
     expect(k.defaultPriceId).toBeUndefined();
     expect(k.release).toEqual({
@@ -272,7 +256,7 @@ describe('includes and preview', () => {
       sha256: '9a21261fee8f61821b3ba7a9c01bb57c16771eaa33fd4a1e1bc4edee01d56e3d',
     });
     expect(productPageSlug(k)).toBe('launch-kit/agent-factory-kit');
-    expect(webProductBySlug('hfh-factory-setup')!.includes).toEqual(['agent-factory-kit']);
+    expect(k.amountCents).toBe(300);
   });
 
   it('includes: valid slug of a download product passes', () => {
@@ -321,6 +305,6 @@ describe('includes and preview', () => {
     const l = [demo, bundle, other];
     expect(productsIncluding('demo-pack', l)).toEqual([bundle]);
     expect(productsIncluding('other', l)).toEqual([]);
-    expect(productsIncluding('agent-factory-kit').map((p) => p.slug)).toEqual(['hfh-factory-setup']);
+    expect(productsIncluding('agent-factory-kit')).toEqual([]);
   });
 });

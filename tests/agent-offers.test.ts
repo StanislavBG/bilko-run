@@ -9,8 +9,7 @@ describe('agent offers', () => {
     const ids = AGENT_OFFERS.map(o => o.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
-    expect(ids).toEqual(['launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
-      'hfh-unstick', 'hfh-factory-setup', 'hfh-fractional']);
+    expect(ids).toEqual(['launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1']);
   });
 
   it('uses https://bilko.run/buy/<id> for every buyUrl', () => {

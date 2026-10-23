@@ -175,6 +175,8 @@ function MenuRow({ item }: { item: MenuEntry }) {
         setMessage({ tone: 'warn', text: 'Not enough credits for this one. Top up above and try again.', topUp: true });
       } else if (res.status === 409 && data.error === 'daily_cap') {
         setMessage({ tone: 'warn', text: "Today's slots are full. Come back tomorrow." });
+      } else if (res.status === 409 && data.error === 'unavailable') {
+        setMessage({ tone: 'warn', text: 'Not on sale yet.' });
       } else if (res.status === 409) {
         setMessage({ tone: 'warn', text: 'That slot was just taken. Pick another.' });
         setSlots(null);

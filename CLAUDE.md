@@ -41,7 +41,7 @@ Bilko's workspace lives in `~/Projects/` with this structure:
 
 ## What This Is
 
-bilko.run is Bilko's personal brand site and host platform. Apps share a common credit model ($1/credit or $5/7 credits via Stripe), shared Clerk auth, shared Stripe wallet, and a shared component kit. Each app is its own product with its own page, scoring engine, and UX — they are NOT features of one product.
+bilko.run is Bilko's personal brand site and host platform. Apps share a common credit model (a prepaid Bilko Credits wallet with $3/$5/$10 top-ups, PPP bonus credits and a micro-services menu, alongside the PageRoast token bundles; tools spend legacy tokens first, then wallet credit at $1 a call), shared Clerk auth, shared Stripe wallet, and a shared component kit. Each app is its own product with its own page, scoring engine, and UX — they are NOT features of one product.
 
 ### Current apps
 

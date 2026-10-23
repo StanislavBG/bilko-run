@@ -283,7 +283,7 @@ bilko.run treats AI agents as a customer segment: they can discover what is for 
 | POST | `/api/wallet/topup` | Clerk session only | Body `{ cents }` with `cents` one of 300, 500, 1000. Creates a Stripe Checkout session and returns its URL. 400 for any other amount, 429 rate limited, 503 when Checkout is unavailable. Agents without a session buy credits through `/buy/credits-N`. |
 | GET | `/buy/credits-3`, `/buy/credits-5`, `/buy/credits-10` | none | Same as `/buy/:offerId` for the $3, $5 and $10 wallet top-ups (offers `credits-3|5|10`, `source.kind: 'wallet_topup'`). Each also yields a `bkk_` key on the success page. |
 | GET | `/api/menu` | none | The Bilko services menu: `topups` and every orderable item (`id`, `name`, `price`, `priceCents`, `kind`, intake fields). `public, max-age=300`. |
-| POST | `/api/menu/:itemId/order` | Clerk session or `bkk_` key | Body `{ intake }` (strings, validated against the item's intake fields). Spends the item's price from the wallet. 201 `{ order: { id, itemId, status, priceCents }, balanceCents }`. Errors: 400 `invalid_intake` / `live_needs_slot`, 402 `insufficient_credits` (with `balanceCents`, `topUpUrl`), 404 `unknown_item`, 409 `daily_cap`, 429. Rate limited per IP. |
+| POST | `/api/menu/:itemId/order` | Clerk session or `bkk_` key | Body `{ intake }` (strings, validated against the item's intake fields). Spends the item's price from the wallet. 201 `{ order: { id, itemId, status, priceCents }, balanceCents }`. Errors: 400 `invalid_intake` / `live_needs_slot`, 402 `insufficient_credits` (with `balanceCents`, `topUpUrl`), 404 `unknown_item`, 409 `daily_cap`, 409 `{ error: 'unavailable' }` (item not on sale yet), 429. Rate limited per IP. |
 | POST | `/api/menu/live-call/order` | Clerk session or `bkk_` key | Body `{ startMs, intake }`. Books the $9 live call on the slot machinery (see "Selling a bookable service") and spends 900 cents. 201 `{ booking, balanceCents, emailed }`. Errors: 402 `insufficient_credits`, 409 `slot_unavailable`, 400 otherwise. |
 | GET | `/api/menu/orders` | Clerk session or `bkk_` key | The caller's own orders (`id`, `itemId`, `status`, `priceCents`, `createdAt`). |
 | GET | `/buy/:offerId` | none | Creates a Stripe Checkout session for the offer and 302-redirects to it. Unknown id: 404 listing valid ids. Search/AI crawlers and HEAD get a static page with the price and the link instead of a session. Rate limited (10/min/IP); 503 when Checkout is unavailable. |
@@ -312,7 +312,7 @@ Bilko Credits are a prepaid wallet (1 credit = 1 cent of balance, shown as dolla
 | `list_offers` | none | Everything for sale with `buyUrl` (same data as `GET /api/offers`). |
 | `list_menu` | none | The services menu (same data as `GET /api/menu`). |
 | `wallet_balance` | `bkk_` | The key owner's balance. |
-| `order_menu_item(itemId, intake)` | `bkk_` | Orders one menu item from the key owner's wallet. 20 orders a minute per account. Errors name the cause (`insufficient_credits`, `daily_cap`, `invalid_intake`, `unknown_item`, `live_needs_slot`). The live call cannot be booked over MCP. |
+| `order_menu_item(itemId, intake)` | `bkk_` | Orders one menu item from the key owner's wallet. 20 orders a minute per account. Errors name the cause (`insufficient_credits`, `daily_cap`, `unavailable`, `invalid_intake`, `unknown_item`, `live_needs_slot`). The live call cannot be booked over MCP. |
 | `roast_page(url)` | `bkk_` | Paid page roast, 1 credit. |
 
 A tool that needs a key returns an `isError` result with the top-up link when the key is missing or invalid.

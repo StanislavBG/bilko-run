@@ -24,6 +24,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
+      - name: Identity scan
+        # Fails when a tracked file holds the owner's real name or personal email
+        # (docs/identity-boundary.md). The strings live only in the secret.
+        env:
+          IDENTITY_DENYLIST: ${{ secrets.IDENTITY_DENYLIST }}
+        run: |
+          if [ -z "$IDENTITY_DENYLIST" ]; then
+            echo "::warning::IDENTITY_DENYLIST secret not set; identity scan skipped (docs/identity-boundary.md)"
+            exit 0
+          fi
+          list=$(mktemp)
+          printf '%s\n' "$IDENTITY_DENYLIST" > "$list"
+          BILKO_IDENTITY_DENYLIST="$list" bash scripts/identity-guard.sh tree
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:

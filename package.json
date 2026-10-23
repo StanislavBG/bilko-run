@@ -39,6 +39,8 @@
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist-server/server/index.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.scripts.json",
+    "hooks:install": "bash scripts/install-git-hooks.sh",
+    "identity:scan": "bash scripts/identity-guard.sh tree",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

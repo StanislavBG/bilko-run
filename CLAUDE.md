@@ -163,6 +163,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 ## Rules
 
 - Never propose solutions — implement them directly
+- **This repo is public: the owner's real name and personal email never go in a tracked file, commit message or commit author** — write "the owner". `session-manager-operations/prompt-sessions/` is gitignored for this reason; `pnpm hooks:install` puts the identity guard on commit and push. See [`docs/identity-boundary.md`](docs/identity-boundary.md)
 - Each tool is independent — don't merge them or add cross-dependencies in the backend or frontend
 - **New apps default to `static-path` (own repo).** Use `react-route` only when an app genuinely needs to live in this bundle (rare); the trend is the other direction
 - **New npm packages follow [`docs/publishing-contract.md`](docs/publishing-contract.md).** LICENSE on disk (not just metadata), MIT, `--provenance` on publish, Changesets-managed CHANGELOG. Templates in `docs/templates/`.

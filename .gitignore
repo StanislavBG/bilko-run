@@ -36,3 +36,8 @@ playwright-report/
 .claude/*
 !.claude/skills/
 .claude/skills/*/drafts/
+# Session Manager runtime state: Epic session records and chat transcripts. They
+# quote whatever agents wrote, including the owner's identity, and this repo is
+# public (docs/identity-boundary.md). The files stay on disk; Session Manager
+# reads and writes them locally.
+session-manager-operations/prompt-sessions/

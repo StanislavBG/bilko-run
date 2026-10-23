@@ -24,6 +24,7 @@ const demo: WebProduct = {
   productKey: 'wp_demo_pack',
   priceEnvVar: 'STRIPE_PRICE_WP_DEMO_PACK',
   defaultPriceId: 'price_demo',
+  amountCents: 900,
   displayPrice: '$9',
   downloadLimit: 20,
   release: { version: '1.0.0', filename: 'demo-pack-1.0.0.zip', bytes: 1234, sha256: SHA },
@@ -126,6 +127,7 @@ describe('validateWebProducts', () => {
       name: 'Bad',
       productKey: 'wrong',
       priceEnvVar: 'STRIPE_PRICE_NOPE',
+      amountCents: 100,
       displayPrice: '$1',
       downloadLimit: 0,
       release: { version: '1.0', filename: '../evil.tar', bytes: MAX_RELEASE_BYTES + 1, sha256: 'ABC' },
@@ -144,6 +146,14 @@ describe('validateWebProducts', () => {
     expect(msgs).toHaveLength(9);
   });
 
+  it('reports a bad amountCents and a displayPrice that does not match it', () => {
+    for (const amountCents of [0, -5, 9.5, NaN]) {
+      expect(validateWebProducts([{ ...demo, amountCents }]).join('\n')).toContain('amountCents must be a positive integer');
+    }
+    expect(validateWebProducts([{ ...demo, displayPrice: '$10' }]).join('\n')).toContain('displayPrice must be $9');
+    expect(validateWebProducts([{ ...demo, amountCents: 950, displayPrice: '$9.50' }])).toEqual([]);
+  });
+
   it('rejects non-integer and out-of-range numbers', () => {
     const r = demo.release!;
     expect(validateWebProducts([{ ...demo, downloadLimit: 101 }])).toHaveLength(1);
@@ -160,6 +170,7 @@ const svc: WebProduct = {
   name: 'Service One',
   productKey: 'wp_svc_one',
   priceEnvVar: 'STRIPE_PRICE_WP_SVC_ONE',
+  amountCents: 7500,
   displayPrice: '$75',
   downloadLimit: 0,
   release: null,

@@ -35,6 +35,7 @@ const product: WebProduct = {
   productKey: 'wp_route_fixture',
   priceEnvVar: 'STRIPE_PRICE_WP_ROUTE_FIXTURE',
   defaultPriceId: PRICE,
+  amountCents: 900,
   displayPrice: '$9',
   downloadLimit: 2,
   release: { version: '1.0.0', filename: 'route-fixture-1.0.0.zip', bytes: BYTES.length, sha256: SHA },
@@ -54,6 +55,7 @@ function paidSession(over: Record<string, unknown> = {}) {
     metadata: { web_product: product.slug },
     customer_details: { email: 'Jane@Example.com' },
     amount_total: 900,
+    amount_subtotal: 900,
     currency: 'usd',
     line_items: { data: [{ price: { id: PRICE } }] },
     ...over,
@@ -106,7 +108,10 @@ describe('web product routes', () => {
     expect(res.json()).toEqual({ url: 'https://checkout.stripe.test/x' });
     const arg = sessionsCreate.mock.calls[0][0];
     expect(arg.mode).toBe('payment');
-    expect(arg.line_items).toEqual([{ price: PRICE, quantity: 1 }]);
+    expect(arg.line_items).toEqual([{
+      price_data: { currency: 'usd', unit_amount: 900, product_data: { name: 'Route Fixture' } },
+      quantity: 1,
+    }]);
     expect(arg.customer_creation).toBe('always');
     expect(arg.allow_promotion_codes).toBe(true);
     expect(arg.metadata).toEqual({ web_product: product.slug });
@@ -276,7 +281,7 @@ describe('service products', () => {
   const svc = (over: Partial<WebProduct> = {}): WebProduct => ({
     slug: 'svc-fixture', name: 'Svc Fixture', productKey: 'wp_svc_fixture',
     priceEnvVar: 'STRIPE_PRICE_WP_SVC_FIXTURE', defaultPriceId: 'price_svc',
-    displayPrice: '$750', downloadLimit: 0, release: null, kind: 'service',
+    amountCents: 75000, displayPrice: '$750', downloadLimit: 0, release: null, kind: 'service',
     billing: 'month', pageSlug: 'svc-page', ...over,
   });
   async function appFor(p: WebProduct) {
@@ -301,6 +306,27 @@ describe('service products', () => {
     expect(params.success_url).toBe('https://bilko.run/projects/svc-page/thanks/?session_id={CHECKOUT_SESSION_ID}&offer=svc-fixture');
     expect(params.cancel_url).toBe('https://bilko.run/projects/svc-page/?checkout=cancel');
     expect(params.metadata).toEqual({ web_product: 'svc-fixture' });
+  });
+
+  it('one-time products build price_data from amountCents', async () => {
+    const { buildWebProductCheckoutParams } = await import('../server/routes/web-products.js');
+    const p = svc({ billing: 'one_time', amountCents: 7500, displayPrice: '$75' });
+    const params: any = buildWebProductCheckoutParams(p, {
+      owner: false, ownerIp: false, testCents: null, publicUrl: 'https://bilko.run',
+    });
+    expect(params.mode).toBe('payment');
+    expect(params.line_items).toEqual([{
+      price_data: { currency: 'usd', unit_amount: 7500, product_data: { name: 'Svc Fixture' } },
+      quantity: 1,
+    }]);
+  });
+
+  it('one-time checkout does not 503 without a price id; monthly still does', async () => {
+    sessionsCreate.mockResolvedValue({ url: 'https://c/x' });
+    const oneTime = svc({ billing: 'one_time', defaultPriceId: undefined, displayPrice: '$750' });
+    expect((await post(await appFor(oneTime), oneTime)).statusCode).toBe(200);
+    const monthly = svc({ defaultPriceId: undefined });
+    expect((await post(await appFor(monthly), monthly)).statusCode).toBe(503);
   });
 
   it('nested pageSlug points success and cancel at the nested page', async () => {
@@ -417,6 +443,7 @@ describe('included downloads', () => {
     productKey: 'wp_route_host',
     priceEnvVar: 'STRIPE_PRICE_WP_ROUTE_HOST',
     defaultPriceId: HOST_PRICE,
+    amountCents: 22500,
     displayPrice: '$225',
     downloadLimit: 0,
     release: null,
@@ -435,6 +462,7 @@ describe('included downloads', () => {
   }
   const hostSession = (over: Record<string, unknown> = {}) => paidSession({
     metadata: { web_product: host.slug },
+    amount_subtotal: 22500,
     line_items: { data: [{ price: { id: HOST_PRICE } }] },
     ...over,
   });

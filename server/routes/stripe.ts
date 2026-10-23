@@ -16,7 +16,7 @@ import {
   entryForPriceId,
   type PriceType,
 } from '../../shared/product-catalog.js';
-import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug } from '../../shared/web-products.js';
+import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug, productBilling } from '../../shared/web-products.js';
 import { recordOrder } from '../services/web-products.js';
 
 /**
@@ -210,9 +210,14 @@ export function registerStripeRoutes(app: FastifyInstance): void {
           const paidOk = data.payment_status === 'paid' || data.payment_status === 'no_payment_required';
           let priceOk = false;
           if (paidOk) {
-            const lineItems = await stripe.checkout.sessions.listLineItems(data.id, { limit: 1 });
-            const seenPriceId = lineItems.data[0]?.price?.id;
-            priceOk = !!seenPriceId && seenPriceId === resolveWebProductPriceId(webProduct, process.env);
+            if (productBilling(webProduct) === 'month') {
+              const lineItems = await stripe.checkout.sessions.listLineItems(data.id, { limit: 1 });
+              const seenPriceId = lineItems.data[0]?.price?.id;
+              priceOk = !!seenPriceId && seenPriceId === resolveWebProductPriceId(webProduct, process.env);
+            } else {
+              // One-time products are priced inline; subtotal is pre-discount so coupons still pass.
+              priceOk = data.amount_subtotal === webProduct.amountCents;
+            }
           }
           const wpEmail = ((data.customer_details?.email ?? data.customer_email ?? '') as string).trim().toLowerCase();
           if (!paidOk || !priceOk || !wpEmail) {

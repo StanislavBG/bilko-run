@@ -14,16 +14,16 @@ vi.mock('../shared/web-products.js', async (orig) => {
     WEB_PRODUCTS: [{
       slug: 'demo-pack', name: 'Demo Pack', productKey: 'wp_demo_pack',
       priceEnvVar: 'STRIPE_PRICE_WP_DEMO_PACK', defaultPriceId: 'price_wp_demo',
-      displayPrice: '$9', downloadLimit: 5, release: null,
+      amountCents: 900, displayPrice: '$9', downloadLimit: 5, release: null,
     }, {
       slug: 'hfh-fractional', name: 'HFH Fractional', productKey: 'wp_hfh_fractional',
       priceEnvVar: 'STRIPE_PRICE_WP_HFH_FRACTIONAL', defaultPriceId: 'price_wp_frac',
-      displayPrice: '$250', downloadLimit: 0, release: null,
+      amountCents: 25000, displayPrice: '$250', downloadLimit: 0, release: null,
       kind: 'service', billing: 'month', pageSlug: 'human-for-hire',
     }, {
       slug: 'hfh-session', name: 'HFH Session', productKey: 'wp_hfh_session',
       priceEnvVar: 'STRIPE_PRICE_WP_HFH_SESSION', defaultPriceId: 'price_wp_sess',
-      displayPrice: '$150', downloadLimit: 0, release: null,
+      amountCents: 15000, displayPrice: '$150', downloadLimit: 0, release: null,
       kind: 'service', pageSlug: 'human-for-hire',
     }],
   };
@@ -64,7 +64,7 @@ async function post(obj: Record<string, unknown>) {
     method: 'POST', url: '/api/stripe/webhook',
     payload: { type: 'checkout.session.completed', data: { object: {
       id: 'cs_test_wp1', mode: 'payment', payment_status: 'paid', metadata: { web_product: 'demo-pack' },
-      customer_details: { email: 'Buyer@Test.com' }, amount_total: 900, currency: 'usd', ...obj,
+      customer_details: { email: 'Buyer@Test.com' }, amount_total: 900, amount_subtotal: 900, currency: 'usd', ...obj,
     } } },
   });
   await app.close();
@@ -105,11 +105,22 @@ describe('webhook web-product orders', () => {
     }));
   });
 
-  it('records nothing for a wrong price', async () => {
-    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_other' } }] });
-    expect(await post({ customer: 'cus_1' })).toBe(200);
+  it('records a one-time order on matching amount_subtotal even when a coupon lowered the total', async () => {
+    expect(await post({ amount_total: 450, amount_subtotal: 900 })).toBe(200);
+    expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ slug: 'demo-pack', amountTotal: 450 }));
+    expect(listLineItems).not.toHaveBeenCalled();
+  });
+
+  it('records nothing for a one-time amount_subtotal mismatch', async () => {
+    expect(await post({ customer: 'cus_1', amount_subtotal: 100 })).toBe(200);
     expect(recordOrder).not.toHaveBeenCalled();
     expect(saveOneTimePurchase).not.toHaveBeenCalled();
+  });
+
+  it('monthly still checks the line-item price id', async () => {
+    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_other' } }] });
+    expect(await post({ mode: 'subscription', amount_subtotal: 25000, metadata: { web_product: 'hfh-fractional' } })).toBe(200);
+    expect(recordOrder).not.toHaveBeenCalled();
   });
 
   it('records nothing for an unpaid session', async () => {
@@ -158,8 +169,7 @@ describe('webhook web-product orders', () => {
   });
 
   it('records a one-time service session and still calls saveOneTimePurchase', async () => {
-    listLineItems.mockResolvedValue({ data: [{ price: { id: 'price_wp_sess' } }] });
-    expect(await post({ customer: 'cus_1', metadata: { web_product: 'hfh-session' } })).toBe(200);
+    expect(await post({ customer: 'cus_1', amount_subtotal: 15000, amount_total: 15000, metadata: { web_product: 'hfh-session' } })).toBe(200);
     expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ slug: 'hfh-session' }));
     expect(saveOneTimePurchase).toHaveBeenCalledWith(expect.objectContaining({ product_key: 'wp_hfh_session' }));
   });

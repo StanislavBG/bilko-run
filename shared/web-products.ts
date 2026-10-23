@@ -32,7 +32,9 @@ export interface WebProduct {
   priceEnvVar: string;
   /** public Stripe price id used when the env var is unset */
   defaultPriceId?: string;
-  /** human price shown on the page, e.g. '$9' */
+  /** price in US cents; the source of truth for one-time Checkout (price_data) and webhook verification */
+  amountCents: number;
+  /** human price shown on the page, e.g. '$9'; must be the formatted amountCents */
   displayPrice: string;
   /** max downloads per purchase */
   downloadLimit: number;
@@ -69,6 +71,7 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     productKey: 'wp_launch_kit',
     priceEnvVar: 'STRIPE_PRICE_WP_LAUNCH_KIT',
     defaultPriceId: 'price_1UPEUuR6w0VtQRLTqFklclrS',
+    amountCents: 900,
     displayPrice: '$9',
     downloadLimit: 20,
     release: {
@@ -83,6 +86,7 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     name: 'Unstick my agents',
     productKey: 'wp_hfh_unstick',
     priceEnvVar: 'STRIPE_PRICE_WP_HFH_UNSTICK',
+    amountCents: 7500,
     displayPrice: '$75',
     downloadLimit: 0,
     release: null,
@@ -96,6 +100,7 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     name: 'Agent Factory Setup',
     productKey: 'wp_hfh_factory_setup',
     priceEnvVar: 'STRIPE_PRICE_WP_HFH_FACTORY_SETUP',
+    amountCents: 22500,
     displayPrice: '$225',
     downloadLimit: 0,
     release: null,
@@ -112,6 +117,7 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     name: 'Fractional Agent Ops',
     productKey: 'wp_hfh_fractional',
     priceEnvVar: 'STRIPE_PRICE_WP_HFH_FRACTIONAL',
+    amountCents: 75000,
     displayPrice: '$750',
     downloadLimit: 0,
     release: null,
@@ -126,6 +132,7 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     name: 'Bilko Agent Factory Kit',
     productKey: 'wp_agent_factory_kit',
     priceEnvVar: 'STRIPE_PRICE_WP_AGENT_FACTORY_KIT',
+    amountCents: 1900,
     displayPrice: '$19',
     downloadLimit: 20,
     release: {
@@ -214,6 +221,13 @@ export function webProductForPriceId(
   return list.find((p) => resolveWebProductPriceId(p, env) === priceId);
 }
 
+/** Cents → '$9' / '$9.50'. */
+export function formatAmountCents(cents: number): string {
+  const dollars = Math.floor(cents / 100);
+  const rem = cents % 100;
+  return rem === 0 ? `$${dollars}` : `$${dollars}.${String(rem).padStart(2, '0')}`;
+}
+
 function isIntInRange(n: unknown, min: number, max: number): boolean {
   return typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max;
 }
@@ -233,6 +247,11 @@ export function validateWebProducts(list: readonly WebProduct[]): string[] {
     }
     if (!PRICE_ENV_RE.test(p.priceEnvVar)) {
       problems.push(`${tag} priceEnvVar must match ${PRICE_ENV_RE}`);
+    }
+    if (typeof p.amountCents !== 'number' || !Number.isInteger(p.amountCents) || p.amountCents <= 0) {
+      problems.push(`${tag} amountCents must be a positive integer`);
+    } else if (p.displayPrice !== formatAmountCents(p.amountCents)) {
+      problems.push(`${tag} displayPrice must be ${formatAmountCents(p.amountCents)} to match amountCents`);
     }
     const isService = productKind(p) === 'service';
     if (!isIntInRange(p.downloadLimit, isService ? 0 : 1, 100)) {

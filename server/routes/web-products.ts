@@ -94,7 +94,8 @@ export async function resolvePaidOrder(product: WebProduct, sessionId: string): 
   const isTest = sessionId.startsWith('cs_test_');
   const stripe = isTest ? getStripeTest() : getStripe();
   const priceId = resolveWebProductPriceId(product, process.env);
-  if (!stripe || !priceId) throw new StripeUnavailable('stripe or price unconfigured');
+  const monthly = productBilling(product) === 'month';
+  if (!stripe || (monthly && !priceId)) throw new StripeUnavailable('stripe or price unconfigured');
 
   let session: any;
   try {
@@ -111,7 +112,11 @@ export async function resolvePaidOrder(product: WebProduct, sessionId: string): 
   const items: any[] = session.line_items?.data ?? [];
   // Test sessions carry inline price_data (no live price id in test mode), so
   // they are matched on the server-set test marker instead.
-  if (isTest ? session.metadata?.test !== 'true' : !items.some((li) => li?.price?.id === priceId)) {
+  // One-time products are priced inline from amountCents, so match on the pre-discount subtotal.
+  const liveMatch = monthly
+    ? items.some((li) => li?.price?.id === priceId)
+    : session.amount_subtotal === product.amountCents;
+  if (isTest ? session.metadata?.test !== 'true' : !liveMatch) {
     return { status: 'not_found' };
   }
 
@@ -142,7 +147,8 @@ export async function resolvePaidOrder(product: WebProduct, sessionId: string): 
 export interface CheckoutParamsInput {
   owner: boolean;
   ownerIp: boolean;
-  priceId: string;
+  /** Stripe price id; only used for monthly products */
+  priceId?: string;
   testCents: number | null;
   publicUrl: string;
   couponId?: string;
@@ -170,7 +176,16 @@ export function buildWebProductCheckoutParams(
         },
         quantity: 1,
       }]
-      : [{ price: priceId, quantity: 1 }],
+      : monthly
+        ? [{ price: priceId, quantity: 1 }]
+        : [{
+          price_data: {
+            currency: 'usd',
+            unit_amount: product.amountCents,
+            product_data: { name: product.name },
+          },
+          quantity: 1,
+        }],
     ...(monthly ? {} : { customer_creation: 'always' }),
     // Stripe forbids discounts together with allow_promotion_codes.
     ...(couponId ? { discounts: [{ coupon: couponId }] } : { allow_promotion_codes: true }),
@@ -275,7 +290,7 @@ export function registerWebProductRoutes(
       reply.status(409);
       return { error: 'Owner checkouts run in Stripe test mode, which is not configured (STRIPE_TEST_SECRET_KEY).' };
     }
-    if (!stripe || !priceId) {
+    if (!stripe || (productBilling(product) === 'month' && !priceId)) {
       reply.status(503);
       return { error: 'Checkout is not available right now.' };
     }

@@ -66,7 +66,7 @@ describe('GET /buy/:offerId', () => {
     expect(sessionsCreate).toHaveBeenCalledTimes(1);
     expect(sessionsCreate).toHaveBeenCalledWith(expect.objectContaining({
       mode: 'payment',
-      line_items: [{ price: 'price_launch_kit', quantity: 1 }],
+      line_items: [{ price_data: { currency: 'usd', unit_amount: 900, product_data: { name: 'Bilko Launch Kit' } }, quantity: 1 }],
       customer_creation: 'always',
       allow_promotion_codes: true,
       metadata: { web_product: 'launch-kit', agent_buy: 'launch-kit' },

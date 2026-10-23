@@ -278,11 +278,44 @@ bilko.run treats AI agents as a customer segment: they can discover what is for 
 | GET | `/llms.txt` | none | Plain-text storefront for LLMs: offers with prices and `/buy` links, public projects, and the agent endpoints below. `server/routes/agent-storefront.ts` |
 | GET | `/api/offers` | none | JSON `{ offers: [...] }`: `id`, `name`, `summary`, `whatYouGet`, `price`, `amount`, `currency`, `billing`, `pageUrl`, `buyUrl`, `howToBuy`. `Cache-Control: public, max-age=300`. |
 | GET | `/api/projects` | none | The public project catalog (see "Public project catalog"), each project with its `offers` (`id`, `price`, `buyUrl`). |
-| POST | `/mcp` | none for catalog tools; `Authorization: Bearer bkk_...` for `roast_page` | Stateless streamable-HTTP MCP server. Tools: `list_projects`, `get_project(slug)`, `list_offers` (all read-only, same data as the JSON routes) and `roast_page(url)` (paid, 1 credit; returns an `isError` result with the buy link when the key is missing or invalid). |
+| POST | `/mcp` | none for catalog tools; `Authorization: Bearer bkk_...` for `wallet_balance`, `order_menu_item` and `roast_page` | Stateless streamable-HTTP MCP server. See "MCP tools" below. |
+| GET | `/api/wallet` | Clerk session or `bkk_` key | `{ balanceCents, balance }`: the caller's Bilko Credits balance. `private, no-store`. |
+| POST | `/api/wallet/topup` | Clerk session only | Body `{ cents }` with `cents` one of 300, 500, 1000. Creates a Stripe Checkout session and returns its URL. 400 for any other amount, 429 rate limited, 503 when Checkout is unavailable. Agents without a session buy credits through `/buy/credits-N`. |
+| GET | `/buy/credits-3`, `/buy/credits-5`, `/buy/credits-10` | none | Same as `/buy/:offerId` for the $3, $5 and $10 wallet top-ups (offers `credits-3|5|10`, `source.kind: 'wallet_topup'`). Each also yields a `bkk_` key on the success page. |
+| GET | `/api/menu` | none | The Bilko services menu: `topups` and every orderable item (`id`, `name`, `price`, `priceCents`, `kind`, intake fields). `public, max-age=300`. |
+| POST | `/api/menu/:itemId/order` | Clerk session or `bkk_` key | Body `{ intake }` (strings, validated against the item's intake fields). Spends the item's price from the wallet. 201 `{ order: { id, itemId, status, priceCents }, balanceCents }`. Errors: 400 `invalid_intake` / `live_needs_slot`, 402 `insufficient_credits` (with `balanceCents`, `topUpUrl`), 404 `unknown_item`, 409 `daily_cap`, 429. Rate limited per IP. |
+| POST | `/api/menu/live-call/order` | Clerk session or `bkk_` key | Body `{ startMs, intake }`. Books the $9 live call on the slot machinery (see "Selling a bookable service") and spends 900 cents. 201 `{ booking, balanceCents, emailed }`. Errors: 402 `insufficient_credits`, 409 `slot_unavailable`, 400 otherwise. |
+| GET | `/api/menu/orders` | Clerk session or `bkk_` key | The caller's own orders (`id`, `itemId`, `status`, `priceCents`, `createdAt`). |
 | GET | `/buy/:offerId` | none | Creates a Stripe Checkout session for the offer and 302-redirects to it. Unknown id: 404 listing valid ids. Search/AI crawlers and HEAD get a static page with the price and the link instead of a session. Rate limited (10/min/IP); 503 when Checkout is unavailable. |
 | POST | `/api/agent-keys` | Clerk session | Mints a `bkk_` key, returned once (`key`, `prefix`, `id`). 409 at 10 active keys. |
 | GET | `/api/agent-keys` | Clerk session | Lists the caller's keys (prefix, label, timestamps; never the secret). |
 | DELETE | `/api/agent-keys/:id` | Clerk session | Revokes one of the caller's keys. |
+
+### Bilko Credits wallet and services menu
+
+Bilko Credits are a prepaid wallet (1 credit = 1 cent of balance, shown as dollars). Decision D-2026-10-20-14 replaced the old Human For Hire price ladder ($75, $225 and $750) with a credit-priced menu plus one $9 live call.
+
+- **Top-ups:** $3, $5 or $10 (`WALLET_TOPUP_CENTS` in `shared/bilko-menu.ts`). Humans use `POST /api/wallet/topup`; agents open `/buy/credits-3|5|10`. The Stripe webhook credits the wallet only when the session is paid and the subtotal equals an allowed amount. Code: `server/routes/wallet.ts`, `server/services/wallet.ts`.
+- **PPP bonus:** a country-based bonus paid as extra credits on a top-up, never a lower charge. The country comes from the payment card (falling back to the billing address). High-income countries get 0%, upper-middle-income 50%, lower-middle and low income 100%, per the World Bank classification; unlisted or unknown countries get 0%. The bonus is a second, separate wallet credit (`ppp_bonus:<CC>`) keyed to the Checkout session, so a replayed webhook cannot pay it twice. Edit the table in `shared/ppp-bonus.ts`.
+- **Menu:** items and prices live in `shared/bilko-menu.ts` (`MENU_ITEMS`), all at or below the $10 ceiling: `ask-bilko` ($0.50), `claude-md-review` and `prd-review` ($1), `agent-postmortem` ($2), `repo-audit` and `agent-factory-kit` ($3) and `live-call` ($9). Kinds: `async` (written delivery by email), `download` and `live`. Async items share a daily cap (`MENU_DAILY_ASYNC_CAP`). Code: `server/routes/menu-orders.ts`, `server/services/menu-orders.ts`.
+- **Live call:** a 30-minute call booked into the `human-for-hire` slots in `shared/service-slots.ts` (Tue/Wed/Thu 18:30 Pacific, so 3 a week). Read open slots from `GET /api/services/human-for-hire/slots`, then `POST /api/menu/live-call/order`. It needs a slot, so it is not an ordinary menu order: the generic order path returns `live_needs_slot`, and the MCP `order_menu_item` tool refuses it.
+- **Approval queue:** async orders are queued, then drafted by `server/services/menu-drafts.ts`, and nothing is emailed until an admin approves. Admin routes (`requireAdmin`, `server/routes/admin-menu-orders.ts`): `GET /api/admin/menu-orders[?status=]` (also reports `asyncToday` and `asyncCap`), `POST /api/admin/menu-orders/:id/draft`, `POST /api/admin/menu-orders/:id/approve` (body `{ body }`; emails the buyer, then marks delivered) and `POST /api/admin/menu-orders/:id/refund` (returns the credits).
+
+### MCP tools
+
+`POST /mcp` serves these tools. The list is asserted against `/llms.txt` in `tests/agent-storefront.test.ts`.
+
+| Tool | Key | Does |
+|---|---|---|
+| `list_projects` | none | Public project catalog (same data as `GET /api/projects`). |
+| `get_project(slug)` | none | One public project; not-found error otherwise. |
+| `list_offers` | none | Everything for sale with `buyUrl` (same data as `GET /api/offers`). |
+| `list_menu` | none | The services menu (same data as `GET /api/menu`). |
+| `wallet_balance` | `bkk_` | The key owner's balance. |
+| `order_menu_item(itemId, intake)` | `bkk_` | Orders one menu item from the key owner's wallet. 20 orders a minute per account. Errors name the cause (`insufficient_credits`, `daily_cap`, `invalid_intake`, `unknown_item`, `live_needs_slot`). The live call cannot be booked over MCP. |
+| `roast_page(url)` | `bkk_` | Paid page roast, 1 credit. |
+
+A tool that needs a key returns an `isError` result with the top-up link when the key is missing or invalid.
 
 ### Offers
 
@@ -295,7 +328,7 @@ Every paid offer lives in one file, `shared/agent-offers.ts` (`AGENT_OFFERS`): `
 ### Agent keys (`bkk_`)
 
 - A `bkk_` key identifies a bilko.run account (by email) to the agent surfaces. It is minted either by the account owner via `POST /api/agent-keys` (Clerk session) or revealed once on the checkout success page after buying an offer with `agentKey: true`. Only a hash is stored; the secret is shown once.
-- Keys are accepted only on `/mcp`, and the only thing they can do is call `roast_page`, which spends 1 credit from the owner's balance through the same `creditGate` path as the web app. A key never grants admin, never passes `requireAuth`, and cannot mint or revoke keys, so a leaked key can spend only that account's credits.
+- Keys are accepted on `/mcp` and on the wallet and menu routes (`GET /api/wallet`, `POST /api/menu/:itemId/order`, `POST /api/menu/live-call/order`, `GET /api/menu/orders`). They can read the owner's balance, order menu items from it and call `roast_page` (1 credit, through the same `creditGate` path as the web app). A key never grants admin, never passes `requireAuth`, and cannot mint or revoke keys, so a leaked key can spend only that account's credits.
 - Max 10 active keys per account. Implemented in `server/services/agent-api-keys.ts`, `server/routes/agent-keys.ts`.
 
 ### Visitor classes
@@ -769,7 +802,6 @@ Mail failures never fail a booking (`emailed: false`).
 
 | Var | Purpose |
 |---|---|
-| `STRIPE_PRICE_WP_HFH_*` | Human For Hire price ids (`UNSTICK`, `FACTORY_SETUP`, `FRACTIONAL`), same override rule as other `STRIPE_PRICE_WP_*` |
 | `STRIPE_COUPON_WP_*` (+ `_TEST`) | founding-price coupon ids, live and test mode |
 | `RESEND_API_KEY`, `MAIL_FROM` | transactional mail via Resend; unset → bookings still succeed, nothing is sent |
 | `BILKO_INBOX` | address that receives booking notices; also the `.ics` organizer address (falls back to `noreply@bilko.run` when unset) |

@@ -9,9 +9,10 @@ import { SourcesTab, FunnelsTab, AudienceTab, ToolsTab } from './admin/analytics
 import { WebProductsTab } from './admin/analytics/WebProductsTab.js';
 import { SessionManagerTab } from './admin/analytics/SessionManagerTab.js';
 import { SignupsTab } from './admin/analytics/SignupsTab.js';
+import { MenuOrdersTab } from './admin/MenuOrdersTab.js';
 import { SyntheticTab, ManifestsTab } from './admin/analytics/OpsTabs.js';
 
-const TABS = ['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'products', 'session manager', 'signups', 'manifests', 'synthetic'] as const;
+const TABS = ['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'products', 'session manager', 'signups', 'orders', 'manifests', 'synthetic'] as const;
 
 export function AdminPage() {
   const { isLoaded } = useUser();
@@ -99,6 +100,7 @@ export function AdminPage() {
           {tab === 'products' && <WebProductsTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'session manager' && <SessionManagerTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'signups' && <SignupsTab days={days} />}
+          {tab === 'orders' && <MenuOrdersTab />}
 
           {tab === 'synthetic' && <SyntheticTab />}
           {tab === 'manifests' && <ManifestsTab />}

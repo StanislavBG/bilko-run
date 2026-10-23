@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { menuPayload } from '../../shared/bilko-menu.js';
-import { listOrdersForEmail, placeMenuOrder } from '../services/menu-orders.js';
+import { bookLiveCall, listOrdersForEmail, placeMenuOrder } from '../services/menu-orders.js';
 import { walletAuthEmail } from './wallet.js';
 
 const ORDER_LIMIT = 20;
@@ -39,7 +39,25 @@ export function registerMenuOrderRoutes(app: FastifyInstance): void {
 
     const via = req.headers.authorization?.startsWith('Bearer bkk_') ? 'api' : 'web';
     const { itemId } = req.params as { itemId: string };
-    const { intake } = (req.body ?? {}) as { intake?: unknown };
+    const { intake, startMs } = (req.body ?? {}) as { intake?: unknown; startMs?: unknown };
+    if (itemId === 'live-call') {
+      const booked = await bookLiveCall({ email, startMs, intake, via });
+      reply.header('Cache-Control', 'private, no-store');
+      switch (booked.status) {
+        case 'ok':
+          reply.status(201);
+          return { booking: booked.booking, balanceCents: booked.balanceCents, emailed: booked.emailed };
+        case 'slot_unavailable':
+          reply.status(409).send({ error: 'slot_unavailable' });
+          return;
+        case 'insufficient_credits':
+          reply.status(402).send({ error: 'insufficient_credits', balanceCents: booked.balanceCents ?? 0, topUpUrl: TOPUP_URL });
+          return;
+        default:
+          reply.status(400).send({ error: booked.status });
+          return;
+      }
+    }
     const result = await placeMenuOrder({ email, itemId, intake, via });
     reply.header('Cache-Control', 'private, no-store');
 

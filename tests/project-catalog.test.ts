@@ -9,7 +9,7 @@ import { AGENT_OFFERS, formatPrice } from '../shared/agent-offers.js';
 const app = Fastify();
 
 beforeAll(async () => {
-  registerProjectCatalogRoutes(app);
+  registerProjectCatalogRoutes(app, { listOffers: async () => AGENT_OFFERS });
   await app.ready();
 });
 afterAll(() => app.close());

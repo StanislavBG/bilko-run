@@ -7,7 +7,7 @@ import { buildCatalog } from '../src/data/projectCatalog.js';
 describe('GET /llms.txt', () => {
   async function fetchTxt() {
     const app = Fastify();
-    registerAgentStorefrontRoutes(app);
+    registerAgentStorefrontRoutes(app, { listOffers: async () => AGENT_OFFERS });
     return app.inject({ method: 'GET', url: '/llms.txt' });
   }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AGENT_OFFERS, offerById, formatPrice } from '../shared/agent-offers';
-import { WEB_PRODUCTS, webProductBySlug, productBilling } from '../shared/web-products';
+import { WEB_PRODUCTS, webProductBySlug, productBilling, productPageSlug } from '../shared/web-products';
 import { displayPriceCents } from '../server/routes/web-products';
 import { entryForPriceType } from '../shared/product-catalog';
 
@@ -23,6 +23,7 @@ describe('agent offers', () => {
       expect(p).toBeDefined();
       expect(o.amountCents).toBe(displayPriceCents(p!.displayPrice));
       expect(o.billing).toBe(productBilling(p!));
+      expect(o.pageUrl).toBe(`https://bilko.run/projects/${productPageSlug(p!)}/`);
     }
   });
 

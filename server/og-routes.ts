@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { injectOgMeta, resolveOg, type OgContext } from './og-meta.js';
 import { buildOfferJsonLd, hasProductJsonLd, injectJsonLd, offersForPath } from './offer-jsonld.js';
+import { availableOffers } from './services/offer-availability.js';
 import { renderOgCard } from './og-image.js';
 import { readProjectPng } from './og-assets.js';
 
@@ -67,7 +68,8 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
       if (meta) break;
     }
     meta ??= resolveOg(path, ctx);
-    const offers = offersForPath(path);
+    const onPage = offersForPath(path);
+    const offers = onPage.length ? await availableOffers(onPage) : onPage;
     if (!meta && !offers.length) return payload;
     let html = typeof payload === 'string' ? payload : payload.toString('utf-8');
     if (meta) html = injectOgMeta(html, meta);

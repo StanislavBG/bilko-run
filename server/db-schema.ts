@@ -626,6 +626,40 @@ export const MIGRATIONS = [
     UNIQUE(page_slug, slot_start_ms)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_service_bookings_session ON service_bookings(checkout_session_id)`,
+  // Prepaid Bilko Credits wallet, in US cents (server/services/wallet.ts).
+  `CREATE TABLE IF NOT EXISTS wallet_balances (
+    email         TEXT PRIMARY KEY,
+    balance_cents INTEGER NOT NULL DEFAULT 0,
+    updated_at    INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    email        TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    reason       TEXT NOT NULL,
+    ref          TEXT NOT NULL UNIQUE,
+    created_at   INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_wallet_transactions_email ON wallet_transactions(email)`,
+  // Menu orders: defined here, written by the menu-order PRD. created_day is 'YYYY-MM-DD' in America/Los_Angeles.
+  `CREATE TABLE IF NOT EXISTS menu_orders (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref            TEXT NOT NULL UNIQUE,
+    item_id        TEXT,
+    email          TEXT,
+    price_cents    INTEGER,
+    kind           TEXT,
+    intake_json    TEXT,
+    status         TEXT,
+    via            TEXT,
+    draft          TEXT,
+    delivered_body TEXT,
+    created_day    TEXT,
+    created_at     INTEGER,
+    updated_at     INTEGER
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_menu_orders_status ON menu_orders(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_menu_orders_created_day ON menu_orders(created_day)`,
   // Personal admin API keys (server/services/admin-api-keys.ts): only the sha256 is stored.
   `CREATE TABLE IF NOT EXISTS admin_api_keys (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -3,11 +3,12 @@ import { getStripe } from '../services/stripe.js';
 import { dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import { classifyVisitor } from '../services/analytics.js';
-import { AGENT_OFFERS, formatPrice, offerById, type AgentOffer } from '../../shared/agent-offers.js';
+import { formatPrice, offerById, type AgentOffer } from '../../shared/agent-offers.js';
 import { entryForPriceType } from '../../shared/product-catalog.js';
 import { buildWebProductCheckoutParams } from './web-products.js';
 import { countLiveOrders } from '../services/web-products.js';
-import { resolveWebProductPriceId, webProductBySlug, type WebProduct } from '../../shared/web-products.js';
+import { availableOffers, isOfferAvailable, isOfferPriced, offerPriceId } from '../services/offer-availability.js';
+import { webProductBySlug, type WebProduct } from '../../shared/web-products.js';
 
 const RATE_WINDOW_MS = 60_000;
 const SESSION_LIMIT = 10;
@@ -50,15 +51,6 @@ function sendHtml(reply: any, status: number, html: string) {
     .send(html);
 }
 
-function resolvePrice(offer: AgentOffer, env: Record<string, string | undefined>): string | undefined {
-  if (offer.source.kind === 'web_product') {
-    const product = webProductBySlug(offer.source.slug);
-    return product ? resolveWebProductPriceId(product, env) : undefined;
-  }
-  const entry = entryForPriceType(offer.source.priceType);
-  return entry ? env[entry.envVar] || entry.defaultPriceId : undefined;
-}
-
 /** Founding coupon id when its env var is set and Stripe says it is still valid. */
 async function foundingCouponId(product: WebProduct, stripe: any): Promise<string | undefined> {
   const id = product.foundingCouponEnvVar ? process.env[product.foundingCouponEnvVar] : undefined;
@@ -93,13 +85,19 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     const offerId = (req.params as { offerId?: string }).offerId;
     const offer = typeof offerId === 'string' && OFFER_ID_RE.test(offerId) ? offerById(offerId) : undefined;
     if (!offer) {
+      const open = await availableOffers();
       return sendHtml(reply, 404, page('Offer not found',
-        `<p>No such offer. Available: ${AGENT_OFFERS.map((o) => `<a href="/buy/${esc(o.id)}">${esc(o.id)}</a>`).join(', ')}.</p>`));
+        `<p>No such offer. Available: ${open.map((o) => `<a href="/buy/${esc(o.id)}">${esc(o.id)}</a>`).join(', ') || 'none right now'}.</p>`));
     }
+
+    // Never take money for something that cannot be delivered (e.g. a download whose zip is not stored).
+    const notYet = () => sendHtml(reply, 503, page('Not available yet',
+      `<p>${esc(offer.name)} is not on sale yet. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
 
     const ua = String(req.headers['user-agent'] ?? '');
     const cls = classifyVisitor(ua);
     if (req.method === 'HEAD' || cls === 'search_crawler' || cls === 'ai_crawler') {
+      if (!(await isOfferAvailable(offer))) return notYet();
       return sendHtml(reply, 200, page(offer.name,
         `<p>${esc(offer.summary)}</p><p>Price: ${esc(formatPrice(offer))}</p>`
         + `<p>To buy, open <a href="${esc(offer.buyUrl)}">${esc(offer.buyUrl)}</a> in a browser.</p>`));
@@ -113,11 +111,10 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
       `<p>Checkout is not available right now. Try again later or visit <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a>.</p>`));
 
     const stripe = getStripe();
-    const priceId = resolvePrice(offer, process.env);
-    const oneTimeWebProduct = offer.source.kind === 'web_product'
-      && (webProductBySlug(offer.source.slug)?.billing ?? 'one_time') === 'one_time';
+    const priceId = offerPriceId(offer, process.env);
     // One-time web products charge amountCents inline; only catalog offers and monthly products need a price id.
-    if (!stripe || (!priceId && !oneTimeWebProduct)) return unavailable();
+    if (!stripe || !isOfferPriced(offer, process.env)) return unavailable();
+    if (!(await isOfferAvailable(offer))) return notYet();
 
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
     let url: string | null | undefined;

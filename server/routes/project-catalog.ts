@@ -6,7 +6,8 @@ import { buildCatalog, findCatalogProject } from '../../src/data/projectCatalog.
 import { registerPageRoastMcpTool } from './tools/page-roast.js';
 import { hashIp } from './tools/_shared.js';
 import { verifyAgentApiKey } from '../services/agent-api-keys.js';
-import { AGENT_OFFERS, formatPrice } from '../../shared/agent-offers.js';
+import { AGENT_OFFERS, formatPrice, type AgentOffer } from '../../shared/agent-offers.js';
+import { availableOffers } from '../services/offer-availability.js';
 
 /**
  * Public project catalog: exactly the cards an anonymous visitor sees on
@@ -22,20 +23,23 @@ function json(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 }
 
-function offersForSlug(slug: string) {
-  return AGENT_OFFERS
+/** Offers listed to agents: only those that can be bought and delivered now. */
+export type ListOffers = () => Promise<readonly AgentOffer[]>;
+
+function offersForSlug(slug: string, offers: readonly AgentOffer[]) {
+  return offers
     .filter(o => new URL(o.pageUrl).pathname === `/projects/${slug}/`)
     .map(o => ({ id: o.id, price: formatPrice(o), buyUrl: o.buyUrl }));
 }
 
-function enrichedCatalog() {
+function enrichedCatalog(offers: readonly AgentOffer[]) {
   const catalog = buildCatalog();
-  return { ...catalog, projects: catalog.projects.map(p => ({ ...p, offers: offersForSlug(p.slug) })) };
+  return { ...catalog, projects: catalog.projects.map(p => ({ ...p, offers: offersForSlug(p.slug, offers) })) };
 }
 
-export function buildOffersPayload() {
+export function buildOffersPayload(offers: readonly AgentOffer[] = AGENT_OFFERS) {
   return {
-    offers: AGENT_OFFERS.map(o => ({
+    offers: offers.map(o => ({
       id: o.id,
       name: o.name,
       summary: o.summary,
@@ -51,7 +55,10 @@ export function buildOffersPayload() {
   };
 }
 
-export function buildCatalogMcpServer(auth?: { email: string | null; ipHash: string; invalidKey?: boolean }): McpServer {
+export function buildCatalogMcpServer(
+  auth?: { email: string | null; ipHash: string; invalidKey?: boolean },
+  listOffers: ListOffers = availableOffers,
+): McpServer {
   const server = new McpServer({ name: 'bilko-run-projects', version: '1.0.0' });
 
   server.registerTool(
@@ -63,7 +70,7 @@ export function buildCatalogMcpServer(auth?: { email: string | null; ipHash: str
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => json(enrichedCatalog()),
+    async () => json(enrichedCatalog(await listOffers())),
   );
 
   server.registerTool(
@@ -80,7 +87,7 @@ export function buildCatalogMcpServer(auth?: { email: string | null; ipHash: str
       if (!project) {
         return { isError: true, content: [{ type: 'text' as const, text: `Project "${slug}" not found.` }] };
       }
-      return json({ ...project, offers: offersForSlug(project.slug) });
+      return json({ ...project, offers: offersForSlug(project.slug, await listOffers()) });
     },
   );
 
@@ -93,7 +100,7 @@ export function buildCatalogMcpServer(auth?: { email: string | null; ipHash: str
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => json(buildOffersPayload()),
+    async () => json(buildOffersPayload(await listOffers())),
   );
 
   registerPageRoastMcpTool(server, auth ?? { email: null, ipHash: hashIp('unknown') });
@@ -101,15 +108,20 @@ export function buildCatalogMcpServer(auth?: { email: string | null; ipHash: str
   return server;
 }
 
-export function registerProjectCatalogRoutes(app: FastifyInstance): void {
+export function registerProjectCatalogRoutes(
+  app: FastifyInstance,
+  opts: { listOffers?: ListOffers } = {},
+): void {
+  const listOffers = opts.listOffers ?? availableOffers;
+
   app.get('/api/projects', async (_req, reply) => {
     reply.header('Cache-Control', CACHE_CONTROL);
-    return enrichedCatalog();
+    return enrichedCatalog(await listOffers());
   });
 
   app.get('/api/offers', async (_req, reply) => {
     reply.header('Cache-Control', CACHE_CONTROL);
-    return buildOffersPayload();
+    return buildOffersPayload(await listOffers());
   });
 
   // Stateless streamable HTTP with plain JSON replies: a fresh server +
@@ -126,7 +138,7 @@ export function registerProjectCatalogRoutes(app: FastifyInstance): void {
       email = await verifyAgentApiKey(authHeader.slice('Bearer '.length));
       invalidKey = !email;
     }
-    const server = buildCatalogMcpServer({ email, ipHash: hashIp(req.ip), invalidKey });
+    const server = buildCatalogMcpServer({ email, ipHash: hashIp(req.ip), invalidKey }, listOffers);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

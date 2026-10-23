@@ -5,7 +5,11 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 const placeMenuOrder = vi.fn();
 const getWalletCents = vi.fn();
-vi.mock('../server/services/menu-orders.js', () => ({ placeMenuOrder: (...a: unknown[]) => placeMenuOrder(...a) }));
+const availableMenuPayload = vi.fn();
+vi.mock('../server/services/menu-orders.js', () => ({
+  placeMenuOrder: (...a: unknown[]) => placeMenuOrder(...a),
+  availableMenuPayload: (...a: unknown[]) => availableMenuPayload(...a),
+}));
 vi.mock('../server/services/wallet.js', () => ({ getWalletCents: (...a: unknown[]) => getWalletCents(...a) }));
 
 import { buildCatalogMcpServer } from '../server/routes/project-catalog.js';
@@ -31,13 +35,29 @@ async function call(
 
 const KEYED = { email: 'agent@example.com', ipHash: 'h' };
 
-beforeEach(() => { placeMenuOrder.mockReset(); getWalletCents.mockReset(); });
+beforeEach(() => { availableMenuPayload.mockReset(); availableMenuPayload.mockImplementation(async () => menuPayload()); placeMenuOrder.mockReset(); getWalletCents.mockReset(); });
 
 describe('menu MCP tools', () => {
   it('list_menu needs no key and returns menuPayload()', async () => {
     const res = await call(undefined, 'list_menu');
     expect(res.isError).toBeFalsy();
     expect(JSON.parse(res.content[0].text)).toEqual(menuPayload());
+  });
+
+  it('list_menu omits what availableMenuPayload omits, and lists the kit when it returns it', async () => {
+    const full = menuPayload();
+    availableMenuPayload.mockResolvedValueOnce({ ...full, items: full.items.filter((i) => i.id !== 'agent-factory-kit') });
+    const without = JSON.parse((await call(undefined, 'list_menu')).content[0].text);
+    expect(without.items.map((i: any) => i.id)).not.toContain('agent-factory-kit');
+    const withKit = JSON.parse((await call(undefined, 'list_menu')).content[0].text);
+    expect(withKit.items.map((i: any) => i.id)).toContain('agent-factory-kit');
+  });
+
+  it('order_menu_item maps unavailable to a not-on-sale error', async () => {
+    placeMenuOrder.mockResolvedValueOnce({ status: 'unavailable' });
+    const res = await call(KEYED, 'order_menu_item', { itemId: 'agent-factory-kit', intake: {} });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('not on sale yet');
   });
 
   it('wallet_balance and order_menu_item refuse without a key, and with an invalid key', async () => {
@@ -77,7 +97,7 @@ describe('menu MCP tools', () => {
     expect(poor.isError).toBe(true);
     expect(poor.content[0].text).toContain('insufficient_credits');
     expect(poor.content[0].text).toContain('https://bilko.run/buy/credits-5');
-    for (const status of ['daily_cap', 'invalid_intake', 'unknown_item', 'live_needs_slot']) {
+    for (const status of ['daily_cap', 'invalid_intake', 'unknown_item', 'live_needs_slot', 'unavailable']) {
       placeMenuOrder.mockResolvedValueOnce({ status });
       const res = await call(KEYED, 'order_menu_item', { itemId: 'i', intake: {} });
       expect(res.isError).toBe(true);

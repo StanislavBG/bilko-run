@@ -1,7 +1,9 @@
 // Bilko services menu orders: wallet-paid, queued for an agent draft (async) or granted at once (download).
 import { randomUUID } from 'node:crypto';
 import { dbAll, dbGet, dbRun } from '../db.js';
-import { MENU_DAILY_ASYNC_CAP, menuItemById, parseMenuIntake } from '../../shared/bilko-menu.js';
+import { MENU_DAILY_ASYNC_CAP, menuItemById, menuPayload, parseMenuIntake, type MenuItem } from '../../shared/bilko-menu.js';
+import { webProductBySlug } from '../../shared/web-products.js';
+import { isDeliverable } from './offer-availability.js';
 import { debitWallet, refundWallet } from './wallet.js';
 import { recordOrder } from './web-products.js';
 import { claimSlot, claimedStarts } from './service-bookings.js';
@@ -30,7 +32,24 @@ export interface MenuOrder {
 
 export type PlaceMenuOrderResult =
   | { status: 'ok'; order: MenuOrder; balanceCents: number }
-  | { status: 'unknown_item' | 'invalid_intake' | 'daily_cap' | 'insufficient_credits' | 'live_needs_slot'; balanceCents?: number };
+  | { status: 'unknown_item' | 'invalid_intake' | 'daily_cap' | 'insufficient_credits' | 'live_needs_slot' | 'unavailable'; balanceCents?: number };
+
+/** A download item is on sale only when the zip it promises is stored. Other kinds are always on sale. */
+async function isMenuItemOnSale(item: MenuItem): Promise<boolean> {
+  if (item.kind !== 'download') return true;
+  const product = webProductBySlug(item.downloadSlug ?? item.id);
+  return !!product && isDeliverable(product);
+}
+
+/** menuPayload() without download items whose release zip is not stored yet. */
+export async function availableMenuPayload() {
+  const payload = menuPayload();
+  const ok = await Promise.all(payload.items.map((i) => {
+    const item = menuItemById(i.id);
+    return item ? isMenuItemOnSale(item) : false;
+  }));
+  return { ...payload, items: payload.items.filter((_, idx) => ok[idx]) };
+}
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 const dayLA = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(d);
@@ -74,6 +93,8 @@ export async function placeMenuOrder(input: {
   if (item.kind === 'live') return { status: 'live_needs_slot' };
   const intake = parseMenuIntake(item, input.intake);
   if (!intake) return { status: 'invalid_intake' };
+
+  if (!(await isMenuItemOnSale(item))) return { status: 'unavailable' };
 
   const email = normEmail(input.email);
   const ref = randomUUID();

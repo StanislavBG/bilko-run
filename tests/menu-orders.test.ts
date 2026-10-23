@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import { dbRun, dbGet, initDb } from '../server/db.js';
 import * as wallet from '../server/services/wallet.js';
 import * as products from '../server/services/web-products.js';
+import { availableMenuPayload } from '../server/services/menu-orders.js';
 import { creditWallet, getWalletCents } from '../server/services/wallet.js';
 import { hasOrderForEmail } from '../server/services/web-products.js';
 import { MENU_DAILY_ASYNC_CAP } from '../shared/bilko-menu.js';
@@ -15,6 +16,7 @@ const ask = (email = E) => placeMenuOrder({ email, itemId: 'ask-bilko', intake: 
 beforeAll(async () => { await initDb(); });
 afterEach(() => { vi.restoreAllMocks(); });
 beforeEach(async () => {
+  vi.spyOn(products, 'isReleaseStored').mockResolvedValue(true);
   await dbRun('DELETE FROM menu_orders');
   await dbRun('DELETE FROM wallet_transactions');
   await dbRun('DELETE FROM wallet_balances');
@@ -68,6 +70,26 @@ describe('placeMenuOrder', () => {
     expect(await hasOrderForEmail('agent-factory-kit', E)).toBe(true);
     const row = await dbGet<{ checkout_session_id: string }>('SELECT checkout_session_id FROM web_product_orders WHERE email = ?', E);
     expect(row?.checkout_session_id).toBe(`wallet_${r.order.ref}`);
+  });
+});
+
+describe('kit not stored', () => {
+  it('returns unavailable with no debit and no rows, and is not listed', async () => {
+    vi.spyOn(products, 'isReleaseStored').mockResolvedValue(false);
+    await creditWallet(E, 500, 'topup', 't1');
+    const r = await placeMenuOrder({ email: E, itemId: 'agent-factory-kit', intake: {}, via: 'web' });
+    expect(r).toEqual({ status: 'unavailable' });
+    expect(await getWalletCents(E)).toBe(500);
+    expect(await listOrders()).toHaveLength(0);
+    expect(await dbGet('SELECT 1 FROM web_product_orders WHERE email = ?', E)).toBeFalsy();
+    const ids = (await availableMenuPayload()).items.map((i) => i.id);
+    expect(ids).not.toContain('agent-factory-kit');
+    expect(ids).toContain('ask-bilko');
+  });
+
+  it('stored kit is listed', async () => {
+    const ids = (await availableMenuPayload()).items.map((i) => i.id);
+    expect(ids).toContain('agent-factory-kit');
   });
 });
 

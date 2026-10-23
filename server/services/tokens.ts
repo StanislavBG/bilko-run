@@ -1,4 +1,6 @@
 import { dbGet, dbTransaction, txGet, txRun } from '../db.js';
+import { randomUUID } from 'node:crypto';
+import { debitWallet } from './wallet.js';
 import { TOKENS_PER_SINGLE, TOKENS_PER_BUNDLE } from '../../shared/product-catalog.js';
 
 const FREE_TOKEN_GRANT = 1;
@@ -31,9 +33,13 @@ export async function grantFreeTokens(email: string, amount: number = FREE_TOKEN
   });
 }
 
-/** Deduct tokens atomically. Returns { success, balance }. Fails if insufficient balance. */
-export async function deductToken(email: string, cost: number = 1, reason: string = 'page_roast'): Promise<{ success: boolean; balance: number }> {
-  return dbTransaction(async (tx) => {
+/**
+ * Deduct tokens atomically; when tokens are short, fall back to Bilko Credits
+ * (wallet) at 100 cents per token. Returns { success, balance, source }.
+ * `balance` is the token balance. Nothing is debited when neither covers the cost.
+ */
+export async function deductToken(email: string, cost: number = 1, reason: string = 'page_roast'): Promise<{ success: boolean; balance: number; source: 'tokens' | 'wallet' }> {
+  const fromTokens = await dbTransaction(async (tx) => {
     // Atomic deduction — WHERE clause prevents negative balance even under concurrency
     const result = await txRun(tx,
       'UPDATE token_balances SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE email = ? AND balance >= ?',
@@ -50,9 +56,15 @@ export async function deductToken(email: string, cost: number = 1, reason: strin
     const row = await txGet<{ balance: number }>(tx, 'SELECT balance FROM token_balances WHERE email = ?', email);
     return { success: true, balance: row?.balance ?? 0 };
   });
+  if (fromTokens.success) return { ...fromTokens, source: 'tokens' };
+
+  const debit = await debitWallet(email, cost * 100, reason, 'tool:' + randomUUID());
+  return { success: debit.ok, balance: fromTokens.balance, source: 'wallet' };
 }
 
-/** Refund tokens after a failed paid call. Adds to the balance and logs the same ledger deductToken writes to. */
+/**
+ * Refund tokens after a failed paid call. Unchanged for wallet-paid calls: the
+ * refund comes back as a token (worth one tool call), not as wallet cents. Adds to the balance and logs the same ledger deductToken writes to. */
 export async function refundTokens(email: string, amount: number, reason: string): Promise<void> {
   await dbTransaction(async (tx) => {
     await txRun(tx,

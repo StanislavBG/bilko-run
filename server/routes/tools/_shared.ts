@@ -5,6 +5,7 @@ import { askGemini } from '../../gemini.js';
 import { getActiveSubscriptionLive, hasPurchased } from '../../services/stripe.js';
 import { verifyClerkToken, requireAuth, ADMIN_EMAILS } from '../../clerk.js';
 import { getTokenBalance, grantFreeTokens, hasTokenAccount } from '../../services/tokens.js';
+import { getWalletCents } from '../../services/wallet.js';
 import { parseJsonResponse } from '../../utils.js';
 import { verifyAgentApiKey } from '../../services/agent-api-keys.js';
 
@@ -262,7 +263,7 @@ export async function creditGate(
   const sub = await getActiveSubscriptionLive(email);
   if (!sub.isPro) {
     const balance = await getTokenBalance(email);
-    if (balance < opts.cost) {
+    if (balance < opts.cost && (await getWalletCents(email)) < opts.cost * 100) {
       reply.status(402).send({ error: 'No credits remaining.', requiresTokens: true, balance });
       return null;
     }

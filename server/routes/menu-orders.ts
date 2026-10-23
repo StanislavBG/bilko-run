@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { menuPayload } from '../../shared/bilko-menu.js';
-import { bookLiveCall, listOrdersForEmail, placeMenuOrder } from '../services/menu-orders.js';
+import { availableMenuPayload, bookLiveCall, listOrdersForEmail, placeMenuOrder } from '../services/menu-orders.js';
 import { walletAuthEmail } from './wallet.js';
 
 const ORDER_LIMIT = 20;
@@ -26,7 +25,7 @@ function orderRateLimited(ip: string): boolean {
 export function registerMenuOrderRoutes(app: FastifyInstance): void {
   app.get('/api/menu', async (_req, reply) => {
     reply.header('Cache-Control', 'public, max-age=300');
-    return menuPayload();
+    return availableMenuPayload();
   });
 
   app.post('/api/menu/:itemId/order', { bodyLimit: BODY_LIMIT }, async (req, reply) => {
@@ -91,6 +90,9 @@ export function registerMenuOrderRoutes(app: FastifyInstance): void {
         return;
       case 'daily_cap':
         reply.status(409).send({ error: 'daily_cap' });
+        return;
+      case 'unavailable':
+        reply.status(409).send({ error: 'unavailable' });
         return;
     }
   });

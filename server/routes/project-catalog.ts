@@ -8,8 +8,8 @@ import { hashIp } from './tools/_shared.js';
 import { verifyAgentApiKey } from '../services/agent-api-keys.js';
 import { AGENT_OFFERS, formatPrice, type AgentOffer } from '../../shared/agent-offers.js';
 import { availableOffers } from '../services/offer-availability.js';
-import { menuPayload, formatCents } from '../../shared/bilko-menu.js';
-import { placeMenuOrder } from '../services/menu-orders.js';
+import { formatCents } from '../../shared/bilko-menu.js';
+import { availableMenuPayload, placeMenuOrder } from '../services/menu-orders.js';
 import { getWalletCents } from '../services/wallet.js';
 
 /**
@@ -147,7 +147,7 @@ export function buildCatalogMcpServer(
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => json(menuPayload()),
+    async () => json(await availableMenuPayload()),
   );
 
   server.registerTool(
@@ -197,6 +197,8 @@ export function buildCatalogMcpServer(
           return mcpError('invalid_intake: intake does not match the item fields. See list_menu for the required fields.');
         case 'unknown_item':
           return mcpError('unknown_item: no such menu item. See list_menu for valid ids.');
+        case 'unavailable':
+          return mcpError('unavailable: this item is not on sale yet. See list_menu for what is available.');
         case 'live_needs_slot':
           return mcpError('live_needs_slot: the live call needs a booked time slot and cannot be ordered over MCP. Book at https://bilko.run/projects/human-for-hire/.');
       }

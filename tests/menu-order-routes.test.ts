@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import { dbRun, initDb } from '../server/db.js';
+import * as products from '../server/services/web-products.js';
 import { creditWallet } from '../server/services/wallet.js';
 import { MENU_DAILY_ASYNC_CAP } from '../shared/bilko-menu.js';
 
@@ -34,6 +35,8 @@ const ask = (app: any, auth = 'Bearer clerk-ok', ip?: string) =>
 
 beforeAll(async () => { await initDb(); });
 beforeEach(async () => {
+  vi.restoreAllMocks();
+  vi.spyOn(products, 'isReleaseStored').mockResolvedValue(true);
   await dbRun('DELETE FROM menu_orders');
   await dbRun('DELETE FROM wallet_transactions');
   await dbRun('DELETE FROM wallet_balances');
@@ -41,13 +44,30 @@ beforeEach(async () => {
 });
 
 describe('menu order routes', () => {
+  it('kit not stored: 409 unavailable, wallet intact, not listed; stored: 201 and listed', async () => {
+    const app = await buildApp();
+    await creditWallet('buyer@example.com', 500, 'topup', 't1');
+    const listed = async () => (await app.inject({ method: 'GET', url: '/api/menu' })).json().items.map((i: any) => i.id);
+    vi.spyOn(products, 'isReleaseStored').mockResolvedValue(false);
+    expect(await listed()).not.toContain('agent-factory-kit');
+    const res = await order(app, 'agent-factory-kit', { intake: {} });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: 'unavailable' });
+    const { getWalletCents } = await import('../server/services/wallet.js');
+    expect(await getWalletCents('buyer@example.com')).toBe(500);
+    vi.spyOn(products, 'isReleaseStored').mockResolvedValue(true);
+    expect(await listed()).toContain('agent-factory-kit');
+    expect((await order(app, 'agent-factory-kit', { intake: {} })).statusCode).toBe(201);
+    await app.close();
+  });
+
   it('GET /api/menu is public and cacheable', async () => {
     const app = await buildApp();
     const { menuPayload } = await import('../shared/bilko-menu.js');
     const res = await app.inject({ method: 'GET', url: '/api/menu' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('public, max-age=300');
-    expect(res.json()).toEqual(JSON.parse(JSON.stringify(menuPayload())));
+    expect(res.json()).toEqual(JSON.parse(JSON.stringify(menuPayload())));  // all items deliverable here
     await app.close();
   });
 

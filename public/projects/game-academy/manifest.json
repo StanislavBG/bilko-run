@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "game-academy",
   "version": "0.1.0-alpha.1",
-  "builtAt": "2026-10-24T00:10:39.427Z",
-  "gitSha": "6d48c59",
+  "builtAt": "2026-10-24T03:57:32.953Z",
+  "gitSha": "8f8b185",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 1276834,
+    "sizeBytesGz": 1276690,
     "fileCount": 30
   }
 }

@@ -101,6 +101,19 @@ interface Room { id: string; seats: Map<number, Seat>; }
 
 const rooms = new Map<string, Room>();
 
+type RoomClosedListener = (roomId: string) => void;
+const roomClosedListeners = new Set<RoomClosedListener>();
+
+/** Called whenever a room is forgotten: its last seat was released, or the deploy drain ran. */
+export function onRoomClosed(listener: RoomClosedListener): () => void {
+  roomClosedListeners.add(listener);
+  return () => { roomClosedListeners.delete(listener); };
+}
+
+function emitRoomClosed(roomId: string): void {
+  for (const listener of roomClosedListeners) listener(roomId);
+}
+
 function seatOf(room: Room, email: string): Seat | undefined {
   for (const s of room.seats.values()) if (s.email === email) return s;
   return undefined;
@@ -128,7 +141,10 @@ function releaseSeat(room: Room, seat: Seat): void {
   if (seat.holdTimer) clearTimeout(seat.holdTimer);
   room.seats.delete(seat.seat);
   announce(room, seat.seat, 'leave', seat.seat);
-  if (room.seats.size === 0) rooms.delete(room.id);
+  if (room.seats.size === 0) {
+    rooms.delete(room.id);
+    emitRoomClosed(room.id);
+  }
   if (rooms.size === 0) stopHeartbeat();
 }
 
@@ -318,6 +334,13 @@ export function closeAllRooms(): void {
     }
   }
   stopHeartbeat();
+  for (const room of all) emitRoomClosed(room.id);
+}
+
+/** Does `email` hold a seat in `roomId`, live or held for a reconnect? */
+export function holdsSeat(roomId: string, email: string): boolean {
+  const room = rooms.get(roomId);
+  return room !== undefined && seatOf(room, email) !== undefined;
 }
 
 /** Test/admin introspection: live and held seats per room. */

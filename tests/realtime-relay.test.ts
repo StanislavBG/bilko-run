@@ -11,7 +11,7 @@ import type { AddressInfo } from 'node:net';
 import Fastify from 'fastify';
 import WebSocket from 'ws';
 import { requireAuth } from '../server/clerk.js';
-import { registerRealtimeRoutes, resetRealtimeTicketRate } from '../server/routes/realtime.js';
+import { registerRealtimeRoutes, resetRealtimeRateLimits } from '../server/routes/realtime.js';
 import {
   handleUpgrade, issueTicket, consumeTicket, isAllowedOrigin, closeAllRooms, roomSnapshot, roomCount,
   REALTIME_PATH_PREFIX, CLOSE, MAX_SEATS, RATE_PER_SEC, SEAT_HOLD_MS, TICKET_TTL_MS, TARGET_BROADCAST, TARGET_ECHO,
@@ -260,7 +260,7 @@ describe('POST /api/realtime/ticket', () => {
   registerRealtimeRoutes(app);
   beforeAll(async () => { await app.ready(); });
   afterAll(async () => { await app.close(); });
-  afterEach(() => { resetRealtimeTicketRate(); vi.mocked(requireAuth).mockReset(); });
+  afterEach(() => { resetRealtimeRateLimits(); vi.mocked(requireAuth).mockReset(); });
 
   const post = (body: unknown) => app.inject({ method: 'POST', url: '/api/realtime/ticket', payload: body as any });
 

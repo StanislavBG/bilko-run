@@ -662,14 +662,17 @@ Score submission is rate-limited to 60/hour per (user × game) and scores above 
 
 ## Realtime relay
 
-A game-agnostic binary WebSocket relay for online team games, built for Game Academy's deterministic lockstep/rollback arenas (up to 5v5). The host never runs or parses a game. It authenticates the socket, assigns seats, and fans out small input frames. Code: `server/realtime/relay.ts` (socket) and `server/routes/realtime.ts` (ticket). Tests: `tests/realtime-relay.test.ts`.
+A game-agnostic binary WebSocket relay for online team games, built for Game Academy's deterministic lockstep/rollback arenas (up to 5v5). The host never runs or parses a game. It authenticates the socket, assigns seats, and fans out small input frames. A public lobby directory lists open rooms, so players join from a list instead of trading room codes. Code: `server/realtime/relay.ts` (socket), `server/realtime/lobbies.ts` (directory) and `server/routes/realtime.ts` (ticket + directory routes). Tests: `tests/realtime-relay.test.ts`, `tests/realtime-lobbies.test.ts`.
 
 ### Endpoints
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
+| Endpoint | Auth | Description |
+|---|---|---|
 | `POST /api/realtime/ticket` | Required (Clerk Bearer) | Body `{ roomId }`, where `roomId` matches `[A-Za-z0-9_-]{1,64}`. Returns `{ ticket, expiresAt, path, limits }`. The ticket is single-use, lasts 30 s, and is bound to the caller's email and that room. Returns 400 for a bad `roomId`, 409 `room_full`, 503 `server_full` (500 rooms per instance), and 429 above 30 tickets/min per user. |
 | `GET wss://bilko.run/api/realtime/rooms/:roomId?ticket=<t>` | Ticket | WebSocket upgrade. A ticket is needed because browsers can't set `Authorization` on a WebSocket. The handshake is refused with 401 (missing, unknown, expired, reused or wrong-room ticket), 403 (an `Origin` other than `https://bilko.run` / `https://www.bilko.run`) or 404 (malformed room id). |
+| `GET /api/realtime/lobbies?app=<app>` | Public | Open lobbies for `app` (`[a-z0-9-]{1,32}`), newest first: `{ lobbies: [{ roomId, gameId, host, humans, bots, capacity, updatedAt }] }`. Never contains an email. `cache-control: no-store`. 400 for a missing or malformed `app`. |
+| `PUT /api/realtime/lobbies/:roomId` | Required (Clerk Bearer) | Announce or refresh a lobby (the heartbeat). Body `{ app, gameId, host, humans, bots, capacity }`, ≤ 1 KiB. Returns 200 `{ ok, expiresAt, listed }`; `listed` is false while the caller holds no seat in the room. 400 for a malformed `roomId` or body, 403 `not_owner` when another user owns the listing, 429 above 30 PUTs/min per user, 503 `directory_full` (500 listings per instance). |
+| `DELETE /api/realtime/lobbies/:roomId` | Required (Clerk Bearer) | Owner only: unlist the room. 204, also when there is no listing (idempotent). 400 for a malformed `roomId`, 403 `not_owner`. |
 
 The socket is same-origin, so the page CSP's `connect-src 'self'` already covers it.
 
@@ -701,10 +704,21 @@ The payload is opaque to the relay. Versioning and encoding are the game's job (
 | Heartbeat | protocol ping every 15 s | an unanswered ping → terminated, seat held |
 | Deploy drain | on SIGTERM (`app.close()`) | every socket gets `1012` (Service Restart). Fetch a new ticket and reconnect. |
 
+### Lobby directory
+
+A host lists its room so others can find it and join with one click. There is no room code or invite link. Game Academy uses `app: 'game-academy'` and room ids `ga-<6 chars>` (the same id it passes to `POST /api/realtime/ticket`). Its client is `packages/platform-bilko/src/bilko-platform.ts` in Bilko-Game-Academy.
+
+- **Body fields.** `gameId` matches `[a-z0-9-]{1,32}`. `humans` is an integer ≥ 1, `bots` an integer ≥ 0, `capacity` an integer ≤ 10 (the room's seats), with `humans + bots ≤ capacity`. `host` is a display label: control and bidi-override characters are stripped, it is trimmed and cut to 16 characters, and only an empty result is refused. Other fields are ignored. Clients must render `host` as plain text.
+- **Ownership.** The first PUT for a room id makes the caller its owner. A PUT or DELETE from anyone else gets 403 until the listing is gone. **One listing per owner:** a PUT for a new room id removes the owner's previous listing.
+- **Shown only while the owner holds a seat** in that relay room (live, or held for a reconnect). A PUT that arrives before the owner's socket joins is accepted, and the lobby shows once they sit down. If the owner leaves a room that still has guests, the lobby is hidden.
+- **Expiry.** A listing is gone **30 s after its last PUT**, on the owner's DELETE, and **as soon as its relay room empties** (last seat released, or the deploy drain). Hosts heartbeat with a PUT every 10 s.
+- **Not a matchmaker.** Lists are ordered newest first, with no MMR ordering or filtering. Seat counts are what the host says; the relay does not check them.
+
 ### Deployment constraints
 
 - **Rooms live in one process's memory.** That is correct only while the service runs **one instance**. Scaling Render horizontally would split a room across instances. That would need room → instance routing (or a shared pub/sub) first.
 - A deploy drops every room (`1012`). Clients should reconnect with a fresh ticket and resync from their own state. The server keeps no input log.
+- The lobby directory is in memory too. A deploy empties it, and hosts re-announce on their next heartbeat (≤ 10 s).
 - **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. One instance is what the in-memory rooms need. Free has a cost, though: the service spins down after 15 minutes without inbound traffic. The first ticket after an idle spell then waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move the service to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
 
 ## Sign-in capture ("sign in for updates")

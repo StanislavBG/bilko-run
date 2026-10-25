@@ -39,6 +39,12 @@ export interface PriceCatalogEntry {
   envVar: string;
   /** public Stripe price id used when the env var is unset */
   defaultPriceId?: string;
+  /**
+   * Retired price ids of the same product. Never used for a new checkout, but
+   * still resolve to this entry so subscriptions and in-flight checkouts on an
+   * old price keep their product (and plan tier) after a price change.
+   */
+  legacyPriceIds?: readonly string[];
   /** product_key written to `stripe_one_time_purchases` (payment mode) */
   productKey: ProductKey;
   mode: 'subscription' | 'payment';
@@ -52,10 +58,11 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   { priceType: 'audiencedecoder_report', envVar: 'STRIPE_PRICE_AUDIENCEDECODER',       productKey: PRODUCT_KEYS.AUDIENCEDECODER_REPORT, mode: 'payment' },
   { priceType: 'session_manager',        envVar: 'STRIPE_PRICE_SESSION_MANAGER',       productKey: PRODUCT_KEYS.SESSION_MANAGER,        mode: 'payment' },
   { priceType: 'publictrades_coffee',    envVar: 'STRIPE_PRICE_PUBLICTRADES_COFFEE',   defaultPriceId: 'price_1U2LEcR6w0VtQRLThguPtRCI', productKey: PRODUCT_KEYS.PUBLICTRADES_COFFEE,    mode: 'payment' },
-  // $5/mo hosted Git Viewer portfolio. Subscription: the webhook records it in
+  // $5/yr hosted Git Viewer portfolio. Subscription: the webhook records it in
   // stripe_subscriptions with plan_tier 'git_viewer' (priceToPlanTier), not as a purchase.
-  // Default is the live price on prod_VQ3LWcamPHLWbg 'Git Viewer Portfolio'.
-  { priceType: 'git_viewer',             envVar: 'STRIPE_PRICE_GITVIEWER',             defaultPriceId: 'price_1UPDEjR6w0VtQRLT1SKNJ3T1', productKey: PRODUCT_KEYS.GIT_VIEWER,             mode: 'subscription' },
+  // Default is the live yearly price (lookup_key git_viewer_yearly) on prod_VQ3LWcamPHLWbg
+  // 'Git Viewer Portfolio'. The legacy id is the retired $5/mo price on the same product.
+  { priceType: 'git_viewer',             envVar: 'STRIPE_PRICE_GITVIEWER',             defaultPriceId: 'price_1UUDkTR6w0VtQRLTdMok0qzl', legacyPriceIds: ['price_1UPDEjR6w0VtQRLT1SKNJ3T1'], productKey: PRODUCT_KEYS.GIT_VIEWER, mode: 'subscription' },
 ];
 
 /** Public Stripe payment link for the live "Buy me a coffee" product (prod_V2Q4ego2oijqo4). */
@@ -67,7 +74,16 @@ export function entryForPriceType(priceType: PriceType): PriceCatalogEntry | und
 }
 
 /**
- * Lookup by resolved Stripe price ID (what the webhook sees on the line item).
+ * Every price id that identifies `e`: the env override, the default and any
+ * legacy ids. Checkout charges only `env[e.envVar] || e.defaultPriceId`; this
+ * wider set is for recognizing what was already bought.
+ */
+function catalogPriceIds(e: PriceCatalogEntry, env: Record<string, string | undefined>): string[] {
+  return [env[e.envVar], e.defaultPriceId, ...(e.legacyPriceIds ?? [])].filter((id): id is string => !!id);
+}
+
+/**
+ * Lookup by Stripe price ID (what the webhook sees on the line item).
  * `env` is passed in rather than read directly so this module stays dependency-free.
  */
 export function entryForPriceId(
@@ -75,5 +91,5 @@ export function entryForPriceId(
   env: Record<string, string | undefined>,
 ): PriceCatalogEntry | undefined {
   if (!priceId) return undefined;
-  return PRICE_CATALOG.find(e => (env[e.envVar] || e.defaultPriceId) === priceId);
+  return PRICE_CATALOG.find(e => catalogPriceIds(e, env).includes(priceId));
 }

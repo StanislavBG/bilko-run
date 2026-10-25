@@ -42,7 +42,8 @@ describe('agent offers', () => {
 
   it('formats prices and flags agent keys', () => {
     expect(formatPrice(offerById('launch-kit')!)).toBe('$9');
-    expect(formatPrice(offerById('git-viewer')!)).toBe('$5/month');
+    expect(formatPrice(offerById('git-viewer')!)).toBe('$5/year');
+    expect(formatPrice({ ...offerById('git-viewer')!, billing: 'month' })).toBe('$5/month');
     expect(formatPrice(offerById('pageroast-credit-1')!)).toBe('$1');
     expect(offerById('nope')).toBeUndefined();
     expect(offerById('pageroast-credits-7')!.agentKey).toBe(true);

@@ -25,12 +25,12 @@ function productFor(o: AgentOffer): Record<string, unknown> {
     url: o.buyUrl,
     availability: 'https://schema.org/InStock',
   };
-  if (o.billing === 'month') {
+  if (o.billing !== 'one_time') {
     offer.priceSpecification = {
       '@type': 'UnitPriceSpecification',
       price,
       priceCurrency: currency,
-      billingDuration: 'P1M',
+      billingDuration: o.billing === 'year' ? 'P1Y' : 'P1M',
     };
   }
   return { '@type': 'Product', name: o.name, description: o.summary, url: o.pageUrl, offers: offer };

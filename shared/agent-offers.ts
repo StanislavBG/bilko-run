@@ -21,7 +21,7 @@ export interface AgentOffer {
   whatYouGet: string;
   amountCents: number;
   currency: 'usd';
-  billing: 'one_time' | 'month';
+  billing: 'one_time' | 'month' | 'year';
   pageUrl: string;
   /** no-JS buy URL: https://bilko.run/buy/<id> */
   buyUrl: string;
@@ -75,7 +75,7 @@ const BASE_OFFERS: readonly Omit<AgentOffer, 'payWith'>[] = [
       'A hosted portfolio page that refreshes daily. Pay with the same email as the GitHub-linked bilko.run sign-in so the subscription attaches to your account.',
     amountCents: 500,
     currency: 'usd',
-    billing: 'month',
+    billing: 'year',
     pageUrl: `${SITE}/projects/git-viewer/`,
     buyUrl: buy('git-viewer'),
     source: { kind: 'price_catalog', priceType: 'git_viewer' },
@@ -154,9 +154,9 @@ export function offerById(id: string): AgentOffer | undefined {
   return AGENT_OFFERS.find(o => o.id === id);
 }
 
-/** '$9', '$5/month', '$1.50' */
+/** '$9', '$5/year', '$5/month', '$1.50' */
 export function formatPrice(o: AgentOffer): string {
   const dollars = o.amountCents / 100;
   const amount = Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
-  return o.billing === 'month' ? `${amount}/month` : amount;
+  return o.billing === 'one_time' ? amount : `${amount}/${o.billing}`;
 }

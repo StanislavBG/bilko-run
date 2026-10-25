@@ -15,7 +15,7 @@ import type { OgMeta } from '../../og-meta.js';
 // buildPortfolio() with the server's GITHUB_TOKEN, at most 2 at a time, and
 // cached in git_viewer_profiles. Free: 1 project, regenerated at most once per
 // 24h when viewed; claimed free profiles are also refreshed weekly unviewed.
-// Paid ($5/mo git_viewer subscription, or a legacy pro/business/team plan): up
+// Paid ($5/yr git_viewer subscription, or a legacy pro/business/team plan): up
 // to 12 chosen repos + Writing, refreshed daily. Showcase logins build at the
 // paid tier when GITHUB_TOKEN is set (free otherwise) and are kept cached by
 // the refresh loop regardless of claim.

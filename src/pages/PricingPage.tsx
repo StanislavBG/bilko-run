@@ -371,7 +371,7 @@ export function PricingPage() {
           <h2 className="text-display-md text-warm-900 text-center mb-10">Common questions</h2>
           <div className="space-y-6">
             {[
-              { q: 'Why not a subscription?', a: 'Because you don\'t analyze pages every day. Pay for what you use, not what you don\'t. The one exception is Git Viewer at $5/month, because it keeps rebuilding your portfolio every day.' },
+              { q: 'Why not a subscription?', a: 'Because you don\'t analyze pages every day. Pay for what you use, not what you don\'t. The one exception is Git Viewer at $5/year, because it keeps rebuilding your portfolio every day.' },
               { q: 'What if I don\'t use all my credits?', a: 'They never expire. Buy today, use the last one next year. No pressure.' },
               { q: 'Can I get a refund?', a: 'Credits are spent the moment you order. Top-ups are final, so start with the smallest one.' },
               { q: 'Is my payment secure?', a: 'Payments are processed by Stripe. We never see your card number.' },

@@ -319,7 +319,7 @@ A tool that needs a key returns an `isError` result with the top-up link when th
 
 ### Offers
 
-Every paid offer lives in one file, `shared/agent-offers.ts` (`AGENT_OFFERS`): `id`, name, summary, `whatYouGet`, `amountCents`, `billing` (`one_time` | `month`), `pageUrl`, `buyUrl`, a `source` pointing at the existing catalog (`web_product` slug in `shared/web-products.ts`, or `price_catalog` type in `shared/product-catalog.ts`), and `agentKey` (true when the purchase yields a `bkk_` key). `amountCents` is not in `PRICE_CATALOG`, so it must match the price shown on the app's page and Stripe. Current offers: `launch-kit` ($9), `git-viewer` ($5/month), `pageroast-credits-7` ($5), `pageroast-credit-1` ($1).
+Every paid offer lives in one file, `shared/agent-offers.ts` (`AGENT_OFFERS`): `id`, name, summary, `whatYouGet`, `amountCents`, `billing` (`one_time` | `month` | `year`), `pageUrl`, `buyUrl`, a `source` pointing at the existing catalog (`web_product` slug in `shared/web-products.ts`, or `price_catalog` type in `shared/product-catalog.ts`), and `agentKey` (true when the purchase yields a `bkk_` key). `amountCents` is not in `PRICE_CATALOG`, so it must match the price shown on the app's page and Stripe. Current offers: `launch-kit` ($9), `git-viewer` ($5/year), `pageroast-credits-7` ($5), `pageroast-credit-1` ($1).
 
 **To add an offer:** add an entry to `AGENT_OFFERS` (and the underlying web product or price-catalog entry if it is new). That one edit flows to `/llms.txt`, `GET /api/offers`, the `list_offers` MCP tool, the `offers` on each project in `/api/projects` and `list_projects`/`get_project`, the JSON-LD on the offer's page, and `/buy/<id>`.
 

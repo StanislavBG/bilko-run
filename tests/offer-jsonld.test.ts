@@ -41,10 +41,10 @@ describe('offer JSON-LD', () => {
     expect(p.offers.priceSpecification).toBeUndefined();
   });
 
-  it('git-viewer gets the P1M price specification', async () => {
+  it('git-viewer gets the P1Y price specification', async () => {
     const res = await app.inject({ method: 'GET', url: '/projects/git-viewer/' });
     const [p] = blocks(res.body) as any[];
-    expect(p.offers.priceSpecification).toMatchObject({ '@type': 'UnitPriceSpecification', billingDuration: 'P1M' });
+    expect(p.offers.priceSpecification).toMatchObject({ '@type': 'UnitPriceSpecification', billingDuration: 'P1Y' });
   });
 
   it('page-roast gets both credit offers', async () => {

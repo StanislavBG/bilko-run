@@ -33,8 +33,8 @@ describe.skipIf(!KEY)('sandbox: /buy/:offerId -> Stripe test-mode Checkout', () 
     const lookup_key = `bilko-sandbox-${offer.id}`;
     const existing = await stripe.prices.list({ lookup_keys: [lookup_key], active: true, limit: 1 });
     const found = existing.data[0];
-    const recurring = offer.billing === 'month';
-    if (found && found.unit_amount === offer.amountCents && !!found.recurring === recurring) return found.id;
+    const interval = offer.billing === 'one_time' ? null : offer.billing;
+    if (found && found.unit_amount === offer.amountCents && (found.recurring?.interval ?? null) === interval) return found.id;
     const product = await stripe.products.create({ name: `[sandbox] ${offer.name}`, metadata: { offer: offer.id } });
     const price = await stripe.prices.create({
       product: product.id,
@@ -42,7 +42,7 @@ describe.skipIf(!KEY)('sandbox: /buy/:offerId -> Stripe test-mode Checkout', () 
       unit_amount: offer.amountCents,
       lookup_key,
       transfer_lookup_key: true,
-      ...(recurring ? { recurring: { interval: 'month' as const } } : {}),
+      ...(interval ? { recurring: { interval } } : {}),
     });
     return price.id;
   }
@@ -82,7 +82,7 @@ describe.skipIf(!KEY)('sandbox: /buy/:offerId -> Stripe test-mode Checkout', () 
 
     const session = await stripe.checkout.sessions.retrieve(sessionId!, { expand: ['line_items'] });
     const priceId = priceIds.get(offer.id)!;
-    const mode = offer.billing === 'month' ? 'subscription' : 'payment';
+    const mode = offer.billing === 'one_time' ? 'payment' : 'subscription';
     expect(session.livemode).toBe(false);
     expect(session.mode).toBe(mode);
     expect(session.line_items?.data).toHaveLength(1);

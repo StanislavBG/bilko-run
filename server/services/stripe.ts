@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { dbGet, dbRun } from '../db.js';
-import { entryForPriceType } from '../../shared/product-catalog.js';
+import { entryForPriceId } from '../../shared/product-catalog.js';
 
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 let _stripe: Stripe | null = null;
@@ -99,13 +99,14 @@ export async function hasActiveSubscription(email: string): Promise<boolean> {
   return (await getSubscriptionTier(email)) !== 'free';
 }
 
-/** plan_tier for the $5/mo Git Viewer subscription. It is NOT a site-wide plan: it never sets isPro. */
+/** plan_tier for the $5/yr Git Viewer subscription. It is NOT a site-wide plan: it never sets isPro. */
 export const GIT_VIEWER_TIER = 'git_viewer';
 
-// Map Stripe price IDs to plan tiers
+// Map Stripe price IDs to plan tiers. Any git_viewer price (env override,
+// default, or a legacy id such as the retired $5/mo price) maps to git_viewer:
+// an unmatched price falls through to 'pro', which would unlock every AI tool.
 export function priceToPlanTier(priceId: string): string {
-  const gitViewer = process.env.STRIPE_PRICE_GITVIEWER || entryForPriceType('git_viewer')?.defaultPriceId;
-  if (gitViewer && priceId === gitViewer) return GIT_VIEWER_TIER;
+  if (entryForPriceId(priceId, process.env)?.priceType === 'git_viewer') return GIT_VIEWER_TIER;
   const proBiz = process.env.STRIPE_PRICE_CONTENTGRADE_BUSINESS;
   const proTeam = process.env.STRIPE_PRICE_CONTENTGRADE_TEAM;
   if (proBiz && priceId === proBiz) return 'business';
@@ -178,7 +179,7 @@ async function subStatusFromDb(email: string): Promise<SubStatus> {
 /**
  * Live subscription state. `isPro`/`tier` describe the site-wide plan
  * (pro/business/team) only; a Git Viewer subscription sets `gitViewer` and
- * leaves `isPro` false, so $5/mo never unlocks the AI tools.
+ * leaves `isPro` false, so $5/yr never unlocks the AI tools.
  */
 export async function getActiveSubscriptionLive(email: string): Promise<SubStatus> {
   const cached = _subCache.get(email);

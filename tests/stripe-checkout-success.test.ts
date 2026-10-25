@@ -66,6 +66,48 @@ describe('product catalog: session_manager', () => {
   });
 });
 
+describe('create-checkout-session: git_viewer charges the $5/yr price', () => {
+  const OLD_ENV = process.env;
+
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...OLD_ENV };
+    delete process.env.STRIPE_PRICE_GITVIEWER;
+  });
+
+  it('subscribes to the committed yearly price, never the retired monthly one', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/stripe/create-checkout-session',
+      payload: { email: 'a@b.co', priceType: 'git_viewer' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(sessionsCreate).toHaveBeenCalledOnce();
+    const params = (sessionsCreate.mock.calls[0] as unknown[])[0] as { mode: string; line_items: unknown };
+    expect(params.mode).toBe('subscription');
+    expect(params.line_items).toEqual([{ price: 'price_1UUDkTR6w0VtQRLTdMok0qzl', quantity: 1 }]);
+    await app.close();
+  });
+
+  it('STRIPE_PRICE_GITVIEWER still overrides the committed price', async () => {
+    process.env.STRIPE_PRICE_GITVIEWER = 'price_gv_env';
+    const app = await buildApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/stripe/create-checkout-session',
+      payload: { email: 'a@b.co', priceType: 'git_viewer' },
+    });
+    const params = (sessionsCreate.mock.calls[0] as unknown[])[0] as { line_items: unknown };
+    expect(params.line_items).toEqual([{ price: 'price_gv_env', quantity: 1 }]);
+    await app.close();
+  });
+});
+
 describe('create-checkout-session: the Field Manual is free', () => {
   const OLD_ENV = process.env;
 

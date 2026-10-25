@@ -25,6 +25,7 @@ interface UsageResponse {
     byVersion: Array<{ version: string; installs: number; active7: number }>;
     byPlatform: Array<{ platform: string; arch: string; installs: number }>;
     specs: { medianTotalMemMb: number | null; medianCpuCount: number | null };
+    seeds?: Array<{ seed: string; done: number; pending: number; failed: number; exhausted: number }>;
   };
   usage: {
     daily: Array<{ date: string; launches: number; sessions: number; epics: number; installsSeen: number }>;
@@ -52,6 +53,7 @@ interface UsageResponse {
     arch: string;
     firstSeen: number;
     lastSeen: number;
+    seeds?: Record<string, string> | null;
     last7: InstallCounts;
     prev7: InstallCounts;
   }>;
@@ -62,6 +64,13 @@ interface InstallCounts { launches: number; sessions: number; epics: number; err
 // "12 / 4" — last 7d against the 7d before it.
 function vsPrev(cur: number, prev: number): string {
   return `${cur} / ${prev}`;
+}
+
+// "all done", or only the steps that are not done: "schedulerMcp failed, agentPersonas pending".
+function setupSummary(seeds: Record<string, string> | null | undefined): string {
+  if (!seeds) return '—';
+  const open = Object.entries(seeds).filter(([, status]) => status !== 'done');
+  return open.length === 0 ? 'all done' : open.map(([step, status]) => `${step} ${status}`).join(', ');
 }
 
 const PT_FORMAT = new Intl.DateTimeFormat('en-US', {
@@ -203,6 +212,7 @@ export function SessionManagerTab({ days, excludeSelf }: TabProps) {
             { label: 'Platform' },
             { label: 'First seen' },
             { label: 'Last seen' },
+            { label: 'Setup' },
             { label: 'Launches', right: true },
             { label: 'Sessions', right: true },
             { label: 'Epics', right: true },
@@ -214,6 +224,7 @@ export function SessionManagerTab({ days, excludeSelf }: TabProps) {
             `${r.platform}/${r.arch}`,
             formatPtSeconds(r.firstSeen),
             formatPtSeconds(r.lastSeen),
+            setupSummary(r.seeds),
             vsPrev(r.last7.launches, r.prev7.launches),
             vsPrev(r.last7.sessions, r.prev7.sessions),
             vsPrev(r.last7.epics, r.prev7.epics),
@@ -241,6 +252,24 @@ export function SessionManagerTab({ days, excludeSelf }: TabProps) {
           rows={installs.byPlatform.map(r => [r.platform, r.arch, r.installs])}
           empty="No installs yet"
         />
+      </Panel>
+
+      <Panel title="First-run setup">
+        <Table
+          headers={[
+            { label: 'Step' },
+            { label: 'Done', right: true },
+            { label: 'Pending', right: true },
+            { label: 'Failed', right: true },
+            { label: 'Exhausted', right: true },
+          ]}
+          rows={(installs.seeds ?? []).map(r => [r.seed, r.done, r.pending, r.failed, r.exhausted])}
+          empty="No install has reported its setup steps yet"
+        />
+        <p className="text-xs text-warm-400 mt-3">
+          Installs per step, from each machine's latest install report. Failed steps are retried;
+          exhausted ones hit the retry limit and need the manual fix.
+        </p>
       </Panel>
 
       <Panel title="Issues">

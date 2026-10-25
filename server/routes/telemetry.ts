@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { dbRun, dbGet } from '../db.js';
+import { dbRun, dbGet, dbAll } from '../db.js';
 import { readSessionIds } from '../session-identity.js';
 
 const MAX_BATCH = 50;
@@ -242,6 +242,67 @@ function safeMeta(val: unknown, maxBytes: number): string {
   try { return JSON.stringify(val ?? {}).slice(0, maxBytes); } catch { return '{}'; }
 }
 
+// --- Install seeds -----------------------------------------------------------
+// A desktop client's first-run setup steps and how each one ended, sent as
+// `seeds` in its install profile (Session Manager sends devPlugin, schedulerMcp
+// and agentPersonas). Step names are the client's own, so any app can report
+// its own steps. app_installs must never hold PII (docs/telemetry-beacons.md),
+// so nothing free-form is kept: a step name must be slug-shaped (the `app`
+// shape, after clamping to 60 chars) and its value one of SEED_STATUSES.
+// Anything else is dropped, never a 400.
+const SEED_STATUSES = ['done', 'pending', 'failed', 'exhausted'] as const;
+type SeedStatus = (typeof SEED_STATUSES)[number];
+export type Seeds = Record<string, SeedStatus>;
+const SEED_STATUS_SET = new Set<string>(SEED_STATUSES);
+const MAX_SEEDS = 20;
+const MAX_SEED_NAME = 60;
+
+/** The valid part of a `seeds` value, or null when no valid step is left. Never throws. */
+function sanitizeSeeds(raw: unknown): Seeds | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out = new Map<string, SeedStatus>();
+  for (const [k, v] of Object.entries(raw)) {
+    if (out.size >= MAX_SEEDS) break;
+    const name = k.slice(0, MAX_SEED_NAME);
+    if (APP_SLUG_RE.test(name) && SEED_STATUS_SET.has(v as string)) out.set(name, v as SeedStatus);
+  }
+  return out.size > 0 ? Object.fromEntries(out) : null;
+}
+
+/** Reads a stored app_installs.seeds value; anything unreadable is null. */
+export function parseStoredSeeds(raw: unknown): Seeds | null {
+  if (typeof raw !== 'string') return null;
+  try { return sanitizeSeeds(JSON.parse(raw)); } catch { return null; }
+}
+
+export type SeedRollup = { seed: string } & Record<SeedStatus, number>;
+
+/**
+ * Installs per setup step and outcome, one row per step, sorted by step name.
+ * `filter` is a trusted predicate over unqualified app_installs columns (e.g.
+ * envPredicate), its values always bound.
+ */
+export async function seedRollup(app: string, filter: { sql: string; args: unknown[] }): Promise<SeedRollup[]> {
+  const rows = await dbAll<{ seed: string; status: string; n: number }>(
+    `SELECT s.key AS seed, s.value AS status, COUNT(*) AS n
+       FROM app_installs, json_each(app_installs.seeds) AS s
+      WHERE app = ? AND ${filter.sql}
+      GROUP BY s.key, s.value`,
+    app, ...filter.args,
+  );
+  const bySeed = new Map<string, SeedRollup>();
+  for (const r of rows) {
+    if (!SEED_STATUS_SET.has(r.status)) continue;
+    let row = bySeed.get(r.seed);
+    if (!row) {
+      row = { seed: r.seed, done: 0, pending: 0, failed: 0, exhausted: 0 };
+      bySeed.set(r.seed, row);
+    }
+    row[r.status as SeedStatus] += Number(r.n);
+  }
+  return [...bySeed.values()].sort((a, b) => a.seed.localeCompare(b.seed));
+}
+
 // --- Retention -------------------------------------------------------------
 // app_logs / app_errors are unbounded ingest tables with no external scheduler
 // to sweep them, and desktop crash reports arrive in correlated bursts (one
@@ -418,13 +479,14 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     ]);
     if (!charged.ok) return sendThrottled(reply, charged.retryAfterSec);
     const now = Math.floor(Date.now() / 1000);
+    const seeds = sanitizeSeeds(b.seeds);
 
     await dbRun(
       `INSERT INTO app_installs (
          install_id, app, app_version, platform, os_release, arch, cpu_count,
          total_mem_mb, node_version, electron_version, install_channel, locale,
-         timezone, env, first_seen_at, last_seen_at, seen_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+         timezone, env, seeds, first_seen_at, last_seen_at, seen_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON CONFLICT(install_id) DO UPDATE SET
          app              = excluded.app,
          app_version      = excluded.app_version,
@@ -439,6 +501,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
          locale           = excluded.locale,
          timezone         = excluded.timezone,
          env              = excluded.env,
+         seeds            = excluded.seeds,
          last_seen_at     = excluded.last_seen_at,
          seen_count       = app_installs.seen_count + 1`,
       installId,
@@ -455,6 +518,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
       clamp(b.locale, 20),
       clamp(b.timezone, 60),
       envOf(b),
+      seeds ? JSON.stringify(seeds) : null,
       now,
       now,
     );

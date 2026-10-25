@@ -751,7 +751,11 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
   ],
   app_logs: [['env', 'TEXT']],
   app_errors: [['env', 'TEXT']],
-  app_installs: [['env', 'TEXT']],
+  app_installs: [
+    ['env', 'TEXT'],
+    // First-run setup outcomes: JSON `{ <step>: <status> }` or NULL (sanitizeSeeds in routes/telemetry.ts).
+    ['seeds', 'TEXT'],
+  ],
   project_feedback: [
     ['parent_id', 'TEXT'],
     ['moderation_action', 'TEXT'],

@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
-import { parseEnvSelector, envPredicate } from './telemetry.js';
+import { parseEnvSelector, envPredicate, seedRollup, parseStoredSeeds } from './telemetry.js';
 
 const APP = 'session-manager';
 const ISSUE_LIMIT = 50;
@@ -163,6 +163,7 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       installsByVersion,
       installsByPlatform,
       installSpecs,
+      installSeeds,
       usageDaily,
       usageByVersion,
       issues,
@@ -213,6 +214,9 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
         `SELECT total_mem_mb, cpu_count FROM app_installs WHERE app = ? AND ${instF.sql}`,
         APP, ...instF.args,
       ), []),
+
+      // First-run setup outcomes per step (devPlugin, schedulerMcp, ...).
+      safeQuery(() => seedRollup(APP, instF), []),
 
       // ---- usage ----------------------------------------------------------
       safeQuery(() => dbAll<{
@@ -329,9 +333,9 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       // Last 7d vs the 7d before it, independent of ?days.
       safeQuery(() => dbAll<{
         install_id: string; app_version: string | null; platform: string | null; arch: string | null;
-        first_seen_at: number; last_seen_at: number;
+        first_seen_at: number; last_seen_at: number; seeds: string | null;
       }>(
-        `SELECT install_id, app_version, platform, arch, first_seen_at, last_seen_at
+        `SELECT install_id, app_version, platform, arch, first_seen_at, last_seen_at, seeds
          FROM app_installs WHERE app = ? AND ${instF.sql}
          ORDER BY last_seen_at DESC
          LIMIT ?`,
@@ -398,6 +402,7 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
         arch: r.arch ?? 'unknown',
         firstSeen: r.first_seen_at ?? 0,
         lastSeen: r.last_seen_at ?? 0,
+        seeds: parseStoredSeeds(r.seeds),
         last7: {
           launches: u?.launches7 ?? 0, sessions: u?.sessions7 ?? 0,
           epics: u?.epics7 ?? 0, errors: e?.errors7 ?? 0,
@@ -435,6 +440,7 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
           medianTotalMemMb: median(installSpecs.map((r) => Number(r.total_mem_mb))),
           medianCpuCount: median(installSpecs.map((r) => Number(r.cpu_count))),
         },
+        seeds: installSeeds,
       },
       usage: {
         daily: usageDaily

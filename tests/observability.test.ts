@@ -347,12 +347,12 @@ describe('Session Manager panel — /api/admin/observability/installs', () => {
   async function seedInstall(id: string, over: Record<string, unknown> = {}) {
     const r = {
       app: 'session-manager', app_version: '0.81.0', platform: 'linux', arch: 'x64',
-      first_seen_at: now - 60 * 86_400, last_seen_at: now, ...over,
+      first_seen_at: now - 60 * 86_400, last_seen_at: now, seeds: null, ...over,
     };
     await dbRun(
-      `INSERT INTO app_installs (install_id, app, app_version, platform, arch, first_seen_at, last_seen_at, seen_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-      id, r.app, r.app_version, r.platform, r.arch, r.first_seen_at, r.last_seen_at,
+      `INSERT INTO app_installs (install_id, app, app_version, platform, arch, first_seen_at, last_seen_at, seen_count, seeds)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      id, r.app, r.app_version, r.platform, r.arch, r.first_seen_at, r.last_seen_at, r.seeds,
     );
   }
 
@@ -379,6 +379,20 @@ describe('Session Manager panel — /api/admin/observability/installs', () => {
     expect(body.installs.byPlatform.find((p: any) => p.platform === 'linux').n).toBe(3);
     expect(body.installs.byArch.find((a: any) => a.arch === 'arm64').n).toBe(1);
     expect(body.installs.byVersion.find((v: any) => v.app_version === '0.82.0').installs).toBe(1);
+  });
+
+  it('rolls up first-run setup outcomes per step from the seeds profile field', async () => {
+    asAdmin();
+    await seedInstall('a', { seeds: JSON.stringify({ devPlugin: 'done', schedulerMcp: 'failed' }) });
+    await seedInstall('b', { seeds: JSON.stringify({ devPlugin: 'done', schedulerMcp: 'exhausted' }) });
+    await seedInstall('c');                                                   // client that sends no seeds
+    await seedInstall('other', { app: 'not-session-manager', seeds: JSON.stringify({ devPlugin: 'pending' }) });
+
+    const res = await app.inject({ method: 'GET', url: '/api/admin/observability/installs' });
+    expect(JSON.parse(res.body).installs.bySeed).toEqual([
+      { seed: 'devPlugin', done: 2, pending: 0, failed: 0, exhausted: 0 },
+      { seed: 'schedulerMcp', done: 0, pending: 0, failed: 1, exhausted: 1 },
+    ]);
   });
 
   it('groups errors by version and returns top signatures with counts', async () => {

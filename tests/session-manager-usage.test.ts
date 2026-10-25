@@ -51,14 +51,15 @@ function get(url = '/api/admin/session-manager/usage', headers: Record<string, s
 
 async function addInstall(id: string, o: Partial<{
   version: string; platform: string; arch: string;
-  cpu: number; mem: number; first: number; last: number;
+  cpu: number; mem: number; first: number; last: number; seeds: Record<string, string>;
 }> = {}) {
   await dbRun(
     `INSERT INTO app_installs (install_id, app, app_version, platform, arch, cpu_count,
-       total_mem_mb, first_seen_at, last_seen_at, seen_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+       total_mem_mb, first_seen_at, last_seen_at, seen_count, seeds)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     id, APP, o.version ?? '0.81.0', o.platform ?? 'linux', o.arch ?? 'x64',
     o.cpu ?? 8, o.mem ?? 16_384, o.first ?? now - 86_400, o.last ?? now - 3_600,
+    o.seeds ? JSON.stringify(o.seeds) : null,
   );
 }
 
@@ -111,6 +112,7 @@ describe('GET /api/admin/session-manager/usage', () => {
       total: 0, active7: 0, active30: 0, new7: 0,
       byVersion: [], byPlatform: [],
       specs: { medianTotalMemMb: 0, medianCpuCount: 0 },
+      seeds: [],
     });
     expect(b.usage).toEqual({ daily: [], byVersion: [] });
     expect(b.issues).toEqual([]);
@@ -150,6 +152,30 @@ describe('GET /api/admin/session-manager/usage', () => {
       { platform: 'darwin', arch: 'arm64', installs: 1 },
     ]);
     expect(b.installs.specs).toEqual({ medianTotalMemMb: 16_384, medianCpuCount: 8 });
+  });
+
+  it('rolls up first-run setup steps over the same installs as every other section', async () => {
+    asAdmin();
+    await addInstall('i1', { seeds: { devPlugin: 'done', schedulerMcp: 'failed', agentPersonas: 'done' } });
+    await addInstall('i2', { seeds: { devPlugin: 'done', schedulerMcp: 'exhausted', agentPersonas: 'pending' } });
+    await addInstall('i3');                                                       // client that sends no seeds
+    await addInstall('e2e', { version: '42.11.10', seeds: { devPlugin: 'failed' } });       // test install
+    await addInstall('9c6b8ecd-b3da-400d-b795-0c0c32504731', { seeds: { devPlugin: 'pending' } }); // owner
+
+    const b = (await get()).json();
+    expect(b.installs.seeds).toEqual([
+      { seed: 'agentPersonas', done: 1, pending: 1, failed: 0, exhausted: 0 },
+      { seed: 'devPlugin', done: 2, pending: 0, failed: 0, exhausted: 0 },
+      { seed: 'schedulerMcp', done: 0, pending: 0, failed: 1, exhausted: 1 },
+    ]);
+    const byId = Object.fromEntries(b.perInstall.map((r: any) => [r.id, r.seeds]));
+    expect(byId.i1).toEqual({ devPlugin: 'done', schedulerMcp: 'failed', agentPersonas: 'done' });
+    expect(byId.i3).toBeNull();
+
+    const all = (await get('/api/admin/session-manager/usage?includeTest=1&exclude_self=0')).json();
+    expect(all.installs.seeds.find((r: any) => r.seed === 'devPlugin')).toEqual(
+      { seed: 'devPlugin', done: 2, pending: 1, failed: 1, exhausted: 0 },
+    );
   });
 
   // The load-bearing design decision: one machine in a crash loop must not
@@ -436,6 +462,7 @@ describe('GET /api/admin/session-manager/usage', () => {
       arch: 'arm64',
       firstSeen: now - 20 * 86_400,
       lastSeen: now - 3_600,
+      seeds: null,
       last7: { launches: 2, sessions: 1, epics: 0, errors: 1 },
       prev7: { launches: 1, sessions: 0, epics: 1, errors: 1 },
     }]);

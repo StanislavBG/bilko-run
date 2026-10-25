@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import { load as loadYaml } from 'js-yaml';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
-import { parseEnvSelector, envPredicate } from './telemetry.js';
+import { parseEnvSelector, envPredicate, seedRollup } from './telemetry.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
 import { flushEgress, topEgress, topEgressBySlug, topStaticAssets, earliestEgressDate, dayKey } from '../egress.js';
 import { VISITOR_CLASSES } from '../services/analytics.js';
@@ -588,7 +588,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     const since30 = now - 30 * 86_400;
     const sinceWindow = now - days * 86_400;
 
-    const [totals, byPlatform, byArch, byVersion, errorsByVersion, topSignatures, logLevels] = await Promise.all([
+    const [totals, byPlatform, byArch, byVersion, bySeed, errorsByVersion, topSignatures, logLevels] = await Promise.all([
       safeQuery(() => dbGet<{
         total: number; active7: number; active30: number; new7: number;
       }>(
@@ -619,6 +619,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
           GROUP BY app_version ORDER BY installs DESC`,
         since7, appName, ...ev.args,
       ), []),
+
+      // First-run setup outcomes per step, from the `seeds` install profile field.
+      safeQuery(() => seedRollup(appName, ev), []),
 
       // The release-regression query: errors per version, and how many distinct
       // machines they came from (10 000 errors from one looping install is a
@@ -661,6 +664,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         byPlatform,
         byArch,
         byVersion,
+        bySeed,
       },
       errorsByVersion,
       topSignatures,

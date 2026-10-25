@@ -8,7 +8,7 @@ an Electron desktop app on a stranger's laptop — can report into with nothing 
 | `POST /api/telemetry/event` | `funnel_events` | `{ batch: [{ name, app, props, visitor_id, session_id }] }` | 1200/min |
 | `POST /api/telemetry/log` | `app_logs` | `{ batch: [{ app, version, level, msg, visitor_id, session_id, fields, ts }] }` | 600/min |
 | `POST /api/telemetry/error` | `app_errors` | `{ batch: [{ app, version, name, msg, stack, url, ua, visitor_id, session_id, context, ts }] }` | 300/min |
-| `POST /api/telemetry/install` | `app_installs` | single object, upsert keyed on `install_id` | 60/min |
+| `POST /api/telemetry/install` | `app_installs` | single object (machine profile + optional `seeds`), upsert keyed on `install_id` | 60/min |
 | `POST /api/analytics/pageview` | `page_views` | `{ path, referrer, screen, visitor_id, session_id, utm_* }` (injected beacon) | event-rate limiter |
 | `POST /api/analytics/click` | `click_events` | `{ path, tag, id, label, href, visitor_id, session_id, track }` (injected beacon; `track` is the `data-track` name) | event-rate limiter |
 
@@ -51,9 +51,19 @@ transient burst.
 ## No PII
 
 `app_installs` carries the anonymous install UUID and a machine profile (platform, arch, cpu
-count, memory, versions, locale, timezone). It has **no column that can hold an email, username
-or hostname**, and must not gain one — a test in `tests/telemetry.test.ts` asserts this. The
-former `identify_email` column was dropped.
+count, memory, versions, locale, timezone, first-run setup outcomes). It has **no column that can
+hold an email, username or hostname**, and must not gain one — a test in `tests/telemetry.test.ts`
+asserts this. The former `identify_email` column was dropped.
+
+## First-run setup outcomes (`seeds`)
+
+An install POST may carry `seeds`: the client's first-run setup steps and how each one ended.
+Session Manager sends `{ "devPlugin": "done", "schedulerMcp": "failed", "agentPersonas": "pending" }`.
+Step names belong to the client. The server keeps a step only when its name is slug-shaped (the
+`app` pattern, after clamping to 60 chars) and its value is `done`, `pending`, `failed` or
+`exhausted`. It keeps at most 20 steps. Anything else is dropped, never a 4xx, so the column can
+never carry free text. `app_installs.seeds` holds the kept steps as JSON, or NULL when none are
+left. Every upsert overwrites it like the other profile fields, so a POST without `seeds` clears it.
 
 ## CORS
 
@@ -65,4 +75,6 @@ same-origin or from a non-browser client.
 ## Admin surface
 
 `GET /api/admin/observability/installs?app=<slug>` — installs, 7-day actives, platform/arch
-splits, and an errors-by-version rollup. Admin-only.
+splits, installs per setup step and outcome (`installs.bySeed`), and an errors-by-version rollup.
+Admin-only. `GET /api/admin/session-manager/usage` has the same per-step rollup as
+`installs.seeds` and each machine's steps as `perInstall[].seeds`.

@@ -145,6 +145,75 @@ describe('Telemetry ingest — /api/telemetry/install', () => {
   });
 });
 
+describe('Telemetry ingest — /api/telemetry/install seeds', () => {
+  const base = { app: 'session-manager', app_version: '0.120.0', platform: 'linux' };
+
+  async function storedSeeds(installId: string): Promise<unknown> {
+    const rows = await dbAll<{ seeds: string | null }>('SELECT seeds FROM app_installs WHERE install_id = ?', installId);
+    expect(rows).toHaveLength(1);
+    return rows[0].seeds === null ? null : JSON.parse(rows[0].seeds);
+  }
+
+  it('stores a valid seeds object, and a later post overwrites it like any profile field', async () => {
+    const res = await inject('POST', '/api/telemetry/install', {
+      ...base, install_id: 'seed-1', seeds: { 'dev-plugin': 'done', 'scheduler-mcp': 'failed' },
+    }, '10.4.0.1');
+    expect(res.statusCode).toBe(200);
+    expect(await storedSeeds('seed-1')).toEqual({ 'dev-plugin': 'done', 'scheduler-mcp': 'failed' });
+
+    await inject('POST', '/api/telemetry/install', {
+      ...base, install_id: 'seed-1', seeds: { 'dev-plugin': 'done', 'scheduler-mcp': 'exhausted' },
+    }, '10.4.0.1');
+    expect(await storedSeeds('seed-1')).toEqual({ 'dev-plugin': 'done', 'scheduler-mcp': 'exhausted' });
+
+    await inject('POST', '/api/telemetry/install', { ...base, install_id: 'seed-1' }, '10.4.0.1');
+    expect(await storedSeeds('seed-1')).toBeNull();
+  });
+
+  it("keeps Session Manager's wire shape: camelCase steps, null where a status is unknown", async () => {
+    await inject('POST', '/api/telemetry/install', {
+      ...base, install_id: 'seed-2', seeds: { devPlugin: 'done', schedulerMcp: null, agentPersonas: 'pending' },
+    }, '10.4.0.2');
+    expect(await storedSeeds('seed-2')).toEqual({ devPlugin: 'done', agentPersonas: 'pending' });
+  });
+
+  it('stores NULL for null, missing, non-object or all-invalid seeds, and never 400s', async () => {
+    const cases: Array<[string, unknown]> = [
+      ['seed-null', null],
+      ['seed-missing', undefined],
+      ['seed-string', 'done'],
+      ['seed-array', ['done']],
+      ['seed-number', 42],
+      ['seed-empty', {}],
+      ['seed-invalid', { devPlugin: 'installed', schedulerMcp: 1, agentPersonas: { status: 'done' } }],
+    ];
+    for (const [installId, seeds] of cases) {
+      const res = await inject('POST', '/api/telemetry/install', { ...base, install_id: installId, seeds }, '10.4.0.3');
+      expect(res.statusCode).toBe(200);
+      expect(await storedSeeds(installId)).toBeNull();
+    }
+  });
+
+  it('drops invalid statuses and non-slug step names, clamps names to 60 chars, keeps at most 20 steps', async () => {
+    await inject('POST', '/api/telemetry/install', {
+      ...base,
+      install_id: 'seed-3',
+      seeds: {
+        devPlugin: 'failed',
+        schedulerMcp: 'DONE',
+        'two words': 'done',
+        'someone@example.com': 'done',
+        ['x'.repeat(80)]: 'pending',
+      },
+    }, '10.4.0.4');
+    expect(await storedSeeds('seed-3')).toEqual({ devPlugin: 'failed', ['x'.repeat(60)]: 'pending' });
+
+    const many = Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`step-${i}`, 'done']));
+    await inject('POST', '/api/telemetry/install', { ...base, install_id: 'seed-4', seeds: many }, '10.4.0.4');
+    expect(await storedSeeds('seed-4')).toEqual(Object.fromEntries(Object.entries(many).slice(0, 20)));
+  });
+});
+
 describe('Telemetry retention — pruneTelemetry()', () => {
   it('drops rows past the age cap and keeps recent ones', async () => {
     const now = Math.floor(Date.now() / 1000);

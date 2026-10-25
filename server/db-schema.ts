@@ -555,19 +555,10 @@ export const MIGRATIONS = [
     device_pub_key TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_sm_relay_devices_user ON sm_relay_devices(user_id)`,
-  // Session Manager relay paired clients: a desktop Session Manager that drives the
-  // user's devices as a 'browser' without a Clerk session. Same storage model as
-  // sm_relay_devices — token hash only, revocation deletes the row.
-  `CREATE TABLE IF NOT EXISTS sm_relay_clients (
-    client_id   TEXT PRIMARY KEY,
-    token_hash  TEXT NOT NULL UNIQUE,
-    user_id     TEXT NOT NULL,
-    email       TEXT NOT NULL,
-    client_name TEXT NOT NULL,
-    issued_at   INTEGER NOT NULL,
-    expires_at  INTEGER NOT NULL
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_sm_relay_clients_user ON sm_relay_clients(user_id)`,
+  // Retired: Session Manager relay desktop-client tokens (desktop-to-desktop pairing,
+  // removed in Session Manager). Dropping the table, and its index with it, destroys
+  // every issued client token. No-ops once gone.
+  `DROP TABLE IF EXISTS sm_relay_clients`,
   // One row per one-shot data migration that has run (see
   // applyDataMigrationOnce). Schema changes stay in this array and the
   // additive ALTER list; this is for fixes to seeded rows that an admin may

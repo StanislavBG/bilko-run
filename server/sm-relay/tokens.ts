@@ -1,25 +1,17 @@
 // Session Manager web-remote relay — token stores.
 // Ported from session-manager web-remote/relay/src/tokens.ts.
 // Auth-mechanism-agnostic: `userId` is the Clerk user's email (see routes/sm-relay.ts).
-// Long-lived device tokens persist in the `sm_relay_devices` table and client tokens
-// in `sm_relay_clients`, so paired desktops survive a redeploy. Neither expires: a
-// pairing lasts until the owner revokes it (row delete). Short-lived OTPs, WS tickets and rate counters stay in-process —
+// Long-lived device tokens persist in the `sm_relay_devices` table, so paired desktops
+// survive a redeploy. They never expire: a pairing lasts until the owner revokes it
+// (row delete). Short-lived OTPs, WS tickets and rate counters stay in-process —
 // losing them on redeploy only means re-requesting a code or ticket.
 import crypto from 'node:crypto';
 import { dbGet, dbAll, dbRun } from '../db.js';
-
-/**
- * What a pairing code may be redeemed for. A 'device' code mints an agent token
- * (POST /pair); a 'client' code mints a token that drives the user's devices as a
- * browser (POST /client-pair). The two are never interchangeable.
- */
-export type OtpPurpose = 'device' | 'client';
 
 export interface OtpEntry {
   code: string;
   userId: string;
   email: string;
-  purpose: OtpPurpose;
   expiresAt: number;
   attempts: number;
 }
@@ -39,19 +31,7 @@ export interface WsTicketEntry {
   email: string;
   role: 'browser' | 'agent';
   deviceId?: string;
-  /** Set when a paired desktop client (not a Clerk session) holds this browser ticket. */
-  clientId?: string;
   expiresAt: number;
-}
-
-export interface ClientRecord {
-  clientId: string;
-  userId: string;
-  email: string;
-  clientName: string;
-  issuedAt: number;
-  /** Always null: client tokens never expire. */
-  expiresAt: null;
 }
 
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -81,7 +61,6 @@ function generateOtpCode(): string {
 export function issueOtp(
   userId: string,
   email: string,
-  purpose: OtpPurpose = 'device',
   now = Date.now(),
 ): { code: string } | { error: string; retryAfterMs?: number } {
   const rate = otpRateStore.get(userId);
@@ -95,23 +74,21 @@ export function issueOtp(
   }
 
   for (const [code, entry] of otpStore) {
-    if (entry.userId === userId && entry.purpose === purpose) otpStore.delete(code);
+    if (entry.userId === userId) otpStore.delete(code);
   }
 
   const code = generateOtpCode();
-  otpStore.set(code, { code, userId, email, purpose, expiresAt: now + OTP_TTL_MS, attempts: 0 });
+  otpStore.set(code, { code, userId, email, expiresAt: now + OTP_TTL_MS, attempts: 0 });
   return { code };
 }
 
-/** A code redeemed at the wrong endpoint is reported as invalid and left unconsumed. */
 export function verifyOtp(
   code: string,
-  purpose: OtpPurpose = 'device',
   now = Date.now(),
 ): { userId: string; email: string } | { error: string; status: number } {
   const normalized = code.toUpperCase().trim();
   const entry = otpStore.get(normalized);
-  if (!entry || entry.purpose !== purpose) return { error: 'invalid_code', status: 400 };
+  if (!entry) return { error: 'invalid_code', status: 400 };
   if (now > entry.expiresAt) {
     otpStore.delete(normalized);
     return { error: 'code_expired', status: 400 };
@@ -207,96 +184,6 @@ export async function revokeAllDevicesForUser(userId: string): Promise<string[]>
   return rows.map((r) => r.device_id);
 }
 
-// ── Client tokens: a paired desktop Session Manager acting as a browser ──
-// Same storage model as device tokens: hashed, revocable by row delete.
-
-interface ClientRow {
-  client_id: string;
-  user_id: string;
-  email: string;
-  client_name: string;
-  issued_at: number;
-}
-
-function toClient(row: ClientRow): ClientRecord {
-  return {
-    clientId: row.client_id,
-    userId: row.user_id,
-    email: row.email,
-    clientName: row.client_name,
-    issuedAt: Number(row.issued_at),
-    expiresAt: null,
-  };
-}
-
-const CLIENT_COLS = 'client_id, user_id, email, client_name, issued_at';
-
-export async function issueClientToken(
-  userId: string,
-  email: string,
-  clientName: string,
-  now = Date.now(),
-): Promise<{ clientId: string; clientToken: string }> {
-  const clientId = crypto.randomUUID();
-  const clientToken = crypto.randomBytes(32).toString('base64url');
-  await dbRun(
-    `INSERT INTO sm_relay_clients (client_id, token_hash, user_id, email, client_name, issued_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    clientId, hashToken(clientToken), userId, email, clientName, now, NO_EXPIRY,
-  );
-  return { clientId, clientToken };
-}
-
-export async function verifyClientToken(token: string): Promise<ClientRecord | null> {
-  const row = await dbGet<ClientRow>(
-    `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE token_hash = ?`,
-    hashToken(token),
-  );
-  return row ? toClient(row) : null;
-}
-
-export async function getClient(clientId: string): Promise<ClientRecord | null> {
-  const row = await dbGet<ClientRow>(
-    `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE client_id = ?`,
-    clientId,
-  );
-  return row ? toClient(row) : null;
-}
-
-export async function getClientsForUser(userId: string): Promise<Array<Omit<ClientRecord, 'userId'>>> {
-  const rows = await dbAll<ClientRow>(
-    `SELECT ${CLIENT_COLS} FROM sm_relay_clients WHERE user_id = ? ORDER BY issued_at`,
-    userId,
-  );
-  return rows.map((r) => {
-    const { userId: _u, ...rest } = toClient(r);
-    return rest;
-  });
-}
-
-/** Also drops the client's unconsumed WS tickets, so revocation can't be outrun. */
-function dropTicketsForClients(clientIds: string[]): void {
-  for (const [ticket, entry] of wsTicketStore) {
-    if (entry.clientId && clientIds.includes(entry.clientId)) wsTicketStore.delete(ticket);
-  }
-}
-
-export async function revokeClient(clientId: string): Promise<boolean> {
-  const { changes } = await dbRun('DELETE FROM sm_relay_clients WHERE client_id = ?', clientId);
-  dropTicketsForClients([clientId]);
-  return changes > 0;
-}
-
-export async function revokeAllClientsForUser(userId: string): Promise<string[]> {
-  const rows = await dbAll<{ client_id: string }>(
-    'DELETE FROM sm_relay_clients WHERE user_id = ? RETURNING client_id',
-    userId,
-  );
-  const ids = rows.map((r) => r.client_id);
-  dropTicketsForClients(ids);
-  return ids;
-}
-
 export function issueWsTicket(
   data: Omit<WsTicketEntry, 'expiresAt'>,
   now = Date.now(),
@@ -314,7 +201,7 @@ export function consumeWsTicket(ticket: string, now = Date.now()): WsTicketEntry
   return entry;
 }
 
-/** In-process stores only; paired device and client rows never expire. */
+/** In-process stores only; paired device rows never expire. */
 export function purgeExpired(now = Date.now()): void {
   for (const [code, entry] of otpStore) {
     if (now > entry.expiresAt) otpStore.delete(code);

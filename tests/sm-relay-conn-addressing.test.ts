@@ -7,7 +7,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
-import { handleUpgrade, browserConns, deviceConns, notifyClientRevoked, RELAY_WS_PATH } from '../server/sm-relay/router.js';
+import { handleUpgrade, browserConns, deviceConns, RELAY_WS_PATH } from '../server/sm-relay/router.js';
 import { issueWsTicket } from '../server/sm-relay/tokens.js';
 
 const OWNER = 'conn-owner@test.com';
@@ -16,7 +16,7 @@ const DEVICE_ID = 'a1b2c3d4-0000-4000-8000-000000000001';
 const OTHER_DEVICE_ID = 'a1b2c3d4-0000-4000-8000-000000000002';
 
 type Msg = Record<string, any>;
-interface Peer { ws: WebSocket; msgs: Msg[]; next: (pred: (m: Msg) => boolean) => Promise<Msg>; }
+interface Peer { ws: WebSocket; msgs: Msg[]; next: (pred: (m: Msg) => boolean) => Promise<Msg>; connId?: string; }
 
 let server: http.Server;
 let port: number;
@@ -61,52 +61,50 @@ async function connect(ticket: Parameters<typeof issueWsTicket>[0]): Promise<Pee
   return { ws, msgs, next };
 }
 
-const browser = (userId = OWNER, clientId?: string) => connect({ userId, email: userId, role: 'browser', clientId });
+/** A browser peer plus the relay-side conn id it was registered under. */
+async function browser(userId = OWNER): Promise<Peer & { connId: string }> {
+  const before = new Set(browserConns.keys());
+  const peer = await connect({ userId, email: userId, role: 'browser' });
+  return { ...peer, connId: [...browserConns.keys()].find((k) => !before.has(k))! };
+}
 const device = (userId = OWNER, deviceId = DEVICE_ID) => connect({ userId, email: userId, role: 'agent', deviceId });
 const env = (type: string, extra: Msg = {}) => JSON.stringify({ type, id: crypto.randomUUID(), ts: Date.now(), ...extra });
-const connIdOf = (clientId?: string, userId = OWNER) =>
-  [...browserConns.values()].find((c) => c.userId === userId && c.clientId === clientId)!.id;
 
 describe('sm-relay conn addressing', () => {
-  it('stamps a distinct fromConn/fromClientId per sender', async () => {
+  it('stamps a distinct fromConn per sender and no fromClientId', async () => {
     const dev = await device();
     const phone = await browser();
-    const desk = await browser(OWNER, 'client-1');
-    const phoneId = connIdOf(undefined);
-    const deskId = connIdOf('client-1');
-    expect(phoneId).not.toBe(deskId);
+    const laptop = await browser();
+    expect(phone.connId).not.toBe(laptop.connId);
 
     phone.ws.send(env('e2e:hello', { deviceId: DEVICE_ID }));
-    desk.ws.send(env('e2e:hello', { deviceId: DEVICE_ID }));
-    const a = await dev.next((m) => m.type === 'e2e:hello' && m.fromConn === phoneId);
-    const b = await dev.next((m) => m.type === 'e2e:hello' && m.fromConn === deskId);
-    expect(a.fromClientId).toBeNull();
-    expect(b.fromClientId).toBe('client-1');
+    laptop.ws.send(env('e2e:hello', { deviceId: DEVICE_ID }));
+    const a = await dev.next((m) => m.type === 'e2e:hello' && m.fromConn === phone.connId);
+    const b = await dev.next((m) => m.type === 'e2e:hello' && m.fromConn === laptop.connId);
+    expect(a).not.toHaveProperty('fromClientId');
+    expect(b).not.toHaveProperty('fromClientId');
   });
 
-  it('overwrites a spoofed fromConn/fromClientId from the browser', async () => {
+  it('overwrites a spoofed fromConn and drops a spoofed fromClientId from the browser', async () => {
     const dev = await device();
     const phone = await browser();
-    await browser(OWNER, 'victim-client');
-    const phoneId = connIdOf(undefined);
-    const victimId = connIdOf('victim-client');
+    const victim = await browser();
 
-    phone.ws.send(env('e2e:box', { deviceId: DEVICE_ID, fromConn: victimId, fromClientId: 'victim-client' }));
+    phone.ws.send(env('e2e:box', { deviceId: DEVICE_ID, fromConn: victim.connId, fromClientId: 'victim-client' }));
     const m = await dev.next((x) => x.type === 'e2e:box');
-    expect(m.fromConn).toBe(phoneId);
-    expect(m.fromClientId).toBeNull();
+    expect(m.fromConn).toBe(phone.connId);
+    expect(m).not.toHaveProperty('fromClientId');
   });
 
   it('toConn delivers to exactly one browser conn', async () => {
     const dev = await device();
     const phone = await browser();
-    const desk = await browser(OWNER, 'client-1');
-    const deskId = connIdOf('client-1');
+    const laptop = await browser();
 
-    dev.ws.send(env('e2e:box', { toConn: deskId, payload: 'only-desk' }));
+    dev.ws.send(env('e2e:box', { toConn: laptop.connId, payload: 'only-laptop' }));
     dev.ws.send(env('marker'));
-    const got = await desk.next((m) => m.type === 'e2e:box');
-    expect(got.payload).toBe('only-desk');
+    const got = await laptop.next((m) => m.type === 'e2e:box');
+    expect(got.payload).toBe('only-laptop');
     expect(got.deviceId).toBe(DEVICE_ID);
     expect(got.toConn).toBeUndefined();
     await phone.next((m) => m.type === 'marker');
@@ -116,20 +114,19 @@ describe('sm-relay conn addressing', () => {
   it('without toConn keeps broadcasting to every same-user browser', async () => {
     const dev = await device();
     const phone = await browser();
-    const desk = await browser(OWNER, 'client-1');
+    const laptop = await browser();
     dev.ws.send(env('event:session:list'));
     await phone.next((m) => m.type === 'event:session:list');
-    await desk.next((m) => m.type === 'event:session:list');
+    await laptop.next((m) => m.type === 'event:session:list');
   });
 
   it('drops a toConn that names another user\'s conn', async () => {
     await device();
     const otherDev = await device(OTHER, OTHER_DEVICE_ID);
     const victim = await browser(OWNER);
-    const victimId = connIdOf(undefined, OWNER);
     const otherBrowser = await browser(OTHER);
 
-    otherDev.ws.send(env('e2e:box', { toConn: victimId, payload: 'leak' }));
+    otherDev.ws.send(env('e2e:box', { toConn: victim.connId, payload: 'leak' }));
     otherDev.ws.send(env('marker'));
     await otherBrowser.next((m) => m.type === 'marker');
     expect(victim.msgs.some((m) => m.type === 'e2e:box' || m.type === 'marker')).toBe(false);
@@ -139,22 +136,12 @@ describe('sm-relay conn addressing', () => {
     const dev = await device();
     const other = await device(OTHER, OTHER_DEVICE_ID);
     const phone = await browser();
-    const phoneId = connIdOf(undefined);
 
     phone.ws.close();
     const m = await dev.next((x) => x.type === 'event:client:disconnected');
-    expect(m).toMatchObject({ fromConn: phoneId, fromClientId: null, reason: 'closed' });
+    expect(m).toMatchObject({ fromConn: phone.connId, reason: 'closed' });
+    expect(m).not.toHaveProperty('fromClientId');
     expect(typeof m.id).toBe('string');
     expect(other.msgs.some((x) => x.type === 'event:client:disconnected')).toBe(false);
-  });
-
-  it('reports token_revoked when notifyClientRevoked closes the conn', async () => {
-    const dev = await device();
-    await browser(OWNER, 'client-9');
-    const deskId = connIdOf('client-9');
-
-    notifyClientRevoked('client-9');
-    const m = await dev.next((x) => x.type === 'event:client:disconnected');
-    expect(m).toMatchObject({ fromConn: deskId, fromClientId: 'client-9', reason: 'token_revoked' });
   });
 });

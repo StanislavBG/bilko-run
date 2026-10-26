@@ -682,11 +682,20 @@
     "public": true,
     "displayName": "Launch Kit",
     "listing": {
+      "detail": "Eight Claude skills in one $9 zip. Start with launch-context: about five minutes of questions writes a one-page brief that every other skill reads. The rest save their output in .launch/: a scored landing-page roast, 20 scored headlines, a price and launch offer, five launch emails, a T-7 to T+7 launch week with a readiness scorecard, build-in-public posts and a first-100-customers plan.",
+      "audience": "Solo builders who use Claude and have a product that works but has not launched yet.",
+      "talkingPoints": [
+        "Eight Claude skills work from one short brief to write a scored and rewritten landing page, a priced launch offer, five launch emails, a day-by-day launch week and a first-100-customers plan.",
+        "Launch Kit's page-roast skill scores your landing page 0-100, writes three roast lines, ranks the top five fixes and rewrites your hero section.",
+        "Launch Kit's launch-week skill plans each day from T-7 to T+7 and gives a 0-100 launch readiness scorecard that shows what is still red.",
+        "$9 one-time buys a zip of all eight skills with 20 downloads per purchase, no subscription and a 14-day refund.",
+        "Each skill is a plain folder with a SKILL.md file that works in Claude Code, Claude.ai and the Agent SDK; for Claude Code you copy the folders into ~/.claude/skills/."
+      ],
       "offering": "content",
       "pricing": "paid",
       "callToAction": "Get the Launch Kit: eight Claude skills that plan and write your launch. $9 one-time download.",
       "avoidClaims": [
-        "Launch Kit is a SaaS, app or subscription. It is a one-time $9 zip download of Claude skill files.",
+        "Launch Kit is a SaaS, app or subscription.",
         "Launch Kit is free or open source.",
         "Launch Kit guarantees sales, signups, revenue or a successful launch.",
         "Launch Kit is made, endorsed or sold by Anthropic.",

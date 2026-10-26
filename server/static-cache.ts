@@ -79,6 +79,9 @@ const MEDIA_EXT = new Set([
  *   still collapsing the ~40 asset requests of a page view down to one.
  */
 export function staticCacheControl(filePath: string): string {
+  // A precompressed variant (`index.wasm.br`, see server/precompress.ts) is
+  // the same resource as its source and gets the source's lifetime.
+  filePath = filePath.replace(/\.(?:br|gz)$/i, '');
   const ext = extname(filePath).toLowerCase();
   if (ext === '.html') return 'public, max-age=0, must-revalidate';
   if (isImmutableAsset(filePath)) return `public, max-age=${YEAR}, immutable`;
@@ -214,6 +217,29 @@ export function registerStaticCorsTrim(app: {
     if (kept.length > 0) reply.header('vary', kept.join(', '));
     else reply.removeHeader('vary');
 
+    return payload;
+  });
+}
+
+/**
+ * Make every encoded response vary on Accept-Encoding.
+ *
+ * @fastify/compress adds the header when it compresses on the fly, but a
+ * precompressed file from `@fastify/static` arrives with `Content-Encoding`
+ * already set, so compress skips it and nothing adds `Vary`. A shared cache
+ * could then hand brotli bytes to a client that never offered `br`.
+ * Registered after compress so it only fills that gap.
+ */
+export function registerEncodingVary(app: {
+  addHook(name: 'onSend', fn: (req: any, reply: any, payload: any) => Promise<any>): unknown;
+}): void {
+  app.addHook('onSend', async (_req, reply, payload) => {
+    const encoding = String(reply.getHeader('content-encoding') ?? '');
+    if (!encoding || encoding === 'identity') return payload;
+    const vary = String(reply.getHeader('vary') ?? '');
+    if (vary.trim() === '*' || /(?:^|,)\s*accept-encoding\s*(?:,|$)/i.test(vary)) return payload;
+    // Lowercase, matching @fastify/compress's own case-sensitive check.
+    reply.header('vary', vary.trim() ? `${vary}, accept-encoding` : 'accept-encoding');
     return payload;
   });
 }

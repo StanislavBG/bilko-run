@@ -357,6 +357,9 @@ export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolea
   if (opts.flush !== false && !timer) {
     timer = setInterval(() => { void flushEgress(); }, FLUSH_MS);
     timer.unref?.();
+    // Flush before the deploy drain too: a long drain can end in Render's
+    // SIGKILL, which would lose everything onClose was holding.
+    app.addHook('preClose', async () => { await flushEgress(); });
     app.addHook('onClose', async () => {
       if (timer) { clearInterval(timer); timer = null; }
       await flushEgress();

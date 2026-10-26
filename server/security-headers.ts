@@ -54,7 +54,22 @@ export function isStaticProjectPath(url: string): boolean {
   return url.split('?')[0].startsWith('/projects/');
 }
 
-function buildCsp(nonce: string, frameAncestors: string): string {
+// Decision on record (2026-10-26): BILKO_CSP_ENFORCE enforces the policy on
+// the host's own pages only. Static-path apps (/projects/<slug>/) stay
+// report-only even when it is on. They are sibling-owned code with
+// engine-specific needs the host can't vouch for. Godot's
+// JavaScriptBridge.eval needs 'unsafe-eval', and engines draw icons and
+// cursors from blob: images. Enforcing the host policy there would break
+// escape-velocity at boot. Their reports still flow, so before anyone
+// enforces on /projects/ that has to become a per-project policy declared
+// in the registry, not one host-wide carve-out. blob: images are allowed
+// there now: they are same-origin by construction and only add report noise.
+export function cspIsEnforced(url: string, enforce = ENFORCE): boolean {
+  return enforce && !isStaticProjectPath(url);
+}
+
+function buildCsp(nonce: string, staticProject: boolean, enforced: boolean): string {
+  const frameAncestors = staticProject ? `'self'` : `'none'`;
   const directives = [
     `default-src 'self'`,
     // 'wasm-unsafe-eval' allows WebAssembly compilation only (not JS eval) —
@@ -67,7 +82,7 @@ function buildCsp(nonce: string, frameAncestors: string): string {
     // handful of style-src reports on every render pass. style-src-attr is
     // scoped to attributes only, so <style> elements stay nonce-gated.
     `style-src-attr 'unsafe-inline'`,
-    `img-src 'self' data: https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com`,
+    `img-src 'self' data:${staticProject ? ' blob:' : ''} https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com`,
     `font-src 'self' data: ${FONT_FILE_ORIGIN}`,
     `connect-src 'self' https://*.clerk.com ${CLERK_FAPI_ORIGIN} https://api.stripe.com`,
     `frame-src 'self' https://*.clerk.com https://js.stripe.com https://hooks.stripe.com`,
@@ -79,7 +94,7 @@ function buildCsp(nonce: string, frameAncestors: string): string {
   ];
   // Browsers ignore upgrade-insecure-requests in a report-only policy and log a
   // console error saying so — emit it only when the policy is enforced.
-  if (ENFORCE) directives.push(`upgrade-insecure-requests`);
+  if (enforced) directives.push(`upgrade-insecure-requests`);
   return directives.join('; ');
 }
 
@@ -151,8 +166,9 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
       reply.header('Content-Security-Policy', BLOG_VIDEO_CSP);
       return;
     }
-    const cspHeader = ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only';
-    reply.header(cspHeader, buildCsp(nonce, isStaticProjectPath(req.url) ? `'self'` : `'none'`));
+    const enforced = cspIsEnforced(req.url);
+    const cspHeader = enforced ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only';
+    reply.header(cspHeader, buildCsp(nonce, isStaticProjectPath(req.url), enforced));
   });
 
   // Inject the per-request nonce onto every <script> and <style> tag in HTML responses.

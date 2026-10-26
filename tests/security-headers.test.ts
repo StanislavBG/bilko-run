@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { describe, it, expect, beforeAll } from 'vitest';
-import { registerSecurityHeaders } from '../server/security-headers.js';
+import { registerSecurityHeaders, cspIsEnforced } from '../server/security-headers.js';
 import { initDb, dbGet, dbRun } from '../server/db.js';
 
 const TEST_HTML = '<html><head></head><body><script src="/app.js"></script><style>.x{}</style></body></html>';
@@ -185,5 +185,17 @@ describe('Security headers — blog video fence', () => {
     const res = await app.inject({ method: 'GET', url: '/test-html' });
     const frameSrc = getCsp(res.headers).split(';').map((d) => d.trim()).find((d) => d.startsWith('frame-src'));
     expect(frameSrc!.split(/\s+/)).toContain(`'self'`);
+  });
+});
+
+describe('CSP enforcement scope', () => {
+  // Static-path apps stay report-only even when BILKO_CSP_ENFORCE=1: Godot
+  // needs 'unsafe-eval' (JavaScriptBridge.eval) the host policy doesn't grant.
+  it('enforces on host pages only', () => {
+    expect(cspIsEnforced('/', true)).toBe(true);
+    expect(cspIsEnforced('/blog/post', true)).toBe(true);
+    expect(cspIsEnforced('/projects/escape-velocity/', true)).toBe(false);
+    expect(cspIsEnforced('/projects/escape-velocity/index.html?x=1', true)).toBe(false);
+    expect(cspIsEnforced('/', false)).toBe(false);
   });
 });

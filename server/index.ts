@@ -50,7 +50,8 @@ import { loadOgProjects, type OgProject } from './og-meta.js';
 import { loadBlogPosts } from './blog-posts.js';
 import { projectNotFound } from './project-not-found.js';
 import { registerProjectsHubRoutes } from './projects-hub.js';
-import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
+import { normalizeStaticMtimes, registerEncodingVary, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
+import { createShutdown, drainWindowMs } from './shutdown.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
 import { registerClickBeacon } from './click-beacon.js';
@@ -169,6 +170,10 @@ await app.register(compress, {
   customTypes: /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)|javascript|^application\/wasm(?:;|$)/u,
 });
 
+// Static files with a build-time `.br`/`.gz` sibling are served precompressed
+// (preCompressed below), which compress skips — this adds the Vary it would.
+registerEncodingVary(app);
+
 // Per-route egress accounting. Registered before the routes so its onSend hook
 // sees every /api/* response.
 registerEgressMeter(app);
@@ -277,6 +282,10 @@ if (isProd) {
       // Per-file lifetimes — immutable for content-hashed bundles, revalidate
       // for HTML, short shared TTL for unhashed project assets.
       setHeaders: (res, path) => setStaticCacheHeaders(res, path),
+      // Serve the `.br`/`.gz` siblings the build writes (server/precompress.ts)
+      // instead of compressing on every request: a disk read with a
+      // Content-Length, not ~3 MB/s of origin brotli for a 61 MB game build.
+      preCompressed: true,
       // 301 missing-trailing-slash → with-slash for directory indexes.
       // Without this, a request to `/projects/game-academy` looks for a
       // file (not a dir), 404s, and falls through to the SPA which then
@@ -386,17 +395,11 @@ try {
   });
   console.log(`Bilko.run server running on http://0.0.0.0:${PORT}`);
 
-  // Graceful shutdown: app.close() runs onClose hooks (egress meter flush).
-  // Render sends SIGTERM when stopping the old instance on deploy.
-  let shuttingDown = false;
-  const shutdown = (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    console.log(`[Shutdown] ${signal} received, closing server`);
-    const killer = setTimeout(() => process.exit(1), 10_000);
-    killer.unref();
-    app.close().then(() => process.exit(0), () => process.exit(1));
-  };
+  // Graceful shutdown. Render sends SIGTERM to the old instance on deploy;
+  // in-flight downloads drain before exit (server/shutdown.ts). preClose hooks
+  // close the WebSocket relays and flush the meters first; onClose hooks run
+  // once the last response has finished.
+  const shutdown = createShutdown(app, { drainMs: drainWindowMs(process.env.SHUTDOWN_DRAIN_SECONDS) });
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 } catch (err) {

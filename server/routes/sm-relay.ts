@@ -23,6 +23,7 @@ import {
   isDeviceOnline,
   notifyDeviceRevoked,
   closeSessionsForUser,
+  closeAllRelayConnections,
 } from '../sm-relay/router.js';
 
 // ── Optional email allowlist (defense in depth; default: any authenticated Clerk user) ──
@@ -82,6 +83,10 @@ async function listDevices(userId: string) {
 }
 
 export function registerSmRelayRoutes(app: FastifyInstance): void {
+  // Deploy drain (server/shutdown.ts): relay sockets close before app.close()
+  // waits on in-flight responses, so they reconnect to the new instance.
+  app.addHook('preClose', async () => { closeAllRelayConnections(); });
+
   // ── Product-root entry point for the web-remote phone app ─────────────────
   // Session Manager's whole web presence is reasoned about as one unit under
   // /products/session-manager. The phone app's BUNDLE, though, stays published

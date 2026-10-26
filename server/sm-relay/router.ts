@@ -278,6 +278,20 @@ export function closeSessionsForUser(userId: string): void {
   }
 }
 
+/**
+ * Deploy drain: close every relay socket with 1012 (service restart) so
+ * browsers and devices reconnect to the new instance. Open sockets would
+ * otherwise hold app.close() open until the drain window ran out.
+ */
+export function closeAllRelayConnections(): void {
+  for (const conns of [browserConns, deviceConns] as Map<string, { ws: WebSocket }>[]) {
+    for (const [id, conn] of conns) {
+      if (conn.ws.readyState === WebSocket.OPEN) conn.ws.close(1012, 'server_restart');
+      conns.delete(id);
+    }
+  }
+}
+
 export function isDeviceOnline(deviceId: string): boolean {
   const conn = deviceConns.get(deviceId);
   return conn !== undefined && conn.ws.readyState === WebSocket.OPEN;

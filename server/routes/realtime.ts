@@ -113,5 +113,7 @@ export function registerRealtimeRoutes(app: FastifyInstance): void {
 
   // Deploy drain: Render SIGTERMs the old instance → app.close() → every socket
   // gets 1012 (Service Restart) so clients reconnect to the new instance.
-  app.addHook('onClose', async () => { closeAllRooms(); });
+  // preClose, not onClose: open sockets hold app.close()'s drain open, so the
+  // rooms must close before it waits (server/shutdown.ts).
+  app.addHook('preClose', async () => { closeAllRooms(); });
 }

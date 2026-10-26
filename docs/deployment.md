@@ -35,3 +35,13 @@ curl -s "https://bilko.run/projects/<slug>/" | grep -oE "<title>[^<]+</title>"
 
 - Never push Bilko to the `content-grade` remote. It is a separate, unrelated project and its history has diverged.
 - Never add secrets to the repo; set them in the Render dashboard.
+
+## Deploy drain and large static downloads
+
+On a deploy Render moves traffic to the new instance, waits 60 s, sends SIGTERM to the old one, and SIGKILLs it after the service's shutdown delay. The server drains on SIGTERM (`server/shutdown.ts`): in-flight responses finish, the WebSocket relays close with 1012 so clients reconnect, and the meters flush first. `SHUTDOWN_DRAIN_SECONDS` (default 290) is only a backstop.
+
+**The real limit is Render's `maxShutdownDelaySeconds`**: 30 s by default, so a download gets about 90 s after the traffic switch. The maximum is 300 s, set through the Render API (`PATCH /v1/services/<id>` with `maxShutdownDelaySeconds: 300`); the dashboard does not expose it. Raising it to 300 gives a download about 6 minutes.
+
+Static files are precompressed at build time (`server/precompress.ts`, the last step of `pnpm build`), and `@fastify/static` serves the `.br`/`.gz` sibling with a Content-Length instead of compressing on every request.
+
+Edge caching is Render's, not ours (the domain has no Cloudflare zone of its own). Turn it on under the service's Edge Caching setting and choose "all file types", because `.wasm`/`.pck` are not in the default list. Render purges the edge cache on every deploy, so a hit lasts only until the next push.

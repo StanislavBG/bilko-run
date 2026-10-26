@@ -41,6 +41,8 @@ These are the OS services. Apps use them; they should not reimplement.
 ### To `static-path` and `external-url` apps additionally
 
 - **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page.
+- **CSP stays report-only under `/projects/`.** `BILKO_CSP_ENFORCE=1` enforces the policy on host pages only. Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Before enforcement reaches `/projects/`, it needs a per-project policy declared in the registry (decision 2026-10-26, `server/security-headers.ts`).
+- **Large assets are precompressed at build time.** Files ≥1 KB of compressible types (js, css, json, wasm, pck, data, …, never HTML) get `.br`/`.gz` siblings, served with a Content-Length. Don't publish your own `.br`/`.gz` next to a source file; the build replaces them.
 - **Same-origin framing only.** Responses under `/projects/` carry CSP `frame-ancestors 'self'`, so one static-path app may embed another in an iframe (e.g. Game Academy hosting an engine game slug) and talk to it over `postMessage`. Cross-origin framing is refused; every other host page is `frame-ancestors 'none'`.
 
 ### Calling authenticated host APIs from a `static-path` app

@@ -243,6 +243,8 @@ export function registerPageHitRecorder(app: FastifyInstance, opts: { flush?: bo
   if (opts.flush !== false && !timer) {
     timer = setInterval(() => { void flushPageHits(); }, FLUSH_MS);
     timer.unref?.();
+    // Flush before the deploy drain too (see server/egress.ts).
+    app.addHook('preClose', async () => { await flushPageHits(); });
     app.addHook('onClose', async () => {
       if (timer) { clearInterval(timer); timer = null; }
       await flushPageHits();

@@ -3,24 +3,28 @@ import { describe, it, expect } from 'vitest';
 import { PUBLIC_CARDS, HUB_CARDS } from '../src/data/projectsView';
 import { PROJECTS } from '../src/data/projectsRegistry';
 import { projectMetadataRows } from '../src/data/projectMetadata';
+import commitCounts from '../src/data/commit-counts.json' with { type: 'json' };
 import { ListingSchema } from '../mcp-host-server/src/contract/registry';
 
-// Captured from the pre-change code (hardcoded PUBLIC_SLUGS / DISPLAY_NAME).
-const EXPECTED: ReadonlyArray<readonly [string, string]> = [
-  ['session-manager', 'Session Manager'],
-  ['social-signals-trader', 'Social Signals Trader'],
-  ['escape-velocity', 'Escape Velocity'],
-  ['academy', 'Academy'],
-  ['git-viewer', 'Git Viewer'],
-  ['game-academy', 'Bilko Game Academy'],
-  ['launch-kit', 'Launch Kit'],
-  ['outdoor-hours', 'Weather'],
-  ['family-frame', 'Family Frame'],
-];
+const COUNTS = commitCounts as Record<string, number>;
+const PUBLIC_PROJECTS = PROJECTS.filter(p => p.public === true);
 
 describe('projectsView public cards', () => {
-  it('renders the same public slugs, order, and names as before the registry wiring', () => {
-    expect(PUBLIC_CARDS.map(c => [c.slug, c.name])).toEqual(EXPECTED);
+  it('shows exactly the registry projects marked public', () => {
+    expect(new Set(PUBLIC_CARDS.map(c => c.slug))).toEqual(new Set(PUBLIC_PROJECTS.map(p => p.slug)));
+    expect(PUBLIC_CARDS.length).toBe(PUBLIC_PROJECTS.length);
+  });
+
+  it("each public card's name is its registry displayName ?? name", () => {
+    const names = new Map(PUBLIC_PROJECTS.map(p => [p.slug, p.displayName ?? p.name]));
+    for (const c of PUBLIC_CARDS) expect(c.name, c.slug).toBe(names.get(c.slug));
+  });
+
+  it('orders public cards by non-increasing commit count', () => {
+    const count = (slug: string) => COUNTS[slug] ?? 0;
+    for (let i = 0; i < PUBLIC_CARDS.length - 1; i++) {
+      expect(count(PUBLIC_CARDS[i].slug), PUBLIC_CARDS[i].slug).toBeGreaterThanOrEqual(count(PUBLIC_CARDS[i + 1].slug));
+    }
   });
 });
 

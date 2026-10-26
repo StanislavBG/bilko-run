@@ -2271,8 +2271,8 @@ window.FEEDBACK_THREADS = {
     },
     fund_hibernated: {
       label: "Hibernated",
-      short: "The options experiment is over; the fund is not opening new trades.",
-      long: "The options experiment concluded on 2026-10-08. The trader no longer scans for or places new spreads (config flag hibernate = true in data/spread_config.json, mirrored to window.SPREAD_CONFIG.config.hibernate). Positions already open are still managed to exit by the deterministic exit policy, so the book, P/L and trade log keep updating until the last spread closes.",
+      short: "The credit-spread experiment is over; the Reddit (WSB) sleeves still trade on paper.",
+      long: "The options experiment concluded on 2026-10-08. The credit-spread trader no longer scans for or places new spreads (config flag hibernate = true in data/spread_config.json, mirrored to window.SPREAD_CONFIG.config.hibernate). Positions already open are still managed to exit by the deterministic exit policy, so the book, P/L and trade log keep updating until the last spread closes. This applies to the credit-spread book only: the Reddit (WSB) momentum and earnings sleeves are separate and still trade on Alpaca's paper account.",
       example: "A spread opened on 2026-10-02 and expiring 2026-10-16 still closes on its exit rules; no replacement spread is proposed or placed afterwards."
     },
     last_updated: {
@@ -7129,8 +7129,8 @@ function FooterCTA({
   return /*#__PURE__*/React.createElement("div", {
     className: "footer-cta"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", null, "If watching the experiment is useful, fuel it."), /*#__PURE__*/React.createElement("p", null, "Servers, scrapers, model calls and broker fees are paid out of pocket. No paid signals, no Discord, no affiliate. The bots make their own decisions; coffee keeps the pipeline running \u2014 and you get to watch live whether autonomous Reddit-driven trading actually works (so far: ", /*#__PURE__*/React.createElement("span", {
-    className: "up mono"
-  }, "+", perf.totalPnlPct.toFixed(1), "%"), " YTD vs SPY ", /*#__PURE__*/React.createElement("span", {
+    className: `${perf.totalPnlPct >= 0 ? "up " : ""}mono`
+  }, perf.totalPnlPct >= 0 ? "+" : "\u2212", Math.abs(perf.totalPnlPct).toFixed(1), "%"), " YTD vs SPY ", /*#__PURE__*/React.createElement("span", {
     className: "mono"
   }, "+", perf.spyYtdPct.toFixed(1), "%"), ").")), /*#__PURE__*/React.createElement("a", {
     className: "bmc-btn",
@@ -10057,7 +10057,11 @@ function TradeLogTable({
     className: "opt-log-note opt-reconcile-warn"
   }, "Reconciliation note: this table's Open count (", counts.open, ") doesn't match the", " ", "Positions table's row count (", expectedOpenCount, ") \u2014 one likely has an event the other doesn't. Trust Positions (sourced from Alpaca); flag this for review."), capped && /*#__PURE__*/React.createElement("p", {
     className: "opt-log-note opt-log-capped"
-  }, "Publishing note: only the newest ", publishedEvents, " of ", totalEvents, " trade log events are published to this dashboard \u2014 older activity exists in the internal record but cannot be shown here."), !enriched.length ? /*#__PURE__*/React.createElement("p", {
+  }, "Publishing note: only the newest ", publishedEvents, " of ", totalEvents, " trade log events are published to this dashboard \u2014 older activity exists in the internal record but cannot be shown here."), !enriched.length ? typeof expectedOpenCount === "number" && expectedOpenCount > 0 ? /*#__PURE__*/React.createElement("p", {
+    className: "opt-log-empty"
+  }, "No credit-spread fills here. The Reddit (WSB) sleeve's paper trades are in the", " ", /*#__PURE__*/React.createElement("a", {
+    href: "#dashboard"
+  }, "#dashboard Live Trade Log"), ".") : /*#__PURE__*/React.createElement("p", {
     className: "opt-log-empty"
   }, "No filled trades yet.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "opt-filter-row"
@@ -10758,7 +10762,7 @@ function HibernationNotice() {
   return /*#__PURE__*/React.createElement("div", {
     className: "opts-stale-banner opts-hibernate-banner",
     role: "status"
-  }, "\u23F8 HIBERNATED \u2014 the options experiment concluded on 2026-10-08. No new trades are being opened; open positions are managed to exit.", /*#__PURE__*/React.createElement(window.Help, {
+  }, "\u23F8 CREDIT-SPREAD BOOK HIBERNATED \u2014 the options experiment concluded on 2026-10-08. No new credit spreads are being opened; any open spread is managed to exit. The Reddit (WSB) sleeves still trade on paper.", /*#__PURE__*/React.createElement(window.Help, {
     term: "fund_hibernated"
   }));
 }
@@ -17220,10 +17224,15 @@ function PolicyFeedback({
 function ExecutionState() {
   var sc = window.SPREAD_CONFIG;
   if (!sc || !sc.config || sc.config.live == null) return null;
+  if (sc.config.live && sc.paper !== false) {
+    return /*#__PURE__*/React.createElement("p", {
+      className: "opts-exec-state opts-exec-state--live"
+    }, /*#__PURE__*/React.createElement("b", null, "Execution: PAPER."), " The 15-minute tick sends orders to Alpaca's paper (simulated) account \u2014 no real money is at risk.");
+  }
   if (sc.config.live) {
     return /*#__PURE__*/React.createElement("p", {
       className: "opts-exec-state opts-exec-state--live"
-    }, /*#__PURE__*/React.createElement("b", null, "Execution: LIVE."), " The 15-minute tick submits real orders to the broker.");
+    }, /*#__PURE__*/React.createElement("b", null, "Execution: LIVE."), " The 15-minute tick sends orders to the live brokerage account.");
   }
   return /*#__PURE__*/React.createElement("p", {
     className: "opts-exec-state opts-exec-state--halted"
@@ -18032,7 +18041,7 @@ function TickerDetailsPage() {
     }
   }, "Options Log"), /*#__PURE__*/React.createElement("span", {
     className: "opts-page-sub"
-  }, "every open credit spread, what it's worth now, and what we did"), /*#__PURE__*/React.createElement("p", {
+  }, "the open book, what it's worth now, and what we did"), /*#__PURE__*/React.createElement("p", {
     className: "opts-page-loop"
   }, "Three voices write this page: the ", /*#__PURE__*/React.createElement("b", null, "Analyst"), " reads the book and posts its opinion", " ", "(", summary.cadenceLabel || "on schedule", "); you, the ", /*#__PURE__*/React.createElement("b", null, "User"), ", comment in public on any card or proposal; the ", /*#__PURE__*/React.createElement("b", null, "Trader"), " wakes on its own 15-minute tick and applies the fund's frozen rules \u2014 arithmetic only. The Analyst's read and your comments are for the human reading this page; neither is an input to the Trader's decision."), /*#__PURE__*/React.createElement(ExecutionState, null)), summary.empty || /*#__PURE__*/React.createElement(React.Fragment, null, summary.headline, /*#__PURE__*/React.createElement("div", {
     id: "options-summary"

@@ -1,4 +1,4 @@
-import { RegistryProjectSchema, type RegistryProject } from './contract/registry.js';
+import { ListingSchema, RegistryProjectSchema, type Listing, type RegistryProject } from './contract/registry.js';
 
 export const PROJECT_OWNED_FIELDS = [
   'name',
@@ -27,11 +27,19 @@ export const ListingPatchSchema = RegistryProjectSchema.pick({
 export type ListingPatch = ReturnType<typeof ListingPatchSchema.parse>;
 
 const DELETABLE_FIELDS = ['displayName', 'tags', 'thumbnail', 'listing'] as const;
+const LISTING_FIELDS = new Set(Object.keys(ListingSchema.shape));
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /**
  * Apply a sibling project's content patch to its registry entry. Only
  * project-owned fields (plus `url` on external-url entries) are accepted;
  * host-owned fields (slug, host, year, public, launchedAt) are rejected.
+ * The patch is a JSON merge patch (RFC 7386): omitted fields keep their value,
+ * null deletes an optional field, and `listing` merges key by key, so
+ * `{ listing: { audience } }` keeps avoidClaims. A null listing key deletes
+ * that key; `listing: null` deletes the whole listing. Arrays replace whole.
  * Returns a new, schema-validated entry; the input is never mutated.
  */
 export function applyListingPatch(entry: RegistryProject, patch: unknown): RegistryProject {
@@ -54,12 +62,28 @@ export function applyListingPatch(entry: RegistryProject, patch: unknown): Regis
   const toValidate: Record<string, unknown> = { ...rest };
   for (const k of deletes) delete toValidate[k];
 
+  let listingDeletes: string[] = [];
+  const listingPatch = toValidate.listing;
+  if (isPlainObject(listingPatch)) {
+    listingDeletes = Object.keys(listingPatch).filter((k) => listingPatch[k] === null);
+    const unknown = listingDeletes.filter((k) => !LISTING_FIELDS.has(k));
+    if (unknown.length > 0) throw new Error(`unknown listing fields: ${unknown.join(', ')}`);
+    toValidate.listing = Object.fromEntries(Object.entries(listingPatch).filter(([, v]) => v !== null));
+  }
+
   const parsed = ListingPatchSchema.safeParse(toValidate);
   if (!parsed.success) throw new Error(parsed.error.message);
 
+  const { listing, ...fields } = structuredClone(parsed.data);
   const next = structuredClone(entry) as Record<string, unknown>;
-  Object.assign(next, structuredClone(parsed.data));
+  Object.assign(next, fields);
   for (const k of deletes) delete next[k];
+  if (listing !== undefined) {
+    const merged: Record<string, unknown> = { ...(next.listing as Listing | undefined), ...listing };
+    for (const k of listingDeletes) delete merged[k];
+    if (Object.keys(merged).length > 0) next.listing = merged;
+    else delete next.listing;
+  }
 
   if (hasUrl) {
     if (typeof url !== 'string' || !url.startsWith('https://')) {
@@ -71,4 +95,18 @@ export function applyListingPatch(entry: RegistryProject, patch: unknown): Regis
   const result = RegistryProjectSchema.safeParse(next);
   if (!result.success) throw new Error(result.error.message);
   return result.data;
+}
+
+/**
+ * Project-owned fields set on `before` and gone from `after`, e.g.
+ * `['tags', 'listing.avoidClaims']`, so a write can say what it deleted.
+ */
+export function removedFields(before: RegistryProject, after: RegistryProject): string[] {
+  const removed: string[] = DELETABLE_FIELDS.filter(
+    (k) => k !== 'listing' && before[k] !== undefined && after[k] === undefined,
+  );
+  for (const k of Object.keys(before.listing ?? {}) as Array<keyof Listing>) {
+    if (after.listing?.[k] === undefined) removed.push(`listing.${k}`);
+  }
+  return removed;
 }

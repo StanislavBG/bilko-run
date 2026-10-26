@@ -139,8 +139,16 @@ Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `
 
 **Two edit paths.** Both take the same patch and run the same ownership and schema checks.
 
-1. `update_project_listing { slug, callerRepoPath, patch }` — edits the card now. Commits and pushes. Use `get_project { slug }` first to see the current entry. Set `displayName`, `tags`, `thumbnail` or `listing` to `null` in the patch to remove it.
-2. `bilko.listing.json` at the sibling repo root (max 16 KB) — `publish_static_project` reads it from `sourceRepoPath` and syncs it into the registry in the same commit as the bytes. The result line reports `listing: synced from bilko.listing.json`, `listing: unchanged` or `listing: no bilko.listing.json`. Invalid JSON or a rejected field fails the publish.
+1. `update_project_listing { slug, callerRepoPath, patch }` — edits the card now. Commits and pushes. Use `get_project { slug }` first to see the current entry. The result names any field the patch removed (`removed: listing.avoidClaims`).
+2. `bilko.listing.json` at the sibling repo root (max 16 KB) — `publish_static_project` reads it from `sourceRepoPath` and syncs it into the registry in the same commit as the bytes. The result line reports `listing: synced from bilko.listing.json` (plus `(removed: …)` when the file deleted a field), `listing: unchanged` or `listing: no bilko.listing.json`. Invalid JSON or a rejected field fails the publish.
+
+**The patch is a merge patch** ([RFC 7386](https://www.rfc-editor.org/rfc/rfc7386)). Send only what you want to change:
+
+- A field you leave out keeps its current value.
+- `listing` merges key by key. `{ "listing": { "audience": "…" } }` changes `audience` and keeps every other listing key, including `avoidClaims`.
+- `null` removes. `{ "displayName": null }` removes a field (`displayName`, `tags`, `thumbnail` or `listing`). `{ "listing": { "avoidClaims": null } }` removes one listing key. `{ "listing": null }` removes the whole listing.
+- Arrays (`tags`, `talkingPoints`, `avoidClaims`) are replaced whole. Send the full list you want.
+- Deleting a key from `bilko.listing.json` does not remove it from the card. Set it to `null` in the file instead.
 
 ```json
 {

@@ -336,27 +336,32 @@ server.registerTool(
   {
     title: 'Update a project listing',
     description:
-      'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints,offering,pricing,callToAction,avoidClaims,icon,shareImage}). icon and shareImage must be PNG files inside your project\'s own published bundle (a path like /projects/<slug>/icon.png): icon is square and is composited onto the generated share card; shareImage is exactly 1200x630 and replaces the generated card. offering/pricing/callToAction/avoidClaims tell promoters (e.g. Burrow) what kind of project this is, what the reader should do, and claims never to make. Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. Commits and pushes; bilko.run redeploys in ~1 minute.',
+      'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints,offering,pricing,callToAction,avoidClaims,icon,shareImage}). icon and shareImage must be PNG files inside your project\'s own published bundle (a path like /projects/<slug>/icon.png): icon is square and is composited onto the generated share card; shareImage is exactly 1200x630 and replaces the generated card. offering/pricing/callToAction/avoidClaims tell promoters (e.g. Burrow) what kind of project this is, what the reader should do, and claims never to make. Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. The patch is a JSON merge patch: send only what changes. Fields you leave out keep their value, and listing merges key by key, so {listing:{audience:"..."}} keeps avoidClaims and every other listing key. null deletes: {displayName:null} removes a field, {listing:{avoidClaims:null}} removes one listing key, {listing:null} removes the whole listing. Arrays (tags, talkingPoints, avoidClaims) are replaced whole. The result names any field the patch removed. Commits and pushes; bilko.run redeploys in ~1 minute.',
     inputSchema: {
       slug: SlugSchema,
       callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
-      patch: z.record(z.string(), z.unknown()).describe('Fields to change; null deletes an optional field; url only for external-url entries'),
+      patch: z.record(z.string(), z.unknown()).describe('JSON merge patch of the fields to change: omitted fields and omitted listing keys are kept; null deletes an optional field or one listing key; arrays replace whole; url only for external-url entries'),
     },
   },
   async ({ slug, callerRepoPath, patch }) => {
     try {
       const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
         const projects = await readRegistry(root);
-        const { next, changed } = updateListingInRegistry(projects, slug, callerRepoPath, patch);
+        const { next, changed, removed } = updateListingInRegistry(projects, slug, callerRepoPath, patch);
         const message = `listing: update ${slug}`;
-        if (!changed) return { result: { changed: false as boolean }, paths: [], message };
+        if (!changed) return { result: { changed: false as boolean, removed }, paths: [], message };
         await writeRegistry(root, next);
-        return { result: { changed: true as boolean }, paths: ['src/data/standalone-projects.json'], message };
+        return { result: { changed: true as boolean, removed }, paths: ['src/data/standalone-projects.json'], message };
       });
 
       if (!outcome.ok) return checkoutErr(outcome);
       if (!outcome.result.changed) return ok(`no change: ${slug}`);
-      return ok([`updated listing: ${slug}`, pushedLine(outcome)].join('\n'));
+      const { removed } = outcome.result;
+      return ok([
+        `updated listing: ${slug}`,
+        ...(removed.length > 0 ? [`removed: ${removed.join(', ')}`] : []),
+        pushedLine(outcome),
+      ].join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);
     }
@@ -383,7 +388,8 @@ server.registerTool(
   },
 );
 
-// Share assets declared by bilko.listing.json (if it sets a listing), else the registry entry.
+// Share assets the entry will have once bilko.listing.json is merged in: the
+// file's listing keys win (null removes one), the registry entry fills the rest.
 function declaredShareAssets(
   projects: RegistryProject[],
   slug: string,
@@ -391,10 +397,12 @@ function declaredShareAssets(
 ): { icon?: string; shareImage?: string } | undefined {
   const patch = sourceRepoPath ? readListingFile(resolve(sourceRepoPath.replace(/^~(?=\/|$)/, homedir()))) : undefined;
   const patched = patch && typeof patch === 'object' ? (patch as { listing?: unknown }).listing : undefined;
-  const source = patched && typeof patched === 'object'
-    ? (patched as { icon?: string; shareImage?: string })
-    : projects.find(p => p.slug === slug)?.listing;
-  return source ? { icon: source.icon, shareImage: source.shareImage } : undefined;
+  if (patched === null) return undefined;
+  const source: { icon?: string | null; shareImage?: string | null } = {
+    ...projects.find(p => p.slug === slug)?.listing,
+    ...(patched && typeof patched === 'object' && !Array.isArray(patched) ? patched : {}),
+  };
+  return { icon: source.icon ?? undefined, shareImage: source.shareImage ?? undefined };
 }
 
 // 5) publish_static_project ─────────────────────────────────────────────
@@ -496,7 +504,8 @@ server.registerTool(
           }
           if (res.changed) {
             listingNext = res.next;
-            listingStatus = 'listing: synced from bilko.listing.json';
+            listingStatus = 'listing: synced from bilko.listing.json'
+              + (res.removed.length > 0 ? ` (removed: ${res.removed.join(', ')})` : '');
           } else {
             listingStatus = 'listing: unchanged';
           }

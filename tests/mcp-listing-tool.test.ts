@@ -61,6 +61,27 @@ describe('updateListingInRegistry', () => {
     expect(changed).toBe(false);
     expect(next).toEqual(registry());
   });
+
+  it('a partial listing patch keeps avoidClaims and reports nothing removed', () => {
+    const base = registry();
+    base[0] = { ...base[0], listing: { detail: 'D', avoidClaims: ['Demo is a SaaS'], callToAction: 'Play' } };
+    const { next, changed, removed } = updateListingInRegistry(base, 'demo', OWNER, {
+      listing: { audience: 'Students', talkingPoints: ['Free'] },
+    });
+    expect(changed).toBe(true);
+    expect(removed).toEqual([]);
+    expect(next[0].listing).toEqual({
+      detail: 'D', avoidClaims: ['Demo is a SaaS'], callToAction: 'Play', audience: 'Students', talkingPoints: ['Free'],
+    });
+  });
+
+  it('reports an explicitly deleted listing key', () => {
+    const base = registry();
+    base[0] = { ...base[0], listing: { detail: 'D', avoidClaims: ['Demo is a SaaS'] } };
+    const { next, removed } = updateListingInRegistry(base, 'demo', OWNER, { listing: { avoidClaims: null } });
+    expect(next[0].listing).toEqual({ detail: 'D' });
+    expect(removed).toEqual(['listing.avoidClaims']);
+  });
 });
 
 describe('buildRegistration', () => {
@@ -135,6 +156,15 @@ describe('readListingFile', () => {
     const d = tmp();
     fs.writeFileSync(path.join(d, 'bilko.listing.json'), JSON.stringify({ tagline: 'Hi' }));
     expect(readListingFile(d)).toEqual({ tagline: 'Hi' });
+  });
+
+  it('a file with a partial listing merges into the entry like an update_project_listing patch', () => {
+    const d = tmp();
+    fs.writeFileSync(path.join(d, 'bilko.listing.json'), JSON.stringify({ listing: { shareImage: '/projects/demo/og.png' } }));
+    const base = registry();
+    base[0] = { ...base[0], listing: { detail: 'D', avoidClaims: ['Demo is a SaaS'] } };
+    const { next } = updateListingInRegistry(base, 'demo', OWNER, readListingFile(d));
+    expect(next[0].listing).toEqual({ detail: 'D', avoidClaims: ['Demo is a SaaS'], shareImage: '/projects/demo/og.png' });
   });
 
   it('a file containing public: true is rejected by updateListingInRegistry', () => {

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { RegistrySchema } from './contract/registry.js';
 import { assertCallerOwnsSlug, canonicalPath } from './ownership.js';
-import { applyListingPatch } from './listing-patch.js';
+import { applyListingPatch, removedFields } from './listing-patch.js';
 import { buildStaticEntry, buildExternalEntry } from './publish-request.js';
 import os from 'node:os';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -9,7 +9,8 @@ import path from 'node:path';
 /**
  * Pure core of `update_project_listing`: ownership check + allowlisted patch
  * over a registry array. No fs, no git. Throws on unknown slug, foreign caller,
- * or any patch the allowlist/schema rejects.
+ * or any patch the allowlist/schema rejects. `removed` names the fields the
+ * patch deleted (only an explicit null can delete one).
  */
 export function updateListingInRegistry(projects, slug, callerRepoPath, patch) {
     const idx = projects.findIndex((p) => p.slug === slug);
@@ -19,7 +20,7 @@ export function updateListingInRegistry(projects, slug, callerRepoPath, patch) {
     assertCallerOwnsSlug(original, callerRepoPath);
     const patched = applyListingPatch(original, patch);
     const next = RegistrySchema.parse(projects.map((p, i) => (i === idx ? patched : p)));
-    return { next, changed: !isDeepStrictEqual(original, next[idx]) };
+    return { next, changed: !isDeepStrictEqual(original, next[idx]), removed: removedFields(original, next[idx]) };
 }
 /**
  * Cheap ownership check run BEFORE publish gates (which execute commands in

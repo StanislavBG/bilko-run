@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your download — Bilko Agent Factory Kit</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/projects/launch-kit/assets/track-Db2RGENN.js"></script>
+  <script type="module" crossorigin src="/projects/launch-kit/assets/thanks-ClCiKCvI.js"></script>
+  <link rel="stylesheet" crossorigin href="/projects/launch-kit/assets/style-Bln4mtFD.css">
+</head>
+<body class="thanks" data-offer="agent-factory-kit">
+  <main class="thanks-card">
+    <section data-state="pending">
+      <p class="mono">T-0 · confirming your payment</p>
+      <h1>Confirming your payment…</h1>
+      <p>Hang tight. This usually takes a few seconds.</p>
+    </section>
+
+    <section data-state="paid" hidden>
+      <p class="mono">T-0 · payment received</p>
+      <h1>You're cleared for launch</h1>
+      <ul class="facts">
+        <li data-track-redact>Receipt for <strong id="email"></strong></li>
+        <li>Bilko Agent Factory Kit v<span id="version"></span></li>
+        <li>Downloads used: <span id="used"></span></li>
+      </ul>
+      <a id="download" data-track="download-zip" class="pill" href="#">Download the Agent Factory Kit</a>
+      <h2>Install in 3 steps</h2>
+      <ol>
+        <li>Unzip the download.</li>
+        <li>Read <code>CORE-RULES.md</code>, then copy <code>personas/</code> into <code>~/.claude/agents/</code>.</li>
+        <li>Follow the README's "Your first hour" to run your first PRD.</li>
+      </ol>
+      <p><strong>Bookmark this page.</strong> It is your download link. Lost it? Open <a data-track="thanks-kit-recover" href="./">this page</a> again and sign in with your purchase email to re-download.</p>
+    </section>
+
+    <section data-state="limit" hidden>
+      <p class="mono">T-0 · limit reached</p>
+      <h1>Download limit reached</h1>
+      <p>This purchase has used all of its downloads. Sign in with your purchase email to download again.</p>
+      <button id="recover-limit" data-track="download-recover-limit" class="pill" type="button">Sign in to re-download</button>
+    </section>
+
+    <section data-state="error" hidden>
+      <p class="mono">T-0 · hold</p>
+      <h1>We couldn't find that order</h1>
+      <p>The link may be incomplete or still processing. Try again in a minute, or <a data-help data-track="thanks-help" href="https://bilko.run/contact">contact us</a> and we will sort it out.</p>
+      <button id="recover" data-track="download-recover" class="pill" type="button">Sign in to re-download</button>
+    </section>
+
+    <p id="recover-msg" class="note" role="status" hidden></p>
+    <a class="pill" data-track="thanks-back" href="/projects/launch-kit/agent-factory-kit/">Back to the Agent Factory Kit</a>
+  </main>
+</body>
+</html>

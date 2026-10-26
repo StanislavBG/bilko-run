@@ -57,11 +57,14 @@ describe('projectsView listing-driven enrichment', () => {
     }
   });
 
-  it('a project with no listing has metric/detail undefined', () => {
-    const bare = HUB_CARDS.find(c => c.type === 'project' && c.slug === 'academy');
-    expect(bare).toBeDefined();
-    expect(bare?.metric).toBeUndefined();
-    expect(bare?.detail).toBeUndefined();
+  it('a project with no listing metric/detail has none on its card', () => {
+    const bare = PROJECTS.filter(p => p.listing?.metric === undefined && p.listing?.detail === undefined);
+    for (const p of bare) {
+      const card = HUB_CARDS.find(c => c.type === 'project' && c.slug === p.slug);
+      if (!card) continue;
+      expect(card.metric, p.slug).toBeUndefined();
+      expect(card.detail, p.slug).toBeUndefined();
+    }
   });
 });
 

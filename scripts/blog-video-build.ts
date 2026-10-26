@@ -34,7 +34,10 @@ const MIN_SCREENS = 3;
 const W = 1280;
 const H = 720;
 const TYPES: SceneType[] = ['title', 'text', 'screen', 'closing'];
-const PROJECT_URL_RE = /^(https:\/\/bilko\.run\/projects\/[a-z0-9-]+\/|https:\/\/github\.com\/\S+)$/;
+// A static-path project page, a host page such as /pricing (never /projects/<slug> without its
+// slash), or a GitHub repo.
+const PROJECT_URL_RE =
+  /^(https:\/\/bilko\.run\/projects\/[a-z0-9-]+\/|https:\/\/bilko\.run\/(?!projects\/)[a-z0-9-]+(?:\/[a-z0-9-]+)*|https:\/\/github\.com\/\S+)$/;
 
 const words = (s: string): number => s.trim().split(/\s+/).filter(Boolean).length;
 const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
@@ -47,7 +50,7 @@ export function parseStoryboard(json: unknown): Storyboard {
   if (!nonEmpty(sb.voice)) errors.push('voice must be a non-empty string');
   if (!nonEmpty(sb.project?.name)) errors.push('project.name must be a non-empty string');
   if (typeof sb.project?.url !== 'string' || !PROJECT_URL_RE.test(sb.project.url)) {
-    errors.push('project.url must be https://bilko.run/projects/<slug>/ or https://github.com/...');
+    errors.push('project.url must be https://bilko.run/projects/<slug>/, a bilko.run page such as https://bilko.run/pricing, or https://github.com/...');
   }
   if (!Array.isArray(sb.scenes) || sb.scenes.length === 0) {
     errors.push('scenes must be a non-empty array');

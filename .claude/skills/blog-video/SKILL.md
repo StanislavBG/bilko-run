@@ -34,12 +34,15 @@ video" and stop.
 
 Read the post in full from `content/blog/<slug>.md` (frontmatter title + body; see
 `content/blog/README.md`). Find the project the post links to (`https://bilko.run/projects/<p>/`) and
-take its `name` and `tagline` from `src/data/standalone-projects.json`. Write a claims list: every
-caption, callout and narration line next to the verbatim post sentence it comes from. Drop any with
-no source. No invented numbers, logos, screens or features.
+take its `name` and `tagline` from `src/data/standalone-projects.json`. If the post links no project
+page, only a bilko.run host page (e.g. `https://bilko.run/pricing`), that page is the project: its
+URL is the post's link and its name is the one the page itself shows (e.g. "Bilko Credits"). Write a
+claims list: every caption, callout and narration line next to the verbatim post sentence it comes
+from. Drop any with no source. No invented numbers, logos, screens or features.
 
-Then check for the post's content-DAG outline at
-`/home/bilko/Projects/Bilko/.claude/skills/blog-from-git/drafts/<slug>/outline.json` (the drafts
+Then check for the post's content-DAG outline: the path the request names, else
+`/home/bilko/Projects/burrow/downloads/blog-drafts/<stamp>-<slug>/artifacts/<slug>/outline.json`,
+else `/home/bilko/Projects/Bilko/.claude/skills/blog-from-git/drafts/<slug>/outline.json` (the drafts
 folder is gitignored and lives only in the main checkout, so use that absolute path). When it exists,
 use its sections (`heading` + `point`) and their `figure` fields to choose the `you can` moments and
 what to capture for each, and read `evidence.json` in the same folder to confirm each claim. When it

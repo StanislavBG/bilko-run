@@ -70,6 +70,13 @@ describe('parseStoryboard', () => {
     }, /s2.*between 3 and 8/));
   it('rejects narrationSeconds > duration - 0.3', () => fail((s) => (s.scenes[1].narrationSeconds = 3.8), /s2.*narrationSeconds/));
   it('rejects a bad project url', () => fail((s) => (s.project.url = 'http://example.com'), /project\.url/));
+  it('accepts a bilko.run host page as the project url', () => {
+    const sb: any = validSb();
+    sb.project.url = 'https://bilko.run/pricing';
+    expect(parseStoryboard(sb).project.url).toBe('https://bilko.run/pricing');
+  });
+  it('rejects a static-path project url without its trailing slash', () =>
+    fail((s) => (s.project.url = 'https://bilko.run/projects/outdoor-hours'), /project\.url/));
 });
 
 describe('buildVideo', () => {

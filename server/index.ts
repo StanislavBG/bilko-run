@@ -49,6 +49,7 @@ import { gitViewerOg, getGitViewerHealth } from './routes/tools/git-viewer.js';
 import { loadOgProjects, type OgProject } from './og-meta.js';
 import { loadBlogPosts } from './blog-posts.js';
 import { projectNotFound } from './project-not-found.js';
+import { registerProjectsHubRoutes } from './projects-hub.js';
 import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
@@ -288,6 +289,9 @@ if (isProd) {
     });
 
     const indexHtml = readFileSync(resolve(distPath, 'index.html'), 'utf-8');
+
+    // /projects served directly; /projects/ 301s to it (see projects-hub.ts)
+    registerProjectsHubRoutes(app, indexHtml);
 
     // SPA fallback — the OG onSend hook (registerOgRoutes) injects route-specific tags
     //

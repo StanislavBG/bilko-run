@@ -10,6 +10,13 @@ import { useForumToast } from '../pages/forum/ForumToast.js';
 
 const HandleModal = lazy(() => import('../pages/forum/HandleModal.js').then(m => ({ default: m.HandleModal })));
 
+function searchShortcutLabel(): string {
+  if (typeof navigator === 'undefined') return 'Ctrl K';
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const platform = nav.userAgentData?.platform || nav.platform || nav.userAgent || '';
+  return /mac|iphone|ipad|ipod/i.test(platform) ? '⌘K' : 'Ctrl K';
+}
+
 function activeSectionPath(pathname: string): string {
   if (pathname === '/' || pathname === '/home') return '/';
   if (pathname.startsWith('/projects') || pathname.startsWith('/work')) return '/projects';
@@ -112,9 +119,9 @@ export function Layout() {
             <span className="bk-online-dot"></span>
             Online
           </span>
-          <button className="bk-chip" onClick={() => setCmdOpen(true)} title="Search (⌘K)">
+          <button className="bk-chip" onClick={() => setCmdOpen(true)} title={`Search (${searchShortcutLabel()})`}>
             <span>Search</span>
-            <span style={{ opacity: 0.6 }}>⌘K</span>
+            <span style={{ opacity: 0.6 }}>{searchShortcutLabel()}</span>
           </button>
           <SignedOut>
             <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>

@@ -7,7 +7,7 @@ import { type ReactNode } from 'react';
  * on Clerk + React Router and can't be imported by a static-path sibling. This
  * is a self-contained, dependency-free reproduction: brand, section links
  * (absolute bilko.run URLs so they work from any /projects/<slug>/ page),
- * an optional Search (⌘K) trigger, an Online status pill, and a right slot for
+ * an optional Search (⌘K / Ctrl K) trigger, an Online status pill, and a right slot for
  * app-specific controls (e.g. a theme toggle).
  *
  * Styling is theme-aware: it reads host-kit/app CSS tokens (--paper, --ink,
@@ -29,7 +29,7 @@ export interface SiteHeaderProps {
   sections?: readonly SiteSection[];
   /** href of the section to render as active. */
   activeHref?: string;
-  /** When set, renders a "Search ⌘K" button that calls this on click. */
+  /** When set, renders a "Search ⌘K" (Ctrl K off Apple platforms) button that calls this on click. */
   onSearch?: () => void;
   /** Show the "Online" status pill. Default: true. */
   showStatus?: boolean;
@@ -110,6 +110,16 @@ const CSS = `
 }
 `;
 
+type NavLike = { platform?: string; userAgent?: string; userAgentData?: { platform?: string } };
+
+/** Platform-correct label for the search shortcut: ⌘K on Apple platforms, Ctrl K elsewhere. */
+export function searchShortcutLabel(
+  nav: NavLike | undefined = typeof navigator === 'undefined' ? undefined : (navigator as NavLike),
+): '⌘K' | 'Ctrl K' {
+  const platform = nav?.userAgentData?.platform || nav?.platform || nav?.userAgent || '';
+  return /mac|iphone|ipad|ipod/i.test(platform) ? '⌘K' : 'Ctrl K';
+}
+
 export function SiteHeader({
   brandHref = 'https://bilko.run',
   brandName = 'Bilko Bibitkov',
@@ -119,6 +129,7 @@ export function SiteHeader({
   showStatus = true,
   rightSlot,
 }: SiteHeaderProps) {
+  const label = searchShortcutLabel();
   return (
     <header className="bk-siteheader">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
@@ -146,9 +157,9 @@ export function SiteHeader({
           </span>
         )}
         {onSearch && (
-          <button className="bk-sh-search" onClick={onSearch} title="Search (⌘K)">
+          <button className="bk-sh-search" onClick={onSearch} title={`Search (${label})`}>
             <span>Search</span>
-            <kbd>⌘K</kbd>
+            <kbd>{label}</kbd>
           </button>
         )}
         {rightSlot}

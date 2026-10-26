@@ -40,7 +40,7 @@ export type { GameShellProps, GameThemeColors } from './games/index.js';
 // ─────────────────────────────────────────────────────────────
 // Site header — the shared Bilko top bar for static-path siblings.
 
-export { SiteHeader, DEFAULT_SECTIONS } from './SiteHeader.js';
+export { SiteHeader, DEFAULT_SECTIONS, searchShortcutLabel } from './SiteHeader.js';
 export type { SiteHeaderProps, SiteSection } from './SiteHeader.js';
 
 // ─────────────────────────────────────────────────────────────

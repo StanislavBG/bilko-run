@@ -143,6 +143,8 @@ interface ManifestEntry {
 }
 
 // Trim the recorded webm to the action window and encode it, stepping crf up until it fits.
+// A keyframe every second: the player seeks the clip on every frame, and a one-keyframe clip
+// decodes from frame 0 on each seek and freezes.
 function encodeClip(webm: string, offsetSec: number, seconds: number, outFile: string, maxClipBytes: number): { bytes: number; crf: number } | string {
   let last = 0;
   for (const crf of CRF_LADDER) {
@@ -150,6 +152,7 @@ function encodeClip(webm: string, offsetSec: number, seconds: number, outFile: s
       'ffmpeg',
       ['-y', '-loglevel', 'error', '-ss', offsetSec.toFixed(2), '-t', String(seconds), '-i', webm,
         '-vf', 'scale=1280:720', '-r', '24', '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf),
+        '-g', '24', '-keyint_min', '24', '-sc_threshold', '0',
         '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', outFile],
       { encoding: 'utf8' },
     );

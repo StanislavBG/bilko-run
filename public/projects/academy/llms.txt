@@ -1,0 +1,37 @@
+# Bilko Academy
+
+> A free, plain-language course that teaches anyone to use Claude well. 13 short lessons, no coding needed, every claim cited.
+
+Bilko Academy is an independent course, not made or endorsed by Anthropic. It is free and you can read every lesson without an account. Lessons are #/ hash routes inside a JavaScript page, so a plain HTTP fetch of a lesson URL returns only the app shell, not the lesson text.
+
+## Start here
+
+- [Welcome to the Academy](https://bilko.run/projects/academy/#/intro/welcome): Read this first. Three minutes. (3 min)
+
+## Meet Claude
+
+- [A model, not a search engine](https://bilko.run/projects/academy/#/meet-claude/a-model-not-a-search-engine): What you're actually talking to when you talk to Claude. (7 min)
+- [Tokens and probability — why answers vary](https://bilko.run/projects/academy/#/meet-claude/tokens-and-probability): Claude reads in chunks and answers with weighted dice. Those two facts explain more than they should. (7 min)
+- [The two hard limits — context window and knowledge cutoff](https://bilko.run/projects/academy/#/meet-claude/the-two-hard-limits): One wall in time, one wall in space — and no prompt can talk Claude past either. (7 min)
+
+## Working in Claude
+
+- [Your first week in claude.ai](https://bilko.run/projects/academy/#/working-in-claude/your-first-week-in-claude): Four decisions you'll meet in the first week — a plan, a model, two settings, and what Claude remembers. (7 min)
+- [Projects — give Claude a standing briefing](https://bilko.run/projects/academy/#/working-in-claude/projects-a-standing-briefing): Write the context once. Every chat after that starts already briefed. (8 min)
+- [Making things — Artifacts, files, and Claude that acts](https://bilko.run/projects/academy/#/working-in-claude/making-things-artifacts-and-agents): When the answer isn't a paragraph but a document, an app, a report, or a finished job. (7 min)
+
+## Prompting
+
+- [Say what you mean — clarity, context, and roles](https://bilko.run/projects/academy/#/prompting/say-what-you-mean): Most disappointing answers trace back to a prompt that never said what it wanted. (8 min)
+- [Show and structure — examples, XML tags, long documents](https://bilko.run/projects/academy/#/prompting/show-and-structure): Three techniques, one habit — keep what Claude should read separate from what Claude should do. (7 min)
+- [One job per turn — chaining and testing your prompts](https://bilko.run/projects/academy/#/prompting/one-job-per-turn): Split dependent work into a chain of turns, then prove the new prompt beats the old one. (7 min)
+
+## Trust and next steps
+
+- [Hallucination, trust, and "show me the source"](https://bilko.run/projects/academy/#/trust-and-next-steps/hallucination-and-when-to-trust): Output is plausible, not verified. Here is the decision rule that handles that. (8 min)
+- [Staying safe — prompt injection and the rules of the road](https://bilko.run/projects/academy/#/trust-and-next-steps/prompt-injection-and-the-rules): When the document Claude is reading tells Claude what to do — and what you actually agreed to when you signed up. (7 min)
+- [Claude Code — when chat isn't enough](https://bilko.run/projects/academy/#/trust-and-next-steps/claude-code-when-chat-isnt-enough): The capstone: an agent that works where your files live. (8 min)
+
+## Optional
+
+- [Glossary](https://bilko.run/projects/academy/#/glossary): Plain-language definitions of the terms used in the lessons.

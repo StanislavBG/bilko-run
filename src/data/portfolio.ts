@@ -83,7 +83,7 @@ export const CHANNELS: readonly Channel[] = [
 export const NOW_ITEMS: readonly string[] = [
   'Social Signals Trader running live, in public',
   'signal-builder split out into its own hosted MCP service',
-  'Academy module 1s live; lesson backfill cooking',
+  'Academy: 13 free, plain-language lessons on using Claude',
   'New build log up on the blog',
 ];
 

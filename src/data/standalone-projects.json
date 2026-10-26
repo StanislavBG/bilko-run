@@ -318,6 +318,15 @@
     ],
     "public": true,
     "listing": {
+      "detail": "Burrow, a Reddit-reading pipeline, tallies which stocks r/wallstreetbets is talking about and which way the crowd leans. Scheduled jobs then bet against that lean with defined-risk options spreads on an Alpaca paper account and close them by written rules, with no one approving each order. The dashboard shows open positions and past trades, and scores the whole account against SPY.",
+      "audience": "People curious whether trading on Reddit chatter can work, and builders who want to watch an automated trader run in the open, losing trades included.",
+      "talkingPoints": [
+        "It reads r/wallstreetbets' big discussion threads and counts which stocks get the most mentions and whether the crowd leans bullish or bearish.",
+        "It bets against the crowd: when r/wallstreetbets leans bullish on a stock, it buys a bearish options spread, and a bullish one when the crowd leans bearish.",
+        "It is judged on one number: the whole paper account's return against SPY, which the dashboard charts over time.",
+        "The dashboard lists each open position with its live price, paper profit or loss and a safe, watch or danger band, plus a log of its past trades.",
+        "An earlier strategy, selling options credit spreads, lost money and stopped opening trades on Oct 8, 2026; the dashboard still breaks down how those trades closed."
+      ],
       "offering": "experiment",
       "pricing": "free",
       "callToAction": "Watch the live paper-trading log and comment on any trade it makes.",
@@ -327,7 +336,8 @@
         "Guaranteed, consistent or market-beating returns (the experiment has lost money)",
         "A product, service or signal feed people can buy or subscribe to",
         "Managing or accepting other people's money"
-      ]
+      ],
+      "shareImage": "/projects/social-signals-trader/og.png"
     }
   },
   {

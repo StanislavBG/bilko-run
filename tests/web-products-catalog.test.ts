@@ -5,6 +5,7 @@ import {
   isValidCheckoutSessionId,
   isValidReleaseVersion,
   isValidWebProductSlug,
+  isWebProductPriced,
   productBilling,
   productKind,
   productPageSlug,
@@ -187,6 +188,16 @@ describe('service products', () => {
     expect(productPageSlug({ ...svc, pageSlug: 'human-for-hire' })).toBe('human-for-hire');
   });
 
+  it('only monthly products need a Stripe price id to be priced', () => {
+    const noId = { defaultPriceId: undefined };
+    expect(isWebProductPriced({ ...demo, ...noId }, {})).toBe(true);
+    expect(isWebProductPriced({ ...svc, ...noId, billing: 'one_time' }, {})).toBe(true);
+    const monthly: WebProduct = { ...svc, ...noId, billing: 'month' };
+    expect(isWebProductPriced(monthly, {})).toBe(false);
+    expect(isWebProductPriced(monthly, { [monthly.priceEnvVar]: 'price_env' })).toBe(true);
+    expect(isWebProductPriced({ ...monthly, defaultPriceId: 'price_default' }, {})).toBe(true);
+  });
+
   it('service: release null and downloadLimit 0 ok; release present fails', () => {
     expect(validateWebProducts([svc])).toEqual([]);
     expect(validateWebProducts([{ ...svc, release: demo.release }]).join()).toContain('release');
@@ -248,8 +259,8 @@ describe('includes and preview', () => {
     ]);
     expect(k.defaultPriceId).toBeUndefined();
     expect(k.release).toEqual({
-      version: '1.0.0', filename: 'bilko-agent-factory-kit-1.0.0.zip', bytes: 60099,
-      sha256: 'c5fe49c81d94ab91e561bdb2be7f63e38a2dfd233e3f1ea636f8f33d77b0db08',
+      version: '1.0.1', filename: 'bilko-agent-factory-kit-1.0.1.zip', bytes: 60144,
+      sha256: '846f731e3c2d4ab906a48bd983ae2ba0356e6f069a759217ad4ca7db11cc31e6',
     });
     expect(k.preview).toEqual({
       version: '1.0.0', filename: 'agent-factory-kit-preview-1.0.0.zip', bytes: 3392,

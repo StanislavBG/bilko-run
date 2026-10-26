@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import Fastify from 'fastify';
+import { WEB_PRODUCTS } from '../shared/web-products.js';
 
 const OLD_ENV = process.env;
 const sessionsCreate = vi.fn();
 let stripeAvailable = true;
 // slug@version pairs whose release bytes are "stored".
 const stored = new Set<string>();
+// slug@version of a catalog product's pinned release, so pin bumps leave these tests alone.
+const pinned = (slug: string) => `${slug}@${WEB_PRODUCTS.find((p) => p.slug === slug)!.release!.version}`;
 
 vi.mock('../server/services/stripe.js', () => ({
   getStripe: () => (stripeAvailable ? { checkout: { sessions: { create: sessionsCreate } }, coupons: { retrieve: vi.fn() } } : null),
@@ -56,7 +59,7 @@ describe('offers are listed only when they can be bought and delivered', () => {
     vi.clearAllMocks();
     stripeAvailable = true;
     stored.clear();
-    stored.add('launch-kit@1.0.1');
+    stored.add(pinned('launch-kit'));
     process.env = {
       ...OLD_ENV,
       PUBLIC_URL: 'https://bilko.run',
@@ -82,7 +85,7 @@ describe('offers are listed only when they can be bought and delivered', () => {
   });
 
   it('lists the download once its release is stored', async () => {
-    stored.add('agent-factory-kit@1.0.0');
+    stored.add(pinned('agent-factory-kit'));
     const a = await app();
     const ids = (await a.inject({ method: 'GET', url: '/api/offers' })).json().offers.map((o: { id: string }) => o.id);
     expect(ids).toEqual(expect.arrayContaining(['launch-kit', 'agent-factory-kit']));
@@ -92,7 +95,7 @@ describe('offers are listed only when they can be bought and delivered', () => {
 
   it('lists only credit-priced menu offers when Stripe is not configured', async () => {
     stripeAvailable = false;
-    stored.add('agent-factory-kit@1.0.0');
+    stored.add(pinned('agent-factory-kit'));
     const a = await app();
     const offers = (await a.inject({ method: 'GET', url: '/api/offers' })).json().offers as { id: string; payWith: string }[];
     expect(offers.length).toBeGreaterThan(0);

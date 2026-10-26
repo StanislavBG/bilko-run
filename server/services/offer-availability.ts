@@ -7,7 +7,7 @@ import { isReleaseStored } from './web-products.js';
 import { AGENT_OFFERS, type AgentOffer } from '../../shared/agent-offers.js';
 import { entryForPriceType } from '../../shared/product-catalog.js';
 import {
-  WEB_PRODUCTS, productBilling, productKind, resolveWebProductPriceId, webProductBySlug, type WebProduct,
+  WEB_PRODUCTS, isWebProductPriced, productKind, resolveWebProductPriceId, webProductBySlug, type WebProduct,
 } from '../../shared/web-products.js';
 
 export function offerPriceId(offer: AgentOffer, env: Record<string, string | undefined>): string | undefined {
@@ -26,8 +26,7 @@ export function isOfferPriced(offer: AgentOffer, env: Record<string, string | un
   if (offer.source.kind === 'wallet_topup' || offer.source.kind === 'menu') return true;
   if (offer.source.kind === 'web_product') {
     const product = webProductBySlug(offer.source.slug);
-    if (!product) return false;
-    if (productBilling(product) === 'one_time') return true;
+    return !!product && isWebProductPriced(product, env);
   }
   return !!offerPriceId(offer, env);
 }

@@ -11,7 +11,7 @@ import {
 } from '../services/web-products.js';
 import { isDeliverable } from '../services/offer-availability.js';
 import {
-  MAX_RELEASE_BYTES, WEB_PRODUCTS, isValidCheckoutSessionId, isValidReleaseVersion, isValidWebProductSlug,
+  MAX_RELEASE_BYTES, WEB_PRODUCTS, isValidCheckoutSessionId, isValidReleaseVersion, isValidWebProductSlug, isWebProductPriced,
   productBilling, productKind, productPageSlug, productsIncluding, resolveWebProductPriceId, webProductBySlug, type WebProduct,
 } from '../../shared/web-products.js';
 
@@ -231,6 +231,10 @@ export function registerWebProductRoutes(
   const lookup = (slug: unknown): WebProduct | undefined =>
     isValidWebProductSlug(slug) ? webProductBySlug(slug, products) : undefined;
 
+  // `available` checks what the checkout route checks, so the two never disagree.
+  const purchasable = async (product: WebProduct, stripe: unknown): Promise<boolean> =>
+    !!stripe && isWebProductPriced(product, process.env) && isDeliverable(product, products);
+
   app.get('/api/web-products/:slug', async (req, reply) => {
     const product = lookup((req.params as { slug?: string }).slug);
     reply.header('Cache-Control', 'no-store');
@@ -252,16 +256,12 @@ export function registerWebProductRoutes(
         foundingDisplayPrice: product.foundingDisplayPrice ?? null,
         foundingRemaining: coupon?.remaining ?? null,
         soldOut: sold,
-        available: !!resolveWebProductPriceId(product, process.env) && !!stripe,
+        available: await purchasable(product, stripe),
       };
     }
-    let available = false;
+    const available = await purchasable(product, getStripe());
     const previewAvailable = !!product.preview
       && !!(await getRelease(previewSlug(product), product.preview.version));
-    if (product.release) {
-      const stored = await getRelease(product.slug, product.release.version);
-      available = !!stored && !!resolveWebProductPriceId(product, process.env) && !!getStripe();
-    }
     return {
       slug: product.slug,
       name: product.name,
@@ -291,7 +291,7 @@ export function registerWebProductRoutes(
       reply.status(409);
       return { error: 'Owner checkouts run in Stripe test mode, which is not configured (STRIPE_TEST_SECRET_KEY).' };
     }
-    if (!stripe || (productBilling(product) === 'month' && !priceId)) {
+    if (!stripe || !isWebProductPriced(product, process.env)) {
       reply.status(503);
       return { error: 'Checkout is not available right now.' };
     }

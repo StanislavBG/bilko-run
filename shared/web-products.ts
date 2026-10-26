@@ -75,10 +75,10 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     displayPrice: '$9',
     downloadLimit: 20,
     release: {
-      version: '1.0.1',
-      filename: 'bilko-launch-kit-1.0.1.zip',
-      bytes: 32631,
-      sha256: '40506573c3855d6412fc64d8718e9f74b24fa873da1e2991e708ea0581ffd7c5',
+      version: '1.0.2',
+      filename: 'bilko-launch-kit-1.0.2.zip',
+      bytes: 32684,
+      sha256: 'a42d69f41be74b8b5cd6cb6532f595a897b937ca5c5178209e433296a30e1c52',
     },
   },
   {
@@ -90,10 +90,10 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
     displayPrice: '$3',
     downloadLimit: 20,
     release: {
-      version: '1.0.0',
-      filename: 'bilko-agent-factory-kit-1.0.0.zip',
-      bytes: 60099,
-      sha256: 'c5fe49c81d94ab91e561bdb2be7f63e38a2dfd233e3f1ea636f8f33d77b0db08',
+      version: '1.0.1',
+      filename: 'bilko-agent-factory-kit-1.0.1.zip',
+      bytes: 60144,
+      sha256: '846f731e3c2d4ab906a48bd983ae2ba0356e6f069a759217ad4ca7db11cc31e6',
     },
     pageSlug: 'launch-kit/agent-factory-kit',
     preview: {
@@ -152,6 +152,11 @@ export function productKind(p: WebProduct): 'download' | 'service' {
 
 export function productBilling(p: WebProduct): 'one_time' | 'month' {
   return p.billing ?? 'one_time';
+}
+
+/** One-time products are charged amountCents inline (price_data); only monthly ones need a Stripe price id. */
+export function isWebProductPriced(p: WebProduct, env: Record<string, string | undefined>): boolean {
+  return productBilling(p) === 'one_time' || !!resolveWebProductPriceId(p, env);
 }
 
 export function productPageSlug(p: WebProduct): string {

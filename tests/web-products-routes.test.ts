@@ -100,6 +100,21 @@ describe('web product routes', () => {
     });
   });
 
+  it('info available agrees with checkout: no price id needed, the pinned release must be stored', async () => {
+    const { registerWebProductRoutes } = await import('../server/routes/web-products.js');
+    const noPriceId: WebProduct = { ...product, defaultPriceId: undefined };
+    const unstored: WebProduct = { ...product, release: { ...product.release!, version: '9.9.9' } };
+    let n = 0;
+    for (const [p, available, status] of [[noPriceId, true, 200], [unstored, false, 503]] as const) {
+      const app = Fastify();
+      registerWebProductRoutes(app, { products: [p] });
+      expect((await app.inject({ url: `/api/web-products/${p.slug}` })).json().available).toBe(available);
+      const dry = await app.inject({ method: 'POST', url: `/api/web-products/${p.slug}/checkout?dryRun=1`, remoteAddress: `10.8.0.${++n}` });
+      expect(dry.statusCode).toBe(status);
+    }
+    expect(sessionsCreate).not.toHaveBeenCalled();
+  });
+
   it('creates a checkout with metadata and thanks success_url', async () => {
     sessionsCreate.mockResolvedValue({ url: 'https://checkout.stripe.test/x' });
     const app = await buildApp();
@@ -327,6 +342,10 @@ describe('service products', () => {
     expect((await post(await appFor(oneTime), oneTime)).statusCode).toBe(200);
     const monthly = svc({ defaultPriceId: undefined });
     expect((await post(await appFor(monthly), monthly)).statusCode).toBe(503);
+    for (const [p, available] of [[oneTime, true], [monthly, false]] as const) {
+      const info = await (await appFor(p)).inject({ url: `/api/web-products/${p.slug}` });
+      expect(info.json().available).toBe(available);
+    }
   });
 
   it('nested pageSlug points success and cancel at the nested page', async () => {
@@ -477,6 +496,17 @@ describe('included downloads', () => {
     expect(await countSessionDownloads(product.slug, sid)).toBe(1);
     await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=${sid}` });
     expect((await app.inject({ url: `/api/web-products/${product.slug}/download?session_id=${sid}` })).statusCode).toBe(429);
+  });
+
+  it('GET reports the including product unavailable until the included zip is stored, like checkout', async () => {
+    const unstored: WebProduct = { ...product, release: { ...product.release!, version: '9.9.9' } };
+    let n = 0;
+    for (const [list, available, status] of [[[product, host], true, 200], [[unstored, host], false, 503]] as const) {
+      const app = await app2([...list]);
+      expect((await app.inject({ url: `/api/web-products/${host.slug}` })).json().available).toBe(available);
+      const dry = await app.inject({ method: 'POST', url: `/api/web-products/${host.slug}/checkout?dryRun=1`, remoteAddress: `10.8.1.${++n}` });
+      expect(dry.statusCode).toBe(status);
+    }
   });
 
   it('order of the including product lists included downloads', async () => {

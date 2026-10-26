@@ -48,6 +48,7 @@ import { registerOgRoutes } from './og-routes.js';
 import { gitViewerOg, getGitViewerHealth } from './routes/tools/git-viewer.js';
 import { loadOgProjects, type OgProject } from './og-meta.js';
 import { loadBlogPosts } from './blog-posts.js';
+import { projectNotFound } from './project-not-found.js';
 import { normalizeStaticMtimes, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
@@ -310,6 +311,41 @@ if (isProd) {
       // A missing blog video must 404, not fall through to the SPA shell.
       if (path.startsWith('/blog-videos/')) {
         return reply.status(404).type('text/plain').send('Not found');
+      }
+      // Unknown paths deeper than a /projects/<slug>/ root: real 404 with a
+      // body that fits the request (sibling 404.html, plain text, or a page).
+      const deep = projectNotFound(path, distPath);
+      if (deep) {
+        if (deep.kind === 'sibling-404') {
+          return reply
+            .status(404)
+            .header('cache-control', 'private, no-store')
+            .type('text/html')
+            .send(readFileSync(deep.file, 'utf-8'));
+        }
+        if (deep.kind === 'plain') {
+          return reply
+            .status(404)
+            .header('cache-control', 'public, max-age=300')
+            .type('text/plain')
+            .send('Not found');
+        }
+        if (deep.published) {
+          const html =
+            `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+            `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+            `<title>Page not found — bilko.run</title></head>` +
+            `<body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem">` +
+            `<h1>Page not found</h1>` +
+            `<p><a href="/projects/${deep.slug}/">Back to this project</a> · <a href="/">bilko.run home</a></p>` +
+            `</body></html>`;
+          return reply
+            .status(404)
+            .header('cache-control', 'private, no-store')
+            .type('text/html')
+            .send(html);
+        }
+        reply.status(404);
       }
       // A /projects/<slug>/ root the static plugin didn't serve has no
       // published bundle: real 404 status. The SPA renders a terminal

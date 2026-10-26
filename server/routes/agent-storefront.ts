@@ -66,7 +66,7 @@ export function buildLlmsTxt(
     `- [MCP endpoint](${SITE}/mcp): POST ${SITE}/mcp, a streamable HTTP MCP server with tools ${MCP_TOOLS.join(', ')}. list_projects, get_project, list_offers and list_menu need no key; wallet_balance, order_menu_item and roast_page need a bkk_ key sent as "Authorization: Bearer bkk_...".`,
     `- [Menu](${SITE}/api/menu): GET ${SITE}/api/menu returns the services menu with credit prices. Top up at ${SITE}/buy/credits-3, /buy/credits-5 or /buy/credits-10 (the success page shows a bkk_ key), then spend credits with POST ${SITE}/api/menu/<itemId>/order or the order_menu_item tool. Check the balance with GET ${SITE}/api/wallet.`,
     `- [Project catalog](${SITE}/api/projects): GET ${SITE}/api/projects returns every public project as JSON.`,
-    `- [Offers](${SITE}/api/offers): GET ${SITE}/api/offers returns every paid offer as JSON, each with a buyUrl to open in a browser to pay via Stripe Checkout.`,
+    `- [Offers](${SITE}/api/offers): GET ${SITE}/api/offers returns every paid offer as JSON, each with a buyUrl to open in a browser to pay via Stripe Checkout. To check a buyUrl without opening a checkout, send HEAD or add ?dryRun=1.`,
     '',
   ].join('\n');
 }

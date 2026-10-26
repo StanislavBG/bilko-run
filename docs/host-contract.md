@@ -294,7 +294,7 @@ bilko.run treats AI agents as a customer segment: they can discover what is for 
 | POST | `/api/menu/:itemId/order` | Clerk session or `bkk_` key | Body `{ intake }` (strings, validated against the item's intake fields). Spends the item's price from the wallet. 201 `{ order: { id, itemId, status, priceCents }, balanceCents }`. Errors: 400 `invalid_intake` / `live_needs_slot`, 402 `insufficient_credits` (with `balanceCents`, `topUpUrl`), 404 `unknown_item`, 409 `daily_cap`, 409 `{ error: 'unavailable' }` (item not on sale yet), 429. Rate limited per IP. |
 | POST | `/api/menu/live-call/order` | Clerk session or `bkk_` key | Body `{ startMs, intake }`. Books the $9 live call on the slot machinery (see "Selling a bookable service") and spends 900 cents. 201 `{ booking, balanceCents, emailed }`. Errors: 402 `insufficient_credits`, 409 `slot_unavailable`, 400 otherwise. |
 | GET | `/api/menu/orders` | Clerk session or `bkk_` key | The caller's own orders (`id`, `itemId`, `status`, `priceCents`, `createdAt`). |
-| GET | `/buy/:offerId` | none | Creates a Stripe Checkout session for the offer and 302-redirects to it. Unknown id: 404 listing valid ids. Search/AI crawlers and HEAD get a static page with the price and the link instead of a session. Rate limited (10/min/IP); 503 when Checkout is unavailable. |
+| GET | `/buy/:offerId` | none | A browser GET (a `Mozilla/` user agent that `classifyVisitor` calls `human`) creates a **live** Stripe Checkout session and 302-redirects to it. Every other client gets a static page with the price and the link, and no session: HEAD, crawlers, AI fetchers (`ChatGPT-User`), HTTP clients (curl, Wget, python-requests, Node `fetch`) and headless browsers. `?dryRun=1` runs the checks a browser GET would (Stripe, price, availability, sold out) and returns that page or the error status. It never opens a session and is not rate limited. A session from an IP with admin page hits is flagged like `POST …/checkout` (`owner_ip` metadata, `is_admin=1` funnel row). Unknown id: 404 listing valid ids. Rate limited (10 sessions/min/IP); 503 when Checkout is unavailable. |
 | POST | `/api/agent-keys` | Clerk session | Mints a `bkk_` key, returned once (`key`, `prefix`, `id`). 409 at 10 active keys. |
 | GET | `/api/agent-keys` | Clerk session | Lists the caller's keys (prefix, label, timestamps; never the secret). |
 | DELETE | `/api/agent-keys/:id` | Clerk session | Revokes one of the caller's keys. |
@@ -360,7 +360,7 @@ They show up in the admin traffic panel (`/admin`, backed by `GET /api/admin/tra
 
 ### robots.txt
 
-`public/robots.txt` keeps `/api/` private but explicitly allows `/mcp`, `/llms.txt`, `/api/offers` and `/api/projects` (longest match wins). It disallows `/buy/` because each GET creates a Checkout session; agents acting for a user follow buy links directly.
+`public/robots.txt` keeps `/api/` private but explicitly allows `/mcp`, `/llms.txt`, `/api/offers` and `/api/projects` (longest match wins). It disallows `/buy/` because a browser GET creates a live Checkout session; agents acting for a user hand the link to the user, whose browser opens checkout.
 
 ## URL canonicalization
 
@@ -768,6 +768,7 @@ The Stripe webhook (`checkout.session.completed`) dispatches on `metadata.web_pr
 Live mode holds real buyers only. Owner/agent testing never creates live sessions:
 - **Owner in a browser:** sign in on bilko.run; checkout routes to test mode. Pay with `4242 4242 4242 4242`. Test orders (`cs_test_…`) deliver the zip but are never counted in `/admin`.
 - **Agents/deploy smokes:** `POST /api/web-products/<slug>/checkout?dryRun=1`. Never `POST` without it against prod.
+- **`/buy/<id>` links:** a browser GET opens a **live** session, including the owner's. `/buy` has no owner test mode; an owner-IP session is only flagged (`owner_ip`, `is_admin`). Agents and deploy smokes check these links with `HEAD` or `GET /buy/<id>?dryRun=1`, never a plain GET from a browser or browser automation. Scripts, AI fetchers and headless browsers get the info page, but a client that sends a browser user agent still opens a live session.
 - **Local dev:** `getStripe()` refuses an `sk_live_` key unless `NODE_ENV=production` (override: `STRIPE_ALLOW_LIVE_IN_DEV=1`). Use an `sk_test_` key.
 - **Full live-path check** (real webhook, real price): a 100%-off promo code on a live session is still the one sanctioned way; expect it in Stripe as a $0 completed session.
 

@@ -49,7 +49,8 @@ vi.mock('../server/services/stripe.js', () => ({
 vi.mock('../server/services/tokens.js', () => ({
   creditTokens: async () => {}, grantFreeTokens: async () => {}, hasTokenAccount: async () => true,
 }));
-vi.mock('../server/db.js', () => ({ dbRun }));
+const dbGet = vi.fn(async (..._args: unknown[]): Promise<unknown> => undefined);
+vi.mock('../server/db.js', () => ({ dbRun, dbGet }));
 
 async function build() {
   const { registerStripeRoutes } = await import('../server/routes/stripe.js');
@@ -204,6 +205,19 @@ describe('webhook web-product orders', () => {
     await expire({ web_product: 'demo-pack', owner_ip: 'true' });
     await expire({ web_product: 'nope' });
     expect(funnelCalls('checkout_expired')).toHaveLength(0);
+  });
+
+  it('skips an expiry whose checkout_start row was flagged as the owner\'s after the fact', async () => {
+    dbGet.mockResolvedValueOnce({ n: 1 });
+    expect(await expire({ web_product: 'demo-pack', agent_buy: 'demo-pack' })).toBe(200);
+    expect(dbGet).toHaveBeenCalledWith(expect.stringContaining('checkout_start'), 'cs_live_exp1');
+    expect(funnelCalls('checkout_expired')).toHaveLength(0);
+  });
+
+  it('still records the expiry when the owner lookup fails', async () => {
+    dbGet.mockRejectedValueOnce(new Error('db down'));
+    expect(await expire({ web_product: 'demo-pack' })).toBe(200);
+    expect(funnelCalls('checkout_expired')).toHaveLength(1);
   });
 
   it('records a recovered checkout when a completed session came from a recovery link', async () => {

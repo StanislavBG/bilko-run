@@ -412,5 +412,17 @@ export async function initDb(): Promise<void> {
     { sql: "UPDATE git_viewer_profiles SET updated_at = 0 WHERE tier = 'free'", args: [] },
   ], doneIds);
 
+  // 2026-10-26 12:47 PM PDT: an agent verifying a bug report ran a curl GET of
+  // /buy/agent-factory-kit, which opened live session cs_live_b1oju… (never paid).
+  // Flag its checkout_start row as the owner's and stamp the session id, so /admin
+  // drops it and the webhook skips its checkout_expired (ownerStartedCheckout).
+  await applyDataMigrationOnce('2026-10-26-afk-curl-checkout-start', [{
+    sql: `UPDATE funnel_events SET is_admin = 1, metadata = json_set(metadata, '$.checkout_session_id', ?)
+           WHERE event = 'checkout_start' AND tool = 'agent-factory-kit' AND json_valid(metadata)
+             AND json_extract(metadata, '$.via') = 'agent-buy'
+             AND created_at BETWEEN '2026-10-26 19:46:28' AND '2026-10-26 19:48:27'`,
+    args: ['cs_live_b1oju3z0hzzxgnvQE67XKXv1heBoeu0ymbhkN6VmPQDjzDnWQB5x6BM3U5'],
+  }], doneIds);
+
   console.log('[DB] Initialized' + (process.env.TURSO_DATABASE_URL ? ' (Turso)' : ' (local SQLite)'));
 }

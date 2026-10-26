@@ -162,7 +162,10 @@ describe('GET /buy/:offerId', () => {
     const call = dbRun.mock.calls.find((c: any[]) => String(c[0]).includes('funnel_events'));
     expect(call).toBeDefined();
     expect(call).toContain('checkout_start');
-    expect(call!.some((a: unknown) => typeof a === 'string' && a.includes('"via":"agent-buy"') && a.includes('"offer":"launch-kit"'))).toBe(true);
+    expect(call!.some((a: unknown) => typeof a === 'string' && a.includes('"via":"agent-buy"') && a.includes('"offer":"launch-kit"')
+      && a.includes('"checkout_session_id":"cs_test_abc"'))).toBe(true);
+    expect(call![call!.length - 1]).toBe(0);
+    expect(sessionsCreate.mock.calls[0][0].metadata).not.toHaveProperty('owner_ip');
     await app.close();
   });
 
@@ -198,12 +201,72 @@ describe('GET /buy/:offerId', () => {
     await app.close();
   });
 
-  it('AI user agents and scripts get the redirect', async () => {
+  it.each([
+    ['curl/8.7.1'],
+    ['Wget/1.21.4'],
+    ['python-requests/2.32.3'],
+    ['node'],
+    ['undici'],
+    ['ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)'],
+    ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot'],
+    ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/120.0.0.0 Safari/537.36'],
+    [''],
+  ])('non-browser GET gets the info page and opens no live session (%j)', async (ua) => {
     const app = await buildApp();
-    const ai = await get(app, '/buy/launch-kit', { 'user-agent': 'ChatGPT-User/1.0' });
-    const script = await get(app, '/buy/launch-kit', { 'user-agent': 'curl/8.0' });
-    expect(ai.statusCode).toBe(302);
-    expect(script.statusCode).toBe(302);
+    const res = await get(app, '/buy/agent-factory-kit', { 'user-agent': ua });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('https://bilko.run/buy/agent-factory-kit');
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    expect(dbRun.mock.calls.some((c: any[]) => String(c[0]).includes('funnel_events'))).toBe(false);
+    await app.close();
+  });
+
+  it('a mobile Safari GET still opens checkout', async () => {
+    const app = await buildApp();
+    const res = await get(app, '/buy/agent-factory-kit', {
+      'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    });
+    expect(res.statusCode).toBe(302);
+    expect(sessionsCreate).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it('?dryRun=1 runs the checks and opens no session, for browsers and scripts alike', async () => {
+    const app = await buildApp();
+    for (const ua of [HUMAN_UA, 'curl/8.7.1']) {
+      const res = await get(app, '/buy/launch-kit?dryRun=1', { 'user-agent': ua });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('Dry run');
+    }
+    stripeAvailable = false;
+    expect((await get(app, '/buy/launch-kit?dryRun=1', { 'user-agent': 'curl/8.7.1' })).statusCode).toBe(503);
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    expect(couponsRetrieve).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('?dryRun=1 does not use up the session rate limit', async () => {
+    const app = await buildApp();
+    const ip = nextIp();
+    for (let i = 0; i < 12; i++) {
+      expect((await get(app, '/buy/launch-kit?dryRun=1', {}, ip)).statusCode).toBe(200);
+    }
+    expect((await get(app, '/buy/launch-kit', {}, ip)).statusCode).toBe(302);
+    await app.close();
+  });
+
+  it('flags a checkout from an owner IP like the web-product checkout route does', async () => {
+    dbGet.mockImplementation(async (sql: unknown) => {
+      const q = String(sql);
+      if (q.includes('web_product_releases')) return { ok: 1 };
+      if (q.includes('page_hits')) return { n: 1 };
+      return undefined;
+    });
+    const app = await buildApp();
+    expect((await get(app, '/buy/launch-kit')).statusCode).toBe(302);
+    expect(sessionsCreate.mock.calls[0][0].metadata).toMatchObject({ web_product: 'launch-kit', owner_ip: 'true' });
+    const call = dbRun.mock.calls.find((c: any[]) => String(c[0]).includes('funnel_events'))!;
+    expect(call[call.length - 1]).toBe(1);
     await app.close();
   });
 

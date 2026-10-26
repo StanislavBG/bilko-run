@@ -7,7 +7,7 @@ import {
   saveOneTimePurchase, priceToPlanTier,
 } from '../services/stripe.js';
 import { creditTokens, grantFreeTokens, hasTokenAccount } from '../services/tokens.js';
-import { dbRun } from '../db.js';
+import { dbGet, dbRun } from '../db.js';
 import { mintAgentApiKey } from '../services/agent-api-keys.js';
 import {
   PRODUCT_KEYS,
@@ -38,6 +38,24 @@ async function recordCheckoutOutcome(event: 'checkout_expired' | 'checkout_recov
     );
   } catch (err: any) {
     console.error(`[stripe_webhook] ${event} insert failed:`, err?.message);
+  }
+}
+
+/**
+ * True when this session's checkout_start row is flagged as the owner's (is_admin = 1). Covers
+ * sessions flagged after they were created, which carry no owner_ip metadata in Stripe.
+ */
+async function ownerStartedCheckout(sessionId: string): Promise<boolean> {
+  try {
+    const row = await dbGet<{ n: number }>(
+      `SELECT 1 AS n FROM funnel_events
+        WHERE event = 'checkout_start' AND is_admin = 1 AND json_valid(metadata)
+          AND json_extract(metadata, '$.checkout_session_id') = ? LIMIT 1`,
+      sessionId,
+    );
+    return !!row;
+  } catch {
+    return false;
   }
 }
 
@@ -349,7 +367,8 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         // sessions are skipped so the funnel only counts real visitors.
         const wpSlug = typeof data.metadata?.web_product === 'string' ? data.metadata.web_product : '';
         const meta = data.metadata ?? {};
-        if (wpSlug && webProductBySlug(wpSlug, WEB_PRODUCTS) && meta.test !== 'true' && meta.owner_ip !== 'true') {
+        if (wpSlug && webProductBySlug(wpSlug, WEB_PRODUCTS) && meta.test !== 'true' && meta.owner_ip !== 'true'
+          && !(await ownerStartedCheckout(String(data.id)))) {
           await recordCheckoutOutcome('checkout_expired', wpSlug, data);
         }
       } else if (event.type === 'customer.subscription.updated') {

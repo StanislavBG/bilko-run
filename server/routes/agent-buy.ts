@@ -6,7 +6,7 @@ import { classifyVisitor } from '../services/analytics.js';
 import { MENU_ITEMS, WALLET_TOPUP_CENTS } from '../../shared/bilko-menu.js';
 import { formatPrice, offerById, type AgentOffer } from '../../shared/agent-offers.js';
 import { entryForPriceType } from '../../shared/product-catalog.js';
-import { buildWebProductCheckoutParams } from './web-products.js';
+import { buildWebProductCheckoutParams, ipSeenAsAdmin } from './web-products.js';
 import { countLiveOrders } from '../services/web-products.js';
 import { availableOffers, isOfferAvailable, isOfferPriced, offerPriceId } from '../services/offer-availability.js';
 import { webProductBySlug, type WebProduct } from '../../shared/web-products.js';
@@ -87,6 +87,15 @@ function menuInstructions(offer: AgentOffer): string {
     + `${item?.intake.length ? ` and fields: ${item.intake.map((f) => esc(f.key)).join(', ')}` : ''}, or use the MCP tool <code>order_menu_item</code>.</p>`;
 }
 
+/**
+ * Only a person in a browser can finish Stripe Checkout, so only a browser GET opens a live
+ * session. HEAD, crawlers, AI fetchers (ChatGPT-User), HTTP clients (curl, fetch, python-requests)
+ * and headless browsers get the info page instead.
+ */
+function opensCheckout(method: string, ua: string): boolean {
+  return method === 'GET' && ua.startsWith('Mozilla/') && classifyVisitor(ua) === 'human';
+}
+
 function sessionParams(offer: AgentOffer, priceId: string, publicUrl: string): Record<string, unknown> {
   const lineItems = [{ price: priceId, quantity: 1 }];
   const mode = offer.source.kind === 'price_catalog'
@@ -121,16 +130,19 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
       return sendHtml(reply, 200, page(offer.name, menuInstructions(offer)));
     }
 
-    const ua = String(req.headers['user-agent'] ?? '');
-    const cls = classifyVisitor(ua);
-    if (req.method === 'HEAD' || cls === 'search_crawler' || cls === 'ai_crawler') {
+    // ?dryRun=1 runs every check a browser GET would (Stripe, price, stock) without a session.
+    const dryRun = (req.query as { dryRun?: string } | undefined)?.dryRun === '1';
+    const info = (note = '') => sendHtml(reply, 200, page(offer.name,
+      `<p>${esc(offer.summary)}</p><p>Price: ${esc(formatPrice(offer))}</p>${note}`
+      + `<p>To buy, open <a href="${esc(offer.buyUrl)}">${esc(offer.buyUrl)}</a> in a browser.</p>`
+      + `<p>Product page: <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a></p>`));
+
+    if (!dryRun && !opensCheckout(req.method, String(req.headers['user-agent'] ?? ''))) {
       if (!(await isOfferAvailable(offer))) return notYet();
-      return sendHtml(reply, 200, page(offer.name,
-        `<p>${esc(offer.summary)}</p><p>Price: ${esc(formatPrice(offer))}</p>`
-        + `<p>To buy, open <a href="${esc(offer.buyUrl)}">${esc(offer.buyUrl)}</a> in a browser.</p>`));
+      return info();
     }
 
-    if (!rateOk(`agent-buy:${req.ip}`, SESSION_LIMIT)) {
+    if (!dryRun && !rateOk(`agent-buy:${req.ip}`, SESSION_LIMIT)) {
       return sendHtml(reply, 429, page('Too many requests', '<p>Try again in a minute.</p>'));
     }
 
@@ -144,17 +156,22 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     if (!(await isOfferAvailable(offer))) return notYet();
 
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
-    let url: string | null | undefined;
+    const product = offer.source.kind === 'web_product' ? webProductBySlug(offer.source.slug)! : undefined;
+    let session: { id: string; url?: string | null };
+    let ownerIp = false;
     try {
+      if (product?.maxOrders !== undefined && (await countLiveOrders(product.slug)) >= product.maxOrders) {
+        return sendHtml(reply, 409, page('Sold out',
+          `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
+      }
+      if (dryRun) return info('<p>Dry run: checkout is ready. No Stripe session was created.</p>');
+
+      // Same owner flag as POST /api/web-products/:slug/checkout: keeps the owner's own clicks out of /admin.
+      ownerIp = await ipSeenAsAdmin(req.ip);
       let params: Record<string, unknown>;
-      if (offer.source.kind === 'web_product') {
-        const product = webProductBySlug(offer.source.slug)!;
-        if (product.maxOrders !== undefined && (await countLiveOrders(product.slug)) >= product.maxOrders) {
-          return sendHtml(reply, 409, page('Sold out',
-            `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
-        }
+      if (product) {
         const base = buildWebProductCheckoutParams(product, {
-          owner: false, ownerIp: false, priceId: priceId ?? undefined, testCents: null, publicUrl,
+          owner: false, ownerIp, priceId: priceId ?? undefined, testCents: null, publicUrl,
           couponId: await foundingCouponId(product, stripe),
         });
         params = { ...base, metadata: { ...base.metadata, agent_buy: offer.id } };
@@ -163,19 +180,19 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
       } else {
         params = sessionParams(offer, priceId!, publicUrl);
       }
-      const session = await stripe.checkout.sessions.create(params as any);
-      url = session.url;
+      session = await stripe.checkout.sessions.create(params as any);
     } catch (err: any) {
       console.error('[agent-buy] checkout failed:', err?.message);
       return unavailable();
     }
+    const url = session.url;
     if (!url) return unavailable();
 
     try {
       await dbRun(
         'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin) VALUES (?, ?, ?, ?, ?)',
         'checkout_start', hashIp(req.ip), offer.id,
-        JSON.stringify({ via: 'agent-buy', offer: offer.id }), 0,
+        JSON.stringify({ via: 'agent-buy', offer: offer.id, checkout_session_id: session.id }), ownerIp ? 1 : 0,
       );
     } catch (err: any) {
       console.error('[agent-buy] funnel insert failed:', err?.message);

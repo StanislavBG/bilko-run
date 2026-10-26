@@ -75,7 +75,7 @@ async function isOwnerRequest(req: any): Promise<boolean> {
 }
 
 /** Signed-out owner: this IP produced an admin page hit in the last 30 days. */
-async function ipSeenAsAdmin(ip: string): Promise<boolean> {
+export async function ipSeenAsAdmin(ip: string): Promise<boolean> {
   try {
     const row = await dbGet<{ n: number }>(
       'SELECT 1 AS n FROM page_hits WHERE ip = ? AND is_admin = 1 AND ts_ms >= ? LIMIT 1',

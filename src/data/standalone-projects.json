@@ -207,12 +207,13 @@
     "public": true,
     "displayName": "Bilko Academy",
     "listing": {
+      "detail": "The course starts with what Claude is and why its answers vary. Then it covers claude.ai with Projects and Artifacts, prompting, when to trust an answer, and how to stay safe. It ends with Claude Code, taught from zero for people who have never opened a terminal. Most lessons take 7 or 8 minutes and end with a short quiz.",
       "audience": "Non-technical people who want to learn to use Claude well; no coding or AI background needed.",
       "talkingPoints": [
-        "Free and ad-free: 13 short lessons in plain language on using Claude well.",
-        "No coding needed, and no account needed to read. Signing in only saves your progress across devices.",
-        "Every claim in the course is cited.",
-        "Covers how Claude works, working in claude.ai, prompting, and when to trust an answer.",
+        "13 short lessons, about 90 minutes in all, cover how Claude works, working in claude.ai, prompting, and when to trust an answer.",
+        "You can read every lesson without an account, and your progress is saved in your browser.",
+        "In every lesson, a claim's numbered note opens its source and a quote.",
+        "No ads, and nothing in the course sends your text to an AI.",
         "An independent course, not made or endorsed by Anthropic."
       ],
       "offering": "content",

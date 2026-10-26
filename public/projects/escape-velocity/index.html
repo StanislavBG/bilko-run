@@ -359,6 +359,139 @@ window.evTrack('screen_view', { screen: 'title' });
 		<script>
 const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":21872440,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
+
+// Resilient downloader for the engine's two big files. Godot's preloader never forwards a
+// mid-body read error and only retries the initial fetch(), so a cut or stalled stream
+// would leave the loading bar frozen forever. Everything else passes straight through.
+const LOAD_ATTEMPTS = 4;
+const STALL_MS = 15000;
+const BACKOFF_MS = [1000, 2000, 4000];
+const loadFileBytes = {};
+const loadFileFailures = {};
+const evLoadStats = { attempts: {}, bytes: {}, reason: {}, failedFile: '' };
+
+function renderLoadProgress(retryAttempt) {
+	const bar = document.getElementById('status-progress');
+	const text = document.getElementById('loading-text');
+	if (!bar || !text) return;
+	if (retryAttempt) {
+		text.textContent = 'Connection dropped — retrying (' + retryAttempt + '/' + LOAD_ATTEMPTS + ')…';
+	}
+	const sizes = GODOT_CONFIG.fileSizes || {};
+	let total = 0;
+	let current = 0;
+	Object.keys(loadFileBytes).forEach(function (f) { current += loadFileBytes[f]; });
+	[GODOT_CONFIG.executable + '.wasm', GODOT_CONFIG.executable + '.pck'].forEach(function (f) { total += Number(sizes[f]) || 0; });
+	if (current > 0 && total > 0) {
+		bar.max = total;
+		bar.value = Math.min(current, total);
+		if (!retryAttempt) {
+			text.textContent = 'Loading… ' + (current / 1000000).toFixed(1) + ' MB / ' + (total / 1000000).toFixed(1) + ' MB';
+		}
+	} else if (!retryAttempt) {
+		bar.removeAttribute('value');
+		bar.removeAttribute('max');
+		text.textContent = 'Loading…';
+	}
+}
+
+const nativeFetch = window.fetch.bind(window);
+
+function evSleep(ms) {
+	return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+async function evDownloadAttempt(file, url, attempt) {
+	const controller = new AbortController();
+	let timer = null;
+	const arm = function () {
+		if (timer !== null) clearTimeout(timer);
+		timer = setTimeout(function () { controller.abort(); }, STALL_MS);
+	};
+	arm();
+	try {
+		const target = new URL(url.href);
+		if (attempt > 1) target.searchParams.set('evretry', String(attempt) + '-' + Date.now());
+		let response;
+		try {
+			response = await nativeFetch(target.href, { signal: controller.signal, cache: attempt > 1 ? 'reload' : 'default' });
+		} catch (e) {
+			throw new Error(controller.signal.aborted ? 'stalled (no data for ' + STALL_MS + ' ms)' : 'network error');
+		}
+		if (!response.ok) throw new Error('HTTP ' + response.status);
+		if (!response.body) throw new Error('no response body');
+		const reader = response.body.getReader();
+		const chunks = [];
+		let received = 0;
+		for (;;) {
+			let step;
+			try {
+				step = await reader.read();
+			} catch (e) {
+				throw new Error(controller.signal.aborted ? 'stalled (no data for ' + STALL_MS + ' ms)' : 'stream error');
+			}
+			if (step.done) break;
+			arm();
+			chunks.push(step.value);
+			received += step.value.length;
+			loadFileBytes[file] = received;
+			renderLoadProgress();
+		}
+		const out = new Uint8Array(received);
+		let offset = 0;
+		chunks.forEach(function (c) { out.set(c, offset); offset += c.length; });
+		return out;
+	} finally {
+		if (timer !== null) clearTimeout(timer);
+	}
+}
+
+async function evDownloadFile(file, url) {
+	if (loadFileFailures[file]) throw loadFileFailures[file];
+	let reason = 'unknown';
+	for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
+		loadFileBytes[file] = 0;
+		evLoadStats.attempts[file] = attempt;
+		try {
+			const bytes = await evDownloadAttempt(file, url, attempt);
+			const type = /\.wasm$/.test(file) ? 'application/wasm' : 'application/octet-stream';
+			return new Response(bytes, { status: 200, headers: { 'content-type': type } });
+		} catch (e) {
+			reason = (e && e.message) || String(e);
+			const bytes = loadFileBytes[file] || 0;
+			loadFileBytes[file] = 0;
+			evLoadStats.bytes[file] = bytes;
+			evLoadStats.reason[file] = reason;
+			if (attempt < LOAD_ATTEMPTS) {
+				renderLoadProgress(attempt + 1);
+				window.evTrackFlow('load', 'retry', { file: file, attempt: attempt + 1, reason: reason, bytes: bytes });
+				await evSleep(BACKOFF_MS[attempt - 1]);
+			}
+		}
+	}
+	const err = new Error('Could not download ' + file + ' after ' + LOAD_ATTEMPTS + ' attempts (' + reason + ').');
+	loadFileFailures[file] = err;
+	if (!evLoadStats.failedFile) evLoadStats.failedFile = file;
+	// Godot's startGame() never rejects when a preload fetch fails (the rejection goes unhandled),
+	// so the shell is told directly.
+	if (typeof window.evOnLoadGiveUp === 'function') { try { window.evOnLoadGiveUp(err); } catch (e) {} }
+	throw err;
+}
+
+function evResilientFetch(input, init) {
+	try {
+		const raw = typeof input === 'string' ? input : (input && input.url) || String(input);
+		const url = new URL(raw, location.href);
+		const exe = GODOT_CONFIG.executable;
+		const m = /\/([^\/]+)$/.exec(url.pathname);
+		if (m && (m[1] === exe + '.wasm' || m[1] === exe + '.pck')) {
+			return evDownloadFile(m[1], url);
+		}
+	} catch (e) {}
+	return nativeFetch(input, init);
+}
+window.fetch = evResilientFetch;
+
 const engine = new Engine(GODOT_CONFIG);
 
 (function () {
@@ -386,7 +519,35 @@ const engine = new Engine(GODOT_CONFIG);
 		statusNotice.hidden = false;
 	}
 
+	let loadStartedAt = performance.now();
+
+	function reportLoadFailure(message) {
+		try {
+			const file = evLoadStats.failedFile || '';
+			const ms = Math.round(performance.now() - loadStartedAt);
+			const attempts = file ? (evLoadStats.attempts[file] || 0) : 0;
+			const bytes = file ? (evLoadStats.bytes[file] || 0) : 0;
+			const reason = String(file ? (evLoadStats.reason[file] || '') : '').slice(0, 200);
+			window.evTrackFlow('load', 'fail', { file: file, attempts: attempts, bytes: bytes, reason: reason, ms: ms });
+			const body = JSON.stringify({ batch: [{
+				app: 'escape-velocity',
+				name: 'LoadError',
+				msg: String(message).slice(0, 500),
+				url: location.href,
+				ua: (navigator.userAgent || '').slice(0, 200),
+				ts: Date.now(),
+				context: { file: file, attempts: attempts, bytes: bytes, reason: reason },
+			}] });
+			if (navigator.sendBeacon && navigator.sendBeacon('/api/telemetry/error', new Blob([body], { type: 'application/json' }))) return;
+			fetch('/api/telemetry/error', { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, keepalive: true }).catch(function () {});
+		} catch (e) {}
+	}
+
+	let failureShown = false;
+
 	function displayFailureNotice(err) {
+		if (failureShown) return;
+		failureShown = true;
 		console.error(err);
 		window.evTrack('screen_view', { screen: 'load-error' });
 		playButton.hidden = true;
@@ -398,7 +559,17 @@ const engine = new Engine(GODOT_CONFIG);
 		} else {
 			setStatusNotice('An unknown error occurred.');
 		}
+		const retry = document.createElement('button');
+		retry.id = 'load-retry';
+		retry.type = 'button';
+		retry.setAttribute('data-track', 'load-retry');
+		retry.textContent = 'Try again';
+		retry.addEventListener('click', function () { location.reload(); });
+		statusNotice.appendChild(retry);
+		reportLoadFailure(err instanceof Error ? err.message : (typeof err === 'string' ? err : 'An unknown error occurred.'));
 	}
+
+	window.evOnLoadGiveUp = displayFailureNotice;
 
 	const missing = Engine.getMissingFeatures({
 		threads: GODOT_THREADS_ENABLED,
@@ -409,6 +580,7 @@ const engine = new Engine(GODOT_CONFIG);
 		setStatusNotice('Your browser is missing features required to run this game:\n' + missing.join('\n'));
 	} else {
 		playButton.addEventListener('click', async function () {
+			loadStartedAt = performance.now();
 			playButton.disabled = true;
 			playButton.hidden = true;
 			loading.hidden = false;
@@ -434,19 +606,12 @@ const engine = new Engine(GODOT_CONFIG);
 			}
 			const shellTitle = document.title;
 			engine.startGame({
-				'onProgress': function (current, total) {
-					if (current > 0 && total > 0) {
-						statusProgress.value = current;
-						statusProgress.max = total;
-						loadingText.textContent = 'Loading… ' + bytesToMB(current) + ' MB / ' + bytesToMB(total) + ' MB';
-					} else {
-						statusProgress.removeAttribute('value');
-						statusProgress.removeAttribute('max');
-						loadingText.textContent = 'Loading…';
-					}
-				},
+				// Progress is driven by evResilientFetch (renderLoadProgress); Godot's own
+				// late in-memory progress must not overwrite it.
+				'onProgress': function () {},
 			}).then(() => {
 				document.title = shellTitle;
+				window.evTrackFlow('load', 'complete', { ms: Math.round(performance.now() - loadStartedAt), attempts: { wasm: evLoadStats.attempts[GODOT_CONFIG.executable + '.wasm'] || 1, pck: evLoadStats.attempts[GODOT_CONFIG.executable + '.pck'] || 1 } });
 				overlay.remove();
 				canvas.focus();
 			}, displayFailureNotice);

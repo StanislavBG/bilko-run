@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "slug": "escape-velocity",
   "version": "1.0.0",
-  "builtAt": "2026-10-26T14:59:45.644Z",
-  "gitSha": "9054dfc",
-  "gitBranch": "main",
+  "builtAt": "2026-10-26T21:25:34.384Z",
+  "gitSha": "45773b5",
+  "gitBranch": "sm-job/432-fix-publish-load-resilience",
   "hostKit": {
     "version": "0.0.0"
   },
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 30815177,
+    "sizeBytesGz": 30818205,
     "fileCount": 10
   }
 }

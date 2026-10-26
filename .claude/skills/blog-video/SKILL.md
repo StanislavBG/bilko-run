@@ -82,7 +82,11 @@ Write `<tmp>/shots.json` (`<tmp>` from `mktemp -d`): an array of
 `{ name, url, scrollY?, waitMs?, actions?: [{click: selector}|{fill: [selector, text]}|{press: key}|{wait: ms}], record?: {seconds} }`
 — max 6 shots, max 5 actions, `record.seconds` 1-6, only `https://bilko.run` and `https://github.com`
 URLs. Stills (no `record`) for title, reveal and closing only; `record: {seconds}` for EVERY
-`you can` moment, with `actions` performing the interaction the sentence describes. Run:
+`you can` moment, with `actions` performing the interaction the sentence describes. Open `actions`
+with `{wait: 1500}` or more: the scene fades in over its first 0.5 s and the clip can start up to
+0.5 s after the actions do, so an earlier click lands inside the fade. On bilko.run, `scrollY`
+animates for about 0.4 s at the clip's start and `PageDown` jumps 630 px in about 0.2 s, so show a
+click that changes the page rather than a scroll alone. Run:
 
 `pnpm tsx scripts/blog-video-capture.ts --shots <tmp>/shots.json --out <tmp>/shots`
 

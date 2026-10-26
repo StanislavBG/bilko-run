@@ -171,6 +171,7 @@ function esc(s: string): string {
 
 export function injectOgMeta(html: string, meta: OgMeta): string {
   if (!/<\/head>/i.test(html)) return html;
+  const hasCanonical = /<link\b(?=[^>]*\brel\s*=\s*["']?canonical["']?[\s/>])[^>]*>/i.test(html);
   const stripped = html
     .replace(/<title\b[^>]*>[\s\S]*?<\/title\s*>/gi, '')
     .replace(/<meta\b(?=[^>]*\bname\s*=\s*["']?description["']?[\s/>])[^>]*>/gi, '')
@@ -184,6 +185,7 @@ export function injectOgMeta(html: string, meta: OgMeta): string {
   const block = [
     `<title>${t}</title>`,
     `<meta name="description" content="${d}" />`,
+    ...(hasCanonical ? [] : [`<link rel="canonical" href="${u}" />`]),
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="bilko.run" />`,
     `<meta property="og:title" content="${t}" />`,

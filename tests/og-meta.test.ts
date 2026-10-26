@@ -112,3 +112,33 @@ describe('loadOgProjects', () => {
     }
   });
 });
+
+describe('injectOgMeta canonical', () => {
+  const base = { title: 'T', description: 'D', image: 'https://bilko.run/og/x.png' };
+  const canon = /<link\b[^>]*rel\s*=\s*["']?canonical/gi;
+
+  it('injects a canonical for a host page', () => {
+    const out = injectOgMeta(STALE, { ...base, url: 'https://bilko.run/projects' });
+    expect(count(out, canon)).toBe(1);
+    expect(out).toContain('<link rel="canonical" href="https://bilko.run/projects" />');
+  });
+
+  it('keeps an existing sibling canonical and adds none', () => {
+    const variants = [
+      `<link rel="canonical" href="https://bilko.run/projects/academy/" />`,
+      `<link href='https://bilko.run/projects/academy/' rel=canonical>`,
+      `<LINK HREF="https://bilko.run/projects/academy/" REL='canonical' />`,
+    ];
+    for (const link of variants) {
+      const html = STALE.replace('</head>', `${link}\n</head>`);
+      const out = injectOgMeta(html, { ...base, url: 'https://bilko.run/projects/academy/' });
+      expect(count(out, canon)).toBe(1);
+      expect(out).toContain(link);
+    }
+  });
+
+  it('escapes & and quotes in the canonical url', () => {
+    const out = injectOgMeta(STALE, { ...base, url: 'https://bilko.run/x?a=1&b="2"' });
+    expect(out).toContain('<link rel="canonical" href="https://bilko.run/x?a=1&amp;b=&quot;2&quot;" />');
+  });
+});

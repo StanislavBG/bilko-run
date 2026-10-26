@@ -197,3 +197,15 @@ export async function funnelReport(opts: { utmSource: string; since?: string }):
     booked: num(b.booked),
   };
 }
+
+/** GET /api/admin/flows: per-app sessions, views, clicks, events and errors. Body passed through as-is. */
+export async function flowsReport(opts: { days?: number; app?: string }): Promise<Record<string, unknown>> {
+  const p = new URLSearchParams();
+  if (opts.days !== undefined) p.set('days', String(opts.days));
+  if (opts.app) p.set('app', opts.app);
+  const qs = p.toString();
+  const body = await adminGet(`/api/admin/flows${qs ? `?${qs}` : ''}`);
+  if (!body) throw new Error('bilko.run returned 404 for /api/admin/flows');
+  const b = (typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  return { source: baseUrl(), ...b };
+}

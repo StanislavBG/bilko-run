@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { errorsReport, errorDetail, adminGet, mapEgressToUsage, resolveAdminKey, trafficReport, mapTrafficToReport, funnelReport } from '../mcp-host-server/src/errors-report.js';
+import { errorsReport, errorDetail, adminGet, mapEgressToUsage, resolveAdminKey, trafficReport, mapTrafficToReport, funnelReport, flowsReport } from '../mcp-host-server/src/errors-report.js';
 
 const KEY = 'bka_supersecretkeyvalue';
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -263,5 +263,27 @@ describe('mcp funnel_report', () => {
     expect(u.pathname).toBe('/api/admin/funnel');
     expect(Object.fromEntries(u.searchParams)).toEqual({ utm_source: 'burrow', since: '2026-10-14' });
     expect(r).toMatchObject({ since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 0 });
+  });
+
+  it('flowsReport builds query from days and app and spreads the body with source', async () => {
+    fetchMock.mockResolvedValue(res(200, { apps: [{ app: 'academy', sessions: 3 }] }));
+    const r = await flowsReport({ days: 7, app: 'academy' });
+    const u = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(u.pathname).toBe('/api/admin/flows');
+    expect(Object.fromEntries(u.searchParams)).toEqual({ days: '7', app: 'academy' });
+    expect(r).toMatchObject({ apps: [{ app: 'academy', sessions: 3 }] });
+    expect(typeof r.source).toBe('string');
+  });
+
+  it('flowsReport omits params that were not given', async () => {
+    fetchMock.mockResolvedValue(res(200, { apps: [] }));
+    await flowsReport({});
+    const u = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(u.search).toBe('');
+  });
+
+  it('flowsReport throws on a 404 null body', async () => {
+    fetchMock.mockResolvedValue(res(404, 'nope'));
+    await expect(flowsReport({})).rejects.toThrow('bilko.run returned 404 for /api/admin/flows');
   });
 });

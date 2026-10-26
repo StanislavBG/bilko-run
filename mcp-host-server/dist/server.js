@@ -23,6 +23,7 @@
  *   - error_detail               → one app_errors row by id via admin API (read-only)
  *   - traffic_report             → visitors, bot/human split, top pages/referrers via admin API (read-only)
  *   - funnel_report              → per-UTM revenue funnel (visits → paid → booked) via admin API (read-only)
+ *   - flows_report               → per-app sessions, views, clicks, events and errors via admin API (read-only)
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -42,7 +43,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { getHostDb, mcpRun, ensureGateTables } from './db.js';
-import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, trafficReport, funnelReport } from './errors-report.js';
+import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, trafficReport, funnelReport, flowsReport } from './errors-report.js';
 import { runGates, gateSummary } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
@@ -620,6 +621,22 @@ server.registerTool('funnel_report', {
 }, async ({ utmSource, since }) => {
     try {
         return ok(JSON.stringify(await funnelReport({ utmSource, since }), null, 2));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 12) flows_report ───────────────────────────────────────────────────────
+server.registerTool('flows_report', {
+    title: 'Per-app flows',
+    description: 'Read-only. Calls the bilko.run admin API (GET /api/admin/flows) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns per-app sessions, views, clicks, events and errors, so a sibling can see page- or lesson-level drop-off. Admin and bot traffic are handled as the host does. The top-level `source` field is the base URL queried.',
+    inputSchema: {
+        days: z.number().int().min(1).max(30).optional().describe('Window in days (1-30). Host default applies if omitted.'),
+        app: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,59}$/i).optional().describe('Limit to one app slug, e.g. "academy".'),
+    },
+}, async ({ days, app }) => {
+    try {
+        return ok(JSON.stringify(await flowsReport({ days, app }), null, 2));
     }
     catch (e) {
         return err(e.message);

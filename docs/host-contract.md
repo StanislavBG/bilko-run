@@ -283,7 +283,7 @@ bilko.run treats AI agents as a customer segment: they can discover what is for 
 
 | Method | Path | Auth | Returns |
 |---|---|---|---|
-| GET | `/llms.txt` | none | Plain-text storefront for LLMs: offers with prices and `/buy` links, public projects, and the agent endpoints below. `server/routes/agent-storefront.ts` |
+| GET | `/llms.txt` | none | Plain-text storefront for LLMs: offers with prices and `/buy` links, public projects, and the agent endpoints below. A public static-path project whose bundle ships its own `llms.txt` (at the bundle root, served as `/projects/<slug>/llms.txt`) is linked under "Project guides". `server/routes/agent-storefront.ts` |
 | GET | `/api/offers` | none | JSON `{ offers: [...] }`: `id`, `name`, `summary`, `whatYouGet`, `price`, `amount`, `currency`, `billing`, `pageUrl`, `buyUrl`, `howToBuy`. `Cache-Control: public, max-age=300`. |
 | GET | `/api/projects` | none | The public project catalog (see "Public project catalog"), each project with its `offers` (`id`, `price`, `buyUrl`). |
 | POST | `/mcp` | none for catalog tools; `Authorization: Bearer bkk_...` for `wallet_balance`, `order_menu_item` and `roast_page` | Stateless streamable-HTTP MCP server. See "MCP tools" below. |

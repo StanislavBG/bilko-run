@@ -190,7 +190,7 @@ registerStripeRoutes(app);
 registerWebProductRoutes(app);
 registerServiceBookingRoutes(app);
 registerAgentBuyRoutes(app);
-registerAgentStorefrontRoutes(app);
+registerAgentStorefrontRoutes(app, { distPath });
 registerSitemapRoutes(app, { distPath });
 registerAgentKeyRoutes(app);
 registerWalletRoutes(app);

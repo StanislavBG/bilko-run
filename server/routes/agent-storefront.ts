@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { buildCatalog } from '../../src/data/projectCatalog.js';
 import { AGENT_OFFERS, formatPrice, type AgentOffer } from '../../shared/agent-offers.js';
 import { availableOffers } from '../services/offer-availability.js';
@@ -8,10 +10,14 @@ import type { ListOffers } from './project-catalog.js';
  * /llms.txt (llmstxt.org): what bilko.run is, every public project, every paid
  * offer that can be bought now with price + buy link, and the machine endpoints.
  * Built per request from the available AGENT_OFFERS and the project catalog so it cannot drift.
+ * A public project whose published bundle ships its own llms.txt
+ * (<dist>/projects/<slug>/llms.txt) is linked under "Project guides".
  */
 
 const CACHE_CONTROL = 'public, max-age=300';
 const SITE = 'https://bilko.run';
+
+const SLUG_RE = /^[a-z0-9-]+$/;
 
 const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
@@ -26,13 +32,20 @@ export const MCP_TOOLS = [
   'roast_page',
 ] as const;
 
-export function buildLlmsTxt(offers: readonly AgentOffer[] = AGENT_OFFERS): string {
+export function buildLlmsTxt(
+  offers: readonly AgentOffer[] = AGENT_OFFERS,
+  hasProjectLlmsTxt: (slug: string) => boolean = () => false,
+): string {
   const buy = offers.map(
     o => `- [${o.name} — ${formatPrice(o)}](${o.buyUrl}): ${oneLine(o.summary)} ${oneLine(o.whatYouGet)}`,
   );
-  const projects = buildCatalog().projects.map(
+  const catalog = buildCatalog().projects;
+  const projects = catalog.map(
     p => `- [${p.name}](${SITE}/projects/${p.slug}/): ${oneLine(p.tagline)}`,
   );
+  const guides = catalog
+    .filter(p => SLUG_RE.test(p.slug) && hasProjectLlmsTxt(p.slug))
+    .map(p => `- [${p.name} llms.txt](${SITE}/projects/${p.slug}/llms.txt): ${p.name}'s own llms.txt, with more detail than this file.`);
 
   return [
     '# bilko.run',
@@ -47,6 +60,7 @@ export function buildLlmsTxt(offers: readonly AgentOffer[] = AGENT_OFFERS): stri
     '',
     ...projects,
     '',
+    ...(guides.length > 0 ? ['## Project guides', '', ...guides, ''] : []),
     '## For agents',
     '',
     `- [MCP endpoint](${SITE}/mcp): POST ${SITE}/mcp, a streamable HTTP MCP server with tools ${MCP_TOOLS.join(', ')}. list_projects, get_project, list_offers and list_menu need no key; wallet_balance, order_menu_item and roast_page need a bkk_ key sent as "Authorization: Bearer bkk_...".`,
@@ -59,13 +73,16 @@ export function buildLlmsTxt(offers: readonly AgentOffer[] = AGENT_OFFERS): stri
 
 export function registerAgentStorefrontRoutes(
   app: FastifyInstance,
-  opts: { listOffers?: ListOffers } = {},
+  opts: { listOffers?: ListOffers; distPath?: string } = {},
 ): void {
   const listOffers = opts.listOffers ?? availableOffers;
+  const { distPath } = opts;
+  const hasProjectLlmsTxt = (slug: string): boolean =>
+    distPath !== undefined && existsSync(resolve(distPath, 'projects', slug, 'llms.txt'));
   app.get('/llms.txt', async (_req, reply) => {
     reply
       .header('Content-Type', 'text/plain; charset=utf-8')
       .header('Cache-Control', CACHE_CONTROL);
-    return buildLlmsTxt(await listOffers());
+    return buildLlmsTxt(await listOffers(), hasProjectLlmsTxt);
   });
 }

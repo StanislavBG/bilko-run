@@ -190,7 +190,7 @@
   {
     "slug": "academy",
     "name": "Academy",
-    "tagline": "Free, ad-free AI fundamentals for humans — every claim cited.",
+    "tagline": "A free, plain-language course that teaches anyone to use Claude well. 13 short lessons, no coding needed, every claim cited.",
     "category": "Learn",
     "status": "live",
     "year": 2026,
@@ -205,11 +205,15 @@
       "Free"
     ],
     "public": true,
+    "displayName": "Bilko Academy",
     "listing": {
-      "audience": "Non-technical people who want to understand AI from the ground up.",
+      "audience": "Non-technical people who want to learn to use Claude well; no coding or AI background needed.",
       "talkingPoints": [
-        "Free, ad-free AI fundamentals course.",
-        "Every claim in the course is cited."
+        "Free and ad-free: 13 short lessons in plain language on using Claude well.",
+        "No coding needed, and no account needed to read. Signing in only saves your progress across devices.",
+        "Every claim in the course is cited.",
+        "Covers how Claude works, working in claude.ai, prompting, and when to trust an answer.",
+        "An independent course, not made or endorsed by Anthropic."
       ],
       "offering": "content",
       "pricing": "free",

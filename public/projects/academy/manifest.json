@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "academy",
   "version": "0.1.0",
-  "builtAt": "2026-10-26T05:30:30.526Z",
-  "gitSha": "d50ce1e",
+  "builtAt": "2026-10-26T15:16:40.722Z",
+  "gitSha": "5de8075",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.9.0"

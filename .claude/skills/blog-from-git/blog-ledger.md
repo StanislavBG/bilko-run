@@ -9,6 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
+| 2026-10-29 | the-web-remote-now-drives-any-computer-you-pair | the-web-remote-now-drives-any-computer-you-pair | ❌ no tile | unspecified (burrow) |
 | 2026-10-26 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | ❌ no tile | unspecified (burrow) |
 | 2026-10-22 | four-arcade-games-now-playable-online-with-a-friend | four-arcade-games-now-playable-online-with-a-friend | ❌ no tile | unspecified (burrow) |
 | 2026-10-19 | boat-shooter-is-back-116-mb-down-to-2 | boat-shooter-is-back-116-mb-down-to-2 | ❌ no tile | unspecified (burrow) |
@@ -48,14 +49,14 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** no-subscription-bilkos-help-now-costs-50-cents-to-9 (off-list, no tile), post `no-subscription-bilkos-help-now-costs-50-cents-to-9` seeded 2026-10-26 by scripts/blog-seed.sh.
+- **Last project covered:** the-web-remote-now-drives-any-computer-you-pair (off-list, no tile), post `the-web-remote-now-drives-any-computer-you-pair` seeded 2026-10-29 by scripts/blog-seed.sh.
 - **Rotation debt:** none — last post on-`/projects`. burrow (off-list, no tile) is ineligible as a
   sole subject (no user-facing surface); do not queue it as a standalone post.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
   08-19), problem→outcome (07-02, 08-11, 10-03 ×2 spotlight), shipped-note (07-06, 07-21, 08-23,
   08-27, 09-22, 09-26), field-note (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18,
   08-04). Next: compare reception/readability rather than adding tones.
-- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** no-subscription-bilkos-help-now-costs-50-cents-to-9, four-arcade-games-now-playable-online-with-a-friend, boat-shooter-is-back-116-mb-down-to-2.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** the-web-remote-now-drives-any-computer-you-pair, no-subscription-bilkos-help-now-costs-50-cents-to-9, four-arcade-games-now-playable-online-with-a-friend.
 - **Due / under-covered on-list projects** (good next candidates): local-score, game-academy,
   stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
   audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku.

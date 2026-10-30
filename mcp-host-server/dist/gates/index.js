@@ -30,3 +30,11 @@ export function gateSummary(results) {
     const failed = results.filter(r => r.status === 'fail').map(r => r.name);
     return { ok: failed.length === 0, failed };
 }
+// Success-result lines: the name=status summary callers grep, then each gate's details
+// (the budget gate's measured size is otherwise only on stderr).
+export function gateLines(results) {
+    return [
+        `gates: ${results.map(r => `${r.name}=${r.status}`).join(', ')}`,
+        ...results.map(r => `  ${r.name}: ${r.details}`),
+    ];
+}

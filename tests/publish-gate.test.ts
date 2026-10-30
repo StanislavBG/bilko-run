@@ -47,7 +47,7 @@ import { budgetGate } from '../mcp-host-server/src/gates/budget.js';
 import { a11yGate } from '../mcp-host-server/src/gates/a11y.js';
 import { goldenGate } from '../mcp-host-server/src/gates/golden.js';
 import { auditGate } from '../mcp-host-server/src/gates/audit.js';
-import { runGates, gateSummary } from '../mcp-host-server/src/gates/index.js';
+import { runGates, gateSummary, gateLines } from '../mcp-host-server/src/gates/index.js';
 import { mcpGet } from '../mcp-host-server/src/db.js';
 import { chromium } from 'playwright';
 import { execSync } from 'node:child_process';
@@ -166,17 +166,20 @@ describe('budgetGate', () => {
 
 // ── a11y gate ────────────────────────────────────────────────────────────────
 
+// A browser whose axe scan finds no violations.
+function mockCleanBrowser(): void {
+  vi.mocked(chromium.launch).mockResolvedValue({
+    newPage: vi.fn().mockResolvedValue({
+      goto: vi.fn().mockResolvedValue(undefined),
+      addScriptTag: vi.fn().mockResolvedValue(undefined),
+      evaluate: vi.fn().mockResolvedValue([]),
+    }),
+    close: vi.fn().mockResolvedValue(undefined),
+  } as never);
+}
+
 describe('a11yGate', () => {
-  beforeEach(() => {
-    vi.mocked(chromium.launch).mockResolvedValue({
-      newPage: vi.fn().mockResolvedValue({
-        goto: vi.fn().mockResolvedValue(undefined),
-        addScriptTag: vi.fn().mockResolvedValue(undefined),
-        evaluate: vi.fn().mockResolvedValue([]),
-      }),
-      close: vi.fn().mockResolvedValue(undefined),
-    } as never);
-  });
+  beforeEach(mockCleanBrowser);
 
   it('pass: zero violations returned by mocked axe', async () => {
     const ctx = makeCtx({ manifest: VALID_MANIFEST });
@@ -354,6 +357,28 @@ describe('runGates', () => {
     const results = await runGates(ctx);
     const skipped = results.filter(r => r.status === 'skipped');
     expect(skipped.map(r => r.name)).toEqual(expect.arrayContaining(['golden', 'a11y', 'audit']));
+  });
+
+  it('gateLines keeps the name=status summary and adds the budget gate\'s measured size', async () => {
+    // Real manifest, budget and share-assets gates on the valid bundle; golden, a11y and audit mocked green.
+    const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+    vi.mocked(existsSync).mockImplementation((p) => String(p).endsWith('golden.spec.ts') || actual.existsSync(p));
+    vi.mocked(execSync).mockReturnValue(JSON.stringify({ metadata: { vulnerabilities: { high: 0, critical: 0 } } }) as never);
+    mockCleanBrowser();
+    try {
+      const results = await runGates(makeCtx({ sourceRepo: '/tmp/fake-repo' }));
+      expect(gateSummary(results).ok).toBe(true);
+
+      const budget = results.find(r => r.name === 'budget')!;
+      expect(budget.details).toMatch(/^measured \d+\.\d KB gz \(manifest reported 48\.8 KB\) \/ 195 KB budget$/);
+
+      const lines = gateLines(results);
+      expect(lines[0]).toBe('gates: manifest=pass, budget=pass, golden=pass, a11y=pass, audit=pass, share-assets=pass');
+      expect(lines).toContain(`  budget: ${budget.details}`);
+      expect(lines.slice(1)).toEqual(results.map(r => `  ${r.name}: ${r.details}`));
+    } finally {
+      vi.mocked(existsSync).mockImplementation(actual.existsSync);
+    }
   });
 
   it('gateSummary returns ok when all pass', () => {

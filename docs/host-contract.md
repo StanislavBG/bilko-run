@@ -588,6 +588,8 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 
 The `manifest` gate short-circuits the pipeline — if it fails, the other five are skipped (their results would be meaningless without a valid manifest).
 
+A successful publish returns the `gates: manifest=pass, budget=pass, …` summary line, then one indented `<gate>: <details>` line per gate. The `budget` line gives the gate's own measurement next to the manifest's self-reported size, e.g. `budget: measured 181.3 KB gz (manifest reported 183.0 KB) / 195 KB budget` (KB = bytes / 1024). Record the measured figure to see how close a build is to its cap before a publish fails. A blocked publish returns every gate's details as JSON instead.
+
 ### `sourceRepoPath` requirement
 
 `sourceRepoPath` is the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`) and is needed by the `golden` and `audit` gates to locate `tests/golden.spec.ts` and run `pnpm audit`. Pass it on every publish call — without it, both gates fail outright (and both are in the default, non-bypassed set), so in practice a publish cannot clear the gate without it unless you explicitly bypass `golden` and `audit`.

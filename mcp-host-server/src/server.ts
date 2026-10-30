@@ -46,7 +46,7 @@ import { homedir } from 'node:os';
 import { ManifestSchema } from './manifest-schema.js';
 import { getHostDb, mcpRun, ensureGateTables } from './db.js';
 import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, trafficReport, funnelReport, flowsReport } from './errors-report.js';
-import { runGates, gateSummary, type GateContext } from './gates/index.js';
+import { runGates, gateSummary, gateLines, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout, type PublishOutcome } from './publish-checkout.js';
@@ -411,7 +411,7 @@ server.registerTool(
   {
     title: 'Publish a static-path app build',
     description:
-      'Only the repo bound to the slug may publish it (sourceRepoPath must match host.localPath; unregistered slugs are refused). Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs six publish gates (manifest, budget, golden, a11y, audit, share-assets) before copying; valid declared share assets are excluded from the budget sum. Any non-bypassed gate failure blocks the publish. Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
+      'Only the repo bound to the slug may publish it (sourceRepoPath must match host.localPath; unregistered slugs are refused). Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs six publish gates (manifest, budget, golden, a11y, audit, share-assets) before copying; valid declared share assets are excluded from the budget sum. Any non-bypassed gate failure blocks the publish. On success the result lists each gate\'s details under the gates line (budget: gate-measured KB gz vs manifest-reported KB vs budget). Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
     inputSchema: {
       slug: SlugSchema,
       distPath: z.string().describe('Absolute path to the built dist/ directory in the sibling repo. Example: "/home/bilko/Projects/Outdoor-Hours/dist".'),
@@ -548,7 +548,7 @@ server.registerTool(
       }
 
       const lines = [
-        `gates: ${results.map(r => `${r.name}=${r.status}`).join(', ')}`,
+        ...gateLines(results),
         `published: ${distAbs} → public/projects/${slug}`,
         outcome.result.listingStatus,
         pushedLine(outcome),

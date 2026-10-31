@@ -18,7 +18,7 @@ import { verifyClerkGitHubUser } from '../server/clerk.js';
 import { getActiveSubscriptionLive } from '../server/services/stripe.js';
 import {
   registerGitViewerRoutes, setPortfolioBuilder, drainGitViewerQueue, resetGitViewerState,
-  runGitViewerRefresh, failedTtlMs, getGitViewerHealth, checkGitHubRateBudget, isGitHubRateLimited, PLAN_LIMITS, NEW_BUILDS_PER_IP, SHOWCASE_LOGINS,
+  runGitViewerRefresh, failedTtlMs, getGitViewerHealth, checkGitHubRateBudget, isGitHubRateLimited, PLAN_LIMITS, COMMIT_PAGE_LIMITS, NEW_BUILDS_PER_IP, SHOWCASE_LOGINS,
   type BuildPortfolio,
 } from '../server/routes/tools/git-viewer.js';
 
@@ -84,7 +84,8 @@ describe('GET /api/git-viewer/u/:login', () => {
     expect(first.json()).toEqual({ status: 'generating', retryAfterSec: 5 });
     await drainGitViewerQueue();
     expect(build).toHaveBeenCalledWith(expect.objectContaining({
-      user: 'octocat', maxProjects: PLAN_LIMITS.free, allowlist: undefined, writing: 'none',
+      user: 'octocat', maxProjects: PLAN_LIMITS.free, maxCommitPagesPerRepo: COMMIT_PAGE_LIMITS.free,
+      allowlist: undefined, writing: 'none',
     }));
 
     const ready = await get('octocat');
@@ -303,7 +304,8 @@ describe('POST /api/git-viewer/claim', () => {
     expect(res.json()).toMatchObject({ ok: true, login: 'octocat', tier: 'paid' });
     await drainGitViewerQueue();
     expect(build).toHaveBeenCalledWith(expect.objectContaining({
-      user: 'octocat', maxProjects: PLAN_LIMITS.paid, allowlist: ['hello-world', 'Spoon-Knife'], writing: 'profile-repo',
+      user: 'octocat', maxProjects: PLAN_LIMITS.paid, maxCommitPagesPerRepo: COMMIT_PAGE_LIMITS.paid,
+      allowlist: ['hello-world', 'Spoon-Knife'], writing: 'profile-repo',
     }));
     const ready = (await get('octocat')).json();
     expect(ready.tier).toBe('paid');
@@ -320,7 +322,9 @@ describe('POST /api/git-viewer/claim', () => {
     vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'a@x.com', githubLogins: ['octocat'] });
     expect((await claim({ login: 'octocat', allowlist: ['a'] })).json().tier).toBe('free');
     await drainGitViewerQueue();
-    expect(build).toHaveBeenCalledWith(expect.objectContaining({ maxProjects: PLAN_LIMITS.free, allowlist: undefined }));
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({
+      maxProjects: PLAN_LIMITS.free, maxCommitPagesPerRepo: COMMIT_PAGE_LIMITS.free, allowlist: undefined,
+    }));
   });
 });
 
@@ -383,7 +387,7 @@ describe('daily refresh', () => {
     await runGitViewerRefresh();
     await drainGitViewerQueue();
     expect(build).toHaveBeenCalledWith(expect.objectContaining({
-      user: showcase, maxProjects: PLAN_LIMITS.paid, writing: 'profile-repo',
+      user: showcase, maxProjects: PLAN_LIMITS.paid, maxCommitPagesPerRepo: COMMIT_PAGE_LIMITS.paid, writing: 'profile-repo',
     }));
     expect((await get(showcase)).statusCode).toBe(200);
 

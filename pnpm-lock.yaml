@@ -17,8 +17,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(zod@3.25.76)
       '@bilkobibitkov/git-viewer':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.1
+        version: 0.1.1
       '@bilkobibitkov/page-roast':
         specifier: ^0.1.0
         version: 0.1.0(zod@3.25.76)
@@ -311,8 +311,8 @@ packages:
       zod:
         optional: true
 
-  '@bilkobibitkov/git-viewer@0.1.0':
-    resolution: {integrity: sha512-6lV26rMacvNfGaniYDjgIBTpPFsB+uf45okG367y4J5fa+dV0bdAQ0tOIQzop70/Vf+TxCg9zFHY3w1v2BK64w==}
+  '@bilkobibitkov/git-viewer@0.1.1':
+    resolution: {integrity: sha512-Rlrev12P8FckOn6F5SlJp9DLAwJFd53+ipYv+AZSG4veOWcA+hjAMpw79e2RJsriCs6hSRUPbkVeHjnM/c0b1A==}
     engines: {node: '>=18.0.0'}
 
   '@bilkobibitkov/page-roast@0.1.0':
@@ -4034,7 +4034,7 @@ snapshots:
     optionalDependencies:
       zod: 3.25.76
 
-  '@bilkobibitkov/git-viewer@0.1.0':
+  '@bilkobibitkov/git-viewer@0.1.1':
     dependencies:
       '@octokit/rest': 21.1.1
       p-limit: 6.2.0

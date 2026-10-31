@@ -20,6 +20,11 @@ import type { OgMeta } from '../../og-meta.js';
 // paid tier when GITHUB_TOKEN is set (free otherwise) and are kept cached by
 // the refresh loop regardless of claim.
 //
+// Commit history is read newest first, 100 to a page, up to COMMIT_PAGE_LIMITS
+// per repo. Free stops at 500 commits so an anonymous build has a fixed GitHub
+// cost. Every commit stat comes from what was read, so a paid build's limit has
+// to clear a busy repo's whole year or its 30-day numbers come out low too.
+//
 // New-build budget (only an uncached login costs GitHub calls):
 //   - NEW_BUILDS_PER_IP distinct new builds per IP per UTC day, its own counter
 //     (not the paid tools' FREE_TIER_LIMIT), so a visitor can try a few logins
@@ -33,6 +38,7 @@ export const GIT_VIEWER_ENDPOINT = 'git-viewer';
 export const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const REPO_NAME_RE = /^[A-Za-z0-9._-]{1,100}$/;
 export const PLAN_LIMITS = { free: 1, paid: 12 } as const;
+export const COMMIT_PAGE_LIMITS = { free: 5, paid: 200 } as const;
 
 const STALE_SEC = 24 * 60 * 60;
 const MAX_CONCURRENT = 2;
@@ -54,6 +60,7 @@ export type BuildPortfolio = (opts: {
   user: string;
   token?: string;
   maxProjects: number;
+  maxCommitPagesPerRepo: number;
   allowlist?: string[];
   writing: 'none' | 'profile-repo';
 }) => Promise<{ data: unknown; lockedCount: number }>;
@@ -201,6 +208,7 @@ async function generate(login: string, job: Job): Promise<void> {
       user: login,
       token: process.env.GITHUB_TOKEN || undefined,
       maxProjects: paid ? PLAN_LIMITS.paid : PLAN_LIMITS.free,
+      maxCommitPagesPerRepo: paid ? COMMIT_PAGE_LIMITS.paid : COMMIT_PAGE_LIMITS.free,
       allowlist: paid && job.allowlist?.length ? job.allowlist : undefined,
       writing: paid ? 'profile-repo' : 'none',
     });

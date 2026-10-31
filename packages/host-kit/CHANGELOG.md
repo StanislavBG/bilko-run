@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.0
+
+### Minor Changes
+
+- 6b739f3: Telemetry SDK joins the site-wide session: visitor/session ids now come from the `bilko_vid` / `bilko_sid` cookies (session cookie re-read and refreshed with a 30-minute sliding Max-Age on every event; a legacy localStorage `bilko_vid` still wins) instead of a per-tab sessionStorage id. The default endpoint is now relative `/api/telemetry` on bilko.run and `https://bilko.run/api/telemetry` elsewhere, and an uninitialized `track()` auto-initializes (app from `/projects/<slug>/`) and batches to `/api/telemetry/event` instead of posting to `/api/analytics/event`. Every event gets `props.path`. New `trackFlow(flow, step, props?)` sends `${flow}.${step}` with `props.flow` / `props.step`.
+
+### Patch Changes
+
+- c7014b0: LICENSE copyright holder and the `author` field now use the Bilko persona name.
+- c722529: SiteHeader now shows the platform-correct search shortcut (⌘K on Apple, Ctrl K elsewhere) and exports `searchShortcutLabel`.
+- 6e01caf: Telemetry SDK: log and error enqueues now refresh the session cookies once instead of twice, and visitor/session ids fall back to a Math.random v4 UUID where `crypto.randomUUID` is unavailable (e.g. plain-http pages) instead of `anon`.
+
 ## 0.9.0
 
 ### Minor Changes

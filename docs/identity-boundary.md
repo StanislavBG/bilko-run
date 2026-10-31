@@ -60,6 +60,11 @@ real values.
 Without the secret, a push to `main` fails. A pull request only warns and skips, because
 GitHub withholds secrets from fork pull requests. The push that lands it still scans.
 
+A secret with no usable entries fails on every event, pull requests included. That means
+it holds only blank lines, lines that start with `#`, or empty `word:` lines. The guard
+exits 0 when it has nothing to check, which is right for a git hook, so the step requires
+the pass line instead of trusting the exit code.
+
 The secret is a copy of the deny-list file. After you change the file, update the secret:
 
 ```bash

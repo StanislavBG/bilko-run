@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import yaml from 'js-yaml';
 import { identityHits } from './identity-denylist';
 
 // Exercises the identity guard (docs/identity-boundary.md) in throwaway repos with a
@@ -214,6 +215,76 @@ describe('identity-guard.sh', () => {
       writeFileSync(denylist, `word:\nWORD:  \n${SURNAME}\n`);
       expect(staged('anything').status).toBe(0);
       expect(staged(SURNAME).status).toBe(1);
+    });
+  });
+
+  // Runs the real run block from ci.yml with a copy of the real guard. `bash -e` is the shell
+  // Actions logs for a step with no shell key: no pipefail, so a pipe would lose a hit's exit 1.
+  describe('CI Identity scan step', () => {
+    const EVENTS = ['push', 'pull_request'];
+    const UNUSABLE = [
+      ['comment lines', '# the owner email goes here\n# and the surname\n'],
+      ['whitespace', '  \n\t\n \n'],
+      ['blank CRLF lines', '\r\n\r\n'],
+      ['empty word: lines', 'word:\nWORD:  \n'],
+    ];
+    const workflow = yaml.load(readFileSync(join(__dirname, '../.github/workflows/ci.yml'), 'utf-8')) as {
+      jobs: { check: { steps: { name?: string; run?: string }[] } };
+    };
+    const { run } = workflow.jobs.check.steps.find((s) => s.name === 'Identity scan')!;
+
+    // GitHub hands a step a missing secret as an empty string.
+    function step(event: string, secret: string) {
+      const script = join(dir, 'step.sh');
+      writeFileSync(script, run!);
+      const r = spawnSync('bash', ['-e', script], {
+        cwd: repo,
+        encoding: 'utf-8',
+        timeout: 15_000,
+        env: { ...process.env, ...isolatedGit, GITHUB_EVENT_NAME: event, IDENTITY_DENYLIST: secret },
+      });
+      return { status: r.status, out: `${r.stdout}${r.stderr}` };
+    }
+
+    beforeEach(() => {
+      mkdirSync(join(repo, 'scripts'));
+      copyFileSync(GUARD, join(repo, 'scripts/identity-guard.sh'));
+    });
+
+    it.each(EVENTS.flatMap((event) => UNUSABLE.map(([what, secret]) => [event, what, secret])))(
+      'fails %s when the secret holds only %s',
+      (event, _what, secret) => {
+        const r = step(event, secret);
+        expect(r.status).toBe(1);
+        expect(r.out).toContain('::error::IDENTITY_DENYLIST has no usable entries');
+        expect(r.out).not.toContain('entries checked');
+      },
+    );
+
+    it('fails a push without the secret, and only warns on a pull request', () => {
+      const push = step('push', '');
+      expect(push.status).toBe(1);
+      expect(push.out).toContain('::error::IDENTITY_DENYLIST secret not set');
+      const pr = step('pull_request', '');
+      expect(pr.status).toBe(0);
+      expect(pr.out).toContain('::warning::IDENTITY_DENYLIST secret not available');
+      expect(pr.out).not.toContain('::error::');
+    });
+
+    it.each(EVENTS)('passes %s on a clean tree and logs the entry count', (event) => {
+      const r = step(event, `# comment\n${EMAIL}\n\n${SURNAME}\n`);
+      expect(r.status).toBe(0);
+      expect(r.out).toContain('(2 entries checked)');
+      expect(r.out).not.toContain('::error::');
+    });
+
+    it.each(EVENTS)('fails %s on a tracked match without printing the entry', (event) => {
+      commitFile('a.md', `by ${EMAIL.toUpperCase()}\n`);
+      const r = step(event, `${EMAIL}\n`);
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('a.md: 1 line(s), deny-list entry #1');
+      expect(r.out.toLowerCase()).not.toContain(EMAIL);
+      expect(r.out).not.toContain('no usable entries');
     });
   });
 });

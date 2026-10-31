@@ -1,5 +1,6 @@
 import { PageHeader } from '../components/portfolio/PageHeader.js';
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
@@ -32,7 +33,8 @@ export function ContactPage() {
           <a data-track="contact-twitter" href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer"><span>@BilkoBibitkov</span><span className="pf-where">Twitter</span></a>
           <a data-track="contact-github" href="https://bilko.run/projects/git-viewer/" target="_blank" rel="noopener noreferrer"><span>bilko</span><span className="pf-where">GitHub</span></a>
           <a data-track="contact-linkedin" href="https://www.linkedin.com/in/bilko-bibitkov-403391412/" target="_blank" rel="noopener noreferrer"><span>/in/bilko-bibitkov</span><span className="pf-where">LinkedIn</span></a>
-          <a><span>Forum (soon)</span><span className="pf-where">Community</span></a>
+          <a data-track="contact-tiktok" href="https://www.tiktok.com/@bilkobibitkov" target="_blank" rel="noopener noreferrer"><span>@bilkobibitkov</span><span className="pf-where">TikTok · videos</span></a>
+          <Link data-track="contact-forum" to="/forum"><span>Forum</span><span className="pf-where">Community</span></Link>
         </div>
       </div>
     </div>

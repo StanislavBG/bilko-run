@@ -17,8 +17,10 @@ result screen, the repo page.
 ## 3. Capture
 
 1. `<tmp>=$(mktemp -d)`. Write `<tmp>/shots.json`: an array of
-   `{ name, url, scrollY?, waitMs?, actions? }`. Stills only: do NOT use `record` (that is for
-   video clips; see `blog-video/SKILL.md` section 3). Max 6 shots, `name` in kebab-case.
+   `{ name, url, scrollY?, waitMs?, actions? }`, where `actions` is a list of
+   `{click: selector}`, `{fill: [selector, text]}`, `{press: key}` or `{wait: ms}`. Stills only: do
+   NOT use `record` (that is for the video clips Burrow's Marketing Video captures). Max 6 shots,
+   max 5 actions per shot, `name` in kebab-case.
 2. Run `pnpm tsx scripts/blog-video-capture.ts --shots <tmp>/shots.json --out <tmp>/shots --max-bytes 220000`.
    It writes 1280x720 JPEGs, each capped by `--max-bytes`.
 3. Copy each keeper to `public/blog-images/<slug>/<kebab-name>.jpg`. The path must match

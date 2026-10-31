@@ -1,5 +1,6 @@
-// Blog Video capture primitive: drive headless Chromium against the live product pages a post
-// links to and save compressed 1280x720 JPEG screenshots the Blog Video skill embeds as data: URIs.
+// Capture primitive: drive headless Chromium against the live product pages a post links to and
+// save compressed 1280x720 JPEG screenshots. Burrow's Marketing Video and the blog-from-git images
+// step both run this, so keep its flags stable.
 // A shot with `record` also saves a short H.264 mp4 clip of its actions (needs ffmpeg on PATH).
 // Usage: pnpm tsx scripts/blog-video-capture.ts --shots <file.json> --out <dir> [--max-bytes 220000] [--max-clip-bytes 450000]
 import { spawnSync } from 'node:child_process';

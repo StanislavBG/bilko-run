@@ -1,4 +1,5 @@
 // Quality gate: render a blog video at scene middles/boundaries, flag blank frames, write a contact sheet.
+// Burrow's Marketing Video runs this from here. Nothing in this repo calls it, so keep it and its flags.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';

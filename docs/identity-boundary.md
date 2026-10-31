@@ -6,7 +6,10 @@ commit's author or committer. Write "the owner" instead. This is standing policy
 D-2026-10-20-02 in the owner's private portfolio ledger.
 
 Do not quote the forbidden strings in this file or anywhere else in the repo. That
-includes the guard, its tests and its error messages.
+includes the guard, its tests and its error messages. A test that must prove a string
+stays out of its output calls `identityHits` from `tests/identity-denylist.ts`. It reads
+the strings at run time, from the CI secret or the local deny-list, and reports entry
+numbers.
 
 ## What is not tracked
 
@@ -26,6 +29,12 @@ copies and abort on the dirty ones.
 never committed. The path is `$BILKO_IDENTITY_DENYLIST`, default
 `~/.config/bilko/identity-denylist`, mode 600, one string per line. Matching is
 case-insensitive. Output names files and entry numbers, never the matched text.
+
+An entry written `word:<string>` matches only as a whole word, so a longer word that
+contains the string stays allowed. The tree scan leaves `*.wasm` out of these entries,
+because compiled engines ship third-party credit lists where someone else can share the
+name. The deny-list holds the owner's email, surname and first name. The first name is a
+`word:` entry.
 
 | Hook | Blocks |
 |---|---|
@@ -72,9 +81,13 @@ The 2026-10-22 commit removed the strings from the current tree only. Older revi
 - the 48 files under `session-manager-operations/prompt-sessions/`
 - the author and committer email of roughly 2,260 commits made before the persona
   identity
+- the first name, in the 9 files scrubbed on 2026-10-30
 
 Only a history rewrite removes them, using `git filter-repo` plus a force-push of `main`.
 A rewrite changes every SHA. The owner decides whether to do it.
+
+A rewrite does not reach npm. Published tarballs do not change, so `host-kit` 0.9.0 and
+older, and the legacy `@bilkobibitkov/host-kit`, keep the first name.
 
 **Decision:** pending, asked 2026-10-22. When the owner decides, record the decision and
 the date here.

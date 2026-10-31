@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { identityHits } from './identity-denylist';
 
 // Exercises the identity guard (docs/identity-boundary.md) in throwaway repos with a
 // SYNTHETIC deny-list. The real strings must never appear in this repo, tests included.
@@ -136,5 +137,105 @@ describe('identity-guard.sh', () => {
     expect(guard(['pre-commit'], { env: { BILKO_IDENTITY_DENYLIST: join(dir, 'missing') } }).status).toBe(0);
     writeFileSync(denylist, '\n# only comments\n');
     expect(guard(['pre-commit']).status).toBe(0);
+  });
+
+  describe('word: entries', () => {
+    const NAME = 'Qqnameqq';
+    const LONGER = `${NAME}xy`;
+
+    const staged = (line: string) => {
+      writeFileSync(join(repo, 'notes.md'), `${line}\n`);
+      git('add', 'notes.md');
+      return guard(['pre-commit']);
+    };
+
+    beforeEach(() => writeFileSync(denylist, `word:${NAME}\n`));
+
+    it('blocks the name as a whole word in any case, without echoing it', () => {
+      for (const line of [NAME, `by ${NAME.toUpperCase()}.`, `${NAME.toLowerCase()}'s kit`, `(${NAME} Persona)`, `${LONGER} and ${NAME}`]) {
+        const r = staged(line);
+        expect(r.status, line).toBe(1);
+        expect(r.out).toContain('notes.md: 1 line(s), deny-list entry #1');
+        expect(r.out.toLowerCase()).not.toContain(NAME.toLowerCase());
+      }
+    });
+
+    it('allows a longer word that contains the name', () => {
+      for (const line of [`github.com/${LONGER}/repo`, `x${NAME}`, `${NAME}_x`, `${NAME}9`]) {
+        expect(staged(line).status, line).toBe(0);
+      }
+    });
+
+    it('applies to commit messages and pushes', () => {
+      const msg = join(dir, 'msg');
+      writeFileSync(msg, `fix ${LONGER}\n`);
+      expect(guard(['commit-msg', msg]).status).toBe(0);
+      writeFileSync(msg, `fix for ${NAME}\n`);
+      expect(guard(['commit-msg', msg]).status).toBe(1);
+
+      git('init', '-q', '--bare', join(dir, 'remote.git'));
+      git('remote', 'add', 'origin', join(dir, 'remote.git'));
+      git('push', '-q', '--no-verify', 'origin', 'main');
+      const base = git('rev-parse', 'HEAD');
+      const push = () => guard(['pre-push', 'origin'], { input: `refs/heads/main ${git('rev-parse', 'HEAD')} refs/heads/main ${base}\n` });
+      commitFile('ok.md', `${LONGER}\n`);
+      expect(push().status).toBe(0);
+      commitFile('leak.md', `${NAME}\n`);
+      const r = push();
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('leak.md: 1 line(s), deny-list entry #1');
+    });
+
+    it('tree mode reports the whole word only, in text and binary files, but not in wasm', () => {
+      commitFile('longer.md', `${LONGER}\n`);
+      commitFile('engine.wasm', `\u0000credits ${NAME} Someone\u0000\n`);
+      expect(guard(['tree']).status).toBe(0);
+      commitFile('a.md', `by ${NAME}\n`);
+      commitFile('photo.png', `\u0000exif:${NAME}\u0000\n`);
+      const r = guard(['tree']);
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('a.md: 1 line(s), deny-list entry #1');
+      expect(r.out).toContain('photo.png: 1 line(s), deny-list entry #1');
+      expect(r.out).not.toContain('longer.md');
+      expect(r.out).not.toContain('engine.wasm');
+      expect(guard(['tree', 'HEAD~2']).status).toBe(0);
+    });
+
+    it('leaves wasm out for word: entries only', () => {
+      writeFileSync(denylist, `${EMAIL}\nword:${NAME}\n`);
+      commitFile('engine.wasm', `\u0000${EMAIL} ${NAME}\u0000\n`);
+      const r = guard(['tree']);
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('engine.wasm: 1 line(s), deny-list entry #1');
+      expect(r.out).not.toContain('entry #2');
+    });
+
+    it('drops an empty word: entry instead of matching everything', () => {
+      writeFileSync(denylist, `word:\nWORD:  \n${SURNAME}\n`);
+      expect(staged('anything').status).toBe(0);
+      expect(staged(SURNAME).status).toBe(1);
+    });
+  });
+});
+
+describe('identityHits', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('reports entry numbers from the CI secret, and treats a word: entry as a substring', () => {
+    vi.stubEnv('IDENTITY_DENYLIST', `# comment\n${EMAIL}\n\nword:${SURNAME}\n`);
+    expect(identityHits(`to ${EMAIL.toUpperCase()}`)).toEqual([1]);
+    expect(identityHits(`${SURNAME.toLowerCase()}xy`)).toEqual([2]);
+    expect(identityHits('clean output')).toEqual([]);
+  });
+
+  it('falls back to the local deny-list file, and checks nothing without one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'identity-hits-'));
+    const file = join(dir, 'denylist');
+    vi.stubEnv('IDENTITY_DENYLIST', '');
+    vi.stubEnv('BILKO_IDENTITY_DENYLIST', file);
+    expect(identityHits(EMAIL)).toEqual([]);
+    writeFileSync(file, `${EMAIL}\r\n`);
+    expect(identityHits(EMAIL)).toEqual([1]);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

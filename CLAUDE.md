@@ -180,7 +180,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-169 files, 1904 tests (counted via `pnpm vitest run` on 2026-10-30; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+169 files, 1912 tests (counted via `pnpm vitest run` on 2026-10-30; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

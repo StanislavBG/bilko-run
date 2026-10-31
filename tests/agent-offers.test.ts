@@ -4,6 +4,7 @@ import { WEB_PRODUCTS, webProductBySlug, productBilling, productPageSlug } from 
 import { displayPriceCents } from '../server/routes/web-products';
 import { MENU_ITEMS, WALLET_TOPUP_CENTS } from '../shared/bilko-menu';
 import { entryForPriceType } from '../shared/product-catalog';
+import { identityHits } from './identity-denylist';
 
 describe('agent offers', () => {
   it('has the expected offers with unique kebab-case ids', () => {
@@ -62,7 +63,7 @@ describe('agent offers', () => {
 
   it('never leaks the owner real name in offer text', () => {
     for (const o of AGENT_OFFERS) {
-      expect(JSON.stringify(o).toLowerCase()).not.toContain('stanislav');
+      expect(identityHits(JSON.stringify(o))).toEqual([]);
     }
   });
 

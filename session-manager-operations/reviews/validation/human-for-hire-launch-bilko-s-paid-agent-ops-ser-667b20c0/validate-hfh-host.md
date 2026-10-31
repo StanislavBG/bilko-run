@@ -32,7 +32,7 @@ Gates re-run in the foreground: one combined `pnpm vitest run` over the 14 gate 
 - **1495**: `docs/host-contract.md:725` "Selling a bookable service" with endpoints (l.747-753) and env vars (l.765); `CLAUDE.md:150` sanctioned bullet and `:137` services sentence.
 
 ## Persona sweep
-Added lines in `shared/`, `server/`, `docs/`, `CLAUDE.md` (`git diff <base>..HEAD -U0`, case-insensitive `stanislav`): zero hits. (Existing `StanislavBG/bilko-run` text at `docs/host-contract.md:184` is not an added line.) Only the allowed persona address BilkoBibitkov2000@gmail.com appears, in tests.
+Added lines in `shared/`, `server/`, `docs/`, `CLAUDE.md` (`git diff <base>..HEAD -U0`, case-insensitive `<owner-first-name>`): zero hits. (Existing repo-owner handle text at `docs/host-contract.md:184` is not an added line.) Only the allowed persona address BilkoBibitkov2000@gmail.com appears, in tests.
 
 ## Findings
 ### Critical

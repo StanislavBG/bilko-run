@@ -16,6 +16,7 @@ import {
   webProductForPriceId,
   type WebProduct,
 } from '../shared/web-products.js';
+import { identityHits } from './identity-denylist.js';
 
 const SHA = 'a'.repeat(64);
 
@@ -243,7 +244,7 @@ describe('service products', () => {
   it('persona rule: no owner name or email in the catalog', () => {
     expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
     const blob = JSON.stringify(WEB_PRODUCTS).toLowerCase();
-    expect(blob).not.toContain('stanislav');
+    expect(identityHits(blob)).toEqual([]);
     expect(blob).not.toContain('gmail');
   });
 });

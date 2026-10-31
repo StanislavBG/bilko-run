@@ -25,7 +25,7 @@ Gate (combined gate from 1502, re-run in foreground): 7 test files, 99 tests pas
 ## 1500-afk-setup-confirmation-email: VERIFIED
 - Route builds absolute `${PUBLIC_URL||'https://bilko.run'}/api/web-products/<slug>/download?session_id=<id>`, skips unreleased: server/routes/service-bookings.ts:153-158.
 - Mailer renders text + escaped HTML, unchanged output when `included` empty: server/services/mailer.ts:91-115.
-- Tests: tests/mailer.test.ts (byte-identical, escaping, no `stanislav`), tests/service-booking-routes.test.ts (omits unreleased).
+- Tests: tests/mailer.test.ts (byte-identical, escaping, no owner first name), tests/service-booking-routes.test.ts (omits unreleased).
 
 ## 1501-afk-offer-and-docs: VERIFIED
 - Offer modelled on launch-kit, honest copy: shared/agent-offers.ts:52-65.
@@ -33,8 +33,8 @@ Gate (combined gate from 1502, re-run in foreground): 7 test files, 99 tests pas
 - docs/host-contract.md:725-731 documents includes/order `included`/preview/`?kind=preview`/`--preview`. CLAUDE.md:150 sanctioned list entry.
 
 ## Secret / identity grep on the combined diff
-`git diff 6539aa0b..HEAD | grep '^+' | grep -iE 'stanislav|bibitkov|gmail|/home/|sk_live|sk_test|whsec_|ghp_|AKIA|bkk_...|re_...'`
-Only hit: tests/mailer.test.ts:196 `expect(...).not.toContain('stanislav')` (a negative assertion). No real name, personal email, /home/ path or token in added lines.
+`git diff 6539aa0b..HEAD | grep '^+' | grep -iE '<owner-first-name>|bibitkov|gmail|/home/|sk_live|sk_test|whsec_|ghp_|AKIA|bkk_...|re_...'`
+Only hit: tests/mailer.test.ts:196 `expect(...).not.toContain('<owner-first-name>')` (a negative assertion). No real name, personal email, /home/ path or token in added lines.
 
 ## Findings
 Critical: none.

@@ -4,6 +4,7 @@ import { initDb } from '../server/db.js';
 import { recordOrder } from '../server/services/web-products.js';
 import { SERVICE_SLOT_CONFIG, generateSlots } from '../shared/service-slots.js';
 import type { WebProduct } from '../shared/web-products.js';
+import { identityHits } from './identity-denylist.js';
 
 const sessionsRetrieve = vi.fn();
 const sendMailMock = vi.hoisted(() => vi.fn());
@@ -124,7 +125,7 @@ describe('service booking routes', () => {
     expect(tos).toContain('jane@example.com');
     expect(tos).toContain('BilkoBibitkov2000@gmail.com');
     const blob = JSON.stringify(sendMailMock.mock.calls) + JSON.stringify(body);
-    expect(blob.toLowerCase()).not.toContain('stanislav');
+    expect(identityHits(blob)).toEqual([]);
   });
 
   it('includes kit download links for products with includes, omitting unreleased ones', async () => {
@@ -184,7 +185,7 @@ describe('service booking routes', () => {
     expect(ok.headers['content-type']).toContain('text/calendar');
     expect(ok.headers['content-disposition']).toContain('bilko-session.ics');
     expect(ok.body).toContain('BEGIN:VCALENDAR');
-    expect(ok.body.toLowerCase()).not.toContain('stanislav');
+    expect(identityHits(ok.body)).toEqual([]);
     const none = await app.inject({ method: 'GET', url: `/api/web-products/${product.slug}/booking.ics?session_id=${S_UNPAID}` });
     expect([402, 404]).toContain(none.statusCode);
     sessionsRetrieve.mockResolvedValue({ status: 'open', payment_status: 'unpaid', metadata: { web_product: product.slug } });

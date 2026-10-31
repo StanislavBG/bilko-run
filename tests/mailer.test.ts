@@ -6,6 +6,7 @@ import {
   bookingConfirmationEmail,
   bookingNoticeEmail,
 } from '../server/services/mailer.js';
+import { identityHits } from './identity-denylist.js';
 
 const ENV = { RESEND_API_KEY: 'rk_test', MAIL_FROM: 'Bilko <bilko@example.test>', BILKO_INBOX: 'inbox@example.test' };
 const START = Date.UTC(2026, 6, 15, 20, 0, 0); // 1:00 PM PDT
@@ -123,7 +124,7 @@ describe('bookingConfirmationEmail included downloads', () => {
     expect(m.text).toContain('Kit <b>: https://bilko.run/api/web-products/k/download?session_id=cs_1&x=2');
     expect(m.html).toContain('Kit &lt;b&gt;');
     expect(m.html).toContain('session_id=cs_1&amp;x=2');
-    expect(`${m.text}${m.html}`.toLowerCase()).not.toContain('stanislav');
+    expect(identityHits(`${m.text}${m.html}`)).toEqual([]);
     expect(m.text.trim().endsWith('Bilko')).toBe(true);
   });
 });
@@ -153,9 +154,9 @@ describe('persona', () => {
       bookingConfirmationEmail({ offerName: 'Hour', startMs: START, timeZone: 'UTC', meetingLink: '', icsContent: 'x' }),
       bookingNoticeEmail({ offerName: 'Hour', startMs: START, buyerEmail: 'b@x.test', intake: INTAKE }),
     ].map((m) => `${m.subject}\n${m.text}\n${m.html}`).join('\n');
-    expect(rendered.toLowerCase()).not.toContain('stanislav');
+    expect(identityHits(rendered)).toEqual([]);
     const src = readFileSync(new URL('../server/services/mailer.ts', import.meta.url), 'utf8');
-    expect(src.toLowerCase()).not.toContain('stanislav');
+    expect(identityHits(src)).toEqual([]);
     expect(src).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
   });
 });

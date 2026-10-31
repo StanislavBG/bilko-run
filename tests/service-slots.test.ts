@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SERVICE_SLOT_CONFIG, buildIcs, generateSlots } from '../shared/service-slots';
+import { identityHits } from './identity-denylist';
 
 const cfg = SERVICE_SLOT_CONFIG['human-for-hire'];
 const NOW = Date.UTC(2026, 9, 27);
@@ -55,7 +56,7 @@ describe('buildIcs', () => {
 
   it('never leaks the owner real name; persona address allowed', () => {
     const ics = buildIcs(base);
-    expect(ics.replace(/\r\n /g, '').toLowerCase()).not.toContain('stanislav');
+    expect(identityHits(ics.replace(/\r\n /g, ''))).toEqual([]);
     expect(ics.replace(/\r\n /g, '')).toContain('BilkoBibitkov2000@gmail.com');
   });
 });

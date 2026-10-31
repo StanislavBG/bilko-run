@@ -1,7 +1,7 @@
-import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
+import { bearerMatches } from '../bearer.js';
 import { parseEnvSelector, envPredicate, seedRollup, parseStoredSeeds } from './telemetry.js';
 
 const APP = 'session-manager';
@@ -113,17 +113,7 @@ function median(values: number[]): number {
 // dedicated secret; PROJECT_SNAPSHOT_TOKEN (already held locally) is a fallback.
 // A Bearer matching neither falls through to requireAdmin — Clerk JWTs are Bearer too.
 function hasReadToken(authHeader: unknown): boolean {
-  const auth = typeof authHeader === 'string' ? authHeader : '';
-  if (!auth.startsWith('Bearer ')) return false;
-  const presented = Buffer.from(auth.slice(7));
-  if (presented.length === 0) return false;
-  for (const name of ['SM_USAGE_READ_TOKEN', 'PROJECT_SNAPSHOT_TOKEN']) {
-    const expected = process.env[name];
-    if (!expected) continue;
-    const want = Buffer.from(expected);
-    if (want.length === presented.length && timingSafeEqual(want, presented)) return true;
-  }
-  return false;
+  return bearerMatches(authHeader, [process.env.SM_USAGE_READ_TOKEN, process.env.PROJECT_SNAPSHOT_TOKEN]);
 }
 
 export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {

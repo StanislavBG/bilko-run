@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { dbAll, dbRun } from '../db.js';
+import { bearerMatches } from '../bearer.js';
 
 // Per-project live EVENT STREAM — the append-only sibling of the JSON-globals
 // snapshot in project-data.ts.
@@ -57,9 +58,7 @@ export function registerProjectEventsRoutes(app: FastifyInstance): void {
     const expected = process.env.PROJECT_SNAPSHOT_TOKEN;
     if (!expected) return reply.code(503).send({ error: 'event ingest disabled (no token configured)' });
 
-    const auth = String(req.headers['authorization'] || '');
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!token || token !== expected) return reply.code(401).send({ error: 'unauthorized' });
+    if (!bearerMatches(req.headers['authorization'], [expected])) return reply.code(401).send({ error: 'unauthorized' });
 
     const slug = (req.params as { slug: string }).slug;
     if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });

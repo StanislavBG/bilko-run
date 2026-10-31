@@ -1,14 +1,18 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import Fastify from 'fastify';
 import { initDb, dbRun, dbGet } from '../server/db.js';
 import { registerProjectFeedbackRoutes } from '../server/routes/project-feedback.js';
+import { registerProjectDataRoutes } from '../server/routes/project-data.js';
+import { registerProjectEventsRoutes } from '../server/routes/project-events.js';
 
 const TOKEN = 'test-snapshot-token';
 process.env.PROJECT_SNAPSHOT_TOKEN = TOKEN;
 
 const app = Fastify({ logger: false, bodyLimit: 8 * 1024 * 1024 });
 registerProjectFeedbackRoutes(app);
+registerProjectDataRoutes(app);
+registerProjectEventsRoutes(app);
 
 beforeAll(async () => {
   await initDb();
@@ -41,15 +45,15 @@ function submit(body: Record<string, unknown>) {
   });
 }
 
-function pull(query = '') {
+function pull(query = '', token = TOKEN, slug = SLUG) {
   return app.inject({
     method: 'GET',
-    url: `${URL}${query}`,
-    headers: { authorization: `Bearer ${TOKEN}` },
+    url: `/api/projects/${slug}/feedback${query}`,
+    headers: { authorization: `Bearer ${token}` },
   });
 }
 
-function moderate(id: string, body: unknown, token: string | null = TOKEN) {
+function moderate(id: string, body: unknown, token: string | null = TOKEN, slug = SLUG) {
   ipSeq += 1;
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -58,7 +62,7 @@ function moderate(id: string, body: unknown, token: string | null = TOKEN) {
   if (token) headers['authorization'] = `Bearer ${token}`;
   return app.inject({
     method: 'POST',
-    url: `${URL}/${id}/moderate`,
+    url: `/api/projects/${slug}/feedback/${id}/moderate`,
     headers,
     body: JSON.stringify(body),
   });
@@ -371,6 +375,102 @@ describe('images=none', () => {
       title: 'No image',
       image: null,
     });
+  });
+});
+
+describe('per-project feedback tokens', () => {
+  const OWN = 'test-feedback-token';
+
+  function writeSnapshotAndEvent(token: string) {
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+    return Promise.all([
+      app.inject({
+        method: 'POST',
+        url: `/api/projects/${SLUG}/snapshot`,
+        headers,
+        body: JSON.stringify({ globals: {} }),
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/api/projects/${SLUG}/events`,
+        headers,
+        body: JSON.stringify({ id: 1, line: '{}' }),
+      }),
+    ]);
+  }
+
+  beforeEach(() => {
+    vi.stubEnv('PROJECT_FEEDBACK_TOKENS', `other-project:other-token, ${SLUG}:${OWN}`);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('opens every route of its own project\'s inbox', async () => {
+    const id = (await submit({})).json().id as string;
+
+    const read = await pull('', OWN);
+    expect(read.statusCode).toBe(200);
+    expect(pullItems(read)).toHaveLength(1);
+
+    expect((await setStatus(id, { status: 'resolved' }, OWN)).statusCode).toBe(200);
+    expect((await moderate(id, { action: 'archive' }, OWN)).statusCode).toBe(200);
+
+    const item = pullItems(await pull())[0];
+    expect(item.status.value).toBe('resolved');
+    expect(item.moderation?.action).toBe('archived');
+  });
+
+  it('rejects a wrong bearer', async () => {
+    const id = (await submit({})).json().id as string;
+    for (const token of ['wrong', `${OWN}x`, OWN.replace(/.$/, 'X')]) {
+      expect((await pull('', token)).statusCode).toBe(401);
+      expect((await setStatus(id, { status: 'resolved' }, token)).statusCode).toBe(401);
+      expect((await moderate(id, { action: 'archive' }, token)).statusCode).toBe(401);
+    }
+  });
+
+  it('opens no other project', async () => {
+    const id = (await submit({})).json().id as string;
+    expect((await pull('', OWN, 'other-project')).statusCode).toBe(401);
+    expect((await setStatus(id, { status: 'resolved' }, OWN, 'other-project')).statusCode).toBe(401);
+    expect((await moderate(id, { action: 'archive' }, OWN, 'other-project')).statusCode).toBe(401);
+    expect((await pull('', 'other-token')).statusCode).toBe(401);
+  });
+
+  it('cannot write a snapshot or an event', async () => {
+    const [snapshot, event] = await writeSnapshotAndEvent(OWN);
+    expect(snapshot.statusCode).toBe(401);
+    expect(event.statusCode).toBe(401);
+  });
+
+  it('leaves PROJECT_SNAPSHOT_TOKEN working on every route', async () => {
+    const id = (await submit({})).json().id as string;
+    expect((await pull()).statusCode).toBe(200);
+    expect((await setStatus(id, { status: 'resolved' })).statusCode).toBe(200);
+    expect((await moderate(id, { action: 'archive' })).statusCode).toBe(200);
+
+    const [snapshot, event] = await writeSnapshotAndEvent(TOKEN);
+    expect(snapshot.statusCode).toBe(200);
+    expect(event.statusCode).toBe(200);
+  });
+
+  it('keeps two tokens live for one project during a rotation', async () => {
+    vi.stubEnv('PROJECT_FEEDBACK_TOKENS', `${SLUG}:old-token,${SLUG}:new-token`);
+    expect((await pull('', 'old-token')).statusCode).toBe(200);
+    expect((await pull('', 'new-token')).statusCode).toBe(200);
+  });
+
+  it('treats malformed entries as no token at all', async () => {
+    vi.stubEnv('PROJECT_FEEDBACK_TOKENS', `${SLUG}:,${SLUG},:${OWN}`);
+    for (const token of ['', SLUG, OWN]) expect((await pull('', token)).statusCode).toBe(401);
+  });
+
+  it('works without the shared token and 503s when a project has neither', async () => {
+    vi.stubEnv('PROJECT_SNAPSHOT_TOKEN', '');
+    expect((await pull('', OWN)).statusCode).toBe(200);
+    expect((await pull('', OWN, 'third-project')).statusCode).toBe(503);
   });
 });
 

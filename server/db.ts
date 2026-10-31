@@ -276,6 +276,7 @@ export async function initDb(): Promise<void> {
     'TURSO_AUTH_TOKEN',
     'ANTHROPIC_API_KEY_ACADEMY',
     'PROJECT_SNAPSHOT_TOKEN',
+    'PROJECT_FEEDBACK_TOKENS',
     'SM_USAGE_READ_TOKEN',
     'BILKO_GAME_HMAC_KEY',
   ];

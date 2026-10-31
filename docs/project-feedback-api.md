@@ -7,6 +7,20 @@ host's side of it so a sibling session doesn't have to read the route source.
 
 Storage: table `project_feedback` (Turso; local SQLite in dev).
 
+## Owner credentials
+
+`GET`, `moderate` and `status` take either bearer. Use the narrower one unless the
+caller also posts snapshots or events.
+
+| Bearer | Opens |
+| --- | --- |
+| The project's own token in `PROJECT_FEEDBACK_TOKENS` | those three routes for that one slug, and nothing else: another slug, a snapshot write and an event write all return `401` |
+| `PROJECT_SNAPSHOT_TOKEN` | those three routes for every slug, plus snapshot and event writes for every slug |
+
+`PROJECT_FEEDBACK_TOKENS` is a comma-separated list of `slug:token` pairs. Holders and
+rotation steps are in [`secrets-rotation.md`](secrets-rotation.md). With no bearer that
+could open the route, it returns `503`.
+
 ## `POST /api/projects/:slug/feedback` — public
 
 Unauthenticated by design (any visitor to a public page may file feedback), so the
@@ -35,9 +49,10 @@ not listed above is dropped. `parentId` is the one deliberate exception to
 interpretation: it is stored verbatim, echoed back unchanged, never resolved or
 validated against an existing row. A dangling value is the reading client's problem.
 
-→ `201 {"id", "parentId", "receivedAt"}`
+→ `201 {"id", "parentId", "receivedAt", "receipt"}`. `receipt` is a one-time secret for
+the status lookup below. Only its sha256 is stored, so it can't be fetched again.
 
-## `GET /api/projects/:slug/feedback` — `Authorization: Bearer $PROJECT_SNAPSHOT_TOKEN`
+## `GET /api/projects/:slug/feedback` — owner bearer
 
 Query: `since` (ISO, exclusive `created_at` cursor), `moderatedSince` (ISO, exclusive
 `moderation_at` cursor), `limit` (1–1000, default 500), `images` (`none` to omit
@@ -54,20 +69,21 @@ Each item carries `id`, `receivedAt`, `target`, `route`, `type`, `title`,
 
 ```jsonc
 "parentId": "fb_abc123" | null,
-"moderation": { "action": "archived" | "deleted", "at": "<ISO>", "reason": "..." } | null
+"moderation": { "action": "archived" | "deleted", "at": "<ISO>", "reason": "..." } | null,
+"status": { "value": "open" | "in_progress" | "resolved" | "wontfix", "note": "..." | null, "at": "<ISO>" | null }
 ```
 
 `moderation` is `null` when the item has never been moderated or was un-archived /
-restored.
+restored. `status.value` is `open` until someone sets it.
 
 Response also returns `nextSince` and `nextModeratedSince`. **`nextSince` alone is not
 enough to stay in sync:** moderation happens long after a row's `created_at`, so a
 purely created_at-based cursor never re-surfaces a newly archived item. Replay
 `moderatedSince=<nextModeratedSince>` alongside `since` to re-admit already-pulled rows
-whose moderation state changed. `nextSince` never regresses, even on a page made
+whose moderation or status changed. `nextSince` never regresses, even on a page made
 entirely of re-admitted old rows.
 
-## `POST /api/projects/:slug/feedback/:id/moderate` — same bearer
+## `POST /api/projects/:slug/feedback/:id/moderate` — owner bearer
 
 ```jsonc
 { "action": "archive" | "unarchive" | "delete" | "restore", "reason": "<optional, ≤500>" }
@@ -82,7 +98,32 @@ flips. Hard-deleting would make the item re-arrive as brand-new feedback on the
 sibling's next pull (its store dedupes on ids already seen on disk) and resurrect
 itself on the published page. `archive` → `moderation.action = "archived"`, `delete`
 → `"deleted"`, `unarchive`/`restore` → `moderation = null`. Moderation is
-slug-scoped, so a token can't reach another project's rows.
+slug-scoped: an id only resolves under its own slug.
+
+## `POST /api/projects/:slug/feedback/:id/status` — owner bearer
+
+```jsonc
+{ "status": "open" | "in_progress" | "resolved" | "wontfix", "note": "<optional, ≤500>" }
+```
+
+→ `200 {"id", "status", "note", "statusAt"}` · `400` bad status/note · `401` bad token ·
+`404` unknown id (or id belonging to another slug) · `429` rate-limited.
+
+Status is work state and independent of moderation: an archived row can still be
+resolved. A change re-surfaces the row through the `moderatedSince` cursor.
+
+## `POST /api/projects/:slug/feedback/status-lookup` — public
+
+```jsonc
+{ "items": [{ "id": "fb_abc123", "receipt": "<from the 201>" }] } // 1–100 items
+```
+
+→ `200 {"items": [{"id", "status", "note", "statusAt"}]}`
+
+The receipt is the credential. Anything that doesn't match (unknown id, another slug,
+wrong receipt, a row filed before receipts existed) is left out without a trace, and
+no title, description or client field is ever returned. 10 lookups/min/IP, in a
+separate bucket from submissions.
 
 ## Measuring what this costs
 

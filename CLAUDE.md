@@ -133,6 +133,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/blog-posts.ts` — loads `content/blog/*.md` seed posts
 - `server/gemini.ts` — Gemini API client (key via header, not URL)
 - `server/utils.ts` — `parseJsonResponse` (shared Gemini output parser)
+- `server/bearer.ts` — `bearerMatches`, the timing-safe compare for shared-secret bearer routes
 
 ### Web products (paid downloads)
 Paid zips sold from a static-path landing page. Declared in `shared/web-products.ts` (`WEB_PRODUCTS`: price id, release version/filename/bytes/sha256); public + delivery + content-addressed upload routes in `server/routes/web-products.ts`; admin metrics (`/admin` → Products) in `server/routes/admin-web-products.ts`; order/release/download storage in `server/services/web-products.ts`. The Stripe webhook dispatches on `metadata.web_product`. Entries with `kind: 'service'` sell bookable sessions instead of a zip (subscription billing, founding coupon, order cap, slot booking in `server/routes/service-bookings.ts`). Endpoint table and the new-product playbook: the "Selling a downloadable web product" section of [`docs/host-contract.md`](docs/host-contract.md).
@@ -179,7 +180,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-168 files, 1883 tests (counted via `pnpm vitest run` on 2026-10-26; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+169 files, 1903 tests (counted via `pnpm vitest run` on 2026-10-30; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

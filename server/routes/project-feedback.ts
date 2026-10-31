@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { dbAll, dbRun } from '../db.js';
+import { bearerMatches } from '../bearer.js';
 
 // Per-project user-feedback endpoint — the receiving half of a sibling app's
 // in-page feedback widget.
@@ -16,6 +17,12 @@ import { dbAll, dbRun } from '../db.js';
 //   POST /api/projects/:slug/feedback/:id/moderate  authed → archive/delete a thread
 //   POST /api/projects/:slug/feedback/:id/status    authed → set work status
 //   POST /api/projects/:slug/feedback/status-lookup PUBLIC → status by receipt
+//
+// The authed side takes either of two bearers. PROJECT_SNAPSHOT_TOKEN opens
+// every project, and also writes snapshots and events for all of them. A
+// project's own token in PROJECT_FEEDBACK_TOKENS opens that project's inbox and
+// nothing else, so a machine or browser that only works one inbox never has to
+// hold the all-project write credential.
 //
 // Moderation is visibility; status is work state (open | in_progress |
 // resolved | wontfix, NULL = open). The POST returns a one-time `receipt`
@@ -104,14 +111,23 @@ function str(v: unknown, max: number): string | null {
   return s;
 }
 
-// Shared bearer check for the two authed routes. Returns an error tuple the
-// caller sends verbatim, or null when the request is authorised.
-function checkBearer(req: { headers: Record<string, unknown> }): { code: number; error: string } | null {
-  const expected = process.env.PROJECT_SNAPSHOT_TOKEN;
-  if (!expected) return { code: 503, error: 'feedback read disabled (no token configured)' };
-  const auth = String(req.headers['authorization'] || '');
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!token || token !== expected) return { code: 401, error: 'unauthorized' };
+// One project's entries in PROJECT_FEEDBACK_TOKENS, a comma-separated list of
+// `slug:token` pairs. A slug may appear twice, which keeps two tokens live
+// during a rotation.
+function feedbackTokens(slug: string): string[] {
+  return (process.env.PROJECT_FEEDBACK_TOKENS ?? '')
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter((pair) => pair.startsWith(`${slug}:`))
+    .map((pair) => pair.slice(slug.length + 1));
+}
+
+// Shared bearer check for the authed routes. Returns an error tuple the caller
+// sends verbatim, or null when the request is authorised.
+function checkBearer(req: { headers: Record<string, unknown> }, slug: string): { code: number; error: string } | null {
+  const accepted = [process.env.PROJECT_SNAPSHOT_TOKEN, ...feedbackTokens(slug)];
+  if (!accepted.some(Boolean)) return { code: 503, error: 'feedback read disabled (no token configured)' };
+  if (!bearerMatches(req.headers['authorization'], accepted)) return { code: 401, error: 'unauthorized' };
   return null;
 }
 
@@ -221,10 +237,10 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
 
   // ── authed read ──────────────────────────────────────────────────────────
   app.get('/api/projects/:slug/feedback', async (req, reply) => {
-    const bad = checkBearer(req as never);
+    const slug = (req.params as { slug: string }).slug;
+    const bad = checkBearer(req as never, slug);
     if (bad) return reply.code(bad.code).send({ error: bad.error });
 
-    const slug = (req.params as { slug: string }).slug;
     if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
 
     const q = req.query as { since?: string; limit?: string; moderatedSince?: string; images?: string };
@@ -319,13 +335,13 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
   // means this can never be open: an unauthenticated route would let any
   // visitor erase anyone's feedback.
   app.post('/api/projects/:slug/feedback/:id/moderate', async (req, reply) => {
-    const bad = checkBearer(req as never);
+    const { slug, id } = req.params as { slug: string; id: string };
+    const bad = checkBearer(req as never, slug);
     if (bad) return reply.code(bad.code).send({ error: bad.error });
 
     const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
     if (rateLimited(ip)) return reply.code(429).send({ error: 'too many moderation calls, try again shortly' });
 
-    const { slug, id } = req.params as { slug: string; id: string };
     if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
 
     const body = req.body as Record<string, unknown> | undefined;
@@ -358,13 +374,13 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
   // Owner-only work state. Same bearer, rate limit and slug scoping as
   // moderation; independent of it (an archived row can still be resolved).
   app.post('/api/projects/:slug/feedback/:id/status', async (req, reply) => {
-    const bad = checkBearer(req as never);
+    const { slug, id } = req.params as { slug: string; id: string };
+    const bad = checkBearer(req as never, slug);
     if (bad) return reply.code(bad.code).send({ error: bad.error });
 
     const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
     if (rateLimited(ip)) return reply.code(429).send({ error: 'too many status calls, try again shortly' });
 
-    const { slug, id } = req.params as { slug: string; id: string };
     if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
 
     const body = req.body as Record<string, unknown> | undefined;

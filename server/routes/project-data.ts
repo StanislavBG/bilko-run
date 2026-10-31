@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { dbGet, dbRun } from '../db.js';
+import { bearerMatches } from '../bearer.js';
 
 // Per-project live data snapshot endpoint.
 //
@@ -55,9 +56,7 @@ export function registerProjectDataRoutes(app: FastifyInstance): void {
       const expected = process.env.PROJECT_SNAPSHOT_TOKEN;
       if (!expected) return reply.code(503).send({ error: 'snapshot ingest disabled (no token configured)' });
 
-      const auth = String(req.headers['authorization'] || '');
-      const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-      if (!token || token !== expected) return reply.code(401).send({ error: 'unauthorized' });
+      if (!bearerMatches(req.headers['authorization'], [expected])) return reply.code(401).send({ error: 'unauthorized' });
 
       const slug = (req.params as { slug: string }).slug;
       if (!SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });

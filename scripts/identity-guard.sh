@@ -16,8 +16,8 @@
 #   pre-push <remote>   block pushed commits whose added lines or messages
 #                       match; warn (only) on author/committer identities,
 #                       since older commits predate the persona identity
-#   tree [<rev>]        list tracked files that match (CI, audits); exit 1 on
-#                       any hit
+#   tree [<rev>]        list tracked files, binary ones included, that match
+#                       (CI, audits); exit 1 on any hit
 set -euo pipefail
 
 mode=${1:-}
@@ -149,19 +149,19 @@ case $mode in
     i=0
     while IFS= read -r p; do
       i=$((i + 1))
-      # -I skips binary files; -c prints "[<rev>:]<path>:<count>" and never the text.
+      # Binary files count too; -c prints "[<rev>:]<path>:<count>" and never the text.
       while IFS= read -r row; do
         [[ -z $row ]] && continue
         [[ ${#rev[@]} -gt 0 ]] && row=${row#"${rev[0]}":}
         hits=$((hits + 1))
         echo "  ${row%:*}: ${row##*:} line(s), deny-list entry #$i"
-      done < <(git grep -c -I -i -F -e "$p" "${rev[@]}" -- || true)
+      done < <(git grep -c -i -F -e "$p" "${rev[@]}" -- || true)
     done <"$patterns"
     if [[ $hits -gt 0 ]]; then
       echo "identity-guard: $hits tracked file match(es) for deny-listed identifiers." >&2
       advice
       exit 1
     fi
-    echo "identity-guard: no tracked file contains a deny-listed identifier."
+    echo "identity-guard: no tracked file contains a deny-listed identifier ($i entries checked)."
     ;;
 esac

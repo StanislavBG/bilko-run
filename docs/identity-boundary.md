@@ -40,11 +40,22 @@ To set up a machine:
    worktree. The hooks run a copy of the guard, so re-run the install after you change
    the guard.
 
-To audit the tree, run `pnpm identity:scan`. It exits 1 on any hit.
+To audit the tree, run `pnpm identity:scan`. It checks binary files as well as text and
+exits 1 on any hit. Its pass line gives the number of deny-list entries it checked.
 
-CI runs the same scan when the `IDENTITY_DENYLIST` repo secret is set (one string per
-line). Without the secret, CI skips the scan and prints a warning. To enable it, run
-`gh secret set IDENTITY_DENYLIST < ~/.config/bilko/identity-denylist`.
+CI runs the same scan on every push to `main` and every pull request. It reads the
+strings from the `IDENTITY_DENYLIST` repo secret (one string per line), set on
+2026-10-30. A pass line with an entry count in the Identity scan step shows the run used
+real values.
+
+Without the secret, a push to `main` fails. A pull request only warns and skips, because
+GitHub withholds secrets from fork pull requests. The push that lands it still scans.
+
+The secret is a copy of the deny-list file. After you change the file, update the secret:
+
+```bash
+gh secret set IDENTITY_DENYLIST --repo StanislavBG/bilko-run < ~/.config/bilko/identity-denylist
+```
 
 `--no-verify` bypasses the hooks. Do not use it to get past the guard.
 

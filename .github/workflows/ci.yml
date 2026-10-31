@@ -26,13 +26,18 @@ jobs:
 
       - name: Identity scan
         # Fails when a tracked file holds the owner's real name or personal email
-        # (docs/identity-boundary.md). The strings live only in the secret.
+        # (docs/identity-boundary.md). The strings live only in the secret. GitHub withholds
+        # it from fork pull requests, so only a pull request may skip; a push must scan.
         env:
           IDENTITY_DENYLIST: ${{ secrets.IDENTITY_DENYLIST }}
         run: |
           if [ -z "$IDENTITY_DENYLIST" ]; then
-            echo "::warning::IDENTITY_DENYLIST secret not set; identity scan skipped (docs/identity-boundary.md)"
-            exit 0
+            if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+              echo "::warning::IDENTITY_DENYLIST secret not available; identity scan skipped (docs/identity-boundary.md)"
+              exit 0
+            fi
+            echo "::error::IDENTITY_DENYLIST secret not set; identity scan cannot run (docs/identity-boundary.md)"
+            exit 1
           fi
           list=$(mktemp)
           printf '%s\n' "$IDENTITY_DENYLIST" > "$list"

@@ -111,12 +111,23 @@ describe('identity-guard.sh', () => {
   });
 
   it('tree mode lists matching tracked files and exits 1, and exits 0 on a clean tree', () => {
-    expect(guard(['tree']).status).toBe(0);
+    const clean = guard(['tree']);
+    expect(clean.status).toBe(0);
+    // The count is what lets a CI log prove the scan had real entries to check.
+    expect(clean.out).toContain('(2 entries checked)');
     commitFile('a.json', `{"by": "${SURNAME.toLowerCase()}"}\n`);
     const r = guard(['tree']);
     expect(r.status).toBe(1);
     expect(r.out).toContain('a.json: 1 line(s), deny-list entry #2');
     expect(guard(['tree', 'HEAD~1']).status).toBe(0);
+  });
+
+  it('tree mode reports a binary file that holds a deny-listed string, without echoing it', () => {
+    commitFile('photo.png', `\u0000\u0001exif:${EMAIL}\u0000\n`);
+    const r = guard(['tree']);
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('photo.png: 1 line(s), deny-list entry #1');
+    expect(r.out.toLowerCase()).not.toContain(EMAIL);
   });
 
   it('is a no-op without a deny-list, and treats an empty one as no entries', () => {

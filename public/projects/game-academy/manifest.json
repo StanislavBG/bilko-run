@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "game-academy",
   "version": "0.1.0-alpha.1",
-  "builtAt": "2026-11-01T05:29:36.362Z",
-  "gitSha": "4c72ab3",
+  "builtAt": "2026-11-01T15:55:02.624Z",
+  "gitSha": "e307d47",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"

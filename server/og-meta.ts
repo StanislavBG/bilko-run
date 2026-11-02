@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
+import { BILKO_PROFILE_DESCRIPTION, BILKO_PROFILE_TITLE } from '../shared/bilko-profile.js';
 
 export interface OgMeta {
   title: string;
@@ -45,7 +46,12 @@ const DEFAULT_META: OgMeta = {
   image: DEFAULT_IMAGE,
 };
 
-const SECTION_PAGES: Record<string, { title: string; description: string }> = {
+const BILKO_PROFILE_PAGE = { title: BILKO_PROFILE_TITLE, description: BILKO_PROFILE_DESCRIPTION, url: `${SITE}/bilko` };
+
+const SECTION_PAGES: Record<string, { title: string; description: string; url?: string }> = {
+  '/bilko': BILKO_PROFILE_PAGE,
+  '/hire': BILKO_PROFILE_PAGE,
+  '/human-for-hire': BILKO_PROFILE_PAGE,
   '/projects': {
     title: 'Projects — bilko.run',
     description: 'Every project Bilko is building: live apps, games and tools, each in its own repo.',
@@ -129,7 +135,7 @@ export function resolveOg(path: string, ctx: OgContext): OgMeta | null {
   if (clean === '/') return { ...DEFAULT_META };
 
   const section = SECTION_PAGES[clean];
-  if (section) return { ...section, url: `${SITE}${clean}`, image: DEFAULT_IMAGE };
+  if (section) return { ...section, url: section.url ?? `${SITE}${clean}`, image: DEFAULT_IMAGE };
 
   const proj = PROJECT_PATH_RE.exec(clean);
   if (proj) {

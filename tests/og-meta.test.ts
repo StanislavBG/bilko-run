@@ -1,3 +1,4 @@
+import { BILKO_PROFILE_DESCRIPTION } from '../shared/bilko-profile';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { injectOgMeta, resolveOg, loadOgProjects, type OgContext } from '../server/og-meta.js';
@@ -60,6 +61,14 @@ describe('resolveOg', () => {
   });
   it('maps section pages', () => {
     expect(resolveOg('/pricing', ctx)!.title).toBe('Pricing — bilko.run');
+  });
+  it('maps the Human For Hire page and its aliases to the /bilko canonical', () => {
+    for (const p of ['/bilko', '/hire', '/human-for-hire']) {
+      const m = resolveOg(p, ctx)!;
+      expect(m.title).toBe('Bilko — Human For Hire');
+      expect(m.description).toBe(BILKO_PROFILE_DESCRIPTION);
+      expect(m.url).toBe('https://bilko.run/bilko');
+    }
   });
   it('maps static-path projects, ignoring query', () => {
     for (const p of ['/projects/page-roast/', '/projects/page-roast/index.html?x=1']) {

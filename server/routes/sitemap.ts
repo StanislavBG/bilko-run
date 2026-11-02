@@ -65,6 +65,7 @@ export function buildSitemapXml(input: SitemapInput): string {
   const entries: Entry[] = [
     { path: '/', changefreq: 'weekly', priority: '1.0' },
     { path: '/projects', changefreq: 'weekly', priority: '0.9' },
+    { path: '/bilko', changefreq: 'monthly', priority: '0.9' },
     { path: '/blog', changefreq: 'weekly', priority: '0.9' },
     { path: '/forum', changefreq: 'weekly', priority: '0.7' },
     { path: '/contact', changefreq: 'monthly', priority: '0.7' },

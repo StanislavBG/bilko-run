@@ -12,16 +12,8 @@ import {
 const item = (id: string) => menuItemById(id)!;
 
 describe('bilko menu catalog', () => {
-  it('has the seven ids and prices', () => {
-    expect(MENU_ITEMS.map(i => [i.id, i.priceCents, i.kind])).toEqual([
-      ['ask-bilko', 50, 'async'],
-      ['claude-md-review', 100, 'async'],
-      ['prd-review', 100, 'async'],
-      ['agent-postmortem', 200, 'async'],
-      ['repo-audit', 300, 'async'],
-      ['agent-factory-kit', 300, 'download'],
-      ['live-call', 900, 'live'],
-    ]);
+  it('holds only the Agent Factory Kit', () => {
+    expect(MENU_ITEMS.map(i => [i.id, i.priceCents, i.kind])).toEqual([['agent-factory-kit', 300, 'download']]);
     expect(item('agent-factory-kit').downloadSlug).toBe('agent-factory-kit');
     expect([...WALLET_TOPUP_CENTS]).toEqual([300, 500, 1000]);
   });
@@ -37,7 +29,6 @@ describe('bilko menu catalog', () => {
     expect(formatCents(50)).toBe('$0.50');
     expect(formatCents(100)).toBe('$1');
     expect(formatCents(300)).toBe('$3');
-    expect(formatCents(900)).toBe('$9');
     expect(formatCents(450)).toBe('$4.50');
   });
 
@@ -48,33 +39,24 @@ describe('bilko menu catalog', () => {
       { cents: 500, price: '$5' },
       { cents: 1000, price: '$10' },
     ]);
-    expect(p.items).toHaveLength(7);
-    expect(p.items[0]).toMatchObject({ id: 'ask-bilko', price: '$0.50', priceCents: 50, kind: 'async' });
+    expect(p.items).toHaveLength(1);
+    expect(p.items[0]).toMatchObject({ id: 'agent-factory-kit', price: '$3', priceCents: 300, kind: 'download' });
   });
 
   it('accepts valid intake and trims', () => {
-    expect(parseMenuIntake(item('ask-bilko'), { question: '  hi there  ' })).toEqual({ question: 'hi there' });
-    expect(parseMenuIntake(item('claude-md-review'), { document: 'doc' })).toEqual({ document: 'doc' });
     expect(parseMenuIntake(item('agent-factory-kit'), {})).toEqual({});
-    for (const url of [
-      'https://github.com/foo/bar',
-      'https://github.com/foo/bar/',
-      'https://github.com/foo/bar.git',
-    ]) {
-      expect(parseMenuIntake(item('repo-audit'), { repoUrl: url })).toEqual({ repoUrl: url });
-    }
+    const field = { key: 'q', label: 'Q', required: true, maxLength: 10, kind: 'text' as const };
+    const fake = { ...item('agent-factory-kit'), intake: [field] };
+    expect(parseMenuIntake(fake, { q: '  hi  ' })).toEqual({ q: 'hi' });
   });
 
   it('rejects bad intake', () => {
-    const repo = item('repo-audit');
-    expect(parseMenuIntake(repo, { repoUrl: 'http://github.com/foo/bar' })).toBeNull();
-    expect(parseMenuIntake(repo, { repoUrl: 'https://gitlab.com/foo/bar' })).toBeNull();
-    expect(parseMenuIntake(repo, { repoUrl: 'javascript:alert(1)' })).toBeNull();
-    expect(parseMenuIntake(repo, { repoUrl: 'https://github.com/foo' })).toBeNull();
-    expect(parseMenuIntake(repo, {})).toBeNull();
-    expect(parseMenuIntake(item('ask-bilko'), { question: 'x', extra: 'y' })).toBeNull();
-    expect(parseMenuIntake(item('ask-bilko'), { question: '   ' })).toBeNull();
-    expect(parseMenuIntake(item('claude-md-review'), { document: 'a'.repeat(20001) })).toBeNull();
     expect(parseMenuIntake(item('agent-factory-kit'), { x: '1' })).toBeNull();
+    const field = { key: 'q', label: 'Q', required: true, maxLength: 10, kind: 'text' as const };
+    const fake = { ...item('agent-factory-kit'), intake: [field] };
+    expect(parseMenuIntake(fake, {})).toBeNull();
+    expect(parseMenuIntake(fake, { q: '   ' })).toBeNull();
+    expect(parseMenuIntake(fake, { q: 'a'.repeat(11) })).toBeNull();
+    expect(parseMenuIntake(fake, { q: 'x', extra: 'y' })).toBeNull();
   });
 });

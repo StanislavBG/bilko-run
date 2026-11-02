@@ -97,7 +97,7 @@ describe('menu MCP tools', () => {
     expect(poor.isError).toBe(true);
     expect(poor.content[0].text).toContain('insufficient_credits');
     expect(poor.content[0].text).toContain('https://bilko.run/buy/credits-5');
-    for (const status of ['daily_cap', 'invalid_intake', 'unknown_item', 'live_needs_slot', 'unavailable']) {
+    for (const status of ['invalid_intake', 'unknown_item', 'unavailable']) {
       placeMenuOrder.mockResolvedValueOnce({ status });
       const res = await call(KEYED, 'order_menu_item', { itemId: 'i', intake: {} });
       expect(res.isError).toBe(true);

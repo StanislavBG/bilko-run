@@ -139,9 +139,9 @@ export function buildCatalogMcpServer(
   server.registerTool(
     'list_menu',
     {
-      title: 'List the Bilko services menu',
+      title: 'List the Bilko credits menu',
       description:
-        'Returns the Bilko services menu: wallet top-ups and every orderable item (id, price, kind, intake fields). No API key needed. Order with order_menu_item.',
+        'Returns the Bilko credits menu: wallet top-ups and every orderable item (the Agent Factory Kit) (id, price, kind, intake fields). No API key needed. Order with order_menu_item.',
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -167,7 +167,7 @@ export function buildCatalogMcpServer(
     'order_menu_item',
     {
       title: 'Order a menu item with Bilko Credits',
-      description: `Orders one item from list_menu, paid from the wallet of the API key owner ("Authorization: Bearer bkk_..."). Top up at ${TOPUP_URL}. intake holds the item's intake fields as strings. The live call cannot be booked over MCP.`,
+      description: `Orders one item from list_menu, paid from the wallet of the API key owner ("Authorization: Bearer bkk_..."). Top up at ${TOPUP_URL}. intake holds the item's intake fields as strings.`,
       inputSchema: { itemId: z.string().min(1).max(64), intake: z.record(z.string(), z.string()) },
       annotations: { readOnlyHint: false, openWorldHint: false },
     },
@@ -189,16 +189,12 @@ export function buildCatalogMcpServer(
           });
         case 'insufficient_credits':
           return mcpError(`insufficient_credits: balance is ${formatCents(result.balanceCents ?? 0)}. Top up at ${TOPUP_URL}.`);
-        case 'daily_cap':
-          return mcpError('daily_cap: the daily limit for this item is reached. Try again tomorrow.');
         case 'invalid_intake':
           return mcpError('invalid_intake: intake does not match the item fields. See list_menu for the required fields.');
         case 'unknown_item':
           return mcpError('unknown_item: no such menu item. See list_menu for valid ids.');
         case 'unavailable':
           return mcpError('unavailable: this item is not on sale yet. See list_menu for what is available.');
-        case 'live_needs_slot':
-          return mcpError('live_needs_slot: the live call needs a booked time slot and cannot be ordered over MCP. Book at https://bilko.run/projects/human-for-hire/.');
       }
     },
   );

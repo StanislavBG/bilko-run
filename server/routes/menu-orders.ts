@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { availableMenuPayload, bookLiveCall, listOrdersForEmail, placeMenuOrder } from '../services/menu-orders.js';
+import { availableMenuPayload, listOrdersForEmail, placeMenuOrder } from '../services/menu-orders.js';
 import { walletAuthEmail } from './wallet.js';
 
 const ORDER_LIMIT = 20;
@@ -38,25 +38,7 @@ export function registerMenuOrderRoutes(app: FastifyInstance): void {
 
     const via = req.headers.authorization?.startsWith('Bearer bkk_') ? 'api' : 'web';
     const { itemId } = req.params as { itemId: string };
-    const { intake, startMs } = (req.body ?? {}) as { intake?: unknown; startMs?: unknown };
-    if (itemId === 'live-call') {
-      const booked = await bookLiveCall({ email, startMs, intake, via });
-      reply.header('Cache-Control', 'private, no-store');
-      switch (booked.status) {
-        case 'ok':
-          reply.status(201);
-          return { booking: booked.booking, balanceCents: booked.balanceCents, emailed: booked.emailed };
-        case 'slot_unavailable':
-          reply.status(409).send({ error: 'slot_unavailable' });
-          return;
-        case 'insufficient_credits':
-          reply.status(402).send({ error: 'insufficient_credits', balanceCents: booked.balanceCents ?? 0, topUpUrl: TOPUP_URL });
-          return;
-        default:
-          reply.status(400).send({ error: booked.status });
-          return;
-      }
-    }
+    const { intake } = (req.body ?? {}) as { intake?: unknown };
     const result = await placeMenuOrder({ email, itemId, intake, via });
     reply.header('Cache-Control', 'private, no-store');
 
@@ -78,18 +60,12 @@ export function registerMenuOrderRoutes(app: FastifyInstance): void {
       case 'invalid_intake':
         reply.status(400).send({ error: 'invalid_intake' });
         return;
-      case 'live_needs_slot':
-        reply.status(400).send({ error: 'live_needs_slot' });
-        return;
       case 'insufficient_credits':
         reply.status(402).send({
           error: 'insufficient_credits',
           balanceCents: result.balanceCents ?? 0,
           topUpUrl: TOPUP_URL,
         });
-        return;
-      case 'daily_cap':
-        reply.status(409).send({ error: 'daily_cap' });
         return;
       case 'unavailable':
         reply.status(409).send({ error: 'unavailable' });

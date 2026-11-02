@@ -5,13 +5,12 @@ import * as products from '../server/services/web-products.js';
 import { availableMenuPayload } from '../server/services/menu-orders.js';
 import { creditWallet, getWalletCents } from '../server/services/wallet.js';
 import { hasOrderForEmail } from '../server/services/web-products.js';
-import { MENU_DAILY_ASYNC_CAP } from '../shared/bilko-menu.js';
 import {
-  placeMenuOrder, listOrders, listOrdersForEmail, getOrder, setDraft, markDelivered, refundOrder,
+  placeMenuOrder, listOrders, listOrdersForEmail,
 } from '../server/services/menu-orders.js';
 
 const E = 'buyer@test.com';
-const ask = (email = E) => placeMenuOrder({ email, itemId: 'ask-bilko', intake: { question: 'Why?' }, via: 'web' });
+const kit = (email = E) => placeMenuOrder({ email, itemId: 'agent-factory-kit', intake: {}, via: 'web' });
 
 beforeAll(async () => { await initDb(); });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -24,40 +23,21 @@ beforeEach(async () => {
 });
 
 describe('placeMenuOrder', () => {
-  it('queues an async order and debits', async () => {
-    await creditWallet(E, 500, 'topup', 't1');
-    const r = await ask();
-    expect(r.status).toBe('ok');
-    if (r.status !== 'ok') return;
-    expect(r.order.status).toBe('queued');
-    expect(r.balanceCents).toBe(450);
-    expect(await getWalletCents(E)).toBe(450);
-    expect((await listOrdersForEmail(E)).length).toBe(1);
-    expect((await listOrders({ status: 'queued' })).length).toBe(1);
-  });
-
-  it('rejects unknown item, invalid intake and live items', async () => {
+  it('rejects unknown item, invalid intake and retired ids', async () => {
     await creditWallet(E, 500, 'topup', 't1');
     expect((await placeMenuOrder({ email: E, itemId: 'nope', intake: {}, via: 'api' })).status).toBe('unknown_item');
-    expect((await placeMenuOrder({ email: E, itemId: 'ask-bilko', intake: {}, via: 'api' })).status).toBe('invalid_intake');
-    expect((await placeMenuOrder({ email: E, itemId: 'live-call', intake: { topic: 'x' }, via: 'api' })).status).toBe('live_needs_slot');
+    expect((await placeMenuOrder({ email: E, itemId: 'ask-bilko', intake: { question: 'x' }, via: 'api' })).status).toBe('unknown_item');
+    expect((await placeMenuOrder({ email: E, itemId: 'live-call', intake: { topic: 'x' }, via: 'api' })).status).toBe('unknown_item');
+    expect((await placeMenuOrder({ email: E, itemId: 'agent-factory-kit', intake: { x: '1' }, via: 'api' })).status).toBe('invalid_intake');
     expect(await getWalletCents(E)).toBe(500);
   });
 
   it('insufficient credits leaves no row and no debit', async () => {
     await creditWallet(E, 20, 'topup', 't1');
-    const r = await ask();
+    const r = await kit();
     expect(r).toEqual({ status: 'insufficient_credits', balanceCents: 20 });
     expect(await listOrders()).toHaveLength(0);
     expect(await getWalletCents(E)).toBe(20);
-  });
-
-  it('daily cap blocks without charging', async () => {
-    await creditWallet(E, 1000, 'topup', 't1');
-    for (let i = 0; i < MENU_DAILY_ASYNC_CAP; i++) expect((await ask()).status).toBe('ok');
-    const before = await getWalletCents(E);
-    expect((await ask()).status).toBe('daily_cap');
-    expect(await getWalletCents(E)).toBe(before);
   });
 
   it('kit order is delivered and grants the download entitlement', async () => {
@@ -84,60 +64,11 @@ describe('kit not stored', () => {
     expect(await dbGet('SELECT 1 FROM web_product_orders WHERE email = ?', E)).toBeFalsy();
     const ids = (await availableMenuPayload()).items.map((i) => i.id);
     expect(ids).not.toContain('agent-factory-kit');
-    expect(ids).toContain('ask-bilko');
   });
 
   it('stored kit is listed', async () => {
     const ids = (await availableMenuPayload()).items.map((i) => i.id);
     expect(ids).toContain('agent-factory-kit');
-  });
-});
-
-describe('order state changes', () => {
-  async function queued() {
-    await creditWallet(E, 500, 'topup', 't1');
-    const r = await ask();
-    if (r.status !== 'ok') throw new Error('setup');
-    return r.order;
-  }
-
-  it('moves queued -> drafted -> delivered and refuses illegal transitions', async () => {
-    const o = await queued();
-    expect(await markDelivered(o.id, 'x')).toBeNull();
-    expect((await setDraft(o.id, 'd1'))?.status).toBe('drafted');
-    expect((await setDraft(o.id, 'd2'))?.draft).toBe('d2');
-    expect((await markDelivered(o.id, 'final'))?.status).toBe('delivered');
-    expect(await setDraft(o.id, 'd3')).toBeNull();
-    expect(await refundOrder(o.id)).toBeNull();
-    expect((await getOrder(o.id))?.delivered_body).toBe('final');
-  });
-
-  it('refunds only once', async () => {
-    const o = await queued();
-    expect((await refundOrder(o.id))?.status).toBe('refunded');
-    expect(await getWalletCents(E)).toBe(500);
-    expect(await refundOrder(o.id)).toBeNull();
-    expect(await getWalletCents(E)).toBe(500);
-    expect(await setDraft(o.id, 'late')).toBeNull();
-  });
-
-  it('refundWallet failure then retry credits exactly once and ends refunded', async () => {
-    const o = await queued();
-    vi.spyOn(wallet, 'refundWallet').mockRejectedValueOnce(new Error('boom'));
-    await expect(refundOrder(o.id)).rejects.toThrow('boom');
-    expect((await getOrder(o.id))?.status).toBe('queued');
-    expect(await getWalletCents(E)).toBe(450);
-    expect((await refundOrder(o.id))?.status).toBe('refunded');
-    expect(await getWalletCents(E)).toBe(500);
-    expect(await refundOrder(o.id)).toBeNull();
-    expect(await getWalletCents(E)).toBe(500);
-  });
-
-  it('finishes a half-done refund (credit present, status not moved) without a second credit', async () => {
-    const o = await queued();
-    await wallet.refundWallet(E, o.price_cents, 'x', `refund:${o.ref}`);
-    expect((await refundOrder(o.id))?.status).toBe('refunded');
-    expect(await getWalletCents(E)).toBe(500);
   });
 });
 
@@ -149,6 +80,7 @@ describe('kit order failure', () => {
     expect(await dbGet('SELECT 1 FROM web_product_orders WHERE email = ?', E)).toBeFalsy();
     expect(await getWalletCents(E)).toBe(500);
     const orders = await listOrdersForEmail(E);
+    expect((await listOrders({ status: 'delivered' }))).toHaveLength(0);
     expect(orders).toHaveLength(1);
     expect(orders[0].status).toBe('refunded');
   });

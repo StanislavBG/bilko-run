@@ -3,7 +3,6 @@ import Fastify from 'fastify';
 import { dbRun, initDb } from '../server/db.js';
 import * as products from '../server/services/web-products.js';
 import { creditWallet } from '../server/services/wallet.js';
-import { MENU_DAILY_ASYNC_CAP } from '../shared/bilko-menu.js';
 
 vi.mock('../server/clerk.js', () => ({
   requireAuth: async (req: any, reply: any) => {
@@ -31,7 +30,7 @@ const order = (app: any, itemId: string, body: unknown, auth = 'Bearer clerk-ok'
     headers: auth ? { authorization: auth } : {}, remoteAddress: ip,
   });
 const ask = (app: any, auth = 'Bearer clerk-ok', ip?: string) =>
-  order(app, 'ask-bilko', { intake: { question: 'Why?' } }, auth, ip);
+  order(app, 'agent-factory-kit', { intake: {} }, auth, ip);
 
 beforeAll(async () => { await initDb(); });
 beforeEach(async () => {
@@ -78,7 +77,7 @@ describe('menu order routes', () => {
     const web = await ask(app, 'Bearer clerk-ok');
     expect(web.statusCode).toBe(201);
     expect(web.json()).toMatchObject({
-      order: { itemId: 'ask-bilko', status: 'queued', priceCents: 50 }, balanceCents: 450,
+      order: { itemId: 'agent-factory-kit', status: 'delivered', priceCents: 300 }, balanceCents: 200,
     });
     expect(typeof web.json().order.id).toBe('number');
     const api = await ask(app, 'Bearer bkk_good');
@@ -92,13 +91,16 @@ describe('menu order routes', () => {
     await app.close();
   });
 
-  it('maps unknown_item 404, invalid_intake 400, live_needs_slot 400', async () => {
+  it('maps unknown_item 404 (retired ids too) and invalid_intake 400', async () => {
     const app = await buildApp();
     await creditWallet('buyer@example.com', 500, 'topup', 't1');
     expect((await order(app, 'nope', { intake: {} })).statusCode).toBe(404);
-    expect((await order(app, 'ask-bilko', { intake: {} })).statusCode).toBe(400);
-    expect((await order(app, 'ask-bilko', {})).statusCode).toBe(400);
-    expect((await order(app, 'live-call', { intake: { topic: 'x' } })).statusCode).toBe(400);
+    for (const id of ['ask-bilko', 'live-call']) {
+      const res = await order(app, id, { intake: {} });
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toEqual({ error: 'unknown_item' });
+    }
+    expect((await order(app, 'agent-factory-kit', { intake: { x: '1' } })).statusCode).toBe(400);
     await app.close();
   });
 
@@ -110,16 +112,6 @@ describe('menu order routes', () => {
     expect(res.json()).toEqual({
       error: 'insufficient_credits', balanceCents: 20, topUpUrl: 'https://bilko.run/buy/credits-5',
     });
-    await app.close();
-  });
-
-  it('maps daily_cap to 409', async () => {
-    const app = await buildApp();
-    await creditWallet('buyer@example.com', 1000, 'topup', 't1');
-    for (let i = 0; i < MENU_DAILY_ASYNC_CAP; i++) expect((await ask(app, 'Bearer clerk-ok')).statusCode).toBe(201);
-    const res = await ask(app, 'Bearer clerk-ok');
-    expect(res.statusCode).toBe(409);
-    expect(res.json()).toEqual({ error: 'daily_cap' });
     await app.close();
   });
 
@@ -163,7 +155,7 @@ describe('menu order routes', () => {
 
   it('rejects bodies over 64 KB', async () => {
     const app = await buildApp();
-    const res = await order(app, 'ask-bilko', { intake: { question: 'x'.repeat(70_000) } });
+    const res = await order(app, 'agent-factory-kit', { intake: { q: 'x'.repeat(70_000) } });
     expect(res.statusCode).toBe(413);
     await app.close();
   });

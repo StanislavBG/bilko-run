@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MENU_ITEMS,
-  MENU_PRICE_CEILING_CENTS,
+  PRODUCT_PRICE_CEILING_CENTS,
   WALLET_TOPUP_CENTS,
   formatCents,
   menuItemById,
@@ -19,7 +19,7 @@ describe('bilko menu catalog', () => {
   });
 
   it('respects the price ceiling and id format', () => {
-    for (const i of MENU_ITEMS) expect(i.priceCents).toBeLessThanOrEqual(MENU_PRICE_CEILING_CENTS);
+    for (const i of MENU_ITEMS) expect(i.priceCents).toBeLessThanOrEqual(PRODUCT_PRICE_CEILING_CENTS);
     const ids = MENU_ITEMS.map(i => i.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);

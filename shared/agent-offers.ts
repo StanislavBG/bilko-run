@@ -40,6 +40,20 @@ const buy = (id: string): string => `${SITE}/buy/${id}`;
 
 const BASE_OFFERS: readonly Omit<AgentOffer, 'payWith'>[] = [
   {
+    id: 'bilko-hour',
+    name: 'Bilko hour',
+    summary: 'One hour of Consultation, Architecture or Design with Bilko, after the free first hour.',
+    whatYouGet:
+      'Hours of Consultation, Architecture or Design at $100 per hour, paid before work starts. Choose the number of hours at checkout. Start with the free hour at https://bilko.run/bilko.',
+    amountCents: 10000,
+    currency: 'usd',
+    billing: 'one_time',
+    pageUrl: `${SITE}/bilko`,
+    buyUrl: buy('bilko-hour'),
+    source: { kind: 'web_product', slug: 'bilko-hour' },
+    agentKey: false,
+  },
+  {
     id: 'launch-kit',
     name: 'Bilko Launch Kit',
     summary: 'A downloadable launch kit zip, sold as a one-time purchase.',

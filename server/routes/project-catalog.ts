@@ -29,15 +29,16 @@ function json(data: unknown) {
 /** Offers listed to agents: only those that can be bought and delivered now. */
 export type ListOffers = () => Promise<readonly AgentOffer[]>;
 
-function offersForSlug(slug: string, offers: readonly AgentOffer[]) {
+function offersForProject(project: { slug: string; url: string }, offers: readonly AgentOffer[]) {
+  const paths = new Set([`/projects/${project.slug}/`, new URL(project.url, 'https://bilko.run').pathname]);
   return offers
-    .filter(o => new URL(o.pageUrl).pathname === `/projects/${slug}/`)
+    .filter(o => paths.has(new URL(o.pageUrl).pathname))
     .map(o => ({ id: o.id, price: formatPrice(o), buyUrl: o.buyUrl }));
 }
 
 function enrichedCatalog(offers: readonly AgentOffer[]) {
   const catalog = buildCatalog();
-  return { ...catalog, projects: catalog.projects.map(p => ({ ...p, offers: offersForSlug(p.slug, offers) })) };
+  return { ...catalog, projects: catalog.projects.map(p => ({ ...p, offers: offersForProject(p, offers) })) };
 }
 
 export function buildOffersPayload(offers: readonly AgentOffer[] = AGENT_OFFERS) {
@@ -120,7 +121,7 @@ export function buildCatalogMcpServer(
       if (!project) {
         return { isError: true, content: [{ type: 'text' as const, text: `Project "${slug}" not found.` }] };
       }
-      return json({ ...project, offers: offersForSlug(project.slug, await listOffers()) });
+      return json({ ...project, offers: offersForProject(project, await listOffers()) });
     },
   );
 

@@ -16,7 +16,7 @@ import {
   entryForPriceId,
   type PriceType,
 } from '../../shared/product-catalog.js';
-import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug, productBilling } from '../../shared/web-products.js';
+import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug, productBilling, webProductSubtotalOk } from '../../shared/web-products.js';
 import { recordOrder } from '../services/web-products.js';
 import { creditWallet } from '../services/wallet.js';
 import { pppBonusCents } from '../../shared/ppp-bonus.js';
@@ -264,7 +264,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
               priceOk = !!seenPriceId && seenPriceId === resolveWebProductPriceId(webProduct, process.env);
             } else {
               // One-time products are priced inline; subtotal is pre-discount so coupons still pass.
-              priceOk = data.amount_subtotal === webProduct.amountCents;
+              priceOk = webProductSubtotalOk(webProduct, data.amount_subtotal);
             }
           }
           const wpEmail = ((data.customer_details?.email ?? data.customer_email ?? '') as string).trim().toLowerCase();

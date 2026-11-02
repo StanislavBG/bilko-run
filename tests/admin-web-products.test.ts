@@ -163,6 +163,11 @@ describe('GET /api/admin/web-products', () => {
     });
     expect((await claim('a', upcoming)).status).toBe('ok');
     expect((await claim('b', stale)).status).toBe('ok');
+    // A booking for another product on the same page must not show under this one.
+    expect((await claimSlot({
+      pageSlug: 'fixture-service', slug: 'other-product', checkoutSessionId: `cs_live_${'c'.repeat(12)}`,
+      startMs: upcoming + 3600000, endMs: upcoming + 3600000 + 1800000, email: 'x@t.dev', intake: {}, sessionsPerMonth: 10,
+    })).status).toBe('ok');
     const body = (await app.inject({ method: 'GET', url: '/api/admin/web-products' })).json();
     const svc = body.products.find((e: any) => e.slug === 'fixture-service');
     expect(svc.release).toBeNull();

@@ -79,7 +79,7 @@ export function registerAdminWebProductRoutes(
       const serviceExtra = productKind(p) === 'service'
         ? {
           release: null,
-          bookings: (await listBookings({ pageSlug: productPageSlug(p), fromMs: Date.now() - DAY_MS })).map((b) => ({
+          bookings: (await listBookings({ pageSlug: productPageSlug(p), fromMs: Date.now() - DAY_MS })).filter((b) => b.slug === p.slug).map((b) => ({
             slug: b.slug, startMs: b.slotStartMs, endMs: b.slotEndMs, email: b.email, intake: b.intake, createdAt: b.createdAt,
           })),
         }

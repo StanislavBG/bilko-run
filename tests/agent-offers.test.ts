@@ -12,7 +12,7 @@ describe('agent offers', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     expect(ids).toEqual([
-      'launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
+      'bilko-hour', 'launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
       'credits-3', 'credits-5', 'credits-10',
     ]);
   });
@@ -28,7 +28,10 @@ describe('agent offers', () => {
       expect(p).toBeDefined();
       expect(o.amountCents).toBe(displayPriceCents(p!.displayPrice));
       expect(o.billing).toBe(productBilling(p!));
-      expect(o.pageUrl).toBe(`https://bilko.run/projects/${productPageSlug(p!)}/`);
+      // bilko-hour is the one product whose page is the host route /bilko.
+      expect(o.pageUrl).toBe(
+        o.id === 'bilko-hour' ? 'https://bilko.run/bilko' : `https://bilko.run/projects/${productPageSlug(p!)}/`,
+      );
     }
   });
 
@@ -77,7 +80,7 @@ describe('agent offers', () => {
     }
     for (const o of AGENT_OFFERS) expect(o.payWith).toBe('stripe');
     expect(AGENT_OFFERS.map((o) => o.id)).toEqual([
-      'launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
+      'bilko-hour', 'launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
       'credits-3', 'credits-5', 'credits-10',
     ]);
     expect(offerById('credits-5')!.summary).toBe('A $5 Bilko Credits wallet top-up, spent on bilko.run tools and the Agent Factory Kit.');

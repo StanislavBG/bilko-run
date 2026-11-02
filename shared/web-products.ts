@@ -59,6 +59,8 @@ export interface WebProduct {
   includes?: readonly string[];
   /** free sign-in preview zip, pinned by sha256 like release; downloads only */
   preview?: WebProductRelease | null;
+  /** one-time only: the buyer picks 1..maxQuantity units at Checkout and pays amountCents each */
+  maxQuantity?: number;
 }
 
 /** Hard cap on a stored release zip. */
@@ -102,6 +104,19 @@ export const WEB_PRODUCTS: readonly WebProduct[] = [
       bytes: 3392,
       sha256: '9a21261fee8f61821b3ba7a9c01bb57c16771eaa33fd4a1e1bc4edee01d56e3d',
     },
+  },
+  {
+    slug: 'bilko-hour',
+    name: 'Bilko hour',
+    productKey: 'wp_bilko_hour',
+    priceEnvVar: 'STRIPE_PRICE_WP_BILKO_HOUR',
+    amountCents: 10000,
+    displayPrice: '$100',
+    downloadLimit: 0,
+    release: null,
+    kind: 'service',
+    pageSlug: 'human-for-hire',
+    maxQuantity: 40,
   },
 ];
 
@@ -180,6 +195,14 @@ export function webProductForPriceId(
   return list.find((p) => resolveWebProductPriceId(p, env) === priceId);
 }
 
+/** One-time subtotal check: exact price, or a whole multiple 1..maxQuantity when the buyer picks a quantity. */
+export function webProductSubtotalOk(product: WebProduct, subtotal: unknown): boolean {
+  if (typeof subtotal !== 'number' || !Number.isInteger(subtotal)) return false;
+  if (product.maxQuantity === undefined) return subtotal === product.amountCents;
+  if (subtotal <= 0 || subtotal % product.amountCents !== 0) return false;
+  return subtotal / product.amountCents <= product.maxQuantity;
+}
+
 /** Cents → '$9' / '$9.50'. */
 export function formatAmountCents(cents: number): string {
   const dollars = Math.floor(cents / 100);
@@ -229,6 +252,10 @@ export function validateWebProducts(list: readonly WebProduct[]): string[] {
     }
     if (p.maxOrders !== undefined && !isIntInRange(p.maxOrders, 1, 100)) {
       problems.push(`${tag} maxOrders must be an integer in 1..100`);
+    }
+    if (p.maxQuantity !== undefined) {
+      if (productBilling(p) !== 'one_time') problems.push(`${tag} maxQuantity is for one-time products only`);
+      if (!isIntInRange(p.maxQuantity, 2, 100)) problems.push(`${tag} maxQuantity must be an integer in 2..100`);
     }
     if (p.sessionsPerMonth !== undefined && !isIntInRange(p.sessionsPerMonth, 1, 100)) {
       problems.push(`${tag} sessionsPerMonth must be an integer in 1..100`);

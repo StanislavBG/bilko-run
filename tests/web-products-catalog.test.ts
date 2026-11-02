@@ -14,6 +14,7 @@ import {
   validateWebProducts,
   webProductBySlug,
   webProductForPriceId,
+  webProductSubtotalOk,
   type WebProduct,
 } from '../shared/web-products.js';
 import { identityHits } from './identity-denylist.js';
@@ -44,7 +45,7 @@ const list = [demo, other];
 describe('catalog constants', () => {
   it('has the 5 MiB cap and a valid catalog', () => {
     expect(MAX_RELEASE_BYTES).toBe(5 * 1024 * 1024);
-    expect(WEB_PRODUCTS).toHaveLength(2);
+    expect(WEB_PRODUCTS).toHaveLength(3);
     expect(validateWebProducts(WEB_PRODUCTS)).toEqual([]);
   });
 
@@ -318,5 +319,34 @@ describe('includes and preview', () => {
     expect(productsIncluding('demo-pack', l)).toEqual([bundle]);
     expect(productsIncluding('other', l)).toEqual([]);
     expect(productsIncluding('agent-factory-kit')).toEqual([]);
+  });
+});
+
+describe('maxQuantity and webProductSubtotalOk', () => {
+  const hour = webProductBySlug('bilko-hour')!;
+  const kit = webProductBySlug('launch-kit')!;
+
+  it('declares bilko-hour as a one-time service with 40 max hours', () => {
+    expect(hour).toMatchObject({ amountCents: 10000, maxQuantity: 40, kind: 'service', pageSlug: 'human-for-hire' });
+  });
+
+  it('accepts maxQuantity only on one-time products as an integer in 2..100', () => {
+    const ok = (o: Partial<WebProduct>) => validateWebProducts([{ ...hour, ...o }]);
+    expect(ok({})).toEqual([]);
+    expect(ok({ maxQuantity: 1 }).join()).toContain('maxQuantity must be an integer in 2..100');
+    expect(ok({ maxQuantity: 101 }).join()).toContain('2..100');
+    expect(ok({ maxQuantity: 2.5 }).join()).toContain('2..100');
+    expect(ok({ billing: 'month' }).join()).toContain('maxQuantity is for one-time products only');
+  });
+
+  it('requires exact equality without maxQuantity and a whole multiple 1..max with it', () => {
+    expect(webProductSubtotalOk(kit, 900)).toBe(true);
+    expect(webProductSubtotalOk(kit, 1800)).toBe(false);
+    expect(webProductSubtotalOk(hour, 10000)).toBe(true);
+    expect(webProductSubtotalOk(hour, 50000)).toBe(true);
+    expect(webProductSubtotalOk(hour, 400000)).toBe(true);
+    for (const bad of [15000, 0, 410000, -10000, undefined, null]) {
+      expect(webProductSubtotalOk(hour, bad), String(bad)).toBe(false);
+    }
   });
 });

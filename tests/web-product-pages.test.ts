@@ -12,6 +12,8 @@ import {
 
 const PROJECTS_DIR = resolve(fileURLToPath(import.meta.url), '..', '..', 'public', 'projects');
 
+const HOST_ROUTE_PRODUCT = 'bilko-hour';
+
 const AMOUNT_RE = /\$\s?(\d+(?:,\d{3})*)(?:\.(\d{1,2}))?(?!\d)/g;
 
 /** Cents of every dollar amount in the markup (attributes included) and in its text, where `<sup>$</sup>9` reads `$9`. Scripts and styles are skipped. */
@@ -45,6 +47,8 @@ const isSellable = (p: WebProduct): boolean => productKind(p) === 'service' || p
 
 /** What is wrong with a product's published landing and thanks pages; empty when they agree with the catalog. */
 function pageProblems(p: WebProduct, catalog: readonly WebProduct[] = WEB_PRODUCTS): string[] {
+  // bilko-hour is sold from the host route /bilko, not a published /projects/ bundle.
+  if (p.slug === HOST_ROUTE_PRODUCT) return [];
   const page = productPageSlug(p);
   const allowed = catalogCents(catalog);
   const problems: string[] = [];

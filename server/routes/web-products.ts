@@ -12,7 +12,7 @@ import {
 import { isDeliverable } from '../services/offer-availability.js';
 import {
   MAX_RELEASE_BYTES, WEB_PRODUCTS, isValidCheckoutSessionId, isValidReleaseVersion, isValidWebProductSlug, isWebProductPriced,
-  productBilling, productKind, productPageSlug, productsIncluding, resolveWebProductPriceId, webProductBySlug, type WebProduct,
+  productBilling, productKind, productPageSlug, productsIncluding, resolveWebProductPriceId, webProductBySlug, webProductSubtotalOk, type WebProduct,
 } from '../../shared/web-products.js';
 
 const RATE_WINDOW_MS = 60_000;
@@ -116,7 +116,7 @@ export async function resolvePaidOrder(product: WebProduct, sessionId: string): 
   // One-time products are priced inline from amountCents, so match on the pre-discount subtotal.
   const liveMatch = monthly
     ? items.some((li) => li?.price?.id === priceId)
-    : session.amount_subtotal === product.amountCents;
+    : webProductSubtotalOk(product, session.amount_subtotal);
   if (isTest ? session.metadata?.test !== 'true' : !liveMatch) {
     return { status: 'not_found' };
   }
@@ -186,6 +186,9 @@ export function buildWebProductCheckoutParams(
             product_data: { name: product.name },
           },
           quantity: 1,
+          ...(product.maxQuantity !== undefined
+            ? { adjustable_quantity: { enabled: true, minimum: 1, maximum: product.maxQuantity } }
+            : {}),
         }],
     ...(monthly ? {} : { customer_creation: 'always' }),
     // Stripe forbids discounts together with allow_promotion_codes.

@@ -2,7 +2,7 @@
 // (the Agent Factory Kit download). Pure module: no fs/env/server imports.
 
 export const WALLET_TOPUP_CENTS = [300, 500, 1000] as const;
-export const MENU_PRICE_CEILING_CENTS = 1000;
+export const PRODUCT_PRICE_CEILING_CENTS = 1000;
 
 export type MenuKind = 'download';
 

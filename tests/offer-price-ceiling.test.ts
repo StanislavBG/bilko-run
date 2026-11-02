@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import { AGENT_OFFERS, formatPrice } from '../shared/agent-offers.js';
-import { WEB_PRODUCTS, productBilling } from '../shared/web-products.js';
-import { MENU_PRICE_CEILING_CENTS } from '../shared/bilko-menu.js';
+import { WEB_PRODUCTS, productBilling, productKind } from '../shared/web-products.js';
+import { PRODUCT_PRICE_CEILING_CENTS } from '../shared/bilko-menu.js';
 
 // Stub the availability check: every offer counts as buyable and deliverable.
 vi.mock('../server/services/offer-availability.js', async () => {
@@ -23,16 +23,27 @@ vi.mock('../server/db.js', () => ({
   dbGet: vi.fn(async () => undefined),
 }));
 
-const DECISION = 'D-2026-10-20-14';
+const DECISION = 'D-2026-10-30-01';
 
 describe(`offer price ceiling (${DECISION})`, () => {
-  it(`every offer is at most the menu ceiling (${DECISION})`, () => {
+  it(`bilko-hour is the only service offer and the only one above ${PRODUCT_PRICE_CEILING_CENTS} cents (${DECISION})`, () => {
+    const serviceIds = AGENT_OFFERS.filter((o) => {
+      if (o.source.kind !== 'web_product') return false;
+      const slug = o.source.slug;
+      const p = WEB_PRODUCTS.find((w) => w.slug === slug);
+      return !!p && productKind(p) === 'service';
+    }).map((o) => o.id);
+    expect(serviceIds, DECISION).toEqual(['bilko-hour']);
+
     const over = [
-      ...AGENT_OFFERS.filter((o) => o.amountCents > MENU_PRICE_CEILING_CENTS).map((o) => `offer ${o.id}=${o.amountCents}`),
-      ...WEB_PRODUCTS.filter((p) => productBilling(p) === 'one_time' && p.amountCents > MENU_PRICE_CEILING_CENTS)
-        .map((p) => `web product ${p.slug}=${p.amountCents}`),
+      ...AGENT_OFFERS.filter((o) => o.amountCents > PRODUCT_PRICE_CEILING_CENTS).map((o) => o.id),
     ];
-    expect(over, `${DECISION}: no offer may exceed ${MENU_PRICE_CEILING_CENTS} cents`).toEqual([]);
+    expect(over, DECISION).toEqual(['bilko-hour']);
+    expect(AGENT_OFFERS.find((o) => o.id === 'bilko-hour')!.amountCents).toBe(10000);
+    expect(WEB_PRODUCTS.filter((p) => productBilling(p) === 'one_time' && p.amountCents > PRODUCT_PRICE_CEILING_CENTS)
+      .map((p) => p.slug)).toEqual(['bilko-hour']);
+    const gap = AGENT_OFFERS.filter((o) => o.amountCents > 1000 && o.amountCents < 10000).map((o) => o.id);
+    expect(gap, `${DECISION}: no offer may cost 1001 to 9999 cents`).toEqual([]);
   });
 
   it('retired hfh-* ids never return and offer ids are unique', () => {

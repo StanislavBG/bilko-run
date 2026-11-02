@@ -323,6 +323,20 @@ describe('service products', () => {
     expect(params.metadata).toEqual({ web_product: 'svc-fixture' });
   });
 
+  it('adds adjustable_quantity only to products with maxQuantity; owner test stays quantity 1', async () => {
+    const { buildWebProductCheckoutParams } = await import('../server/routes/web-products.js');
+    const { webProductBySlug } = await import('../shared/web-products.js');
+    const base = { ownerIp: false, testCents: 50, publicUrl: 'https://bilko.run' };
+    const hour: any = buildWebProductCheckoutParams(webProductBySlug('bilko-hour')!, { ...base, owner: false });
+    expect(hour.line_items[0].adjustable_quantity).toEqual({ enabled: true, minimum: 1, maximum: 40 });
+    expect(hour.line_items[0].quantity).toBe(1);
+    const kit: any = buildWebProductCheckoutParams(webProductBySlug('launch-kit')!, { ...base, owner: false });
+    expect(kit.line_items[0]).not.toHaveProperty('adjustable_quantity');
+    const test: any = buildWebProductCheckoutParams(webProductBySlug('bilko-hour')!, { ...base, owner: true });
+    expect(test.line_items[0]).not.toHaveProperty('adjustable_quantity');
+    expect(test.line_items[0].quantity).toBe(1);
+  });
+
   it('one-time products build price_data from amountCents', async () => {
     const { buildWebProductCheckoutParams } = await import('../server/routes/web-products.js');
     const p = svc({ billing: 'one_time', amountCents: 7500, displayPrice: '$75' });

@@ -61,6 +61,9 @@ describe('resolveOg', () => {
   });
   it('maps section pages', () => {
     expect(resolveOg('/pricing', ctx)!.title).toBe('Pricing — bilko.run');
+    expect(resolveOg('/pricing', ctx)!.description).toBe(
+      'A free hour with Bilko, then $100 / hour. Tools run on prepaid credits, with no subscriptions.',
+    );
   });
   it('maps the Human For Hire page and its aliases to the /bilko canonical', () => {
     for (const p of ['/bilko', '/hire', '/human-for-hire']) {

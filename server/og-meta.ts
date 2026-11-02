@@ -63,7 +63,7 @@ const SECTION_PAGES: Record<string, { title: string; description: string; url?: 
   },
   '/pricing': {
     title: 'Pricing — bilko.run',
-    description: 'Free to start. Then $1 per credit or 7 for $5. No subscriptions.',
+    description: 'A free hour with Bilko, then $100 / hour. Tools run on prepaid credits, with no subscriptions.',
   },
 };
 

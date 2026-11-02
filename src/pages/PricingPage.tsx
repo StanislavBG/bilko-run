@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { SignInButton, useAuth } from '@clerk/clerk-react';
 import { API_BASE } from '../constants.js';
 import { trackFlow } from '../lib/telemetry.js';
@@ -7,10 +8,9 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 interface IntakeField { key: string; label: string; required: boolean; maxLength: number; kind: 'text' | 'url' }
 interface MenuEntry {
   id: string; name: string; summary: string; whatYouGet: string;
-  price: string; priceCents: number; kind: 'async' | 'download' | 'live'; intake: IntakeField[];
+  price: string; priceCents: number; kind: 'download'; intake: IntakeField[];
 }
 interface MenuPayload { topups: { cents: number; price: string }[]; items: MenuEntry[] }
-interface SlotsPayload { timeZone: string; durationMinutes: number; slots: { startMs: number; endMs: number }[] }
 
 const BTN_PRIMARY = 'px-5 py-3 text-sm font-bold text-white bg-fire-500 hover:bg-fire-600 rounded-xl shadow-md shadow-fire-500/20 transition-all disabled:opacity-50';
 const BTN_SOFT = 'px-5 py-3 text-sm font-bold text-fire-600 bg-fire-50 hover:bg-fire-100 rounded-xl transition-colors disabled:opacity-50';
@@ -87,7 +87,7 @@ function WalletSection({ menu }: { menu: MenuPayload | null }) {
           </p>
         )}
         <p className="mt-2 text-sm text-warm-500">
-          Top up, then spend on anything below. Credits never expire; some countries get bonus credits at checkout.
+          Top up, then spend credits on bilko.run tools and the Agent Factory Kit. Credits never expire; some countries get bonus credits at checkout.
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
           {(menu?.topups ?? []).map(t =>
@@ -111,12 +111,12 @@ function WalletSection({ menu }: { menu: MenuPayload | null }) {
 function MenuSection({ menu, menuError }: { menu: MenuPayload | null; menuError: boolean }) {
   return (
     <section className="max-w-3xl mx-auto px-6 pb-16 md:pb-20">
-      <h2 className="text-display-md text-warm-900 text-center mb-2">The menu</h2>
+      <h2 className="text-display-md text-warm-900 text-center mb-2">Buy with credits</h2>
       <p className="text-sm text-warm-500 text-center mb-8">
-        Written answers are drafted by Bilko's agents and reviewed before they reach your inbox. Best effort, no guaranteed results.
+        The Agent Factory Kit is the one product you can buy with credits. Credits also run the AI tools on bilko.run.
       </p>
-      {menuError && <p role="alert" className="text-center text-sm text-warm-500">The menu didn't load. Refresh and try again.</p>}
-      {!menu && !menuError && <p className="text-center text-sm text-warm-400">Loading the menu…</p>}
+      {menuError && <p role="alert" className="text-center text-sm text-warm-500">This didn't load. Refresh and try again.</p>}
+      {!menu && !menuError && <p className="text-center text-sm text-warm-400">Loading…</p>}
       <div className="space-y-4">
         {menu?.items.map(item => <MenuRow key={item.id} item={item} />)}
       </div>
@@ -128,20 +128,9 @@ function MenuRow({ item }: { item: MenuEntry }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  const [slots, setSlots] = useState<SlotsPayload | null>(null);
-  const [slotsError, setSlotsError] = useState(false);
-  const [startMs, setStartMs] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string; topUp?: boolean } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string; topUp?: boolean; kind?: 'download' } | null>(null);
   const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    if (!open || item.kind !== 'live' || slots) return;
-    fetch(`${API_BASE}/services/human-for-hire/slots`)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('slots'))))
-      .then((s: SlotsPayload) => setSlots(s))
-      .catch(() => setSlotsError(true));
-  }, [open, item.kind, slots]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -157,30 +146,20 @@ function MenuRow({ item }: { item: MenuEntry }) {
       const res = await fetch(`${API_BASE}/menu/${encodeURIComponent(item.id)}/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(item.kind === 'live' ? { intake, startMs } : { intake }),
+        body: JSON.stringify({ intake }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (res.status === 201) {
         setDone(true);
         trackFlow('checkout', 'click-buy', { product: 'menu', plan: item.id });
         setMessage({
           tone: 'ok',
-          text: item.kind === 'live'
-            ? 'Booked. A confirmation is on its way to your email.'
-            : item.kind === 'download'
-              ? 'Paid from credits. Your download link is on its way to your email.'
-              : 'Ordered. It arrives by email within 48 hours.',
+          kind: 'download',
+          text: 'Paid from credits. No email is sent. Sign in with this same account on the kit page to download it:',
         });
       } else if (res.status === 402) {
         setMessage({ tone: 'warn', text: 'Not enough credits for this one. Top up above and try again.', topUp: true });
-      } else if (res.status === 409 && data.error === 'daily_cap') {
-        setMessage({ tone: 'warn', text: "Today's slots are full. Come back tomorrow." });
-      } else if (res.status === 409 && data.error === 'unavailable') {
-        setMessage({ tone: 'warn', text: 'Not on sale yet.' });
       } else if (res.status === 409) {
-        setMessage({ tone: 'warn', text: 'That slot was just taken. Pick another.' });
-        setSlots(null);
-        setStartMs(null);
+        setMessage({ tone: 'warn', text: 'Not on sale yet.' });
       } else if (res.status === 429) {
         setMessage({ tone: 'warn', text: 'Too many requests. Try again in a minute.' });
       } else {
@@ -193,8 +172,7 @@ function MenuRow({ item }: { item: MenuEntry }) {
   }
 
   const missingRequired = item.intake.some(f => f.required && !(values[f.key] ?? '').trim());
-  const needsSlot = item.kind === 'live' && startMs === null;
-  const cta = item.kind === 'download' ? 'Buy with credits' : item.kind === 'live' ? 'Book a call' : 'Order';
+  const cta = 'Buy with credits';
 
   return (
     <div className="bg-white rounded-2xl shadow-elevation-1 p-6">
@@ -219,27 +197,6 @@ function MenuRow({ item }: { item: MenuEntry }) {
             </SignInButton>
           ) : done ? null : (
             <form onSubmit={e => void submit(e)} className="space-y-4">
-              {item.kind === 'live' && (
-                <div>
-                  <p className="text-sm font-bold text-warm-900 mb-2">Pick a slot (Pacific Time)</p>
-                  {slotsError && <p className="text-sm text-warm-500">Couldn't load slots. Try again shortly.</p>}
-                  {!slots && !slotsError && <p className="text-sm text-warm-400">Loading slots…</p>}
-                  {slots && slots.slots.length === 0 && <p className="text-sm text-warm-500">No open slots right now. Check back soon.</p>}
-                  <div className="flex flex-wrap gap-2">
-                    {slots?.slots.map(s => (
-                      <button
-                        key={s.startMs}
-                        type="button"
-                        aria-pressed={startMs === s.startMs}
-                        onClick={() => setStartMs(s.startMs)}
-                        className={`px-3 py-2 text-xs font-bold rounded-lg border ${startMs === s.startMs ? 'bg-fire-500 text-white border-fire-500' : 'bg-white text-warm-600 border-warm-200 hover:border-fire-400'}`}
-                      >
-                        {formatSlot(s.startMs)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               {item.intake.map(f => (
                 <label key={f.key} className="block">
                   <span className="text-sm font-bold text-warm-900">{f.label}</span>
@@ -264,7 +221,7 @@ function MenuRow({ item }: { item: MenuEntry }) {
                   )}
                 </label>
               ))}
-              <button type="submit" className={BTN_PRIMARY} disabled={busy || missingRequired || needsSlot}>
+              <button type="submit" className={BTN_PRIMARY} disabled={busy || missingRequired}>
                 {busy ? 'Working…' : `${cta} · ${item.price}`}
               </button>
             </form>
@@ -272,6 +229,9 @@ function MenuRow({ item }: { item: MenuEntry }) {
           {message && (
             <p role={message.tone === 'ok' ? 'status' : 'alert'} className={`mt-4 text-sm ${message.tone === 'ok' ? 'text-fire-600 font-bold' : 'text-warm-600'}`}>
               {message.text}
+              {message.kind === 'download' && (
+                <> <a href="/projects/launch-kit/agent-factory-kit/" className="underline font-bold">Open the Agent Factory Kit page</a></>
+              )}
               {message.topUp && (
                 <> <a href="#top" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="underline font-bold">Add credits</a></>
               )}
@@ -281,14 +241,6 @@ function MenuRow({ item }: { item: MenuEntry }) {
       )}
     </div>
   );
-}
-
-function formatSlot(startMs: number): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-  }).format(new Date(startMs));
 }
 
 export function PricingPage() {
@@ -312,11 +264,23 @@ export function PricingPage() {
           No subscriptions. No BS.
         </h1>
         <p className="mt-5 text-lg text-warm-500 leading-relaxed">
-          Bilko Credits: top up a few dollars, spend them on the menu below.
+          Bilko Credits: top up a few dollars, spend them on bilko.run tools and the Agent Factory Kit.
         </p>
         <p className="mt-2 text-sm text-warm-400">
           Credits never expire. Some countries get bonus credits at checkout.
         </p>
+      </section>
+
+      <section className="max-w-3xl mx-auto px-6 pb-12">
+        <div className="bg-white rounded-2xl shadow-elevation-2 p-7 text-center">
+          <span className="text-label text-fire-500">Work with Bilko</span>
+          <p className="mt-2 text-lg text-warm-900">
+            Start with a free hour, then $100 / hour for Consultation, Architecture and Design.
+          </p>
+          <Link to="/bilko" data-track="pricing-hire" className={`mt-5 inline-block ${BTN_PRIMARY}`}>
+            Book a free hour
+          </Link>
+        </div>
       </section>
 
       <WalletSection menu={menu} />
@@ -335,7 +299,7 @@ export function PricingPage() {
               features: ['1 project', 'Public repos only', 'Refreshed at most once a day', 'Bilko branding'],
             },
             {
-              label: 'Paid', price: '$5', unit: '/ month', accent: 'text-fire-500',
+              label: 'Paid', price: '$5', unit: '/ year', accent: 'text-fire-500',
               features: ['Up to 12 projects you choose', 'Refreshed daily', 'Writing tab from your profile repo', 'Included with any existing bilko.run subscription'],
             },
           ].map(tier => (
@@ -373,7 +337,7 @@ export function PricingPage() {
             {[
               { q: 'Why not a subscription?', a: 'Because you don\'t analyze pages every day. Pay for what you use, not what you don\'t. The one exception is Git Viewer at $5/year, because it keeps rebuilding your portfolio every day.' },
               { q: 'What if I don\'t use all my credits?', a: 'They never expire. Buy today, use the last one next year. No pressure.' },
-              { q: 'Can I get a refund?', a: 'Credits are spent the moment you order. Top-ups are final, so start with the smallest one.' },
+              { q: 'Can I get a refund?', a: 'Credits are spent the moment you buy. Top-ups are final, so start with the smallest one.' },
               { q: 'Is my payment secure?', a: 'Payments are processed by Stripe. We never see your card number.' },
               { q: 'What\'s the A/B Compare?', a: 'Paste two URLs — your page vs. a competitor. We score both and pick a winner. Costs 2 credits because we\'re working twice as hard.' },
               { q: 'What do tools cost?', a: 'The AI tools on bilko.run run on the same wallet. Each analysis uses a credit or two, and the tool page shows the exact cost before you commit. LocalScore is free because it runs in your browser.' },

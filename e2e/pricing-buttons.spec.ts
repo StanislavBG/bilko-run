@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 test('pricing buttons keep their utility fill and padding', async ({ page }) => {
   await page.goto('/pricing');
   const add = page.getByRole('button', { name: 'Add $3', exact: true });
-  const order = page.getByRole('button', { name: 'Order' }).first();
+  const order = page.getByRole('button', { name: 'Buy with credits' }).first();
   await expect(add).toBeVisible();
   await expect(order).toBeVisible();
   const style = (l: typeof add, p: string) =>

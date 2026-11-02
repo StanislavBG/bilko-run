@@ -16,7 +16,8 @@ import {
   entryForPriceId,
   type PriceType,
 } from '../../shared/product-catalog.js';
-import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug, productBilling, webProductSubtotalOk } from '../../shared/web-products.js';
+import { WEB_PRODUCTS, webProductBySlug, resolveWebProductPriceId, productPageSlug, productBilling, productKind, webProductSubtotalOk } from '../../shared/web-products.js';
+import { sendMail, paidHoursConfirmationEmail, paidHoursNoticeEmail } from '../services/mailer.js';
 import { recordOrder } from '../services/web-products.js';
 import { creditWallet } from '../services/wallet.js';
 import { pppBonusCents } from '../../shared/ppp-bonus.js';
@@ -274,7 +275,7 @@ export function registerStripeRoutes(app: FastifyInstance): void {
               `payment_status=${data.payment_status} priceMatch=${priceOk} email=${wpEmail ? 'present' : 'missing'}`,
             );
           } else {
-            await recordOrder({
+            const inserted = await recordOrder({
               checkoutSessionId: data.id,
               slug: webProduct.slug,
               email: wpEmail,
@@ -282,6 +283,17 @@ export function registerStripeRoutes(app: FastifyInstance): void {
               currency: data.currency ?? null,
               paymentStatus: data.payment_status,
             });
+            if (inserted && productKind(webProduct) === 'service') {
+              try {
+                const hours = Math.max(1, Math.round((data.amount_subtotal ?? webProduct.amountCents) / webProduct.amountCents));
+                const buyerMail = paidHoursConfirmationEmail({ hours });
+                await sendMail({ to: wpEmail, ...buyerMail });
+                const inbox = process.env.BILKO_INBOX;
+                if (inbox) await sendMail({ to: inbox, ...paidHoursNoticeEmail({ hours, buyerEmail: wpEmail }) });
+              } catch (err) {
+                console.error('[stripe_webhook] paid-hour mail failed', err);
+              }
+            }
             // Subscription-mode (monthly service) orders are not one-time purchases.
             if (stripeCustomerId && data.mode !== 'subscription') {
               await saveOneTimePurchase({

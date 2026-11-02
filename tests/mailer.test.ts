@@ -5,6 +5,8 @@ import {
   sendMail,
   bookingConfirmationEmail,
   bookingNoticeEmail,
+  paidHoursConfirmationEmail,
+  paidHoursNoticeEmail,
 } from '../server/services/mailer.js';
 import { identityHits } from './identity-denylist.js';
 
@@ -158,5 +160,27 @@ describe('persona', () => {
     const src = readFileSync(new URL('../server/services/mailer.ts', import.meta.url), 'utf8');
     expect(identityHits(src)).toEqual([]);
     expect(src.replace('noreply@bilko.run', '')).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
+  });
+});
+
+describe('paid hours mail', () => {
+  it('confirmation uses singular and plural wording', () => {
+    const one = paidHoursConfirmationEmail({ hours: 1 });
+    const five = paidHoursConfirmationEmail({ hours: 5 });
+    expect(one.text).toContain('Thanks for buying 1 hour with Bilko. Bilko will email you shortly to plan your hours.');
+    expect(five.text).toContain('Thanks for buying 5 hours with Bilko.');
+    expect(identityHits(one.text + one.html + one.subject)).toEqual([]);
+    expect(identityHits(five.text + five.html)).toEqual([]);
+  });
+
+  it('notice names the hours and escapes the buyer', () => {
+    const one = paidHoursNoticeEmail({ hours: 1, buyerEmail: 'a@b.test' });
+    const five = paidHoursNoticeEmail({ hours: 5, buyerEmail: '<b>x</b>@b.test' });
+    expect(one.subject).toBe('Paid: 1 Bilko hour');
+    expect(five.subject).toBe('Paid: 5 Bilko hours');
+    expect(five.text).toContain('<b>x</b>@b.test');
+    expect(five.html).toContain('&lt;b&gt;');
+    expect(identityHits(one.text + one.html + one.subject)).toEqual([]);
+    expect(identityHits(five.text + five.html)).toEqual([]);
   });
 });

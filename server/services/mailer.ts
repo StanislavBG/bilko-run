@@ -132,6 +132,27 @@ export function bookingConfirmationEmail(p: {
   };
 }
 
+function hoursPhrase(hours: number): string {
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
+
+export function paidHoursConfirmationEmail(p: { hours: number }): { subject: string; text: string; html: string } {
+  const line = `Thanks for buying ${hoursPhrase(p.hours)} with Bilko. Bilko will email you shortly to plan your hours.`;
+  return {
+    subject: `Your ${hoursPhrase(p.hours)} with Bilko`,
+    text: [line, '', 'Bilko'].join('\n'),
+    html: `<p>${escapeHtml(line)}</p><p>Bilko</p>`,
+  };
+}
+
+export function paidHoursNoticeEmail(p: { hours: number; buyerEmail: string }): { subject: string; text: string; html: string } {
+  return {
+    subject: `Paid: ${p.hours} Bilko ${p.hours === 1 ? 'hour' : 'hours'}`,
+    text: `Hours bought: ${p.hours}\nBuyer: ${p.buyerEmail}`,
+    html: `<p><strong>Hours bought:</strong> ${p.hours}</p><p><strong>Buyer:</strong> ${escapeHtml(p.buyerEmail)}</p>`,
+  };
+}
+
 export function bookingNoticeEmail(p: {
   offerName: string;
   startMs: number;

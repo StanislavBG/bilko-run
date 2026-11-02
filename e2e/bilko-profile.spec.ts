@@ -42,3 +42,15 @@ test('no sideways scroll at 390x844', async ({ page }) => {
   const over = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(over).toBe(false);
 });
+
+test('shows a paid message after Checkout', async ({ page }) => {
+  await mock(page, 201, {});
+  await page.goto('/bilko?offer=bilko-hour&session_id=cs_test_1');
+  await expect(page.getByRole('status')).toHaveText('Payment received. Thank you. Bilko will email you shortly to plan your hours.');
+});
+
+test('shows a cancelled message after Checkout', async ({ page }) => {
+  await mock(page, 201, {});
+  await page.goto('/bilko?checkout=cancel');
+  await expect(page.getByRole('status')).toHaveText('Checkout cancelled. No charge.');
+});

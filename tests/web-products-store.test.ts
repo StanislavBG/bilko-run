@@ -28,8 +28,8 @@ describe('orders', () => {
       checkoutSessionId: 'cs_test_order1', slug: 'fixture-pack', email: '  Buyer@Example.COM ',
       amountTotal: 900, currency: 'usd', paymentStatus: 'paid',
     };
-    await recordOrder(o);
-    await recordOrder({ ...o, amountTotal: 1 });
+    expect(await recordOrder(o)).toBe(true);
+    expect(await recordOrder({ ...o, amountTotal: 1 })).toBe(false);
     const rows = await dbAll('SELECT * FROM web_product_orders WHERE checkout_session_id = ?', 'cs_test_order1');
     expect(rows).toHaveLength(1);
     const found = await findOrder('fixture-pack', 'cs_test_order1');

@@ -24,14 +24,15 @@ export interface RecordOrderInput {
   paymentStatus: string | null;
 }
 
-export async function recordOrder(o: RecordOrderInput): Promise<void> {
-  await dbRun(
+export async function recordOrder(o: RecordOrderInput): Promise<boolean> {
+  const res = await dbRun(
     `INSERT OR IGNORE INTO web_product_orders
        (checkout_session_id, slug, email, amount_total, currency, payment_status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     o.checkoutSessionId, o.slug, o.email.trim().toLowerCase(),
     o.amountTotal, o.currency, o.paymentStatus, Date.now(),
   );
+  return (res?.changes ?? 0) > 0;
 }
 
 export async function findOrder(slug: string, checkoutSessionId: string): Promise<WebProductOrder | null> {

@@ -4,7 +4,8 @@ import Fastify from 'fastify';
 const listLineItems = vi.fn();
 const retrieve = vi.fn();
 const saveOneTimePurchase = vi.fn(async () => {});
-const recordOrder = vi.fn(async () => {});
+const recordOrder = vi.fn(async (..._a: unknown[]): Promise<boolean> => false);
+const sendMail = vi.fn(async (..._a: unknown[]) => ({ sent: true, id: 'x' }));
 const dbRun = vi.fn(async (..._args: unknown[]) => {});
 
 vi.mock('../shared/web-products.js', async (orig) => {
@@ -24,12 +25,13 @@ vi.mock('../shared/web-products.js', async (orig) => {
       slug: 'hfh-session', name: 'HFH Session', productKey: 'wp_hfh_session',
       priceEnvVar: 'STRIPE_PRICE_WP_HFH_SESSION', defaultPriceId: 'price_wp_sess',
       amountCents: 15000, displayPrice: '$150', downloadLimit: 0, release: null,
-      kind: 'service', pageSlug: 'human-for-hire',
+      kind: 'service', pageSlug: 'human-for-hire', maxQuantity: 5,
     }],
   };
 });
 
 vi.mock('../server/services/web-products.js', () => ({ recordOrder }));
+vi.mock('../server/services/mailer.js', async (orig) => ({ ...(await orig<typeof import('../server/services/mailer.js')>()), sendMail }));
 
 vi.mock('../server/services/stripe.js', () => ({
   getStripe: () => ({ checkout: { sessions: { listLineItems, retrieve } } }),
@@ -173,6 +175,32 @@ describe('webhook web-product orders', () => {
     expect(await post({ customer: 'cus_1', amount_subtotal: 15000, amount_total: 15000, metadata: { web_product: 'hfh-session' } })).toBe(200);
     expect(recordOrder).toHaveBeenCalledWith(expect.objectContaining({ slug: 'hfh-session' }));
     expect(saveOneTimePurchase).toHaveBeenCalledWith(expect.objectContaining({ product_key: 'wp_hfh_session' }));
+  });
+
+  it('mails buyer and Bilko once for a first-time paid service order, nothing on replay', async () => {
+    process.env.BILKO_INBOX = 'inbox@example.test';
+    const seen = new Set<string>();
+    recordOrder.mockImplementation(async (o: any) => { const fresh = !seen.has(o.checkoutSessionId); seen.add(o.checkoutSessionId); return fresh; });
+    const body = { amount_subtotal: 30000, amount_total: 30000, metadata: { web_product: 'hfh-session' } };
+    expect(await post(body)).toBe(200);
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    expect(sendMail.mock.calls[0][0]).toMatchObject({ to: 'buyer@test.com', subject: 'Your 2 hours with Bilko' });
+    expect(sendMail.mock.calls[1][0]).toMatchObject({ to: 'inbox@example.test', subject: 'Paid: 2 Bilko hours' });
+    sendMail.mockClear();
+    expect(await post(body)).toBe(200);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('does not mail for a download product', async () => {
+    recordOrder.mockResolvedValue(true);
+    expect(await post({})).toBe(200);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('still answers 200 when the mail builder or sender throws', async () => {
+    recordOrder.mockResolvedValue(true);
+    sendMail.mockRejectedValue(new Error('boom'));
+    expect(await post({ amount_subtotal: 15000, metadata: { web_product: 'hfh-session' } })).toBe(200);
   });
 
   it('does not redirect for an unknown metadata slug', async () => {

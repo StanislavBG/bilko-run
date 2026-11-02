@@ -65,7 +65,13 @@ let timer: NodeJS.Timeout | null = null;
 let lastPruneDay = '';
 let flushInFlight: Promise<void> | null = null;
 
+// Host-rendered pages (not under /projects/<slug>/) that still count as a
+// project's traffic: the Human For Hire page and its two aliases.
+export const HOST_PAGE_SLUG = 'human-for-hire';
+const HOST_PAGE_RE = /^\/(?:bilko|hire|human-for-hire)\/?$/;
+
 export function slugFromPath(path: string): string | null {
+  if (HOST_PAGE_RE.test(path)) return HOST_PAGE_SLUG;
   const m = /^\/projects\/([^/?#]+)\//.exec(path);
   return m ? m[1] : null;
 }

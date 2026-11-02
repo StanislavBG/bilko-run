@@ -94,6 +94,13 @@ describe('GET /api/admin/funnel', () => {
     });
   });
 
+  it('does not count free-hour bookings as booked', async () => {
+    await dbRun(`INSERT INTO service_bookings (page_slug, slug, checkout_session_id, slot_start_ms, slot_end_ms, email, intake_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 'bilko', 'free-hour', 'free_1', now + DAY, now + DAY + 3600000, 'buyer@t.dev', '{}', now);
+    const res = await get(`?since=${since}&utm_source=burrow`);
+    expect(res.json().booked).toBe(1);
+  });
+
   it('defaults since to 7 days ago', async () => {
     const res = await get('?utm_source=burrow');
     expect(res.statusCode).toBe(200);

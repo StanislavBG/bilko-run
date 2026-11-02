@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dbGet } from '../db.js';
 import { requireAdmin, ADMIN_EMAILS } from '../clerk.js';
+import { FREE_HOUR_SLUG } from '../services/service-bookings.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_DAYS = 7;
@@ -73,6 +74,7 @@ export async function funnelCounts(opts: {
        (SELECT COUNT(*) FROM paid) AS paid,
        (SELECT COUNT(*) FROM service_bookings b
          WHERE b.created_at >= ?${inAdmins('b.email')}
+           AND b.slug <> ?
            AND (b.checkout_session_id IN (SELECT cs_id FROM co WHERE cs_id IS NOT NULL)
                 OR LOWER(b.email) IN (SELECT email FROM ve))) AS booked`,
     opts.utmSource, sinceMs, ...admins,
@@ -80,7 +82,7 @@ export async function funnelCounts(opts: {
     opts.since,
     sinceMs, ...admins,
     sinceMs,
-    sinceMs, ...admins,
+    sinceMs, ...admins, FREE_HOUR_SLUG,
   );
 
   const n = (k: string) => Number(row?.[k] ?? 0);

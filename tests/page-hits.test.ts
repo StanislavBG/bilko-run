@@ -52,6 +52,10 @@ describe('slugFromPath', () => {
     expect(slugFromPath('/')).toBeNull();
     expect(slugFromPath('/blog/x')).toBeNull();
     expect(slugFromPath('/projects')).toBeNull();
+    for (const p of ['/bilko', '/hire', '/human-for-hire', '/bilko/']) {
+      expect(slugFromPath(p)).toBe('human-for-hire');
+    }
+    expect(slugFromPath('/bilkos')).toBeNull();
   });
 });
 

@@ -106,6 +106,19 @@ describe(`offer price ceiling (${DECISION})`, () => {
     expect(data.map((d) => ({ id: d.offers.url.split('/buy/')[1], amount: Number(d.offers.price) })))
       .toEqual(expected);
 
+    // MCP list_offers, through the live route.
+    const mcpRes = await app.inject({
+      method: 'POST',
+      url: '/mcp',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      payload: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_offers', arguments: {} } },
+    });
+    expect(mcpRes.statusCode).toBe(200);
+    const mcpOffers = JSON.parse(mcpRes.json().result.content[0].text).offers as
+      { id: string; amount: number; price: string }[];
+    expect(mcpOffers.map((o) => ({ id: o.id, amount: o.amount }))).toEqual(expected);
+    expect(mcpOffers.map((o) => ({ id: o.id, price: o.price }))).toEqual(expectedLines);
+
     await app.close();
   });
 });

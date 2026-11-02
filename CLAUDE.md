@@ -41,7 +41,7 @@ Bilko's workspace lives in `~/Projects/` with this structure:
 
 ## What This Is
 
-bilko.run is Bilko's personal brand site and host platform. Apps share a common credit model (a prepaid Bilko Credits wallet with $3/$5/$10 top-ups, PPP bonus credits and a micro-services menu, alongside the PageRoast token bundles; tools spend legacy tokens first, then wallet credit at $1 a call), shared Clerk auth, shared Stripe wallet, and a shared component kit. Each app is its own product with its own page, scoring engine, and UX — they are NOT features of one product.
+bilko.run is Bilko's personal brand site and host platform. Apps share a common credit model (a prepaid Bilko Credits wallet with $3/$5/$10 top-ups, PPP bonus credits and one credit-bought product, the Agent Factory Kit, alongside the PageRoast token bundles; tools spend legacy tokens first, then wallet credit at $1 a call), shared Clerk auth, shared Stripe wallet, and a shared component kit. Each app is its own product with its own page, scoring engine, and UX — they are NOT features of one product.
 
 ### Current apps
 
@@ -123,7 +123,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/routes/forum.ts` + `server/services/forum.ts` — site-level Forum at `/forum`, like the blog: public reads, Clerk + handle writes, admin hide
 - `server/routes/project-catalog.ts` — public `GET /api/projects` + `GET /api/offers` + MCP at `/mcp` (read-only `list_projects`/`get_project`/`list_offers`, plus the paid `roast_page` behind a `bkk_` agent key; the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
 - Agent storefront — `shared/agent-offers.ts` (offer data), `server/routes/agent-buy.ts` (`/buy/:offerId`), `server/routes/agent-storefront.ts` (`/llms.txt`), `server/routes/agent-keys.ts` + `server/services/agent-api-keys.ts` (`bkk_` keys); contract in `docs/host-contract.md` → "Agent-facing surfaces"
-- Wallet and services menu — `server/services/wallet.ts` + `server/routes/wallet.ts` (`/api/wallet`, `/api/wallet/topup`; PPP bonus credits from `shared/ppp-bonus.ts`), `server/services/menu-orders.ts` + `server/routes/menu-orders.ts` (`/api/menu`, `/api/menu/:itemId/order`, live call on the slot machinery), `server/services/menu-drafts.ts` (drafts async orders) and `server/routes/admin-menu-orders.ts` (admin approval queue); contract in `docs/host-contract.md` → "Bilko Credits wallet and services menu"
+- Wallet and credit-bought product — `server/services/wallet.ts` + `server/routes/wallet.ts` (`/api/wallet`, `/api/wallet/topup`; PPP bonus credits from `shared/ppp-bonus.ts`), `server/services/menu-orders.ts` + `server/routes/menu-orders.ts` (`/api/menu`, `/api/menu/:itemId/order`; the menu holds only the Agent Factory Kit); contract in `docs/host-contract.md` → "Bilko Credits wallet and credit-bought product"
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
 - `server/routes/signin-capture.ts` + `shared/signin-capture.ts` — "sign in for updates" capture: source page + opt-in consent per account, admin signups view + CSV (`/admin` → Signups); contract in `docs/host-contract.md` → "Sign-in capture"
 - `server/routes/realtime.ts` + `server/realtime/relay.ts` — ticket endpoint and binary WebSocket input relay (`/api/realtime/rooms/:roomId`, ≤10 seats, in-memory, single instance); `server/realtime/lobbies.ts` — public lobby directory (`/api/realtime/lobbies`: open rooms listed while their owner holds a seat, 30 s TTL)
@@ -150,10 +150,9 @@ Host code is framework by default — it should not know about one specific app.
 - Realtime input relay and lobby directory (Game Academy online play, game-agnostic) — `server/realtime/relay.ts`, `server/realtime/lobbies.ts`, `server/routes/realtime.ts`; contract in `docs/host-contract.md` → "Realtime relay"
 - Bilko Launch Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price id + release sha256 only; the paid zip lives in the private ~/Projects/Bilko-Launch-Kit repo and the web_product_releases table)
 - Bilko Agent Factory Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price env var + release/preview sha256 only; the zip is built in the private ~/Projects/Bilko-Launch-Kit repo and stored in the web_product_releases table)
-- Human For Hire live call — the `live-call` menu item in `shared/bilko-menu.ts` and the `'human-for-hire'` slot entry in `shared/service-slots.ts` (the generic booking code in `server/routes/service-bookings.ts`, `server/services/service-bookings.ts` and `server/services/mailer.ts` is framework)
-- Human For Hire page and free hour — `shared/bilko-profile.ts`, `src/styles/bilko-profile.css`, `src/pages/BilkoProfilePage.tsx`, `src/components/FreeHourBooking.tsx`, `server/bilko-profile-routes.ts`, `server/routes/free-hour.ts`, `server/routes/admin-bookings.ts`, and the free-hour functions in `server/services/service-bookings.ts`
+- Human For Hire page, free hour and Bilko hour — the `bilko-hour` entry in `shared/web-products.ts`, the `'human-for-hire'` slot entry in `shared/service-slots.ts`, `shared/bilko-profile.ts`, `src/styles/bilko-profile.css`, `src/pages/BilkoProfilePage.tsx`, `src/components/FreeHourBooking.tsx`, `server/bilko-profile-routes.ts`, `server/routes/free-hour.ts`, `server/routes/admin-bookings.ts`, and the free-hour functions in `server/services/service-bookings.ts` (the generic booking code in `server/routes/service-bookings.ts`, `server/services/service-bookings.ts` and `server/services/mailer.ts` is framework)
 - Git Viewer hosted portfolios — `server/routes/tools/git-viewer.ts` (`/api/git-viewer/u/:login`, `/api/git-viewer/claim`, in-process generation + daily refresh), the `git_viewer_profiles` table, `verifyClerkGitHubUser` in `server/clerk.ts`, and the `git_viewer` subscription tier ($5/yr; `STRIPE_PRICE_GITVIEWER`; `priceToPlanTier` → `git_viewer` for the current price and the retired $5/mo one kept in `legacyPriceIds`, which sets `gitViewer` but never `isPro`). Generation uses the `@bilkobibitkov/git-viewer` library, loaded lazily
-- Bilko services menu — `shared/bilko-menu.ts` (menu prices, wallet top-ups, intake validation; pure module) and the menu order/admin code built on it
+- Bilko credits menu — `shared/bilko-menu.ts` (wallet top-ups, the one credit-bought item, the Agent Factory Kit, and intake validation; pure module) and the menu order code built on it (`server/services/menu-orders.ts`, `server/routes/menu-orders.ts`)
 - ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
 
 Any new app-specific host code must be added to this list in the same commit, or live in the sibling repo instead.
@@ -181,7 +180,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-169 files, 1912 tests (counted via `pnpm vitest run` on 2026-10-30; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+168 files, 1873 tests (1858 pass, 15 skipped; counted via `pnpm vitest run` on 2026-11-01; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

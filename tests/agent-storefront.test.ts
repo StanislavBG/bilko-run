@@ -52,6 +52,14 @@ describe('GET /llms.txt', () => {
     expect(named).toEqual(registered);
     expect(body).toContain('GET https://bilko.run/api/menu');
   });
+
+  it('describes /api/menu as the Agent Factory Kit and never as a services menu', async () => {
+    const body = (await fetchTxt()).body;
+    const line = body.split('\n').find(l => l.includes('GET https://bilko.run/api/menu')) ?? '';
+    expect(line).toContain('Agent Factory Kit');
+    expect(line).toContain('Credits also pay for bilko.run tools');
+    expect(body.toLowerCase()).not.toContain('services menu');
+  });
 });
 
 describe('/llms.txt project guides', () => {

@@ -42,7 +42,7 @@ export function menuItemById(id: string): MenuItem | undefined {
   return MENU_ITEMS.find(i => i.id === id);
 }
 
-/** '$0.50', '$1', '$3', '$9', '$4.50' */
+/** '$0.50', '$1', '$3', '$4.50' */
 export function formatCents(cents: number): string {
   const dollars = cents / 100;
   return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;

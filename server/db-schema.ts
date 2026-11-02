@@ -633,7 +633,7 @@ export const MIGRATIONS = [
     created_at   INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_wallet_transactions_email ON wallet_transactions(email)`,
-  // Menu orders: defined here, written by the menu-order PRD. created_day is 'YYYY-MM-DD' in America/Los_Angeles.
+  // Menu orders: one row per credit-bought item (the Agent Factory Kit). created_day is 'YYYY-MM-DD' in America/Los_Angeles.
   `CREATE TABLE IF NOT EXISTS menu_orders (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     ref            TEXT NOT NULL UNIQUE,

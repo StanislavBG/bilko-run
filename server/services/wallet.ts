@@ -1,6 +1,6 @@
 import { dbGet, dbTransaction, txGet, txRun } from '../db.js';
 
-/** Prepaid Bilko Credits wallet, in US cents. Single store for top-ups and menu spending. */
+/** Prepaid Bilko Credits wallet, in US cents. Single store for top-ups, PPP bonus credits and credit spending (the Agent Factory Kit and paid tools). */
 
 const MAX_CENTS = 100000;
 

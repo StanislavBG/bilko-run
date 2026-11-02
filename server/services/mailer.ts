@@ -5,6 +5,16 @@ const TIMEOUT_MS = 10_000;
 const PT_ZONE = 'America/Los_Angeles';
 const MEETING_FALLBACK = 'Bilko will email the meeting link before the session.';
 
+export const EMAIL_RE = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/;
+
+export function organizerEmail(): string {
+  const from = process.env.MAIL_FROM ?? '';
+  const m = /<([^>]+)>/.exec(from);
+  const addr = (m ? m[1] : from).trim();
+  if (EMAIL_RE.test(addr)) return addr;
+  return process.env.BILKO_INBOX || 'noreply@bilko.run';
+}
+
 type Env = Record<string, string | undefined>;
 
 export interface MailAttachment {

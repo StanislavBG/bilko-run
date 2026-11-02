@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { resolvePaidOrder } from './web-products.js';
 import { bookingsForSession, claimSlot, claimedStarts } from '../services/service-bookings.js';
-import { bookingConfirmationEmail, bookingNoticeEmail, sendMail } from '../services/mailer.js';
+import { bookingConfirmationEmail, bookingNoticeEmail, sendMail, EMAIL_RE, organizerEmail } from '../services/mailer.js';
 import { SERVICE_SLOT_CONFIG, buildIcs, generateSlots } from '../../shared/service-slots.js';
 import {
   WEB_PRODUCTS, isValidCheckoutSessionId, isValidWebProductSlug, productKind, productPageSlug, webProductBySlug,
@@ -10,7 +10,6 @@ import {
 
 const RATE_WINDOW_MS = 60_000;
 const BOOKING_LIMIT = 10;
-const EMAIL_RE = /^[^\s@<>,;:"]+@[^\s@<>,;:"]+\.[^\s@<>,;:"]+$/;
 
 const rateCounts = new Map<string, { count: number; windowStart: number }>();
 
@@ -43,14 +42,6 @@ function parseIntake(raw: unknown): Intake | null {
   const c = contact.trim();
   if (c.length > 254 || !EMAIL_RE.test(c)) return null;
   return { repo, broken, done, contact: c };
-}
-
-function organizerEmail(): string {
-  const from = process.env.MAIL_FROM ?? '';
-  const m = /<([^>]+)>/.exec(from);
-  const addr = (m ? m[1] : from).trim();
-  if (EMAIL_RE.test(addr)) return addr;
-  return process.env.BILKO_INBOX || 'noreply@bilko.run';
 }
 
 export function registerServiceBookingRoutes(

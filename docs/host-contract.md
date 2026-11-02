@@ -823,15 +823,17 @@ A web product with `kind: 'service'` sells a booking instead of a zip: no `relea
 | `GET /api/services/:pageSlug/slots` | none | 200 `{ timeZone, durationMinutes, slots: [{ startMs, endMs }] }` — open (unclaimed) slots; `no-store` | 404 unknown page |
 | `POST /api/web-products/:slug/booking?session_id=cs_…` body `{ startMs, intake }` | possession of the paid Checkout session id (verified against Stripe) | 200 `{ booking: { startMs, endMs }, icsUrl, emailed }` — claims the slot atomically, emails the buyer (and intake contact) a confirmation with `.ics` and notifies `BILKO_INBOX` | 400 bad session id / body · 402 not paid · 404 unknown service / order · 409 `slot_unavailable` or `limit` (sessions used up) · 429 · 502 Stripe unreachable |
 | `GET /api/web-products/:slug/booking.ics?session_id=cs_…` | same | 200 `text/calendar` for the session's latest booking | 400 · 402 · 404 no booking · 429 · 502 |
+| `POST /api/services/human-for-hire/free-hour` body `{ email, startMs, topic?, website? }` (`?dryRun=1` checks only) | none (signed out, no payment; 6/hour/IP) | 201 `{ booking: { startMs, endMs }, emailed, ics, cancelToken }` — claims the slot, mails the booker the `.ics`, notifies `BILKO_INBOX`; dry run 200 `{ dryRun: true }` | 400 `invalid` · 409 `slot_unavailable` or `already_booked` · 429 `rate_limited` · 503 `booking_unavailable` (mail unset) |
+| `POST /api/services/human-for-hire/free-hour/cancel` body `{ token }` | possession of the `free_…` cancel token (10/min/IP) | 200 `{ cancelled: true }` — frees the slot, notifies `BILKO_INBOX` | 400 `invalid` · 404 `not_found` · 429 |
 
-Mail failures never fail a booking (`emailed: false`).
+Mail failures never fail a paid booking (`emailed: false`). The free hour is the exception to "unset mail still books": it refuses with 503 `booking_unavailable` when mail is unset, since nobody would be told.
 
 **Env vars:**
 
 | Var | Purpose |
 |---|---|
 | `STRIPE_COUPON_WP_*` (+ `_TEST`) | founding-price coupon ids, live and test mode |
-| `RESEND_API_KEY`, `MAIL_FROM` | transactional mail via Resend; unset → bookings still succeed, nothing is sent |
+| `RESEND_API_KEY`, `MAIL_FROM` | transactional mail via Resend; unset → paid bookings still succeed, nothing is sent; the free hour refuses with 503 |
 | `BILKO_INBOX` | address that receives booking notices; also the `.ics` organizer address (falls back to `noreply@bilko.run` when unset) |
 | `HFH_MEETING_LINK` | meeting URL put in the confirmation email and `.ics`; unset → "Bilko will email the meeting link" |
 

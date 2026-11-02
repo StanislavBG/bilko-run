@@ -157,6 +157,6 @@ describe('persona', () => {
     expect(identityHits(rendered)).toEqual([]);
     const src = readFileSync(new URL('../server/services/mailer.ts', import.meta.url), 'utf8');
     expect(identityHits(src)).toEqual([]);
-    expect(src).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
+    expect(src.replace('noreply@bilko.run', '')).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
   });
 });

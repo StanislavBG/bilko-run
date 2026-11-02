@@ -50,3 +50,7 @@ Gates re-run (foreground): `pnpm test` → 166 files passed, 2 skipped; 1858 pas
 - docs/host-contract.md:310 says the buyer books paid hours via the booking endpoints, while the page text and PRD say Bilko schedules by email. Confirm which is intended.
 - Webhook hours use Math.round (stripe.ts:288); safe only because webProductSubtotalOk runs first.
 - Playwright specs were not run in this validation.
+
+## Resolution
+
+The Important finding (MCP `list_offers` not compared in the offer parity test) is closed by commit a19dd1ee. `timeout 120 pnpm vitest run tests/offer-price-ceiling.test.ts`: 4 tests passed. Recorded 2026-11-01 7:20 PM PST.

@@ -137,6 +137,7 @@ describe('signinSourceForPath', () => {
     expect(signinSourceForPath('/products/session-manager')).toBe('session-manager');
     expect(signinSourceForPath('/products/session-manager/manual')).toBe('manual');
     expect(signinSourceForPath('/projects/human-for-hire/')).toBe('human-for-hire');
+    for (const p of ['/bilko', '/bilko/', '/hire', '/human-for-hire']) expect(signinSourceForPath(p)).toBe('human-for-hire');
     expect(signinSourceForPath('/blog')).toBeNull();
   });
 });

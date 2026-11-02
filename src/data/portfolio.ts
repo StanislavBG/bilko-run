@@ -67,6 +67,7 @@ const LIVE_COUNT = PORTFOLIO_PROJECTS.filter(p => p.status === 'Live').length;
 export const SECTIONS: readonly Section[] = [
   { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
   { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
+  { id: 'hire',      label: 'Hire',        path: '/bilko',     icon: '✺', desc: 'A free hour with Bilko, then $100 / hour.', tag: 'free hour' },
   { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
   { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
   { id: 'forum',     label: 'Forum',       path: '/forum',     icon: '❝', desc: 'Threads, hellos, and people who stick around.', tag: 'new' },

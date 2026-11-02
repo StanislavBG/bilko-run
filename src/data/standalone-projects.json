@@ -761,5 +761,36 @@
         "Family Frame offers end-to-end encryption."
       ]
     }
+  },
+  {
+    "slug": "human-for-hire",
+    "name": "Human For Hire",
+    "tagline": "Book a free hour with Bilko, then Consultation, Architecture or Design at $100 / hour.",
+    "category": "Service",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "external-url",
+      "url": "https://bilko.run/bilko"
+    },
+    "tags": [
+      "consulting",
+      "ai-agents"
+    ],
+    "public": true,
+    "listing": {
+      "detail": "Founders and small teams get a free hour with Bilko to talk through an AI project. After that, Consultation, Architecture and Design are $100 / hour, with a short written plan and an hour estimate first.",
+      "audience": "Founders and small teams planning or building with AI agents",
+      "talkingPoints": [
+        "The first hour is free, with no card needed.",
+        "Consultation, Architecture and Design are $100 / hour after that.",
+        "After the free hour Bilko sends a short plan with an honest estimate of the hours."
+      ],
+      "pricing": "freemium",
+      "callToAction": "Free first hour, then $100/h. Book at bilko.run/bilko.",
+      "avoidClaims": [
+        "Do not promise results, delivery dates or a fixed project price."
+      ]
+    }
   }
 ]

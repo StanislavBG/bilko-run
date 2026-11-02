@@ -8,9 +8,10 @@ const FLIP = { timeout: 3000 };
 const PAGES = ['/', '/projects', '/blog', '/contact', '/forum'] as const;
 const PILLS = [
   { name: '01 Projects', path: '/projects' },
-  { name: '02 Blog', path: '/blog' },
-  { name: '03 Contact', path: '/contact' },
-  { name: '04 Forum', path: '/forum' },
+  { name: '02 Hire', path: '/bilko' },
+  { name: '03 Blog', path: '/blog' },
+  { name: '04 Contact', path: '/contact' },
+  { name: '05 Forum', path: '/forum' },
 ] as const;
 
 const header = (page: Page) => page.locator('header.bk-header');
@@ -74,7 +75,7 @@ test('flip and Back agree', async ({ page }) => {
   await expect(heading(page)).toBeVisible();
   await page.keyboard.press('1');
   await page.waitForURL(u => u.pathname === '/projects', FLIP);
-  await header(page).getByRole('link', { name: '03 Contact' }).click();
+  await header(page).getByRole('link', { name: '04 Contact' }).click();
   await page.waitForURL(u => u.pathname === '/contact', FLIP);
   await page.goBack();
   await page.waitForURL(u => u.pathname === '/projects', FLIP);

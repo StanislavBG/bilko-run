@@ -106,7 +106,7 @@ test('same chrome on home, projects and contact', async ({ page }) => {
   for (const path of ['/', '/projects', '/contact']) {
     await page.goto(path);
     const header = page.locator('header').first();
-    for (const name of ['01 Projects', '02 Blog', '03 Contact']) {
+    for (const name of ['01 Projects', '03 Blog', '04 Contact']) {
       await expect(header.getByRole('link', { name })).toBeVisible();
     }
     await expect(page.getByText('Currently →')).toBeVisible();

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Link } from 'react-router-dom';
 import { PUBLIC_CARDS } from '../data/projectsView.js';
 import {
   FLIP_DESTS, RADAR_SECTORS, buildRadarItems, radarSize,
@@ -141,6 +142,14 @@ export function HomePage() {
           <p className="hr-lede">
             Small AI tools built in the open. Use the projects, read the build logs, send a message.
           </p>
+          <Link
+            to="/bilko"
+            className="hr-cta"
+            data-track="home-hire"
+            style={{ textDecoration: 'none', display: 'inline-block' }}
+          >
+            Book a free hour with Bilko
+          </Link>
           <div className="hr-rows" onMouseLeave={() => setLock(null)}>
             {RADAR_SECTORS.map((s, i) => (
               <a

@@ -14,6 +14,6 @@ export function signinSourceForPath(pathname: string): SigninSource | null {
   const p = pathname.replace(/\/+$/, '');
   if (p === '/products/session-manager') return 'session-manager';
   if (p === '/products/session-manager/manual') return 'manual';
-  if (p === '/projects/human-for-hire') return 'human-for-hire';
+  if (p === '/projects/human-for-hire' || p === '/bilko' || p === '/hire' || p === '/human-for-hire') return 'human-for-hire';
   return null;
 }

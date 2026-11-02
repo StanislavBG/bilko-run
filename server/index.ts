@@ -18,6 +18,7 @@ import { registerAgentKeyRoutes } from './routes/agent-keys.js';
 import { registerWalletRoutes } from './routes/wallet.js';
 import { registerMenuOrderRoutes } from './routes/menu-orders.js';
 import { registerAdminWebProductRoutes } from './routes/admin-web-products.js';
+import { registerAdminBookingRoutes } from './routes/admin-bookings.js';
 import { registerAdminMenuOrderRoutes } from './routes/admin-menu-orders.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerBlogRoutes } from './routes/blog.js';
@@ -204,6 +205,7 @@ registerAgentKeyRoutes(app);
 registerWalletRoutes(app);
 registerMenuOrderRoutes(app);
 registerAdminWebProductRoutes(app);
+registerAdminBookingRoutes(app);
 registerAdminMenuOrderRoutes(app);
 registerBlogRoutes(app, {
   videosRoot: isProd ? join(distPath, 'blog-videos') : join(process.cwd(), 'public', 'blog-videos'),

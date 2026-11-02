@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { initDb } from '../server/db.js';
 import {
-  claimSlot, claimedStarts, bookingsForSession, listBookings,
+  claimSlot, claimFreeHour, hasFreeHour, cancelFreeHour, FREE_HOUR_SLUG, claimedStarts, bookingsForSession, listBookings,
 } from '../server/services/service-bookings.js';
 
 beforeAll(async () => { await initDb(); });
@@ -80,5 +80,51 @@ describe('reads', () => {
     expect(all).toHaveLength(1);
     expect(all[0].intake).toEqual(intake);
     expect(await listBookings({ pageSlug: 'p-intake', fromMs: T0 + 1 })).toHaveLength(0);
+  });
+});
+
+describe('free hour', () => {
+  const FUT = Date.UTC(2099, 0, 5, 18, 0, 0);
+  const fh = (pageSlug: string, email: string, token: string, startMs = FUT) =>
+    claimFreeHour({ pageSlug, token, startMs, endMs: startMs + HOUR, email, intake: { n: 1 } });
+
+  it('claims once per email (trimmed, case-insensitive) even on another slot', async () => {
+    expect((await fh('fh-a', 'fh1@example.com', 'free_1')).status).toBe('ok');
+    expect(await hasFreeHour('FH1@example.com')).toBe(true);
+    expect((await fh('fh-a', ' FH1@Example.com ', 'free_2', FUT + 24 * HOUR)).status).toBe('already_booked');
+  });
+
+  it('reports taken for a slot held by anyone else, including a paid booking', async () => {
+    expect((await fh('fh-b', 'fh2@example.com', 'free_3')).status).toBe('ok');
+    expect((await fh('fh-b', 'fh3@example.com', 'free_4')).status).toBe('taken');
+    await claimSlot(input({ pageSlug: 'fh-c', checkoutSessionId: 'cs_fhpaid', startMs: FUT }));
+    expect((await fh('fh-c', 'fh4@example.com', 'free_5')).status).toBe('taken');
+  });
+
+  it('lets exactly one of two concurrent claims from one email win', async () => {
+    const r = await Promise.all([
+      fh('fh-d', 'fh5@example.com', 'free_6'),
+      fh('fh-d', 'fh5@example.com', 'free_7', FUT + 24 * HOUR),
+    ]);
+    expect(r.filter((x) => x.status === 'ok')).toHaveLength(1);
+  });
+
+  it('cancels a future free hour by token and frees slot and email', async () => {
+    expect((await fh('fh-e', 'fh6@example.com', 'free_8')).status).toBe('ok');
+    const b = await cancelFreeHour('free_8');
+    expect(b?.email).toBe('fh6@example.com');
+    expect(await hasFreeHour('fh6@example.com')).toBe(false);
+    expect((await fh('fh-e', 'fh6@example.com', 'free_9')).status).toBe('ok');
+  });
+
+  it('returns null for unknown token, past slot, or non-free-hour row', async () => {
+    expect(await cancelFreeHour('free_nope')).toBeNull();
+    expect((await fh('fh-f', 'fh7@example.com', 'free_10')).status).toBe('ok');
+    expect(await cancelFreeHour('free_10', FUT + 1)).toBeNull();
+    expect(await hasFreeHour('fh7@example.com')).toBe(true);
+    await claimSlot(input({ pageSlug: 'fh-g', checkoutSessionId: 'cs_fhnot', startMs: FUT }));
+    expect(await cancelFreeHour('cs_fhnot')).toBeNull();
+    expect((await bookingsForSession('cs_fhnot'))).toHaveLength(1);
+    expect(FREE_HOUR_SLUG).toBe('free-hour');
   });
 });

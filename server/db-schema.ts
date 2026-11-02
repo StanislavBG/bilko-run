@@ -617,6 +617,7 @@ export const MIGRATIONS = [
     UNIQUE(page_slug, slot_start_ms)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_service_bookings_session ON service_bookings(checkout_session_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_service_bookings_free_hour_email ON service_bookings(email) WHERE slug = 'free-hour'`,
   // Prepaid Bilko Credits wallet, in US cents (server/services/wallet.ts).
   `CREATE TABLE IF NOT EXISTS wallet_balances (
     email         TEXT PRIMARY KEY,

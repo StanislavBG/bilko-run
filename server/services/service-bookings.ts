@@ -1,7 +1,7 @@
 // Persistence for service bookings: a paid checkout session claims an open slot.
 // A slot is claimable once (UNIQUE(page_slug, slot_start_ms)); a session may hold at
 // most `sessionsPerMonth` bookings per Pacific Time calendar month.
-import { dbAll, dbTransaction, txGet, txRun } from '../db.js';
+import { dbAll, dbGet, dbRun, dbTransaction, txGet, txRun } from '../db.js';
 
 export interface ServiceBooking {
   id: number;
@@ -139,4 +139,76 @@ export async function listBookings(o: { pageSlug: string; fromMs: number }): Pro
     o.pageSlug, o.fromMs,
   );
   return rows.map(toBooking);
+}
+
+export const FREE_HOUR_SLUG = 'free-hour';
+
+export type ClaimFreeHourResult =
+  | { status: 'ok'; booking: ServiceBooking }
+  | { status: 'taken' }
+  | { status: 'already_booked' };
+
+export interface ClaimFreeHourInput {
+  pageSlug: string;
+  token: string;
+  startMs: number;
+  endMs: number;
+  email: string;
+  intake: unknown;
+}
+
+export function claimFreeHour(i: ClaimFreeHourInput): Promise<ClaimFreeHourResult> {
+  const run = claimQueue.then(() => claimFreeHourUnlocked(i));
+  claimQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function claimFreeHourUnlocked(i: ClaimFreeHourInput): Promise<ClaimFreeHourResult> {
+  const email = i.email.trim().toLowerCase();
+  const createdAt = Date.now();
+  try {
+    return await dbTransaction<ClaimFreeHourResult>(async (tx) => {
+      const existing = await txGet<BookingRow>(
+        tx,
+        'SELECT * FROM service_bookings WHERE slug = ? AND email = ?',
+        FREE_HOUR_SLUG, email,
+      );
+      if (existing) return { status: 'already_booked' };
+      await txRun(
+        tx,
+        `INSERT INTO service_bookings
+           (page_slug, slug, checkout_session_id, slot_start_ms, slot_end_ms, email, intake_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        i.pageSlug, FREE_HOUR_SLUG, i.token, i.startMs, i.endMs, email,
+        JSON.stringify(i.intake ?? null), createdAt,
+      );
+      const row = await txGet<BookingRow>(
+        tx,
+        'SELECT * FROM service_bookings WHERE page_slug = ? AND slot_start_ms = ?',
+        i.pageSlug, i.startMs,
+      );
+      return { status: 'ok', booking: toBooking(row as BookingRow) };
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) return (await hasFreeHour(email)) ? { status: 'already_booked' } : { status: 'taken' };
+    throw e;
+  }
+}
+
+export async function hasFreeHour(email: string): Promise<boolean> {
+  const row = await dbGet<{ id: number }>(
+    'SELECT id FROM service_bookings WHERE slug = ? AND email = ?',
+    FREE_HOUR_SLUG, email.trim().toLowerCase(),
+  );
+  return !!row;
+}
+
+export async function cancelFreeHour(token: string, nowMs: number = Date.now()): Promise<ServiceBooking | null> {
+  const row = await dbGet<BookingRow>(
+    'SELECT * FROM service_bookings WHERE checkout_session_id = ? AND slug = ? AND slot_start_ms > ?',
+    token, FREE_HOUR_SLUG, nowMs,
+  );
+  if (!row) return null;
+  await dbRun('DELETE FROM service_bookings WHERE id = ?', row.id);
+  return toBooking(row);
 }

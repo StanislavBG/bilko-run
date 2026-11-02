@@ -100,7 +100,7 @@ describe('service booking routes', () => {
     expect(before.headers['cache-control']).toBe('no-store');
     const b = before.json();
     expect(b.timeZone).toBe('America/Los_Angeles');
-    expect(b.durationMinutes).toBe(30);
+    expect(b.durationMinutes).toBe(60);
     const first = b.slots[0];
 
     const res = await book(app, S_HAPPY, { startMs: first.startMs, intake: INTAKE });

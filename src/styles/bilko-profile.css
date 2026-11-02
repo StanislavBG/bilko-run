@@ -27,3 +27,14 @@
 .bilko-profile ol.steps li{counter-increment:s;background:var(--bp-card);border:1px solid var(--bp-line);border-radius:18px;padding:1rem 1.2rem 1rem 3.4rem;position:relative}
 .bilko-profile ol.steps li::before{content:counter(s);position:absolute;left:1rem;top:1rem;width:1.8rem;height:1.8rem;border-radius:50%;background:var(--bp-accent);color:var(--bp-accent-ink);text-align:center;font-weight:700;line-height:1.8rem}
 .bilko-profile .bp-footer{padding-bottom:3rem}
+.bilko-profile .free-hour-booking{max-width:960px;margin:0 auto;padding:2rem 1.25rem}
+.bilko-profile .fhb-slots{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 1rem}
+.bilko-profile .fhb-slots .btn{background:transparent;cursor:pointer;font:inherit;font-weight:600;padding:.5rem .9rem}
+.bilko-profile .fhb-slots .btn.primary{background:var(--bp-accent)}
+.bilko-profile .fhb-field{display:block;margin:0 0 1rem}
+.bilko-profile .fhb-field span{display:block;font-weight:600;margin-bottom:.25rem}
+.bilko-profile .fhb-field input,.bilko-profile .fhb-field textarea{width:100%;font:inherit;padding:.6rem .8rem;border:1px solid var(--bp-line);border-radius:10px;background:#fff;color:var(--bp-ink)}
+.bilko-profile .free-hour-booking button.btn{background:transparent;cursor:pointer;font:inherit;font-weight:600}
+.bilko-profile .free-hour-booking button.btn.primary{background:var(--bp-accent);color:var(--bp-accent-ink)}
+.bilko-profile .free-hour-booking button:disabled{opacity:.5;cursor:not-allowed}
+.bilko-profile .fhb-hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}

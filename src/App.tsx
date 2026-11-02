@@ -6,6 +6,8 @@ import { ToolErrorBoundary } from './components/ErrorBoundary.js';
 import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
+// The server pre-renders this page; a lazy chunk would blank it.
+import { BilkoProfilePage } from './pages/BilkoProfilePage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { UnpublishedProjectPage } from './pages/UnpublishedProjectPage.js';
 import { PROJECTS } from './data/projectsRegistry.js';
@@ -206,6 +208,9 @@ function AppRoutes() {
             <Route path="/workflows" element={<Navigate to="/projects" replace />} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={lazyRoute(BlogPostPage)} />
+            <Route path="/bilko" element={<BilkoProfilePage />} />
+            <Route path="/hire" element={<BilkoProfilePage />} />
+            <Route path="/human-for-hire" element={<BilkoProfilePage />} />
             <Route path="/pricing" element={lazyRoute(PricingPage)} />
             <Route path="/privacy" element={lazyRoute(PrivacyPage)} />
             <Route path="/terms" element={lazyRoute(TermsPage)} />

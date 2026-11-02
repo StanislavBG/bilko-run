@@ -2,6 +2,7 @@
 @import "./styles/portfolio.css";
 @import "./styles/projects-ring.css";
 @import "./styles/site-chrome.css";
+@import "./styles/bilko-profile.css";
 
 @theme {
   /* Warm, human palette — away from dark/purple/robotic */

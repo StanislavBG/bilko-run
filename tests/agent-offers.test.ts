@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { AGENT_OFFERS, offerById, formatPrice } from '../shared/agent-offers';
 import { WEB_PRODUCTS, webProductBySlug, productBilling, productPageSlug } from '../shared/web-products';
 import { displayPriceCents } from '../server/routes/web-products';
-import { MENU_ITEMS, WALLET_TOPUP_CENTS } from '../shared/bilko-menu';
+import { WALLET_TOPUP_CENTS } from '../shared/bilko-menu';
 import { entryForPriceType } from '../shared/product-catalog';
 import { identityHits } from './identity-denylist';
 
@@ -14,7 +14,6 @@ describe('agent offers', () => {
     expect(ids).toEqual([
       'launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
       'credits-3', 'credits-5', 'credits-10',
-      'ask-bilko', 'claude-md-review', 'prd-review', 'agent-postmortem', 'repo-audit', 'live-call',
     ]);
   });
 
@@ -67,7 +66,7 @@ describe('agent offers', () => {
     }
   });
 
-  it('generates top-up and menu offers from bilko-menu', () => {
+  it('generates top-up offers from bilko-menu', () => {
     for (const cents of WALLET_TOPUP_CENTS) {
       const o = offerById(`credits-${cents / 100}`)!;
       expect(o.source).toEqual({ kind: 'wallet_topup', cents });
@@ -76,20 +75,14 @@ describe('agent offers', () => {
       expect(o.agentKey).toBe(true);
       expect(o.pageUrl).toBe('https://bilko.run/pricing');
     }
-    for (const item of MENU_ITEMS) {
-      const o = offerById(item.id);
-      if (item.kind === 'download') {
-        expect(o?.source.kind).not.toBe('menu');
-        continue;
-      }
-      expect(o!.source).toEqual({ kind: 'menu', itemId: item.id });
-      expect(o!.amountCents).toBe(item.priceCents);
-      expect(o!.payWith).toBe('credits');
-      expect(o!.pageUrl).toBe('https://bilko.run/pricing');
-    }
-    for (const o of AGENT_OFFERS) {
-      expect(o.payWith).toBe(o.source.kind === 'menu' ? 'credits' : 'stripe');
-    }
+    for (const o of AGENT_OFFERS) expect(o.payWith).toBe('stripe');
+    expect(AGENT_OFFERS.map((o) => o.id)).toEqual([
+      'launch-kit', 'agent-factory-kit', 'git-viewer', 'pageroast-credits-7', 'pageroast-credit-1',
+      'credits-3', 'credits-5', 'credits-10',
+    ]);
+    expect(offerById('credits-5')!.summary).toBe('A $5 Bilko Credits wallet top-up, spent on bilko.run tools and the Agent Factory Kit.');
+    expect(offerById('credits-5')!.whatYouGet).toBe('$5 of Bilko Credits and a bkk_ agent API key to spend them.');
+    for (const id of ['ask-bilko', 'claude-md-review', 'prd-review', 'agent-postmortem', 'repo-audit', 'live-call']) expect(offerById(id)).toBeUndefined();
     expect(offerById('agent-factory-kit')!.whatYouGet).toMatch(/\$3 of Bilko Credits/);
   });
 });

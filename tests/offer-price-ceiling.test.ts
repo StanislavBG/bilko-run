@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import { AGENT_OFFERS, formatPrice } from '../shared/agent-offers.js';
 import { WEB_PRODUCTS, productBilling } from '../shared/web-products.js';
-import { MENU_ITEMS, MENU_PRICE_CEILING_CENTS } from '../shared/bilko-menu.js';
+import { MENU_PRICE_CEILING_CENTS } from '../shared/bilko-menu.js';
 
 // Stub the availability check: every offer counts as buyable and deliverable.
 vi.mock('../server/services/offer-availability.js', async () => {
@@ -49,11 +49,6 @@ describe(`offer price ceiling (${DECISION})`, () => {
         const p = WEB_PRODUCTS.find((w) => w.slug === slug);
         expect(p, `web product ${slug}`).toBeDefined();
         expect(o.amountCents, o.id).toBe(p!.amountCents);
-      } else if (o.source.kind === 'menu') {
-        const itemId = o.source.itemId;
-        const item = MENU_ITEMS.find((i) => i.id === itemId);
-        expect(item, `menu item ${itemId}`).toBeDefined();
-        expect(o.amountCents, o.id).toBe(item!.priceCents);
       } else if (o.source.kind === 'wallet_topup') {
         expect(o.amountCents, o.id).toBe(o.source.cents);
       }

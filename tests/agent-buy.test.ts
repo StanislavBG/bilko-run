@@ -98,17 +98,15 @@ describe('GET /buy/:offerId', () => {
     await app.close();
   });
 
-  it('menu item returns instructions HTML and creates no session', async () => {
+  it('the six retired service items are not offers and answer 404 at /buy', async () => {
+    const { AGENT_OFFERS } = await import('../shared/agent-offers');
     const app = await buildApp();
-    const res = await get(app, '/buy/ask-bilko');
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toContain('text/html');
-    expect(res.body).toContain('$0.50');
-    expect(res.body).toContain('/buy/credits-3');
-    expect(res.body).toContain('/buy/credits-10');
-    expect(res.body).toContain('https://bilko.run/api/menu/ask-bilko/order');
-    expect(res.body).toContain('bkk_');
-    expect(res.body).toContain('order_menu_item');
+    for (const id of ['ask-bilko', 'claude-md-review', 'prd-review', 'agent-postmortem', 'repo-audit', 'live-call']) {
+      expect(AGENT_OFFERS.some((o) => o.id === id)).toBe(false);
+      const res = await get(app, `/buy/${id}`);
+      expect(res.statusCode).toBe(404);
+      expect(res.body).toContain('Offer not found');
+    }
     expect(sessionsCreate).not.toHaveBeenCalled();
     await app.close();
   });

@@ -11,7 +11,7 @@
 
 import type { PriceType } from './product-catalog.js';
 import { TOKENS_PER_BUNDLE, TOKENS_PER_SINGLE } from './product-catalog.js';
-import { MENU_ITEMS, WALLET_TOPUP_CENTS, formatCents } from './bilko-menu.js';
+import { WALLET_TOPUP_CENTS, formatCents } from './bilko-menu.js';
 
 export interface AgentOffer {
   /** kebab-case id; also the /buy/<id> path segment */
@@ -28,10 +28,9 @@ export interface AgentOffer {
   source:
     | { kind: 'web_product'; slug: string }
     | { kind: 'price_catalog'; priceType: PriceType }
-    | { kind: 'wallet_topup'; cents: number }
-    | { kind: 'menu'; itemId: string };
-  /** 'stripe': /buy opens Checkout. 'credits': spent from a Bilko Credits wallet (agent key or MCP). */
-  payWith: 'stripe' | 'credits';
+    | { kind: 'wallet_topup'; cents: number };
+  /** Always 'stripe': /buy opens Checkout. Kept because agents read it from /api/offers. */
+  payWith: 'stripe';
   /** true when the purchase yields an API key an agent can use */
   agentKey: boolean;
 }
@@ -114,8 +113,8 @@ const WALLET_OFFERS: readonly AgentOffer[] = WALLET_TOPUP_CENTS.map((cents) => {
   return {
     id,
     name: `Bilko Credits (${formatCents(cents)})`,
-    summary: `A ${formatCents(cents)} Bilko Credits wallet top-up, spent on the Bilko services menu.`,
-    whatYouGet: `${formatCents(cents)} of Bilko Credits and a bkk_ agent API key to spend them on menu items.`,
+    summary: `A ${formatCents(cents)} Bilko Credits wallet top-up, spent on bilko.run tools and the Agent Factory Kit.`,
+    whatYouGet: `${formatCents(cents)} of Bilko Credits and a bkk_ agent API key to spend them.`,
     amountCents: cents,
     currency: 'usd',
     billing: 'one_time',
@@ -127,27 +126,9 @@ const WALLET_OFFERS: readonly AgentOffer[] = WALLET_TOPUP_CENTS.map((cents) => {
   } satisfies AgentOffer;
 });
 
-const MENU_OFFERS: readonly AgentOffer[] = MENU_ITEMS
-  .filter((i) => i.kind === 'async' || i.kind === 'live')
-  .map((i) => ({
-    id: i.id,
-    name: i.name,
-    summary: i.summary,
-    whatYouGet: i.whatYouGet,
-    amountCents: i.priceCents,
-    currency: 'usd',
-    billing: 'one_time',
-    pageUrl: `${SITE}/pricing`,
-    buyUrl: buy(i.id),
-    source: { kind: 'menu', itemId: i.id },
-    payWith: 'credits',
-    agentKey: false,
-  } satisfies AgentOffer));
-
 export const AGENT_OFFERS: readonly AgentOffer[] = [
   ...BASE_OFFERS.map((o): AgentOffer => ({ ...o, payWith: 'stripe' })),
   ...WALLET_OFFERS,
-  ...MENU_OFFERS,
 ];
 
 export function offerById(id: string): AgentOffer | undefined {

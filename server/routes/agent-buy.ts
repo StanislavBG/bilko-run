@@ -3,7 +3,6 @@ import { getStripe } from '../services/stripe.js';
 import { dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import { classifyVisitor } from '../services/analytics.js';
-import { MENU_ITEMS, WALLET_TOPUP_CENTS } from '../../shared/bilko-menu.js';
 import { formatPrice, offerById, type AgentOffer } from '../../shared/agent-offers.js';
 import { entryForPriceType } from '../../shared/product-catalog.js';
 import { buildWebProductCheckoutParams, ipSeenAsAdmin } from './web-products.js';
@@ -77,16 +76,6 @@ function topupParams(offer: AgentOffer & { source: { kind: 'wallet_topup'; cents
   };
 }
 
-function menuInstructions(offer: AgentOffer): string {
-  const id = offer.source.kind === 'menu' ? offer.source.itemId : offer.id;
-  const item = MENU_ITEMS.find((i) => i.id === id);
-  const topups = WALLET_TOPUP_CENTS.map((c) => `<a href="/buy/credits-${c / 100}">${esc(`$${c / 100}`)}</a>`).join(' · ');
-  return `<p>${esc(offer.summary)}</p><p>${esc(offer.whatYouGet)}</p><p>Price: ${esc(formatPrice(offer))} in Bilko Credits.</p>`
-    + `<p>Top up your wallet: ${topups}. A top-up gives you a bkk_ agent key.</p>`
-    + `<p>To order, POST <code>https://bilko.run/api/menu/${esc(id)}/order</code> with your bkk_ key`
-    + `${item?.intake.length ? ` and fields: ${item.intake.map((f) => esc(f.key)).join(', ')}` : ''}, or use the MCP tool <code>order_menu_item</code>.</p>`;
-}
-
 /**
  * Only a person in a browser can finish Stripe Checkout, so only a browser GET opens a live
  * session. HEAD, crawlers, AI fetchers (ChatGPT-User), HTTP clients (curl, fetch, python-requests)
@@ -125,10 +114,6 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     // Never take money for something that cannot be delivered (e.g. a download whose zip is not stored).
     const notYet = () => sendHtml(reply, 503, page('Not available yet',
       `<p>${esc(offer.name)} is not on sale yet. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
-
-    if (offer.source.kind === 'menu') {
-      return sendHtml(reply, 200, page(offer.name, menuInstructions(offer)));
-    }
 
     // ?dryRun=1 runs every check a browser GET would (Stripe, price, stock) without a session.
     const dryRun = (req.query as { dryRun?: string } | undefined)?.dryRun === '1';

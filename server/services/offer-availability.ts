@@ -11,7 +11,7 @@ import {
 } from '../../shared/web-products.js';
 
 export function offerPriceId(offer: AgentOffer, env: Record<string, string | undefined>): string | undefined {
-  if (offer.source.kind === 'wallet_topup' || offer.source.kind === 'menu') return undefined;
+  if (offer.source.kind === 'wallet_topup') return undefined;
   if (offer.source.kind === 'web_product') {
     const product = webProductBySlug(offer.source.slug);
     return product ? resolveWebProductPriceId(product, env) : undefined;
@@ -22,8 +22,8 @@ export function offerPriceId(offer: AgentOffer, env: Record<string, string | und
 
 /** One-time web products are charged amountCents inline (price_data) and need no Stripe price id; everything else does. */
 export function isOfferPriced(offer: AgentOffer, env: Record<string, string | undefined>): boolean {
-  // Top-ups charge amountCents inline; menu items are priced in credits, not Stripe.
-  if (offer.source.kind === 'wallet_topup' || offer.source.kind === 'menu') return true;
+  // Top-ups charge amountCents inline.
+  if (offer.source.kind === 'wallet_topup') return true;
   if (offer.source.kind === 'web_product') {
     const product = webProductBySlug(offer.source.slug);
     return !!product && isWebProductPriced(product, env);
@@ -48,7 +48,6 @@ export async function isDeliverable(product: WebProduct, list: readonly WebProdu
 }
 
 export async function isOfferAvailable(offer: AgentOffer): Promise<boolean> {
-  if (offer.source.kind === 'menu') return true;
   if (offer.source.kind === 'wallet_topup') return !!getStripe();
   if (!getStripe() || !isOfferPriced(offer, process.env)) return false;
   if (offer.source.kind !== 'web_product') return true;

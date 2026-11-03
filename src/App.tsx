@@ -8,6 +8,8 @@ import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
 // The server pre-renders this page; a lazy chunk would blank it.
 import { BilkoProfilePage } from './pages/BilkoProfilePage.js';
+// The server pre-renders this page; a lazy chunk would blank it.
+import { BookingPage } from './pages/BookingPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 import { UnpublishedProjectPage } from './pages/UnpublishedProjectPage.js';
 import { PROJECTS } from './data/projectsRegistry.js';
@@ -243,6 +245,7 @@ function AppRoutes() {
               its own header instead. Still shares this repo's
               ClerkProvider, which
               its header account chip reads. */}
+          <Route path="/book" element={<BookingPage />} />
           <Route path="/products/session-manager" element={lazyRoute(SessionManagerPage)} />
           {/* The Field Manual reader is the landing's next page, so it lives
               outside <Layout /> too and wears the landing's chrome (own

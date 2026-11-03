@@ -60,7 +60,12 @@ export function registerServiceBookingRoutes(
     if (!config) return null;
     const now = Date.now();
     const claimed = new Set(await claimedStarts(pageSlug, now));
-    return { config, slots: generateSlots(config, now).filter((s) => !claimed.has(s.startMs)) };
+    const generated = generateSlots(config, now);
+    return {
+      config,
+      slots: generated.filter((s) => !claimed.has(s.startMs)),
+      taken: generated.filter((s) => claimed.has(s.startMs)).sort((a, b) => a.startMs - b.startMs),
+    };
   }
 
   app.get('/api/services/:pageSlug/slots', async (req, reply) => {
@@ -75,6 +80,7 @@ export function registerServiceBookingRoutes(
       timeZone: open.config.timeZone,
       durationMinutes: open.config.durationMinutes,
       slots: open.slots.map((s) => ({ startMs: s.startMs, endMs: s.endMs })),
+      taken: open.taken.map((s) => ({ startMs: s.startMs, endMs: s.endMs })),
     };
   });
 

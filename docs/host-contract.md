@@ -821,7 +821,7 @@ A web product with `kind: 'service'` sells a booking instead of a zip: no `relea
 
 | Endpoint | Auth | Success | Errors |
 |---|---|---|---|
-| `GET /api/services/:pageSlug/slots` | none | 200 `{ timeZone, durationMinutes, slots: [{ startMs, endMs }] }` — open (unclaimed) slots; `no-store` | 404 unknown page |
+| `GET /api/services/:pageSlug/slots` | none | 200 `{ timeZone, durationMinutes, slots: [{ startMs, endMs }], taken: [{ startMs, endMs }] }` — `slots` are open (unclaimed); `taken` are generated slots inside the horizon already claimed, ascending, times only (no email, id, slug or intake); `no-store` | 404 unknown page |
 | `POST /api/web-products/:slug/booking?session_id=cs_…` body `{ startMs, intake }` | possession of the paid Checkout session id (verified against Stripe) | 200 `{ booking: { startMs, endMs }, icsUrl, emailed }` — claims the slot atomically, emails the buyer (and intake contact) a confirmation with `.ics` and notifies `BILKO_INBOX` | 400 bad session id / body · 402 not paid · 404 unknown service / order · 409 `slot_unavailable` or `limit` (sessions used up) · 429 · 502 Stripe unreachable |
 | `GET /api/web-products/:slug/booking.ics?session_id=cs_…` | same | 200 `text/calendar` for the session's latest booking | 400 · 402 · 404 no booking · 429 · 502 |
 | `POST /api/services/human-for-hire/free-hour` body `{ email, startMs, topic?, website? }` (`?dryRun=1` checks only) | none (signed out, no payment; 6/hour/IP) | 201 `{ booking: { startMs, endMs }, emailed, ics, cancelToken }` — claims the slot; with mail set, also mails the booker the `.ics` and notifies `BILKO_INBOX`; dry run 200 `{ dryRun: true }` | 400 `invalid` · 409 `slot_unavailable` or `already_booked` · 429 `rate_limited` |

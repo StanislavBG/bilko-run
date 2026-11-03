@@ -111,6 +111,24 @@ describe('service booking routes', () => {
     expect((await app.inject({ method: 'GET', url: '/api/services/nope/slots' })).statusCode).toBe(404);
   });
 
+  it('reports a claimed slot in taken (start/end only) and not in slots', async () => {
+    const { claimFreeHour } = await import('../server/services/service-bookings.js');
+    const app = await buildApp();
+    const slot = slotsNow()[5];
+    const r = await claimFreeHour({
+      pageSlug: 'human-for-hire', token: 'free_takentest', startMs: slot.startMs, endMs: slot.endMs,
+      email: 'taken-test@example.com', intake: { note: 'x' },
+    });
+    expect(r.status).toBe('ok');
+    const body = (await app.inject({ method: 'GET', url: '/api/services/human-for-hire/slots' })).json();
+    expect(body.taken).toContainEqual({ startMs: slot.startMs, endMs: slot.endMs });
+    expect(body.slots.find((s: any) => s.startMs === slot.startMs)).toBeUndefined();
+    const starts = body.taken.map((s: any) => s.startMs);
+    expect(starts).toEqual([...starts].sort((a: number, b: number) => a - b));
+    for (const t of body.taken) expect(Object.keys(t).sort()).toEqual(['endMs', 'startMs']);
+    expect(JSON.stringify(body.taken)).not.toContain('taken-test');
+  });
+
   it('happy path returns booking, icsUrl, emailed and sends two mails', async () => {
     const app = await buildApp();
     const slot = slotsNow()[1];

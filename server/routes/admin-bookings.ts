@@ -56,14 +56,21 @@ export function registerAdminBookingRoutes(app: FastifyInstance): void {
         createdAt: Number(o.created_at),
       })),
       mailer_configured: mailerConfigured(),
-      upcoming: bookings.map((b) => ({
-        slug: b.slug,
-        startMs: b.slotStartMs,
-        endMs: b.slotEndMs,
-        email: b.email,
-        topic: (b.intake as { topic?: string } | null)?.topic ?? '',
-        createdAt: b.createdAt,
-      })),
+      upcoming: bookings.map((b) => {
+        const intake = b.intake as { topic?: unknown; tags?: unknown } | null;
+        const note = typeof intake?.topic === 'string' ? intake.topic : '';
+        const tags = Array.isArray(intake?.tags) ? intake.tags.filter((t): t is string => typeof t === 'string') : [];
+        const joined = tags.join(', ');
+        return {
+          slug: b.slug,
+          startMs: b.slotStartMs,
+          endMs: b.slotEndMs,
+          email: b.email,
+          topic: joined && note ? `${joined} — ${note}` : joined || note,
+          tags,
+          createdAt: b.createdAt,
+        };
+      }),
     };
   });
 }

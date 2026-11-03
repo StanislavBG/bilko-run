@@ -104,7 +104,7 @@ describe('GET /api/admin/bookings', () => {
     const res = await get();
     const body = res.json();
     expect(body.upcoming.map((u: any) => u.topic)).toEqual(['first', 'second']);
-    expect(Object.keys(body.upcoming[0]).sort()).toEqual(['createdAt', 'email', 'endMs', 'slug', 'startMs', 'topic']);
+    expect(Object.keys(body.upcoming[0]).sort()).toEqual(['createdAt', 'email', 'endMs', 'slug', 'startMs', 'tags', 'topic']);
     expect(res.body).not.toContain('secret-');
   });
 });

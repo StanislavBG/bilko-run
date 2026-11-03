@@ -4,6 +4,7 @@ import { cancelFreeHour, claimFreeHour, claimedStarts, hasFreeHour } from '../se
 import {
   EMAIL_RE, bookingConfirmationEmail, bookingNoticeEmail, organizerEmail, sendMail,
 } from '../services/mailer.js';
+import { parseTopicTags } from '../../shared/free-hour-topics.js';
 import { SERVICE_SLOT_CONFIG, buildIcs, generateSlots } from '../../shared/service-slots.js';
 
 const PAGE = 'human-for-hire';
@@ -40,6 +41,8 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
     ) {
       return reply.status(400).send({ error: 'invalid' });
     }
+    const tags = parseTopicTags(b.tags);
+    if (tags === null) return reply.status(400).send({ error: 'invalid' });
     const topicText = topic.trim();
 
     const config = SERVICE_SLOT_CONFIG[PAGE];
@@ -55,7 +58,7 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
 
     const token = 'free_' + randomUUID();
     const claim = await claimFreeHour({
-      pageSlug: PAGE, token, startMs, endMs: slot.endMs, email, intake: { topic: topicText },
+      pageSlug: PAGE, token, startMs, endMs: slot.endMs, email, intake: { topic: topicText, tags },
     });
     if (claim.status === 'taken') return reply.status(409).send({ error: 'slot_unavailable' });
     if (claim.status === 'already_booked') return reply.status(409).send({ error: 'already_booked' });

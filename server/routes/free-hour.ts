@@ -66,6 +66,7 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
     const meetingLink = (process.env.HFH_MEETING_LINK ?? '').trim();
     const ics = buildIcs({
       uid: `booking-${claim.booking.id}@bilko.run`,
+      sequence: claim.booking.icsSequence,
       startMs,
       endMs: slot.endMs,
       summary: 'Free hour with Bilko',
@@ -150,6 +151,7 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
     const meetingLink = (process.env.HFH_MEETING_LINK ?? '').trim();
     const ics = buildIcs({
       uid: `booking-${booking.id}@bilko.run`,
+      sequence: booking.icsSequence,
       startMs,
       endMs: slot.endMs,
       summary: 'Free hour with Bilko',

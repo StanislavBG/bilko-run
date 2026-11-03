@@ -54,6 +54,11 @@ describe('buildIcs', () => {
     for (const line of ics.split('\r\n')) expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75);
   });
 
+  it('writes SEQUENCE right after UID: 0 by default, else the given revision', () => {
+    expect(buildIcs(base)).toContain('UID:abc@bilko.run\r\nSEQUENCE:0\r\n');
+    expect(buildIcs({ ...base, sequence: 3 })).toContain('UID:abc@bilko.run\r\nSEQUENCE:3\r\n');
+  });
+
   it('never leaks the owner real name; persona address allowed', () => {
     const ics = buildIcs(base);
     expect(identityHits(ics.replace(/\r\n /g, ''))).toEqual([]);

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
-import { initDb, dbRun } from '../server/db.js';
+import { initDb, dbAll, dbRun } from '../server/db.js';
 
 const adminOk = vi.hoisted(() => ({ value: true }));
 
@@ -104,7 +104,21 @@ describe('GET /api/admin/bookings', () => {
     const res = await get();
     const body = res.json();
     expect(body.upcoming.map((u: any) => u.topic)).toEqual(['first', 'second']);
-    expect(Object.keys(body.upcoming[0]).sort()).toEqual(['createdAt', 'email', 'endMs', 'slug', 'startMs', 'tags', 'topic']);
+    expect(Object.keys(body.upcoming[0]).sort()).toEqual(
+      ['createdAt', 'email', 'endMs', 'icsSequence', 'id', 'slug', 'startMs', 'tags', 'topic'],
+    );
     expect(res.body).not.toContain('secret-');
+  });
+
+  it('carries each booking id and .ics SEQUENCE, the parts of its UID booking-<id>@bilko.run', async () => {
+    const now = Date.now();
+    await booking({ token: 'tok-a', start: now + DAY, email: 'a@x.com', created: now });
+    await booking({ token: 'tok-b', start: now + 2 * DAY, email: 'b@x.com', created: now });
+    await dbRun('UPDATE service_bookings SET ics_sequence = 2 WHERE checkout_session_id = ?', 'tok-b');
+    const rows = await dbAll<{ id: number; checkout_session_id: string }>(
+      'SELECT id, checkout_session_id FROM service_bookings ORDER BY slot_start_ms');
+    const upcoming = (await get()).json().upcoming;
+    expect(upcoming.map((u: any) => [u.id, u.icsSequence])).toEqual([[rows[0].id, 0], [rows[1].id, 2]]);
+    expect(rows.map((r) => r.checkout_session_id)).toEqual(['tok-a', 'tok-b']);
   });
 });

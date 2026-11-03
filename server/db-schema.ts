@@ -741,6 +741,8 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     // 1 = the owner (web-products checkout_start from an IP with admin page hits).
     ['is_admin', 'INTEGER DEFAULT 0'],
   ],
+  // SEQUENCE of the booking's .ics: 0 when claimed, +1 per reschedule (server/services/service-bookings.ts).
+  service_bookings: [['ics_sequence', 'INTEGER NOT NULL DEFAULT 0']],
   app_logs: [['env', 'TEXT']],
   app_errors: [['env', 'TEXT']],
   app_installs: [

@@ -99,6 +99,12 @@ export function generateSlots(config: SlotConfig, nowMs: number): Slot[] {
 
 export interface IcsInput {
   uid: string;
+  /**
+   * SEQUENCE: 0 when booked, one higher on every move. RFC 5546 requires it to rise
+   * when the time changes; a calendar ignores an update for a UID it holds at a
+   * higher SEQUENCE. Defaults to 0.
+   */
+  sequence?: number;
   startMs: number;
   endMs: number;
   summary: string;
@@ -147,6 +153,7 @@ export function buildIcs(b: IcsInput, nowMs: number = Date.now()): string {
     'METHOD:REQUEST',
     'BEGIN:VEVENT',
     `UID:${escapeText(b.uid)}`,
+    `SEQUENCE:${b.sequence ?? 0}`,
     `DTSTAMP:${icsDate(nowMs)}`,
     `DTSTART:${icsDate(b.startMs)}`,
     `DTEND:${icsDate(b.endMs)}`,

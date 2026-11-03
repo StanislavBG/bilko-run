@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { initDb } from '../server/db.js';
 import {
-  claimSlot, claimFreeHour, hasFreeHour, cancelFreeHour, FREE_HOUR_SLUG, claimedStarts, bookingsForSession, listBookings,
+  claimSlot, claimFreeHour, hasFreeHour, cancelFreeHour, rescheduleFreeHour, FREE_HOUR_SLUG, claimedStarts, bookingsForSession,
+  listBookings,
 } from '../server/services/service-bookings.js';
 
 beforeAll(async () => { await initDb(); });
@@ -126,5 +127,17 @@ describe('free hour', () => {
     expect(await cancelFreeHour('cs_fhnot')).toBeNull();
     expect((await bookingsForSession('cs_fhnot'))).toHaveLength(1);
     expect(FREE_HOUR_SLUG).toBe('free-hour');
+  });
+
+  it('bumps icsSequence once per move and not when the target slot is taken', async () => {
+    const r = await fh('fh-h', 'fh8@example.com', 'free_11');
+    expect(r.status === 'ok' && r.booking.icsSequence).toBe(0);
+    await fh('fh-h', 'fh9@example.com', 'free_12', FUT + 48 * HOUR);
+    const moved = await rescheduleFreeHour('free_11', FUT + 24 * HOUR, FUT + 25 * HOUR, FUT - HOUR);
+    expect(moved.status === 'ok' && moved.booking.icsSequence).toBe(1);
+    expect((await rescheduleFreeHour('free_11', FUT + 48 * HOUR, FUT + 49 * HOUR, FUT - HOUR)).status).toBe('taken');
+    expect((await bookingsForSession('free_11'))[0].icsSequence).toBe(1);
+    const back = await rescheduleFreeHour('free_11', FUT, FUT + HOUR, FUT - HOUR);
+    expect(back.status === 'ok' && back.booking.icsSequence).toBe(2);
   });
 });

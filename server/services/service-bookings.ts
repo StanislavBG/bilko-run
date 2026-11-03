@@ -13,6 +13,8 @@ export interface ServiceBooking {
   email: string;
   intake: unknown;
   createdAt: number;
+  /** SEQUENCE of the booking's .ics: 0 when claimed, +1 per reschedule. */
+  icsSequence: number;
 }
 
 interface BookingRow {
@@ -25,6 +27,7 @@ interface BookingRow {
   email: string;
   intake_json: string;
   created_at: number;
+  ics_sequence: number;
 }
 
 export interface ClaimSlotInput {
@@ -64,6 +67,7 @@ function toBooking(r: BookingRow): ServiceBooking {
     email: r.email,
     intake: JSON.parse(r.intake_json),
     createdAt: Number(r.created_at),
+    icsSequence: Number(r.ics_sequence ?? 0),
   };
 }
 
@@ -230,8 +234,11 @@ async function rescheduleFreeHourUnlocked(
   token: string, startMs: number, endMs: number, nowMs: number,
 ): Promise<RescheduleFreeHourResult> {
   try {
+    // The move and the SEQUENCE bump are one statement, so an .ics for the new time
+    // always outranks every earlier one for the same UID.
     const res = await dbRun(
-      'UPDATE service_bookings SET slot_start_ms = ?, slot_end_ms = ? WHERE checkout_session_id = ? AND slug = ? AND slot_start_ms > ?',
+      `UPDATE service_bookings SET slot_start_ms = ?, slot_end_ms = ?, ics_sequence = ics_sequence + 1
+        WHERE checkout_session_id = ? AND slug = ? AND slot_start_ms > ?`,
       startMs, endMs, token, FREE_HOUR_SLUG, nowMs,
     );
     if (!res.changes) return { status: 'not_found' };

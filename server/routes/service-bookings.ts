@@ -135,6 +135,7 @@ export function registerServiceBookingRoutes(
     const meetingLink = process.env.HFH_MEETING_LINK ?? '';
     const ics = buildIcs({
       uid: `booking-${claim.booking.id}@bilko.run`,
+      sequence: claim.booking.icsSequence,
       startMs: slot.startMs,
       endMs: slot.endMs,
       summary: `${product.name} with Bilko`,
@@ -196,6 +197,7 @@ export function registerServiceBookingRoutes(
     const meetingLink = (process.env.HFH_MEETING_LINK ?? '').trim();
     const ics = buildIcs({
       uid: `booking-${latest.id}@bilko.run`,
+      sequence: latest.icsSequence,
       startMs: latest.slotStartMs,
       endMs: latest.slotEndMs,
       summary: `${product.name} with Bilko`,

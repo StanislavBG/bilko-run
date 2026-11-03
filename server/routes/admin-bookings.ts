@@ -62,6 +62,8 @@ export function registerAdminBookingRoutes(app: FastifyInstance): void {
         const tags = Array.isArray(intake?.tags) ? intake.tags.filter((t): t is string => typeof t === 'string') : [];
         const joined = tags.join(', ');
         return {
+          id: b.id,
+          icsSequence: b.icsSequence,
           slug: b.slug,
           startMs: b.slotStartMs,
           endMs: b.slotEndMs,

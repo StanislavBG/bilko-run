@@ -57,6 +57,28 @@ describe('free hour reschedule', () => {
     void c;
   });
 
+  it('keeps the booking UID and raises SEQUENCE on every move, but not on a failed one', async () => {
+    const s = slots();
+    const field = (ics: string, name: string) => ics.match(new RegExp(`^${name}:(.*)$`, 'm'))![1].trim();
+    // s[5], s[7] and s[8] only: the other tests here need s[3], s[4] and s[6].
+    const booked = (await post({ email: 'seq@example.com', startMs: s[5].startMs })).json();
+    await post({ email: 'blocker@example.com', startMs: s[7].startMs });
+    const { bookingsForSession } = await import('../server/services/service-bookings.js');
+    const [row] = await bookingsForSession(booked.cancelToken);
+    expect(field(booked.ics, 'UID')).toBe(`booking-${row.id}@bilko.run`);
+    expect(field(booked.ics, 'SEQUENCE')).toBe('0');
+
+    const moved = (await post({ token: booked.cancelToken, startMs: s[8].startMs }, `${BASE}/reschedule`)).json();
+    expect(field(moved.ics, 'UID')).toBe(`booking-${row.id}@bilko.run`);
+    expect(field(moved.ics, 'SEQUENCE')).toBe('1');
+
+    expect((await post({ token: booked.cancelToken, startMs: s[7].startMs }, `${BASE}/reschedule`)).statusCode).toBe(409);
+    const back = (await post({ token: booked.cancelToken, startMs: s[5].startMs }, `${BASE}/reschedule`)).json();
+    expect(field(back.ics, 'UID')).toBe(`booking-${row.id}@bilko.run`);
+    expect(field(back.ics, 'SEQUENCE')).toBe('2');
+    expect((await bookingsForSession(booked.cancelToken))[0].icsSequence).toBe(2);
+  });
+
   it('409s when the target is taken', async () => {
     const s = slots();
     const t1 = (await post({ email: 'one@example.com', startMs: s[3].startMs })).json();

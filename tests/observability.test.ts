@@ -97,6 +97,27 @@ describe('auth gate', () => {
   });
 });
 
+describe('GET /api/admin/runtime', () => {
+  it('keeps the runtime from non-admins', async () => {
+    const res = await get('/api/admin/runtime');
+    expect(res.statusCode).toBe(403);
+    expect(res.body).not.toContain(process.version);
+  });
+
+  it('reports the running Node and a NODE_VERSION override', async () => {
+    asAdmin();
+    vi.stubEnv('NODE_VERSION', undefined);
+    expect((await get('/api/admin/runtime')).json()).toEqual({
+      node: process.version,
+      openssl: process.versions.openssl,
+      nodeVersionEnv: null,
+    });
+    vi.stubEnv('NODE_VERSION', '22.0.0');
+    expect((await get('/api/admin/runtime')).json().nodeVersionEnv).toBe('22.0.0');
+    vi.unstubAllEnvs();
+  });
+});
+
 describe('aggregator — empty state', () => {
   it('returns empty rows when no manifests', async () => {
     asAdmin();

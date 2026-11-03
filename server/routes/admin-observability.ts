@@ -42,6 +42,19 @@ async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 }
 
 export function registerObservabilityRoutes(app: FastifyInstance): void {
+  // Admin-only so the exact runtime stays off the public /api/health. Render
+  // never sets NODE_VERSION itself, so a value here came from the dashboard
+  // and overrides engines.node.
+  app.get('/api/admin/runtime', async (req, reply) => {
+    const email = await requireAdmin(req, reply);
+    if (!email) return;
+    return {
+      node: process.version,
+      openssl: process.versions.openssl,
+      nodeVersionEnv: process.env.NODE_VERSION ?? null,
+    };
+  });
+
   app.get('/api/admin/observability', async (req, reply) => {
     const email = await requireAdmin(req, reply);
     if (!email) return;

@@ -66,12 +66,13 @@ let lastPruneDay = '';
 let flushInFlight: Promise<void> | null = null;
 
 // Host-rendered pages (not under /projects/<slug>/) that still count as a
-// project's traffic: the Human For Hire page and its two aliases.
+// project's traffic: the Human For Hire page and its two aliases, with or
+// without the trailing slash.
 export const HOST_PAGE_SLUG = 'human-for-hire';
-const HOST_PAGE_RE = /^\/(?:bilko|hire|human-for-hire)\/?$/;
+export const HOST_PAGE_PATHS: readonly string[] = ['/bilko', '/hire', '/human-for-hire'].flatMap((p) => [p, `${p}/`]);
 
 export function slugFromPath(path: string): string | null {
-  if (HOST_PAGE_RE.test(path)) return HOST_PAGE_SLUG;
+  if (HOST_PAGE_PATHS.includes(path)) return HOST_PAGE_SLUG;
   const m = /^\/projects\/([^/?#]+)\//.exec(path);
   return m ? m[1] : null;
 }

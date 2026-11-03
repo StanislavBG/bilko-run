@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { WEB_PRODUCTS, productKind, productPageSlug, type WebProduct } from '../../shared/web-products.js';
+import { HOST_PAGE_PATHS, HOST_PAGE_SLUG } from '../page-hits.js';
 import { listBookings } from '../services/service-bookings.js';
 
 const DAY_MS = 86400000;
@@ -9,6 +10,14 @@ const DAY_MS = 86400000;
 function likePrefix(slug: string): string {
   const escaped = `/projects/${slug}/`.replace(/[\\%_]/g, (c) => `\\${c}`);
   return `${escaped}%`;
+}
+
+/** page_views filter for the page that sells p. Only placeholders are interpolated; every value is a bound arg. */
+function viewsFilter(p: WebProduct): { sql: string; args: string[] } {
+  if (productPageSlug(p) === HOST_PAGE_SLUG) {
+    return { sql: `path IN (${HOST_PAGE_PATHS.map(() => '?').join(', ')})`, args: [...HOST_PAGE_PATHS] };
+  }
+  return { sql: `path LIKE ? ESCAPE '\\'`, args: [likePrefix(p.slug)] };
 }
 
 export function registerAdminWebProductRoutes(
@@ -34,12 +43,12 @@ export function registerAdminWebProductRoutes(
     const daily: Array<{ date: string; slug: string; views: number; checkoutStarts: number; orders: number; downloads: number }> = [];
 
     for (const p of products) {
-      const pattern = likePrefix(p.slug);
+      const page = viewsFilter(p);
       const [views, checkouts, orders, downloads, lastOrder, lastDownload, release,
         viewsByDay, checkoutsByDay, ordersByDay, downloadsByDay, outcomes] = await Promise.all([
         dbGet<{ views: number; visitors: number }>(
           `SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM page_views
-           WHERE date >= ? AND path LIKE ? ESCAPE '\\' AND COALESCE(is_bot, 0) = 0${selfSql}`, sinceDate, pattern),
+           WHERE date >= ? AND ${page.sql} AND COALESCE(is_bot, 0) = 0${selfSql}`, sinceDate, ...page.args),
         dbGet<{ n: number }>(
           `SELECT COUNT(*) AS n FROM funnel_events WHERE event = 'checkout_start' AND tool = ? AND date(created_at) >= ?${selfSql}`,
           p.slug, sinceDate),
@@ -56,7 +65,7 @@ export function registerAdminWebProductRoutes(
           : Promise.resolve(null),
         dbAll<{ d: string; n: number }>(
           `SELECT date AS d, COUNT(*) AS n FROM page_views
-           WHERE date >= ? AND path LIKE ? ESCAPE '\\' AND COALESCE(is_bot, 0) = 0${selfSql} GROUP BY date`, sinceDate, pattern),
+           WHERE date >= ? AND ${page.sql} AND COALESCE(is_bot, 0) = 0${selfSql} GROUP BY date`, sinceDate, ...page.args),
         dbAll<{ d: string; n: number }>(
           `SELECT date(created_at) AS d, COUNT(*) AS n FROM funnel_events
            WHERE event = 'checkout_start' AND tool = ? AND date(created_at) >= ?${selfSql} GROUP BY d`, p.slug, sinceDate),

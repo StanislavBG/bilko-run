@@ -17,6 +17,7 @@ vi.mock('../server/clerk.js', async (importOriginal) => {
 });
 
 import { registerAdminWebProductRoutes } from '../server/routes/admin-web-products.js';
+import { registerAnalyticsRoutes } from '../server/routes/analytics.js';
 import type { WebProduct } from '../shared/web-products.js';
 import { claimSlot } from '../server/services/service-bookings.js';
 
@@ -44,6 +45,10 @@ const service: WebProduct = {
 const app = Fastify({ logger: false });
 registerAdminWebProductRoutes(app, { products: [product, service] });
 
+const catalogApp = Fastify({ logger: false });
+registerAdminWebProductRoutes(catalogApp);
+registerAnalyticsRoutes(catalogApp);
+
 const DAY = 86400000;
 const dayStr = (ago: number) => new Date(Date.now() - ago * DAY).toISOString().slice(0, 10);
 const ts = (ago: number) => `${dayStr(ago)} 12:00:00`;
@@ -52,6 +57,7 @@ const ms = (ago: number) => Date.now() - ago * DAY;
 beforeAll(async () => {
   await initDb();
   await app.ready();
+  await catalogApp.ready();
 });
 
 beforeEach(async () => {
@@ -186,5 +192,63 @@ describe('GET /api/admin/web-products', () => {
     }
     const p = (await app.inject({ method: 'GET', url: '/api/admin/web-products' })).json().products[0];
     expect(p).toMatchObject({ views: 0, orders: 0, releaseStored: false, lastOrderAt: null, lastDownloadAt: null });
+  });
+});
+
+describe('views of a product sold from a host route', () => {
+  const addView = (path: string, visitor: string, bot = 0, admin = 0) =>
+    dbRun('INSERT INTO page_views (path, date, visitor_id, is_bot, is_admin) VALUES (?, ?, ?, ?, ?)', path, dayStr(0), visitor, bot, admin);
+  const entry = async (slug: string, query = '') => {
+    const res = await catalogApp.inject({ method: 'GET', url: `/api/admin/web-products?days=7${query}` });
+    return res.json().products.find((p: any) => p.slug === slug);
+  };
+
+  it('counts a beacon hit on /bilko', async () => {
+    const uuid = '123e4567-e89b-42d3-a456-426614174000';
+    const post = await catalogApp.inject({
+      method: 'POST', url: '/api/analytics/pageview',
+      headers: {
+        'content-type': 'text/plain;charset=UTF-8',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+      },
+      payload: JSON.stringify({ path: '/bilko', referrer: '', screen: '1280x720', visitor_id: uuid, session_id: uuid }),
+    });
+    expect(post.statusCode).toBeLessThan(300);
+    const res = await catalogApp.inject({ method: 'GET', url: '/api/admin/web-products?days=7' });
+    const body = res.json();
+    expect(body.products.find((p: any) => p.slug === 'bilko-hour')).toMatchObject({ views: 1, uniqueVisitors: 1 });
+    expect(body.daily.find((r: any) => r.slug === 'bilko-hour' && r.date === dayStr(0))).toMatchObject({ views: 1 });
+  });
+
+  it('counts the page and its aliases, not look-alikes, bots or the retired path', async () => {
+    for (const [i, path] of ['/bilko', '/hire', '/human-for-hire', '/bilko/'].entries()) await addView(path, `ok${i}`);
+    for (const [i, path] of ['/bilkos', '/bilko/extra', '/hire-me', '/projects/bilko-hour/', '/projects/human-for-hire/'].entries()) await addView(path, `no${i}`);
+    await addView('/bilko', 'bot', 1);
+    expect(await entry('bilko-hour')).toMatchObject({ views: 4, uniqueVisitors: 4 });
+  });
+
+  it('counts an is_admin row only with exclude_self=0', async () => {
+    await addView('/bilko', 'v1');
+    await addView('/bilko', 'owner', 0, 1);
+    expect((await entry('bilko-hour')).views).toBe(1);
+    expect((await entry('bilko-hour', '&exclude_self=0')).views).toBe(2);
+  });
+
+  it('leaves every other product filter alone', async () => {
+    await addView('/projects/launch-kit/', 'k1');
+    await addView('/bilko', 'h1');
+    expect(await entry('launch-kit')).toMatchObject({ views: 1 });
+    expect((await entry('agent-factory-kit')).views).toBe(0);
+    expect((await entry('bilko-hour')).views).toBe(1);
+    await dbRun('DELETE FROM page_views');
+    await addView('/bilko', 'h2');
+    expect((await entry('launch-kit')).views).toBe(0);
+    expect((await entry('agent-factory-kit')).views).toBe(0);
+  });
+
+  it('still counts a /projects/<slug>/ row for a service with no pageSlug', async () => {
+    await addView('/projects/fixture-service/', 's1');
+    const res = await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7' });
+    expect(res.json().products.find((p: any) => p.slug === 'fixture-service').views).toBe(1);
   });
 });

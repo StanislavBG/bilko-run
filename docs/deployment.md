@@ -13,7 +13,9 @@ These come from `package.json`. Confirm the exact commands in the Render dashboa
 
 ## Node version
 
-`engines.node` in `package.json` sets the Node version. It has a floor and a ceiling on purpose. Render resolves a range to the newest release inside it on every build, so patch releases arrive on their own and a new major never does. CI reads the same field (`node-version-file: package.json`), so it tests what Render builds. The floor is the patched release named in Render's eMudhra advisory of October 2026.
+`engines.node` in `package.json` sets the Node version. The ceiling matters: Render resolves a range to the newest release inside it on every build, so patch releases arrive on their own and a new major never does. That puts production on the newest Node 24, which must be at or above 24.22.1, the patched release named in Render's eMudhra advisory of October 2026. CI reads the same field (`node-version-file: package.json`), so it tests the same range.
+
+The floor stays at 22 because this machine runs Node 22. Outside the range pnpm prints an `Unsupported engine` warning on stdout, which breaks scripts that parse pnpm output, such as the blog watchdog, and fails `pnpm test` in every scheduler gate here. Raise the floor only after upgrading local Node.
 
 Render uses the first of these it finds: a `NODE_VERSION` env var, `.node-version`, `.nvmrc`, `engines`. Keep the first three unset, or `engines` stops deciding anything. An exact pin in `.node-version` would also stop patch releases.
 

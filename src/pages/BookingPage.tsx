@@ -11,6 +11,7 @@ import {
   slotView,
   timeZoneOptions,
 } from '../lib/bookingView.js';
+import { DetailsStep, DoneStep, Notice, type Booked, type Msg } from './BookingSteps.js';
 
 interface Slot { startMs: number; endMs: number }
 interface SlotItem extends Slot { taken: boolean }
@@ -44,6 +45,14 @@ export function BookingPage() {
   const detected = useMemo(() => detectTimeZone(), []);
   const [tz, setTz] = useState(detected);
   const [nowMs] = useState(() => Date.now());
+  const [email, setEmail] = useState('');
+  const [topic, setTopic] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [website, setWebsite] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<Msg | null>(null);
+  const [booked, setBooked] = useState<Booked | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
 
   const load = useCallback(() => {
     setOpen(null);
@@ -64,8 +73,10 @@ export function BookingPage() {
       ...(open ?? []).map((s) => ({ ...s, taken: false })),
       ...taken.map((s) => ({ ...s, taken: true })),
     ];
-    return all.sort((a, b) => a.startMs - b.startMs);
-  }, [open, taken]);
+    return all
+      .filter((s) => !(rescheduling && booked && s.startMs === booked.startMs))
+      .sort((a, b) => a.startMs - b.startMs);
+  }, [open, taken, rescheduling, booked]);
 
   const firstMs = items.length ? items[0].startMs : nowMs;
   const options = useMemo(() => timeZoneOptions(firstMs, detected, tz), [firstMs, detected, tz]);
@@ -74,6 +85,106 @@ export function BookingPage() {
 
   const picked = pickedMs === null ? null : items.find((s) => s.startMs === pickedMs && !s.taken) ?? null;
   const pv = picked ? slotView(picked.startMs, picked.endMs, tz, nowMs) : null;
+
+  const bv = booked ? slotView(booked.startMs, booked.endMs, tz, nowMs) : null;
+
+  async function post(path: string, body: object) {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string; booking?: { startMs: number; endMs?: number }; ics?: string; cancelToken?: string;
+    };
+    return { res, data };
+  }
+
+  async function book() {
+    if (!picked) return;
+    setBusy(true);
+    setMsg(null);
+    trackFlow('hire', 'book-free-hour');
+    try {
+      const { res, data } = await post('/free-hour', {
+        email: email.trim(), startMs: picked.startMs, topic: topic.trim(), tags, website,
+      });
+      if (res.status === 201 && data.booking) {
+        trackFlow('hire', 'booked');
+        setBooked({
+          startMs: data.booking.startMs,
+          endMs: data.booking.endMs ?? picked.endMs,
+          ics: data.ics ?? '',
+          token: data.cancelToken ?? '',
+          email: email.trim(),
+        });
+        setStep(2);
+      } else if (res.status === 409 && data.error === 'already_booked') {
+        setMsg('already_booked');
+      } else if (res.status === 409) {
+        setMsg('slot_unavailable');
+        setPickedMs(null);
+        setStep(0);
+        load();
+      } else if (res.status === 429) {
+        setMsg('rate');
+      } else if (res.status === 400) {
+        setMsg('invalid');
+      } else {
+        setMsg('down');
+      }
+    } catch {
+      setMsg('down');
+    }
+    setBusy(false);
+  }
+
+  async function reschedule() {
+    if (!picked || !booked) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const { res, data } = await post('/free-hour/reschedule', { token: booked.token, startMs: picked.startMs });
+      if (res.status === 200 && data.booking) {
+        setBooked({
+          ...booked,
+          startMs: data.booking.startMs,
+          endMs: data.booking.endMs ?? picked.endMs,
+          ics: data.ics ?? booked.ics,
+          token: data.cancelToken ?? booked.token,
+        });
+        setRescheduling(false);
+        setPickedMs(null);
+        setStep(2);
+      } else if (res.status === 409) {
+        setMsg('slot_unavailable');
+        setPickedMs(null);
+        load();
+      } else if (res.status === 429) {
+        setMsg('rate');
+      } else {
+        setMsg('reschedule_failed');
+      }
+    } catch {
+      setMsg('reschedule_failed');
+    }
+    setBusy(false);
+  }
+
+  async function cancel() {
+    if (!booked) return;
+    setBusy(true);
+    try {
+      await post('/free-hour/cancel', { token: booked.token });
+    } catch { /* reload below shows the real state */ }
+    setBooked(null);
+    setRescheduling(false);
+    setPickedMs(null);
+    setStep(0);
+    setMsg('cancelled');
+    setBusy(false);
+    load();
+  }
 
   const mail = (
     <a href={`mailto:${BILKO_CONTACT_EMAIL}`}>{BILKO_CONTACT_EMAIL}</a>
@@ -89,6 +200,7 @@ export function BookingPage() {
           {step === 0 ? (
             <>
               <h2 style={{ marginTop: 20 }}>Pick a time</h2>
+              <Notice msg={msg} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                 <label htmlFor="bk-tz" style={{ font: '500 12.5px var(--bk-sans)', color: 'var(--bk-muted)' }}>Times in</label>
                 <select id="bk-tz" className="bk-select" value={tz} onChange={(e) => setTz(e.target.value)}>
@@ -157,6 +269,8 @@ export function BookingPage() {
                   onClick={() => {
                     if (!picked) return;
                     trackFlow('hire', 'continue');
+                    if (rescheduling) { void reschedule(); return; }
+                    setMsg(null);
                     setStep(1);
                   }}
                 >
@@ -164,19 +278,33 @@ export function BookingPage() {
                 </button>
               </div>
             </>
-          ) : (
+          ) : step === 1 ? (
             pv && (
-              <>
-                <h2 style={{ marginTop: 20 }}>Your details</h2>
-                <div className="bk-summary" style={{ marginTop: 16 }}>
-                  <div className="bk-leaf"><small>{pv.mon}</small>{pv.day}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ font: '600 15px var(--bk-sans)' }}>{pv.dateLong}</div>
-                    <div style={{ font: '400 13.5px var(--bk-sans)', color: 'var(--bk-body)' }}>{pv.time} – {pv.timeEnd} {pv.tzAbbr} · Video call</div>
-                  </div>
-                  <button type="button" className="bk-link" onClick={() => setStep(0)}>Change</button>
-                </div>
-              </>
+              <DetailsStep
+                pv={pv}
+                email={email}
+                setEmail={setEmail}
+                topic={topic}
+                setTopic={setTopic}
+                tags={tags}
+                toggleTag={(t) => setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]))}
+                website={website}
+                setWebsite={setWebsite}
+                busy={busy}
+                msg={msg}
+                onChange={() => { setMsg(null); setStep(0); }}
+                onSubmit={() => void book()}
+              />
+            )
+          ) : (
+            booked && bv && (
+              <DoneStep
+                booked={booked}
+                pv={bv}
+                busy={busy}
+                onReschedule={() => { setMsg(null); setRescheduling(true); setPickedMs(null); setStep(0); load(); }}
+                onCancel={() => void cancel()}
+              />
             )
           )}
         </div>

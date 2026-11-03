@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { cancelFreeHour, claimFreeHour, claimedStarts, hasFreeHour } from '../services/service-bookings.js';
 import {
-  EMAIL_RE, bookingConfirmationEmail, bookingNoticeEmail, mailerConfigured, organizerEmail, sendMail,
+  EMAIL_RE, bookingConfirmationEmail, bookingNoticeEmail, organizerEmail, sendMail,
 } from '../services/mailer.js';
 import { SERVICE_SLOT_CONFIG, buildIcs, generateSlots } from '../../shared/service-slots.js';
 
@@ -41,7 +41,6 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
       return reply.status(400).send({ error: 'invalid' });
     }
     const topicText = topic.trim();
-    if (!mailerConfigured()) return reply.status(503).send({ error: 'booking_unavailable' });
 
     const config = SERVICE_SLOT_CONFIG[PAGE];
     const now = Date.now();

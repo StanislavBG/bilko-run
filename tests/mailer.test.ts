@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   mailerConfigured,
+  organizerEmail,
   sendMail,
   bookingConfirmationEmail,
   bookingNoticeEmail,
   paidHoursConfirmationEmail,
   paidHoursNoticeEmail,
 } from '../server/services/mailer.js';
+import { BILKO_CONTACT_EMAIL } from '../shared/bilko-profile.js';
 import { identityHits } from './identity-denylist.js';
 
 const ENV = { RESEND_API_KEY: 'rk_test', MAIL_FROM: 'Bilko <bilko@example.test>', BILKO_INBOX: 'inbox@example.test' };
@@ -36,6 +38,16 @@ describe('mailerConfigured', () => {
     expect(mailerConfigured({ ...ENV, RESEND_API_KEY: '' })).toBe(false);
     expect(mailerConfigured({ ...ENV, MAIL_FROM: undefined })).toBe(false);
     expect(mailerConfigured({ ...ENV, BILKO_INBOX: '' })).toBe(false);
+  });
+});
+
+describe('organizerEmail', () => {
+  it('prefers MAIL_FROM, then BILKO_INBOX, then the published address', () => {
+    expect(organizerEmail()).toBe('bilko@example.test');
+    vi.stubEnv('MAIL_FROM', '');
+    expect(organizerEmail()).toBe('inbox@example.test');
+    vi.stubEnv('BILKO_INBOX', '');
+    expect(organizerEmail()).toBe(BILKO_CONTACT_EMAIL);
   });
 });
 
@@ -159,7 +171,7 @@ describe('persona', () => {
     expect(identityHits(rendered)).toEqual([]);
     const src = readFileSync(new URL('../server/services/mailer.ts', import.meta.url), 'utf8');
     expect(identityHits(src)).toEqual([]);
-    expect(src.replace('noreply@bilko.run', '')).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
+    expect(src).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
   });
 });
 

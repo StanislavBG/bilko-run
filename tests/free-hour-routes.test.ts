@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { initDb } from '../server/db.js';
 import { SERVICE_SLOT_CONFIG, generateSlots } from '../shared/service-slots.js';
+import { BILKO_CONTACT_EMAIL } from '../shared/bilko-profile.js';
 import { identityHits } from './identity-denylist.js';
 
 const sendMailMock = vi.hoisted(() => vi.fn());
@@ -103,15 +104,23 @@ describe('free hour routes', () => {
     expect((await post({ email: 'bad' }, undefined, ip)).statusCode).toBe(429);
   });
 
-  it('refuses with 503 when mail is unset and writes no row', async () => {
-    delete process.env.RESEND_API_KEY;
+  it('books with mail unset: 201, emailed false, row written, Gmail organizer', async () => {
+    const real = await vi.importActual<typeof import('../server/services/mailer.js')>('../server/services/mailer.js');
+    sendMailMock.mockImplementation(real.sendMail);
+    for (const k of ['RESEND_API_KEY', 'MAIL_FROM', 'BILKO_INBOX']) delete process.env[k];
     const s = slots()[5];
+    const dry = await post({ email: 'nomail@example.com', startMs: s.startMs }, '/api/services/human-for-hire/free-hour?dryRun=1');
+    expect(dry.statusCode).toBe(200);
     const r = await post({ email: 'nomail@example.com', startMs: s.startMs });
-    expect(r.statusCode).toBe(503);
-    expect(r.json()).toEqual({ error: 'booking_unavailable' });
-    process.env.RESEND_API_KEY = 're_fake';
+    expect(r.statusCode).toBe(201);
+    const body = r.json();
+    expect(body.emailed).toBe(false);
+    expect(body.ics).toContain(`ORGANIZER;CN=Bilko:mailto:${BILKO_CONTACT_EMAIL}`);
+    const { dbGet } = await import('../server/db.js');
+    const row: any = await dbGet('SELECT * FROM service_bookings WHERE checkout_session_id = ?', body.cancelToken);
+    expect(row.email).toBe('nomail@example.com');
     const open = (await app.inject({ method: 'GET', url: '/api/services/human-for-hire/slots' })).json().slots;
-    expect(open.some((x: any) => x.startMs === s.startMs)).toBe(true);
+    expect(open.some((x: any) => x.startMs === s.startMs)).toBe(false);
   });
 
   it('dryRun checks without writing or mailing', async () => {

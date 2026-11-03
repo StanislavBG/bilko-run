@@ -1,5 +1,7 @@
 /** Tiny Resend REST client over fetch. Disabled unless RESEND_API_KEY, MAIL_FROM and BILKO_INBOX are set. */
 
+import { BILKO_CONTACT_EMAIL } from '../../shared/bilko-profile.js';
+
 const RESEND_URL = 'https://api.resend.com/emails';
 const TIMEOUT_MS = 10_000;
 const PT_ZONE = 'America/Los_Angeles';
@@ -12,7 +14,7 @@ export function organizerEmail(): string {
   const m = /<([^>]+)>/.exec(from);
   const addr = (m ? m[1] : from).trim();
   if (EMAIL_RE.test(addr)) return addr;
-  return process.env.BILKO_INBOX || 'noreply@bilko.run';
+  return process.env.BILKO_INBOX || BILKO_CONTACT_EMAIL;
 }
 
 type Env = Record<string, string | undefined>;

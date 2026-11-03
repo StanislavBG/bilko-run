@@ -4,7 +4,7 @@ import { trackFlow } from '../lib/telemetry.js';
 import { BILKO_CONTACT_EMAIL } from '../../shared/bilko-profile.js';
 
 interface Slot { startMs: number; endMs: number }
-interface Booked { startMs: number; emailed: boolean; ics: string; cancelToken: string; email: string }
+interface Booked { startMs: number; ics: string; cancelToken: string; email: string }
 
 const FMT = new Intl.DateTimeFormat(undefined, {
   weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
@@ -61,13 +61,12 @@ export function FreeHourBooking() {
         body: JSON.stringify({ email: email.trim(), startMs, topic: topic.trim(), website }),
       });
       const data = (await res.json().catch(() => ({}))) as {
-        error?: string; booking?: { startMs: number }; emailed?: boolean; ics?: string; cancelToken?: string;
+        error?: string; booking?: { startMs: number }; ics?: string; cancelToken?: string;
       };
       if (res.status === 201 && data.booking) {
         trackFlow('hire', 'booked');
         setBooked({
           startMs: data.booking.startMs,
-          emailed: data.emailed !== false,
           ics: data.ics ?? '',
           cancelToken: data.cancelToken ?? '',
           email: email.trim(),
@@ -111,7 +110,7 @@ export function FreeHourBooking() {
   let notice: React.ReactNode = null;
   switch (msg) {
     case 'already_booked':
-      notice = <>You've already booked your free hour with this email. Check your inbox for the invite, or write to <Mail /> to change it.</>; break;
+      notice = <>You've already booked your free hour with this email. Write to <Mail /> to change it.</>; break;
     case 'slot_unavailable': notice = <>That time was just taken. Pick another.</>; break;
     case 'rate': notice = <>Too many tries. Please try again in an hour.</>; break;
     case 'down': notice = <>Booking isn't working right now. Write to <Mail /> and we'll set it up by hand.</>; break;
@@ -126,9 +125,7 @@ export function FreeHourBooking() {
         {booked ? (
           <div role="status">
             <p>
-              {booked.emailed
-                ? <>You're booked: {label(booked.startMs)}. A calendar invite is on its way to {booked.email}.</>
-                : <>You're booked: {label(booked.startMs)}, but the invite email didn't send. Download it here, and write to <Mail /> if anything looks wrong.</>}
+              You're booked: {label(booked.startMs)}. Add it to your calendar now. A confirmation is coming to {booked.email} from <Mail />, and Bilko will send the meeting link before the session.
             </p>
             <div className="btns">
               {icsUrl && <a className="btn primary" href={icsUrl} download="bilko-free-hour.ics">Add to calendar</a>}

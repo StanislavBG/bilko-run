@@ -14,7 +14,6 @@ interface BookingsResponse {
   days: number;
   free_hours_booked: number;
   paid_hours: number;
-  mailer_configured: boolean;
   upcoming: BookingEntry[];
 }
 
@@ -44,11 +43,6 @@ export function BookingsTab({ days }: { days: number }) {
   return (
     <div className="space-y-6">
       {error && <div className="text-red-500 text-sm">Could not refresh bookings: {error}</div>}
-      {!data.mailer_configured && (
-        <div role="alert" className="bg-red-50 border border-red-300 text-red-700 font-bold rounded-xl p-4">
-          Booking is refusing visitors: set RESEND_API_KEY, MAIL_FROM and BILKO_INBOX on Render.
-        </div>
-      )}
       <div className="grid grid-cols-2 gap-3 max-w-md">
         <Tile label="free_hours_booked" value={data.free_hours_booked} />
         <Tile label="paid_hours" value={data.paid_hours} />

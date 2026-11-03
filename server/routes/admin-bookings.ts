@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { dbGet } from '../db.js';
+import { dbAll, dbGet } from '../db.js';
 import { requireAdmin, ADMIN_EMAILS } from '../clerk.js';
 import { FREE_HOUR_SLUG, listBookings } from '../services/service-bookings.js';
 import { mailerConfigured } from '../services/mailer.js';
@@ -33,14 +33,15 @@ export function registerAdminBookingRoutes(app: FastifyInstance): void {
       `SELECT COUNT(*) AS n FROM service_bookings WHERE slug = ? AND created_at >= ?${notOwner}`,
       FREE_HOUR_SLUG, sinceMs, ...owners,
     );
-    const paid = await dbGet<{ cents: number }>(
-      `SELECT COALESCE(SUM(amount_total), 0) AS cents FROM web_product_orders
+    const paid = await dbAll<{ email: string; amount_total: number | null; created_at: number }>(
+      `SELECT email, amount_total, created_at FROM web_product_orders
         WHERE slug = ? AND created_at >= ?
           AND checkout_session_id NOT LIKE 'cs\\_test\\_%' ESCAPE '\\'${notOwner}
           AND NOT EXISTS (
             SELECT 1 FROM funnel_events
              WHERE event = 'checkout_start' AND is_admin = 1 AND json_valid(metadata)
-               AND json_extract(metadata, '$.checkout_session_id') = web_product_orders.checkout_session_id)`,
+               AND json_extract(metadata, '$.checkout_session_id') = web_product_orders.checkout_session_id)
+        ORDER BY created_at`,
       PAID_HOUR_SLUG, sinceMs, ...owners,
     );
 
@@ -48,7 +49,12 @@ export function registerAdminBookingRoutes(app: FastifyInstance): void {
     return {
       days,
       free_hours_booked: Number(free?.n ?? 0),
-      paid_hours: Number(paid?.cents ?? 0) / PAID_HOUR_CENTS,
+      paid_hours: paid.reduce((cents, o) => cents + Number(o.amount_total ?? 0), 0) / PAID_HOUR_CENTS,
+      paid_orders: paid.map((o) => ({
+        email: o.email,
+        hours: Number(o.amount_total ?? 0) / PAID_HOUR_CENTS,
+        createdAt: Number(o.created_at),
+      })),
       mailer_configured: mailerConfigured(),
       upcoming: bookings.map((b) => ({
         slug: b.slug,

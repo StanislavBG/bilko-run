@@ -58,7 +58,9 @@ describe('GET /api/admin/bookings', () => {
     expect((await get('?days=0')).json().days).toBe(1);
     expect((await get('?days=9999')).json().days).toBe(365);
     expect((await get('?days=30')).json().days).toBe(30);
-    expect((await get()).json()).toHaveProperty('mailer_configured');
+    expect(Object.keys((await get()).json()).sort()).toEqual(
+      ['days', 'free_hours_booked', 'mailer_configured', 'paid_hours', 'paid_orders', 'upcoming'],
+    );
   });
 
   it('counts free hours in window and excludes owner addresses', async () => {
@@ -73,9 +75,9 @@ describe('GET /api/admin/bookings', () => {
     expect((await get('?days=30')).json().free_hours_booked).toBe(2);
   });
 
-  it('sums paid hours excluding tests, owners and owner checkouts', async () => {
+  it('sums and lists paid hours excluding tests, owners and owner checkouts', async () => {
     const now = Date.now();
-    await order('cs_live_1', 'a@x.com', 10000, now - DAY);
+    await order('cs_live_1', 'a@x.com', 10000, now - 2 * DAY);
     await order('cs_live_2', 'b@x.com', 20000, now - DAY);
     await order('cs_test_3', 'c@x.com', 10000, now - DAY);
     await order('cs_live_4', 'bilko@bilko.run', 10000, now - DAY);
@@ -85,7 +87,13 @@ describe('GET /api/admin/bookings', () => {
     await dbRun(
       `INSERT INTO funnel_events (event, tool, is_admin, metadata) VALUES ('checkout_start', 'bilko-hour', 1, ?)`,
       JSON.stringify({ checkout_session_id: 'cs_live_5' }));
-    expect((await get('?days=7')).json().paid_hours).toBe(3);
+    const res = await get('?days=7');
+    expect(res.json().paid_hours).toBe(3);
+    expect(res.json().paid_orders).toEqual([
+      { email: 'a@x.com', hours: 1, createdAt: now - 2 * DAY },
+      { email: 'b@x.com', hours: 2, createdAt: now - DAY },
+    ]);
+    expect(res.body).not.toContain('cs_live');
   });
 
   it('lists upcoming bookings soonest first without the cancel token', async () => {

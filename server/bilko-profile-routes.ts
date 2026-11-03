@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { BOOKING_PAGE_PRERENDER_HTML } from '../shared/booking-page.js';
 import { BILKO_PROFILE_BOTTOM_HTML, BILKO_PROFILE_TOP_HTML } from '../shared/bilko-profile.js';
 
 const START = '<!--bilko-prerender-->';
@@ -6,13 +7,21 @@ const END = '<!--/bilko-prerender-->';
 
 /** Swap the loading placeholder between the prerender markers for the approved profile copy. */
 export function renderBilkoProfileShell(indexHtml: string): string {
+  return injectPrerender(indexHtml, `<div class="bilko-profile">${BILKO_PROFILE_TOP_HTML}${BILKO_PROFILE_BOTTOM_HTML}</div>`);
+}
+
+/** Same marker swap for the /book page. */
+export function renderBookingPageShell(indexHtml: string): string {
+  return injectPrerender(indexHtml, BOOKING_PAGE_PRERENDER_HTML);
+}
+
+function injectPrerender(indexHtml: string, block: string): string {
   const a = indexHtml.indexOf(START);
   const b = indexHtml.indexOf(END);
   if (a === -1 || b === -1 || b < a) {
     console.error('bilko-profile: prerender markers missing from index.html; serving the shell unchanged');
     return indexHtml;
   }
-  const block = `<div class="bilko-profile">${BILKO_PROFILE_TOP_HTML}${BILKO_PROFILE_BOTTOM_HTML}</div>`;
   return indexHtml.slice(0, a) + block + indexHtml.slice(b + END.length);
 }
 
@@ -23,6 +32,14 @@ export function renderBilkoProfileShell(indexHtml: string): string {
  */
 export function registerBilkoProfileRoutes(app: FastifyInstance, indexHtml: string): void {
   const html = renderBilkoProfileShell(indexHtml);
+  const bookHtml = renderBookingPageShell(indexHtml);
+
+  for (const path of ['/book', '/book/']) {
+    app.get(path, async (_req, reply) => {
+      reply.header('cache-control', 'private, no-store');
+      return reply.type('text/html').send(bookHtml);
+    });
+  }
 
   for (const path of ['/bilko', '/hire', '/human-for-hire']) {
     app.get(path, async (_req, reply) => {

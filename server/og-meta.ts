@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
+import { BOOKING_PAGE_DESCRIPTION, BOOKING_PAGE_TITLE } from '../shared/booking-page.js';
 import { BILKO_PROFILE_DESCRIPTION, BILKO_PROFILE_TITLE } from '../shared/bilko-profile.js';
 
 export interface OgMeta {
@@ -50,6 +51,7 @@ const BILKO_PROFILE_PAGE = { title: BILKO_PROFILE_TITLE, description: BILKO_PROF
 
 const SECTION_PAGES: Record<string, { title: string; description: string; url?: string }> = {
   '/bilko': BILKO_PROFILE_PAGE,
+  '/book': { title: BOOKING_PAGE_TITLE, description: BOOKING_PAGE_DESCRIPTION, url: `${SITE}/book` },
   '/hire': BILKO_PROFILE_PAGE,
   '/human-for-hire': BILKO_PROFILE_PAGE,
   '/projects': {

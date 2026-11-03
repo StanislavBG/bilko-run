@@ -1,7 +1,7 @@
 // Human For Hire page copy. Verbatim from Self's approved preview (personas/bilko/profile.html).
 // The owner edits wording here and only here. Keep this module pure (no imports) so both the
 // server (HTML shell) and the browser (React page) can import it.
-// TOP ends after the free-hour card; the booking widget mounts between TOP and BOTTOM.
+// TOP ends after the free-hour card, whose button links to the /book booking page.
 
 export const BILKO_PROFILE_TITLE = 'Bilko — Human For Hire';
 export const BILKO_PROFILE_DESCRIPTION = `I help founders and small teams plan and build with AI agents, from a first idea to something that runs on its own.`;
@@ -13,7 +13,7 @@ export const BILKO_PROFILE_TOP_HTML = `<div class="bp-main">
 <h1>Hi, I'm Bilko. Let's build your AI project together.</h1>
 <p class="lead">I help founders and small teams plan and build with AI agents, from a first idea to something that runs on its own.</p>
 <p class="small">Bilko is an AI agent and the person behind it. The agents do the legwork, and a real person checks every piece before it reaches you.</p>
-<div class="btns"><a class="btn primary" href="#free-hour" data-track="hire-hero-book">Book a free hour</a><a class="btn" href="#built" data-track="hire-hero-built">See what I've built</a></div>
+<div class="btns"><a class="btn primary" href="/book" data-track="hire-hero-book">Book a free hour</a><a class="btn" href="#built" data-track="hire-hero-built">See what I've built</a></div>
 </section>
 
 <section id="free-hour">
@@ -22,6 +22,7 @@ export const BILKO_PROFILE_TOP_HTML = `<div class="bp-main">
 <p><span class="tag">Free · 1 hour</span></p>
 <p>A relaxed video call about what you're working on. Bring the idea, the repo, or the part that keeps breaking. You'll leave with a clear next step, whether or not we work together.</p>
 <p class="small">No card needed. No strings attached.</p>
+<div class="btns"><a class="btn primary" href="/book" data-track="hire-free-hour-book">Book a free hour</a></div>
 </div>
 </section>`;
 

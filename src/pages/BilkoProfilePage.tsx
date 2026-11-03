@@ -1,5 +1,4 @@
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
-import { FreeHourBooking } from '../components/FreeHourBooking.js';
 import {
   BILKO_PROFILE_TITLE,
   BILKO_PROFILE_TOP_HTML,
@@ -23,7 +22,6 @@ export function BilkoProfilePage() {
       {message && <p role="status">{message}</p>}
       {/* Trusted constants from shared/bilko-profile.ts; no user input. */}
       <div dangerouslySetInnerHTML={{ __html: BILKO_PROFILE_TOP_HTML }} />
-      <FreeHourBooking />
       <div dangerouslySetInnerHTML={{ __html: BILKO_PROFILE_BOTTOM_HTML }} />
     </div>
   );

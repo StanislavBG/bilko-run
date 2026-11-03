@@ -10,35 +10,26 @@ async function mock(page: Page, status: number, body: object) {
   await page.route('**/api/services/human-for-hire/free-hour/cancel', r => r.fulfill({ json: { cancelled: true } }));
 }
 
-async function fill(page: Page) {
+test('both Book a free hour links go to /book', async ({ page }) => {
+  await mock(page, 201, {});
   await page.goto('/bilko');
-  await page.locator('.fhb-slots button').first().click();
-  await page.getByLabel('Email', { exact: true }).fill('visitor@example.com');
-  await page.getByRole('button', { name: 'Book my free hour' }).click();
-}
-
-test('books a free hour', async ({ page }) => {
-  await mock(page, 201, {
-    booking: { startMs: T, endMs: T + 3600000 }, emailed: true,
-    ics: 'BEGIN:VCALENDAR\r\nEND:VCALENDAR', cancelToken: 'tok',
-  });
-  await fill(page);
-  await expect(page.getByText("You're booked:")).toBeVisible();
-  await expect(page.getByText('visitor@example.com')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Add to calendar' })).toBeVisible();
+  const links = page.getByRole('link', { name: 'Book a free hour' });
+  await expect(links).toHaveCount(2);
+  for (const l of await links.all()) await expect(l).toHaveAttribute('href', '/book');
 });
 
-test('shows already_booked', async ({ page }) => {
-  await mock(page, 409, { error: 'already_booked' });
-  await fill(page);
-  await expect(page.getByText("You've already booked your free hour")).toBeVisible();
+test('renders no inline booking form', async ({ page }) => {
+  await mock(page, 201, {});
+  await page.goto('/bilko');
+  await expect(page.getByRole('link', { name: 'Book a free hour' }).first()).toBeVisible();
+  await expect(page.locator('.fhb-slots')).toHaveCount(0);
 });
 
 test('no sideways scroll at 390x844', async ({ page }) => {
   await mock(page, 201, {});
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/bilko');
-  await expect(page.getByRole('button', { name: 'Book my free hour' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Book a free hour' }).first()).toBeVisible();
   const over = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(over).toBe(false);
 });

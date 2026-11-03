@@ -91,13 +91,22 @@
   .booking-page .bk-inner{flex-direction:column;flex-wrap:nowrap;gap:40px}
   .booking-page .bk-left,.booking-page .bk-card{flex:0 0 auto;width:100%}
   .booking-page .bk-eyebrow{margin-top:40px}
+  /* Phone reading order: pitch, then the card, then the footer. Visual only; the DOM keeps .bk-foot inside .bk-left. */
+  .booking-page .bk-left{display:contents}
+  .booking-page .bk-top{order:1}
+  .booking-page .bk-card{order:2}
+  .booking-page .bk-foot{order:3}
 }
 @media (max-width:520px){
   .booking-page .bk-inner{padding:20px 16px;gap:28px}
   .booking-page .bk-card{padding:20px 16px}
   .booking-page .bk-h1{font-size:34px}
   .booking-page .bk-eyebrow{margin-top:32px}
-  .booking-page .bk-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .booking-page .bk-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .booking-page .bk-slot{padding:10px}
+  .booking-page .bk-slot .bk-slot-top,.booking-page .bk-slot .bk-slot-bottom{flex-direction:column;align-items:flex-start;justify-content:flex-start}
+  .booking-page .bk-slot .bk-slot-top{flex-wrap:wrap}
+  .booking-page .bk-slot .bk-date{font-size:18px}
   .booking-page .bk-card h2{font-size:23px}
   .booking-page .bk-summary{flex-wrap:wrap}
 }

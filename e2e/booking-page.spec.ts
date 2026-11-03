@@ -205,3 +205,51 @@ test('left column spacing matches the design at 1280x720', async ({ page }) => {
   expect(Math.abs(r.eyebrow.top - r.brand.bottom - 56)).toBeLessThanOrEqual(2);
   expect(Math.abs(r.h1.top - r.eyebrow.bottom - 16)).toBeLessThanOrEqual(2);
 });
+
+test.describe('phone fold at 390x844', () => {
+  test.use({ viewport: { width: 390, height: 844 }, timezoneId: 'America/New_York' });
+  const NOW = Date.UTC(2026, 10, 2, 12, 0, 0);
+  const phoneSlots = {
+    timeZone: 'America/Los_Angeles',
+    durationMinutes: 60,
+    // Week 1 starts about 30 hours after the fixed clock, so its first slot is "Tomorrow".
+    slots: [0, 7, 14].flatMap((d) =>
+      [30, 31, 32].map((h) => ({ startMs: NOW + d * 24 * H + h * H, endMs: NOW + d * 24 * H + (h + 1) * H }))),
+    taken: [],
+  };
+
+  async function open(page: Page) {
+    await page.clock.install({ time: NOW });
+    await mock(page, phoneSlots);
+    await page.goto('/book');
+    await expect(page.locator('button.bk-slot')).toHaveCount(9);
+  }
+
+  test('open times are on the first screen and the footer follows the card', async ({ page }) => {
+    await open(page);
+    await expect(page.getByText(/for Bilko\./)).toBeVisible();
+    const m = await page.evaluate(() => {
+      const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+      const de = document.documentElement;
+      return { slotBottom: r('.bk-slot').bottom, footTop: r('.bk-foot').top, cardBottom: r('.bk-card').bottom, over: de.scrollWidth > de.clientWidth };
+    });
+    expect(m.slotBottom).toBeLessThanOrEqual(844);
+    expect(m.footTop).toBeGreaterThanOrEqual(m.cardBottom);
+    expect(m.over).toBe(false);
+    await page.screenshot({ path: 'test-results/booking-page-390x844-step1.png' });
+  });
+
+  test('no slot content overflows, before and after a pick, including the Tomorrow badge', async ({ page }) => {
+    await open(page);
+    const overflowing = () => page.evaluate(() =>
+      [...document.querySelectorAll('.bk-slot')].filter((e) => e.scrollWidth > e.clientWidth).length);
+    await expect(page.locator('.bk-badge', { hasText: 'Tomorrow' }).first()).toBeVisible();
+    expect(await overflowing()).toBe(0);
+    await page.locator('button.bk-slot').nth(4).click();
+    await expect(page.locator('button.bk-slot').nth(4)).toContainText('✓ Selected');
+    expect(await overflowing()).toBe(0);
+    await page.locator('button.bk-slot').first().click();
+    await expect(page.locator('button.bk-slot').first()).toContainText('✓ Selected');
+    expect(await overflowing()).toBe(0);
+  });
+});

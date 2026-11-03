@@ -166,3 +166,42 @@ for (const [w, h] of [[1280, 720], [390, 844]] as const) {
     await page.screenshot({ path: `test-results/booking-page-step3-${w}x${h}.png`, fullPage: true });
   });
 }
+
+const D = 24 * H;
+const nineSlots = {
+  timeZone: 'America/Los_Angeles',
+  durationMinutes: 60,
+  slots: [0, 1, 2, 7, 8, 9, 14, 15, 16].map((d) => ({ startMs: T + d * D, endMs: T + d * D + H })),
+  taken: [],
+};
+
+test('fits 1280x720 on every step', async ({ page }) => {
+  await mockBook(page);
+  await mock(page, nineSlots);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/book');
+  await expect(page.locator('button.bk-slot').first()).toBeVisible();
+  await page.getByLabel('Times in').selectOption('Europe/Berlin');
+  const h = () => page.evaluate(() => document.documentElement.scrollHeight);
+  expect(await h()).toBeLessThanOrEqual(720);
+  await page.locator('button.bk-slot').first().click();
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByPlaceholder('you@company.com').fill('me@example.com');
+  expect(await h()).toBeLessThanOrEqual(720);
+  await page.getByRole('button', { name: 'Book my free hour' }).click();
+  await expect(page.getByRole('heading', { name: "You're booked." })).toBeVisible();
+  expect(await h()).toBeLessThanOrEqual(720);
+});
+
+test('left column spacing matches the design at 1280x720', async ({ page }) => {
+  await mock(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/book');
+  await expect(page.locator('button.bk-slot').first()).toBeVisible();
+  const r = await page.evaluate(() => {
+    const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+    return { brand: b('.bk-brand'), eyebrow: b('.bk-eyebrow'), h1: b('.bk-h1') };
+  });
+  expect(Math.abs(r.eyebrow.top - r.brand.bottom - 56)).toBeLessThanOrEqual(2);
+  expect(Math.abs(r.h1.top - r.eyebrow.bottom - 16)).toBeLessThanOrEqual(2);
+});

@@ -28,6 +28,8 @@ describe('booking page routes', () => {
       expect(res.body).toContain('Bring your AI idea. Leave with a plan.');
       expect(res.body).toContain('Pick a time');
       expect(res.body).toContain('og:title');
+      expect(res.body).toContain('<div class="booking-page"><div class="bk-inner"><div class="bk-left">');
+      expect(res.body).toContain('class="bk-top"');
     }
   });
 

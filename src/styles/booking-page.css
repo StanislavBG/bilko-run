@@ -7,16 +7,18 @@
 
 /* Left column */
 .booking-page .bk-left{flex:1 1 400px;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:32px}
+.booking-page .bk-top{display:flex;flex-direction:column;gap:0}
 .booking-page .bk-brand{display:flex;align-items:center;gap:12px}
 .booking-page .bk-avatar{flex:none;width:40px;height:40px;border-radius:50%;background:var(--bk-accent);color:var(--bk-bg);display:flex;align-items:center;justify-content:center;font:italic 600 21px/1 var(--bk-serif)}
 .booking-page .bk-name{font:600 17px/1.1 var(--bk-serif)}
 .booking-page .bk-sub{font:400 13px/1.2 var(--bk-sans);color:var(--bk-muted);margin-top:4px}
-.booking-page .bk-eyebrow{margin-top:56px;font:500 12px/1 var(--bk-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--bk-accent)}
+.booking-page .bk-eyebrow{margin:56px 0 0;font:500 12px/1 var(--bk-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--bk-accent)}
 .booking-page .bk-h1{margin:16px 0 0;font:600 46px/1.08 var(--bk-serif);letter-spacing:-.01em;text-wrap:balance;color:var(--bk-ink)}
 .booking-page .bk-lead{margin:18px 0 0;max-width:460px;font:400 17px/1.55 var(--bk-sans);color:var(--bk-body);text-wrap:pretty}
 .booking-page .bk-points{list-style:none;padding:0;margin:28px 0 0;display:flex;flex-direction:column;gap:12px;font:500 15px/1.35 var(--bk-sans)}
 .booking-page .bk-points li{display:flex;align-items:center;gap:12px}
 .booking-page .bk-check{flex:none;width:20px;height:20px;border-radius:50%;background:var(--bk-green);color:var(--bk-bg);display:flex;align-items:center;justify-content:center;font-size:11px}
+.booking-page .bk-foot p{margin:0}
 .booking-page .bk-foot{display:flex;flex-direction:column;gap:8px;padding-top:18px;border-top:1px solid var(--bk-line);font:400 12.5px/1.5 var(--bk-sans);color:var(--bk-muted)}
 .booking-page .bk-shipped{color:var(--bk-ink);font-weight:500}
 

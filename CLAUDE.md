@@ -97,6 +97,7 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 - **AI**: Gemini (REST API via `gemini-flash-latest` alias, key via header not URL)
 - **Auth**: Clerk (JWT verification, `requireAuth`, `requireAdmin`)
 - **Payments**: Stripe (token credits, webhook verification)
+- **Runtime**: Node 24, set by `engines.node` in `package.json` (bounded on purpose; Render and CI both read it — see [`docs/deployment.md`](docs/deployment.md#node-version))
 - **Deploy**: Render, from the **`StanislavBG/bilko-run`** repo (`main`). Deploy source is configured in the Render dashboard (no `render.yaml` in-repo) — confirm there if in doubt. **Not** the `content-grade` remote anymore.
 - **Database**: Turso (persistent), falls back to local SQLite in dev
 

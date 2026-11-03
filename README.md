@@ -15,7 +15,7 @@ The full rules for how apps plug in are in [docs/host-contract.md](docs/host-con
 
 ## Run it on your computer
 
-You need Node 22 or newer and [pnpm](https://pnpm.io/installation) (a package installer).
+You need Node 24 and [pnpm](https://pnpm.io/installation) (a package installer). `engines` in `package.json` has the exact range.
 
 ```bash
 cp .env.example .env   # then fill in the values you need

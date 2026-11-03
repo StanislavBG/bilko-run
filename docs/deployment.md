@@ -11,6 +11,22 @@ bilko.run auto-deploys from `origin` = `StanislavBG/bilko-run`, branch `main`. P
 
 These come from `package.json`. Confirm the exact commands in the Render dashboard (service → Settings → Build & Deploy), since the dashboard is what actually runs.
 
+## Node version
+
+`engines.node` in `package.json` sets the Node version. It has a floor and a ceiling on purpose. Render resolves a range to the newest release inside it on every build, so patch releases arrive on their own and a new major never does. CI reads the same field (`node-version-file: package.json`), so it tests what Render builds. The floor is the patched release named in Render's eMudhra advisory of October 2026.
+
+Render uses the first of these it finds: a `NODE_VERSION` env var, `.node-version`, `.nvmrc`, `engines`. Keep the first three unset, or `engines` stops deciding anything. An exact pin in `.node-version` would also stop patch releases.
+
+To see what production runs, use the admin key (`~/.config/bilko-host/admin-key`):
+
+```bash
+curl -s -H "Authorization: Bearer $BILKO_ADMIN_KEY" https://bilko.run/api/admin/runtime
+```
+
+`node` is the running release. `nodeVersionEnv` should be `null`: Render never sets that variable itself, so any value means it is set on the service and is overriding `engines`. After removing it, choose **Save, rebuild, and deploy**, because Render picks the Node version at build time.
+
+To move to a new major, run `pnpm typecheck`, `pnpm test`, `pnpm --filter host-kit test` and `pnpm build` on it, then change both bounds together. Node 25 and later add a global `localStorage` that hides jsdom's, so `packages/host-kit/tests/telemetry.test.ts` fails on Node 26 until its test setup handles that.
+
 ## Env vars
 
 Env vars live in the Render dashboard (service → Environment). They are not committed to the repo. Rotation steps are in [secrets-rotation.md](secrets-rotation.md).

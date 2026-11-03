@@ -5,8 +5,8 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { brotliDecompressSync, gunzipSync } from 'zlib';
-import { registerSecurityHeaders } from '../server/security-headers.js';
+import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'zlib';
+import { registerSecurityHeaders, REQUEST_BODY_ENCODINGS } from '../server/security-headers.js';
 import { registerEgressMeter, setStaticKnownSlugs, flushEgress } from '../server/egress.js';
 import { initDb, dbGet, dbRun } from '../server/db.js';
 
@@ -19,11 +19,17 @@ async function buildApp() {
   // Same registration order as server/index.ts: security headers (CSP nonce
   // onSend) → compress (so it compresses AFTER nonce injection) → egress meter.
   registerSecurityHeaders(app);
-  await app.register(compress, { threshold: 1024, encodings: ['br', 'gzip'], customTypes: CUSTOM_TYPES });
+  await app.register(compress, {
+    threshold: 1024,
+    encodings: ['br', 'gzip'],
+    requestEncodings: REQUEST_BODY_ENCODINGS,
+    customTypes: CUSTOM_TYPES,
+  });
   registerEgressMeter(app, { flush: false });
 
   app.get('/api/big', async () => ({ blob: 'x'.repeat(50_000) }));
   app.get('/api/tiny', async () => ({ ok: true }));
+  app.post('/api/echo', async (req) => req.body);
   app.get('/big.html', async (_req, reply) =>
     reply.type('text/html').send(
       `<html><head></head><body><script src="/app.js"></script>${'y'.repeat(50_000)}</body></html>`,
@@ -48,6 +54,30 @@ describe('origin compression', () => {
     // before clearing the table, so requests don't leak across tests.
     await flushEgress();
     await dbRun('DELETE FROM api_egress_daily');
+  });
+
+  it('refuses a Brotli request body but still responds in Brotli', async () => {
+    const refused = await app.inject({
+      method: 'POST',
+      url: '/api/echo',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
+      payload: brotliCompressSync(Buffer.from('{"a":1}')),
+    });
+    expect(refused.statusCode).toBe(415);
+
+    const sent = await app.inject({ method: 'GET', url: '/api/big', headers: { 'accept-encoding': 'br' } });
+    expect(sent.headers['content-encoding']).toBe('br');
+  });
+
+  it('still accepts a gzip request body', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/echo',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      payload: gzipSync(Buffer.from('{"a":1}')),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ a: 1 });
   });
 
   it('sets content-encoding on a compressible JSON response above threshold', async () => {

@@ -44,7 +44,7 @@ import { registerForumRoutes, getForumSeedHealth } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
 import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
-import { registerSecurityHeaders } from './security-headers.js';
+import { registerSecurityHeaders, REQUEST_BODY_ENCODINGS } from './security-headers.js';
 import { registerOgRoutes } from './og-routes.js';
 import { gitViewerOg, getGitViewerHealth } from './routes/tools/git-viewer.js';
 import { loadOgProjects, type OgProject } from './og-meta.js';
@@ -157,6 +157,7 @@ await app.register(compress, {
   // bandwidth saved.
   threshold: 1024,
   encodings: ['br', 'gzip'],
+  requestEncodings: REQUEST_BODY_ENCODINGS,
   // @fastify/compress's default compressible-types regex doesn't match
   // `application/javascript` (only `text/*`, `*/json`, `*/xml`, `*/text`,
   // `octet-stream`) — extend it to cover the static JS bundle explicitly.

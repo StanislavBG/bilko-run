@@ -4,6 +4,10 @@ import { dbRun } from './db.js';
 
 const ENFORCE = process.env.BILKO_CSP_ENFORCE === '1';
 
+// Request bodies only. No client sends Brotli, so a `Content-Encoding: br` body
+// gets a 415 rather than handing anonymous bytes to the Brotli decoder.
+export const REQUEST_BODY_ENCODINGS: ('gzip' | 'deflate')[] = ['gzip', 'deflate'];
+
 const PERMISSIONS = [
   'accelerometer=()', 'camera=()', 'geolocation=(self)', 'gyroscope=()',
   'magnetometer=()', 'microphone=(self)', 'payment=(self)', 'usb=()',

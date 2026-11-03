@@ -5,6 +5,7 @@ import { mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { BLOG_REWRITES, type BlogRewrite } from './blog-rewrites/index.js';
+import { BILKO_CONTACT_EMAIL } from '../shared/bilko-profile.js';
 import { DEFAULT_BUDGET_GZ_BYTES, APP_BUDGETS_GZ_BYTES } from '../mcp-host-server/src/contract/app-budgets.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -405,6 +406,13 @@ export async function initDb(): Promise<void> {
   );
 
   await applyBlogRewrites(BLOG_REWRITES, doneIds);
+
+  // bilko@bilko.run has no mailbox. INSERT OR IGNORE left it in this post's production row
+  // after the markdown moved to the published Gmail, so carry that fix over once.
+  await applyDataMigrationOnce('2026-11-02-blog-contact-address', [{
+    sql: 'UPDATE blog_posts SET content = replace(content, ?, ?), updated_at = ? WHERE slug = ?',
+    args: ['bilko@bilko.run', BILKO_CONTACT_EMAIL, new Date().toISOString(), 'outdoorhours-week-2-from-fixed-rules-to-rule-engine'],
+  }], doneIds);
 
   // The git-viewer free tier dropped from 3 projects to 1 on 2026-10-14. Mark
   // cached free profiles stale so each rebuilds at the new cap: unclaimed ones

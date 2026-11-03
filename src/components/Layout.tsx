@@ -7,6 +7,7 @@ import { NOW_ITEMS, SECTIONS } from '../data/portfolio.js';
 import { CommandPalette } from './portfolio/CommandPalette.js';
 import { fetchMe, type ForumMember } from '../lib/forumClient.js';
 import { useForumToast } from '../pages/forum/ForumToast.js';
+import { BILKO_CONTACT_EMAIL } from '../../shared/bilko-profile.js';
 
 const HandleModal = lazy(() => import('../pages/forum/HandleModal.js').then(m => ({ default: m.HandleModal })));
 
@@ -195,7 +196,7 @@ export function Layout() {
             <div className="pf-eyebrow" style={{ marginTop: 24, marginBottom: 12 }}>Elsewhere</div>
             <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" className="pf-mobile-link">GitHub ↗</a>
             <a href="https://x.com/BilkoBibitkov" target="_blank" rel="noopener noreferrer" className="pf-mobile-link">Twitter ↗</a>
-            <a href="mailto:bilko@bilko.run" className="pf-mobile-link">Email ↗</a>
+            <a href={`mailto:${BILKO_CONTACT_EMAIL}`} className="pf-mobile-link">Email ↗</a>
           </div>
         </div>
       )}
@@ -225,7 +226,7 @@ export function Layout() {
               <Link to="/privacy" data-track="footer-privacy">Privacy</Link>
               <Link to="/terms" data-track="footer-terms">Terms</Link>
               <a href="https://github.com/StanislavBG" target="_blank" rel="noopener noreferrer" data-track="footer-github">GitHub</a>
-              <a href="mailto:bilko@bilko.run" data-track="footer-email">Email</a>
+              <a href={`mailto:${BILKO_CONTACT_EMAIL}`} data-track="footer-email">Email</a>
             </>
           )}
         </div>

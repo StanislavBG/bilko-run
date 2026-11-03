@@ -1,4 +1,5 @@
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import { BILKO_CONTACT_EMAIL } from '../../shared/bilko-profile.js';
 
 export function PrivacyPage() {
   useDocumentTitle('Privacy Policy — bilko.run');
@@ -6,7 +7,7 @@ export function PrivacyPage() {
   return (
     <section className="max-w-3xl mx-auto px-6 py-16 md:py-24">
       <h1 className="text-3xl font-extrabold text-warm-900 mb-2">Privacy Policy</h1>
-      <p className="text-sm text-warm-400 mb-10">Last updated: October 18, 2026</p>
+      <p className="text-sm text-warm-400 mb-10">Last updated: November 2, 2026</p>
 
       <div className="prose-warm space-y-8 text-warm-700 text-sm leading-relaxed">
         <div>
@@ -19,7 +20,8 @@ export function PrivacyPage() {
           <p>We collect the minimum data needed to operate:</p>
           <ul className="list-disc pl-5 mt-2 space-y-1">
             <li><strong>Account data:</strong> Email address and name provided via Clerk (our authentication provider) when you sign in with Google or email.</li>
-            <li><strong>Sign-in updates:</strong> If you sign in from a "sign in for updates" prompt (Session Manager, its Field Manual, Human For Hire), we record which page you came from and whether you ticked "Send me occasional updates" (off unless you tick it), with the time you ticked it. Email <strong>bilko@bilko.run</strong> to turn it off.</li>
+            <li><strong>Sign-in updates:</strong> If you sign in from a "sign in for updates" prompt (Session Manager, its Field Manual, Human For Hire), we record which page you came from and whether you ticked "Send me occasional updates" (off unless you tick it), with the time you ticked it. Email <strong>{BILKO_CONTACT_EMAIL}</strong> to turn it off.</li>
+            <li><strong>Bookings:</strong> If you book time with Bilko, we store your email, the time you picked, and what you wrote about your project, and use them to confirm the booking and prepare for the call.</li>
             <li><strong>Usage data:</strong> URLs you submit for analysis, scores generated, and credit balances.</li>
             <li><strong>Payment data:</strong> Processed by Stripe. We never see or store your card number. We store your email and Stripe customer ID for credit delivery.</li>
             <li><strong>Analytics:</strong> Page views, clicks, and funnel events (anonymized IP hash, tool used), tied together by two first-party cookies. See Cookies below.</li>
@@ -59,6 +61,7 @@ export function PrivacyPage() {
             <li><strong>Clerk</strong> — Authentication. Manages sign-in, sessions, and user data. <a href="https://clerk.com/privacy" className="text-fire-600 underline" target="_blank" rel="noopener noreferrer">Clerk Privacy Policy</a></li>
             <li><strong>Stripe</strong> — Payment processing. Handles all financial transactions. <a href="https://stripe.com/privacy" className="text-fire-600 underline" target="_blank" rel="noopener noreferrer">Stripe Privacy Policy</a></li>
             <li><strong>Google Gemini</strong> — AI analysis. Page content is sent to Google's Gemini API for scoring. <a href="https://policies.google.com/privacy" className="text-fire-600 underline" target="_blank" rel="noopener noreferrer">Google Privacy Policy</a></li>
+            <li><strong>Gmail</strong> — Email. Booking confirmations and replies come from Bilko's Gmail account. <a href="https://policies.google.com/privacy" className="text-fire-600 underline" target="_blank" rel="noopener noreferrer">Google Privacy Policy</a></li>
             <li><strong>Render</strong> — Hosting. <a href="https://render.com/privacy" className="text-fire-600 underline" target="_blank" rel="noopener noreferrer">Render Privacy Policy</a></li>
           </ul>
         </div>
@@ -72,7 +75,7 @@ export function PrivacyPage() {
             <li>Manage your Clerk account settings directly.</li>
             <li>Manage your Stripe billing via the customer portal.</li>
           </ul>
-          <p className="mt-2">To exercise these rights, email <strong>bilko@bilko.run</strong>.</p>
+          <p className="mt-2">To exercise these rights, email <strong>{BILKO_CONTACT_EMAIL}</strong>.</p>
         </div>
 
         <div>
@@ -92,7 +95,7 @@ export function PrivacyPage() {
 
         <div>
           <h2 className="text-lg font-bold text-warm-900 mb-2">11. Contact</h2>
-          <p>Questions? Email <strong>bilko@bilko.run</strong>.</p>
+          <p>Questions? Email <strong>{BILKO_CONTACT_EMAIL}</strong>.</p>
         </div>
       </div>
     </section>

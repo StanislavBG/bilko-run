@@ -74,7 +74,7 @@ Why the reskin: with nine regions, six rules, five prebuilt profiles, and a cust
 
 [OutdoorHours](/projects/outdoor-hours) now covers nine regions across three continents, six rules, five prebuilt profiles, and a custom profile builder with shareable URLs. Free, no credits, no login.
 
-Build a profile that reflects your idea of nice weather and send me the URL — `bilko@bilko.run`. The most opinionated reader's profile gets pinned as a guest preset next week.
+Build a profile that reflects your idea of nice weather and send me the URL — `BilkoBibitkov2000@gmail.com`. The most opinionated reader's profile gets pinned as a guest preset next week.
 
 If you want to see how the rest of the bilko.run platform fits together, [the full project list is here](/projects). Or for a different tool that takes opinions and gives them back to you sharper, try [PageRoast](/projects/page-roast).
 
@@ -87,7 +87,7 @@ Every UI selection — regions, range, grain, metric, profile (built-in id or cu
 Because cloud cover and humidity are the two rules that most often *should* be in someone's definition of comfortable but weren't in ours. Adding them as optional rules (with a `null` cap meaning "ignore") preserved the four-rule classic profile while opening up the cloudy-and-cool and humid-and-warm cases.
 
 **Can I add my own region?**
-Not directly — adding a region requires fetching ten years of hourly ERA5 data via Open-Meteo, processing it through the export pipeline, and rebuilding the bundles. If there's a county you want covered, email `bilko@bilko.run` with the lat/long. The ten regions we have today were added that way.
+Not directly — adding a region requires fetching ten years of hourly ERA5 data via Open-Meteo, processing it through the export pipeline, and rebuilding the bundles. If there's a county you want covered, email `BilkoBibitkov2000@gmail.com` with the lat/long. The ten regions we have today were added that way.
 
 **Why precompute per-profile rollups instead of scoring at click time?**
 Because click latency is the difference between a tool that feels live and a tool that feels like it's loading. The custom-profile path falls back to client-side scoring when the rules are user-defined; built-in profiles read pre-computed columns and stay sub-50ms.

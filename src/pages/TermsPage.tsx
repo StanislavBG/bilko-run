@@ -1,4 +1,5 @@
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import { BILKO_CONTACT_EMAIL } from '../../shared/bilko-profile.js';
 
 export function TermsPage() {
   useDocumentTitle('Terms of Service — bilko.run');
@@ -6,7 +7,7 @@ export function TermsPage() {
   return (
     <section className="max-w-3xl mx-auto px-6 py-16 md:py-24">
       <h1 className="text-3xl font-extrabold text-warm-900 mb-2">Terms of Service</h1>
-      <p className="text-sm text-warm-400 mb-10">Last updated: March 29, 2026</p>
+      <p className="text-sm text-warm-400 mb-10">Last updated: November 2, 2026</p>
 
       <div className="prose-warm space-y-8 text-warm-700 text-sm leading-relaxed">
         <div>
@@ -90,7 +91,7 @@ export function TermsPage() {
 
         <div>
           <h2 className="text-lg font-bold text-warm-900 mb-2">14. Contact</h2>
-          <p>Questions about these terms? Email <strong>bilko@bilko.run</strong>.</p>
+          <p>Questions about these terms? Email <strong>{BILKO_CONTACT_EMAIL}</strong>.</p>
         </div>
       </div>
     </section>

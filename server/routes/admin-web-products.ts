@@ -13,11 +13,17 @@ function likePrefix(slug: string): string {
 }
 
 /** page_views filter for the page that sells p. Only placeholders are interpolated; every value is a bound arg. */
-function viewsFilter(p: WebProduct): { sql: string; args: string[] } {
-  if (productPageSlug(p) === HOST_PAGE_SLUG) {
+function viewsFilter(p: WebProduct, products: readonly WebProduct[]): { sql: string; args: string[] } {
+  const page = productPageSlug(p);
+  if (page === HOST_PAGE_SLUG) {
     return { sql: `path IN (${HOST_PAGE_PATHS.map(() => '?').join(', ')})`, args: [...HOST_PAGE_PATHS] };
   }
-  return { sql: `path LIKE ? ESCAPE '\\'`, args: [likePrefix(p.slug)] };
+  // A page can hold another product's page (launch-kit/agent-factory-kit); those views are that product's.
+  const nested = products.filter((q) => productPageSlug(q).startsWith(`${page}/`)).map((q) => likePrefix(productPageSlug(q)));
+  return {
+    sql: [`path LIKE ? ESCAPE '\\'`, ...nested.map(() => `path NOT LIKE ? ESCAPE '\\'`)].join(' AND '),
+    args: [likePrefix(page), ...nested],
+  };
 }
 
 export function registerAdminWebProductRoutes(
@@ -43,7 +49,7 @@ export function registerAdminWebProductRoutes(
     const daily: Array<{ date: string; slug: string; views: number; checkoutStarts: number; orders: number; downloads: number }> = [];
 
     for (const p of products) {
-      const page = viewsFilter(p);
+      const page = viewsFilter(p, products);
       const [views, checkouts, orders, downloads, lastOrder, lastDownload, release,
         viewsByDay, checkoutsByDay, ordersByDay, downloadsByDay, outcomes] = await Promise.all([
         dbGet<{ views: number; visitors: number }>(

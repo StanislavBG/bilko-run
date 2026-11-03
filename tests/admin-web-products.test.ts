@@ -252,3 +252,28 @@ describe('views of a product sold from a host route', () => {
     expect(res.json().products.find((p: any) => p.slug === 'fixture-service').views).toBe(1);
   });
 });
+
+describe('views of a product nested in another product page', () => {
+  const addView = (path: string, visitor: string) =>
+    dbRun('INSERT INTO page_views (path, date, visitor_id, is_bot, is_admin) VALUES (?, ?, ?, 0, 0)', path, dayStr(0), visitor);
+  const body = async () => (await catalogApp.inject({ method: 'GET', url: '/api/admin/web-products?days=7' })).json();
+
+  it('counts the nested page for its own product and adds nothing to the parent', async () => {
+    await addView('/projects/launch-kit/agent-factory-kit/', 'n1');
+    const b = await body();
+    const afk = b.products.find((p: any) => p.slug === 'agent-factory-kit');
+    expect(afk).toMatchObject({ views: 1, uniqueVisitors: 1 });
+    expect(b.products.find((p: any) => p.slug === 'launch-kit').views).toBe(0);
+    expect(b.daily.find((r: any) => r.slug === 'agent-factory-kit' && r.date === dayStr(0))).toMatchObject({ views: 1 });
+    expect(b.daily.find((r: any) => r.slug === 'launch-kit' && r.date === dayStr(0))?.views ?? 0).toBe(0);
+  });
+
+  it('counts the parent page and its subpages for the parent only; the retired path counts for neither', async () => {
+    await addView('/projects/launch-kit/', 'p1');
+    await addView('/projects/launch-kit/thanks/', 'p2');
+    await addView('/projects/agent-factory-kit/', 'x1');
+    const b = await body();
+    expect(b.products.find((p: any) => p.slug === 'launch-kit')).toMatchObject({ views: 2, uniqueVisitors: 2 });
+    expect(b.products.find((p: any) => p.slug === 'agent-factory-kit').views).toBe(0);
+  });
+});

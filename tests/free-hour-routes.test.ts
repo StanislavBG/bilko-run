@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { initDb } from '../server/db.js';
 import { SERVICE_SLOT_CONFIG, generateSlots } from '../shared/service-slots.js';
@@ -18,12 +18,20 @@ const post = (body: unknown, url = '/api/services/human-for-hire/free-hour', ip?
   app.inject({ method: 'POST', url, payload: body as object, remoteAddress: ip ?? `10.2.0.${++ipN}` });
 
 beforeAll(async () => {
+  // The suite books up to slots()[8]; the open-slot count is 8 or 9 depending on the weekday,
+  // so pin the clock (Date only, timers stay real) to a day that yields 9.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.UTC(2026, 10, 2, 20));
   await initDb();
   const { registerFreeHourRoutes } = await import('../server/routes/free-hour.js');
   const { registerServiceBookingRoutes } = await import('../server/routes/service-bookings.js');
   app = Fastify();
   registerServiceBookingRoutes(app);
   registerFreeHourRoutes(app);
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 beforeEach(() => {

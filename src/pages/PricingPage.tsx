@@ -277,7 +277,7 @@ export function PricingPage() {
           <p className="mt-2 text-lg text-warm-900">
             Start with a free hour, then $100 / hour for Consultation, Architecture and Design.
           </p>
-          <Link to="/bilko" data-track="pricing-hire" className={`mt-5 inline-block ${BTN_PRIMARY}`}>
+          <Link to="/book" data-track="pricing-hire" className={`mt-5 inline-block ${BTN_PRIMARY}`}>
             Book a free hour
           </Link>
         </div>

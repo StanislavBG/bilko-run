@@ -143,7 +143,7 @@ export function HomePage() {
             Small AI tools built in the open. Use the projects, read the build logs, send a message.
           </p>
           <Link
-            to="/bilko"
+            to="/book"
             className="hr-cta"
             data-track="home-hire"
             style={{ textDecoration: 'none', display: 'inline-block' }}

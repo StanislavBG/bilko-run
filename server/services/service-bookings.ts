@@ -212,3 +212,37 @@ export async function cancelFreeHour(token: string, nowMs: number = Date.now()):
   await dbRun('DELETE FROM service_bookings WHERE id = ?', row.id);
   return toBooking(row);
 }
+
+export type RescheduleFreeHourResult =
+  | { status: 'ok'; booking: ServiceBooking }
+  | { status: 'not_found' }
+  | { status: 'taken' };
+
+export function rescheduleFreeHour(
+  token: string, startMs: number, endMs: number, nowMs: number = Date.now(),
+): Promise<RescheduleFreeHourResult> {
+  const run = claimQueue.then(() => rescheduleFreeHourUnlocked(token, startMs, endMs, nowMs));
+  claimQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function rescheduleFreeHourUnlocked(
+  token: string, startMs: number, endMs: number, nowMs: number,
+): Promise<RescheduleFreeHourResult> {
+  try {
+    const res = await dbRun(
+      'UPDATE service_bookings SET slot_start_ms = ?, slot_end_ms = ? WHERE checkout_session_id = ? AND slug = ? AND slot_start_ms > ?',
+      startMs, endMs, token, FREE_HOUR_SLUG, nowMs,
+    );
+    if (!res.changes) return { status: 'not_found' };
+    const row = await dbGet<BookingRow>(
+      'SELECT * FROM service_bookings WHERE checkout_session_id = ? AND slug = ?',
+      token, FREE_HOUR_SLUG,
+    );
+    if (!row) return { status: 'not_found' };
+    return { status: 'ok', booking: toBooking(row) };
+  } catch (e) {
+    if (isUniqueViolation(e)) return { status: 'taken' };
+    throw e;
+  }
+}

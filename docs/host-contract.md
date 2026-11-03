@@ -826,6 +826,7 @@ A web product with `kind: 'service'` sells a booking instead of a zip: no `relea
 | `GET /api/web-products/:slug/booking.ics?session_id=cs_…` | same | 200 `text/calendar` for the session's latest booking | 400 · 402 · 404 no booking · 429 · 502 |
 | `POST /api/services/human-for-hire/free-hour` body `{ email, startMs, topic?, tags?, website? }` (`?dryRun=1` checks only) | none (signed out, no payment; 6/hour/IP) | 201 `{ booking: { startMs, endMs }, emailed, ics, cancelToken }` — claims the slot; with mail set, also mails the booker the `.ics` and notifies `BILKO_INBOX`; dry run 200 `{ dryRun: true }` | 400 `invalid` · 409 `slot_unavailable` or `already_booked` · 429 `rate_limited` |
 | `POST /api/services/human-for-hire/free-hour/cancel` body `{ token }` | possession of the `free_…` cancel token (10/min/IP) | 200 `{ cancelled: true }` — frees the slot, notifies `BILKO_INBOX` | 400 `invalid` · 404 `not_found` · 429 |
+| `POST /api/services/human-for-hire/free-hour/reschedule` body `{ token, startMs }` | possession of the `free_…` cancel token (10/min/IP) | 200 `{ booking: { startMs, endMs }, ics, cancelToken }` — atomically moves the booking to another open slot (same id, email, intake; the one-free-hour rule is not re-checked); notifies `BILKO_INBOX` | 400 `invalid` · 404 `not_found` · 409 `slot_unavailable` · 429 |
 
 Mail never fails a booking, paid or free: unset or failing mail still books, with `emailed: false`.
 

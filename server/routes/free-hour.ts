@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
-import { cancelFreeHour, claimFreeHour, claimedStarts, hasFreeHour } from '../services/service-bookings.js';
+import { cancelFreeHour, claimFreeHour, claimedStarts, hasFreeHour, rescheduleFreeHour } from '../services/service-bookings.js';
 import {
   EMAIL_RE, bookingConfirmationEmail, bookingNoticeEmail, organizerEmail, sendMail,
 } from '../services/mailer.js';
@@ -123,5 +123,57 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
       console.error('[free-hour] cancel notice failed:', err?.message);
     }
     return reply.status(200).send({ cancelled: true });
+  });
+
+  app.post(`/api/services/${PAGE}/free-hour/reschedule`, { bodyLimit: 1024 }, async (req, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    if (!rateOk(`free-hour-reschedule:${req.ip}`, 10, 60_000)) return reply.status(429).send({ error: 'rate_limited' });
+    const b = (req.body && typeof req.body === 'object' ? req.body : {}) as { token?: unknown; startMs?: unknown };
+    const { token, startMs } = b;
+    if (
+      typeof token !== 'string' || !/^free_[0-9a-f-]{36}$/.test(token) ||
+      typeof startMs !== 'number' || !Number.isSafeInteger(startMs)
+    ) {
+      return reply.status(400).send({ error: 'invalid' });
+    }
+    const config = SERVICE_SLOT_CONFIG[PAGE];
+    const now = Date.now();
+    const claimed = new Set(await claimedStarts(PAGE, now));
+    const slot = generateSlots(config, now).find((s) => s.startMs === startMs && !claimed.has(s.startMs));
+    if (!slot) return reply.status(409).send({ error: 'slot_unavailable' });
+
+    const moved = await rescheduleFreeHour(token, startMs, slot.endMs, now);
+    if (moved.status === 'taken') return reply.status(409).send({ error: 'slot_unavailable' });
+    if (moved.status === 'not_found') return reply.status(404).send({ error: 'not_found' });
+    const { booking } = moved;
+
+    const meetingLink = (process.env.HFH_MEETING_LINK ?? '').trim();
+    const ics = buildIcs({
+      uid: `booking-${booking.id}@bilko.run`,
+      startMs,
+      endMs: slot.endMs,
+      summary: 'Free hour with Bilko',
+      description: meetingLink ? `Meeting link: ${meetingLink}` : 'Bilko will email the meeting link before the session.',
+      organizerName: 'Bilko',
+      organizerEmail: organizerEmail(),
+      attendeeEmail: booking.email,
+      location: meetingLink || 'Online',
+    });
+
+    try {
+      const inbox = process.env.BILKO_INBOX;
+      if (inbox) {
+        await sendMail({
+          to: inbox,
+          ...bookingNoticeEmail({
+            offerName: 'Rescheduled: free hour', startMs, buyerEmail: booking.email,
+            intake: { repo: '-', broken: '-', done: '-', contact: booking.email },
+          }),
+        });
+      }
+    } catch (err: any) {
+      console.error('[free-hour] reschedule notice failed:', err?.message);
+    }
+    return reply.status(200).send({ booking: { startMs, endMs: slot.endMs }, ics, cancelToken: token });
   });
 }

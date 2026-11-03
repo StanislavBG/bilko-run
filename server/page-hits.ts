@@ -69,7 +69,7 @@ let flushInFlight: Promise<void> | null = null;
 // project's traffic: the Human For Hire page and its two aliases, with or
 // without the trailing slash.
 export const HOST_PAGE_SLUG = 'human-for-hire';
-export const HOST_PAGE_PATHS: readonly string[] = ['/bilko', '/hire', '/human-for-hire'].flatMap((p) => [p, `${p}/`]);
+export const HOST_PAGE_PATHS: readonly string[] = ['/bilko', '/hire', '/human-for-hire', '/book'].flatMap((p) => [p, `${p}/`]);
 
 export function slugFromPath(path: string): string | null {
   if (HOST_PAGE_PATHS.includes(path)) return HOST_PAGE_SLUG;

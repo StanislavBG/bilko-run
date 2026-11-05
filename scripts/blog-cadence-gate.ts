@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 export interface SeededPost {
   slug: string;
@@ -152,8 +152,23 @@ function loadCadenceConfig(): CadenceConfig {
   return { minGapDays, sinceIso };
 }
 
+// `check --root <dir>` checks <dir>/content/blog instead of this checkout's. blog-seed.sh builds
+// its commit in a worktree at origin/main, and that tree plus the new post is what goes live.
+// The loader (server/blog-posts.ts) reads process.cwd()/content/blog first.
+function useContentRoot(): void {
+  const i = process.argv.indexOf('--root', 3);
+  if (i === -1) return;
+  const root = process.argv[i + 1] ? path.resolve(process.argv[i + 1]) : '';
+  if (!root || !existsSync(path.join(root, 'content', 'blog'))) {
+    process.stderr.write(`blog-cadence-gate: --root '${root}' has no content/blog\n`);
+    process.exit(2);
+  }
+  process.chdir(root);
+}
+
 async function runCheck(): Promise<void> {
   const { minGapDays, sinceIso } = loadCadenceConfig();
+  useContentRoot();
   const posts = await loadSeededPosts();
   const violations = findSpacingViolations(posts, minGapDays, sinceIso);
 
@@ -181,7 +196,7 @@ async function main(): Promise<void> {
   } else if (cmd === 'next-slot') {
     await runNextSlot();
   } else {
-    process.stderr.write('Usage: blog-cadence-gate.ts <check|next-slot>\n');
+    process.stderr.write('Usage: blog-cadence-gate.ts <check [--root <dir>]|next-slot>\n');
     process.exit(2);
   }
 }

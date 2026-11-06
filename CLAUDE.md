@@ -43,7 +43,7 @@ Bilko's workspace lives in `~/Projects/` with this structure:
 
 ## What This Is
 
-bilko.run is Bilko's personal brand site and host platform. Apps share a common credit model (a prepaid Bilko Credits wallet with $3/$5/$10 top-ups, PPP bonus credits and one credit-bought product, the Agent Factory Kit, alongside the PageRoast token bundles; tools spend legacy tokens first, then wallet credit at $1 a call), shared Clerk auth, shared Stripe wallet, and a shared component kit. Each app is its own product with its own page, scoring engine, and UX — they are NOT features of one product.
+bilko.run is Bilko's personal brand site and host platform. Apps share a common credit model (details: [`docs/commerce.md`](docs/commerce.md)), shared Clerk auth, shared Stripe wallet, and a shared component kit. Each app is its own product with its own page, scoring engine, and UX — they are NOT features of one product.
 
 ### Current apps
 
@@ -125,8 +125,8 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/routes/blog.ts` — Blog CRUD (admin-only writes)
 - `server/routes/forum.ts` + `server/services/forum.ts` — site-level Forum at `/forum`, like the blog: public reads, Clerk + handle writes, admin hide
 - `server/routes/project-catalog.ts` — public `GET /api/projects` + `GET /api/offers` + MCP at `/mcp` (read-only `list_projects`/`get_project`/`list_offers`, plus the paid `roast_page` behind a `bkk_` agent key; the public `/projects` cards as data; contract in `docs/host-contract.md` → "Public project catalog"; card content is project-owned via each registry entry's `listing`, see "Project listing — who owns what")
-- Agent storefront — `shared/agent-offers.ts` (offer data), `server/routes/agent-buy.ts` (`/buy/:offerId`), `server/routes/agent-storefront.ts` (`/llms.txt`), `server/routes/agent-keys.ts` + `server/services/agent-api-keys.ts` (`bkk_` keys); contract in `docs/host-contract.md` → "Agent-facing surfaces"
-- Wallet and credit-bought product — `server/services/wallet.ts` + `server/routes/wallet.ts` (`/api/wallet`, `/api/wallet/topup`; PPP bonus credits from `shared/ppp-bonus.ts`), `server/services/menu-orders.ts` + `server/routes/menu-orders.ts` (`/api/menu`, `/api/menu/:itemId/order`; the menu holds only the Agent Factory Kit); contract in `docs/host-contract.md` → "Bilko Credits wallet and credit-bought product"
+- Agent storefront — `shared/agent-offers.ts` (offer data), `server/routes/agent-buy.ts` (`/buy/:offerId`), `server/routes/agent-storefront.ts` (`/llms.txt`), `server/routes/agent-keys.ts` + `server/services/agent-api-keys.ts` (`bkk_` keys); contract in [`docs/commerce.md`](docs/commerce.md)
+- Wallet and credit-bought product — `server/services/wallet.ts` + `server/routes/wallet.ts` (`/api/wallet`, `/api/wallet/topup`; PPP bonus credits from `shared/ppp-bonus.ts`), `server/services/menu-orders.ts` + `server/routes/menu-orders.ts` (`/api/menu`, `/api/menu/:itemId/order`); contract in [`docs/commerce.md`](docs/commerce.md)
 - `server/routes/stripe.ts` — Checkout, webhooks, billing portal
 - `server/routes/signin-capture.ts` + `shared/signin-capture.ts` — "sign in for updates" capture: source page + opt-in consent per account, admin signups view + CSV (`/admin` → Signups); contract in `docs/host-contract.md` → "Sign-in capture"
 - `server/routes/realtime.ts` + `server/realtime/relay.ts` — ticket endpoint and binary WebSocket input relay (`/api/realtime/rooms/:roomId`, ≤10 seats, in-memory, single instance); `server/realtime/lobbies.ts` — public lobby directory (`/api/realtime/lobbies`: open rooms listed while their owner holds a seat, 30 s TTL)
@@ -139,7 +139,7 @@ Clerk auth state comes straight from `@clerk/clerk-react` (`useUser()` / `useAut
 - `server/bearer.ts` — `bearerMatches`, the timing-safe compare for shared-secret bearer routes
 
 ### Web products (paid downloads)
-Paid zips sold from a static-path landing page. Declared in `shared/web-products.ts` (`WEB_PRODUCTS`: price id, release version/filename/bytes/sha256); public + delivery + content-addressed upload routes in `server/routes/web-products.ts`; admin metrics (`/admin` → Products) in `server/routes/admin-web-products.ts`; order/release/download storage in `server/services/web-products.ts`. The Stripe webhook dispatches on `metadata.web_product`. Entries with `kind: 'service'` sell bookable sessions instead of a zip (subscription billing, founding coupon, order cap, slot booking in `server/routes/service-bookings.ts`). Endpoint table and the new-product playbook: the "Selling a downloadable web product" section of [`docs/host-contract.md`](docs/host-contract.md).
+Paid zips and bookable services, the wallet, offers and agent storefront: [`docs/commerce.md`](docs/commerce.md); sibling-facing endpoints and playbook: [`docs/host-contract.md`](docs/host-contract.md).
 
 ### Sanctioned app-specific host code
 

@@ -9,6 +9,7 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
+| 2026-11-05 | a-minesweeper-that-never-makes-you-guess | a-minesweeper-that-never-makes-you-guess | ❌ no tile | unspecified (burrow) |
 | 2026-11-02 | your-build-now-carries-to-the-next-planet | your-build-now-carries-to-the-next-planet | ❌ no tile | unspecified (burrow) |
 | 2026-10-29 | the-web-remote-now-drives-any-computer-you-pair | the-web-remote-now-drives-any-computer-you-pair | ❌ no tile | unspecified (burrow) |
 | 2026-10-26 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | ❌ no tile | unspecified (burrow) |
@@ -50,14 +51,14 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** your-build-now-carries-to-the-next-planet (off-list, no tile), post `your-build-now-carries-to-the-next-planet` seeded 2026-11-02 by scripts/blog-seed.sh.
+- **Last project covered:** a-minesweeper-that-never-makes-you-guess (off-list, no tile), post `a-minesweeper-that-never-makes-you-guess` seeded 2026-11-05 by scripts/blog-seed.sh.
 - **Rotation debt:** none — last post on-`/projects`. burrow (off-list, no tile) is ineligible as a
   sole subject (no user-facing surface); do not queue it as a standalone post.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
   08-19), problem→outcome (07-02, 08-11, 10-03 ×2 spotlight), shipped-note (07-06, 07-21, 08-23,
   08-27, 09-22, 09-26), field-note (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18,
   08-04). Next: compare reception/readability rather than adding tones.
-- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** your-build-now-carries-to-the-next-planet, the-web-remote-now-drives-any-computer-you-pair, no-subscription-bilkos-help-now-costs-50-cents-to-9.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** a-minesweeper-that-never-makes-you-guess, your-build-now-carries-to-the-next-planet, the-web-remote-now-drives-any-computer-you-pair.
 - **Due / under-covered on-list projects** (good next candidates): local-score, game-academy,
   stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
   audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku.

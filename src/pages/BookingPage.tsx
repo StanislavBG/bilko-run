@@ -199,17 +199,20 @@ export function BookingPage() {
           <Stepper active={step} />
           {step === 0 ? (
             <>
-              <h2 style={{ marginTop: 20 }}>Pick a time</h2>
-              <Notice msg={msg} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                <label htmlFor="bk-tz" style={{ font: '500 12.5px var(--bk-sans)', color: 'var(--bk-muted)' }}>Times in</label>
-                <select id="bk-tz" className="bk-select" value={tz} onChange={(e) => setTz(e.target.value)}>
-                  {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+              <div className="bk-body">
+              <div className="bk-head">
+                <h2>Pick a time</h2>
+                <label className="bk-tz" htmlFor="bk-tz">
+                  Times in
+                  <select id="bk-tz" className="bk-select" value={tz} onChange={(e) => setTz(e.target.value)}>
+                    {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </label>
               </div>
-              {note && <p style={{ margin: '8px 0 0', font: '400 12.5px var(--bk-sans)', color: 'var(--bk-muted)' }}>{note}</p>}
+              <Notice msg={msg} />
+              {note && <p className="bk-host-note">{note}</p>}
 
-              <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="bk-groups">
                 {loadError && (
                   <div role="alert">
                     <p style={{ margin: '0 0 10px' }}>We couldn't load the open times. Try again shortly, or write to {mail}.</p>
@@ -219,8 +222,8 @@ export function BookingPage() {
                 {!open && !loadError && <p style={{ margin: 0 }}>Loading open times…</p>}
                 {open && open.length === 0 && <p style={{ margin: 0 }}>No open times right now. Write to {mail} and we'll find one.</p>}
                 {open && open.length > 0 && groups.map((g) => (
-                  <div key={g.label}>
-                    <div className="bk-group-label" style={{ marginBottom: 8 }}>{g.label}</div>
+                  <div key={g.label} className="bk-group">
+                    <div className="bk-group-label">{g.label}</div>
                     <div className="bk-grid">
                       {g.slots.map((s) => {
                         const v = slotView(s.startMs, s.endMs, tz, nowMs);
@@ -257,15 +260,19 @@ export function BookingPage() {
                 ))}
               </div>
 
-              <div style={{ marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--bk-line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                <div style={{ font: '500 13.5px/1.4 var(--bk-sans)', color: 'var(--bk-body)', minWidth: 0 }}>
-                  {pv ? `${pv.dateLong} · ${pv.time} – ${pv.timeEnd} ${pv.tzAbbr} · Video call` : 'Choose a time to continue'}
-                </div>
+              <div className="bk-step-foot">
+                {pv ? (
+                  <div className="bk-pick">
+                    <span className="bk-pick-date">{pv.dateLong}</span>
+                    <span className="bk-pick-time">{`${pv.time} – ${pv.timeEnd} ${pv.tzAbbr} · Video call`}</span>
+                  </div>
+                ) : (
+                  <div className="bk-pick-none">Choose a time to continue</div>
+                )}
                 <button
                   type="button"
-                  className="bk-cta"
+                  className="bk-cta bk-cta-sm"
                   aria-disabled={!picked}
-                  style={!picked ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
                   onClick={() => {
                     if (!picked) return;
                     trackFlow('hire', 'continue');
@@ -276,6 +283,7 @@ export function BookingPage() {
                 >
                   Continue →
                 </button>
+              </div>
               </div>
             </>
           ) : step === 1 ? (

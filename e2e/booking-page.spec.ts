@@ -253,3 +253,32 @@ test.describe('phone fold at 390x844', () => {
     expect(await overflowing()).toBe(0);
   });
 });
+
+test('frame and time step match the design at 1280x720 and 1440x900', async ({ page }) => {
+  await mock(page, nineSlots);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/book');
+  await expect(page.locator('button.bk-slot').first()).toBeVisible();
+  const m = await page.evaluate(() => {
+    const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+    const h2 = [...document.querySelectorAll('.bk-card h2')].find((e) => e.textContent === 'Pick a time')!.getBoundingClientRect();
+    return { h2, sel: b('#bk-tz'), card: b('.bk-card') };
+  });
+  const mid = m.sel.top + m.sel.height / 2;
+  expect(mid).toBeGreaterThanOrEqual(m.h2.top);
+  expect(mid).toBeLessThanOrEqual(m.h2.bottom);
+  expect(m.card.height).toBeGreaterThanOrEqual(620);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const f = await page.evaluate(() => {
+    const r = document.querySelector('.bk-inner')!.getBoundingClientRect();
+    return { h: r.height, top: r.top, bottom: window.innerHeight - r.bottom };
+  });
+  expect(Math.abs(f.h - 820)).toBeLessThanOrEqual(2);
+  expect(Math.abs(f.top - f.bottom)).toBeLessThanOrEqual(2);
+
+  await page.locator('button.bk-slot').first().click();
+  await expect(page.locator('.bk-pick-date')).toBeVisible();
+  await expect(page.locator('.bk-pick-time')).toContainText('Video call');
+  expect(await page.locator('.bk-pick-date').textContent()).not.toContain('Video call');
+});

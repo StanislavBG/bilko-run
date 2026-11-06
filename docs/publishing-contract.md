@@ -8,8 +8,8 @@ The two contracts are independent: a sibling app may also publish parts of itsel
 
 Nothing — npm packages are standalone. They don't inherit bilko.run auth, credits, Clerk, or Stripe. The only shared infrastructure is:
 
-- **NPM_AUTOMATION_TOKEN** — one GH org secret; every publishable repo is added to its visibility list.
-- **release.yml template** — copy once; CI handles the rest.
+- **A by-hand release procedure** — see [Releasing by hand](#releasing-by-hand). There is no org-level npm token (`StanislavBG` is a user account, not an org).
+- **release.yml template** — a starting point for repos that later get their own npm token secret.
 - **Versioning discipline** — described below; consistent across all packages.
 
 If an npm package *also* happens to be a sibling app (e.g. PageRoast CLI + `/projects/page-roast/` page), it follows *both* contracts independently.
@@ -136,9 +136,9 @@ Every publishable package implements at minimum:
 
 `.github/workflows/release.yml` triggered on `v*.*.*` tag push (or `<pkg>-v*.*.*` for monorepo subpackages). Pinned actions by SHA. Steps: checkout → setup-node 20 with `registry-url: https://registry.npmjs.org` → setup-pnpm → install (frozen lockfile) → build → test → `npm publish --access public --provenance`.
 
-Token: GH org secret `NPM_AUTOMATION_TOKEN`, scoped to `@bilkobibitkov/*`.
+Token: a per-repo `NPM_AUTOMATION_TOKEN` repo secret, only in repos that actually have the workflow working. This repo has none (`gh secret list` shows only `IDENTITY_DENYLIST`), so its tag workflow `.github/workflows/host-kit-release.yml` cannot publish; host-kit is released by hand.
 
-Provenance requires the source URL on GitHub: a published-but-private package cannot use `--provenance`. Every Bilko npm publish lives at `github.com/StanislavBG/<repo>` (public).
+`--provenance` only works from a supported CI runner, so a by-hand publish cannot use it. `packages/host-kit/package.json` sets `publishConfig.provenance` to `false` for that reason. Provenance also requires the source URL on GitHub: a published-but-private package cannot use `--provenance`. Every Bilko npm publish lives at `github.com/StanislavBG/<repo>` (public).
 
 ## Required versioning discipline
 
@@ -168,26 +168,20 @@ Mirrors the static-path publish gate from `host-contract.md`. Each must pass bef
 2. **Test** — `pnpm test` clean.
 3. **Typecheck** — `pnpm typecheck` clean.
 4. **Changelog** — `CHANGELOG.md` has an entry for the new version.
-5. **Size** — `pnpm pack --dry-run` shows tarball size below per-kind cap (libs ≤30 KB, CLIs ≤50 KB, host-kit ≤200 KB).
+5. **Size** — `pnpm pack --dry-run` shows tarball size below per-kind cap (caps in [Size budgets](#size-budgets)).
 
-## Token setup runbook
+## Releasing by hand
 
-One-time, by the maintainer:
+host-kit (and any package without a working token secret) is released by the maintainer, never from the live working directory:
 
-1. Go to `https://www.npmjs.com/settings/bilkobibitkov/tokens`.
-2. **Generate New Token** → **Automation**. Scope to `@bilkobibitkov/*` if you want package isolation; otherwise leave full publish.
-3. Copy the token (shown once).
-4. Add as a GH org secret:
-   ```bash
-   gh secret set NPM_AUTOMATION_TOKEN \
-     --org StanislavBG \
-     --visibility selected \
-     --repos "bilko-run,Preflight,sudoku-engine,minesweeper-engine,webgpu-gemma,ai-tool-kit,page-roast,headline-grader,ad-scorer,thread-grader,email-forge,audience-decoder,launch-grader,stack-audit,session-manager,bilko-flow"
-   # Paste the token when prompted.
-   ```
-5. Verify: tag a no-op version, push tag, watch the workflow publish.
+1. Create an isolated worktree on a fresh `origin/main` (`git worktree add`), install with the frozen lockfile.
+2. Run the publish gate there: build, test, typecheck, CHANGELOG entry, version bump.
+3. `npm pack` in the package directory. Inspect the tarball: `LICENSE` present, size under the cap, no secrets or source maps.
+4. Publish the scanned tarball itself (`npm publish <file>.tgz --access public`), not the directory, so what was inspected is what ships.
+5. Verify with a cache-busted registry URL, for example `https://registry.npmjs.org/host-kit?nocache=<timestamp>`, and check that `dist-tags.latest` is the new version.
+6. Tag `v<ver>` and push the tag.
 
-The token is **automation-class** — bypasses 2FA for CI but is tied to the maintainer's 2FA enrollment. If the token leaks: revoke at npm immediately, rotate, update the GH secret.
+If a repo later gets its own `NPM_AUTOMATION_TOKEN` repo secret, an automation-class token bypasses 2FA for CI; if it leaks, revoke it at npm immediately and rotate the secret.
 
 ## Monorepo subpackage extras
 
@@ -200,7 +194,7 @@ For packages under `Preflight/packages/*`:
 
 ## Publish checklist
 
-Run this before every `git tag v<ver> && git push --tags`:
+Run this before every tag push or by-hand publish:
 
 ```
 [ ] pnpm build                         — exits 0, dist/ updated
@@ -233,13 +227,13 @@ Before tagging, always run `pnpm pack --dry-run` and grep the output for every p
 
 ## Size budgets
 
-`pnpm pack --dry-run` output must stay under:
+No script enforces these; the maintainer checks `pnpm pack --dry-run` (or `npm pack`) by hand. The packed size must stay under:
 
 | Kind | Packed size cap |
 |---|---|
-| Library (e.g. host-kit) | 200 KB |
+| Library (e.g. sudoku-engine) | 30 KB |
 | CLI (e.g. agent-trace) | 50 KB |
-| Small lib (e.g. sudoku-engine) | 30 KB |
+| host-kit (the one named exception, it ships React components) | 200 KB |
 
 If you exceed the cap: audit `files`, strip test fixtures from the tarball, and confirm `dist/` doesn't include source maps in production.
 

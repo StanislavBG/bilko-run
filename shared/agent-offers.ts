@@ -48,7 +48,7 @@ const BASE_OFFERS: readonly Omit<AgentOffer, 'payWith'>[] = [
     amountCents: 10000,
     currency: 'usd',
     billing: 'one_time',
-    pageUrl: `${SITE}/bilko`,
+    pageUrl: `${SITE}/pricing`,
     buyUrl: buy('bilko-hour'),
     source: { kind: 'web_product', slug: 'bilko-hour' },
     agentKey: false,

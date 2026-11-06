@@ -28,9 +28,9 @@ describe('agent offers', () => {
       expect(p).toBeDefined();
       expect(o.amountCents).toBe(displayPriceCents(p!.displayPrice));
       expect(o.billing).toBe(productBilling(p!));
-      // bilko-hour is the one product whose page is the host route /bilko.
+      // bilko-hour is the one product whose page is the host route /pricing.
       expect(o.pageUrl).toBe(
-        o.id === 'bilko-hour' ? 'https://bilko.run/bilko' : `https://bilko.run/projects/${productPageSlug(p!)}/`,
+        o.id === 'bilko-hour' ? 'https://bilko.run/pricing' : `https://bilko.run/projects/${productPageSlug(p!)}/`,
       );
     }
   });

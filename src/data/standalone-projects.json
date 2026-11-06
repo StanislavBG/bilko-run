@@ -771,7 +771,7 @@
     "year": 2026,
     "host": {
       "kind": "external-url",
-      "url": "https://bilko.run/bilko"
+      "url": "https://bilko.run/book"
     },
     "tags": [
       "consulting",
@@ -787,7 +787,7 @@
         "After the free hour Bilko sends a short plan with an honest estimate of the hours."
       ],
       "pricing": "freemium",
-      "callToAction": "Free first hour, then $100/h. Book at bilko.run/bilko.",
+      "callToAction": "Free first hour, then $100/h. Book at bilko.run/book.",
       "avoidClaims": [
         "Do not promise results, delivery dates or a fixed project price."
       ]

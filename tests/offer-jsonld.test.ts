@@ -9,7 +9,7 @@ vi.mock('../server/services/offer-availability.js', () => ({
 import { registerSecurityHeaders } from '../server/security-headers.js';
 import { registerOgRoutes } from '../server/og-routes.js';
 import { loadOgProjects } from '../server/og-meta.js';
-import { buildOfferJsonLd, injectJsonLd } from '../server/offer-jsonld.js';
+import { buildOfferJsonLd, injectJsonLd, offersForPath } from '../server/offer-jsonld.js';
 import { AGENT_OFFERS, offerById } from '../shared/agent-offers.js';
 
 const HTML = '<html><head><title>T</title></head><body><p>hi</p></body></html>';
@@ -82,5 +82,10 @@ describe('offer JSON-LD', () => {
 
   it('injectJsonLd is a no-op without </head>', () => {
     expect(injectJsonLd('<p>x</p>', buildOfferJsonLd(AGENT_OFFERS))).toBe('<p>x</p>');
+  });
+
+  it('bilko-hour is offered on /pricing, and /bilko offers nothing', () => {
+    expect(offersForPath('/pricing').map(o => o.id)).toContain('bilko-hour');
+    expect(offersForPath('/bilko')).toEqual([]);
   });
 });

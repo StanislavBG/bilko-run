@@ -12,7 +12,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 /**
  * Combined Projects + Packages hub, rendered as the "Projects Ring": a fixed
  * hero window with an endless ring of vertical spines and a tick scrubber
- * (spec: docs/design/projects-ring/README.md).
+ * (geometry: src/data/projectsRing.ts).
  *
  * - Public visitors see only PUBLIC_CARDS; the admin (Clerk email in
  *   ADMIN_EMAILS) gets a toggle that reveals every card in HUB_CARDS.

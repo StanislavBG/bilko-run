@@ -1,4 +1,4 @@
-/* Projects Ring (/projects). Spec: docs/design/projects-ring/README.md.
+/* Projects Ring (/projects). Geometry: src/data/projectsRing.ts.
    Dynamic geometry (spine/hero/tick sizes) is set via React style props. */
 .pr-page {
   --pr-paper: #f5f0e6; --pr-paper-2: #ede6d6; --pr-paper-3: #e3dcc8;

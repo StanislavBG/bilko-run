@@ -1,5 +1,4 @@
 // Pure math + view-model helpers for the /projects "Projects Ring" page.
-// Mirrors docs/design/projects-ring/Projects Ring.dc.html (wrap, meta, renderVals).
 import { lastWorkedLabel, type HubCard } from './projectsView.js';
 
 export const RING_DOTS = ['#a83818', '#1a1612', '#2e5a3e'] as const;

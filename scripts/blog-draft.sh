@@ -3,9 +3,12 @@
 #
 # Entrypoint for Burrow's blog drafter. Runs blog-from-git phases 1-5d in one pinned
 # `claude -p` call and writes ONLY into <abs_dir>:
-#   result.json  {"status":"drafted","slug","title","excerpt","category"}
+#   result.json  {"status":"drafted","slug","title","excerpt","category","project"}
 #                {"status":"skipped","reason"} | {"status":"error","error"}
-#   post.md      frontmatter (slug,title,excerpt,category) + markdown body
+#   post.md      frontmatter (slug,title,excerpt,category,project) + markdown body
+# The subject must be a public bilko.run/projects project off cooldown (scripts/blog-subjects.ts
+# picks the candidates before the claude call and checks post.md after it). When the env var
+# BLOG_DRAFT_CONTEXT names Burrow's draft-context JSON, its public_projects and blog_posts are used.
 #   images/*.jpg referenced as /blog-images/<slug>/<file>
 #   artifacts/   content-DAG files
 # Exit 0 = drafted or skipped, 1 = error, 2 = bad arguments.
@@ -73,8 +76,23 @@ guard_snapshot() {
 }
 BEFORE="$(guard_snapshot)"
 
+SUBJECT_ARGS=(--root "$REPO_ROOT" --slot "$SLOT")
+if [[ -n "${BLOG_DRAFT_CONTEXT:-}" ]]; then
+  [[ -f "$BLOG_DRAFT_CONTEXT" ]] || fail "BLOG_DRAFT_CONTEXT is set but $BLOG_DRAFT_CONTEXT is not a file"
+  SUBJECT_ARGS+=(--context "$BLOG_DRAFT_CONTEXT")
+fi
+SUBJECTS="$(timeout "$READABILITY_TIMEOUT" npx tsx scripts/blog-subjects.ts candidates "${SUBJECT_ARGS[@]}" 2>&1)"
+RC=$?
+if [[ $RC -eq 3 ]]; then
+  REASON="every public bilko.run/projects project is cooling off or retired"
+  printf '{"status":"skipped","reason":"%s"}\n' "$REASON" > "$OUT/result.json"
+  echo "[blog-draft] skipped: $REASON"
+  exit 0
+fi
+[[ $RC -eq 0 ]] || fail "could not compute blog subjects (exit $RC): $SUBJECTS"
+
 AUTHORED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-PROMPT="$(bp_draft_prompt "$OUT" "$SLOT" "$AUTHORED_AT")"
+PROMPT="$(bp_draft_prompt "$OUT" "$SLOT" "$AUTHORED_AT" "$SUBJECTS" "${BLOG_DRAFT_CONTEXT:-}")"
 
 echo "[blog-draft] slot=$SLOT out=$OUT — invoking claude -p"
 CLAUDE_OUTPUT="$(timeout "$CLAUDE_TIMEOUT" claude -p "$PROMPT" \
@@ -107,15 +125,18 @@ if [[ ! -f "$OUT/post.md" ]]; then
 fi
 
 REASON="$(bp_validate_post "$OUT/post.md" "$OUT")" || fail "malformed post.md: $REASON"
+PROJECT="$(timeout "$READABILITY_TIMEOUT" npx tsx scripts/blog-subjects.ts check --post "$OUT/post.md" "${SUBJECT_ARGS[@]}" 2>&1)" \
+  || fail "subject refused: $PROJECT"
 
 timeout "$READABILITY_TIMEOUT" npx tsx scripts/blog-readability.ts "$OUT/post.md" >&2
 RC=$?
 [[ $RC -eq 0 ]] || fail "readability check failed (exit $RC)"
 
-printf '{"status":"drafted","slug":"%s","title":"%s","excerpt":"%s","category":"%s"}\n' \
+printf '{"status":"drafted","slug":"%s","title":"%s","excerpt":"%s","category":"%s","project":"%s"}\n' \
   "$(bp_json_escape "$(bp_fm_get "$OUT/post.md" slug)")" \
   "$(bp_json_escape "$(bp_fm_get "$OUT/post.md" title)")" \
   "$(bp_json_escape "$(bp_fm_get "$OUT/post.md" excerpt)")" \
-  "$(bp_json_escape "$(bp_fm_get "$OUT/post.md" category)")" > "$OUT/result.json"
+  "$(bp_json_escape "$(bp_fm_get "$OUT/post.md" category)")" \
+  "$(bp_json_escape "$PROJECT")" > "$OUT/result.json"
 echo "[blog-draft] drafted $(bp_fm_get "$OUT/post.md" slug)"
 exit 0

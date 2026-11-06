@@ -83,19 +83,27 @@ bp_validate_post() {
   return 0
 }
 
-# bp_draft_prompt <out_dir> <slot> <authored_at> — the unattended phases 1-5d prompt.
+# bp_draft_prompt <out_dir> <slot> <authored_at> <subjects_json> [context_file] — the unattended
+# phases 1-5d prompt. subjects_json is scripts/blog-subjects.ts candidates output.
 bp_draft_prompt() {
-  local out="$1" slot="$2" authored_at="$3"
+  local out="$1" slot="$2" authored_at="$3" subjects="$4" context="${5:-}" context_note=""
+  if [[ -n "$context" ]]; then
+    context_note="
+Burrow's draft context is the JSON file ${context}: read it. Its public_projects list is the public set above, and its blog_posts (newest queued or published posts, newest first) are already counted in cooling_off — Burrow's queued drafts are not in blog-ledger.md yet."
+  fi
   cat <<PROMPT
 You are running unattended, called by Burrow's blog drafter (scripts/blog-draft.sh). There is NO human present. The intended publish slot is ${slot}; Burrow owns the slot and the publishing, you only draft. This run started at ${authored_at}.
 
-Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run PHASES 1-5d ONLY: 1 Rotation (read rotation.md + blog-ledger.md — respect never_repeat_previous_project, the project cooldown and max_consecutive_untiled_posts, and the retired subjects in blog.config.yaml), 2 Scan, 3 Research, 4 Ground, 5 Draft (voice.md), 5d Illustrate (images.md). Obey blog.config.yaml truth rules and the readability policy.
+Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run PHASES 1-5d ONLY: 1 Rotation (read rotation.md + blog-ledger.md — the subject rule below replaces the ledger's own cooldown reading), 2 Scan, 3 Research, 4 Ground, 5 Draft (voice.md), 5d Illustrate (images.md). Obey blog.config.yaml truth rules and the readability policy.
+
+SUBJECT RULE (owner, 2026-11-05; scripts/blog-draft.sh refuses a post that breaks it): the post is about exactly ONE project from "candidates" below — the projects https://bilko.run/projects shows without admin, minus cooling_off and retired, best first (never covered, then longest since last covered). Spotlight mode takes the FIRST candidate. A post driven by new work may take any candidate with new work in the window. Never write about, link, or screenshot any project outside "public" (admin-only projects such as mindswiffer or sudoku, and untiled ones such as burrow, are never a subject). Name the subject in post.md's frontmatter as project: <its slug from the list>.
+Subjects (scripts/blog-subjects.ts): ${subjects}${context_note}
 
 Content DAG: follow .claude/skills/blog-from-git/dag.md, but write every pipeline artifact (questions.json, evidence.json, outline.json, renditions/linkedin.md, renditions/x.md) under ${out}/artifacts/<slug>/ — NOT under .claude/skills/blog-from-git/drafts/.
 
 Output directory: ${out}
 Write ONLY inside that directory:
-- ${out}/post.md — the finished post: YAML frontmatter with exactly these single-line keys: slug, title, excerpt, category; then the markdown body.
+- ${out}/post.md — the finished post: YAML frontmatter with exactly these single-line keys: slug, title, excerpt, category, project; then the markdown body.
 - ${out}/images/<name>.jpg — 0-3 real screenshots (images.md sections 2-4), each at most 220 KB. Capture them into a temp dir and copy the keepers here. Reference each in the body as ![alt](/blog-images/<slug>/<name>.jpg "caption"). Do NOT copy them to public/blog-images/.
 - ${out}/artifacts/ — the DAG files above.
 
@@ -109,7 +117,7 @@ STOP AFTER PHASE 5d. There is no approve or seed phase in this run. You must NOT
 - write any file outside ${out} (except throwaway temp dirs)
 The script checks these paths afterward and fails the run if any changed.
 
-If rotation finds nothing worth writing (and the no-new-work spotlight fallback has no candidate either), do not invent a post and do not write post.md. Print exactly one final line: DRAFT_RESULT: skipped reason="<why>"
+If no candidate is worth writing about, do not invent a post and do not write post.md. Print exactly one final line: DRAFT_RESULT: skipped reason="<why>"
 Otherwise, when post.md is done, print exactly one final line: DRAFT_RESULT: drafted
 PROMPT
 }

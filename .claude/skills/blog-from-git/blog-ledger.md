@@ -1,22 +1,23 @@
 # Blog ledger — rotation memory
 
 The editorial-rotation guard (SKILL.md Part 0) reads this before drafting. Each row is one
-published post: date · slug · **project** · `on /projects?` (is the project a slug in
-`src/data/standalone-projects.json`?) · tone used.
+published post: date · slug · **project** · `on /projects?` (is the project public on
+https://bilko.run/projects, i.e. `public: true` in `src/data/standalone-projects.json`?) · tone used.
+Rows before 2026-10-13 predate that rule and record registry membership only.
 
 **Append a row every time you seed a new post.** Newest at the top. This file — not the git
 scan — is what tells you whether you're about to break the consecutive-rule or repeat a project.
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
-| 2026-11-05 | a-minesweeper-that-never-makes-you-guess | a-minesweeper-that-never-makes-you-guess | ❌ no tile | unspecified (burrow) |
-| 2026-11-02 | your-build-now-carries-to-the-next-planet | your-build-now-carries-to-the-next-planet | ❌ no tile | unspecified (burrow) |
-| 2026-10-29 | the-web-remote-now-drives-any-computer-you-pair | the-web-remote-now-drives-any-computer-you-pair | ❌ no tile | unspecified (burrow) |
-| 2026-10-26 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | ❌ no tile | unspecified (burrow) |
-| 2026-10-22 | four-arcade-games-now-playable-online-with-a-friend | four-arcade-games-now-playable-online-with-a-friend | ❌ no tile | unspecified (burrow) |
-| 2026-10-19 | boat-shooter-is-back-116-mb-down-to-2 | boat-shooter-is-back-116-mb-down-to-2 | ❌ no tile | unspecified (burrow) |
-| 2026-10-16 | the-family-screen-that-opens-your-mail-for-you | the-family-screen-that-opens-your-mail-for-you | ❌ no tile | unspecified (burrow) |
-| 2026-10-13 | launch-kit-eight-skills-hand-off-one-shared-brief | launch-kit-eight-skills-hand-off-one-shared-brief | ❌ no tile | unspecified (burrow) |
+| 2026-11-05 | a-minesweeper-that-never-makes-you-guess | mindswiffer (admin-only) | ❌ not public | unspecified (burrow) |
+| 2026-11-02 | your-build-now-carries-to-the-next-planet | escape-velocity | ✅ | unspecified (burrow) |
+| 2026-10-29 | the-web-remote-now-drives-any-computer-you-pair | session-manager | ✅ | unspecified (burrow) |
+| 2026-10-26 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | bilko-run (credits wallet, host feature) | ❌ not public | unspecified (burrow) |
+| 2026-10-22 | four-arcade-games-now-playable-online-with-a-friend | game-academy | ✅ | unspecified (burrow) |
+| 2026-10-19 | boat-shooter-is-back-116-mb-down-to-2 | game-academy | ✅ | unspecified (burrow) |
+| 2026-10-16 | the-family-screen-that-opens-your-mail-for-you | family-frame | ✅ | unspecified (burrow) |
+| 2026-10-13 | launch-kit-eight-skills-hand-off-one-shared-brief | launch-kit | ✅ | unspecified (burrow) |
 | 2026-10-07 | twelve-places-one-weather-rule-you-set-yourself | outdoor-hours | ✅ | problem-outcome (spotlight, scheduled) |
 | 2026-10-03 | turn-your-github-year-into-a-heatmap-and-badge-wall | git-viewer | ✅ | problem-outcome (spotlight) |
 | 2026-09-26 | a-space-shooter-shrank-66-percent-to-fit-in-your-browser | escape-velocity | ✅ | shipped-note |
@@ -51,17 +52,17 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 ## Current rotation state (update when you append)
 
-- **Last project covered:** a-minesweeper-that-never-makes-you-guess (off-list, no tile), post `a-minesweeper-that-never-makes-you-guess` seeded 2026-11-05 by scripts/blog-seed.sh.
-- **Rotation debt:** none — last post on-`/projects`. burrow (off-list, no tile) is ineligible as a
-  sole subject (no user-facing surface); do not queue it as a standalone post.
+- **Last project covered:** mindswiffer (not public), post `a-minesweeper-that-never-makes-you-guess` seeded 2026-11-05 by scripts/blog-seed.sh.
+- **Subject rule (owner, 2026-11-05):** every post is about one project that is public on
+  https://bilko.run/projects. Admin-only and untiled projects (mindswiffer, burrow, …) are never a
+  subject; scripts/blog-subjects.ts enforces it at draft time. The 2026-11-05 MindSwiffer post
+  broke this rule before it existed in code.
 - **Tone experiment log:** all five tones now published twice or more — changelog (06-28, 07-24,
   08-19), problem→outcome (07-02, 08-11, 10-03 ×2 spotlight), shipped-note (07-06, 07-21, 08-23,
   08-27, 09-22, 09-26), field-note (07-11, 07-31, 08-08, 08-15, 09-02), metric-update (07-18,
   08-04). Next: compare reception/readability rather than adding tones.
-- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** a-minesweeper-that-never-makes-you-guess, your-build-now-carries-to-the-next-planet, the-web-remote-now-drives-any-computer-you-pair.
-- **Due / under-covered on-list projects** (good next candidates): local-score, game-academy,
-  stack-audit, launch-grader, ad-scorer, headline-grader, thread-grader, email-forge,
-  audience-decoder, bglabs, cellar, etch, fizzpop, mindswiffer, sudoku.
+- **Cooling off (last 3 ledger rows — ineligible as next primary subject):** mindswiffer, escape-velocity, session-manager.
+- **Due / under-covered public projects** (next candidates, never covered first, then longest since last covered; regenerated by scripts/blog-seed-apply.ts): human-for-hire (never), academy (2026-07-28), social-signals-trader (2026-09-02), git-viewer (2026-10-03), outdoor-hours (2026-10-07), launch-kit (2026-10-13), family-frame (2026-10-16), game-academy (2026-10-22).
 - **Unpushed-repo watchlist (re-verified 2026-10-03):** `starry-night-2` is local-only (no remote)
   despite being published and tiled as escape-velocity — pushing it to GitHub is still outstanding.
   `wizzard-arena` is still local-only, no tile, last commit 09-25 (nothing new this window) — not

@@ -209,7 +209,7 @@ build_seed_commit() {  # <base>
   WT="$WT_PARENT/tree"
   git worktree add --detach --no-checkout --quiet "$WT" "$1" \
     && git -C "$WT" read-tree "$1" \
-    && git -C "$WT" checkout -- content/blog src/data/standalone-projects.json "$LEDGER_REL" \
+    && git -C "$WT" checkout -- content/blog src/data/standalone-projects.json "$LEDGER_REL" "$CONFIG_REL" \
     || die "could not create a seed worktree at origin/main ($1)"
 
   apply_out="$(pnpm tsx "$SCRIPT_DIR/blog-seed-apply.ts" --bundle "$BUNDLE" --root "$WT")"

@@ -5,6 +5,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 import { BILKO_CONTACT_EMAIL } from '../../shared/bilko-profile.js';
 import { BOOKING_PAGE_LEFT_HTML, BOOKING_PAGE_TITLE } from '../../shared/booking-page.js';
 import {
+  checkoutNotice,
   detectTimeZone,
   groupByWeek,
   hostNote,
@@ -45,6 +46,7 @@ export function BookingPage() {
   const detected = useMemo(() => detectTimeZone(), []);
   const [tz, setTz] = useState(detected);
   const [nowMs] = useState(() => Date.now());
+  const [notice] = useState(() => (typeof window === 'undefined' ? null : checkoutNotice(window.location.search)));
   const [email, setEmail] = useState('');
   const [topic, setTopic] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -197,6 +199,7 @@ export function BookingPage() {
         <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: BOOKING_PAGE_LEFT_HTML }} />
         <div className="bk-card">
           <Stepper active={step} />
+          {step === 0 && notice && <p className="bk-status" role="status">{notice}</p>}
           {step === 0 ? (
             <>
               <div className="bk-body">

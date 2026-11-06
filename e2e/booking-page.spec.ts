@@ -315,3 +315,26 @@ test('details and done steps match the design at 1280x720', async ({ page }) => 
   expect(Math.abs(c.h - 52)).toBeLessThanOrEqual(1);
   expect(c.right).toBeLessThanOrEqual(hb.x);
 });
+
+test.describe('checkout notice', () => {
+  test('paid hour return shows the thank-you in role=status', async ({ page }) => {
+    await mock(page);
+    await page.goto('/book?offer=bilko-hour&session_id=cs_test_1');
+    await expect(page.getByRole('status').filter({ hasText: 'Payment received. Thank you. Bilko will email you shortly to plan your hours.' })).toBeVisible();
+  });
+  test('cancel return shows the cancelled text', async ({ page }) => {
+    await mock(page);
+    await page.goto('/book?checkout=cancel');
+    await expect(page.getByRole('status').filter({ hasText: 'Checkout cancelled. No charge.' })).toBeVisible();
+  });
+  test('plain /book has no notice and still fits 1280x720 with one', async ({ page }) => {
+    await mock(page, nineSlots);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/book');
+    await expect(page.locator('button.bk-slot').first()).toBeVisible();
+    await expect(page.locator('.bk-status')).toHaveCount(0);
+    await page.goto('/book?offer=bilko-hour&session_id=cs_test_1');
+    await expect(page.locator('.bk-status')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(720);
+  });
+});

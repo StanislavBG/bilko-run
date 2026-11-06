@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   detectTimeZone, slotView, groupByWeek, timeZoneOptions, hostNote,
-  googleCalendarUrl, outlookCalendarUrl,
+  googleCalendarUrl, outlookCalendarUrl, checkoutNotice,
 } from '../src/lib/bookingView';
 
 const H = 3600000;
@@ -101,5 +101,27 @@ describe('calendar urls', () => {
   it('outlook', () => {
     expect(outlookCalendarUrl(a)).toBe(
       'https://outlook.live.com/calendar/0/deeplink/compose?subject=Call%20%26%20chat&startdt=2026-11-04T02:30:00.000Z&enddt=2026-11-04T03:30:00.000Z&body=a%20b');
+  });
+});
+
+describe('checkoutNotice', () => {
+  const PAID = 'Payment received. Thank you. Bilko will email you shortly to plan your hours.';
+  it('paid hour', () => {
+    expect(checkoutNotice('?session_id=cs_test_1&offer=bilko-hour')).toBe(PAID);
+  });
+  it('cancel', () => {
+    expect(checkoutNotice('?checkout=cancel')).toBe('Checkout cancelled. No charge.');
+  });
+  it('paid hour without session_id', () => {
+    expect(checkoutNotice('?offer=bilko-hour')).toBeNull();
+    expect(checkoutNotice('?offer=bilko-hour&session_id=')).toBeNull();
+  });
+  it('unrelated offer', () => {
+    expect(checkoutNotice('?offer=other&session_id=cs_1')).toBeNull();
+  });
+  it('empty, other checkout values and malformed input', () => {
+    expect(checkoutNotice('')).toBeNull();
+    expect(checkoutNotice('?checkout=success')).toBeNull();
+    expect(checkoutNotice('?%E0%A4%A&&=')).toBeNull();
   });
 });

@@ -214,3 +214,17 @@ export function outlookCalendarUrl({ title, startMs, endMs, details }: CalArgs):
     '&body=' + encodeURIComponent(details)
   );
 }
+
+/** Notice for the Stripe Checkout return URLs that land on /book. Plain text only. */
+export function checkoutNotice(search: string): string | null {
+  try {
+    const q = new URLSearchParams(search);
+    if (q.get('offer') === 'bilko-hour' && (q.get('session_id') ?? '') !== '') {
+      return 'Payment received. Thank you. Bilko will email you shortly to plan your hours.';
+    }
+    if (q.get('checkout') === 'cancel') return 'Checkout cancelled. No charge.';
+  } catch {
+    // malformed input: no notice
+  }
+  return null;
+}

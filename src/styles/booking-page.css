@@ -158,3 +158,6 @@
   .booking-page .bk-card .bk-done-title h2{font-size:26px}
   .booking-page .bk-summary{flex-wrap:wrap}
 }
+.booking-page .bk-status{margin:12px 0 0;padding:10px 14px;border:1px solid var(--bk-green);background:rgba(46,90,62,.08);color:var(--bk-green);border-radius:10px;font:500 13.5px/1.4 var(--bk-sans)}
+.booking-page .bk-status + .bk-body{margin-top:12px}
+@media (min-width:901px){.booking-page .bk-inner:has(.bk-status){padding-top:24px;padding-bottom:24px}}

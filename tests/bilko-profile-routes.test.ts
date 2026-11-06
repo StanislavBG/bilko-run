@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { registerBilkoProfileRoutes, renderBilkoProfileShell } from '../server/bilko-profile-routes';
-import { identityHits } from './identity-denylist';
+import { registerBilkoProfileRoutes } from '../server/bilko-profile-routes';
 
 const shell = readFileSync(resolve(__dirname, '..', 'index.html'), 'utf-8');
 let app: FastifyInstance;
@@ -17,54 +16,48 @@ afterAll(async () => {
   await app.close();
 });
 
-describe('renderBilkoProfileShell', () => {
-  it('replaces the loading placeholder with the copy', () => {
-    const out = renderBilkoProfileShell(shell);
-    expect(out).toContain('Human For Hire');
-    expect(out).toContain('Start with a free hour');
-    expect(out.split('$100 / hour')).toHaveLength(4);
-    expect(out).not.toContain('Loading...');
-  });
-  it('logs and returns the shell unchanged when markers are missing', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(renderBilkoProfileShell('<html>x</html>')).toBe('<html>x</html>');
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
-  });
-});
+const REDIRECTED = [
+  '/bilko',
+  '/bilko/',
+  '/hire',
+  '/hire/',
+  '/human-for-hire',
+  '/human-for-hire/',
+  '/projects/human-for-hire',
+  '/projects/human-for-hire/',
+  '/projects/human-for-hire/thanks',
+  '/projects/human-for-hire/thanks/',
+];
 
-describe('profile routes', () => {
-  it('serves identical no-store HTML on /bilko, /hire, /human-for-hire', async () => {
-    const bodies: string[] = [];
-    for (const url of ['/bilko', '/hire', '/human-for-hire']) {
-      const res = await app.inject({ method: 'GET', url });
-      expect(res.statusCode).toBe(200);
-      expect(res.headers['content-type']).toContain('text/html');
-      expect(res.headers['cache-control']).toBe('private, no-store');
-      bodies.push(res.body);
-    }
-    expect(new Set(bodies).size).toBe(1);
-    expect(identityHits(bodies[0])).toEqual([]);
-  });
-
-  it('301s old paths to /bilko keeping the query', async () => {
-    for (const url of [
-      '/projects/human-for-hire',
-      '/projects/human-for-hire/',
-      '/projects/human-for-hire/thanks',
-      '/projects/human-for-hire/thanks/',
-    ]) {
+describe('retired hire paths redirect to /book', () => {
+  it('301s to /book keeping the query', async () => {
+    for (const url of REDIRECTED) {
       const res = await app.inject({ method: 'GET', url: url + '?a=1&b=2' });
       expect(res.statusCode).toBe(301);
-      expect(res.headers.location).toBe('/bilko?a=1&b=2');
+      expect(res.headers.location).toBe('/book?a=1&b=2');
     }
-    const bare = await app.inject({ method: 'GET', url: '/projects/human-for-hire' });
-    expect(bare.headers.location).toBe('/bilko');
   });
 
-  it('a crafted query cannot change the target host', async () => {
-    const res = await app.inject({ method: 'GET', url: '/projects/human-for-hire/?//evil.com' });
-    expect(res.statusCode).toBe(301);
-    expect(String(res.headers.location).startsWith('/bilko?')).toBe(true);
+  it('301s to bare /book without a query', async () => {
+    for (const url of REDIRECTED) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode).toBe(301);
+      expect(res.headers.location).toBe('/book');
+    }
+  });
+
+  it('a hostile query cannot change the target host', async () => {
+    for (const url of REDIRECTED) {
+      const res = await app.inject({ method: 'GET', url: url + '?next=//evil.example' });
+      expect(res.statusCode).toBe(301);
+      expect(String(res.headers.location).startsWith('/book?')).toBe(true);
+    }
+  });
+
+  it('still serves /book and /book/ as 200', async () => {
+    for (const url of ['/book', '/book/']) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode).toBe(200);
+    }
   });
 });

@@ -13,10 +13,11 @@ function build(over: Partial<SitemapInput> = {}): string {
 describe('buildSitemapXml', () => {
   it('lists static pages and a static-path project with trailing slash when index.html exists', () => {
     const xml = build({ projects: [stat('academy')] });
-    for (const p of ['/', '/projects', '/bilko', '/blog', '/forum', '/contact', '/pricing']) {
+    for (const p of ['/', '/projects', '/book', '/blog', '/forum', '/contact', '/pricing']) {
       expect(xml).toContain(`<loc>https://bilko.run${p}</loc>`);
     }
     expect(xml).toContain('<loc>https://bilko.run/projects/academy/</loc>');
+    expect(xml).not.toContain('<loc>https://bilko.run/bilko</loc>');
   });
 
   it('omits a static-path project whose index.html is missing', () => {

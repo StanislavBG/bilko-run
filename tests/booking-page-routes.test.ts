@@ -33,10 +33,10 @@ describe('booking page routes', () => {
     }
   });
 
-  it('leaves /bilko unchanged', async () => {
-    const res = await app.inject({ method: 'GET', url: '/bilko' });
-    expect(res.body).toContain("Hi, I'm Bilko. Let's build your AI project together.");
-    expect(res.body).not.toContain('booking-page');
+  it('redirects /bilko to /book', async () => {
+    const res = await app.inject({ method: 'GET', url: '/bilko?src=nav' });
+    expect(res.statusCode).toBe(301);
+    expect(res.headers.location).toBe('/book?src=nav');
   });
 
   it('maps /book to its own og meta', () => {

@@ -1,4 +1,4 @@
-import { BILKO_PROFILE_DESCRIPTION } from '../shared/bilko-profile';
+import { BOOKING_PAGE_TITLE } from '../shared/booking-page';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { injectOgMeta, resolveOg, loadOgProjects, type OgContext } from '../server/og-meta.js';
@@ -65,12 +65,12 @@ describe('resolveOg', () => {
       'A free hour with Bilko, then $100 / hour. Tools run on prepaid credits, with no subscriptions.',
     );
   });
-  it('maps the Human For Hire page and its aliases to the /bilko canonical', () => {
+  it('maps /book to the booking page and no longer advertises the retired profile', () => {
+    const m = resolveOg('/book', ctx)!;
+    expect(m.title).toBe(BOOKING_PAGE_TITLE);
+    expect(m.url).toBe('https://bilko.run/book');
     for (const p of ['/bilko', '/hire', '/human-for-hire']) {
-      const m = resolveOg(p, ctx)!;
-      expect(m.title).toBe('Bilko — Human For Hire');
-      expect(m.description).toBe(BILKO_PROFILE_DESCRIPTION);
-      expect(m.url).toBe('https://bilko.run/bilko');
+      expect(resolveOg(p, ctx)).toBeNull();
     }
   });
   it('maps static-path projects, ignoring query', () => {

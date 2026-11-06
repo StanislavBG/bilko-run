@@ -4,7 +4,7 @@
 
 **Git repo:** this is **`StanislavBG/bilko-run`**, remote `origin`, branch `main`. That is the one and only repo for the Bilko platform — commit and push here. The `content-grade` remote (`Content-Grade/Content-Grade`) is a **separate, unrelated project**; its history has diverged and you must **never push Bilko to it**. (Older docs/scripts that say "push to both remotes" or "deploy from Content-Grade master" are obsolete — see [Deploy](#tech-stack) and [Rules](#rules).)
 
-**Local `main` must match `origin/main`.** Scheduler plans commit their validation and ship records (`session-manager-operations/reviews/`) to local `main`, and a `Ship:` PRD pushes only the feature commit. Push the records too, or local `main` drifts. By 2026-11-05 it was 95 commits ahead and 60 behind, and every blog publish failed. Check with `git status -sb` in `~/Projects/Bilko`: it should print `## main...origin/main` with no ahead or behind count.
+**Local `main` must match `origin/main`.** Scheduler plans commit their validation and ship records (`session-manager-operations/reviews/`) to local `main`, and a `Ship:` PRD pushes only the feature commit. Local `main` drifts unless those records are pushed too. By 2026-11-05 it was 95 commits ahead and 60 behind, and every blog publish failed. Check with `git status -sb` in `~/Projects/Bilko`: it should print `## main...origin/main` with no ahead or behind count. If it doesn't, run `bash scripts/sync-local-main.sh` from `~/Projects/Bilko` (try `--dry-run` first). It publishes the records, drops commits that already shipped, and keeps unshipped work on top. It never pushes product code. Every automated writer into this repo, and how each one reaches origin, is in [`docs/repo-writers.md`](docs/repo-writers.md).
 
 **Repo map:** see README.md → "Where things live" for the folder-by-folder layout.
 
@@ -183,7 +183,7 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 
 ## Testing
 
-169 files, 1862 tests (1847 pass, 15 skipped; counted via `pnpm vitest run` on 2026-11-02; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+175 files, 1926 tests (1911 pass, 15 skipped; counted via `pnpm vitest run` on 2026-11-05; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run
@@ -202,4 +202,4 @@ A test earns its place by exercising host behavior: security (SSRF, auth, egress
 
 Guidelines in `blogs.md`. Each post follows the structure: hook → context → meat (3-5 sections) → what we'd do differently → CTA. Each post is one markdown file, `content/blog/<slug>.md` (frontmatter + body); `server/blog-posts.ts` loads them at boot and inserts new ones. How to add one: [`content/blog/README.md`](content/blog/README.md). Posts are no longer in `server/db.ts`.
 
-**Blog videos are made in Burrow, not here.** Burrow's Marketing Video (`~/Projects/burrow`, macro and skill `marketing-video`) writes `public/blog-videos/<slug>/index.html` in this repo, as one commit to that path under the `scripts/blog-seed.sh` lock, and pushes `origin` `main`. Each page is one self-contained file of at most 2 MiB with `window.smDemo` and a `sm-demo-duration` meta tag. The server scans that folder at boot, so a new video shows on its post only after the Render deploy. Bilko keeps the hosting (`server/blog-videos.ts`, `server/routes/blog.ts`, `BlogVideoPlayer`, `BLOG_VIDEO_CSP` in `server/security-headers.ts`) and two scripts Burrow runs from this repo: `scripts/blog-video-capture.ts` (`blog-from-git` uses it too) and `scripts/blog-video-frames.ts` (nothing in this repo calls it). Keep both, and keep their flags stable.
+**Blog videos are made in Burrow, not here.** Burrow's Marketing Video (`~/Projects/burrow`, macro and skill `marketing-video`) writes `public/blog-videos/<slug>/index.html` in this repo as one commit to that path. It builds that commit on a fresh `origin/main` in a throwaway worktree, never on local `main`, pushes `<sha>:main` under the `scripts/blog-seed.sh` lock, then mirrors it onto local `main`. Each page is one self-contained file of at most 2 MiB with `window.smDemo` and a `sm-demo-duration` meta tag. The server scans that folder at boot, so a new video shows on its post only after the Render deploy. Bilko keeps the hosting (`server/blog-videos.ts`, `server/routes/blog.ts`, `BlogVideoPlayer`, `BLOG_VIDEO_CSP` in `server/security-headers.ts`) and two scripts Burrow runs from this repo: `scripts/blog-video-capture.ts` (`blog-from-git` uses it too) and `scripts/blog-video-frames.ts` (nothing in this repo calls it). Keep both, and keep their flags stable.

@@ -78,7 +78,13 @@ if [[ -f "$REPORT_FILE" ]]; then
   # Stage the refreshed sidecars if they changed (tracked files).
   git add src/data/commit-order.json src/data/commit-counts.json 2>/dev/null || true
   if git commit -q -m "chore(qa): sanity-qa ${DECISION} ${TIMESTAMP}"; then
-    git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"
+    # Push only this commit: local main can hold unshipped plan commits (docs/repo-writers.md).
+    git fetch -q origin main 2>/dev/null || true
+    if [[ "$(git rev-parse HEAD~1)" == "$(git rev-parse origin/main 2>/dev/null)" ]]; then
+      git push origin main || echo "[sanity-qa-cron] push origin failed (non-fatal)"
+    else
+      echo "[sanity-qa-cron] local main holds other unpushed commits; not pushing (see scripts/sync-local-main.sh)"
+    fi
   else
     echo "[sanity-qa-cron] nothing to commit (report unchanged?) — skipping push"
   fi

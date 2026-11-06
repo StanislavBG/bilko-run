@@ -1,15 +1,14 @@
 # Bilko host internals
 
-This is host-side implementation detail — monitoring, QA gates, cost controls, caching, observability, and security headers. It's for whoever is changing the host itself. If you're publishing an app, you want [`docs/host-contract.md`](host-contract.md) instead.
+This is host-side implementation detail — monitoring, QA checks, cost controls, caching, observability, security headers, and the list of sanctioned app-specific host code. It's for whoever is changing the host itself. If you're publishing an app, you want [`docs/host-contract.md`](host-contract.md) instead.
 
 ## Synthetic monitoring
 
-Every 6h a headless Chromium opens each sibling's `manifest.golden.path` and
+When run, a headless Chromium opens each sibling's `manifest.golden.path` and
 asserts `manifest.golden.expect` text is present in the page body. Results
 land in the `synthetic_runs` table. Three consecutive failures open an alert
 (logged via `/api/telemetry/log` as a `synthetic.fail.streak` error event, and
-printed to stderr — email integration is a follow-up once an SMTP provider is
-chosen). Resolution = next passing run.
+printed to stderr; the Resend mailer in `server/services/mailer.ts` exists but the monitor does not email). Resolution = next passing run.
 
 The `/admin` → Synthetic tab shows a per-sibling 30-day grid (green = pass,
 red = fail, grey = no run), latency p50/p95, current failure streak, and any
@@ -21,14 +20,14 @@ Run manually:
 cd /home/bilko/Projects/Bilko && pnpm synthetic
 ```
 
-Schedule via the `schedule` skill at `0 */6 * * *` (cron expression; the schedule lives in the scheduler, not in a repo file).
+It runs by hand only: `crontab -l` and `systemctl --user list-timers` show no installed schedule for it (checked 2026-11-06). Run `pnpm synthetic` when you want a fresh result.
 
 Tune sensitivity via `STREAK_TO_ALERT` in `scripts/synthetic-monitor.ts`
 (default: 3 consecutive failures).
 
 ## Sanity QA gate
 
-`scripts/sanity-qa.ts` is an end-to-end QA gate that must pass before any publish PRD proceeds. Every publish PRD should start with:
+`scripts/sanity-qa.ts` is an end-to-end QA check you run by hand. It is not enforced anywhere: the real publish gate is the MCP publish gate (see "Publish gate" in [`docs/host-contract.md`](host-contract.md)). A publish PRD can start with:
 
 ```bash
 cd ~/Projects/Bilko
@@ -42,10 +41,10 @@ Five subagents run in parallel against every live static-path target:
 
 | Subagent | Checks |
 |---|---|
-| **Smoke** | Playwright golden-path; game-specific flows for sudoku/mindswiffer/game-academy; no console errors |
-| **Security** | CSP headers, HSTS, frame-ancestors, no leaked secrets (sk-/AIza/JWT patterns), SSRF probe on `/api/page-fetch` |
+| **Smoke** | Playwright golden-path; game flow for sudoku only (`scripts/sanity-qa-runners/smoke.ts`); no console errors |
+| **Security** | CSP headers, HSTS, frame-ancestors, no leaked secrets (sk-/AIza/JWT patterns), SSRF probe on `/api/page-fetch` (**known gap:** that route does not exist, so the probe tests nothing; `scripts/sanity-qa-runners/security.ts`) |
 | **Perf** | Lighthouse mobile audit — Performance ≥ 85, Accessibility ≥ 95, Best Practices ≥ 90, SEO ≥ 90; LCP ≤ 2.5s, CLS ≤ 0.1, TTI ≤ 3.5s |
-| **Size** | `manifest.bundle.sizeBytesGz` vs per-app budget (games: 250 KB, academy: 400 KB, others: 200 KB); fileCount ≤ 30; stale-manifest drift detection |
+| **Size** | `manifest.bundle.sizeBytesGz` vs per-app budget from `mcp-host-server/src/contract/app-budgets.ts` (default 200 KB gz; overrides: academy 700 KB, session-manager 1.3 MB, escape-velocity ~30 MB, game-academy 5 MB; that file is the source, the publish gate reads it too); fileCount ≤ 30; stale-manifest drift detection |
 | **A11y** | axe-core scan (WCAG 2.1 AA) in mobile + desktop viewports; zero serious/critical violations; reduced-motion honored |
 
 ### CLI
@@ -76,18 +75,17 @@ Exit codes: `0` = PASS, `1` = FAIL, `2` = internal error.
 
 ### Reports
 
-Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md` (gitignored; reports are not committed). The nightly cron (03:00 PDT) opens a GitHub issue tagged `qa-failure` on FAIL.
+Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md` (gitignored; reports are not committed). `scripts/sanity-qa-cron.sh` opens a GitHub issue tagged `qa-failure` on FAIL, but only when someone runs it.
 
-### Cron schedule
+### Cron script (not scheduled)
 
+`scripts/sanity-qa-cron.sh` wraps the run and, on FAIL or ERROR, opens a GitHub issue on `StanislavBG/bilko-run` tagged `qa-failure` with the first 60 lines of the report (needs the `gh` CLI; token from `~/.env.cron`). No crontab entry or systemd timer installs it (`crontab -l`, `systemctl --user list-timers`). Run it by hand:
+
+```bash
+cd ~/Projects/Bilko && bash scripts/sanity-qa-cron.sh
 ```
-0 10 * * * cd /home/bilko/Projects/Bilko && bash scripts/sanity-qa-cron.sh >> /tmp/sanity-qa-cron.log 2>&1
-```
 
-`10:00 UTC = 03:00 PDT` (DST anchor; during PST it fires at 02:00 PST — acceptable).
-
-- On FAIL or ERROR: opens a GitHub issue on `StanislavBG/bilko-run` tagged `qa-failure` with the first 60 lines of the report (requires `gh` CLI; token sourced from `~/.env.cron`).
-- The report stays local in `test-results/` (gitignored, never pushed).
+The report stays local in `test-results/` (gitignored, never pushed).
 
 ### Prompt files (AI-subagent mode)
 
@@ -101,11 +99,11 @@ Three layers protect the platform from runaway Gemini spend:
 2. **Per-app daily ceiling** (stored in `app_spend_ceilings` table, default 2000). Returns 503 + inserts a `cost_alerts` row when the app's total daily calls exceed the ceiling.
 3. **Daily cost-of-revenue monitor** (`pnpm cost-monitor`): alerts if Gemini COGS exceeds 25% of Stripe revenue, or if absolute spend exceeds $50/day.
 
-All paid `react-route` tools call `enforceCallLimits(ctx)` from `server/routes/tools/_shared.ts` before every Gemini invocation. Free tools (Outdoor-Hours, LocalScore) use the existing IP-only rate limiter and are exempt.
+All paid AI tool gateway routes call `enforceCallLimits(ctx)` from `server/routes/tools/_shared.ts` before every Gemini invocation. Free tools (Outdoor-Hours, LocalScore) use the existing IP-only rate limiter and are exempt.
 
 Open alerts are visible at `/admin/cost`. Ceilings can be tuned per-app via the admin UI or directly in the `app_spend_ceilings` table.
 
-Scheduled cron: `pnpm cost-monitor` runs daily at 7am PT (configured in the scheduler).
+The cost monitor runs by hand only (`pnpm cost-monitor`); no crontab entry or systemd timer installs it.
 
 ## Static-asset caching
 
@@ -132,7 +130,7 @@ Implementation lives in `server/static-cache.ts`. It also rewrites every file's 
 
 ## Observability dashboard
 
-`/admin/observability` is the Observability Command console: a full-viewport view with 7 swappable modules (globe, sessions journeys, app health, traffic, audience, top clicks, bandwidth), a KPI strip and a ticker. Design source: `docs/design/observability-command/`. It aggregates per-sibling:
+`/admin/observability` is the Observability Command console: a full-viewport view with 7 swappable modules (globe, sessions journeys, app health, traffic, audience, top clicks, bandwidth), a KPI strip and a ticker. It aggregates per-sibling:
 
 - 24h traffic, errors, log warnings/errors
 - Synthetic monitor pass rate + load times (p50/p95)
@@ -144,11 +142,17 @@ It is a read-only page over existing tables — no new ingest. To add a column, 
 
 Host-kit drift is computed against `BILKO_LATEST_HOST_KIT` env var (set via Render dashboard). Rows for siblings with no telemetry show `—` instead of `0` to avoid false "everything's broken" signals.
 
+Admin-console rules:
+
+- Each module renders its own loading, error and empty state; a failing source never blanks the whole page.
+- Every fetch goes through `useAdminFetch` (`src/hooks/useAdmin.ts`), which uses Clerk bearer auth. Add no new endpoint for it; reuse the existing `/api/admin/*` ones.
+- The page is admin-only: non-admins are redirected to `/`.
+
 When something feels wrong on bilko.run, this is the first place to look.
 
 ## Security headers
 
-bilko.run sends a strict CSP plus the OWASP-recommended security header set on every response. All headers are applied at the Fastify hook level (`server/security-headers.ts`) so they cover both host SPA routes and `/projects/*` static-path siblings.
+bilko.run sends a strict CSP plus the OWASP-recommended security header set on every response (blog videos get `BLOG_VIDEO_CSP` instead of the nonce policy). All headers are applied at the Fastify hook level (`server/security-headers.ts`) so they cover both host SPA routes and `/projects/*` static-path siblings.
 
 ### Headers sent on every response
 
@@ -157,40 +161,47 @@ bilko.run sends a strict CSP plus the OWASP-recommended security header set on e
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | camera, mic, USB, geolocation capped to `self` or `()` |
+| `Permissions-Policy` | accelerometer, camera, gyroscope, magnetometer, USB off (`()`); geolocation, microphone, payment `(self)` |
 | `Cross-Origin-Opener-Policy` | `same-origin` |
 | `Content-Security-Policy[-Report-Only]` | Per-request nonce; see spec below |
 
 ### CSP spec
 
+Built per request by `buildCsp` in `server/security-headers.ts`:
+
 ```
 default-src 'self';
-script-src  'self' 'nonce-{NONCE}' 'wasm-unsafe-eval' https://js.clerk.com https://js.stripe.com 'strict-dynamic';
-style-src   'self' 'nonce-{NONCE}';
-img-src     'self' data: https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com;
-font-src    'self' data:;
-connect-src 'self' https://*.clerk.com https://api.stripe.com;
-frame-src   https://*.clerk.com https://js.stripe.com https://hooks.stripe.com;
+script-src  'self' 'nonce-{NONCE}' 'wasm-unsafe-eval' https://js.clerk.com https://js.stripe.com https://clerk.bilko.run 'strict-dynamic';
+style-src   'self' 'nonce-{NONCE}' https://fonts.googleapis.com;
+style-src-attr 'unsafe-inline';
+img-src     'self' data: [blob: on /projects/ only] https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com;
+font-src    'self' data: https://fonts.gstatic.com;
+connect-src 'self' https://*.clerk.com https://clerk.bilko.run https://api.stripe.com;
+frame-src   'self' https://*.clerk.com https://js.stripe.com https://hooks.stripe.com;
 object-src  'none';
 base-uri    'self';
 form-action 'self' https://*.stripe.com;
-frame-ancestors 'none';
+frame-ancestors 'none' | 'self';
 report-uri  /api/security/csp-report;
-upgrade-insecure-requests;
+upgrade-insecure-requests;   (only when enforced)
 ```
 
-A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook auto-injects `nonce="…"` onto every `<script>` and `<style>` tag in HTML string payloads, plus a `<meta name="csp-nonce">` for host-kit runtime CSS. Static-file streams served by `@fastify/static` are not rewritten (streams pass through unchanged).
+- `frame-ancestors` is `'self'` for `/projects/*` (Game Academy frames engine games as same-origin iframes) and `'none'` everywhere else.
+- `upgrade-insecure-requests` is emitted only when the policy is enforced; browsers ignore it in report-only and log a console error.
+- `style-src-attr 'unsafe-inline'` covers React `style={{}}` attributes, which a nonce cannot cover; `<style>` elements stay nonce-gated.
+- Blog videos (`/blog-videos/<slug>/`) skip this policy and get `BLOG_VIDEO_CSP`: always enforced, `default-src 'none'`, inline script and style, `connect-src 'none'`, `frame-ancestors 'self'`, `sandbox allow-scripts`.
 
-`'wasm-unsafe-eval'` in `script-src` allows WebAssembly compilation (not JS `eval`) for Godot/WebAssembly apps like the escape-velocity game and LocalScore's WebGPU pipeline.
+A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook injects `nonce="..."` onto every `<script>` and `<style>` tag in HTML payloads (strings and streams, which it buffers), plus a `<meta name="csp-nonce">` for host-kit runtime CSS. HTML sent as an attachment (the Field Manual offline edition) passes through untouched.
+
+`'wasm-unsafe-eval'` in `script-src` allows WebAssembly compilation (not JS `eval`) for Godot/WebAssembly apps like escape-velocity and LocalScore's WebGPU pipeline.
 
 ### Mode toggle
 
-`BILKO_CSP_ENFORCE=1` → `Content-Security-Policy` (enforced).
-Default (unset) → `Content-Security-Policy-Report-Only` (report-only burn-in).
+`BILKO_CSP_ENFORCE=1` enforces `Content-Security-Policy` on the host's own pages only. Static-path apps (`/projects/<slug>/`) stay `Content-Security-Policy-Report-Only` even then (decision on record 2026-10-26): they are sibling-owned code with engine-specific needs (Godot needs `'unsafe-eval'`, engines draw from `blob:` images). Before enforcing on `/projects/`, that has to become a per-project policy declared in the registry. Default (unset) is report-only everywhere.
 
 ### Violation reporting
 
-Browsers POST violations to `/api/security/csp-report`. Reports are persisted in the `csp_violations` table (columns: `blocked_uri`, `violated_dir`, `document_uri`, `source_file`, `line_number`, `user_agent`, `created_at`). The endpoint is rate-limited to 60 req/min/IP. Inspect violations with the admin SQL view or directly:
+Browsers POST violations to `/api/security/csp-report`. Reports are persisted in the `csp_violations` table (columns: `blocked_uri`, `violated_dir`, `document_uri`, `source_file`, `line_number`, `user_agent`, `created_at`). The endpoint is rate-limited to 10 req/min/IP, and deduplicated to one row per distinct (directive, blocked URI, document) per hour. Inspect violations with the admin SQL view or directly:
 
 ```sql
 SELECT blocked_uri, violated_dir, document_uri, COUNT(*) as n
@@ -199,3 +210,23 @@ GROUP BY 1, 2, 3
 ORDER BY n DESC
 LIMIT 50;
 ```
+
+## Sanctioned app-specific host code
+
+
+Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
+
+- AI-tool gateway routes — `server/routes/tools/` (includes the PageRoast `roast_page` MCP tool, `server/routes/tools/page-roast.ts`, registered on the `/mcp` catalog server)
+- Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
+- Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
+- Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer, home hero and Session Manager header
+- Game config — `shared/game-config.ts`
+- Realtime input relay and lobby directory (Game Academy online play, game-agnostic) — `server/realtime/relay.ts`, `server/realtime/lobbies.ts`, `server/routes/realtime.ts`; contract in `docs/host-contract.md` → "Realtime relay"
+- Bilko Launch Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price id + release sha256 only; the paid zip lives in the private ~/Projects/Bilko-Launch-Kit repo and the web_product_releases table)
+- Bilko Agent Factory Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price env var + release/preview sha256 only; the zip is built in the private ~/Projects/Bilko-Launch-Kit repo and stored in the web_product_releases table)
+- Human For Hire page, free hour and Bilko hour — the `bilko-hour` entry in `shared/web-products.ts`, the `'human-for-hire'` slot entry in `shared/service-slots.ts`, `shared/bilko-profile.ts` (the public contact email), `shared/booking-page.ts`, `shared/free-hour-topics.ts`, `src/pages/BookingPage.tsx`, `src/pages/BookingSteps.tsx`, `src/lib/bookingView.ts`, `src/styles/booking-page.css`, `server/bilko-profile-routes.ts` (serves `/book`, the Hire page, and 301s `/bilko`, `/hire`, `/human-for-hire` and `/projects/human-for-hire/*` to it), `server/routes/free-hour.ts` (including its `free_hour_booked` funnel event), the `free_hours_booked` count in `server/routes/admin-funnel.ts`, `server/routes/admin-bookings.ts`, `HOST_PAGE_SLUG` and `HOST_PAGE_PATHS` in `server/page-hits.ts` (they file the page's traffic and count its views in `server/routes/admin-web-products.ts`), and the free-hour functions in `server/services/service-bookings.ts` (the generic booking code in `server/routes/service-bookings.ts`, `server/services/service-bookings.ts` and `server/services/mailer.ts` is framework)
+- Git Viewer hosted portfolios — `server/routes/tools/git-viewer.ts` (`/api/git-viewer/u/:login`, `/api/git-viewer/claim`, in-process generation + daily refresh), the `git_viewer_profiles` table, `verifyClerkGitHubUser` in `server/clerk.ts`, and the `git_viewer` subscription tier ($5/yr; `STRIPE_PRICE_GITVIEWER`; `priceToPlanTier` → `git_viewer` for the current price and the retired $5/mo one kept in `legacyPriceIds`, which sets `gitViewer` but never `isPro`). Generation uses the `@bilkobibitkov/git-viewer` library, loaded lazily
+- Bilko credits menu — `shared/bilko-menu.ts` (wallet top-ups, the one credit-bought item, the Agent Factory Kit, and intake validation; pure module) and the menu order code built on it (`server/services/menu-orders.ts`, `server/routes/menu-orders.ts`)
+- ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
+
+Any new app-specific host code must be added to this list in the same commit, or live in the sibling repo instead.

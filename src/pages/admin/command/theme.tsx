@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { formatBytes } from '../../../lib/format.js';
 
-/** Color tokens from docs/design/observability-command/README.md. */
+/** Color tokens for the Observability Command console. */
 export const C = {
   bg: '#0b0907',
   grid: 'rgba(245,240,230,.022)',

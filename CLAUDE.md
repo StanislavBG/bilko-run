@@ -143,22 +143,7 @@ Paid zips sold from a static-path landing page. Declared in `shared/web-products
 
 ### Sanctioned app-specific host code
 
-Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
-
-- AI-tool gateway routes — `server/routes/tools/` (includes the PageRoast `roast_page` MCP tool, `server/routes/tools/page-roast.ts`, registered on the `/mcp` catalog server)
-- Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
-- Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
-- Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer, home hero and Session Manager header
-- Game config — `shared/game-config.ts`
-- Realtime input relay and lobby directory (Game Academy online play, game-agnostic) — `server/realtime/relay.ts`, `server/realtime/lobbies.ts`, `server/routes/realtime.ts`; contract in `docs/host-contract.md` → "Realtime relay"
-- Bilko Launch Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price id + release sha256 only; the paid zip lives in the private ~/Projects/Bilko-Launch-Kit repo and the web_product_releases table)
-- Bilko Agent Factory Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price env var + release/preview sha256 only; the zip is built in the private ~/Projects/Bilko-Launch-Kit repo and stored in the web_product_releases table)
-- Human For Hire page, free hour and Bilko hour — the `bilko-hour` entry in `shared/web-products.ts`, the `'human-for-hire'` slot entry in `shared/service-slots.ts`, `shared/bilko-profile.ts` (the public contact email), `shared/booking-page.ts`, `shared/free-hour-topics.ts`, `src/pages/BookingPage.tsx`, `src/pages/BookingSteps.tsx`, `src/lib/bookingView.ts`, `src/styles/booking-page.css`, `server/bilko-profile-routes.ts` (serves `/book`, the Hire page, and 301s `/bilko`, `/hire`, `/human-for-hire` and `/projects/human-for-hire/*` to it), `server/routes/free-hour.ts` (including its `free_hour_booked` funnel event), the `free_hours_booked` count in `server/routes/admin-funnel.ts`, `server/routes/admin-bookings.ts`, `HOST_PAGE_SLUG` and `HOST_PAGE_PATHS` in `server/page-hits.ts` (they file the page's traffic and count its views in `server/routes/admin-web-products.ts`), and the free-hour functions in `server/services/service-bookings.ts` (the generic booking code in `server/routes/service-bookings.ts`, `server/services/service-bookings.ts` and `server/services/mailer.ts` is framework)
-- Git Viewer hosted portfolios — `server/routes/tools/git-viewer.ts` (`/api/git-viewer/u/:login`, `/api/git-viewer/claim`, in-process generation + daily refresh), the `git_viewer_profiles` table, `verifyClerkGitHubUser` in `server/clerk.ts`, and the `git_viewer` subscription tier ($5/yr; `STRIPE_PRICE_GITVIEWER`; `priceToPlanTier` → `git_viewer` for the current price and the retired $5/mo one kept in `legacyPriceIds`, which sets `gitViewer` but never `isPro`). Generation uses the `@bilkobibitkov/git-viewer` library, loaded lazily
-- Bilko credits menu — `shared/bilko-menu.ts` (wallet top-ups, the one credit-bought item, the Agent Factory Kit, and intake validation; pure module) and the menu order code built on it (`server/services/menu-orders.ts`, `server/routes/menu-orders.ts`)
-- ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
-
-Any new app-specific host code must be added to this list in the same commit, or live in the sibling repo instead.
+Host code is framework by default. New app-specific host code must be added to the list in [`docs/host-internals.md`](docs/host-internals.md#sanctioned-app-specific-host-code) in the same commit, or live in the sibling repo instead.
 
 ## Voice & Tone
 

@@ -23,6 +23,8 @@ app.get('/api/thing', async () => ({ ok: true }));
 app.get('/api/other', async () => ({ ok: true }));
 app.post('/mcp', async () => ({ ok: true }));
 app.get('/llms.txt', async (_req, reply) => reply.type('text/plain').send('hi'));
+app.get('/coffee', async (_req, reply) => reply.redirect('https://buy.stripe.com/test_link', 302));
+app.get('/other-redirect', async (_req, reply) => reply.redirect('/', 302));
 
 interface Row {
   path: string; slug: string | null; status: number; visitor_hash: string | null;
@@ -261,6 +263,20 @@ describe('visitor class', () => {
     const r = await cls();
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ path: '/llms.txt', visitor_class: 'human', is_bot: 0 });
+  });
+
+  it('records the /coffee tip redirect (no content-type) with its visitor class, but not other redirects', async () => {
+    await app.inject({ method: 'GET', url: '/coffee', headers: { 'user-agent': CHROME, referer: 'https://github.com/x/y' } });
+    await app.inject({ method: 'GET', url: '/coffee', headers: { 'user-agent': 'curl/8.5.0' } });
+    await app.inject({ method: 'GET', url: '/other-redirect', headers: { 'user-agent': CHROME } });
+    await settle();
+    await flushPageHits();
+    const r = await dbAll<{ path: string; status: number; visitor_class: string; referrer_host: string | null }>(
+      'SELECT path, status, visitor_class, referrer_host FROM page_hits ORDER BY id');
+    expect(r).toEqual([
+      { path: '/coffee', status: 302, visitor_class: 'human', referrer_host: 'github.com' },
+      { path: '/coffee', status: 302, visitor_class: 'script', referrer_host: null },
+    ]);
   });
 
   it('uses x-bot-id as api_client', async () => {

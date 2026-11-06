@@ -209,7 +209,10 @@ export function registerPageHitRecorder(app: FastifyInstance, opts: { flush?: bo
       const path = req.url.split('?')[0];
       const isMcp = req.method === 'POST' && path === '/mcp';
       const isAgentPath = req.method === 'GET' && (path === '/llms.txt' || path === '/api/offers' || path.startsWith('/buy/'));
-      if (!isMcp && !isAgentPath) {
+      // The tip jar is a bodyless 302 to a Stripe Payment Link. Record it so each
+      // coffee Checkout Session can be matched to a visitor class and referrer.
+      const isTipRedirect = req.method === 'GET' && path === '/coffee';
+      if (!isMcp && !isAgentPath && !isTipRedirect) {
         if (req.method !== 'GET') return;
         if (path.startsWith('/api/')) return;
         const ct = String(reply.getHeader('content-type') ?? '');

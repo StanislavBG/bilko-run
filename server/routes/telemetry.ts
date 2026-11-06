@@ -246,7 +246,7 @@ function safeMeta(val: unknown, maxBytes: number): string {
 // A desktop client's first-run setup steps and how each one ended, sent as
 // `seeds` in its install profile (Session Manager sends devPlugin, schedulerMcp
 // and agentPersonas). Step names are the client's own, so any app can report
-// its own steps. app_installs must never hold PII (docs/telemetry-beacons.md),
+// its own steps. app_installs must never hold PII (docs/observability.md),
 // so nothing free-form is kept: a step name must be slug-shaped (the `app`
 // shape, after clamping to 60 chars) and its value one of SEED_STATUSES.
 // Anything else is dropped, never a 400.

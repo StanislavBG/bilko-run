@@ -2,7 +2,7 @@
 
 bilko.run is a **host platform**, not a single product. It hosts many independent "apps" — each with its own product, its own scoring engine, its own UX. Some apps live in this repo; some live in their own repos and are dropped in as static assets; some live on other domains.
 
-This document defines the contract: what the host provides, what an app must implement, and how to add a new app. Host-internal implementation detail (monitoring, QA gates, cost controls, caching, observability, security headers) lives in [`docs/host-internals.md`](host-internals.md) — read that only if you're changing the host itself, not when you're publishing an app.
+This document defines the contract: what the host provides, what an app must implement, and how to add a new app. Host-internal implementation detail (monitoring, QA gates, cost controls, caching, observability, security headers) lives in ~/Projects/Bilko/docs/host-internals.md — read that only if you're changing the host itself, not when you're publishing an app.
 
 ## The three host kinds
 
@@ -15,6 +15,8 @@ Every app declares one host kind in `src/data/projectsRegistry.ts` (react-route)
 | `external-url` | App lives on another domain or subdomain | `https://<host>/...` | None — host only links to it |
 
 Default to `static-path` for new apps — including ones that need a signed-in user (see "Calling authenticated host APIs from a `static-path` app" below). `react-route` is rare: today only Session Manager (`/products/session-manager`) uses it. The AI tools are `static-path` siblings whose Gemini endpoints stay in the host as gateway routes under `server/routes/tools/`.
+
+An `external-url` app loses shared Clerk auth and the injected analytics beacon, because the host never serves its pages. Leaving `react-route` turns in-process auth and credit calls (`requireAuth`, `deductToken`) into HTTP round-trips to `/api`, authenticated with a Bearer token.
 
 ## What the host provides
 
@@ -32,9 +34,9 @@ These are the OS services. Apps use them; they should not reimplement.
 - **Credits: token wallet.** Spend via `deductToken(email)` and check via `getTokenBalance(email)` from `server/services/tokens.ts`. Free users get a starter grant via `grantFreeTokens(email)`.
 - **Payments: Stripe.** Subscription state via `getActiveSubscriptionLive(email)`; one-time purchases via `hasPurchased(email, productKey)`. Both from `server/services/stripe.ts`.
 - **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
-- **Page-view and click analytics.** Automatic: the host injects a beacon into every HTML page (pageviews on load and SPA navigation, clicks, session ids via the `bilko_vid`/`bilko_sid` cookies). No hook to call. See [`docs/observability.md`](observability.md).
+- **Page-view and click analytics.** Automatic: the host injects a beacon into every HTML page (pageviews on load and SPA navigation, clicks, session ids via the `bilko_vid`/`bilko_sid` cookies). No hook to call. See ~/Projects/Bilko/docs/observability.md.
 - **Shared UI for siblings** lives in `host-kit` (`packages/host-kit/`), not in this bundle; the old in-repo `tool-page` kit and `useToolApi` hook are gone.
-- **Which host-kit to install.** Use the unscoped npm package `host-kit`, **`>=0.8.0`**: `"host-kit": "^0.8.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. 0.8.0 is the first npm release that has the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`) and Bearer-authenticated games hooks. `host-kit@0.7.2` and the legacy scoped `@bilkobibitkov/host-kit` (last release 0.7.2, no longer published) do not have it. In 0.7.2 the games hooks send cookies only, so every call gets a 401.
+- **Which host-kit to install.** Use the unscoped npm package `host-kit`, **`>=0.10.0`**: `"host-kit": "^0.10.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. 0.8.0 was the first npm release with the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`) and Bearer-authenticated games hooks; `trackFlow` needs 0.10.0 or later. `host-kit@0.7.2` and the legacy scoped `@bilkobibitkov/host-kit` (last release 0.7.2, no longer published) do not have it. In 0.7.2 the games hooks send cookies only, so every call gets a 401.
 - **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
 - **Database.** Turso/libSQL via `dbGet/dbAll/dbRun/dbTransaction` from `server/db.ts`. Falls back to local SQLite in dev. All SQL parameterized.
 
@@ -50,7 +52,7 @@ These are the OS services. Apps use them; they should not reimplement.
 A `static-path` app is same-origin with `/api`, so it *can* call authenticated host endpoints (`/api/games/*`, the AI-tool gateways, `/api/academy/*`). There is **one supported way to authenticate: send a Clerk session JWT in `Authorization: Bearer <token>`.** `requireAuth` / `requireAdmin` in `server/clerk.ts` read only that header.
 
 - **Cookies are not accepted.** Clerk's first-party `__session` cookie on bilko.run is **not** read by the host, and `credentials: 'include'` by itself always gets a 401. This is deliberate. That cookie is a 60-second token that only clerk-js refreshes. A static page that doesn't run clerk-js would get intermittent 401s about a minute after page load. Accepting it would also make every mutating `/api` route cookie-authenticated, which means CSRF exposure.
-- **How to get the token:** load clerk-js from the host's Clerk Frontend API (`https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js`, with the bilko.run publishable key as `data-clerk-publishable-key`). Call `await Clerk.load()`, then `await Clerk.session?.getToken()` before **each** request. Don't cache the token, because clerk-js already caches and refreshes it. The host CSP already allows `clerk.bilko.run` in `script-src`. Copy the CSP nonce from `<meta name="csp-nonce">` onto the script tag. **Use host-kit instead of rolling your own:** `authFetch(url, init)` (`getAuthToken()`, `useAuth()`, `openSignIn()`) from `host-kit` (`>=0.8.0`) does all of this. The `useSaveState` / `useUnlocks` / `useLeaderboard` hooks already use it.
+- **How to get the token:** load clerk-js from the host's Clerk Frontend API (`https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js`, with the bilko.run publishable key as `data-clerk-publishable-key`). Call `await Clerk.load()`, then `await Clerk.session?.getToken()` before **each** request. Don't cache the token, because clerk-js already caches and refreshes it. The host CSP already allows `clerk.bilko.run` in `script-src`. Copy the CSP nonce from `<meta name="csp-nonce">` onto the script tag. **Use host-kit instead of rolling your own:** `authFetch(url, init)` (`getAuthToken()`, `useAuth()`, `openSignIn()`) from `host-kit` (`>=0.10.0`) does all of this. The `useSaveState` / `useUnlocks` / `useLeaderboard` hooks already use it.
 - **Gate the load cheaply:** a `__client_uat` cookie value > 0 means the user has signed in on bilko.run. If it is absent or `0`, treat the user as signed out without downloading clerk-js.
 - **Identity on the server** is always the email from the verified token. Never trust a user id or email in the request body.
 
@@ -58,7 +60,7 @@ A `static-path` app is same-origin with `/api`, so it *can* call authenticated h
 
 ### Every app
 
-A registry entry — a `static-path`/`external-url` entry in `src/data/standalone-projects.json` (validated by `mcp-host-server/src/contract/registry.ts`; see "Registry rules" below), or a `react-route` entry in `src/data/projectsRegistry.ts`. Sibling repos add theirs via the [`bilko-host` MCP](../mcp-host-server/README.md) — never by hand-editing this repo.
+A registry entry — a `static-path`/`external-url` entry in `src/data/standalone-projects.json` (validated by `mcp-host-server/src/contract/registry.ts`; see "Registry rules" below), or a `react-route` entry in `src/data/projectsRegistry.ts`. Sibling repos add theirs via the `bilko-host` MCP (~/Projects/Bilko/mcp-host-server/README.md) — never by hand-editing this repo.
 
 ```json
 {
@@ -279,6 +281,10 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
 
 Implemented in `server/routes/project-catalog.ts`; tests in `tests/project-catalog.test.ts`.
 
+## Project data snapshot
+
+A project can publish live data for its page: `GET /api/projects/<slug>/snapshot` (public) returns the latest snapshot JSON, or 404 when none exists yet, with an `x-snapshot-updated-at` header. `POST /api/projects/<slug>/snapshot` (authenticated) replaces it. Snapshots are capped at 6 MB. Code: `server/routes/project-data.ts`.
+
 ## Agent-facing surfaces
 
 bilko.run serves agents a plain-text storefront at `/llms.txt`, the public catalog at `/api/projects` and `/api/offers`, and a stateless MCP server at `POST /mcp`. A public static-path project whose bundle ships its own `llms.txt` (at the bundle root, served as `/projects/<slug>/llms.txt`) is linked from the storefront under "Project guides".
@@ -319,14 +325,14 @@ project-home lenses must not target that prefix.
 2. Build it.
    - `react-route`: page + route entry + per-tool server file.
    - `static-path`: standalone repo, `vite build`.
-3. Register and publish via the [`bilko-host` MCP](../mcp-host-server/README.md) — see below. `react-route` apps still register by hand in `src/data/projectsRegistry.ts`.
+3. Register and publish via the `bilko-host` MCP (~/Projects/Bilko/mcp-host-server/README.md) — see below. `react-route` apps still register by hand in `src/data/projectsRegistry.ts`.
 4. Run `pnpm test && pnpm exec tsc --noEmit && pnpm exec vite build` — all must pass.
-5. Commit and push to `origin`. Render auto-deploys. (Never push to `content-grade` — it's a separate, unrelated project with diverged history.)
+5. Commit and push to `origin`. Render auto-deploys.
 6. Verify the project shows up on `/`, `/projects`, and in ⌘K.
 
 ## Adding from a sibling-repo Claude session (MCP)
 
-A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by hand. Wire up the [`bilko-host` MCP server](../mcp-host-server/README.md) in your sibling's `.mcp.json`, then per session:
+A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by hand. Wire up the `bilko-host` MCP server (~/Projects/Bilko/mcp-host-server/README.md) in your sibling's `.mcp.json`, then per session:
 
 ```
 1. bilko-host__get_host_contract                          # read this file
@@ -348,41 +354,19 @@ your publish — retry it.
 
 ## Removing an app
 
-1. Delete its entry from the registry. Sibling sessions: `bilko-host__unregister_project { slug, deleteAssets: true }` does both the registry edit and the asset removal.
+1. Delete its entry from the registry. Sibling sessions: `bilko-host__unregister_project { slug, callerRepoPath, deleteAssets: true }` (`callerRepoPath` is required and must be the repo bound to the slug) does both the registry edit and the asset removal.
 2. For `react-route`: also delete the page (`src/pages/<slug>Page.tsx`) and per-tool server file (`server/routes/tools/<slug>.ts`) and remove the call from `server/routes/tools/index.ts`.
 3. For `static-path`: `rm -rf public/projects/<slug>/` (or pass `deleteAssets: true` to the MCP).
 4. Add a redirect in `src/App.tsx` if the slug is still being linked from outside.
 
 ## Telemetry contract
 
-Full adoption process: [`docs/observability.md`](observability.md). Summary:
+The full adoption process, SDK reference, endpoints, rate limits and retention are in ~/Projects/Bilko/docs/observability.md. What a sibling must do:
 
-**Free, no code.** The host injects a beacon into every HTML document (SPA and every static-path app): pageviews on load and SPA navigation, clicks on `a`/`button`/`[role=button]`/`summary`/`[data-track]`, all stitched into one session by the first-party `bilko_vid` (1 year) and `bilko_sid` (30-minute sliding idle) cookies. Tag important buttons with `data-track="<area>-<action>"`.
-
-**SDK.** Every sibling app SHOULD call `initTelemetry({ app, version })` from `host-kit` at boot:
-
-- `track(name, props)` → `POST /api/telemetry/event` → `funnel_events` (not `analytics_events`)
-- `trackFlow(flow, step, props)` → `track('<flow>.<step>', { flow, step, ... })`, kebab-case names
-- `log.info|warn|error(msg, fields)` → `app_logs` (info sampled at 10% by default)
-- `logError(err, context)` and uncaught `window.error` + `unhandledrejection` → `app_errors` (100% sampled, de-duped at 3/min per fingerprint)
-
-The SDK is non-blocking and batched (5s buffer, flush on page-hide) and uses `sendBeacon`. The default endpoint is relative (`/api/telemetry`) on bilko.run. `track()` called without `initTelemetry` auto-inits (app from `/projects/<slug>/`) and posts to `/api/telemetry/event`; it no longer posts to `/api/analytics/event`. Only logs and error capture need `initTelemetry`. Prop/field keys matching `/(email|password|token|key|ssn|card|cvv|apikey)/i` are redacted client-side; never put emails, tokens or free text in props.
-
-```ts
-import { initTelemetry, trackFlow } from 'host-kit';
-initTelemetry({ app: 'my-app', version: '1.0.0' });
-trackFlow('checkout', 'click-buy', { product: 'pro' });
-```
-
-Server endpoints (all rate-limited per IP, append-only tables; the cookie session ids are stamped onto every record):
-
-| Endpoint | Table | Rate limit |
-|---|---|---|
-| `POST /api/telemetry/event` | `funnel_events` | 1200/min |
-| `POST /api/telemetry/log` | `app_logs` | 600/min |
-| `POST /api/telemetry/error` | `app_errors` | 300/min |
-
-See also [`docs/telemetry-beacons.md`](telemetry-beacons.md) for the full endpoint table. Verify in `/admin/observability` (Sessions and Flows).
+- **Nothing for pageviews and clicks.** The host injects a beacon into every HTML page; tag important buttons with `data-track="<area>-<action>"`.
+- **Call `initTelemetry({ app, version })` from `host-kit` once at boot** (`>=0.10.0` for `trackFlow`). Then use `trackFlow(flow, step, props)` (kebab-case), `log.*` and `logError`.
+- **Never put emails, tokens or free text in props**, fields or context.
+- Verify in `/admin/observability` (Sessions and Flows).
 
 ## Manifest contract
 
@@ -390,7 +374,7 @@ Every `static-path` sibling MUST emit `dist/manifest.json` as part of its build.
 
 ### Schema
 
-Defined in `shared/manifest-schema.ts` (Zod) and mirrored in `mcp-host-server/src/manifest-schema.ts` (the MCP's own copy, used by the `manifest` gate at publish time — keep both in sync). All fields required unless marked optional.
+Defined once, in `mcp-host-server/src/manifest-schema.ts` (Zod), which the `manifest` gate uses at publish time; `shared/manifest-schema.ts` re-exports it, so there is nothing to keep in sync. All fields required unless marked optional.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -403,7 +387,7 @@ Defined in `shared/manifest-schema.ts` (Zod) and mirrored in `mcp-host-server/sr
 | `hostKit.version` | `string` | Version of `host-kit` (or legacy `@bilkobibitkov/host-kit`) in use. `"0.0.0"` if not used |
 | `golden.path` | `string` | URL path the synthetic monitor GETs. Must start with `/` |
 | `golden.expect` | `string` | Optional CSS selector or text the monitor checks for |
-| `health.path` | `string` (optional) | If present, host health poller GETs this path every N minutes |
+| `health.path` | `string` (optional) | Stored only (`app_manifests.health_path`); nothing polls it today |
 | `bundle.sizeBytesGz` | `integer` | Total gzip size of all dist files in bytes |
 | `bundle.fileCount` | `integer` | Total number of files in the bundle |
 
@@ -434,13 +418,13 @@ Defined in `shared/manifest-schema.ts` (Zod) and mirrored in `mcp-host-server/sr
 
 ### How to emit it (build script)
 
-Add `scripts/emit-manifest.mjs` to your repo (see Stack-Audit or Outdoor-Hours for a working example), then wire it into your build script:
+Use the `host-kit` CLI (`packages/host-kit/bin/cli.js`, bin `bilko-host-kit`) and wire it after your build:
 
 ```json
-"build": "tsc -b && vite build && node scripts/emit-manifest.mjs"
+"build": "tsc -b && vite build && bilko-host-kit emit-manifest --slug my-app"
 ```
 
-The script reads `package.json`, walks the `dist/` tree, computes gzip sizes, and writes `dist/manifest.json`. It requires no additional dependencies — only Node.js built-ins.
+It reads `package.json` and git, walks `dist/`, computes gzip sizes, and writes `dist/manifest.json` (override the path with `--out`). `golden.path` is set to `/projects/<slug>/`. It needs no extra dependencies.
 
 ### Drift indicator
 
@@ -480,7 +464,7 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 |---|---|---|
 | `manifest` | `manifest.json` exists at the bundle root, parses, validates against the Zod schema, and its `slug` matches the registered slug | **No — never bypassable** |
 | `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz). A declared `listing.icon`/`listing.shareImage` that passes the `share-assets` checks is left out of the sum; it has its own cap there. An invalid one still counts | `budget` |
-| `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` | `golden` |
+| `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` (template: see below) | `golden` |
 | `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
 | `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath` (`npm audit --omit=dev --audit-level=high --json` instead when the repo has a `package-lock.json` and no `pnpm-lock.yaml`); the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
 | `share-assets` | Each declared `listing.icon`/`listing.shareImage` is in the bundle, is a PNG, and has the right size and byte cap (see "Custom share image") | **No** |
@@ -488,6 +472,10 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 The `manifest` gate short-circuits the pipeline — if it fails, the other five are skipped (their results would be meaningless without a valid manifest).
 
 A successful publish returns the `gates: manifest=pass, budget=pass, …` summary line, then one indented `<gate>: <details>` line per gate. The `budget` line gives the gate's own measurement next to the manifest's self-reported size, e.g. `budget: measured 181.3 KB gz (manifest reported 183.0 KB) / 195 KB budget` (KB = bytes / 1024). Record the measured figure to see how close a build is to its cap before a publish fails. A blocked publish returns every gate's details as JSON instead.
+
+### Golden spec template
+
+The template is `packages/host-kit/src/testing/golden.template.ts` in ~/Projects/Bilko; the built package exposes it as the `host-kit/testing` export. **Known gap:** the failure message in `mcp-host-server/src/gates/golden.ts` (~line 17) tells you to copy `@bilkobibitkov/host-kit/dist/testing/golden.template.ts.txt`, a file host-kit does not emit. Copy the `.ts` source above instead.
 
 ### `sourceRepoPath` requirement
 
@@ -515,7 +503,7 @@ Default budget per app: **200 KB gzipped**, from `DEFAULT_BUDGET_GZ_BYTES` in `m
 
 ## Game services
 
-For games hosted on bilko.run (current: Boat Shooter; upcoming: Sudoku), the host provides three platform services accessed via the `host-kit` React hooks `useLeaderboard`, `useSaveState`, and `useUnlocks`.
+For games hosted on bilko.run (the slugs registered in `shared/game-config.ts`: `boat-shooter`, `sudoku`, `mindswiffer`, `etch`, `bilko`), the host provides three platform services accessed via the `host-kit` React hooks `useLeaderboard`, `useSaveState`, and `useUnlocks`.
 
 ### Endpoints
 
@@ -627,10 +615,7 @@ A host lists its room so others can find it and join with one click. There is no
 
 ### Deployment constraints
 
-- **Rooms live in one process's memory.** That is correct only while the service runs **one instance**. Scaling Render horizontally would split a room across instances. That would need room → instance routing (or a shared pub/sub) first.
-- A deploy drops every room (`1012`). Clients should reconnect with a fresh ticket and resync from their own state. The server keeps no input log.
-- The lobby directory is in memory too. A deploy empties it, and hosts re-announce on their next heartbeat (≤ 10 s).
-- **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. One instance is what the in-memory rooms need. Free has a cost, though: the service spins down after 15 minutes without inbound traffic. The first ticket after an idle spell then waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move the service to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
+Rooms and the lobby directory live in one process's memory, so the relay needs a single Render instance and a deploy drops every room (`1012`; reconnect with a fresh ticket). Tier and instance details: ~/Projects/Bilko/docs/deployment.md.
 
 Sign-in capture ("sign in for updates") lives in ~/Projects/Bilko/docs/site.md.
 
@@ -683,13 +668,4 @@ Two optional `WebProduct` fields on download products (validated by `validateWeb
 
 Bookable services (`kind: 'service'`, booking endpoints, founding coupons, free hour) are documented in ~/Projects/Bilko/docs/commerce.md.
 
-
-## Why this contract exists
-
-The AI tools were originally built as one product with one codebase. They've grown into independent products that happen to share a host. This contract makes that explicit, so:
-
-- Adding a new tool is a checklist, not an architectural decision.
-- A failing tool can't break the others (per-tool server files, code-split frontend bundles).
-- Any tool can be extracted to its own repo later by following the `static-path` migration: build standalone, publish into `public/projects/<slug>/` via the MCP, switch the host kind. No URL change for users.
-
-See [`docs/host-internals.md`](host-internals.md) for monitoring, QA, cost, caching, observability, and security-header detail.
+See ~/Projects/Bilko/docs/host-internals.md for monitoring, QA, cost, caching, observability, and security-header detail.

@@ -122,3 +122,61 @@ navigator.sendBeacon('/api/telemetry/event', new Blob([JSON.stringify({
 The server stamps `session_id` / `visitor_id` from the cookies.
 
 > **Code differs from the sent snippet.** The taxonomy as sent passes `JSON.stringify(...)` directly to `sendBeacon`. That goes out as `text/plain`, and `/api/telemetry/event` only reads a parsed JSON body (`server/routes/telemetry.ts` `batchOf`), so the batch would be ignored (`ingested: 0`). Wrap the string in a `Blob` with type `application/json`, as above. The body shape (`batch[]` with `app`, `name`, `ts`, `props`) is otherwise exactly as sent.
+
+## 10. Public telemetry beacons (endpoints, limits, retention)
+
+Unauthenticated POST endpoints on bilko.run that any app (a browser bundle, a CLI, an Electron desktop app on a stranger's laptop) can report into with nothing configured. Code: `server/routes/telemetry.ts`, registered in `server/index.ts` via `registerTelemetryRoutes(app)`.
+
+| Route | Table | Shape | Per-IP limit |
+|---|---|---|---|
+| `POST /api/telemetry/event` | `funnel_events` | `{ batch: [{ name, app, props, visitor_id, session_id }] }` | 1200/min |
+| `POST /api/telemetry/log` | `app_logs` | `{ batch: [{ app, version, level, msg, visitor_id, session_id, fields, ts }] }` | 600/min |
+| `POST /api/telemetry/error` | `app_errors` | `{ batch: [{ app, version, name, msg, stack, url, ua, visitor_id, session_id, context, ts }] }` | 300/min |
+| `POST /api/telemetry/install` | `app_installs` | single object (machine profile + optional `seeds`), upsert keyed on `install_id` | 60/min |
+| `POST /api/analytics/pageview` | `page_views` | `{ path, referrer, screen, visitor_id, session_id, utm_* }` (injected beacon) | event-rate limiter |
+| `POST /api/analytics/click` | `click_events` | `{ path, tag, id, label, href, visitor_id, session_id, track }` (injected beacon; `track` is the `data-track` name) | event-rate limiter |
+
+`MAX_BATCH` is 50 records; the server body limit is 2 MB (`server/index.ts`); stacks clamp at 16 KB, other strings at their column widths. Session columns are listed in section 2.
+
+### Design constraint: zero user-facing auth
+
+There is no API key, no OAuth, no account. A first run must succeed, so every abuse control is identity-free. Responses:
+
+- **Malformed request:** `400`, currently only `install` with no `install_id`.
+- **Quota exceeded** (per-IP, per-install, per-app ceiling): `429 { error: "quota_exceeded", retryAfterSec }` with a `Retry-After` header. A `200` would tell a desktop client the batch was delivered, so it would drop the batch from its queue and lose a boot backlog or crash burst. Clients back off and retry on `429` and do not treat it as "stop reporting". The quota check is all-or-nothing per request and consumes no budget when it refuses, so a retried batch never double-inserts.
+- **Records that can never be valid** (an `app` that is not slug-shaped, a `/log` record with an invalid level): dropped silently inside a `200 { ok: true }`, never charged.
+- Nothing answers `403` for throttling.
+
+### Abuse controls
+
+- **Per-install (`visitor_id`) limits:** 200/hour and 2000/day per install UUID. Records with no `visitor_id` are exempt (per-IP and the app ceiling still cover them).
+- **Shape rejection before any INSERT:** `app` must match `/^[a-z0-9][a-z0-9._-]{0,59}$/i`. There is no hardcoded app allowlist.
+- **Per-app daily ceiling:** 250 000 records/day per `app`.
+- **Beacon tag:** clients may send `X-SM-Beacon: <client>/<version>`. It is not a secret and not authentication. It only gives recognised client traffic its own per-IP bucket. Untagged traffic is never dropped for being untagged.
+
+### Retention
+
+Pruned opportunistically on the write path (at most every 10 min per process), plus a daily scheduled prune:
+
+| Table | Retention |
+|---|---|
+| `app_logs` | 30 days, capped at 200 000 rows |
+| `app_errors` | 90 days, capped at 100 000 rows |
+| `funnel_events` | 180 days (daily prune; only rows that carry an `env` or `version`) |
+| `app_installs` | 365 days since `last_seen_at` (daily prune) |
+
+### No PII
+
+`app_installs` carries the anonymous install UUID and a machine profile (platform, arch, cpu count, memory, versions, locale, timezone, first-run setup outcomes). It has no column that can hold an email, username or hostname, and must not gain one; `tests/telemetry.test.ts` asserts this.
+
+### First-run setup outcomes
+
+An install POST may carry `seeds`: the client's first-run setup steps and how each one ended. Session Manager sends `{ "devPlugin": "done", "schedulerMcp": "failed", "agentPersonas": "pending" }`. Step names belong to the client. The server keeps a step only when its name is slug-shaped (the `app` pattern, after clamping to 60 chars) and its value is `done`, `pending`, `failed` or `exhausted`, and keeps at most 20 steps. Anything else is dropped, never a 4xx. `app_installs.seeds` holds the kept steps as JSON, or NULL when none are left. Every upsert overwrites it, so a POST without `seeds` clears it.
+
+### CORS
+
+`@fastify/cors` restricts browser origins to bilko.run in production. It does not reject requests with no `Origin` header, so a desktop main process or CLI POSTs successfully. Cross-origin browser callers are blocked.
+
+### Admin surface
+
+`GET /api/admin/observability/installs?app=<slug>` returns installs, 7-day actives, platform/arch splits, installs per setup step and outcome (`installs.bySeed`), and an errors-by-version rollup. Admin-only. `GET /api/admin/session-manager/usage` has the same per-step rollup as `installs.seeds` and each machine's steps as `perInstall[].seeds`.

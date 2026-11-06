@@ -49,6 +49,14 @@ To confirm a newly published static app is live, fetch its page and check that i
 curl -s "https://bilko.run/projects/<slug>/" | grep -oE "<title>[^<]+</title>"
 ```
 
+## Realtime relay constraints
+
+The WebSocket relay (`server/realtime/relay.ts`) and its lobby directory (`server/realtime/lobbies.ts`) keep rooms in one process's memory.
+
+- **One instance only.** Scaling Render horizontally would split a room across instances. That needs room-to-instance routing (or a shared pub/sub) first.
+- A deploy drops every room (`1012`). Clients reconnect with a fresh ticket and resync from their own state. The server keeps no input log. The lobby directory is emptied too, and hosts re-announce on their next heartbeat (10 s or less).
+- **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. Free spins down after 15 minutes without inbound traffic, so the first ticket after an idle spell waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
+
 ## Never do
 
 - Never push Bilko to the `content-grade` remote: see the push rule in [CLAUDE.md](../CLAUDE.md#rules).

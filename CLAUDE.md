@@ -104,14 +104,8 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 ## Key Architecture
 
 ### host-kit (`packages/host-kit/`)
-This is the client SDK that static-path siblings use. It provides `authFetch`/`useAuth` (Clerk Bearer auth to the host's `/api`), the games hooks, `SiteHeader`, `GameShell`, and the `bilko-host-kit` manifest CLI. It is a pnpm workspace package with its own build and tests (`pnpm --filter host-kit build|test|typecheck`).
-
-All 14 sibling consumers depend on it locally with `"host-kit": "file:../Bilko/packages/host-kit"`. None of them use npm. Those consumers are the 8 AI-tool pages, Stepproof, Academy, Sudoku, Etch, Fizzpop and MindSwiffer.
-- **After changing it:** pnpm copies the untracked `dist/` into each app. Run `pnpm --filter host-kit build` here, then `pnpm install` in each app.
-- **Tailwind:** apps that render its components need `@source "<rel>/node_modules/host-kit/dist";` in their Tailwind CSS, because Tailwind skips `node_modules`.
-- **Changesets:** add a `.changeset/*.md` (root `.changeset/`) for each change.
-- **npm releases:** optional. Push a `host-kit-vX.Y.Z` tag to run `.github/workflows/host-kit-release.yml`. This needs an `NPM_AUTOMATION_TOKEN` repo secret.
-- **History:** merged in from `StanislavBG/bilko-host-kit` (now archived) on 2026-10-04, with its full history.
+Client SDK for static-path siblings (auth, games hooks, `SiteHeader`, telemetry, manifest CLI). Install, Tailwind and rebuild steps: [`packages/host-kit/README.md`](packages/host-kit/README.md).
+Releases are by hand: [`docs/publishing-contract.md`](docs/publishing-contract.md).
 
 ### Shared Hooks (`src/hooks/`)
 - `usePageView` — Page view tracking with Clerk email

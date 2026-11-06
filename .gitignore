@@ -41,6 +41,16 @@ playwright-report/
 # public (docs/identity-boundary.md). The files stay on disk; Session Manager
 # reads and writes them locally.
 session-manager-operations/prompt-sessions/
+# Session Manager scheduler, UI and log state: machine-local, rewritten while
+# jobs run, never source. Untracked from the main checkout, never from a
+# worktree (merging that deletion would delete the live files here).
+# session-manager-operations/reviews/ stays tracked: validators and Ship PRDs
+# commit and gate on it.
+session-manager-operations/scheduler/
+session-manager-operations/ui-prefs/
+session-manager-operations/logs/
+session-manager-operations/feedback/
+session-manager-operations/memory-clusters/
 
 # Playwright MCP console logs and screenshots (local only).
 .playwright-mcp/

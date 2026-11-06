@@ -59,6 +59,9 @@ describe('classifyVisitor', () => {
     ['HeadlessChrome', 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/124.0.0.0 Safari/537.36'],
     ['generic bot', 'SomeRandomBot/1.0'],
     ['empty', ''],
+    ['unlisted tool UA', 'bilko-coffee-audit/1 (verification, no redirect follow)'],
+    ['PostmanRuntime', 'PostmanRuntime/7.39.0'],
+    ['Java', 'Java/17.0.2'],
   ])('script: %s', (_n, ua) => {
     expect(classifyVisitor(ua)).toBe('script');
   });

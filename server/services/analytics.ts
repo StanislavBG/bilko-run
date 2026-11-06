@@ -113,6 +113,9 @@ export function classifyVisitor(
   if (RE_AI_CRAWLER.test(ua)) return 'ai_crawler';
   if (RE_SEARCH_CRAWLER.test(ua)) return 'search_crawler';
   if (RE_SCRIPT.test(ua)) return 'script';
+  // Every real browser UA starts with Mozilla/. Anything else is a script with a
+  // name we don't list (PostmanRuntime, Java, a tool's own UA), not a person.
+  if (!ua.startsWith('Mozilla/')) return 'script';
   return 'human';
 }
 

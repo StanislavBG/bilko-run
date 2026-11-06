@@ -46,3 +46,24 @@ links.
 
 Prevention: `/coffee` hits are now recorded in `page_hits` with visitor class, referrer and country
 (`server/page-hits.ts`), so the next coffee start can be matched to its visitor by time.
+
+## Re-check, 2026-11-06 2:45 PM PST
+
+Asked again by Self (same decision). Live Stripe still shows these 6 sessions in Self's window and no coffee
+session after 11-06 02:04. Every one has `payment_intent` null: no one submitted payment details on any of them.
+
+Production now records `/coffee`. A curl probe at 2:45:45 PM was stored as `/coffee`, 302, class `script`. The
+deploy check at 2:40 PM was stored as `human`, though it was a tool (UA `bilko-coffee-audit/1 …`).
+`classifyVisitor` called every UA it did not list a person. It now calls any UA that does not start with
+`Mozilla/` a `script`, the rule `/buy` already used (`server/routes/agent-buy.ts`). Rows from before this deploy
+keep their class, so human counts drop a little from the deploy on.
+
+**For Self's `snapshot.py`: don't drop starts by visitor class.** Stripe stores no class, IP or user-agent on
+a Payment Link session, so `snapshot.py` has nothing to filter on. Curl-type scripts and API clients cannot
+start a coffee session at all (test mode, above). Only a browser running Stripe's JavaScript can, and in Stripe
+a headless one looks the same as a person. Count intent instead: Stripe creates the `payment_intent` only when
+someone submits payment details. Report `real_started` as page loads and add `real_attempted` (sessions with a
+`payment_intent`). Judge buying intent on attempted and paid, not on started. This window: 6 started,
+0 attempted, 0 paid. To learn the class of a future start, match it to the `/coffee` hit seconds before it. A
+start with no `/coffee` hit came through the raw `buy.stripe.com` link (SST's snapshot JSON, `shared/product-catalog.ts`) and
+stays unclassified.

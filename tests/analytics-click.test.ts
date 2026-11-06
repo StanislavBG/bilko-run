@@ -23,8 +23,12 @@ beforeEach(async () => {
   verifyMock.mockReset();
 });
 
+// Clicks come from a browser's sendBeacon, so send a browser UA.
 const postJson = (payload: unknown) =>
-  app.inject({ method: 'POST', url: '/api/analytics/click', payload: payload as Record<string, unknown> });
+  app.inject({
+    method: 'POST', url: '/api/analytics/click', payload: payload as Record<string, unknown>,
+    headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0 Safari/537.36' },
+  });
 
 describe('POST /api/analytics/click', () => {
   it('stores a valid JSON click with slug and visitor_hash', async () => {

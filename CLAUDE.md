@@ -4,6 +4,8 @@
 
 **Git repo:** this is **`StanislavBG/bilko-run`**, remote `origin`, branch `main`. That is the one and only repo for the Bilko platform — commit and push here. The `content-grade` remote (`Content-Grade/Content-Grade`) is a **separate, unrelated project**; its history has diverged and you must **never push Bilko to it**. (Older docs/scripts that say "push to both remotes" or "deploy from Content-Grade master" are obsolete — see [Deploy](#tech-stack) and [Rules](#rules).)
 
+**Local `main` must match `origin/main`.** Scheduler plans commit their validation and ship records (`session-manager-operations/reviews/`) to local `main`, and a `Ship:` PRD pushes only the feature commit. Push the records too, or local `main` drifts. By 2026-11-05 it was 95 commits ahead and 60 behind, and every blog publish failed. Check with `git status -sb` in `~/Projects/Bilko`: it should print `## main...origin/main` with no ahead or behind count.
+
 **Repo map:** see README.md → "Where things live" for the folder-by-folder layout.
 
 **Authoritative spec:** [`docs/host-contract.md`](docs/host-contract.md) — read it before adding, removing, or migrating any app.

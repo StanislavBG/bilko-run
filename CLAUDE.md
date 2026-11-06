@@ -4,7 +4,7 @@
 
 **Git repo:** this is **`StanislavBG/bilko-run`**, remote `origin`, branch `main`. That is the one and only repo for the Bilko platform — commit and push here. The `content-grade` remote (`Content-Grade/Content-Grade`) is a **separate, unrelated project**; its history has diverged and you must **never push Bilko to it**. (Older docs/scripts that say "push to both remotes" or "deploy from Content-Grade master" are obsolete — see [Deploy](#tech-stack) and [Rules](#rules).)
 
-**Local `main` must match `origin/main`.** Scheduler plans commit their validation and ship records (`session-manager-operations/reviews/`) to local `main`, and a `Ship:` PRD pushes only the feature commit. Local `main` drifts unless those records are pushed too. By 2026-11-05 it was 95 commits ahead and 60 behind, and every blog publish failed. Check with `git status -sb` in `~/Projects/Bilko`: it should print `## main...origin/main` with no ahead or behind count. If it doesn't, run `bash scripts/sync-local-main.sh` from `~/Projects/Bilko` (try `--dry-run` first). It publishes the records, drops commits that already shipped, and keeps unshipped work on top. It never pushes product code. Every automated writer into this repo, and how each one reaches origin, is in [`docs/repo-writers.md`](docs/repo-writers.md).
+**Local `main` must match `origin/main`.** Check with `git status -sb` in `~/Projects/Bilko` (expect `## main...origin/main`, no ahead or behind); if not, run `bash scripts/sync-local-main.sh`. Details and every writer: [`docs/repo-writers.md`](docs/repo-writers.md).
 
 **Repo map:** see README.md → "Where things live" for the folder-by-folder layout.
 
@@ -99,8 +99,8 @@ TypeScript everywhere. Always use TypeScript over JavaScript for new files.
 - **AI**: Gemini (REST API via `gemini-flash-latest` alias, key via header not URL)
 - **Auth**: Clerk (JWT verification, `requireAuth`, `requireAdmin`)
 - **Payments**: Stripe (token credits, webhook verification)
-- **Runtime**: `engines.node` in `package.json` sets Node (bounded on purpose; Render and CI both read it — see [`docs/deployment.md`](docs/deployment.md#node-version))
-- **Deploy**: Render, from the **`StanislavBG/bilko-run`** repo (`main`). Deploy source is configured in the Render dashboard (no `render.yaml` in-repo) — confirm there if in doubt. **Not** the `content-grade` remote anymore.
+- **Runtime**: Node version set by `engines.node` — see [`docs/deployment.md`](docs/deployment.md#node-version)
+- **Deploy**: Render, from `origin` `main` — see [`docs/deployment.md`](docs/deployment.md)
 - **Database**: Turso (persistent), falls back to local SQLite in dev
 
 ## Key Architecture
@@ -161,10 +161,9 @@ Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoa
 - All SQL uses parameterized statements via db helpers — never string interpolation
 - Auth: `requireAuth` for token-spending endpoints, rate limiting for free-tier endpoints
 - **Push to `origin` (`StanislavBG/bilko-run`) `main` only.** The `content-grade` remote is a separate project — **never push Bilko there** (the old "push to both" rule is dead; histories have diverged)
-- Render auto-deploys from `origin` (`bilko-run`) `main` — deploy source set in the Render dashboard
 - Static-path app fixes belong in the **sibling repo that owns the source**, not the published copy under `public/projects/<slug>/` (the publisher overwrites it)
 - **Paid download bytes never go in this repo (it is public on GitHub) — commit only their sha256 in `shared/web-products.ts`; the bytes live in the `web_product_releases` table.**
-- Env vars managed via Render dashboard
+- Env vars and deploys: [`docs/deployment.md`](docs/deployment.md)
 
 ## Testing
 

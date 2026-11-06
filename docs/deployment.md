@@ -6,7 +6,7 @@ bilko.run auto-deploys from `origin` = `StanislavBG/bilko-run`, branch `main`. P
 
 ## What Render runs
 
-- Build: `pnpm install && pnpm build` (`build` in package.json is `vite build && tsc -p tsconfig.server.json`)
+- Build: `pnpm install && pnpm build` (`build` in package.json is `vite build && tsc -p tsconfig.server.json && node dist-server/server/precompress-cli.js dist`; the last step precompresses static files)
 - Start: `pnpm start` (`node dist-server/server/index.js`)
 
 These come from `package.json`. Confirm the exact commands in the Render dashboard (service → Settings → Build & Deploy), since the dashboard is what actually runs.
@@ -41,7 +41,7 @@ Compare the server uptime with the time you pushed. A fresh deploy resets uptime
 curl -s https://bilko.run/api/health | jq .uptime
 ```
 
-If uptime is still days old well after the build time (about 3–5 minutes), the deploy has not landed. Open the Render dashboard, check the service's Events tab, and use **Manual Deploy → Deploy latest commit** if needed.
+If uptime is still days old well after the build time (a redeploy takes about 3–5 minutes), the deploy has not landed. Open the Render dashboard, check the service's Events tab, and use **Manual Deploy → Deploy latest commit** if needed.
 
 To confirm a newly published static app is live, fetch its page and check that it returns its own title, not the host app's:
 
@@ -51,7 +51,7 @@ curl -s "https://bilko.run/projects/<slug>/" | grep -oE "<title>[^<]+</title>"
 
 ## Never do
 
-- Never push Bilko to the `content-grade` remote. It is a separate, unrelated project and its history has diverged.
+- Never push Bilko to the `content-grade` remote: see the push rule in [CLAUDE.md](../CLAUDE.md#rules).
 - Never add secrets to the repo; set them in the Render dashboard.
 
 ## Deploy drain and large static downloads

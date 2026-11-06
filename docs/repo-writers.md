@@ -5,7 +5,13 @@ epics into its local `main`, and scheduler PRDs commit there. Render deploys `or
 page lists every automated writer, the paths it owns, and how it reaches `origin/main`.
 
 Goal: local `main` equals `origin/main`, or sits strictly ahead of it with only work that is
-waiting to ship. `git status -sb` shows which.
+waiting to ship. `git status -sb` shows which: it should print `## main...origin/main` with no
+ahead or behind count. Scheduler plans commit their validation and ship records
+(`session-manager-operations/reviews/`) to local `main`, and a `Ship:` PRD pushes only the
+feature commit, so local `main` drifts unless the records are pushed too. On 2026-11-05 it was 95
+commits ahead and 60 behind, and every blog publish failed. `bash scripts/sync-local-main.sh`
+publishes the records, drops commits that already shipped and keeps unshipped work on top; it never
+pushes product code.
 
 ## Writers
 
@@ -17,6 +23,10 @@ waiting to ship. `git status -sb` shows which.
 | Scheduler PRDs: dev-lead, validator, `Ship:` | the live checkout, on local `main` | any code; plan records under `session-manager-operations/reviews/` | a `Ship:` PRD cherry-picks the feature commit onto a throwaway `origin/main` tree and pushes it. Records stay local until `scripts/sync-local-main.sh` publishes them |
 | Epic sessions | their own worktree under `~/.local/state/session-manager/session-manager-epic-worktrees/` | their own work | `git push origin HEAD:main` once the branch is on `origin/main`. Session Manager later merges the epic into local `main` |
 | `scripts/sanity-qa-cron.sh` (not scheduled) | the live checkout | `src/data/commit-*.json` | pushes only when local `main` is exactly one commit ahead of `origin/main` |
+| `~/Projects/social-signals-trader/scripts/publish-to-bilko.sh` | the live checkout (it runs `git` in `~/Projects/Bilko`) | `public/projects/social-signals-trader/` only | commits on local `main`, then pushes `HEAD:main` to `origin`. On a rejected push it fetches and runs `git merge --no-edit origin/main`, which leaves a merge commit; `sync-local-main.sh` stops (exit 3) on merge commits. Refuses if local `main` holds unpushed commits outside its subtree |
+| `~/Projects/Weather/scripts/publish_web.sh` | the live checkout | `public/projects/outdoor-hours/`, `public/outdoor-hours/` | fast-forwards to `origin/main`, pathspec commit, `git push origin main`. Line 106 also runs `git push content-grade main:master`, which breaks the rule never to push Bilko to `content-grade` (fix belongs in the Weather repo) |
+| `~/Projects/session-manager/web/remote-app/scripts/vendor-to-bilko.mjs` | Session Manager | copies `dist/` into `public/projects/session-manager/` (`--target` overrides) | does not commit or push. The files sit dirty in the live checkout until another writer or a person commits them |
+| Session Manager Project Home | Session Manager | `session-manager-operations/project-pages/home.html` and `demo-video/index.html` | written into the live checkout's working tree; not committed or pushed by the writer. They show as dirty until committed by hand or by a scheduler PRD |
 
 `.git/blog-seed.lock` serializes everything that moves local `main` from outside a session: the
 seed, the video publisher and the sync.

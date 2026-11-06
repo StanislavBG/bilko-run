@@ -7,7 +7,6 @@ import { HomePage } from './pages/HomePage.js';
 import { ProjectsPage } from './pages/ProjectsPage.js';
 import { BlogPage } from './pages/BlogPage.js';
 // The server pre-renders this page; a lazy chunk would blank it.
-import { BilkoProfilePage } from './pages/BilkoProfilePage.js';
 // The server pre-renders this page; a lazy chunk would blank it.
 import { BookingPage } from './pages/BookingPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
@@ -148,6 +147,13 @@ function RedirectManualToProduct() {
   return <Navigate to={'/products/session-manager/manual' + loc.search + loc.hash} replace />;
 }
 
+// Old Hire entry points → the booking page, query and hash intact. Declared
+// outside <Layout /> so no site chrome flashes before the hop.
+function RedirectHireToBook() {
+  const loc = useLocation();
+  return <Navigate to={'/book' + loc.search + loc.hash} replace />;
+}
+
 function RedirectAppToProducts() {
   const loc = useLocation();
   // /app/<old> → /products/<canonical>; /app/metrics → /admin; /app or anything else → /products
@@ -210,9 +216,6 @@ function AppRoutes() {
             <Route path="/workflows" element={<Navigate to="/projects" replace />} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/blog/:slug" element={lazyRoute(BlogPostPage)} />
-            <Route path="/bilko" element={<BilkoProfilePage />} />
-            <Route path="/hire" element={<BilkoProfilePage />} />
-            <Route path="/human-for-hire" element={<BilkoProfilePage />} />
             <Route path="/pricing" element={lazyRoute(PricingPage)} />
             <Route path="/privacy" element={lazyRoute(PrivacyPage)} />
             <Route path="/terms" element={lazyRoute(TermsPage)} />
@@ -246,6 +249,9 @@ function AppRoutes() {
               ClerkProvider, which
               its header account chip reads. */}
           <Route path="/book" element={<BookingPage />} />
+          <Route path="/bilko" element={<RedirectHireToBook />} />
+          <Route path="/hire" element={<RedirectHireToBook />} />
+          <Route path="/human-for-hire" element={<RedirectHireToBook />} />
           <Route path="/products/session-manager" element={lazyRoute(SessionManagerPage)} />
           {/* The Field Manual reader is the landing's next page, so it lives
               outside <Layout /> too and wears the landing's chrome (own

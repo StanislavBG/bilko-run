@@ -46,76 +46,78 @@ export function DetailsStep(p: DetailsProps) {
   const valid = EMAIL_RE.test(p.email.trim());
   const { pv } = p;
   return (
-    <>
-      <h2 style={{ marginTop: 20 }}>Your details</h2>
-      <div className="bk-summary" style={{ marginTop: 16 }}>
+    <form
+      className="bk-body bk-details"
+      noValidate
+      onSubmit={(e) => { e.preventDefault(); if (valid && !p.busy) p.onSubmit(); }}
+    >
+      <h2 className="bk-sr">Your details</h2>
+      <div className="bk-summary">
         <div className="bk-leaf"><small>{pv.mon}</small>{pv.day}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ font: '600 15px var(--bk-sans)' }}>{pv.dateLong}</div>
-          <div style={{ font: '400 13.5px var(--bk-sans)', color: 'var(--bk-body)' }}>{pv.time} – {pv.timeEnd} {pv.tzAbbr} · Video call</div>
+        <div className="bk-summary-text">
+          <div className="bk-summary-date">{pv.dateLong}</div>
+          <div className="bk-summary-time">{pv.time} – {pv.timeEnd} {pv.tzAbbr} · Video call</div>
         </div>
         <button type="button" className="bk-link" onClick={p.onChange}>Change</button>
       </div>
-      <form
-        noValidate
-        onSubmit={(e) => { e.preventDefault(); if (valid && !p.busy) p.onSubmit(); }}
-        style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 16 }}
-      >
-        <div>
-          <label htmlFor="bk-email" style={{ font: '600 13.5px var(--bk-sans)' }}>
-            Email <span style={{ font: '400 12.5px var(--bk-sans)', color: 'var(--bk-muted)' }}>for the invite and video link</span>
-          </label>
-          <input
-            id="bk-email"
-            className="bk-input"
-            type="email"
-            name="email"
-            autoComplete="email"
-            placeholder="you@company.com"
-            value={p.email}
-            onChange={(e) => p.setEmail(e.target.value)}
-            style={{ marginTop: 6 }}
-          />
+      <div className="bk-field">
+        <div className="bk-label-row">
+          <label htmlFor="bk-email">Email</label>
+          <span className="bk-hint">for the invite and video link</span>
         </div>
-        <div>
-          <div style={{ font: '600 13.5px var(--bk-sans)' }}>
-            What are you working on? <span style={{ font: '400 12.5px var(--bk-sans)', color: 'var(--bk-muted)' }}>Optional</span>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0' }}>
-            {FREE_HOUR_TOPICS.map((t) => (
-              <button key={t} type="button" className="bk-chip" aria-pressed={p.tags.includes(t)} onClick={() => p.toggleTag(t)}>{t}</button>
-            ))}
-          </div>
-          <textarea
-            className="bk-textarea"
-            name="topic"
-            aria-label="What are you working on?"
-            maxLength={2000}
-            placeholder="A sentence or two is plenty."
-            value={p.topic}
-            onChange={(e) => p.setTopic(e.target.value)}
-          />
+        <input
+          id="bk-email"
+          className="bk-input"
+          type="email"
+          name="email"
+          autoComplete="email"
+          placeholder="you@company.com"
+          value={p.email}
+          onChange={(e) => p.setEmail(e.target.value)}
+        />
+      </div>
+      <div className="bk-field">
+        <div className="bk-label-row">
+          <span>What are you working on?</span>
+          <span className="bk-hint">Optional</span>
         </div>
-        <label aria-hidden="true" style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }}>
-          <span>website</span>
-          <input type="text" name="website" tabIndex={-1} autoComplete="off" value={p.website} onChange={(e) => p.setWebsite(e.target.value)} />
-        </label>
-        <div>
-          <button
-            type="submit"
-            className="bk-cta"
-            aria-disabled={!valid || p.busy}
-            style={!valid || p.busy ? { opacity: 0.45, cursor: 'not-allowed', width: '100%' } : { width: '100%' }}
-          >
-            Book my free hour
-          </button>
-          <div style={{ marginTop: 8, textAlign: 'center', font: '400 12.5px var(--bk-sans)', color: 'var(--bk-muted)' }}>
-            Free · No card needed · No strings attached
-          </div>
+        <div className="bk-chips">
+          {FREE_HOUR_TOPICS.map((t) => {
+            const on = p.tags.includes(t);
+            return (
+              <button key={t} type="button" className="bk-chip" aria-pressed={on} aria-label={t} onClick={() => p.toggleTag(t)}>
+                {on && <span aria-hidden="true">✓ </span>}{t}
+              </button>
+            );
+          })}
         </div>
+        <textarea
+          className="bk-textarea"
+          name="topic"
+          aria-label="What are you working on?"
+          maxLength={2000}
+          placeholder="A sentence or two is plenty."
+          value={p.topic}
+          onChange={(e) => p.setTopic(e.target.value)}
+        />
+      </div>
+      <label aria-hidden="true" style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }}>
+        <span>website</span>
+        <input type="text" name="website" tabIndex={-1} autoComplete="off" value={p.website} onChange={(e) => p.setWebsite(e.target.value)} />
+      </label>
+      <div className="bk-cta-block">
+        <button
+          type="submit"
+          className="bk-cta"
+          aria-disabled={!valid || p.busy}
+          style={!valid || p.busy ? { opacity: 0.45, cursor: 'not-allowed', width: '100%' } : { width: '100%' }}
+        >
+          Book my free hour
+        </button>
+        <div className="bk-cta-note">Free · No card needed · No strings attached</div>
         <Notice msg={p.msg} />
-      </form>
-    </>
+      </div>
+    </form>
   );
 }
 
@@ -147,33 +149,34 @@ export function DoneStep({ booked, pv, busy, onReschedule, onCancel }: DoneProps
     "Afterwards I'll send a short plan with an honest hours estimate. Nothing starts until you say yes.",
   ];
   return (
-    <>
-      <h2 style={{ marginTop: 20 }}>You're booked.</h2>
-      <p style={{ margin: '8px 0 0', font: '600 15px var(--bk-sans)' }}>
-        {pv.dateLong} · {pv.time} – {pv.timeEnd} {pv.tzAbbr}
-      </p>
-      <p style={{ margin: '8px 0 0', font: '400 14px/1.5 var(--bk-sans)', color: 'var(--bk-body)' }}>
-        A confirmation with a calendar invite is on its way to {booked.email}. Bilko will send the video link before the session.
+    <div className="bk-body bk-done">
+      <div className="bk-done-head">
+        <div className="bk-done-check" aria-hidden="true">✓</div>
+        <div className="bk-done-title">
+          <h2>You're booked.</h2>
+          <div className="bk-done-date">{pv.dateLong} · {pv.time} – {pv.timeEnd} {pv.tzAbbr}</div>
+        </div>
+      </div>
+      <p className="bk-done-p">
+        A confirmation with a calendar invite is on its way to <strong>{booked.email}</strong>. Bilko will send the video link before the session.
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
         <a className="bk-btn-secondary" href={googleCalendarUrl(cal)} target="_blank" rel="noopener noreferrer">Google Calendar</a>
         {icsUrl && <a className="bk-btn-secondary" href={icsUrl} download="bilko-free-hour.ics">Apple Calendar</a>}
         <a className="bk-btn-secondary" href={outlookCalendarUrl(cal)} target="_blank" rel="noopener noreferrer">Outlook</a>
       </div>
-      <div className="bk-group-label" style={{ margin: '22px 0 10px' }}>What happens next</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="bk-next-block">
+        <div className="bk-group-label">What happens next</div>
         {NEXT.map((t, i) => (
           <div key={t} className="bk-next"><span>0{i + 1}</span><span>{t}</span></div>
         ))}
       </div>
-      <div className="bk-foot" style={{ marginTop: 22 }}>
-        <div>
-          Need a different time?{' '}
-          <button type="button" className="bk-link" disabled={busy} onClick={onReschedule}>Reschedule</button>
-          {' · '}
-          <button type="button" className="bk-link" disabled={busy} onClick={onCancel}>Cancel booking</button>
-        </div>
+      <div className="bk-done-foot">
+        Need a different time?
+        <button type="button" className="bk-link" disabled={busy} onClick={onReschedule}>Reschedule</button>
+        {'·'}
+        <button type="button" className="bk-link" disabled={busy} onClick={onCancel}>Cancel booking</button>
       </div>
-    </>
+    </div>
   );
 }

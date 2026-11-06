@@ -282,3 +282,36 @@ test('frame and time step match the design at 1280x720 and 1440x900', async ({ p
   await expect(page.locator('.bk-pick-time')).toContainText('Video call');
   expect(await page.locator('.bk-pick-date').textContent()).not.toContain('Video call');
 });
+
+test('details and done steps match the design at 1280x720', async ({ page }) => {
+  await mockBook(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await toDetails(page);
+  const d = await page.evaluate(() => {
+    const hidden = [...document.querySelectorAll('.bk-card *')]
+      .filter((el) => el.children.length === 0 && el.textContent?.trim() === 'Your details')
+      .every((el) => { const r = el.getBoundingClientRect(); return r.width <= 1 || r.height <= 1; });
+    const card = document.querySelector('.bk-card')!.getBoundingClientRect();
+    const cs = getComputedStyle(document.querySelector('.bk-card')!);
+    const contentBottom = card.bottom - parseFloat(cs.paddingBottom);
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Book my free hour')!.getBoundingClientRect();
+    const opt = [...document.querySelectorAll('.bk-card *')].find((el) => el.children.length === 0 && el.textContent === 'Optional')!.getBoundingClientRect();
+    const lab = [...document.querySelectorAll('.bk-card *')].find((el) => el.children.length === 0 && el.textContent?.trim() === 'What are you working on?')!.getBoundingClientRect();
+    return { hidden, gap: contentBottom - btn.bottom, optMid: opt.top + opt.height / 2, labMid: lab.top + lab.height / 2 };
+  });
+  expect(d.hidden).toBe(true);
+  expect(d.gap).toBeGreaterThanOrEqual(-1);
+  expect(d.gap).toBeLessThanOrEqual(40);
+  expect(Math.abs(d.optMid - d.labMid)).toBeLessThanOrEqual(6);
+  await page.getByRole('button', { name: 'Book my free hour' }).click();
+  const h = page.getByRole('heading', { name: "You're booked." });
+  await expect(h).toBeVisible();
+  const c = await page.evaluate(() => {
+    const el = document.querySelector('.bk-done-check')!.getBoundingClientRect();
+    return { w: el.width, h: el.height, right: el.right };
+  });
+  const hb = (await h.boundingBox())!;
+  expect(Math.abs(c.w - 52)).toBeLessThanOrEqual(1);
+  expect(Math.abs(c.h - 52)).toBeLessThanOrEqual(1);
+  expect(c.right).toBeLessThanOrEqual(hb.x);
+});

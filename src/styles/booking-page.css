@@ -102,6 +102,31 @@
 .booking-page .bk-link{appearance:none;border:0;background:none;padding:8px;cursor:pointer;font:600 13px/1 var(--bk-sans);color:var(--bk-accent);text-decoration:none}
 .booking-page .bk-link:hover{text-decoration:underline}
 
+/* Step 2 (details) and step 3 (done) */
+.booking-page .bk-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.booking-page .bk-details{gap:18px}
+.booking-page .bk-summary-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.booking-page .bk-summary-date{font:600 16px/1.2 var(--bk-sans)}
+.booking-page .bk-summary-time{font:400 13.5px/1.3 var(--bk-sans);color:var(--bk-muted)}
+.booking-page .bk-field{display:flex;flex-direction:column;gap:8px}
+.booking-page .bk-label-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font:600 13.5px/1 var(--bk-sans)}
+.booking-page .bk-hint{font:400 12.5px/1 var(--bk-sans);color:var(--bk-muted)}
+.booking-page .bk-chips{display:flex;flex-wrap:wrap;gap:6px}
+.booking-page .bk-cta-block{margin-top:auto;display:flex;flex-direction:column;gap:10px}
+.booking-page .bk-cta-note{text-align:center;font:400 12.5px/1 var(--bk-sans);color:var(--bk-muted)}
+.booking-page .bk-cta-block .bk-notice{margin:0!important}
+.booking-page .bk-done{margin-top:28px}
+.booking-page .bk-done-head{display:flex;align-items:center;gap:16px}
+.booking-page .bk-done-check{flex:none;width:52px;height:52px;border-radius:50%;background:var(--bk-green);color:var(--bk-bg);display:flex;align-items:center;justify-content:center;font-size:24px}
+.booking-page .bk-done-title{display:flex;flex-direction:column;gap:7px;min-width:0}
+.booking-page .bk-card .bk-done-title h2{font:600 30px/1.1 var(--bk-serif)}
+.booking-page .bk-done-date{font:500 15px/1.3 var(--bk-sans);color:var(--bk-body)}
+.booking-page .bk-done-p{margin:22px 0 0;font:400 15px/1.55 var(--bk-sans);color:var(--bk-body)}
+.booking-page .bk-done-p strong{font-weight:600;color:var(--bk-ink)}
+.booking-page .bk-next-block{margin-top:28px;padding-top:20px;border-top:1px solid var(--bk-line);display:flex;flex-direction:column;gap:14px}
+.booking-page .bk-done-foot{margin-top:auto;padding-top:16px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:400 13px/1 var(--bk-sans);color:var(--bk-muted)}
+.booking-page .bk-done-foot .bk-link{padding:0}
+
 /* Focus rings on every control */
 .booking-page a:focus-visible,.booking-page button:focus-visible,.booking-page select:focus-visible,.booking-page .bk-slot:focus-visible{outline:2px solid var(--bk-accent);outline-offset:2px}
 .booking-page .bk-slot.selected:focus-visible{outline-color:var(--bk-badge)}
@@ -130,5 +155,6 @@
   .booking-page .bk-slot .bk-slot-top{flex-wrap:wrap}
   .booking-page .bk-slot .bk-date{font-size:18px}
   .booking-page .bk-card h2{font-size:23px}
+  .booking-page .bk-card .bk-done-title h2{font-size:26px}
   .booking-page .bk-summary{flex-wrap:wrap}
 }

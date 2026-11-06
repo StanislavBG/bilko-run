@@ -297,34 +297,7 @@ The wallet, MCP tools, offers, agent keys, visitor classes and the UTM funnel ar
 - `/app/<old-slug>` redirects to `/products/<canonical-slug>` per the `APP_TO_PRODUCT` map in `src/App.tsx`. (Pre-refactor compatibility.)
 - `/projects/<slug>/` (trailing slash, `static-path`) does **not** redirect — it's a different host kind serving different bytes.
 
-### Sub-paths of a `react-route` product
-
-A `react-route` app may own arbitrary sub-paths of `/products/<slug>/` — React
-Router's static segments outrank the `/products/*` splat, and a Fastify route
-declared for a specific sub-path outranks `@fastify/static`'s `/*` wildcard, so
-either the SPA or a server handler can claim one. Use this to keep a product's
-whole surface under one root instead of scattering it across top-level paths.
-
-Worked example — Session Manager owns everything under `/products/session-manager`:
-
-| Path | Served by |
-|---|---|
-| `/products/session-manager` | SPA, outside `<Layout />` (own chrome) |
-| `/products/session-manager/manual` | SPA, outside `<Layout />` with the landing's own header — the Field Manual reader (free since 2.0.1) |
-| `/products/session-manager/my-manual` | Fastify (`server/routes/manual.ts`) — "it's free now" page for past buyers (receipt-email target) |
-| `/products/session-manager/remote` | Fastify 301 → the published web-remote bundle |
-| `/manual`, `/my-manual` | Fastify 301 → the two paths above, **permanently** |
-
-The two legacy top-level paths can never be deleted: they are printed in Stripe
-receipt emails already in customers' inboxes (`server/routes/stripe.ts`).
-
-### What must NOT move under `/products/<slug>/`
-
-A published `static-path` **bundle**. `public/projects/<slug>/` is the only
-prefix `publish_static_project` writes, and a bundle's own URL can be compiled
-into deployed clients. Session Manager's web-remote is the case in point: its
-relay URL is baked into already-paired phones, so `/products/session-manager/remote`
-is a **301 to the bundle**, not a second copy of it.
+Page-specific host content (sub-paths of a `react-route` product, what must not move under `/products/<slug>/`) lives in ~/Projects/Bilko/docs/site.md.
 
 ### One publisher per `/projects/<slug>/` prefix
 
@@ -659,19 +632,7 @@ A host lists its room so others can find it and join with one click. There is no
 - The lobby directory is in memory too. A deploy empties it, and hosts re-announce on their next heartbeat (≤ 10 s).
 - **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. One instance is what the in-memory rooms need. Free has a cost, though: the service spins down after 15 minutes without inbound traffic. The first ticket after an idle spell then waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move the service to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
 
-## Sign-in capture ("sign in for updates")
-
-Owner decision 2026-10-20. A capture page may show an inline, dismissable (never modal) prompt offering bilko.run sign-in for updates. Nothing on the page may require it. Capture pages and their `source` values live in `shared/signin-capture.ts`: `session-manager` (`/products/session-manager`), `manual` (`/products/session-manager/manual`), `human-for-hire` (`/projects/human-for-hire/`). Adding a page means adding it there.
-
-| Endpoint | Auth | What it does |
-|---|---|---|
-| `POST /api/signin-capture` `{ source, consent }` | Clerk Bearer (`requireAuth`) | Records the account's first `source` (never overwritten). `consent: true` (the literal) sets the "send me occasional updates" flag with a timestamp. Anything else leaves it unchanged, so consent defaults off and is never revoked here. The first capture writes a `signin_completed` funnel event. |
-| `GET /api/admin/signups?days=N` | `requireAdmin` | Signups and consent by source, latest 500 rows, and the prompt funnel for the window. |
-| `GET /api/admin/signups.csv` | `requireAdmin` | Every row as a CSV attachment. |
-
-Funnel events: the page sends `prompt_shown` and `prompt_dismissed` through `POST /api/analytics/event` with `tool: <source>`. The server writes `signin_completed`.
-
-**From a `static-path` page** (Human For Hire): signed out, show the prompt with the consent checkbox unticked. Remember a dismissal in `localStorage`. On "Sign in", store `{ source, consent }`, then call host-kit `openSignIn()`. Once signed in, `authFetch('/api/signin-capture', { method: 'POST', body })` with the stored values. The in-repo reference is `src/pages/session-manager-landing/SignInPrompt.tsx`. Copy stays in the Bilko persona. Collect only: nothing sends email yet.
+Sign-in capture ("sign in for updates") lives in ~/Projects/Bilko/docs/site.md.
 
 ## Selling a downloadable web product
 

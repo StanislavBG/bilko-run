@@ -37,9 +37,7 @@ Bilko's workspace lives in `~/Projects/` with this structure:
 
 ## Main URLs
 
-- **Home**: https://bilko.run — Bilko's solopreneur page, story, and tool showcase
-- **Projects**: https://bilko.run/projects — every registered project with `public: true` in the registry (driven by the registry; ~25 standalone projects + tools, not a fixed count)
-- **Blog**: https://bilko.run/blog — Build logs, lessons, and deep dives
+See [`docs/site.md`](docs/site.md).
 
 ## What This Is
 
@@ -147,7 +145,7 @@ Host code is framework by default. New app-specific host code must be added to t
 
 ## Voice & Tone
 
-Bilko's voice: witty, direct, no corporate fluff. The tools are comedic (PageRoast has roast lines, grades have personality). The homepage is a solopreneur personal page, not a SaaS landing page. The blog is informative and reflective — "building in public, learning out loud."
+See [`docs/site.md`](docs/site.md).
 
 ## Rules
 

@@ -90,8 +90,36 @@ describe('GET /api/admin/funnel', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       since, utm_source: 'burrow',
-      visits: 3, sign_ins: 2, checkout_start: 2, paid: 2, booked: 1,
+      visits: 3, sign_ins: 2, checkout_start: 2, paid: 2, booked: 1, free_hours_booked: 0,
     });
+  });
+
+  it('attributes a session that reaches a page tagged with the source mid-session (in-site link)', async () => {
+    // Lands untagged on the Session Manager page, then follows its free-hour link.
+    await session('s8', 'v8', null);
+    await dbRun(
+      'INSERT INTO page_views (path, date, session_id, visitor_id, utm_source, utm_medium, is_bot, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      '/book', new Date(now - DAY).toISOString().slice(0, 10), 's8', 'v8', 'session-manager', 'header', 0, 0,
+    );
+    expect((await get(`?since=${since}&utm_source=session-manager`)).json()).toMatchObject({ visits: 1 });
+    // The session keeps its landing source: burrow's numbers do not move.
+    expect((await get(`?since=${since}&utm_source=burrow`)).json().visits).toBe(3);
+  });
+
+  it('counts an attributed free-hour booking in free_hours_booked, by booking id or signed-in email', async () => {
+    await session('s8', 'v8', 'session-manager');
+    const bid = (await dbRun(`INSERT INTO service_bookings (page_slug, slug, checkout_session_id, slot_start_ms, slot_end_ms, email, intake_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 'human-for-hire', 'free-hour', 'free_8', now + 3 * DAY, now + 3 * DAY + 3600000, 'anon@t.dev', '{}', now)).lastInsertRowid;
+    await dbRun(
+      'INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'free_hour_booked', 'human-for-hire', JSON.stringify({ booking_id: Number(bid) }), 's8', 'v8', sqlTs(now - DAY),
+    );
+    // v1 is signed in as buyer@t.dev; their free hour matches by email.
+    await dbRun(`INSERT INTO service_bookings (page_slug, slug, checkout_session_id, slot_start_ms, slot_end_ms, email, intake_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 'human-for-hire', 'free-hour', 'free_1', now + 2 * DAY, now + 2 * DAY + 3600000, 'buyer@t.dev', '{}', now);
+    expect((await get(`?since=${since}&utm_source=session-manager`)).json()).toMatchObject({ visits: 1, booked: 0, free_hours_booked: 1 });
+    expect((await get(`?since=${since}&utm_source=burrow`)).json()).toMatchObject({ booked: 1, free_hours_booked: 1 });
+    expect((await get(`?since=${since}&utm_source=google`)).json().free_hours_booked).toBe(0);
   });
 
   it('does not count free-hour bookings as booked', async () => {
@@ -110,7 +138,7 @@ describe('GET /api/admin/funnel', () => {
 
   it('returns zeros for a source with no traffic', async () => {
     const body = (await get(`?since=${since}&utm_source=nobody`)).json();
-    expect(body).toMatchObject({ visits: 0, sign_ins: 0, checkout_start: 0, paid: 0, booked: 0 });
+    expect(body).toMatchObject({ visits: 0, sign_ins: 0, checkout_start: 0, paid: 0, booked: 0, free_hours_booked: 0 });
   });
 
   it('include_bots=1 and exclude_self=0 widen the set', async () => {

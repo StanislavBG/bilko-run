@@ -178,7 +178,7 @@ export async function trafficReport(opts: { days: number; slug?: string; exclude
   return mapTrafficToReport(body, opts.days, !!opts.excludeSelf);
 }
 
-/** GET /api/admin/funnel: per-UTM revenue funnel (visits → sign_ins → checkout_start → paid → booked). */
+/** GET /api/admin/funnel: per-UTM revenue funnel (visits → sign_ins → checkout_start → paid → booked), plus free_hours_booked. */
 export async function funnelReport(opts: { utmSource: string; since?: string }): Promise<Record<string, unknown>> {
   const p = new URLSearchParams();
   p.set('utm_source', opts.utmSource);
@@ -195,6 +195,7 @@ export async function funnelReport(opts: { utmSource: string; since?: string }):
     checkout_start: num(b.checkout_start),
     paid: num(b.paid),
     booked: num(b.booked),
+    free_hours_booked: num(b.free_hours_booked),
   };
 }
 

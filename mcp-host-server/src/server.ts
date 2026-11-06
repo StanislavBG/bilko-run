@@ -712,7 +712,7 @@ server.registerTool(
   {
     title: 'Per-UTM revenue funnel',
     description:
-      'Read-only. Calls the bilko.run admin API (GET /api/admin/funnel) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for sessions that landed with the given utm_source since a date: visits (sessions), sign_ins, checkout_start, paid (visitors) and booked (service bookings). Admin and bot traffic are excluded. The top-level `source` field is the base URL queried.',
+      'Read-only. Calls the bilko.run admin API (GET /api/admin/funnel) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for sessions since a date that landed with the given utm_source or viewed a page tagged with it (in-site links such as utm_source=session-manager): visits (sessions), sign_ins, checkout_start, paid (visitors), booked (paid service bookings) and free_hours_booked (free-hour bookings, never part of booked). Admin and bot traffic are excluded. The top-level `source` field is the base URL queried.',
     inputSchema: {
       utmSource: z.string().min(1).describe('utm_source to attribute, e.g. "burrow".'),
       since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Start date YYYY-MM-DD (UTC). Host default: 7 days ago.'),

@@ -277,6 +277,46 @@
   border-top: 0;
 }
 
+/* Closing note after the last chapter: the free hour, as a link. */
+.smlm-root .smlm-askbilko {
+  max-width: 68ch;
+  margin-top: 64px;
+  padding: 24px 28px;
+  background: var(--smlp-paper);
+  border: 2px solid var(--smlp-ink);
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 var(--smlp-ink);
+}
+
+.smlm-root .smlm-askbilko__title {
+  font-family: var(--smlp-serif);
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--smlp-ink);
+}
+
+.smlm-root .smlm-askbilko__body {
+  margin-top: 8px;
+  font-family: var(--smlp-serif);
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--smlp-body);
+}
+
+.smlm-root .smlm-askbilko__link {
+  display: inline-block;
+  margin-top: 14px;
+  font-weight: 700;
+  color: var(--smlp-rust);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.smlm-root .smlm-askbilko__link:hover {
+  color: var(--smlp-ink);
+}
+
 /* ── Prose ─────────────────────────────────────────────────────────────── */
 
 .smlm-root .smlm-prose {
@@ -578,6 +618,12 @@
   .smlm-root--reflow .smlp-tagline {
     display: none;
   }
+}
+
+/* This header has none of the landing's reflow sizing, so it has no room for
+   the free-hour link at any reflow width; the closing note carries it. */
+.smlm-root--reflow .smlp-header__hire {
+  display: none;
 }
 
 .smlm-root--reflow .smlm-title-block {

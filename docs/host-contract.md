@@ -359,7 +359,7 @@ They show up in the admin traffic panel (`/admin`, backed by `GET /api/admin/tra
 
 ### UTM revenue funnel
 
-`GET /api/admin/funnel?utm_source=<src>&since=YYYY-MM-DD` (`requireAdmin`, so read-only `bka_` keys work; `since` defaults to 7 days ago) returns `{since, utm_source, visits, sign_ins, checkout_start, paid, booked}` as integers. Attribution is first-touch: a visitor counts when one of their sessions since `since` landed with that `utm_source` (case-insensitive). `visits` counts sessions; `sign_ins`, `checkout_start` and `paid` count visitors; `booked` counts service bookings. Web-product `checkout_start` rows carry the `bilko_vid`/`bilko_sid` cookies and the Stripe checkout session id, which is how orders and bookings join back to the visit (or by the visitor's signed-in email). Admin and bot traffic are excluded unless `exclude_self=0` / `include_bots=1`. Burrow consumes it; the `bilko-host` MCP exposes it as `funnel_report`.
+`GET /api/admin/funnel?utm_source=<src>&since=YYYY-MM-DD` (`requireAdmin`, so read-only `bka_` keys work; `since` defaults to 7 days ago) returns `{since, utm_source, visits, sign_ins, checkout_start, paid, booked, free_hours_booked}` as integers. A visitor counts when one of their sessions since `since` landed with that `utm_source` (case-insensitive) or later viewed a page tagged with it. Sessions keep their landing source, so an in-site link such as the Session Manager pages' free-hour links (`/book?utm_source=session-manager&utm_medium=header|product-page|manual`) is attributed through its page view. `visits` counts sessions; `sign_ins`, `checkout_start` and `paid` count visitors; `booked` counts paid service bookings; `free_hours_booked` counts free-hour bookings, never part of `booked`. The free-hour route writes a `free_hour_booked` funnel event with the cookie ids and the booking id (never the cancel token). Web-product `checkout_start` rows carry the `bilko_vid`/`bilko_sid` cookies and the Stripe checkout session id, which is how orders and bookings join back to the visit (or by the visitor's signed-in email). Admin and bot traffic are excluded unless `exclude_self=0` / `include_bots=1`. Burrow consumes it; the `bilko-host` MCP exposes it as `funnel_report`.
 
 ### robots.txt
 
@@ -385,7 +385,7 @@ Worked example — Session Manager owns everything under `/products/session-mana
 | Path | Served by |
 |---|---|
 | `/products/session-manager` | SPA, outside `<Layout />` (own chrome) |
-| `/products/session-manager/manual` | SPA, inside `<Layout />` — the Field Manual reader (free since 2.0.1) |
+| `/products/session-manager/manual` | SPA, outside `<Layout />` with the landing's own header — the Field Manual reader (free since 2.0.1) |
 | `/products/session-manager/my-manual` | Fastify (`server/routes/manual.ts`) — "it's free now" page for past buyers (receipt-email target) |
 | `/products/session-manager/remote` | Fastify 301 → the published web-remote bundle |
 | `/manual`, `/my-manual` | Fastify 301 → the two paths above, **permanently** |

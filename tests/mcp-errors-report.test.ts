@@ -257,12 +257,12 @@ describe('mcp funnel_report', () => {
   });
 
   it('queries /api/admin/funnel with utm_source and since, and returns integer stages', async () => {
-    fetchMock.mockResolvedValue(res(200, { since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 'x' }));
+    fetchMock.mockResolvedValue(res(200, { since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 'x', free_hours_booked: 2 }));
     const r = await funnelReport({ utmSource: 'burrow', since: '2026-10-14' });
     const u = new URL(fetchMock.mock.calls[0][0] as string);
     expect(u.pathname).toBe('/api/admin/funnel');
     expect(Object.fromEntries(u.searchParams)).toEqual({ utm_source: 'burrow', since: '2026-10-14' });
-    expect(r).toMatchObject({ since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 0 });
+    expect(r).toMatchObject({ since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 0, free_hours_booked: 2 });
   });
 
   it('flowsReport builds query from days and app and spreads the body with source', async () => {

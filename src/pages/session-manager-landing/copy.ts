@@ -25,13 +25,16 @@ export const COPY = {
     "manualLinkNotFree": "Field Manual →",
     "coffeeLink": "Buy me a coffee ☕",
     "coffeeHref": "/coffee",
+    "freeHourLink": "Free hour",
+    "freeHourHref": "/book?utm_source=session-manager&utm_medium=header",
     "account": {
       "signIn": "Sign in",
       "signedInPrefixSr": "Signed in as",
       "avatarFallbackInitial": "?"
     },
     "aria": {
-      "account": "Account"
+      "account": "Account",
+      "freeHour": "Book a free hour with Bilko"
     }
   },
   "hero": {
@@ -40,7 +43,10 @@ export const COPY = {
     "headlineLine2": "supercharged.",
     "body": "Session Manager is a desktop app that bolts onto Claude Code and gives it a proper garage: sessions that don't lose the plot, a scheduler that waits out your token limit for you, and every setting in one friendly window. The app runs on your own laptop.",
     "ctaLead": "Kick the tires first →",
-    "sticker": "free!"
+    "sticker": "free!",
+    "hireLead": "Building something with agents?",
+    "hireLink": "Book a free hour with Bilko →",
+    "hireHref": "/book?utm_source=session-manager&utm_medium=product-page"
   },
   "ctas": {
     "film": {
@@ -312,6 +318,12 @@ export const COPY = {
     "toParts": "Back to the parts bin",
     "backToApp": "← Session Manager",
     "chapterOfTemplate": "Chapter {n} of {count}",
+    "askBilko": {
+      "title": "Ask Bilko",
+      "body": "Stuck on something this manual doesn't cover, or building something bigger with agents? Bring it to a free hour with Bilko: one-on-one, on your own project.",
+      "link": "Book a free hour →",
+      "href": "/book?utm_source=session-manager&utm_medium=manual"
+    },
     "aria": {
       "manualDot": "Go to the Field Manual",
       "manualPage": "The Field Manual"

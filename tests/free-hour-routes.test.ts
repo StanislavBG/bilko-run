@@ -14,8 +14,10 @@ vi.mock('../server/services/mailer.js', async (orig) => ({
 const slots = () => generateSlots(SERVICE_SLOT_CONFIG['human-for-hire'], Date.now());
 let ipN = 0;
 let app: any;
-const post = (body: unknown, url = '/api/services/human-for-hire/free-hour', ip?: string) =>
-  app.inject({ method: 'POST', url, payload: body as object, remoteAddress: ip ?? `10.2.0.${++ipN}` });
+const post = (body: unknown, url = '/api/services/human-for-hire/free-hour', ip?: string, headers?: Record<string, string>) =>
+  app.inject({ method: 'POST', url, payload: body as object, remoteAddress: ip ?? `10.2.0.${++ipN}`, headers });
+const VID = '11111111-1111-4111-8111-111111111111';
+const SID = '22222222-2222-4222-8222-222222222222';
 
 beforeAll(async () => {
   // The suite books up to slots()[8]; the open-slot count is 8 or 9 depending on the weekday,
@@ -45,7 +47,8 @@ beforeEach(() => {
 describe('free hour routes', () => {
   it('books a slot signed out, mails the booker and the inbox', async () => {
     const s = slots()[0];
-    const res = await post({ email: 'Pat@Example.com', startMs: s.startMs, topic: 'my agent loops' });
+    const res = await post({ email: 'Pat@Example.com', startMs: s.startMs, topic: 'my agent loops' }, undefined, undefined,
+      { cookie: `bilko_vid=${VID}; bilko_sid=${SID}` });
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.booking).toEqual({ startMs: s.startMs, endMs: s.endMs });
@@ -67,6 +70,11 @@ describe('free hour routes', () => {
     const row: any = await dbGet('SELECT * FROM service_bookings WHERE checkout_session_id = ?', body.cancelToken);
     expect(row.page_slug).toBe('human-for-hire');
     expect(row.slug).toBe('free-hour');
+    // The visit's cookie ids and the booking id (never the cancel token) feed /api/admin/funnel.
+    const ev: any = await dbGet("SELECT * FROM funnel_events WHERE event = 'free_hour_booked' AND visitor_id = ?", VID);
+    expect(ev.session_id).toBe(SID);
+    expect(JSON.parse(ev.metadata)).toEqual({ booking_id: row.id });
+    expect(ev.metadata).not.toContain(body.cancelToken);
   });
 
   it('keeps the booking when mail fails', async () => {

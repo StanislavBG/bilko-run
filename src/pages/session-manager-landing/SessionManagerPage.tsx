@@ -114,6 +114,12 @@ function Hero({
         </a>
         {canvas && sticker}
       </div>
+
+      {/* The free hour is a link, never a price: no price, paywall or checkout on this page. */}
+      <p className="smlp-hero__hire">
+        {hero.hireLead}{' '}
+        <a href={hero.hireHref} data-track="sm-hero-hire">{hero.hireLink}</a>
+      </p>
     </div>
   );
 }

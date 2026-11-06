@@ -30,6 +30,13 @@ export function Header({
         <span className="smlp-tagline">{h.tagline}</span>
       </div>
       <div className="smlp-header__right">
+        {/* utm_content tells the landing's header from the manual's in the funnel. */}
+        <a
+          className="smlp-header__hire"
+          href={`${h.freeHourHref}&utm_content=${current}`}
+          aria-label={h.aria.freeHour}
+          data-track="sm-header-hire"
+        >{h.freeHourLink}</a>
         <a
           className="smlp-header__coffee"
           href={h.coffeeHref}

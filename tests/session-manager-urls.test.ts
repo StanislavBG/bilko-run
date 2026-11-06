@@ -120,7 +120,14 @@ describe('no stale top-level manual links survive in shipped source', () => {
     // The Windows .exe ships on the release and is rendered as a link.
     expect(COPY.priceTag.downloads.windows.windowsAvailable).toBe(true);
     expect(COPY.priceTag.downloads.windows.href).toBe(`${RELEASES}/download/Session-Manager-win-x64.exe`);
-    for (const [key, href] of hrefs.filter(([, h]) => !/^https?:/.test(h))) {
+    // The free-hour links go to the host's booking page (a link, never a
+    // checkout), tagged so /api/admin/funnel attributes them to Session Manager.
+    const book = hrefs.filter(([, h]) => h.startsWith('/book?'));
+    expect(book.map(([k]) => k).sort()).toEqual(['COPY.book.askBilko.href', 'COPY.header.freeHourHref', 'COPY.hero.hireHref']);
+    for (const [key, href] of book) {
+      expect(new URL(href, 'https://bilko.run').searchParams.get('utm_source'), key).toBe('session-manager');
+    }
+    for (const [key, href] of hrefs.filter(([, h]) => !/^https?:/.test(h) && !h.startsWith('/book?'))) {
       expect(href, key).toMatch(/^\/products\/session-manager\//);
       expect(href.split(/[#?]/)[0], key).not.toMatch(/^\/(manual|my-manual)$/);
     }

@@ -317,6 +317,15 @@ export default function ManualPage() {
               ))}
             </div>
           ))}
+          {/* Host-side closing note after the last chapter, so it survives every
+              release bundle. A link to the free hour, never a price. */}
+          <aside className="smlm-askbilko" aria-labelledby="smlm-askbilko-title">
+            <h2 id="smlm-askbilko-title" className="smlm-askbilko__title">{COPY.book.askBilko.title}</h2>
+            <p className="smlm-askbilko__body">{COPY.book.askBilko.body}</p>
+            <a className="smlm-askbilko__link" href={COPY.book.askBilko.href} data-track="manual-hire">
+              {COPY.book.askBilko.link}
+            </a>
+          </aside>
         </article>
       </div>
 

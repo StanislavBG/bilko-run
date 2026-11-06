@@ -14,17 +14,22 @@ export interface FunnelCounts {
   checkout_start: number;
   paid: number;
   booked: number;
+  free_hours_booked: number;
 }
 
 /**
- * Per-UTM revenue funnel, first-touch: a visitor is attributed when one of their
- * sessions since `since` landed with this utm_source. Units:
- *   visits          attributed sessions
- *   sign_ins        attributed visitors with a signed-in session since `since`
- *   checkout_start  attributed visitors with a checkout_start event
- *   paid            attributed visitors with a purchase (sessions.purchased, or a
- *                   web-product order matched by checkout session id or email)
- *   booked          service bookings matched by checkout session id or email
+ * Per-UTM revenue funnel: a visitor is attributed when one of their sessions
+ * since `since` landed with this utm_source, or later viewed a page tagged with
+ * it. Sessions keep their landing source, so an in-site link (the Session
+ * Manager pages' free-hour links) is attributed only through its page view. Units:
+ *   visits             attributed sessions
+ *   sign_ins           attributed visitors with a signed-in session since `since`
+ *   checkout_start     attributed visitors with a checkout_start event
+ *   paid               attributed visitors with a purchase (sessions.purchased, or a
+ *                      web-product order matched by checkout session id or email)
+ *   booked             paid service bookings matched by checkout session id or email
+ *   free_hours_booked  free-hour bookings matched by booking id (the server's
+ *                      free_hour_booked event) or email; never part of booked
  * Admin traffic and bots are excluded unless exclude_self=0 / include_bots=1.
  */
 export async function funnelCounts(opts: {
@@ -45,7 +50,11 @@ export async function funnelCounts(opts: {
   const row = await dbGet<Record<string, number>>(
     `WITH s AS (
        SELECT s.session_id, s.visitor_id FROM sessions s
-       WHERE LOWER(s.utm_source) = LOWER(?) AND s.started_at >= ?${inAdmins('s.email')}${pvFilter}
+       WHERE s.started_at >= ?
+         AND (LOWER(s.utm_source) = LOWER(?) OR s.session_id IN (
+           SELECT t.session_id FROM page_views t
+           WHERE t.date >= ? AND t.session_id IS NOT NULL AND LOWER(t.utm_source) = LOWER(?)
+         ))${inAdmins('s.email')}${pvFilter}
      ),
      v AS (SELECT DISTINCT visitor_id FROM s),
      ve AS (
@@ -60,6 +69,11 @@ export async function funnelCounts(opts: {
      o AS (
        SELECT checkout_session_id, LOWER(email) AS email FROM web_product_orders
        WHERE created_at >= ?${inAdmins('email')}
+     ),
+     fh AS (
+       SELECT json_extract(fe.metadata, '$.booking_id') AS booking_id FROM funnel_events fe
+       WHERE fe.event = 'free_hour_booked' AND fe.created_at >= ?
+         AND fe.visitor_id IN (SELECT visitor_id FROM v)${feAdmin}
      ),
      paid AS (
        SELECT s3.visitor_id FROM sessions s3
@@ -76,12 +90,19 @@ export async function funnelCounts(opts: {
          WHERE b.created_at >= ?${inAdmins('b.email')}
            AND b.slug <> ?
            AND (b.checkout_session_id IN (SELECT cs_id FROM co WHERE cs_id IS NOT NULL)
-                OR LOWER(b.email) IN (SELECT email FROM ve))) AS booked`,
-    opts.utmSource, sinceMs, ...admins,
+                OR LOWER(b.email) IN (SELECT email FROM ve))) AS booked,
+       (SELECT COUNT(*) FROM service_bookings b
+         WHERE b.created_at >= ?${inAdmins('b.email')}
+           AND b.slug = ?
+           AND (b.id IN (SELECT booking_id FROM fh WHERE booking_id IS NOT NULL)
+                OR LOWER(b.email) IN (SELECT email FROM ve))) AS free_hours_booked`,
+    sinceMs, opts.utmSource, opts.since, opts.utmSource, ...admins,
     sinceMs, ...admins,
     opts.since,
     sinceMs, ...admins,
+    opts.since,
     sinceMs,
+    sinceMs, ...admins, FREE_HOUR_SLUG,
     sinceMs, ...admins, FREE_HOUR_SLUG,
   );
 
@@ -94,6 +115,7 @@ export async function funnelCounts(opts: {
     checkout_start: n('checkout_start'),
     paid: n('paid'),
     booked: n('booked'),
+    free_hours_booked: n('free_hours_booked'),
   };
 }
 

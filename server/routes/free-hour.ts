@@ -5,6 +5,8 @@ import {
   EMAIL_RE, bookingConfirmationEmail, bookingNoticeEmail, organizerEmail, sendMail,
 } from '../services/mailer.js';
 import { parseTopicTags } from '../../shared/free-hour-topics.js';
+import { dbRun } from '../db.js';
+import { readSessionIds } from '../session-identity.js';
 import { SERVICE_SLOT_CONFIG, buildIcs, generateSlots } from '../../shared/service-slots.js';
 
 const PAGE = 'human-for-hire';
@@ -62,6 +64,18 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
     });
     if (claim.status === 'taken') return reply.status(409).send({ error: 'slot_unavailable' });
     if (claim.status === 'already_booked') return reply.status(409).send({ error: 'already_booked' });
+
+    try {
+      // Visit ids + the booking id let /api/admin/funnel tie this free hour back
+      // to the visit's UTM source (free_hours_booked). Never the cancel token.
+      const { visitorId, sessionId } = readSessionIds(req.headers.cookie);
+      await dbRun(
+        'INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path) VALUES (?, ?, ?, ?, ?, ?)',
+        'free_hour_booked', PAGE, JSON.stringify({ booking_id: claim.booking.id }), sessionId, visitorId, '/book',
+      );
+    } catch (err: any) {
+      console.error('[free-hour] funnel insert failed:', err?.message);
+    }
 
     const meetingLink = (process.env.HFH_MEETING_LINK ?? '').trim();
     const ics = buildIcs({

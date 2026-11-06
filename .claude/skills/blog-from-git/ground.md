@@ -61,7 +61,7 @@ project helps**. It never supplies the post's subject; git and the story unit do
 - `search_distilled` with `filters.min_upvotes` set to `pipeline.community.min_upvotes` (default 25).
 - `search_adhoc` with `min_quality` set to `pipeline.community.min_quality` (default 0.7).
 - Record `upvotes` (distilled) or `quality` (ad hoc) on the evidence item, with `source_kind: "community"`
-  (shape in `research.md` step 3b; checked by `scripts/blog-pipeline-check.ts`).
+  (shape in `dag.md` 3b; checked by `scripts/blog-pipeline-check.ts`).
 
 Rules:
 

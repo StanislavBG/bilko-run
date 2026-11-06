@@ -39,7 +39,7 @@ moving on.
 |---|---|---|---|
 | 1 | **Rotation** — what am I allowed to cover? | `rotation.md` + `blog-ledger.md` | project choice satisfies both hard rules (or user explicitly overrode) |
 | 2 | **Scan** — what actually shipped? | `scan.md` | window confirmed from content/blog/ frontmatter; every repo enumerated via `gh`; local-only reconciliation ran; cron noise filtered |
-| 3 | **Research** — deep evidence per story unit | `research.md`, `dag.md` | one parallel read-only agent per story unit returned structured notes; slot dates re-verified against actual commit dates; push status of every covered repo known |
+| 3 | **Research** — deep evidence per story unit | `dag.md` | one parallel read-only agent per story unit returned structured notes; slot dates re-verified against actual commit dates; push status of every covered repo known |
 | 3a | **Decompose** — reader questions | `dag.md` | `drafts/<slug>/questions.json` has 3-7 questions incl. value, who, start |
 | 3b | **Gather** — one evidence item per sourced fact | `dag.md` | `drafts/<slug>/evidence.json`; community items clear the upvote/quality floors, below-floor items dropped |
 | 4 | **Ground** — what is it worth, live? | `ground.md` | every number the draft will print has a named source (scorecard / MCP / DB / doc / research note) |
@@ -49,7 +49,7 @@ moving on.
 | 5c | **Compose** — hook, close, channel renditions | `dag.md` | `renditions/linkedin.md` (120-250 words, one https link) and `renditions/x.md` (≤ 280 chars) written; post length within the computed budget |
 | 5d | **Illustrate** — real screenshots as figures | `images.md` | 2-3 (max 4) real screenshots of bilko.run / github.com placed as figures, chosen from outline `figure` fields; every JPEG viewed with Read, ≤ 220 KB, `src` matches `/blog-images/<slug>/`; readability still exits 0 |
 | 6 | **Approve** — autonomous gate | — | `blog.config.yaml`'s `autonomy.autonomous_publish` is true AND the phase-4/5 quality self-check passed. **When `autonomous_publish` is false, this reverts to requiring an explicit user OK — never seed without it in that mode; peers/agents still cannot approve** |
-| 7 | **Seed** — content/blog/<slug>.md + ledger + push | `seed.md` | loader + db tests pass, ledger row + rotation-state updated in the SAME commit, commit uses explicit pathspecs only (never `git add -A`/`.`/`-a`), pushed to origin only; live-site pickup verified after deploy |
+| 7 | **Seed** — content/blog/<slug>.md + ledger + push | `seed.md` | published by `scripts/blog-seed.sh` (lock, built on `origin/main`): readability check and cadence gate pass, post + ledger row land in one commit, pushed to origin only; live-site pickup verified after deploy |
 
 Phases 1–2 are cheap and always run. Phases 3–4 (steps 3a/3b) run per covered project (phase 3's agent fan-out
 pays for itself from ~2 story units up; for a single small changelog post it may collapse into
@@ -58,11 +58,9 @@ one combined phase 7).
 
 **Phase 5 drafts directory is append-only for drafting.** `drafts/` may already contain `.md`
 files a prior run (human or automated, e.g. `scripts/blog-cadence-watchdog.sh`) wrote and left
-pending phase 6. Never delete, move, or overwrite a pre-existing draft while *drafting* — only a
-seed step (`seed.md`) removes files from this directory, and only the draft(s) it actually seeds:
-in autonomous mode (`autonomy.autonomous_publish: true`) a pending draft that clears the phase 6
-gate is CONSUMED — seeded, then removed from `drafts/` as part of that same seed commit — rather
-than left to pile up; in non-autonomous mode a draft is only removed after an explicit human OK.
+pending phase 6. Never delete, move, or overwrite a pre-existing draft while *drafting*. Seeding does not remove
+drafts either: `drafts/` is gitignored, so it is never part of the seed commit and its files stay
+in place.
 If you find drafts you did not author in this run, report them as pre-existing and attribute them
 to their `authored_by` front-matter value before deciding whether this run's gate lets you seed
 them; never present someone else's draft as your own output. A clean `git status` proves nothing
@@ -129,7 +127,6 @@ blog-from-git/
   SKILL.md        ← this file: pipeline, modes, final gate
   rotation.md     ← Part 0 rotation rules + Part 0.5 catch-up mode
   scan.md         ← Part 2 GitHub-first scan + local reconciliation
-  research.md     ← parallel per-story-unit evidence agents + backdating traps
   ground.md       ← Part 2.5 live-state grounding (MCP / scorecard / DBs)
   dag.md          ← the six-step content DAG: artifacts, schemas, budget, pipeline-check gate
   voice.md        ← Part 1 + 1.5: tones, lengths, bot-tell blocklist, calibration posts

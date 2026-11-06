@@ -57,6 +57,27 @@ MCP / DB reads (`ground.md`), and community signal from burrow-brain. Community 
 `quality` are for community items only. `source` and `claim` are never empty. Each item cites at least
 one real question id.
 
+Tell each research agent to return evidence items only, not the post, and to report push status (ahead/behind origin) in its notes.
+
+## Traps (keep checking for them)
+
+- **Story units can be misdated.** One backfill slot's planned story ("scheduler fixes, late
+  June") turned out to have happened on July 18 — the research agent caught it by reading commit
+  dates. **Slot dates must follow verified commit dates, not the other way around**; move the slot
+  rather than backdate a post about work that hadn't happened yet.
+- **"Pushed recently" ≠ "work is on GitHub."** Repos can be dozens-to-hundreds of commits ahead of
+  origin (2026-07-24: signal-builder +105, burrow +174, sigma-plus no remote). Every agent must
+  report ahead/behind status; posts about unpushed work must not link commits or imply the code is
+  public. Maintain the ledger's unpushed-repo watchlist from these reports.
+- **Live numbers may belong to a newer regime than the backdated slot.** A KPI redefined after the
+  slot date makes today's scorecard anachronistic for that post. Prefer period-correct numbers
+  queried from operational DBs (run tables, logs) over today's live scorecard; if only the live
+  number exists, date-stamp it in the post.
+- **Epilogue knowledge stays out of backdated posts.** If later evidence grades the covered work
+  (e.g. a fix later judged NO-EFFECT), the backdated post may only carry an honest in-period
+  hedge ("this bets that X is the bottleneck; mid-month will tell") — the grading belongs to the
+  NEXT post, dated when the grade existed.
+
 ## 5a Outline
 
 Pick the tone, then group the evidence into sections. Each section needs at least

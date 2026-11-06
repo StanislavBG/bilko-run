@@ -29,7 +29,7 @@ go-live time in Pacific Time, not just the raw UTC/ISO value.
    is due but every candidate project is on cooldown, do not invent one to fill the slot — see
    `blog.config.yaml`'s truth rules.
 2. **Never run two consecutive posts about a project with no `/projects` tile.** A project is
-   "on `/projects`" iff its slug is in `src/data/standalone-projects.json`. Off-list projects
+   "on `/projects`" iff it has a registry entry with `public: true` (see `src/data/projectsView.ts`). Off-list projects
    (burrow, edgar-rag, and anything untiled) may be blogged, but **not back-to-back** — an on-list
    project must run between them. The blog exists to drive readers to the catalogue; a run of posts
    about things they can't click is a leak.
@@ -78,8 +78,7 @@ the window. Instead of skipping the slot, write an evergreen feature spotlight:
 4. **Still write a ledger row on seed**, same as every mode, with a `spotlight` mode note next to
    the tone so the next rotation pass can see it wasn't a diff-driven post.
 
-`SEED_RESULT: noop` / `cooldown_blocked` are reserved for when even spotlight is exhausted — see
-`scripts/blog-cadence-watchdog.sh`'s `spotlight_candidates`.
+If even spotlight is exhausted (no tiled project off cooldown), the slot is skipped; do not invent a subject.
 
 ## Catch-up mode (Part 0.5) — gap > ~10 days since last post
 

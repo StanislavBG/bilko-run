@@ -93,7 +93,7 @@ plainly, in this priority order:
 - **Where this is heading** (the next move it unlocks — this is the "ongoing focus" spine). Required.
 - *Why it was hard or non-obvious* (the real engineering, the thing that almost broke). **Optional
   and subordinate to the four bullets above** — include it only when it actually backs a value or
-  use claim (per `research.md` item 5); never let it become the paragraph's own point. Git selects
+  use claim (per `dag.md`); never let it become the paragraph's own point. Git selects
   which project and window to write about, not what the post is about (`blog.config.yaml`
   `grounding:`) — a paragraph whose engineering detail has no value/use point it serves is
   changelog filler in the opposite direction and gets cut just like a bare capability statement.

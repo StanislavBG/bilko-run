@@ -126,4 +126,34 @@ describe('sync-local-main.sh', () => {
     expect(git(repo, 'rev-parse', 'main')).toBe(before.local);
     expect(git(origin, 'rev-parse', 'main')).toBe(before.origin);
   });
+
+  const backupAbsent = () =>
+    spawnSync('git', ['rev-parse', '-q', '--verify', 'refs/heads/backup/main-pre-sync'], { cwd: repo }).status !== 0;
+
+  it('strictly ahead with only unshipped commits: exit 0, nothing moves', () => {
+    commit(repo, 'server/a.ts', 'a\n', 'feat: a');
+    commit(repo, 'server/b.ts', 'b\n', 'feat: b');
+    const localBefore = git(repo, 'rev-parse', 'main');
+    const originBefore = git(origin, 'rev-parse', 'main');
+    for (const args of [['--dry-run'], []]) {
+      const r = run(...args);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stderr).toContain('nothing to do');
+      git(repo, 'fetch', '-q', 'origin');
+      expect(git(repo, 'rev-parse', 'main')).toBe(localBefore);
+      expect(git(repo, 'rev-parse', 'origin/main')).toBe(originBefore);
+      expect(backupAbsent()).toBe(true);
+    }
+  });
+
+  it('records directly on origin/main keep their shas', () => {
+    const r1 = commit(repo, RECORD, 'SHIP: PASS\n', 'docs(deploy): record the ship');
+    const o = commit(repo, 'server/o.ts', 'o\n', 'feat: o');
+    const r = run();
+    expect(r.status, r.stderr).toBe(0);
+    git(repo, 'fetch', '-q', 'origin');
+    expect(git(repo, 'rev-parse', 'origin/main')).toBe(r1);
+    expect(git(repo, 'rev-parse', 'main')).toBe(o);
+    expect(backupAbsent()).toBe(true);
+  });
 });

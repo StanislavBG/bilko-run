@@ -13,6 +13,8 @@
 #      pushes them to origin main as they are, since they are plan logs, not product code,
 #   3. replays every other local commit on top, in order. It never pushes them,
 #   4. moves local main there with `git reset --keep`, keeping uncommitted files.
+# Commits already on top of origin/main keep their shas (cherry-pick --ff). A strictly-ahead local
+# main with nothing to publish is left untouched: no push, no backup overwrite, no reset.
 # Unshipped product commits end up strictly ahead of origin/main. Nothing changes if a replay
 # conflicts, local main has merge commits, a dirty file is in the way, or local main moves meanwhile.
 # The old tip is kept as branch backup/main-pre-sync (overwritten on each sync).
@@ -72,7 +74,7 @@ trap cleanup EXIT
 git worktree add -q --detach "$WT" "$BASE" || die "could not create a worktree at origin/main"
 
 replay() {  # <sha>: cherry-pick onto the worktree; an already-applied patch is skipped
-  git -C "$WT" cherry-pick "$1" >/dev/null 2>&1 && return 0
+  git -C "$WT" cherry-pick --ff "$1" >/dev/null 2>&1 && return 0
   if [[ -z "$(git -C "$WT" diff --name-only --diff-filter=U)" ]]; then
     git -C "$WT" cherry-pick --skip >/dev/null 2>&1 && return 0
   fi
@@ -84,6 +86,10 @@ for c in "${RECORDS[@]}"; do replay "$c"; done
 RECORDS_TIP="$(git -C "$WT" rev-parse HEAD)"
 for c in "${OTHERS[@]}"; do replay "$c"; done
 NEW="$(git -C "$WT" rev-parse HEAD)"
+if [[ "$NEW" == "$OLD" && "$RECORDS_TIP" == "$BASE" ]]; then
+  log "local main is already $(git rev-list --count "$BASE..$OLD") unshipped commit(s) strictly ahead of origin/main; nothing to do"
+  exit 0
+fi
 
 # The rebuild may only bring in what origin/main changed. A file it alters beyond that would be
 # local work lost in a replay.
@@ -106,6 +112,10 @@ if [[ "$RECORDS_TIP" != "$BASE" ]]; then
 fi
 
 [[ "$(git rev-parse main)" == "$OLD" ]] || die "local main moved during the sync; rerun"
+if [[ "$NEW" == "$OLD" ]]; then
+  log "local main unchanged at ${NEW:0:8}; only the records were published"
+  exit 0
+fi
 git branch -f backup/main-pre-sync "$OLD" >/dev/null
 git reset -q --keep "$NEW" || die "git reset --keep failed; the old tip is backup/main-pre-sync"
 log "local main is now ${NEW:0:8}: $(git rev-list --count origin/main..main) unshipped commit(s) ahead of origin/main, 0 behind (old tip: backup/main-pre-sync)"

@@ -51,6 +51,8 @@ import { withPublishCheckout } from './publish-checkout.js';
 import { readLatestRegistryRaw } from './registry-source.js';
 import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
+import { readHostContract } from './host-contract.js';
+export { readHostContract };
 const exec = promisify(execFile);
 // Resolve the host repo root from this file's location.
 // Layout: <HOST_ROOT>/mcp-host-server/dist/server.js  →  ../../
@@ -129,12 +131,11 @@ const server = new McpServer({
 // 1) get_host_contract ─────────────────────────────────────────────────
 server.registerTool('get_host_contract', {
     title: 'Get host contract',
-    description: 'Returns the bilko.run host/app contract (host-contract.md). Read this first when working on a sibling-repo app — it explains the three host kinds, what the host provides (auth, credits, kit, brand), what an app must implement, URL canonicalization, and the add/remove checklists.',
+    description: 'Returns the Bilko map (docs/map.md) followed by the bilko.run host contract (host-contract.md). Read this first when working on a sibling-repo app — it explains the three host kinds, what the host provides (auth, credits, kit, brand), what an app must implement, URL canonicalization, and the add/remove checklists.',
     inputSchema: {},
 }, async () => {
     try {
-        const text = await readFile(HOST_CONTRACT, 'utf8');
-        return ok(text);
+        return ok(readHostContract(HOST_ROOT));
     }
     catch (e) {
         return err(`failed to read host contract at ${HOST_CONTRACT}: ${e.message}`);
@@ -158,7 +159,7 @@ server.registerTool('list_projects', {
         const out = {
             standalone,
             notes: [
-                `react-route apps live in src/config/tools.ts and aren't returned here.`,
+                `react-route apps live in src/data/projectsRegistry.ts and aren't returned here.`,
                 latest.source === 'remote'
                     ? `Source: ${latest.ref}:src/data/standalone-projects.json (fetched just now).`
                     : `Source: ${latest.ref} (local working tree; could not read origin/main: ${latest.reason}). May lag behind origin/main.`,

@@ -17,6 +17,14 @@ value from `pnpm tsx scripts/blog-cadence-gate.ts next-slot` (scheduled; it goes
 once that time arrives — see `seed.md`), never with today's date. Tell the owner the resulting
 go-live time in Pacific Time, not just the raw UTC/ISO value.
 
+## Only public projects can be a subject
+
+A post's subject must be public on https://bilko.run/projects: a `src/data/standalone-projects.json`
+entry with `public: true`. Admin-only and untiled projects are never a subject, in any mode, and a
+post must not link a non-public project. `scripts/blog-subjects.ts` is the check: `candidates` lists
+the public, off-cooldown, non-retired projects before drafting, and `check --post <post.md>` refuses
+a post whose frontmatter `project` is not one of them. `scripts/blog-draft.sh` runs both.
+
 ## Two hard rules
 
 1. **3-post cooldown (blog.config.yaml `rotation.project_cooldown_posts: 3`).** A project covered

@@ -63,7 +63,7 @@ describe('blog-seed.sh', () => {
     mkdirSync(join(repo, 'src/data'), { recursive: true });
     copyFileSync(join(ROOT, SKILL, 'blog.config.yaml'), join(repo, SKILL, 'blog.config.yaml'));
     copyFileSync(join(ROOT, LEDGER), join(repo, LEDGER));
-    writeFileSync(join(repo, 'src/data/standalone-projects.json'), '[{"slug":"outdoor-hours"}]');
+    writeFileSync(join(repo, 'src/data/standalone-projects.json'), '[{"slug":"outdoor-hours","public":true},{"slug":"admin-tool"}]');
     writeFileSync(
       join(repo, 'content/blog/old-post.md'),
       '---\nslug: "old-post"\ntitle: "Old"\nexcerpt: "Old."\ncategory: "product"\npublished: true\npublished_at: "2026-01-01T00:00:00.000Z"\norder: 7\n---\n\nOld body.\n',

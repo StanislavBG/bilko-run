@@ -15,12 +15,13 @@ const FAKE_CLAUDE = `#!/bin/bash
 echo "$@" > "$FAKE_DIR/claude-args.txt"
 case " $* " in *" --model claude-sonnet-5 "*) ;; *) echo "no model pin" >&2; exit 9 ;; esac
 case "$FAKE_MODE" in
-  drafted|badfm|touch-drafts|touch-content)
+  drafted|nonpublic|badfm|touch-drafts|touch-content)
     mkdir -p "$FAKE_OUT/images" "$FAKE_OUT/artifacts"
     if [ "$FAKE_MODE" = badfm ]; then
       printf -- '---\\ntitle: No slug here\\n---\\nBody text.\\n' > "$FAKE_OUT/post.md"
     else
-      printf -- '---\\nslug: shipped-it\\ntitle: "We shipped it"\\nexcerpt: A "short" note.\\ncategory: Product Update\\n---\\nBody text.\\n\\n![shot](/blog-images/shipped-it/home.jpg "Home")\\n' > "$FAKE_OUT/post.md"
+      PROJECT=public-one; [ "$FAKE_MODE" = nonpublic ] && PROJECT=admin-only
+      printf -- '---\\nslug: shipped-it\\ntitle: "We shipped it"\\nexcerpt: A "short" note.\\ncategory: Product Update\\nproject: %s\\n---\\nBody text.\\n\\n![shot](/blog-images/shipped-it/home.jpg "Home")\\n' "$PROJECT" > "$FAKE_OUT/post.md"
       printf 'jpg' > "$FAKE_OUT/images/home.jpg"
     fi
     [ "$FAKE_MODE" = touch-drafts ] && { mkdir -p "$FAKE_DRAFTS"; echo x > "$FAKE_DRAFTS/rogue.md"; }
@@ -44,8 +45,23 @@ describe('blog-draft.sh', () => {
     out = join(tmp, 'out');
     mkdirSync(fake);
     writeFileSync(join(fake, 'claude'), FAKE_CLAUDE, { mode: 0o755 });
-    // npx stands in for `npx tsx scripts/blog-readability.ts`; pnpm only needs to resolve.
-    writeFileSync(join(fake, 'npx'), '#!/bin/sh\nexit "${FAKE_READABILITY_RC:-0}"\n', { mode: 0o755 });
+    // npx stands in for `npx tsx scripts/blog-readability.ts`; blog-subjects.ts runs for real.
+    // pnpm only needs to resolve.
+    writeFileSync(
+      join(fake, 'npx'),
+      '#!/bin/sh\ncase "$2" in *blog-subjects.ts) shift; exec "$REAL_TSX" "$@" ;; esac\nexit "${FAKE_READABILITY_RC:-0}"\n',
+      { mode: 0o755 },
+    );
+    // Burrow's draft context: the public set and the posts already covered.
+    writeFileSync(
+      join(tmp, 'context.json'),
+      JSON.stringify({
+        schema_version: 1,
+        slot_at: SLOT,
+        public_projects: [{ slug: 'public-one', name: 'Public One' }, { slug: 'public-two', name: 'Public Two' }],
+        blog_posts: [],
+      }),
+    );
     writeFileSync(join(fake, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   });
   afterEach(() => {
@@ -66,6 +82,8 @@ describe('blog-draft.sh', () => {
         `FAKE_OUT=${out}`,
         `FAKE_ROOT=${ROOT}`,
         `FAKE_DRAFTS=${DRAFTS}`,
+        `REAL_TSX=${join(ROOT, 'node_modules/.bin/tsx')}`,
+        `BLOG_DRAFT_CONTEXT=${join(tmp, 'context.json')}`,
         ...Object.entries(extra).map(([k, v]) => `${k}=${v}`),
         'bash',
         SCRIPT,
@@ -87,11 +105,21 @@ describe('blog-draft.sh', () => {
       title: 'We shipped it',
       excerpt: 'A "short" note.',
       category: 'Product Update',
+      project: 'public-one',
     });
     expect(existsSync(join(out, 'post.md'))).toBe(true);
     expect(existsSync(join(out, 'images/home.jpg'))).toBe(true);
     expect(readFileSync(join(fake, 'claude-args.txt'), 'utf8')).toContain('--model claude-sonnet-5');
     expect(draftsListing()).toEqual(before);
+  });
+
+  it('refuses a post whose project is not public: non-zero exit, error result.json', () => {
+    const r = run('nonpublic');
+    expect(r.status).toBe(1);
+    expect(result().status).toBe('error');
+    expect(result().error).toContain('subject refused');
+    expect(result().error).toContain('admin-only');
+    expect(result().slug).toBeUndefined();
   });
 
   it('skipped: exit 0, reason recorded, no post.md', () => {

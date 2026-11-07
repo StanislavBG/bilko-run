@@ -30,6 +30,8 @@ build-in-public practitioners) plus Burrow's indexed community signal and the ha
 frame around user value, be concise and skimmable, plain spoken voice, feature a few changes well,
 show don't tell, keep a consistent cadence, write honestly not salesy.
 
+> **Subject rule:** only a public `/projects` project (`public: true` in `src/data/standalone-projects.json`) can be a post's subject, in every mode. Run `pnpm tsx scripts/blog-subjects.ts candidates --root .` to list them and `check --post <post.md>` to verify; the post's frontmatter needs `project: <slug>`. Details in `rotation.md`.
+
 ## The pipeline
 
 Run the phases in this order. Each phase has ONE sub-skill file and a gate you must pass before

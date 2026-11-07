@@ -20,6 +20,12 @@ describe('readHostContract', () => {
     expect(out.indexOf('MAP-TEXT')).toBeLessThan(out.indexOf('CONTRACT-TEXT'));
   });
 
+  it('drops whole-line HTML comments from the map and keeps the rest', () => {
+    const map = '<!-- md-network-map owner: x last-review: 2026-11-06 -->\n# Map\n<!-- a --> kept\n<!-- two\nlines -->\nend\n';
+    const out = readHostContract(makeRoot({ 'map.md': map, 'host-contract.md': 'CONTRACT-TEXT' }));
+    expect(out).toBe('# Map\n<!-- a --> kept\nend\n\n\n---\n\nCONTRACT-TEXT');
+  });
+
   it('returns only the contract when map.md is missing', () => {
     const out = readHostContract(makeRoot({ 'host-contract.md': 'CONTRACT-TEXT' }));
     expect(out).toBe('CONTRACT-TEXT');

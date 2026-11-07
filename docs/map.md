@@ -1,3 +1,4 @@
+<!-- md-network-map owner: the owner last-review: 2026-11-06 -->
 # Bilko map
 
 Read this first. Every link is written as `~/Projects/Bilko/<path>`; open it from that folder.

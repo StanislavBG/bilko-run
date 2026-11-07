@@ -2,7 +2,7 @@
 
 bilko.run is a **host platform**, not a single product. Each app is its own repo and is published to `/projects/<slug>/` on this site. The host provides sign-in, credits (the pay-as-you-go balance), the shared look, the blog and the admin pages.
 
-The full rules for how apps plug in are in [docs/host-contract.md](docs/host-contract.md).
+Start at [docs/map.md](docs/map.md), the entry map for every agent and contributor. The full rules for how apps plug in are in [docs/host-contract.md](docs/host-contract.md).
 
 ## Stack
 
@@ -53,12 +53,12 @@ How to confirm a deploy landed is in [docs/deployment.md](docs/deployment.md). S
 | `packages/host-kit/` | Toolkit that apps in other repos use for sign-in and shared look | Platform |
 | `mcp-host-server/` | The `bilko-host` MCP that registers and publishes apps | Platform |
 | `scripts/` | Helper scripts for builds and maintenance (type-checked by `pnpm typecheck`) | Platform |
-| `ops/` | Server setup files (systemd service units) | Platform |
+| `ops/` | Server setup files: the disabled blog-watchdog systemd units | Platform |
 | `tests/` | Unit tests, run with `pnpm test` | Platform |
 | `e2e/` | Browser tests, run with `pnpm test:e2e` | Platform |
 | `docs/` | Written guides (host contract, deployment, secrets) | Platform |
 | `data/` | Bundled data files (the Session Manager manual) | Platform |
-| `.claude/skills/blog-from-git` | Claude skill that drafts blog posts from git history | Platform |
+| `.claude/skills/` | Claude skills: `blog-from-git` drafts blog posts from git history, `error-triage` triages production errors | Platform |
 | `server/routes/tools/` | One gateway file per AI tool (the tool's page lives in its own repo) | One specific app |
 | `server/routes/academy.ts` | Gateway for Bilko Academy | One specific app |
 | `server/sm-relay/`, `src/pages/session-manager-landing/` | Session Manager relay and landing page | One specific app |

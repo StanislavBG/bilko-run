@@ -16,6 +16,22 @@ Every app declares one host kind in `src/data/projectsRegistry.ts` (react-route)
 
 Default to `static-path` for new apps — including ones that need a signed-in user (see "Calling authenticated host APIs from a `static-path` app" below). `react-route` is rare: today only Session Manager (`/products/session-manager`) uses it. The AI tools are `static-path` siblings whose Gemini endpoints stay in the host as gateway routes under `server/routes/tools/`.
 
+### Gateway pattern for the AI-tool siblings
+
+StackAudit, LaunchGrader, AdScorer, HeadlineGrader, ThreadGrader, EmailForge, AudienceDecoder and PageRoast ship their React page from the sibling repo, but their Gemini-backed scoring endpoint stays in the host at `server/routes/tools/<slug>.ts`. The sibling calls it same-origin with a Clerk JWT, so there is no CORS and no cross-origin auth. The split is deliberate, not a migration leftover. PageRoast owns 6 endpoints plus the `PAGEROAST_TOKENS` one-time-purchase tier; AudienceDecoder owns its own one-time-purchase tier. Academy and the free tools (OutdoorHours, LocalScore) are not in this pattern; the free tools have no host-side route and deduct no credits.
+
+Shared helpers in `server/routes/tools/_shared.ts`: the rate limiter, IP hashing, usage tracking, `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check and deduct), `askGeminiJson` (Gemini call plus JSON parse), `toolErrorReply` (uniform error reply) and `handleGenerateEndpoint` (inverse-mode generator). `index.ts` there registers every tool. To extract a tool to a sibling repo, lift its file and the page; no other server change is needed.
+
+### Host code helpers
+
+- `server/db.ts` has the Turso client, `dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`, migrations and seed data; table definitions are in `server/db-schema.ts`.
+- `server/gemini.ts` is the Gemini client (key in a header, not the URL); `server/utils.ts` has `parseJsonResponse`, the shared Gemini output parser.
+- `server/bearer.ts` has `bearerMatches`, the timing-safe compare for shared-secret bearer routes.
+- `server/blog-posts.ts` loads the `content/blog/*.md` seed posts.
+- `src/hooks/usePageView` tracks page views with the Clerk email. Clerk state comes straight from `@clerk/clerk-react`; there is no host-side `useAuth` wrapper.
+- The portfolio (`/`, `/projects`, `⌘K`) reads `src/data/projectsRegistry.ts`. Static-path and external apps load as a full page (Fastify serves the bundle); React routes use SPA navigation.
+- Stack: React 18, Vite 6, Tailwind v4, Fastify 5, Turso/libSQL (local SQLite in dev), Clerk, Stripe, Gemini.
+
 An `external-url` app loses shared Clerk auth and the injected analytics beacon, because the host never serves its pages. Leaving `react-route` turns in-process auth and credit calls (`requireAuth`, `deductToken`) into HTTP round-trips to `/api`, authenticated with a Bearer token.
 
 ## What the host provides

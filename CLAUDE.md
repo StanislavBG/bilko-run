@@ -6,9 +6,9 @@ Everything above the first heading is imported from the entry map. This file kee
 
 ## Git
 
-- This repo is `StanislavBG/bilko-run`, remote `origin`, branch `main`. Commit and push there only. The `content-grade` remote is a separate project with diverged history: never push Bilko to it. Older "push to both remotes" notes are obsolete.
+- The shared rules (push to `origin` `main` only, never `content-grade`; no real name or personal email in tracked files) come from the imported map above. This file adds only the details below.
 - Local `main` must match `origin/main` (`git status -sb` in `~/Projects/Bilko`). If not, run `bash scripts/sync-local-main.sh`. Writers: [`docs/repo-writers.md`](docs/repo-writers.md).
-- **The repo is public: the owner's real name and personal email never go in a tracked file, commit message or commit author.** Write "the owner". `session-manager-operations/prompt-sessions/` is gitignored for this; `pnpm hooks:install` installs the identity guard. See [`docs/identity-boundary.md`](docs/identity-boundary.md).
+- Commit messages and the commit author count as tracked content too. Write "the owner". `session-manager-operations/prompt-sessions/` is gitignored for this; `pnpm hooks:install` installs the identity guard. See [`docs/identity-boundary.md`](docs/identity-boundary.md).
 
 ## Rules
 

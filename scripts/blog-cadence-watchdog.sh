@@ -201,7 +201,7 @@ if [[ -z "$SCAN_EVERY_DAYS" ]]; then
   exit 1
 fi
 if [[ "$SCAN_EVERY_DAYS" != "1" ]]; then
-  echo "[blog-cadence-watchdog] FATAL: scan_every_days=$SCAN_EVERY_DAYS in $CONFIG_FILE, but this script's daily scan is driven by the daily systemd/cron triggers (docs/blog-watchdog.md), not by this value — a value other than 1 would silently misrepresent the real cadence" >&2
+  echo "[blog-cadence-watchdog] FATAL: scan_every_days=$SCAN_EVERY_DAYS in $CONFIG_FILE, but this script's daily scan is driven by the daily systemd/cron triggers (docs/repo-writers.md), not by this value — a value other than 1 would silently misrepresent the real cadence" >&2
   write_heartbeat "error: scan_every_days is not 1, but the scan trigger is hard-wired to daily"
   exit 1
 fi

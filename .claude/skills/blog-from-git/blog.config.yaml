@@ -1,7 +1,7 @@
 # blog.config.yaml — the editorial constitution for bilko.run/blog
 #
 # THIS FILE IS THE AUTHORITY. Every rule the sub-skill files (rotation.md, scan.md,
-# research.md, ground.md, voice.md, seed.md) explain in prose derives from a value here.
+# dag.md, ground.md, voice.md, seed.md) explain in prose derives from a value here.
 # If prose and this file ever disagree, this file wins — fix the prose.
 # Change editorial policy by changing THIS file, not by editing rules scattered in prose.
 
@@ -56,7 +56,7 @@ distribution:
     - must-have
 
 grounding:                  # WHAT git/commit history is FOR in this pipeline — read this before
-                             # research.md or voice.md, both of which must agree with it
+                             # dag.md or voice.md, both of which must agree with it
   git_selects: focus and window only     # which project, and which date range, to write about —
                                           # nothing more
   git_does_not_supply: subject matter    # the post's BODY is the project's value and how a reader
@@ -75,7 +75,7 @@ grounding:                  # WHAT git/commit history is FOR in this pipeline �
     meant to be about the figuring out the focus was the project. The blog is not to spell out
     every bug but to say I worked on the project and use the opportunity to highlight value of the
     project and how to be used." Binding; identity.post_is above already states this — this block
-    exists because prose in research.md and voice.md previously licensed the opposite and won.
+    exists because prose in dag.md and voice.md previously licensed the opposite and won.
   value_claims_still_need_sources: true  # swapping engineering detail for value claims does NOT
                                           # license unsourced marketing prose — see truth: below.
                                           # Every value claim still needs a real artifact or number,

@@ -20,3 +20,24 @@ posts need the minimum gap between them, so check it before picking a date.
 
 A post that is already in the database is never overwritten by editing its file.
 To change a live post, add a rewrite under `server/blog-rewrites/`.
+
+## Categories
+
+`build-log`, `lessons`, `deep-dive`, `market`, `product` (the list in `blog.config.yaml`).
+
+## Blog videos
+
+Blog videos are made in Burrow (`~/Projects/burrow`, macro and skill `marketing-video`), not here.
+Burrow writes `public/blog-videos/<slug>/index.html` in this repo as one commit to that path. It
+builds the commit on a fresh `origin/main` in a throwaway worktree, pushes `<sha>:main` under the
+`scripts/blog-seed.sh` lock, then mirrors it onto local `main`.
+
+- Each page is one self-contained file of at most 2 MiB.
+- It defines `window.smDemo` and has a `sm-demo-duration` meta tag.
+- The server scans `public/blog-videos/` at boot, so a new video shows on its post only after the
+  Render deploy.
+
+Bilko keeps the hosting (`server/blog-videos.ts`, `server/routes/blog.ts`, `BlogVideoPlayer`,
+`BLOG_VIDEO_CSP` in `server/security-headers.ts`) and two scripts Burrow runs from this repo:
+`scripts/blog-video-capture.ts` (`blog-from-git` uses it too) and `scripts/blog-video-frames.ts`.
+Keep both, and keep their flags stable.

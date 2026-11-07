@@ -188,7 +188,7 @@ Two real posts already in `content/blog/` bracket the quality range:
     concrete fact of the week.
 12. **Emoji, exclamation hype, and "🚀 we shipped!"** Never.
 
-## Positive voice rules (from `blogs.md`, which is authoritative)
+## Positive voice rules (`blog.config.yaml` wins on any conflict)
 
 - **Ground every claim in an artifact.** A sentence that can't be traced to a commit, diff, PRD,
   test count, or file is filler — cut it. The whole value of this skill over a generic LLM post is

@@ -95,7 +95,7 @@ cadence:
                                    # the watchdog runs phases 1-2 (Rotation, Scan) every day
                                    # regardless of the publish gap; only phases 6-7 (Approve, Seed)
                                    # are gated on target_gap_days below. The actual daily trigger is
-                                   # the systemd/cron timers (docs/blog-watchdog.md), not this
+                                   # the systemd timers (disabled since 2026-10-12; see docs/repo-writers.md), not this
                                    # value; blog-cadence-watchdog.sh FATALs if this ever drifts
                                    # from 1, so the two stay honest with each other.
   target_gap_days: [3, 4]        # owner policy: publish every 3-4 days. LOWER bound (3) gates "a

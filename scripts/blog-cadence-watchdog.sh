@@ -27,7 +27,7 @@
 # CLOSED (scan-only, no publish) if the gate is unavailable.
 #
 # TRIGGER — this script runs from exactly ONE scheduler on this machine
-# (full detail and log contents: docs/blog-watchdog.md): the systemd user
+# (the systemd timers are disabled since 2026-10-12; see docs/repo-writers.md): the systemd user
 # timer `blog-cadence-watchdog.timer` (OnCalendar=daily, Persistent=true,
 # fires ~00:00-00:15 PT) — Persistent=true replays a run missed while the
 # machine was off/asleep. Its service appends to
@@ -191,7 +191,7 @@ fi
 
 # scan_every_days declares that scanning is daily and independent of whether a
 # post is due — this script's own scan cadence is hard-wired to whatever
-# triggers it (the daily systemd timer, docs/blog-watchdog.md), not to a
+# triggers it (the daily systemd timer, disabled since 2026-10-12; see docs/repo-writers.md), not to a
 # value read here. Parse it anyway and FATAL if it ever drifts from 1, so a
 # future edit to this key does not silently stop meaning what it says.
 SCAN_EVERY_DAYS="$(grep -m1 'scan_every_days:' "$CONFIG_FILE" | grep -oP 'scan_every_days:\s*\K\d+')"

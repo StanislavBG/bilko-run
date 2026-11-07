@@ -31,6 +31,10 @@ pushes product code.
 `.git/blog-seed.lock` serializes everything that moves local `main` from outside a session: the
 seed, the video publisher and the sync.
 
+social-signals-trader's publisher takes its own lock, `.git/publish-to-bilko.lock`, because it never moves
+local `main`. Its old merge retry left merge commit `b1f82963` on `origin/main` on 2026-11-06. It stays:
+the sync stops only on merge commits that are not on `origin/main` yet.
+
 ## Rules
 
 1. Never push local `main` as a whole unless `git status -sb` shows only your own commits ahead

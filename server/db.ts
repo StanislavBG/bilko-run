@@ -1,6 +1,6 @@
 import { createClient, type Client, type InStatement, type Transaction } from '@libsql/client';
 import { MIGRATIONS, ADDITIVE_COLUMNS } from './db-schema.js';
-import { loadBlogPosts } from './blog-posts.js';
+import { loadBlogPosts, loadWithdrawnSlugs } from './blog-posts.js';
 import { mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -413,6 +413,15 @@ export async function initDb(): Promise<void> {
     sql: 'UPDATE blog_posts SET content = replace(content, ?, ?), updated_at = ? WHERE slug = ?',
     args: ['bilko@bilko.run', BILKO_CONTACT_EMAIL, new Date().toISOString(), 'outdoorhours-week-2-from-fixed-rules-to-rule-engine'],
   }], doneIds);
+
+  // content/blog/withdrawn.txt: INSERT OR IGNORE never unpublishes a row production already has,
+  // so each listed slug is switched off once. A later owner re-publish is never overridden.
+  for (const slug of loadWithdrawnSlugs()) {
+    await applyDataMigrationOnce('blog-withdraw:' + slug, [{
+      sql: 'UPDATE blog_posts SET published = 0, updated_at = ? WHERE slug = ?',
+      args: [new Date().toISOString(), slug],
+    }], doneIds);
+  }
 
   // The git-viewer free tier dropped from 3 projects to 1 on 2026-10-14. Mark
   // cached free profiles stale so each rebuilds at the new cap: unclaimed ones

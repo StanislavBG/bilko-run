@@ -77,6 +77,18 @@ function parsePost(file: string, raw: string): SeedBlogPost {
   return { ...parsed.data, content: body };
 }
 
+/** Slugs listed in `content/blog/withdrawn.txt` (one per line, `#` comments and blank lines ignored). */
+export function loadWithdrawnSlugs(dir: string = blogRoot()): string[] {
+  const file = join(dir, 'withdrawn.txt');
+  if (!existsSync(file)) return [];
+  return [...new Set(
+    readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#')),
+  )];
+}
+
 export function loadBlogPosts(dir: string = blogRoot()): SeedBlogPost[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)

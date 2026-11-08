@@ -1,0 +1,4 @@
+# Slugs of blog posts to take off bilko.run. One slug per line; blank lines and # comments are ignored.
+# initDb() unpublishes each listed slug once (data migration blog-withdraw:<slug>), so a later
+# owner re-publish through the blog admin is never overridden. Burrow's withdraw appends here.
+a-minesweeper-that-never-makes-you-guess

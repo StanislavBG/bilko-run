@@ -12,15 +12,26 @@
 # public/blog-images/<slug>/ and the blog-ledger.md row + rotation state, runs the cadence gate
 # on that tree, and makes ONE commit with explicit pathspecs. A guard refuses the push unless the
 # commit is exactly one commit on top of origin/main touching only autonomy.allowed_commit_paths.
-# It pushes <sha>:main (a push race refetches and rebuilds; it never rebases local commits),
-# mirrors the commit onto local main (best effort), and polls /api/blog until the slug is live.
+# It pushes <sha>:main (a push race refetches and rebuilds; local commits are never pushed),
+# mirrors the commit onto local main (best effort, below), and polls /api/blog until the slug is
+# live. A retry that finds the post already on origin/main mirrors and polls the same way.
+#
+# The mirror leaves local main holding <sha> itself, 0 behind origin/main, never a cherry-picked
+# twin (the same patch under another sha, which leaves local main diverged). If local main is
+# <sha>'s parent it fast-forwards. Otherwise local main is behind origin/main or carries unshipped
+# commits: the seed releases .git/blog-seed.lock (flock -u 9) and runs
+# `bash scripts/sync-local-main.sh --no-push` with BILKO_SYNC_REPO_ROOT set to this checkout, which
+# rebuilds local main on origin/main with those commits replayed on top and pushes nothing. A
+# non-zero sync exit is a stderr warning naming the exit code and the manual fix,
+# `bash scripts/sync-local-main.sh`; this script's exit code, stdout and live poll stay the same.
 #
 # stdout: only the final JSON line {"slug","url","commit","published_at"}. Logs go to stderr.
 # Exit: 0 live | 1 error, nothing pushed unless the log says so (safe to retry) | 2 bad
 #       bundle/arguments (nothing committed) | 3 cadence gate refused (nothing committed; Burrow
 #       treats this as final) | 4 readability gate failed (nothing written) | 5 pushed but not
 #       live before the poll timeout (a retry only polls).
-# The live checkout's working tree and index are never written, except by that mirror commit.
+# The live checkout's working tree and index are never written, except by the mirror (the
+# fast-forward, or the sync's `git reset --keep`, which keeps uncommitted files).
 # Test-only env overrides: BLOG_SEED_REPO_ROOT, BLOG_SEED_API_URL, BLOG_SEED_VERIFY_TIMEOUT,
 # BLOG_SEED_VERIFY_INTERVAL, BLOG_SEED_PUSH_BACKOFF.
 set -uo pipefail
@@ -138,20 +149,31 @@ seed_commit_ok() {  # <base> <sha>
   [[ $has_post -eq 1 ]]
 }
 
-# Mirror a pushed seed commit onto local main so its blog paths match production. Best effort:
-# the post is already on origin, so a dirty or conflicting ledger is logged, never forced.
+# Mirror a pushed seed commit onto local main so its blog paths match production: local main gets
+# <sha> itself, never a cherry-picked twin. Best effort: the post is already on origin, so a dirty
+# file or a conflict is logged, never forced, and never changes this script's exit code or stdout.
+# Both callers poll and exit right after this: nothing moves local main once the lock is released.
 mirror_to_local_main() {  # <sha>
-  local out
+  local out rc
   git cat-file -e "HEAD:$POST_REL" 2>/dev/null && return 0
   seed_commit_ok "$1^" "$1" || { log "warning: $1 is not a lone seed commit; local main not updated"; return 0; }
   if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "$1^")" ]]; then
     out="$(git merge -q --ff-only "$1" 2>&1)" && return 0
-  else
-    out="$(git cherry-pick -x "$1" 2>&1)" && { log "mirrored $1 onto local main as $(git rev-parse --short HEAD)"; return 0; }
-    git rev-parse -q --verify CHERRY_PICK_HEAD >/dev/null && git cherry-pick --abort >/dev/null 2>&1
+    echo "$out" >&2
+    log "warning: could not fast-forward local main to $1; its blog files lag origin/main until: bash scripts/sync-local-main.sh"
+    return 0
   fi
-  echo "$out" >&2
-  log "warning: could not mirror $1 onto local main; its blog files lag origin/main until: git cherry-pick -x $1"
+  # Local main is behind origin/main or ahead of it. The sync rebuilds it on origin/main, which has
+  # <sha>, with any unshipped local commits replayed on top, and pushes nothing. It takes
+  # .git/blog-seed.lock itself and would wait 120s on ours, so ours is released first.
+  flock -u 9
+  BILKO_SYNC_REPO_ROOT="$REPO_ROOT" bash "$SCRIPT_DIR/sync-local-main.sh" --no-push >&2
+  rc=$?
+  if [[ $rc -eq 0 ]] && git merge-base --is-ancestor "$1" HEAD 2>/dev/null; then
+    log "local main has $1 itself: synced onto origin/main by sync-local-main.sh --no-push"
+    return 0
+  fi
+  log "warning: sync-local-main.sh --no-push exited $rc, so local main does not have $1 and its blog files lag origin/main; fix by hand: bash scripts/sync-local-main.sh"
 }
 
 poll_live() {  # <published_at> <commit>

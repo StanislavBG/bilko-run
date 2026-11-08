@@ -130,6 +130,31 @@ describe('blog-seed.sh', () => {
     git(dir, 'config', 'user.email', 't@example.com');
     return dir;
   }
+  // Commits one file in <dir>: a plan's unshipped work on local main, or another writer's commit.
+  function commitFile(dir: string, rel: string, text: string, msg: string): string {
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    writeFileSync(join(dir, rel), text);
+    git(dir, 'add', '--', rel);
+    git(dir, 'commit', '-qm', msg);
+    return git(dir, 'rev-parse', 'HEAD');
+  }
+  // stdout is exactly one line, the result JSON, whatever the mirror logged.
+  const resultLine = (stdout: string) => {
+    const lines = stdout.trim().split('\n');
+    expect(lines).toHaveLength(1);
+    return JSON.parse(lines[0]);
+  };
+  const ahead = () => git(repo, 'rev-list', '--count', 'origin/main..main');
+  // Local main holds <sha> itself (not a twin: a copy of its patch under another sha, which git
+  // cherry marks "-") and is 0 behind origin/main.
+  function expectLocalMainHas(sha: string) {
+    git(repo, 'fetch', '-q', 'origin');
+    expect(spawnSync('git', ['merge-base', '--is-ancestor', sha, 'main'], { cwd: repo }).status).toBe(0);
+    expect(git(repo, 'rev-list', '--count', 'main..origin/main')).toBe('0');
+    expect(git(repo, 'cherry', 'origin/main', 'main').split('\n').filter((l) => l.startsWith('-'))).toEqual([]);
+  }
+  const SYNC_WARNING = (rc: number) =>
+    new RegExp(`warning: sync-local-main\\.sh --no-push exited ${rc}\\b.*bash scripts/sync-local-main\\.sh`);
 
   it('publishes: verbatim body, only allowed paths in one commit, pushed, JSON last line', () => {
     live();
@@ -175,7 +200,7 @@ describe('blog-seed.sh', () => {
     live();
     const r = run();
     expect(r.status, r.stderr).toBe(0);
-    const out = JSON.parse(r.stdout.trim().split('\n').pop()!);
+    const out = resultLine(r.stdout);
     const originAfter = git(origin, 'rev-parse', 'main');
     expect(out.commit).toBe(originAfter);
     expect(git(origin, 'rev-list', '--count', `${originBefore}..${originAfter}`)).toBe('1');
@@ -184,14 +209,87 @@ describe('blog-seed.sh', () => {
     expect(git(origin, 'show', `${originAfter}:CLAUDE.md`)).toBe('origin');
     expect(spawnSync('git', ['cat-file', '-e', localOnly], { cwd: origin }).status).not.toBe(0);
 
-    // local main keeps its own commits and gains a mirror of the post; the tree is otherwise untouched
-    expect(git(repo, 'rev-parse', 'HEAD^')).toBe(localTip);
-    expect(git(repo, 'show', '--name-only', '--format=', 'HEAD').split('\n').sort()).toEqual(SEED_FILES);
+    // The sync cannot replay 'fix(ci): local shape' onto origin's CLAUDE.md and exits 3. That is a
+    // warning, not a failure: local main stays as it was, with no cherry-picked twin of the post.
+    expect(r.stderr).toMatch(SYNC_WARNING(3));
+    expect(head()).toBe(localTip);
     expect(readFileSync(join(repo, 'CLAUDE.md'), 'utf-8')).toBe('local\n');
+    expect(existsSync(join(repo, 'content/blog/my-post.md'))).toBe(false);
+    expect(git(repo, 'status', '--porcelain')).toBe(status);
+    expect(worktrees()).toHaveLength(1);
+  });
+
+  it('local main strictly ahead: the seed commit itself goes under the unshipped commit, no twin, 0 behind', () => {
+    const unshipped = commitFile(repo, 'server/next.ts', 'next\n', 'feat: not validated yet');
+    const base = git(repo, 'rev-parse', 'HEAD^');
+    const status = git(repo, 'status', '--porcelain');
+
+    live();
+    const r = run();
+    expect(r.status, r.stderr).toBe(0);
+    const out = resultLine(r.stdout);
+    expect(out.commit).toBe(git(origin, 'rev-parse', 'main'));
+    expect(git(origin, 'rev-parse', `${out.commit}^`)).toBe(base);
+    expect(spawnSync('git', ['cat-file', '-e', unshipped], { cwd: origin }).status).not.toBe(0);
+
+    expectLocalMainHas(out.commit);
+    expect(ahead()).toBe('1');
+    expect(git(repo, 'rev-parse', 'main^')).toBe(out.commit);
+    expect(git(repo, 'log', '-1', '--format=%s', 'main')).toBe('feat: not validated yet');
+    expect(readFileSync(join(repo, 'server/next.ts'), 'utf-8')).toBe('next\n');
     expect(readFileSync(join(repo, 'content/blog/my-post.md'), 'utf-8')).toContain('Human-edited body, kept as is.');
     expect(git(repo, 'status', '--porcelain')).toBe(status);
     expect(worktrees()).toHaveLength(1);
   });
+
+  it('local main behind origin/main: fast-forwards to the seed commit itself, no twin', () => {
+    // Another publisher pushed after local main last moved.
+    const other = otherClone();
+    commitFile(other, 'public/projects/app/index.html', 'app\n', 'feat(projects): publish app');
+    git(other, 'push', '-q', 'origin', 'main');
+    const status = git(repo, 'status', '--porcelain');
+
+    live();
+    const r = run();
+    expect(r.status, r.stderr).toBe(0);
+    const out = resultLine(r.stdout);
+    expect(out.commit).toBe(git(origin, 'rev-parse', 'main'));
+    expect(head()).toBe(out.commit);
+    expectLocalMainHas(out.commit);
+    expect(readFileSync(join(repo, 'public/projects/app/index.html'), 'utf-8')).toBe('app\n');
+    expect(git(repo, 'status', '--porcelain')).toBe(status);
+    expect(worktrees()).toHaveLength(1);
+  });
+
+  it('a failed sync only warns; the retry that finds the post on origin/main syncs local main the same way', () => {
+    commitFile(repo, 'server/next.ts', 'next\n', 'feat: not validated yet');
+    const tip = head();
+    // A dirty ledger is in the sync's way (it must update that file), so the first run's sync exits 1.
+    const ledger = `${readFileSync(join(repo, LEDGER), 'utf-8')}\nlocal edit\n`;
+    writeFileSync(join(repo, LEDGER), ledger);
+
+    const first = run(); // not live yet
+    expect(first.status).toBe(5);
+    expect(first.stdout).toBe('');
+    expect(first.stderr).toMatch(SYNC_WARNING(1));
+    expect(head()).toBe(tip);
+    expect(readFileSync(join(repo, LEDGER), 'utf-8')).toBe(ledger);
+    const pushed = git(origin, 'rev-parse', 'main');
+    expect(committedFiles(pushed)).toEqual(SEED_FILES);
+
+    git(repo, 'checkout', '--', LEDGER);
+    live();
+    const r = run();
+    expect(r.status, r.stderr).toBe(0);
+    const out = resultLine(r.stdout);
+    expect(out.commit).toBe(pushed);
+    expect(git(origin, 'rev-parse', 'main')).toBe(pushed); // the retry only polled: no rebuild, no push
+    expect(readFileSync(join(fake, 'gate-calls'), 'utf-8').match(/root-has-post/g)).toHaveLength(1);
+    expectLocalMainHas(pushed);
+    expect(git(repo, 'rev-parse', 'main^')).toBe(pushed);
+    expect(git(repo, 'log', '-1', '--format=%s', 'main')).toBe('feat: not validated yet');
+    expect(worktrees()).toHaveLength(1);
+  }, 30_000); // two seed runs, one of them a full poll window
 
   it('a push race rebuilds the commit on the new origin/main instead of rebasing local main', () => {
     const other = otherClone();

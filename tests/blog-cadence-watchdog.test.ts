@@ -193,10 +193,13 @@ describe('blog-cadence-watchdog.sh execution (fake blog-draft.sh / blog-seed.sh)
   let repo: string;
   let log: string;
   let bin: string;
+  let lockfile: string;
 
   beforeEach(() => {
     const tmp = mkdtempSync(join(tmpdir(), 'watchdog-'));
     repo = join(tmp, 'repo');
+    // per-test flock path: the default /tmp lock is machine-wide, so parallel gates would skip
+    lockfile = join(tmp, 'watchdog.lock');
     log = join(tmp, 'log');
     bin = join(tmp, 'bin');
     mkdirSync(join(repo, 'scripts'), { recursive: true });
@@ -229,8 +232,12 @@ describe('blog-cadence-watchdog.sh execution (fake blog-draft.sh / blog-seed.sh)
     const cfg = join(repo, '.claude/skills/blog-from-git/blog.config.yaml');
     writeFileSync(cfg, readFileSync(cfg, 'utf-8').replace(/autonomous_publish:\s*(true|false)/, `autonomous_publish: ${value}`));
   }
-  function run(env: Record<string, string>) {
-    return spawnSync('bash', [join(repo, 'scripts/blog-cadence-watchdog.sh')], {
+  function run(env: Record<string, string>, holdLock = false) {
+    // holdLock: a parent shell holds the flock on the per-test path while the watchdog runs
+    const args = holdLock
+      ? ['-c', 'exec 8>"$BLOG_WATCHDOG_LOCKFILE" && flock -n 8 && bash "$0"', join(repo, 'scripts/blog-cadence-watchdog.sh')]
+      : [join(repo, 'scripts/blog-cadence-watchdog.sh')];
+    return spawnSync('bash', args, {
       encoding: 'utf-8',
       timeout: 60_000,
       env: {
@@ -240,6 +247,7 @@ describe('blog-cadence-watchdog.sh execution (fake blog-draft.sh / blog-seed.sh)
         FAKE_LOG: log,
         BLOG_DRAFT_CMD: `bash ${join(repo, '../fake-draft.sh')}`,
         BLOG_SEED_CMD: `bash ${join(repo, '../fake-seed.sh')}`,
+        BLOG_WATCHDOG_LOCKFILE: lockfile,
         ...env,
       },
     });
@@ -260,6 +268,14 @@ describe('blog-cadence-watchdog.sh execution (fake blog-draft.sh / blog-seed.sh)
     expect(heartbeat()).toMatch(/ ok: published slugs=shipped-it url=https:\/\/bilko\.run\/blog\/shipped-it/);
     expect(existsSync(state())).toBe(true);
     expect(existsSync(bundle)).toBe(false); // temp dir cleaned up
+  });
+
+  it('honours BLOG_WATCHDOG_LOCKFILE: a held per-test lock skips the run without drafting', () => {
+    setAutonomous('true');
+    const r = run({ FAKE_DRAFT: 'drafted', FAKE_SEED_RC: '0' }, true);
+    expect(r.status, r.stderr).toBe(0);
+    expect(calls('draft-calls.txt')).toBe('');
+    expect(heartbeat()).toMatch(/ ok: skipped, another instance running/);
   });
 
   it('draft skipped: no seed, lock cleared, ok/warn heartbeat naming the reason, exit 0', () => {

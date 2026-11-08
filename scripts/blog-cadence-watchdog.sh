@@ -167,7 +167,9 @@ if [[ -n "$missing_bins" ]]; then
   exit 1
 fi
 
-LOCKFILE="/tmp/bilko.blog-cadence-watchdog.lock"
+# BLOG_WATCHDOG_LOCKFILE overrides the lock path (tests use a per-test path so parallel
+# gates don't skip each other); production leaves it unset and keeps the machine-wide lock.
+LOCKFILE="${BLOG_WATCHDOG_LOCKFILE:-/tmp/bilko.blog-cadence-watchdog.lock}"
 exec 9>"$LOCKFILE"
 if ! flock -n 9; then
   echo "[blog-cadence-watchdog] another instance running — skipping" >&2

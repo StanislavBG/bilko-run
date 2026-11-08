@@ -21,3 +21,16 @@ Caveat: I did not run the whole script against a local-only change. The existing
 - Important: tests/sync-local-main.test.ts has no test that the LOST guard still exits 1 with local main untouched. Nothing would fail if the guard were disabled. Not caused by this PRD, but this PRD changed the guard.
 - Minor: the commit's co-author trailer says Claude Opus 5.5. Cosmetic.
 - No security issues. The change adds no new input handling; `$MB` and `$BASE` are SHAs from git.
+
+## Finding resolution
+
+Test commit a9a2d4bd ("test(sync): LOST guard exits 1 and leaves local main untouched when a replay drops local work") adds two tests to tests/sync-local-main.test.ts:
+
+- `a replay that drops local work: exit 1, local main untouched, nothing pushed (default mode)`
+- `a replay that drops local work: exit 1, local main untouched, nothing pushed (--no-push)`
+
+Both inject the fault through the git shim (a `tmp/drop-pick` sha turns that commit's `cherry-pick --ff` into a no-op). Each asserts exit 1, empty stdout, `never touched` and `server/local-only.ts` in stderr, local main and the local-only file unchanged, no push, origin refs unchanged, no backup branch, one worktree.
+
+Mutation check: with the `[[ -z "$LOST" ]] || die ...` line replaced by `true`, both new tests FAIL (2 failed, 17 passed). With the line restored, `git diff scripts/sync-local-main.sh` is empty and the gate passes: `timeout 300 pnpm vitest run tests/sync-local-main.test.ts` gives 19 passed.
+
+Important finding (no LOST exit-1 test): RESOLVED

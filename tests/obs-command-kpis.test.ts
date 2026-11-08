@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveKpis, deriveStatus } from '../src/pages/admin/command/useCommandData.js';
+import { deriveKpis, deriveStatus, filterQuery } from '../src/pages/admin/command/useCommandData.js';
 import type {
   TrafficData, FlowsData, EgressData, BlogCadence, ObservabilityData, AppHealth,
 } from '../src/pages/admin/command/types.js';
@@ -77,6 +77,70 @@ describe('deriveKpis', () => {
     const k = deriveKpis(null, null, null, null);
     expect(k).toHaveLength(9);
     for (const t of k) expect(t.value).toBe('—');
+  });
+});
+
+describe('filterQuery', () => {
+  it('is empty when nothing is excluded', () => {
+    expect(filterQuery({ mine: false, bots: false })).toBe('');
+    expect(filterQuery(undefined)).toBe('');
+  });
+  it('sends mine=exclude when MINE is excluded', () => {
+    expect(filterQuery({ mine: true, bots: false })).toBe('&mine=exclude');
+  });
+  it('sends bots=exclude when BOT is excluded', () => {
+    expect(filterQuery({ mine: false, bots: true })).toBe('&bots=exclude');
+  });
+  it('sends both params when both are excluded', () => {
+    expect(filterQuery({ mine: true, bots: true })).toBe('&mine=exclude&bots=exclude');
+  });
+});
+
+describe('deriveKpis with the EXCLUDE filters', () => {
+  const T = traffic();
+  const F = flows([app('a', 4, 1), app('b', 6, 7)]);
+  const E = egress(100, [60, 40]);
+  const B = blog('ok');
+
+  it('leaves every tile unchanged with no filters', () => {
+    const base = deriveKpis(T, F, E, B);
+    expect(deriveKpis(T, F, E, B, undefined)).toEqual(base);
+    expect(deriveKpis(T, F, E, B, { mine: false, bots: false })).toEqual(base);
+  });
+
+  it('keeps the BOT HITS count and reads excluded, neutral, when bots are excluded', () => {
+    const on = byLabel(deriveKpis(T, null, null, null, { mine: false, bots: true }), 'BOT');
+    expect(on.value).toBe('100');
+    expect(on.sub).toBe('excluded');
+    expect(on.tone).toBe('neutral');
+    const off = byLabel(deriveKpis(T, null, null, null, { mine: false, bots: false }), 'BOT');
+    expect(off.value).toBe('100');
+    expect(off.sub).toBe('10% of hits');
+    expect(off.tone).toBe('amber');
+  });
+
+  it('marks UNIQUE VISITORS excl. mine only when mine is excluded', () => {
+    const on = byLabel(deriveKpis(T, null, null, null, { mine: true, bots: false }), 'UNIQUE');
+    expect(on.value).toBe('120');
+    expect(on.sub).toBe('2 countries · excl. mine');
+    expect(byLabel(deriveKpis(T, null, null, null, { mine: false, bots: true }), 'UNIQUE').sub).toBe('2 countries');
+    expect(byLabel(deriveKpis(T, null, null, null, { mine: false, bots: false }), 'UNIQUE').sub).toBe('2 countries');
+  });
+
+  it('with both excluded relabels only BOT HITS and UNIQUE VISITORS', () => {
+    const base = deriveKpis(T, F, E, B);
+    const k = deriveKpis(T, F, E, B, { mine: true, bots: true });
+    expect(byLabel(k, 'UNIQUE').sub).toBe('2 countries · excl. mine');
+    expect(byLabel(k, 'BOT')).toEqual({ label: 'BOT HITS', value: '100', sub: 'excluded', tone: 'neutral' });
+    for (const label of ['HITS', '404S', 'CLICKS', 'APP SESSIONS', 'ERRORS', 'EGRESS', 'BLOG CADENCE']) {
+      expect(k.find((x) => x.label === label)).toEqual(base.find((x) => x.label === label));
+    }
+  });
+
+  it('keeps em-dash values and empty subs without traffic', () => {
+    const k = deriveKpis(null, null, null, null, { mine: true, bots: true });
+    expect(byLabel(k, 'BOT')).toMatchObject({ value: '—', sub: '' });
+    expect(byLabel(k, 'UNIQUE')).toMatchObject({ value: '—', sub: '' });
   });
 });
 

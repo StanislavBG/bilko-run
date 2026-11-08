@@ -6,6 +6,7 @@ import { formatBytes } from '../../../lib/format.js';
 import type {
   BlogCadence, EgressData, FlowsData, ObservabilityData, TrafficData,
 } from './types.js';
+import type { TrafficFilterState } from './CommandShell.js';
 
 export type Tone = 'neutral' | 'green' | 'amber' | 'red';
 
@@ -36,11 +37,24 @@ const EMPTY = { data: null, error: null };
 const num = (n: number): string => n.toLocaleString('en-US');
 const DASH = '—';
 
+/**
+ * The header's EXCLUDE toggles as query params ('&mine=exclude', '&bots=exclude', both, or '') for
+ * /admin/traffic, /admin/flows and /admin/sessions. Egress and blog cadence cannot be split by visitor.
+ */
+export function filterQuery(f?: TrafficFilterState): string {
+  return `${f?.mine ? '&mine=exclude' : ''}${f?.bots ? '&bots=exclude' : ''}`;
+}
+
+/**
+ * `filters` only relabels tiles: the traffic and flows counts already arrive filtered. The server
+ * keeps counting totals.botHits with bots excluded, so BOT HITS keeps its value and reads 'excluded'.
+ */
 export function deriveKpis(
   traffic: TrafficData | null,
   flows: FlowsData | null,
   egress: EgressData | null,
   blog: BlogCadence | null,
+  filters?: TrafficFilterState,
 ): KpiTile[] {
   const t = traffic?.totals;
   const tile = (label: string, value: string | null, sub: string, tone: Tone = 'neutral', spark?: number[]): KpiTile => ({
@@ -48,6 +62,8 @@ export function deriveKpis(
   });
 
   const botPct = t ? Math.round((t.botHits / Math.max(1, t.hits + t.botHits)) * 100) : 0;
+  const botsOut = filters?.bots === true;
+  const mineNote = filters?.mine ? ' · excl. mine' : '';
   const top = traffic?.topClicks?.[0];
 
   const apps = flows?.apps ?? null;
@@ -65,8 +81,8 @@ export function deriveKpis(
 
   return [
     tile('HITS', t ? num(t.hits) : null, '', 'neutral', traffic?.byDay?.map((d) => d.hits)),
-    tile('UNIQUE VISITORS', t ? num(t.visitors) : null, `${traffic?.byCountry?.length ?? 0} countries`),
-    tile('BOT HITS', t ? num(t.botHits) : null, `${botPct}% of hits`, 'amber'),
+    tile('UNIQUE VISITORS', t ? num(t.visitors) : null, `${traffic?.byCountry?.length ?? 0} countries${mineNote}`),
+    tile('BOT HITS', t ? num(t.botHits) : null, botsOut ? 'excluded' : `${botPct}% of hits`, botsOut ? 'neutral' : 'amber'),
     tile('404S', t ? num(t.notFound) : null, t && t.notFound === 0 ? 'clean' : 'not found', t ? (t.notFound === 0 ? 'green' : 'red') : 'neutral'),
     tile('CLICKS', t ? num(t.clicks) : null, top?.label ? `top · ${top.label}` : top ? `top · ${top.path}` : ''),
     tile('APP SESSIONS', apps ? num(sessions) : null, `${apps?.length ?? 0} apps`),
@@ -87,8 +103,12 @@ export function deriveStatus(obs: ObservabilityData | null, failed: boolean): St
   return alerts > 0 ? { label: `${alerts} ALERTS`, tone: 'amber' } : { label: 'ONLINE', tone: 'green' };
 }
 
-export function useCommandData(opts: { days: number; refreshMs: number; enabled: boolean }): CommandData {
+export function useCommandData(opts: {
+  days: number; refreshMs: number; enabled: boolean; filters?: TrafficFilterState;
+}): CommandData {
   const { days, refreshMs } = opts;
+  // A string, so a new filters object with the same values does not re-run the reload.
+  const fq = filterQuery(opts.filters);
   const { isLoaded, isSignedIn } = useAuth();
   const enabled = opts.enabled && isLoaded && !!isSignedIn;
   const adminFetch = useAdminFetch();
@@ -96,8 +116,12 @@ export function useCommandData(opts: { days: number; refreshMs: number; enabled:
     traffic: EMPTY, flows: EMPTY, egress: EMPTY, blog: EMPTY, obs: EMPTY, lastOkAt: null, failed: false,
   });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The window + filters of the newest reload; an older one still in flight must not overwrite it.
+  const scopeRef = useRef('');
 
   const reload = useCallback(async () => {
+    const scope = `${days}${fq}`;
+    scopeRef.current = scope;
     const flowDays = Math.min(30, Math.max(1, days));
     const get = async <T,>(path: string): Promise<T> => {
       const res = await adminFetch(path);
@@ -105,12 +129,13 @@ export function useCommandData(opts: { days: number; refreshMs: number; enabled:
       return (await res.json()) as T;
     };
     const results = await Promise.allSettled([
-      get<TrafficData>(`/admin/traffic?days=${days}`),
-      get<FlowsData>(`/admin/flows?days=${flowDays}`),
+      get<TrafficData>(`/admin/traffic?days=${days}${fq}`),
+      get<FlowsData>(`/admin/flows?days=${flowDays}${fq}`),
       get<EgressData>(`/admin/egress?days=${days}`),
       get<BlogCadence>('/admin/blog-cadence'),
       get<ObservabilityData>('/admin/observability'),
     ]);
+    if (scopeRef.current !== scope) return;
     // A failing source keeps its last good data; only its error is updated.
     const merge = <T,>(prev: Source<T>, r: PromiseSettledResult<T>): Source<T> =>
       r.status === 'fulfilled'
@@ -126,7 +151,7 @@ export function useCommandData(opts: { days: number; refreshMs: number; enabled:
       lastOkAt: results.some((r) => r.status === 'fulfilled') ? Date.now() : p.lastOkAt,
       failed: anyFailed,
     }));
-  }, [adminFetch, days]);
+  }, [adminFetch, days, fq]);
 
   // Poll only while the tab is visible; refresh once immediately on regaining visibility (see ObservabilityPage).
   useEffect(() => {

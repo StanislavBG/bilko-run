@@ -5,6 +5,7 @@ import { useAdminFetch } from '../../../hooks/useAdmin.js';
 import { buildSessionSteps, type Step } from '../../../lib/sessionSteps';
 import type { AdminFetcher, SessionDetail, SessionRow, SessionsList } from './types.js';
 import { C, FONT, Seg, fmtDay, fmtDur, MonoLabel } from './theme.js';
+import { filterQuery } from './useCommandData.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SPEEDS = ['1x', '2x', '4x'] as const;
@@ -52,6 +53,9 @@ function Fact({ label, value, color = C.text }: { label: string; value: string; 
   );
 }
 
+// Row chips: MINE marks the owner's own session, BOT a session with a bot page view.
+const chip: CSSProperties = { flex: 'none', font: `600 8.5px/1 ${FONT.mono}`, padding: '2px 4px', borderRadius: 2 };
+
 const btn: CSSProperties = {
   margin: 0,
   cursor: 'pointer',
@@ -65,16 +69,25 @@ const btn: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days: number; fetcher?: AdminFetcher }) {
+export function SessionsModule({ stage, days, excludeMine = false, excludeBots = false, fetcher }: {
+  stage: boolean;
+  days: number;
+  /** The header's EXCLUDE MINE / BOT toggles, sent to /admin/sessions as mine=exclude / bots=exclude. */
+  excludeMine?: boolean;
+  excludeBots?: boolean;
+  fetcher?: AdminFetcher;
+}) {
   const realFetch = useAdminFetch();
   const adminFetch = fetcher ?? realFetch;
   const { user } = useUser();
   const myEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? null;
+  const toggles = filterQuery({ mine: excludeMine, bots: excludeBots });
 
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [list, setList] = useState<SessionRow[] | null>(null);
-  const [unfiltered, setUnfiltered] = useState<{ days: number; n: number } | null>(null);
+  // Sessions in the window without the search filter, for the shown / total label; only valid for its (days, toggles).
+  const [unfiltered, setUnfiltered] = useState<{ days: number; toggles: string; n: number } | null>(null);
   const [listErr, setListErr] = useState<string | null>(null);
   const [selId, setSelId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -95,20 +108,20 @@ export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days:
     setListErr(null);
     void (async () => {
       try {
-        const res = await adminFetch(`/admin/sessions?days=${days}${filterParam(debouncedQ)}`);
+        const res = await adminFetch(`/admin/sessions?days=${days}${toggles}${filterParam(debouncedQ)}`);
         if (cancelled) return;
         if (!res.ok) { setListErr(`sessions failed (HTTP ${res.status})`); return; }
         const body = (await res.json()) as SessionsList;
         if (cancelled) return;
         const rows = Array.isArray(body?.sessions) ? body.sessions : [];
-        if (!filterParam(debouncedQ)) setUnfiltered({ days, n: rows.length });
+        if (!filterParam(debouncedQ)) setUnfiltered({ days, toggles, n: rows.length });
         setList(rows);
       } catch {
         if (!cancelled) setListErr('network error');
       }
     })();
     return () => { cancelled = true; };
-  }, [adminFetch, days, debouncedQ]);
+  }, [adminFetch, days, toggles, debouncedQ]);
 
   // First row auto-selected; keep the selection while it stays in the list.
   useEffect(() => {
@@ -218,6 +231,9 @@ export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days:
   const selRow = list.find(s => s.session_id === selId) ?? null;
   const head = detail?.session ?? null;
   const prog = last > 0 ? Math.min(stepIdx, last) / last : 0;
+  const total = unfiltered && unfiltered.days === days && unfiltered.toggles === toggles
+    ? Math.max(unfiltered.n, list.length)
+    : list.length;
 
   return (
     <div style={{ position: 'absolute', inset: 0, padding: 12, display: 'grid', gridTemplateColumns: 'minmax(0,.92fr) minmax(0,1.08fr)', gap: 12 }}>
@@ -229,14 +245,15 @@ export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days:
             placeholder="filter · email, visitor id, app"
             style={{ flex: 1, minWidth: 0, height: 28, padding: '0 10px', background: C.well, border: `1px solid ${C.line}`, borderRadius: 3, color: C.text, font: `400 11px/1 ${FONT.mono}`, outline: 'none' }}
           />
-          <span style={{ font: `400 10px/1 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap' }}>{list.length} / {unfiltered && unfiltered.days === days ? Math.max(unfiltered.n, list.length) : list.length}</span>
+          <span style={{ font: `400 10px/1 ${FONT.mono}`, color: C.muted, whiteSpace: 'nowrap' }}>{list.length} / {total}</span>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderTop: `1px solid ${C.line}`, position: 'relative' }}>
           {listErr && <div style={{ padding: 6, font: `400 10px/1.3 ${FONT.mono}`, color: C.redSoft }}>{listErr}</div>}
           {list.length === 0 && <Note>no sessions in window</Note>}
           {list.map(s => {
             const sel = s.session_id === selId;
-            const you = !!myEmail && s.email?.toLowerCase() === myEmail;
+            // Older servers send no `mine`; then the signed-in email decides.
+            const mine = s.mine ?? (!!myEmail && s.email?.toLowerCase() === myEmail);
             return (
               <div
                 key={s.session_id}
@@ -246,7 +263,8 @@ export function SessionsModule({ stage, days, fetcher }: { stage: boolean; days:
                 <span style={{ font: `400 10.5px/1.2 ${FONT.mono}`, color: C.muted }}>{fmtHM(s.started_at)}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                   <span style={{ font: `500 11px/1.2 ${FONT.mono}`, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.visitor_id}>{who(s)}</span>
-                  {you && <span style={{ flex: 'none', font: `600 8.5px/1 ${FONT.mono}`, padding: '2px 4px', borderRadius: 2, background: 'rgba(242,106,46,.18)', color: C.orange }}>YOU</span>}
+                  {mine && <span title="The owner’s own session" style={{ ...chip, background: 'rgba(242,106,46,.18)', color: C.orange }}>MINE</span>}
+                  {s.bot && <span title="Has a bot page view" style={{ ...chip, background: 'rgba(244,185,66,.16)', color: C.amber }}>BOT</span>}
                 </span>
                 <span style={{ font: `500 11px/1.2 ${FONT.mono}`, color: C.ink, textAlign: 'right' }}>{fmtDur(s.duration_ms)}</span>
                 <span style={{ font: `400 9.5px/1.2 ${FONT.mono}`, color: C.faint }}>{fmtDay(s.started_at)}</span>

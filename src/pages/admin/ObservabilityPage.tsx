@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 import { useIsAdmin } from '../../hooks/useAdmin.js';
-import { CommandShell, type RefreshOpt, type WindowOpt } from './command/CommandShell.js';
+import { CommandShell, type RefreshOpt, type TrafficFilterState, type WindowOpt } from './command/CommandShell.js';
 import { KpiStrip, Ticker } from './command/KpiStrip.js';
 import { AppsModule, appTiles, appsSubtitle } from './command/AppsModule.js';
 import { AudienceModule } from './command/AudienceModule.js';
@@ -27,10 +27,13 @@ export function ObservabilityPage() {
   const isAdmin = useIsAdmin();
   const [win, setWin] = useState<WindowOpt>('7D');
   const [refresh, setRefresh] = useState<RefreshOpt>('5M');
+  // EXCLUDE MINE / BOT: traffic, globe, ticker, KPIs, audience, clicks, App health and Sessions follow
+  // them; bandwidth (egress) and blog cadence cannot be split by visitor and stay unfiltered.
+  const [filters, setFilters] = useState<TrafficFilterState>({ mine: false, bots: false });
 
   const days = WINDOW_DAYS[win];
   const { traffic, flows, egress, blog, obs, failed } = useCommandData({
-    days, refreshMs: REFRESH_MS[refresh], enabled: isAdmin,
+    days, refreshMs: REFRESH_MS[refresh], enabled: isAdmin, filters,
   });
 
   useEffect(() => {
@@ -52,8 +55,8 @@ export function ObservabilityPage() {
 
   const tiles = useMemo(() => appTiles(flows.data, obs.data, Date.now()), [flows.data, obs.data]);
   const kpis = useMemo(
-    () => deriveKpis(traffic.data, flows.data, egress.data, blog.data),
-    [traffic.data, flows.data, egress.data, blog.data],
+    () => deriveKpis(traffic.data, flows.data, egress.data, blog.data, filters),
+    [traffic.data, flows.data, egress.data, blog.data, filters],
   );
 
   if (isLoaded && !isAdmin) return <Navigate to="/" replace />;
@@ -64,7 +67,7 @@ export function ObservabilityPage() {
   const render = (key: ModuleKey, stage: boolean) => {
     switch (key) {
       case 'globe': return <GlobeModule stage={stage} traffic={traffic.data} pingCountries={pingCountries} />;
-      case 'sessions': return <SessionsModule stage={stage} days={Math.min(30, days)} />;
+      case 'sessions': return <SessionsModule stage={stage} days={Math.min(30, days)} excludeMine={filters.mine} excludeBots={filters.bots} />;
       case 'apps': return <AppsModule stage={stage} flows={flows} obs={obs} />;
       case 'traffic': return <TrafficModule stage={stage} traffic={traffic} />;
       case 'audience': return <AudienceModule stage={stage} traffic={traffic} days={days} />;
@@ -80,6 +83,8 @@ export function ObservabilityPage() {
       onWindow={setWin}
       refresh={refresh}
       onRefresh={setRefresh}
+      filters={filters}
+      onFilters={setFilters}
       status={{ label: led.label, tone: TONE[led.tone] }}
       kpis={<KpiStrip tiles={kpis} />}
       ticker={<Ticker recent={traffic.data?.recent ?? []} />}

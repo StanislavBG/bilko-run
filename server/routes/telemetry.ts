@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { dbRun, dbGet, dbAll } from '../db.js';
 import { readSessionIds } from '../session-identity.js';
+import { classifyVisitor } from '../services/analytics.js';
 
 const MAX_BATCH = 50;
 const MAX_FIELD_BYTES = 4_000;
@@ -26,6 +27,13 @@ function bumpAndCheck(key: string, limit: number): boolean {
   }
   e.count += 1;
   return e.count <= limit;
+}
+
+// funnel_events / app_errors is_bot: 1 when the request's own User-Agent header is
+// not a person's browser (HeadlessChrome, Playwright, curl, crawlers, no UA). The
+// body's `ua` field is client-written; the header is what actually made the request.
+function uaBotFlag(req: { headers: Record<string, string | string[] | undefined> }): number {
+  return classifyVisitor(String(req.headers['user-agent'] ?? '')) !== 'human' ? 1 : 0;
 }
 
 function ipKey(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
@@ -390,10 +398,11 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     if (!bumpAndCheck(ipKey(req as any), 1200)) return reply.code(429).send({ error: 'rate_limited' });
     const admitted = admit(batchOf(req));
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
+    const isBotUa = uaBotFlag(req);
     for (const e of admitted.records) {
       await dbRun(
-        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env, is_bot)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         clamp(e.name, 80),
         clamp(e.app, 60),
         safeMeta(e.props, MAX_FIELD_BYTES),
@@ -402,6 +411,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
         clamp((e.props as Record<string, unknown> | undefined)?.path, 200),
         eventVersion(e),
         envOf(e),
+        isBotUa,
       );
     }
     return { ok: true, ingested: admitted.records.length };
@@ -438,10 +448,11 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     if (!bumpAndCheck(ipKey(req as any), 300)) return reply.code(429).send({ error: 'rate_limited' });
     const admitted = admit(batchOf(req));
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
+    const isBotUa = uaBotFlag(req);
     for (const e of admitted.records) {
       await dbRun(
-        `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at, env)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at, env, is_bot)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         clamp(e.app, 60),
         clamp(e.version, 20),
         clamp(e.name, 60),
@@ -454,6 +465,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
         safeMeta(e.context, MAX_FIELD_BYTES),
         Math.floor((typeof e.ts === 'number' ? e.ts : Date.now()) / 1000),
         envOf(e),
+        isBotUa,
       );
     }
     await maybePrune();

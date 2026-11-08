@@ -7,6 +7,9 @@ import { VID_COOKIE, SID_COOKIE, VID_MAX_AGE_S, SID_IDLE_S } from './session-ide
 // touching sibling repos. Identity contract: server/session-identity.ts.
 // Never reads input values other than type submit/button. Clicks scrub PII
 // (emails, long digit runs, href query/hash) and honor data-track / data-track-redact.
+// Pageviews add webdriver: true only when navigator.webdriver === true: headed
+// Playwright/agent browsers keep a normal Chrome UA, so it is their only tell, and
+// the pageview ingest flags that visitor's rows as bots.
 export const BEACON_JS = `(function(){try{
 var VC='${VID_COOKIE}',SC='${SID_COOKIE}',LK='bilko_vid',W=window,D=document,L=location;
 var UR=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +30,7 @@ function pv(){try{
 if(adm()||L.pathname===last)return;
 var i=touch(),sc=W.screen||{},b={path:L.pathname,referrer:first?D.referrer||'':'',screen:sc.width+'x'+sc.height,visitor_id:i.v,session_id:i.s},
 q=L.search.replace(/^\\?/,'').split('&'),j,kv,k;
+if(navigator.webdriver===true)b.webdriver=true;
 for(j=0;j<q.length;j++){kv=q[j].split('=');k=kv[0];
 if(/^utm_(source|medium|campaign|term|content)$/.test(k))try{b[k]=decodeURIComponent((kv[1]||'').replace(/\\+/g,' ')).slice(0,100)}catch(x){}}
 last=L.pathname;first=false;

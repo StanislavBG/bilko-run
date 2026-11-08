@@ -205,7 +205,8 @@ export const MIGRATIONS = [
     tool TEXT,
     email TEXT,
     metadata TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_bot INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE INDEX IF NOT EXISTS idx_funnel_events_event ON funnel_events(event)`,
   `CREATE INDEX IF NOT EXISTS idx_funnel_events_created ON funnel_events(created_at)`,
@@ -260,7 +261,8 @@ export const MIGRATIONS = [
     visitor_id    TEXT,
     session_id    TEXT,
     context_json  TEXT,
-    created_at    INTEGER NOT NULL
+    created_at    INTEGER NOT NULL,
+    is_bot        INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE INDEX IF NOT EXISTS idx_app_errors_app_created ON app_errors (app, created_at DESC)`,
   // Slowly-changing dimension, not an event stream: one row per install_id,
@@ -740,11 +742,18 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['env', 'TEXT'],
     // 1 = the owner (web-products checkout_start from an IP with admin page hits).
     ['is_admin', 'INTEGER DEFAULT 0'],
+    // 1 = the request UA is not a person's browser (classifyVisitor !== 'human');
+    // set by /api/analytics/event and /api/telemetry/event.
+    ['is_bot', 'INTEGER NOT NULL DEFAULT 0'],
   ],
   // SEQUENCE of the booking's .ics: 0 when claimed, +1 per reschedule (server/services/service-bookings.ts).
   service_bookings: [['ics_sequence', 'INTEGER NOT NULL DEFAULT 0']],
   app_logs: [['env', 'TEXT']],
-  app_errors: [['env', 'TEXT']],
+  app_errors: [
+    ['env', 'TEXT'],
+    // 1 = the request UA is not a person's browser; set by /api/telemetry/error.
+    ['is_bot', 'INTEGER NOT NULL DEFAULT 0'],
+  ],
   app_installs: [
     ['env', 'TEXT'],
     // First-run setup outcomes: JSON `{ <step>: <status> }` or NULL (sanitizeSeeds in routes/telemetry.ts).

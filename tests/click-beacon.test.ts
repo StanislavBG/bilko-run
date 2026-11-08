@@ -86,7 +86,7 @@ function el(attrs: Record<string, string>, text: string, opts: { tag?: string; r
   return e;
 }
 
-function run(opts: { path?: string; cookie?: string; ls?: Record<string, string>; search?: string; referrer?: string } = {}) {
+function run(opts: { path?: string; cookie?: string; ls?: Record<string, string>; search?: string; referrer?: string; webdriver?: unknown } = {}) {
   const jar = new Map<string, string>();
   for (const part of (opts.cookie ?? '').split(';')) {
     const [k, v] = part.split('=');
@@ -106,7 +106,11 @@ function run(opts: { path?: string; cookie?: string; ls?: Record<string, string>
   };
   const ctx: any = {
     document, location: loc, history, localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) },
-    navigator: { sendBeacon: (url: string, body: string) => { beacons.push({ url, body: JSON.parse(body) }); return true; } },
+    navigator: {
+      sendBeacon: (url: string, body: string) => { beacons.push({ url, body: JSON.parse(body) }); return true; },
+      // Only set when the case asks for it, so "no webdriver property at all" is covered too.
+      ...('webdriver' in opts ? { webdriver: opts.webdriver } : {}),
+    },
     addEventListener: (t: string, f: Function) => { (listeners[t] ??= []).push(f); },
     screen: { width: 1280, height: 720 },
   };
@@ -151,6 +155,23 @@ describe('beacon runtime', () => {
     const pvs = r.beacons.filter((b) => b.url === '/api/analytics/pageview');
     expect(pvs.map((b) => b.body.path)).toEqual(['/a', '/b', '/c']);
     expect(pvs[1].body.referrer).toBe('');
+  });
+
+  it('adds webdriver: true to every pageview when navigator.webdriver === true', () => {
+    const r = run({ path: '/a', cookie: `bilko_vid=${VID}; bilko_sid=${SID}`, webdriver: true });
+    r.history.pushState({}, '', '/b');
+    const pvs = r.beacons.filter((b) => b.url === '/api/analytics/pageview');
+    expect(pvs.map((b) => [b.body.path, b.body.webdriver])).toEqual([['/a', true], ['/b', true]]);
+    expect(pvs[0].body).toMatchObject({ visitor_id: VID, session_id: SID });
+  });
+
+  it('sends no webdriver field when navigator.webdriver is not exactly true', () => {
+    const cases = [run(), run({ webdriver: false }), run({ webdriver: undefined }), run({ webdriver: 'true' }), run({ webdriver: 1 })];
+    for (const r of cases) {
+      expect(r.beacons).toHaveLength(1);
+      expect(r.beacons[0].url).toBe('/api/analytics/pageview');
+      expect(r.beacons[0].body).not.toHaveProperty('webdriver');
+    }
   });
 
   it('does nothing on /admin but tracks after navigating away', () => {

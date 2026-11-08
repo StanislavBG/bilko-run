@@ -472,3 +472,41 @@ describe('Telemetry ingest — session cookie stamping', () => {
     expect(rows).toEqual([{ session_id: 'body-sid', visitor_id: 'body-vid' }]);
   });
 });
+
+// funnel_events / app_errors carry is_bot from the request's own User-Agent header
+// (classifyVisitor !== 'human'), so automation runs drop out of every bots filter
+// even in sessions that never send a page view.
+describe('Telemetry ingest — is_bot from the request UA', () => {
+  const HEADLESS_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36';
+  const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+  function injectUa(url: string, body: unknown, ua: string, ip: string) {
+    return app.inject({
+      method: 'POST',
+      url,
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, 'user-agent': ua },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function ingest(tool: string, ua: string, ip: string) {
+    const ev = await injectUa('/api/telemetry/event', { batch: [{ app: tool, name: 'repo_opened', visitor_id: `${tool}-v`, props: {} }] }, ua, ip);
+    const er = await injectUa('/api/telemetry/error', { batch: [{ app: tool, version: '1.0.0', name: 'TypeError', msg: 'boom', visitor_id: `${tool}-v`, ts: Date.now() }] }, ua, ip);
+    expect([ev.statusCode, er.statusCode]).toEqual([200, 200]);
+    const events = await dbAll<{ is_bot: number }>('SELECT is_bot FROM funnel_events WHERE tool = ?', tool);
+    const errors = await dbAll<{ is_bot: number }>('SELECT is_bot FROM app_errors WHERE app = ?', tool);
+    return { events: events.map((r) => r.is_bot), errors: errors.map((r) => r.is_bot) };
+  }
+
+  beforeEach(async () => {
+    await dbRun("DELETE FROM funnel_events WHERE tool IN ('ua-headless', 'ua-chrome')");
+  });
+
+  it('a HeadlessChrome UA stores is_bot = 1 on funnel_events and app_errors', async () => {
+    expect(await ingest('ua-headless', HEADLESS_UA, '10.6.0.1')).toEqual({ events: [1], errors: [1] });
+  });
+
+  it('a desktop Chrome UA stores is_bot = 0 on funnel_events and app_errors', async () => {
+    expect(await ingest('ua-chrome', CHROME_UA, '10.6.0.2')).toEqual({ events: [0], errors: [0] });
+  });
+});

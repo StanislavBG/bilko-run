@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
-import { classifyReferrer, parseUa, isBot } from '../services/analytics.js';
-import { slugFromPath, visitorHash, stableVisitorId, sessionCookie } from '../page-hits.js';
+import { classifyReferrer, parseUa, isBot, classifyVisitor } from '../services/analytics.js';
+import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, flushPageHits } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
@@ -25,6 +25,10 @@ const _eventCounts = new Map<string, { count: number; windowStart: number }>();
 const EVENT_RATE_LIMIT_VISITOR = 120; // per minute per visitor
 const EVENT_RATE_LIMIT_IP = 600;      // per minute per IP (allows shared networks)
 const EVENT_RATE_WINDOW_MS = 60_000;
+
+// How far back a webdriver pageview re-flags its visitor's page_hits, click_events
+// and page_views. Every UPDATE carries this lower bound on its time column.
+const AUTOMATION_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 function bumpAndCheck(key: string, limit: number): boolean {
   const now = Date.now();
@@ -107,7 +111,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const body = (raw && typeof raw === 'object' ? raw : null) as {
         path?: string; referrer?: string; screen?: string; email?: string;
         utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_term?: string; utm_content?: string;
-        visitor_id?: string; session_id?: string;
+        visitor_id?: string; session_id?: string; webdriver?: unknown;
       } | null;
       const path = (body?.path ?? '/').slice(0, 200);
       const referrer = (body?.referrer ?? '').slice(0, 500) || null;
@@ -133,7 +137,13 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       // Capture bot traffic too — admin needs to be able to see what's hitting
       // the site (random internet traffic, scrapers, link-unfurlers). Reports
       // filter is_bot = 0 by default so the visible numbers don't shift.
-      const bot = isBot(ua) ? 1 : 0;
+      // body.webdriver is the beacon's navigator.webdriver (boolean true only):
+      // headed Playwright/agent browsers send a normal Chrome UA, so it is their
+      // only tell. The identity lookup below still keys on the UA alone, so a
+      // signed-in automated run keeps its email and is_admin.
+      const webdriver = body?.webdriver === true;
+      const uaBot = isBot(ua);
+      const bot = uaBot || webdriver ? 1 : 0;
 
       const refHost = parseRefHost(referrer);
       const { bucket: sourceBucket } = await classifyReferrer(refHost);
@@ -141,7 +151,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       // Admin flag comes only from a verified Clerk token — never from body.email.
       const verified = await verifyClerkToken(req.headers.authorization);
       let verifiedEmail = verified;
-      if (!email && !bot && !verifiedEmail) {
+      if (!email && !uaBot && !verifiedEmail) {
         const token = sessionCookie(req.headers.cookie);
         try {
           if (token) verifiedEmail = (await verifyClerkToken('Bearer ' + token)) ?? null;
@@ -184,6 +194,34 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
           ],
         });
       }
+      // A webdriver pageview also re-flags that visitor's last 24 h, keyed on the
+      // request's own bilko_vid cookie, never body.visitor_id: a client can only
+      // flag itself. Rows already marked as bots keep their more specific class.
+      const flagVid = webdriver ? readSessionIds(req.headers.cookie).visitorId : null;
+      if (flagVid) {
+        // page_hits rows sit in a 60 s memory buffer before they reach the table,
+        // including the hit for the document that ran this beacon. Write them out
+        // first so the UPDATE below can see them.
+        await flushPageHits();
+        const sinceMs = nowMs - AUTOMATION_LOOKBACK_MS;
+        // click_events has no ts_ms index; the UTC day bound lets idx_click_events_date
+        // narrow the scan. date is the UTC day of ts_ms, so it drops no row ts_ms keeps.
+        const sinceDate = new Date(sinceMs).toISOString().slice(0, 10);
+        stmts.push(
+          {
+            sql: 'UPDATE page_hits SET is_bot = ?, visitor_class = ? WHERE ts_ms >= ? AND client_vid = ? AND is_bot IS NOT ?',
+            args: [1, 'script', sinceMs, flagVid, 1],
+          },
+          {
+            sql: 'UPDATE click_events SET is_bot = ? WHERE date >= ? AND ts_ms >= ? AND client_vid = ? AND is_bot IS NOT ?',
+            args: [1, sinceDate, sinceMs, flagVid, 1],
+          },
+          {
+            sql: 'UPDATE page_views SET is_bot = ? WHERE visitor_id = ? AND created_at_ms >= ? AND is_bot IS NOT ?',
+            args: [1, flagVid, sinceMs, 1],
+          },
+        );
+      }
       await getClient().batch(stmts, 'write');
     } catch { /* never fail */ }
 
@@ -216,9 +254,11 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         try { metadata = JSON.stringify(body.metadata).slice(0, 2000); } catch { metadata = null; }
       }
 
+      // Same rule as the telemetry ingest: the request's own UA decides is_bot.
+      const isBotUa = classifyVisitor(String(req.headers['user-agent'] ?? '')) !== 'human' ? 1 : 0;
       await dbRun(
-        'INSERT INTO funnel_events (event, ip_hash, tool, email, metadata, session_id, visitor_id, path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        event, null, tool, null, metadata, sessionId, visitorId, path,
+        'INSERT INTO funnel_events (event, ip_hash, tool, email, metadata, session_id, visitor_id, path, is_bot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        event, null, tool, null, metadata, sessionId, visitorId, path, isBotUa,
       );
 
       // Flip sessions.converted only when the visitor_id on the request matches

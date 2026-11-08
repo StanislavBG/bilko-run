@@ -519,7 +519,9 @@ export const MIGRATIONS = [
   )`,
   // Hosted Git Viewer portfolios (see server/routes/tools/git-viewer.ts). One
   // row per GitHub login (lowercased); payload is the generated GitData JSON.
-  // owner_email/allowlist are set once the login's owner claims it.
+  // owner_email/allowlist are set once the login's owner claims it. created_at
+  // (unix s) and built_by (owner|automation|visitor|showcase) are stamped by the
+  // row's first insert only; rows built before 2026-11-07 keep NULL.
   `CREATE TABLE IF NOT EXISTS git_viewer_profiles (
     login        TEXT PRIMARY KEY,
     payload      TEXT NOT NULL,
@@ -527,7 +529,9 @@ export const MIGRATIONS = [
     locked_count INTEGER NOT NULL DEFAULT 0,
     owner_email  TEXT,
     allowlist    TEXT,
-    updated_at   INTEGER NOT NULL
+    updated_at   INTEGER NOT NULL,
+    created_at   INTEGER,
+    built_by     TEXT
   )`,
   // Per-project live EVENT STREAM (see server/routes/project-events.ts) — the
   // append-only sibling of project_snapshots above. A sibling app's dashboard
@@ -776,5 +780,10 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['status_note', 'TEXT'],
     ['status_at', 'INTEGER'],
     ['receipt_hash', 'TEXT'],
+  ],
+  // Builder attribution, stamped once by a row's first insert (server/routes/tools/git-viewer.ts).
+  git_viewer_profiles: [
+    ['created_at', 'INTEGER'],
+    ['built_by', 'TEXT'],
   ],
 };

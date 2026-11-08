@@ -1,7 +1,11 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { dbAll, dbGet, dbRun } from '../../db.js';
-import { verifyClerkGitHubUser } from '../../clerk.js';
+import { ADMIN_EMAILS, verifyClerkGitHubUser, verifyClerkToken } from '../../clerk.js';
+import { sessionCookie } from '../../page-hits.js';
+import { readSessionIds } from '../../session-identity.js';
+import { classifyVisitor } from '../../services/analytics.js';
 import { getActiveSubscriptionLive } from '../../services/stripe.js';
+import { loadOwnerIds } from '../../traffic-filters.js';
 import { getUsageCount, hashIp, incrementUsage } from './_shared.js';
 import type { OgMeta } from '../../og-meta.js';
 
@@ -33,6 +37,20 @@ import type { OgMeta } from '../../og-meta.js';
 //     GitHub login linked to their Clerk account, and paid subscribers.
 //   - Global guard: after a GitHub rate-limit failure, every new build answers
 //     503 until the budget resets (no point queueing jobs that will fail).
+//
+// Builder attribution, for the owner's 2026-11-18 keep-or-drop count of
+// portfolios built by someone else: a row's first insert stamps created_at
+// (unix s) and built_by, and no ON CONFLICT update touches either, so
+// refreshes, claims and rows built before 2026-11-07 (NULL) keep theirs.
+// A GET that creates a row is classed, first match wins:
+//   owner       its verified Clerk token or __session cookie is an ADMIN_EMAILS
+//               account, or its bilko_vid is in loadOwnerIds().cookieIds
+//   automation  classifyVisitor(UA) is not 'human', or its bilko_vid sent a
+//               page view with is_bot = 1 in the last 24h
+//   visitor     anyone else
+// The refresh sweep stamps the showcase logins it seeds 'showcase'; a claim's
+// placeholder row takes the claimer's class. Only the class is stored: never
+// the cookie id, email or IP.
 
 export const GIT_VIEWER_ENDPOINT = 'git-viewer';
 export const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
@@ -55,6 +73,9 @@ export const CLAIMED_FREE_REFRESH_SEC = 7 * 24 * 60 * 60;
 export const SHOWCASE_LOGINS: readonly string[] = ['stanislavbg'];
 
 type Tier = 'free' | 'paid';
+/** Who caused a portfolio's first build: git_viewer_profiles.built_by (see header comment). */
+type BuiltBy = 'owner' | 'automation' | 'visitor' | 'showcase';
+type SignedInUser = NonNullable<Awaited<ReturnType<typeof verifyClerkGitHubUser>>>;
 
 export type BuildPortfolio = (opts: {
   user: string;
@@ -73,9 +94,16 @@ interface ProfileRow {
   owner_email: string | null;
   allowlist: string | null;
   updated_at: number;
+  created_at: number | null;
+  built_by: BuiltBy | null;
 }
 
-interface Job { tier: Tier; allowlist?: string[] }
+interface Job {
+  tier: Tier;
+  allowlist?: string[];
+  /** Stamped as built_by only if this job's write is the row's first insert; an existing row keeps its own. */
+  builtBy: BuiltBy | null;
+}
 
 // ── Portfolio builder (the git-viewer library) ──────────────────────────────
 // Loaded lazily so the host boots, and tests run, without the package; tests
@@ -212,11 +240,14 @@ async function generate(login: string, job: Job): Promise<void> {
       allowlist: paid && job.allowlist?.length ? job.allowlist : undefined,
       writing: paid ? 'profile-repo' : 'none',
     });
+    const now = Math.floor(Date.now() / 1000);
+    // created_at and built_by come from the row's first insert only: the update never sets them.
     await dbRun(
-      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at, created_at, built_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(login) DO UPDATE SET payload = excluded.payload, tier = excluded.tier,
          locked_count = excluded.locked_count, updated_at = excluded.updated_at`,
-      login, JSON.stringify(data), job.tier, lockedCount, Math.floor(Date.now() / 1000),
+      login, JSON.stringify(data), job.tier, lockedCount, now, now, job.builtBy,
     );
     failed.delete(login);
   } catch (err: any) {
@@ -303,8 +334,8 @@ async function tierFor(login: string, row: Pick<ProfileRow, 'owner_email'> | und
   return sub.gitViewer || sub.isPro ? 'paid' : 'free';
 }
 
-function jobFor(row: Pick<ProfileRow, 'allowlist'> | undefined, tier: Tier): Job {
-  return { tier, allowlist: row?.allowlist ? JSON.parse(row.allowlist) as string[] : undefined };
+function jobFor(row: Pick<ProfileRow, 'allowlist'> | undefined, tier: Tier, builtBy: BuiltBy | null): Job {
+  return { tier, allowlist: row?.allowlist ? JSON.parse(row.allowlist) as string[] : undefined, builtBy };
 }
 
 function secondsToUtcMidnight(): number {
@@ -332,31 +363,54 @@ export async function runGitViewerRefresh(): Promise<number> {
     );
     if (row?.payload && row.updated_at >= dailyCutoff) continue;
     if (jobs.has(login) || isFresh(failed, login) || isFresh(notFound, login)) continue;
-    if (enqueue(login, jobFor(row, await tierFor(login, row)))) queued++;
+    if (enqueue(login, jobFor(row, await tierFor(login, row), 'showcase'))) queued++;
   }
 
   const rows = await dbAll<ProfileRow>(
-    `SELECT login, tier, owner_email, allowlist FROM git_viewer_profiles
+    `SELECT login, tier, owner_email, allowlist, built_by FROM git_viewer_profiles
      WHERE owner_email IS NOT NULL AND updated_at < CASE tier WHEN 'paid' THEN ? ELSE ? END
      ORDER BY updated_at ASC LIMIT ?`,
     dailyCutoff, now - CLAIMED_FREE_REFRESH_SEC, REFRESH_BATCH,
   );
   for (const row of rows) {
     if (jobs.has(row.login) || isFresh(failed, row.login)) continue;
-    if (enqueue(row.login, jobFor(row, await tierFor(row.login, row)))) queued++;
+    if (enqueue(row.login, jobFor(row, await tierFor(row.login, row), row.built_by))) queued++;
   }
   return queued;
 }
 
 /** Whether a new build of `login` skips the per-IP budget (see header comment). */
-async function exemptFromIpLimit(login: string, row: ProfileRow | undefined, authHeader: string | undefined): Promise<boolean> {
+async function exemptFromIpLimit(login: string, row: ProfileRow | undefined, user: SignedInUser | null): Promise<boolean> {
   if (SHOWCASE_LOGINS.includes(login) || row?.owner_email) return true;
-  if (!authHeader) return false;
-  const user = await verifyClerkGitHubUser(authHeader);
   if (!user) return false;
   if (user.githubLogins.includes(login)) return true;
   const sub = await getActiveSubscriptionLive(user.email);
   return sub.gitViewer || sub.isPro;
+}
+
+const BOT_VIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const isAdminEmail = (email: string | null | undefined): boolean =>
+  !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+
+/**
+ * The built_by class of a request that creates a profile row (see header comment).
+ * `bearerEmail` is the verified email of its Authorization token, already looked
+ * up by the caller. Owner signals go first, so the owner's own headless runs count
+ * as the owner's. Reads the cookies; stores nothing.
+ */
+async function builderClass(headers: FastifyRequest['headers'], bearerEmail: string | null): Promise<BuiltBy> {
+  if (isAdminEmail(bearerEmail)) return 'owner';
+  const session = sessionCookie(headers.cookie);
+  if (session && isAdminEmail(await verifyClerkToken(`Bearer ${session}`))) return 'owner';
+  const vid = readSessionIds(headers.cookie).visitorId;
+  if (vid && (await loadOwnerIds()).cookieIds.includes(vid)) return 'owner';
+  if (classifyVisitor(String(headers['user-agent'] ?? '')) !== 'human') return 'automation';
+  const botView = vid && await dbGet<{ n: number }>(
+    'SELECT 1 AS n FROM page_views WHERE visitor_id = ? AND is_bot = 1 AND created_at_ms >= ? LIMIT 1',
+    vid, Date.now() - BOT_VIEW_WINDOW_MS,
+  );
+  return botView ? 'automation' : 'visitor';
 }
 
 const OG_PATH_RE = /^\/projects\/git-viewer\/(?:index\.html)?$/;
@@ -407,7 +461,7 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
       const tier = row.tier === 'free' ? await tierFor(login, row) : row.tier;
       // While GitHub's budget is spent a regeneration would just fail, so keep serving the cached copy.
       if ((stale || tier !== row.tier) && !budgetBlocked() && !jobs.has(login) && !isFresh(failed, login)) {
-        enqueue(login, jobFor(row, tier));
+        enqueue(login, jobFor(row, tier, row.built_by));
       }
       reply.header('cache-control', 'public, max-age=300');
       reply.header('content-type', 'application/json; charset=utf-8');
@@ -432,12 +486,15 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     }
 
     // Only a NEW generation costs GitHub calls, so only that counts against the IP.
-    const exempt = await exemptFromIpLimit(login, row, req.headers.authorization);
+    const user = await verifyClerkGitHubUser(req.headers.authorization);
+    const exempt = await exemptFromIpLimit(login, row, user);
     const ipHash = hashIp(req.ip);
     if (!exempt && await getUsageCount(ipHash, GIT_VIEWER_ENDPOINT) >= NEW_BUILDS_PER_IP) {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: secondsToUtcMidnight() });
     }
-    if (!enqueue(login, jobFor(row, await tierFor(login, row)))) {
+    // A row that already exists (a claim's placeholder) keeps its own stamp; only a build that creates the row is classed.
+    const builtBy = row ? row.built_by : await builderClass(req.headers, user?.email ?? null);
+    if (!enqueue(login, jobFor(row, await tierFor(login, row), builtBy))) {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: 60 });
     }
     if (!exempt) await incrementUsage(ipHash, GIT_VIEWER_ENDPOINT);
@@ -465,14 +522,16 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     }
 
     const allowlistJson = allowlist.length ? JSON.stringify(allowlist) : null;
+    // A new placeholder row takes the claimer's class; claiming a built portfolio keeps its original stamp.
+    const builtBy = await builderClass(req.headers, user.email);
     await dbRun(
-      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, allowlist, updated_at)
-       VALUES (?, '', 'free', 0, ?, ?, 0)
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, allowlist, updated_at, created_at, built_by)
+       VALUES (?, '', 'free', 0, ?, ?, 0, ?, ?)
        ON CONFLICT(login) DO UPDATE SET owner_email = excluded.owner_email, allowlist = excluded.allowlist`,
-      login, user.email, allowlistJson,
+      login, user.email, allowlistJson, Math.floor(Date.now() / 1000), builtBy,
     );
     const tier = await tierFor(login, { owner_email: user.email });
-    enqueue(login, jobFor({ allowlist: allowlistJson }, tier));
+    enqueue(login, jobFor({ allowlist: allowlistJson }, tier, builtBy));
     return reply.send({ ok: true, login, tier, allowlist });
   });
 

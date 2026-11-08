@@ -4,7 +4,7 @@ vi.mock('../server/clerk.js', () => ({
   verifyClerkToken: vi.fn().mockResolvedValue(null),
   verifyClerkGitHubUser: vi.fn().mockResolvedValue(null),
   requireAuth: vi.fn(),
-  ADMIN_EMAILS: [],
+  ADMIN_EMAILS: ['admin@x.com'],
 }));
 
 vi.mock('../server/services/stripe.js', () => ({
@@ -13,8 +13,8 @@ vi.mock('../server/services/stripe.js', () => ({
 }));
 
 import Fastify from 'fastify';
-import { initDb, dbGet, dbRun } from '../server/db.js';
-import { verifyClerkGitHubUser } from '../server/clerk.js';
+import { initDb, dbAll, dbGet, dbRun } from '../server/db.js';
+import { verifyClerkGitHubUser, verifyClerkToken } from '../server/clerk.js';
 import { getActiveSubscriptionLive } from '../server/services/stripe.js';
 import {
   registerGitViewerRoutes, setPortfolioBuilder, drainGitViewerQueue, resetGitViewerState,
@@ -35,6 +35,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   await dbRun('DELETE FROM git_viewer_profiles');
   await dbRun('DELETE FROM usage_tracking');
+  await dbRun('DELETE FROM page_views');
+  await dbRun('DELETE FROM internal_devices');
   resetGitViewerState();
   build.mockReset();
   build.mockImplementation(async opts => ({
@@ -43,6 +45,7 @@ beforeEach(async () => {
   }));
   setPortfolioBuilder(build);
   vi.mocked(verifyClerkGitHubUser).mockReset().mockResolvedValue(null);
+  vi.mocked(verifyClerkToken).mockReset().mockResolvedValue(null);
   vi.mocked(getActiveSubscriptionLive).mockReset()
     .mockResolvedValue({ isPro: false, tier: 'free', gitViewer: false });
   vi.unstubAllEnvs();
@@ -63,10 +66,10 @@ async function exhaustIp(ip = '10.0.0.1'): Promise<void> {
   build.mockReset().mockResolvedValue({ data: { projects: [] }, lockedCount: 0 });
 }
 
-const claim = (body: unknown) =>
+const claim = (body: unknown, headers: Record<string, string> = {}) =>
   app.inject({
     method: 'POST', url: '/api/git-viewer/claim',
-    headers: { authorization: 'Bearer t', 'content-type': 'application/json' },
+    headers: { authorization: 'Bearer t', 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 
@@ -453,5 +456,173 @@ describe('free tier cut to 1 project (2026-10-14)', () => {
     await drainGitViewerQueue();
     expect(build).toHaveBeenCalledWith(expect.objectContaining({ user: showcase, maxProjects: PLAN_LIMITS.paid }));
     expect((await get(showcase)).json()).toMatchObject({ tier: 'paid' });
+  });
+});
+
+describe('builder attribution: created_at + built_by, stamped by the first insert only', () => {
+  const CHROME_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  const HEADLESS_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36';
+  const VID = '0b7e3c52-5f1a-4d8e-9a6b-2c4d6e8f0a1b';
+  const OTHER_VID = '7d1f9a3e-2b4c-4e6a-8f0d-1a3c5e7b9d2f';
+  const IP = '10.0.0.7';
+  const LONG_AGO = 1_700_000_000;
+  const HOUR_MS = 60 * 60 * 1000;
+  const nowSec = () => Math.floor(Date.now() / 1000);
+  const today = () => new Date().toISOString().slice(0, 10);
+
+  const getAs = (login: string, headers: Record<string, string>) =>
+    app.inject({ method: 'GET', url: `/api/git-viewer/u/${login}`, remoteAddress: IP, headers });
+
+  const stamp = (login: string) =>
+    dbGet<{ created_at: number | null; built_by: string | null }>(
+      'SELECT created_at, built_by FROM git_viewer_profiles WHERE login = ?', login,
+    );
+
+  /** A GET that queues a new build of `login`, run to completion; returns the row's stamp. */
+  async function buildAs(login: string, headers: Record<string, string>) {
+    expect((await getAs(login, headers)).statusCode).toBe(202);
+    await drainGitViewerQueue();
+    return stamp(login);
+  }
+
+  /** The stored row as one string, to prove no identifier landed in any column. */
+  const storedRow = async (login: string) =>
+    JSON.stringify(await dbGet('SELECT * FROM git_viewer_profiles WHERE login = ?', login));
+
+  it('visitor: a browser with no owner or bot signal, stamped now, storing only the class', async () => {
+    const before = nowSec();
+    const row = await buildAs('newcomer', { 'user-agent': CHROME_UA, cookie: `bilko_vid=${VID}` });
+    expect(row?.built_by).toBe('visitor');
+    expect(row?.created_at).toBeGreaterThanOrEqual(before);
+    expect(row?.created_at).toBeLessThanOrEqual(nowSec());
+    const stored = await storedRow('newcomer');
+    expect(JSON.parse(stored).owner_email).toBeNull();
+    for (const id of [VID, IP]) expect(stored).not.toContain(id);
+  });
+
+  it('owner: an ADMIN_EMAILS Bearer token; the email and cookie id are not stored', async () => {
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'admin@x.com', githubLogins: [] });
+    expect(await buildAs('bytoken', { 'user-agent': CHROME_UA, authorization: 'Bearer t', cookie: `bilko_vid=${VID}` }))
+      .toMatchObject({ built_by: 'owner' });
+    const stored = await storedRow('bytoken');
+    for (const id of ['admin@x.com', VID, IP]) expect(stored).not.toContain(id);
+  });
+
+  it('owner: an ADMIN_EMAILS __session cookie', async () => {
+    vi.mocked(verifyClerkToken).mockImplementation(async header => (header === 'Bearer sess.jwt' ? 'admin@x.com' : null));
+    expect(await buildAs('bycookie', { 'user-agent': CHROME_UA, cookie: `__session=sess.jwt; bilko_vid=${VID}` }))
+      .toMatchObject({ built_by: 'owner' });
+  });
+
+  it("owner: a bilko_vid among the owner's ids, ahead of a headless UA", async () => {
+    await dbRun(
+      `INSERT INTO page_views (path, date, visitor_id, is_admin, created_at_ms) VALUES ('/admin', ?, ?, 1, ?)`,
+      today(), VID, Date.now() - HOUR_MS,
+    );
+    expect(await buildAs('byvid', { 'user-agent': HEADLESS_UA, cookie: `bilko_vid=${VID}` })).toMatchObject({ built_by: 'owner' });
+  });
+
+  it('a non-admin signed-in account is not the owner', async () => {
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'dev@x.com', githubLogins: [] });
+    vi.mocked(verifyClerkToken).mockResolvedValue('dev@x.com');
+    expect(await buildAs('someone', { 'user-agent': CHROME_UA, authorization: 'Bearer t', cookie: '__session=sess.jwt' }))
+      .toMatchObject({ built_by: 'visitor' });
+  });
+
+  it('automation: a HeadlessChrome UA', async () => {
+    expect(await buildAs('headless', { 'user-agent': HEADLESS_UA })).toMatchObject({ built_by: 'automation' });
+  });
+
+  it('automation: a browser UA whose bilko_vid sent a bot page view in the last 24h; an older one is a visitor', async () => {
+    await dbRun(
+      `INSERT INTO page_views (path, date, visitor_id, is_bot, created_at_ms)
+       VALUES ('/projects/git-viewer/', ?, ?, 1, ?), ('/projects/git-viewer/', ?, ?, 1, ?)`,
+      today(), VID, Date.now() - HOUR_MS, today(), OTHER_VID, Date.now() - 25 * HOUR_MS,
+    );
+    expect(await buildAs('webdriver', { 'user-agent': CHROME_UA, cookie: `bilko_vid=${VID}` })).toMatchObject({ built_by: 'automation' });
+    expect(await buildAs('lastweek', { 'user-agent': CHROME_UA, cookie: `bilko_vid=${OTHER_VID}` })).toMatchObject({ built_by: 'visitor' });
+  });
+
+  it('showcase: the refresh sweep seeds a showcase login as showcase and keeps the stamp on its later refresh', async () => {
+    const showcase = SHOWCASE_LOGINS[0];
+    expect(await runGitViewerRefresh()).toBe(1);
+    await drainGitViewerQueue();
+    expect(await stamp(showcase)).toMatchObject({ built_by: 'showcase', created_at: expect.any(Number) });
+
+    await dbRun('UPDATE git_viewer_profiles SET created_at = ?, updated_at = ? WHERE login = ?', LONG_AGO, nowSec() - 25 * 3600, showcase);
+    expect(await runGitViewerRefresh()).toBe(1);
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledTimes(2);
+    expect(await stamp(showcase)).toEqual({ created_at: LONG_AGO, built_by: 'showcase' });
+  });
+
+  it('a refresh rebuild keeps the original created_at and built_by, and a legacy row keeps NULL', async () => {
+    const stale = nowSec() - 25 * 3600;
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at, created_at, built_by)
+       VALUES ('veteran', '{}', 'free', 0, ?, ?, 'visitor')`, stale, LONG_AGO,
+    );
+    await dbRun(
+      `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES ('legacy', '{}', 'free', 0, ?)`, stale,
+    );
+    // The owner's views trigger both rebuilds; their class must not replace the stored one.
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'admin@x.com', githubLogins: [] });
+    for (const login of ['veteran', 'legacy']) {
+      expect((await getAs(login, { 'user-agent': CHROME_UA, authorization: 'Bearer t' })).statusCode).toBe(200);
+    }
+    await drainGitViewerQueue();
+    expect(build).toHaveBeenCalledTimes(2);
+    const rows = await dbAll<{ login: string; updated_at: number; created_at: number | null; built_by: string | null }>(
+      `SELECT login, updated_at, created_at, built_by FROM git_viewer_profiles WHERE login IN ('veteran', 'legacy') ORDER BY login`,
+    );
+    expect(rows).toEqual([
+      { login: 'legacy', updated_at: expect.any(Number), created_at: null, built_by: null },
+      { login: 'veteran', updated_at: expect.any(Number), created_at: LONG_AGO, built_by: 'visitor' },
+    ]);
+    for (const r of rows) expect(r.updated_at).toBeGreaterThan(stale);
+  });
+
+  it("a claim's placeholder row takes the claimer's class, which its first build keeps", async () => {
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'admin@x.com', githubLogins: ['mine'] });
+    expect((await claim({ login: 'mine' }, { 'user-agent': CHROME_UA })).statusCode).toBe(200);
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'dev@x.com', githubLogins: ['theirs'] });
+    expect((await claim({ login: 'theirs' }, { 'user-agent': CHROME_UA })).statusCode).toBe(200);
+    await drainGitViewerQueue();
+    const rows = await dbAll<{ login: string; payload: string; created_at: number | null; built_by: string | null }>(
+      `SELECT login, payload, created_at, built_by FROM git_viewer_profiles WHERE login IN ('mine', 'theirs') ORDER BY login`,
+    );
+    expect(rows.map(r => [r.login, r.built_by])).toEqual([['mine', 'owner'], ['theirs', 'visitor']]);
+    for (const r of rows) {
+      expect(r.payload).not.toBe(''); // the build landed on the placeholder
+      expect(r.created_at).toBeGreaterThan(LONG_AGO);
+    }
+  });
+
+  it("claiming a built portfolio, and the claimed-profile sweep, keep the original builder's stamp", async () => {
+    expect(await buildAs('popular', { 'user-agent': CHROME_UA })).toMatchObject({ built_by: 'visitor' });
+    await dbRun('UPDATE git_viewer_profiles SET created_at = ? WHERE login = ?', LONG_AGO, 'popular');
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'admin@x.com', githubLogins: ['popular'] });
+    expect((await claim({ login: 'popular' }, { 'user-agent': CHROME_UA })).statusCode).toBe(200);
+    await drainGitViewerQueue();
+
+    await dbRun('UPDATE git_viewer_profiles SET updated_at = ? WHERE login = ?', nowSec() - 8 * 86400, 'popular');
+    await runGitViewerRefresh();
+    await drainGitViewerQueue();
+    expect(build.mock.calls.filter(([opts]) => opts.user === 'popular')).toHaveLength(3); // view, claim, sweep
+    expect(await dbGet('SELECT owner_email, created_at, built_by FROM git_viewer_profiles WHERE login = ?', 'popular'))
+      .toEqual({ owner_email: 'admin@x.com', created_at: LONG_AGO, built_by: 'visitor' });
+  });
+
+  it('an existing table gains both columns at boot, NULL on its legacy rows', async () => {
+    await dbRun('DROP TABLE git_viewer_profiles');
+    await dbRun(`CREATE TABLE git_viewer_profiles (
+      login TEXT PRIMARY KEY, payload TEXT NOT NULL,
+      tier TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free','paid')),
+      locked_count INTEGER NOT NULL DEFAULT 0, owner_email TEXT, allowlist TEXT, updated_at INTEGER NOT NULL
+    )`);
+    await dbRun(`INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, updated_at) VALUES ('old-timer', '{}', 'paid', 0, 1)`);
+    await initDb();
+    expect(await stamp('old-timer')).toEqual({ created_at: null, built_by: null });
+    expect(await buildAs('after-boot', { 'user-agent': HEADLESS_UA })).toMatchObject({ built_by: 'automation' });
   });
 });

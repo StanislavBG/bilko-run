@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBotRequest } from '../services/analytics.js';
-import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, flushPageHits } from '../page-hits.js';
+import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, markAutomationVisitor, isAutomationVisitor } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
 import { internalFlag } from '../internal-traffic.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
@@ -27,8 +27,8 @@ const EVENT_RATE_LIMIT_VISITOR = 120; // per minute per visitor
 const EVENT_RATE_LIMIT_IP = 600;      // per minute per IP (allows shared networks)
 const EVENT_RATE_WINDOW_MS = 60_000;
 
-// How far back a webdriver pageview re-flags its visitor's page_hits, click_events
-// and page_views. Every UPDATE carries this lower bound on its time column.
+// How far back a visitor's first webdriver pageview re-flags its page_hits,
+// click_events and page_views. Every UPDATE carries this lower bound on its time column.
 const AUTOMATION_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 function bumpAndCheck(key: string, limit: number): boolean {
@@ -195,15 +195,13 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
           ],
         });
       }
-      // A webdriver pageview also re-flags that visitor's last 24 h, keyed on the
-      // request's own bilko_vid cookie, never body.visitor_id: a client can only
-      // flag itself. Rows already marked as bots keep their more specific class.
+      // A webdriver pageview records its visitor once in automation_visitors, keyed on
+      // the request's own bilko_vid cookie, never body.visitor_id: a client can only
+      // flag itself. From then on page_hits and click_events rows are stamped at write
+      // time (server/page-hits.ts), so the backfill of the last 24 h runs only on first
+      // detection. Rows already marked as bots keep their more specific class.
       const flagVid = webdriver ? readSessionIds(req.headers.cookie).visitorId : null;
-      if (flagVid) {
-        // page_hits rows sit in a 60 s memory buffer before they reach the table,
-        // including the hit for the document that ran this beacon. Write them out
-        // first so the UPDATE below can see them.
-        await flushPageHits();
+      if (flagVid && await markAutomationVisitor(flagVid, nowMs)) {
         const sinceMs = nowMs - AUTOMATION_LOOKBACK_MS;
         // click_events has no ts_ms index; the UTC day bound lets idx_click_events_date
         // narrow the scan. date is the UTC day of ts_ms, so it drops no row ts_ms keeps.
@@ -306,7 +304,9 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const ua = String(req.headers['user-agent'] ?? '').slice(0, 300);
       const nowMs = Date.now();
       const date = new Date(nowMs).toISOString().slice(0, 10);
-      const bot = isBotRequest(req.headers);
+      // body.webdriver is the beacon's navigator.webdriver (boolean true only); a
+      // visitor already recorded in automation_visitors is a bot on every click too.
+      const bot = isBotRequest(req.headers) || body?.webdriver === true || await isAutomationVisitor(clientVid);
       // Same identity rules as page_hits: Clerk session cookie, skipped for bots.
       let userEmail: string | null = null;
       const token = bot ? null : sessionCookie(req.headers.cookie);

@@ -703,6 +703,14 @@ export const MIGRATIONS = [
     label        TEXT,
     marked_at_ms INTEGER NOT NULL
   )`,
+  // Visitors seen driving a browser under automation (navigator.webdriver === true),
+  // by bilko_vid cookie id. Written once by /api/analytics/pageview (INSERT OR IGNORE);
+  // server/page-hits.ts keeps an in-memory copy so page_hits and click_events rows are
+  // stamped is_bot = 1 at write time. first_seen_ms is the first detection, epoch ms.
+  `CREATE TABLE IF NOT EXISTS automation_visitors (
+    visitor_id    TEXT PRIMARY KEY,
+    first_seen_ms INTEGER NOT NULL
+  )`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

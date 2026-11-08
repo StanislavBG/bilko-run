@@ -7,9 +7,10 @@ import { VID_COOKIE, SID_COOKIE, VID_MAX_AGE_S, SID_IDLE_S } from './session-ide
 // touching sibling repos. Identity contract: server/session-identity.ts.
 // Never reads input values other than type submit/button. Clicks scrub PII
 // (emails, long digit runs, href query/hash) and honor data-track / data-track-redact.
-// Pageviews add webdriver: true only when navigator.webdriver === true: headed
-// Playwright/agent browsers keep a normal Chrome UA, so it is their only tell, and
-// the pageview ingest flags that visitor's rows as bots.
+// Pageviews and clicks add webdriver: true only when navigator.webdriver === true:
+// headed Playwright/agent browsers keep a normal Chrome UA, so it is their only tell.
+// The pageview ingest records the visitor in automation_visitors; click ingest stores
+// is_bot = 1 for the flag or for a known automation visitor.
 export const BEACON_JS = `(function(){try{
 var VC='${VID_COOKIE}',SC='${SID_COOKIE}',LK='bilko_vid',W=window,D=document,L=location;
 var UR=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,8 +49,9 @@ var tag=el.tagName.toLowerCase(),tr=t.closest('[data-track]'),label=el.getAttrib
 if(!label){label=(el.textContent||'').replace(/\\s+/g,' ').trim();
 if(!label&&tag==='input'&&(el.type==='submit'||el.type==='button'))label=el.value||''}
 label=t.closest('[data-track-redact]')?'':String(label).replace(/[^\\s@]+@[^\\s@]+\\.[^\\s@]+/g,'[email]').replace(/\\d{6,}/g,'#').slice(0,80);
-var i=touch();
-navigator.sendBeacon('/api/analytics/click',JSON.stringify({path:location.pathname,tag:tag,id:el.id||'',label:label,href:(el.getAttribute('href')||'').split('#')[0].split('?')[0],visitor_id:i.v,session_id:i.s,track:((tr&&tr.getAttribute('data-track'))||'').slice(0,60)}))
+var i=touch(),c={path:location.pathname,tag:tag,id:el.id||'',label:label,href:(el.getAttribute('href')||'').split('#')[0].split('?')[0],visitor_id:i.v,session_id:i.s,track:((tr&&tr.getAttribute('data-track'))||'').slice(0,60)};
+if(navigator.webdriver===true)c.webdriver=true;
+navigator.sendBeacon('/api/analytics/click',JSON.stringify(c))
 }catch(x){}},true);
 pv()
 }catch(x){}})();`;

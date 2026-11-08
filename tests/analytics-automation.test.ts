@@ -8,7 +8,7 @@ vi.mock('../server/clerk.js', async (importOriginal) => {
 });
 
 import { registerAnalyticsRoutes } from '../server/routes/analytics.js';
-import { recordPageHit } from '../server/page-hits.js';
+import { recordPageHit, flushPageHits, resetAutomationVisitorCache } from '../server/page-hits.js';
 
 // Headed Playwright keeps the stock desktop Chrome UA; only navigator.webdriver
 // (sent by the beacon as body.webdriver) gives it away. Headless announces itself.
@@ -33,7 +33,22 @@ beforeEach(async () => {
   await dbRun('DELETE FROM page_hits');
   await dbRun('DELETE FROM click_events');
   await dbRun('DELETE FROM funnel_events');
+  await dbRun('DELETE FROM automation_visitors');
+  resetAutomationVisitorCache();
 });
+
+function click(body: Record<string, unknown>, vidCookie?: string) {
+  return app.inject({
+    method: 'POST',
+    url: '/api/analytics/click',
+    headers: {
+      'content-type': 'text/plain;charset=UTF-8',
+      'user-agent': CHROME_UA,
+      ...(vidCookie ? { cookie: `bilko_vid=${vidCookie}; bilko_sid=${SID}` } : {}),
+    },
+    payload: JSON.stringify(body),
+  });
+}
 
 // Posted the way the beacon posts it: navigator.sendBeacon sends a text/plain JSON string.
 function pageview(body: Record<string, unknown>, ua: string, vidCookie?: string) {
@@ -131,11 +146,52 @@ describe('POST /api/analytics/pageview — automation flags', () => {
     expect(await flags(OTHER)).toEqual({ hits: ['1:script'], clicks: [1], views: [1, 1] });
   });
 
-  it('flags page hits still waiting in the recorder buffer', async () => {
+  it('a hit buffered before the webdriver pageview is written as is_bot 1 at flush', async () => {
     // The document request that loaded the beacon is buffered, not yet in page_hits.
     recordPageHit({ ts: Date.now() - 1_000, path: '/projects/git-viewer/', status: 200, ip: '203.0.113.9', ua: CHROME_UA, clientVid: VID });
+    recordPageHit({ ts: Date.now() - 1_000, path: '/projects/git-viewer/', status: 200, ip: '203.0.113.9', ua: CHROME_UA, clientVid: OTHER });
     await pageview({ path: '/projects/git-viewer/', visitor_id: VID, session_id: SID, webdriver: true }, CHROME_UA, VID);
+    // The request path no longer flushes the buffer itself.
+    expect((await flags(VID)).hits).toEqual([]);
+    await flushPageHits();
     expect((await flags(VID)).hits).toEqual(['1:script']);
+    expect((await flags(OTHER)).hits).toEqual(['0:human']);
+  });
+
+  it('a known automation visitor stays flagged after the in-memory cache is reloaded from the table', async () => {
+    await pageview({ path: '/a', visitor_id: VID, session_id: SID, webdriver: true }, CHROME_UA, VID);
+    resetAutomationVisitorCache();
+    recordPageHit({ ts: Date.now(), path: '/b', status: 200, ip: '203.0.113.9', ua: CHROME_UA, clientVid: VID });
+    await flushPageHits();
+    expect((await flags(VID)).hits).toEqual(['1:script']);
+  });
+
+  it('records the visitor once and backfills only on first detection', async () => {
+    await pageview({ path: '/first', visitor_id: VID, session_id: SID, webdriver: true }, CHROME_UA, VID);
+    const row = await dbGet<{ visitor_id: string; first_seen_ms: number }>('SELECT visitor_id, first_seen_ms FROM automation_visitors');
+    expect(row?.visitor_id).toBe(VID);
+    // Rows written directly after the first detection: a backfill would flip them.
+    await seed(VID, 0);
+    await pageview({ path: '/second', visitor_id: VID, session_id: SID, webdriver: true }, CHROME_UA, VID);
+    expect(await viewBot('/second')).toBe(1);
+    expect(await flags(VID)).toEqual({ hits: ['0:human'], clicks: [0], views: [1, 0, 1] });
+    expect((await dbAll('SELECT visitor_id FROM automation_visitors')).length).toBe(1);
+  });
+});
+
+describe('POST /api/analytics/click — automation flags', () => {
+  it('a click sent after the last pageview of a webdriver visit is is_bot 1', async () => {
+    await pageview({ path: '/driven', visitor_id: VID, session_id: SID, webdriver: true }, CHROME_UA, VID);
+    // No webdriver flag on the click itself: the known visitor is enough.
+    await click({ path: '/driven', tag: 'button', visitor_id: VID, session_id: SID }, VID);
+    expect((await flags(VID)).clicks).toEqual([1]);
+  });
+
+  it('a click carrying webdriver: true is is_bot 1 with no prior pageview', async () => {
+    await click({ path: '/x', tag: 'a', visitor_id: OTHER, session_id: SID, webdriver: true }, OTHER);
+    await click({ path: '/x', tag: 'a', visitor_id: VID, session_id: SID, webdriver: 'true' }, VID);
+    expect((await flags(OTHER)).clicks).toEqual([1]);
+    expect((await flags(VID)).clicks).toEqual([0]);
   });
 });
 

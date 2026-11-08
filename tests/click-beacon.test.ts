@@ -165,6 +165,18 @@ describe('beacon runtime', () => {
     expect(pvs[0].body).toMatchObject({ visitor_id: VID, session_id: SID });
   });
 
+  it('adds webdriver: true to the click payload when navigator.webdriver === true', () => {
+    const r = run({ path: '/a', cookie: `bilko_vid=${VID}; bilko_sid=${SID}`, webdriver: true });
+    r.click(el({ href: '/go' }, 'go'));
+    const c = r.beacons.find((b) => b.url === '/api/analytics/click')!.body;
+    expect(c).toMatchObject({ webdriver: true, visitor_id: VID });
+    for (const wd of [false, 'true', 1]) {
+      const h = run({ path: '/a', webdriver: wd });
+      h.click(el({ href: '/go' }, 'go'));
+      expect(h.beacons.find((b) => b.url === '/api/analytics/click')!.body).not.toHaveProperty('webdriver');
+    }
+  });
+
   it('sends no webdriver field when navigator.webdriver is not exactly true', () => {
     const cases = [run(), run({ webdriver: false }), run({ webdriver: undefined }), run({ webdriver: 'true' }), run({ webdriver: 1 })];
     for (const r of cases) {

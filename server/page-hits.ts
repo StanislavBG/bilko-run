@@ -149,6 +149,69 @@ export function recordPageHit(input: PageHitInput): void {
   });
 }
 
+// Automation visitors (bilko_vid cookie ids from a navigator.webdriver === true
+// pageview). The automation_visitors table is the source of truth; this set is its
+// in-memory copy, loaded once per process, so rows are stamped at write time.
+let automationVids = new Set<string>();
+let automationLoad: Promise<void> | null = null;
+
+function loadAutomationVisitors(): Promise<void> {
+  if (!automationLoad) {
+    automationLoad = (async () => {
+      try {
+        const rows = await dbAll<{ visitor_id: string }>('SELECT visitor_id FROM automation_visitors');
+        for (const r of rows) automationVids.add(r.visitor_id);
+      } catch {
+        automationLoad = null; // retry on next use
+      }
+    })();
+  }
+  return automationLoad;
+}
+
+/** True when `vid` is a known automation visitor. Never throws. */
+export async function isAutomationVisitor(vid: string | null | undefined): Promise<boolean> {
+  if (!vid) return false;
+  await loadAutomationVisitors();
+  return automationVids.has(vid);
+}
+
+/**
+ * Records `vid` as an automation visitor. Returns true only on first detection
+ * (the INSERT OR IGNORE added the row), so the caller backfills once per visitor.
+ */
+export async function markAutomationVisitor(vid: string, nowMs: number): Promise<boolean> {
+  await loadAutomationVisitors();
+  if (automationVids.has(vid)) return false;
+  automationVids.add(vid);
+  const res = await getClient().execute({
+    sql: 'INSERT OR IGNORE INTO automation_visitors (visitor_id, first_seen_ms) VALUES (?, ?)',
+    args: [vid, nowMs],
+  });
+  return res.rowsAffected > 0;
+}
+
+/** Test hook: drop the in-memory copy so the next use reloads it from the table. */
+export function resetAutomationVisitorCache(): void {
+  automationVids = new Set<string>();
+  automationLoad = null;
+}
+
+function stampAutomation(r: PageHitRow): void {
+  if (r.client_vid && r.is_bot !== 1 && automationVids.has(r.client_vid)) {
+    r.is_bot = 1;
+    r.visitor_class = 'script';
+  }
+}
+
+function insertStmt(r: PageHitRow): InStatement {
+  return {
+    sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin, is_internal, session_id, client_vid, visitor_class)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot, r.ip, r.ua, r.referrer, r.visitor_id, r.user_email, r.is_admin, r.is_internal, r.session_id, r.client_vid, r.visitor_class],
+  };
+}
+
 export async function flushPageHits(): Promise<void> {
   if (flushInFlight) return flushInFlight;
   flushInFlight = (async () => {
@@ -156,15 +219,31 @@ export async function flushPageHits(): Promise<void> {
       const rows = buffer;
       buffer = [];
       const client = getClient();
-      const stmts: InStatement[] = rows.map((r) => ({
-        sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin, is_internal, session_id, client_vid, visitor_class)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot, r.ip, r.ua, r.referrer, r.visitor_id, r.user_email, r.is_admin, r.is_internal, r.session_id, r.client_vid, r.visitor_class],
-      }));
-      for (let i = 0; i < stmts.length; i += BATCH_CHUNK) {
+      await loadAutomationVisitors();
+      for (let i = 0; i < rows.length; i += BATCH_CHUNK) {
+        // Stamp each chunk just before it is written, so a visitor detected while
+        // an earlier chunk was in flight is still caught.
+        const chunk = rows.slice(i, i + BATCH_CHUNK);
+        chunk.forEach(stampAutomation);
         try {
-          await client.batch(stmts.slice(i, i + BATCH_CHUNK), 'write');
+          await client.batch(chunk.map(insertStmt), 'write');
         } catch { /* dropped chunk: don't re-queue, avoids unbounded growth */ }
+      }
+      // A visitor first detected while this flush's batches were in flight may have
+      // run its one-time backfill before these rows landed: flag them now.
+      const late = new Map<string, number>();
+      for (const r of rows) {
+        if (r.client_vid && r.is_bot !== 1 && automationVids.has(r.client_vid)) {
+          late.set(r.client_vid, Math.min(late.get(r.client_vid) ?? r.ts_ms, r.ts_ms));
+        }
+      }
+      for (const [vid, sinceMs] of late) {
+        try {
+          await client.execute({
+            sql: 'UPDATE page_hits SET is_bot = ?, visitor_class = ? WHERE ts_ms >= ? AND client_vid = ? AND is_bot IS NOT ?',
+            args: [1, 'script', sinceMs, vid, 1],
+          });
+        } catch { /* best effort */ }
       }
 
       const today = dayKey(Date.now());

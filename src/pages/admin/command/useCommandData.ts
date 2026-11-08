@@ -46,15 +46,16 @@ export function filterQuery(f?: TrafficFilterState): string {
 }
 
 /**
- * `filters` only relabels tiles: the traffic and flows counts already arrive filtered. The server
- * keeps counting totals.botHits with bots excluded, so BOT HITS keeps its value and reads 'excluded'.
+ * The BOT HITS 'excluded' and UNIQUE VISITORS 'excl. mine' labels come only from `traffic.filters`, the
+ * filters the server applied to these numbers, never from the local toggles: while a refetch is in flight
+ * or after it fails the data on screen is still the old, differently filtered response. The server keeps
+ * counting totals.botHits with bots excluded, so BOT HITS keeps its value and reads 'excluded'.
  */
 export function deriveKpis(
   traffic: TrafficData | null,
   flows: FlowsData | null,
   egress: EgressData | null,
   blog: BlogCadence | null,
-  filters?: TrafficFilterState,
 ): KpiTile[] {
   const t = traffic?.totals;
   const tile = (label: string, value: string | null, sub: string, tone: Tone = 'neutral', spark?: number[]): KpiTile => ({
@@ -62,8 +63,9 @@ export function deriveKpis(
   });
 
   const botPct = t ? Math.round((t.botHits / Math.max(1, t.hits + t.botHits)) * 100) : 0;
-  const botsOut = filters?.bots === true;
-  const mineNote = filters?.mine ? ' · excl. mine' : '';
+  const echo = traffic?.filters;
+  const botsOut = echo?.bots === 'exclude';
+  const mineNote = echo?.mine === 'exclude' ? ' · excl. mine' : '';
   const top = traffic?.topClicks?.[0];
 
   const apps = flows?.apps ?? null;

@@ -55,8 +55,8 @@ export function ObservabilityPage() {
 
   const tiles = useMemo(() => appTiles(flows.data, obs.data, Date.now()), [flows.data, obs.data]);
   const kpis = useMemo(
-    () => deriveKpis(traffic.data, flows.data, egress.data, blog.data, filters),
-    [traffic.data, flows.data, egress.data, blog.data, filters],
+    () => deriveKpis(traffic.data, flows.data, egress.data, blog.data),
+    [traffic.data, flows.data, egress.data, blog.data],
   );
 
   if (isLoaded && !isAdmin) return <Navigate to="/" replace />;
@@ -85,6 +85,7 @@ export function ObservabilityPage() {
       onRefresh={setRefresh}
       filters={filters}
       onFilters={setFilters}
+      mineHits={traffic.data?.filters?.mineHits}
       status={{ label: led.label, tone: TONE[led.tone] }}
       kpis={<KpiStrip tiles={kpis} />}
       ticker={<Ticker recent={traffic.data?.recent ?? []} />}

@@ -112,6 +112,8 @@ export interface CommandShellProps {
   filters?: TrafficFilterState;
   /** Shows the EXCLUDE control and receives every change, including the persisted value adopted on mount. */
   onFilters?: (f: TrafficFilterState) => void;
+  /** The owner's own hits in the window (the traffic filters echo); shown on the MINE toggle's title. */
+  mineHits?: number;
   status: { label: string; tone: 'ok' | 'warn' | 'err' };
   kpis: ReactNode;
   ticker: ReactNode;
@@ -123,7 +125,7 @@ const TONE = { ok: C.green, warn: C.amber, err: C.red } as const;
 const labelBase = `500 10px/1 ${FONT.mono}`;
 
 export function CommandShell(props: CommandShellProps) {
-  const { window: win, onWindow, refresh, onRefresh, filters, onFilters, status, kpis, ticker, headers, render, onLayout } = props;
+  const { window: win, onWindow, refresh, onRefresh, filters, onFilters, mineHits, status, kpis, ticker, headers, render, onLayout } = props;
   const fl = filters ?? NO_FILTERS;
   const excluded = excludedList(fl);
   useCommandFonts();
@@ -297,7 +299,9 @@ export function CommandShell(props: CommandShellProps) {
             <ToggleSet
               options={EXCLUDES}
               value={{ MINE: fl.mine, BOT: fl.bots }}
-              titles={EXCLUDE_TITLES}
+              titles={typeof mineHits === 'number'
+                ? { ...EXCLUDE_TITLES, MINE: `Hide the owner’s own traffic · ${mineHits.toLocaleString('en-US')} owner hits in this window` }
+                : EXCLUDE_TITLES}
               onChange={(k, next) => onFilters(k === 'MINE' ? { mine: next, bots: fl.bots } : { mine: fl.mine, bots: next })}
             />
           ))}

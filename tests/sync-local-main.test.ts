@@ -182,6 +182,31 @@ describe('sync-local-main.sh', () => {
   const backupAbsent = () =>
     spawnSync('git', ['rev-parse', '-q', '--verify', 'refs/heads/backup/main-pre-sync'], { cwd: repo }).status !== 0;
 
+  // The LOST guard is the last line of defence when a replay drops local work without a conflict.
+  // A failing commit signer makes every non-fast-forward cherry-pick fail with no unmerged path, so
+  // replay() skips it: the rebuild would delete server/local.ts, a file no origin commit touched.
+  for (const args of [[], ['--no-push']]) {
+    it(`exit 1 and nothing changes when the rebuild would drop a file origin never touched (${args.join(' ') || 'default'})`, () => {
+      const local = commit(repo, 'server/local.ts', 'local\n', 'feat: local only');
+      commit(other, 'content/blog/post.md', 'post\n', 'feat(blog): publish post');
+      git(other, 'push', '-q', 'origin', 'main');
+      const originBefore = git(origin, 'rev-parse', 'main');
+      git(repo, 'config', 'commit.gpgSign', 'true');
+      git(repo, 'config', 'gpg.program', 'false');
+
+      const r = run(...args);
+      expect(r.status, r.stderr).toBe(1);
+      expect(r.stderr).toContain('the rebuild would change files origin/main never touched: server/local.ts; local main untouched');
+      expect(r.stdout).toBe('');
+      expect(pushes()).toEqual([]);
+      expect(git(repo, 'rev-parse', 'main')).toBe(local);
+      expect(git(origin, 'rev-parse', 'main')).toBe(originBefore);
+      expect(readFileSync(join(repo, 'server/local.ts'), 'utf-8')).toBe('local\n');
+      expect(backupAbsent()).toBe(true);
+      expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(1);
+    });
+  }
+
   it('strictly ahead with only unshipped commits: exit 0, nothing moves', () => {
     commit(repo, 'server/a.ts', 'a\n', 'feat: a');
     commit(repo, 'server/b.ts', 'b\n', 'feat: b');

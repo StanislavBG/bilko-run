@@ -49,7 +49,7 @@ import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, traffic
 import { runGates, gateSummary, gateLines, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
-import { withPublishCheckout, type PublishOutcome } from './publish-checkout.js';
+import { withPublishCheckout, type PublishOutcome, type LocalMainSync } from './publish-checkout.js';
 import { readLatestRegistryRaw } from './registry-source.js';
 import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
@@ -134,7 +134,16 @@ function checkoutErr<T>(outcome: PublishOutcome<T> & { ok: false }) {
   return err(`publish checkout failed at stage "${outcome.stage}": ${outcome.error}`);
 }
 function pushedLine<T>(outcome: PublishOutcome<T> & { ok: true }): string {
-  return outcome.committed ? `pushed: ${outcome.sha}` : 'no changes to commit';
+  if (!outcome.committed) return 'no changes to commit';
+  const pushed = `pushed: ${outcome.sha}`;
+  return outcome.localMain ? `${pushed}\n${localMainLine(outcome.localMain)}` : pushed;
+}
+// One line: did the best-effort catch-up after the push bring the host checkout's local main along?
+function localMainLine(sync: LocalMainSync): string {
+  const detail = sync.detail ? ` — ${sync.detail}` : '';
+  if (sync.synced) return `local main: synced${detail}`;
+  const exit = sync.exitCode === null ? 'no exit code' : `exit ${sync.exitCode}`;
+  return `local main: not synced (${exit})${detail}`;
 }
 
 // ── Server ───────────────────────────────────────────────────────────────

@@ -121,7 +121,18 @@ function checkoutErr(outcome) {
     return err(`publish checkout failed at stage "${outcome.stage}": ${outcome.error}`);
 }
 function pushedLine(outcome) {
-    return outcome.committed ? `pushed: ${outcome.sha}` : 'no changes to commit';
+    if (!outcome.committed)
+        return 'no changes to commit';
+    const pushed = `pushed: ${outcome.sha}`;
+    return outcome.localMain ? `${pushed}\n${localMainLine(outcome.localMain)}` : pushed;
+}
+// One line: did the best-effort catch-up after the push bring the host checkout's local main along?
+function localMainLine(sync) {
+    const detail = sync.detail ? ` — ${sync.detail}` : '';
+    if (sync.synced)
+        return `local main: synced${detail}`;
+    const exit = sync.exitCode === null ? 'no exit code' : `exit ${sync.exitCode}`;
+    return `local main: not synced (${exit})${detail}`;
 }
 // ── Server ───────────────────────────────────────────────────────────────
 const server = new McpServer({

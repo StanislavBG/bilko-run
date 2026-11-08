@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, rm, writeFile, readFile, mkdir } from 'node:fs/promises';
+import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { withPublishCheckout } from '../mcp-host-server/src/publish-checkout.js';
@@ -30,6 +31,46 @@ async function cloneAndSeed(originDir: string, cloneDir: string): Promise<void> 
   await git(cloneDir, ['add', 'fileA.txt']);
   await git(cloneDir, ['commit', '-m', 'seed']);
   await git(cloneDir, ['push', 'origin', 'main']);
+}
+
+// Stands in for the real scripts/sync-local-main.sh (tests/sync-local-main.test.ts covers that one)
+// in a temp hostRoot. Mode 0644 on purpose: it only runs if withPublishCheckout calls it via `bash`.
+async function writeSyncStub(hostDir: string, body: string): Promise<void> {
+  await mkdir(join(hostDir, 'scripts'), { recursive: true });
+  await writeFile(join(hostDir, 'scripts', 'sync-local-main.sh'), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o644 });
+}
+
+// A stub that records how it was called (argv, cwd, BILKO_SYNC_REPO_ROOT, whether the publish
+// lock is still held, origin's main at call time), then logs stderrLines and exits with exitCode.
+function recordingStub(
+  recordFile: string,
+  lockDir: string,
+  originDir: string,
+  stderrLines: string[],
+  exitCode: number,
+): string {
+  return [
+    '{',
+    '  printf "argc=%s\\n" "$#"',
+    '  printf "args=%s\\n" "$*"',
+    '  printf "cwd=%s\\n" "$(pwd -P)"',
+    '  printf "root=%s\\n" "${BILKO_SYNC_REPO_ROOT:-}"',
+    `  if [ -d '${lockDir}' ]; then echo lock=held; else echo lock=released; fi`,
+    `  printf "origin=%s\\n" "$(git --git-dir='${originDir}' rev-parse main)"`,
+    `} > '${recordFile}'`,
+    ...stderrLines.map((line) => `echo '${line}' >&2`),
+    `exit ${exitCode}`,
+  ].join('\n');
+}
+
+async function readRecord(file: string): Promise<Record<string, string>> {
+  const text = await readFile(file, 'utf8');
+  return Object.fromEntries(
+    text.trim().split('\n').map((line) => {
+      const eq = line.indexOf('=');
+      return [line.slice(0, eq), line.slice(eq + 1)];
+    }),
+  );
 }
 
 let tmp: string;
@@ -72,6 +113,8 @@ describe('withPublishCheckout', () => {
     expect(outcome.committed).toBe(true);
     expect(outcome.result).toBe('ok');
     expect(outcome.sha).toBeTruthy();
+    // hostDir has no scripts/sync-local-main.sh, so no local-main catch-up ran.
+    expect(outcome.localMain).toBeUndefined();
 
     // Verify via a fresh clone of origin: only fileB.txt landed, fileA.txt unchanged,
     // ignored-extra.txt (untracked, not in `paths`) never landed.
@@ -254,5 +297,110 @@ describe('withPublishCheckout', () => {
     } finally {
       clearTimeout(release);
     }
+  });
+
+  describe('local-main catch-up after the push', () => {
+    it('runs `bash <hostRoot>/scripts/sync-local-main.sh --no-push` from hostRoot once the push has landed', async () => {
+      const originDir = resolve(tmp, 'origin7.git');
+      const hostDir = resolve(tmp, 'host7');
+      const checkoutDir = resolve(tmp, 'checkout7');
+      const recordFile = resolve(tmp, 'sync-call7.txt');
+
+      await makeBareOrigin(originDir);
+      await cloneAndSeed(originDir, hostDir);
+      await writeSyncStub(
+        hostDir,
+        recordingStub(recordFile, `${checkoutDir}.lock`, originDir, [
+          '[sync-local-main] local main: 0 commit(s) to keep on top in order',
+          '[sync-local-main] fast-forwarded to 0123abcd',
+        ], 0),
+      );
+
+      const outcome = await withPublishCheckout(
+        { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main' },
+        async (root) => {
+          await writeFile(join(root, 'fileB.txt'), 'built output\n', 'utf8');
+          return { result: 'ok', paths: ['fileB.txt'], message: 'publish fileB' };
+        },
+      );
+
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) throw new Error(`expected success, got stage=${outcome.stage} error=${outcome.error}`);
+      expect(outcome.committed).toBe(true);
+      expect(outcome.sha).toBeTruthy();
+      expect(outcome.localMain).toEqual({
+        synced: true,
+        exitCode: 0,
+        detail: '[sync-local-main] fast-forwarded to 0123abcd',
+      });
+
+      const call = await readRecord(recordFile);
+      expect(call.argc).toBe('1');
+      expect(call.args).toBe('--no-push');
+      expect(call.cwd).toBe(realpathSync(hostDir));
+      expect(call.root).toBe(hostDir);
+      // Our commit was already on origin when the catch-up ran, and the publish lock was free.
+      expect(call.origin).toBe(outcome.sha);
+      expect(call.lock).toBe('released');
+    });
+
+    it('a failing catch-up leaves ok, committed and sha alone and reports localMain.synced false', async () => {
+      const originDir = resolve(tmp, 'origin8.git');
+      const hostDir = resolve(tmp, 'host8');
+      const checkoutDir = resolve(tmp, 'checkout8');
+
+      await makeBareOrigin(originDir);
+      await cloneAndSeed(originDir, hostDir);
+      await writeSyncStub(
+        hostDir,
+        [
+          "echo '[sync-local-main] local main: 2 commit(s) to keep on top in order' >&2",
+          "echo '[sync-local-main] error: HEAD is not on branch main' >&2",
+          'exit 3',
+        ].join('\n'),
+      );
+
+      const outcome = await withPublishCheckout(
+        { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main' },
+        async (root) => {
+          await writeFile(join(root, 'fileB.txt'), 'built output\n', 'utf8');
+          return { result: 'ok', paths: ['fileB.txt'], message: 'publish fileB' };
+        },
+      );
+
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) throw new Error(`expected success, got stage=${outcome.stage} error=${outcome.error}`);
+      expect(outcome.committed).toBe(true);
+      expect(outcome.result).toBe('ok');
+      expect(outcome.sha).toBe((await git(originDir, ['rev-parse', 'main'])).stdout.trim());
+      expect(outcome.localMain).toEqual({
+        synced: false,
+        exitCode: 3,
+        detail: '[sync-local-main] error: HEAD is not on branch main',
+      });
+      expect(existsSync(`${checkoutDir}.lock`)).toBe(false);
+    });
+
+    it('does not run the catch-up when there was nothing to commit', async () => {
+      const originDir = resolve(tmp, 'origin9.git');
+      const hostDir = resolve(tmp, 'host9');
+      const checkoutDir = resolve(tmp, 'checkout9');
+      const recordFile = resolve(tmp, 'sync-call9.txt');
+
+      await makeBareOrigin(originDir);
+      await cloneAndSeed(originDir, hostDir);
+      await writeSyncStub(hostDir, recordingStub(recordFile, `${checkoutDir}.lock`, originDir, [], 0));
+
+      const outcome = await withPublishCheckout(
+        { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main' },
+        async () => ({ result: 'noop', paths: ['fileA.txt'], message: 'no real change' }),
+      );
+
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) throw new Error('unreachable');
+      expect(outcome.committed).toBe(false);
+      expect(outcome.localMain).toBeUndefined();
+      expect(existsSync(recordFile)).toBe(false);
+    });
   });
 });

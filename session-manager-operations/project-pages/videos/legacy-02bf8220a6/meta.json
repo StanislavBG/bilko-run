@@ -1,0 +1,22 @@
+{
+  "id": "legacy-02bf8220a6",
+  "title": "Demo video",
+  "kind": "project-demo",
+  "style": "legacy",
+  "lengthS": 30,
+  "createdAt": "2026-11-05T17:05:27.574Z",
+  "character": null,
+  "sources": [],
+  "report": {
+    "lufs": null,
+    "truePeakDb": null,
+    "speechS": null,
+    "readingGrade": null,
+    "checks": [],
+    "bytes": 1764031
+  },
+  "macroVersion": 0,
+  "seedVersion": 0,
+  "model": "unknown",
+  "effort": "unknown"
+}

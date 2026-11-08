@@ -20,6 +20,11 @@
       "import": "./dist/testing/index.js",
       "require": "./dist/testing/index.cjs"
     },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.js",
+      "require": "./dist/vite/index.cjs"
+    },
     "./styles/game-tokens.css": "./styles/game-tokens.css",
     "./styles/sudoku-token-aliases.css": "./styles/sudoku-token-aliases.css"
   },
@@ -63,6 +68,7 @@
     "react-dom": "^18.3.1",
     "tsup": "^8.0.0",
     "typescript": "^5.6.0",
+    "vite": "^6.4.2",
     "vitest": "^3.2.4"
   },
   "publishConfig": {

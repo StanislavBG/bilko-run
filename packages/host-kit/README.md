@@ -13,7 +13,8 @@ Sibling apps in the workspace depend on it locally:
 The npm package name is `host-kit` (`pnpm add host-kit@^0.11.0`; 0.11.0 is the first release that tags every telemetry record with `env`, see [Telemetry](#telemetry)). Peer deps: `react` ^18, and `@playwright/test` >=1.40 only if you use `host-kit/testing`.
 
 - **Tailwind.** Tailwind skips `node_modules`, so apps that render kit components need `@source "<rel>/node_modules/host-kit/dist";` in their Tailwind CSS.
-- **After changing host-kit.** Run `pnpm --filter host-kit build` in the Bilko repo, then `pnpm install` in each app (pnpm copies the untracked `dist/` into the app).
+- **Vite.** Apps on the `file:` dependency add `hostKitVite()` from `host-kit/vite` to `plugins` in `vite.config.ts`. Vite pre-bundles host-kit into `node_modules/.vite/deps` and rebuilds that copy only when the lockfile or the Vite config changes. A `file:` dependency's version is not in `pnpm-lock.yaml`, so without the plugin `pnpm dev` (and a Playwright `webServer` running it) keeps serving the old host-kit after `pnpm install`. The plugin's name carries a fingerprint of the installed host-kit, so Vite re-bundles when that copy changes and keeps its cache otherwise. npm installs record the version in the lockfile and need no plugin. `optimizeDeps.exclude: ['host-kit']` is not a fix: Vite serves an excluded dep at an immutable `?v=` URL that also changes only with the lockfile or config, so an open browser keeps the old copy.
+- **After changing host-kit.** Run `pnpm --filter host-kit build` in the Bilko repo, then `pnpm install` in each app (pnpm copies the untracked `dist/` into the app). An app without `hostKitVite()` must also delete `node_modules/.vite` (or start once with `vite --force`). Then check what the dev server serves, not `node_modules/host-kit`: start `pnpm dev`, load the app once, and `grep -l navigator.webdriver node_modules/.vite/deps/*.js` must list a file (0.11.0 and later).
 - **Changesets.** Add a `.changeset/*.md` in the Bilko repo for each change.
 - **Releases.** Done by hand, see [docs/publishing-contract.md](https://github.com/StanislavBG/bilko-run/blob/main/docs/publishing-contract.md).
 
@@ -112,6 +113,10 @@ Playwright helpers; needs `@playwright/test`.
 
 - `host-kit/styles/game-tokens.css` — game colour and spacing tokens.
 - `host-kit/styles/sudoku-token-aliases.css` — Sudoku token aliases over the game tokens.
+
+## Vite plugin (`host-kit/vite`)
+
+- `hostKitVite(): HostKitVitePlugin` — dev-server-only plugin (`apply: 'serve'`) with no hooks. Its name is `host-kit@<version>+<hash of package.json and dist/>`, and Vite hashes plugin names into the key of its dependency cache. See [Install](#install).
 
 ## CLI
 

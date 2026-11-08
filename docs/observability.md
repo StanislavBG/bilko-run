@@ -100,7 +100,7 @@ No rows? Check that the request hit bilko.run (not localhost), that `flow` and `
 4. Rebuild and republish via the bilko-host MCP (`publish_static_project`).
 5. Verify (section 7).
 
-If the host-kit source changed, build it first in the Bilko repo: `pnpm --filter host-kit build`, then `pnpm install` in each app.
+If the host-kit source changed, refresh each app as the [host-kit README](../packages/host-kit/README.md#install) says (build, `pnpm install`, and the Vite dependency cache).
 
 ## 9. Tagging taxonomy
 

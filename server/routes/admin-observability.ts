@@ -8,6 +8,15 @@ import { parseEnvSelector, envPredicate, seedRollup } from './telemetry.js';
 import { computeDrift } from '../../shared/manifest-schema.js';
 import { flushEgress, topEgress, topEgressBySlug, topStaticAssets, earliestEgressDate, dayKey } from '../egress.js';
 import { VISITOR_CLASSES } from '../services/analytics.js';
+import {
+  parseTrafficFilters, loadOwnerIds, mineExclusionSql, mineMatchSql, isOwnerRow,
+  type MineColumns, type SqlFragment,
+} from '../traffic-filters.js';
+
+// The owner-signal columns, same names in page_hits and click_events.
+const MINE_COLS: MineColumns = { isAdmin: 'is_admin', hashId: 'visitor_id', cookieId: 'client_vid' };
+const NO_SQL: SqlFragment = { sql: '', args: [] };
+const toggle = (excluded: boolean): 'include' | 'exclude' => (excluded ? 'exclude' : 'include');
 
 type DriftStatus = 'current' | 'minor_behind' | 'major_behind' | 'unknown';
 
@@ -204,28 +213,39 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
   });
 
   // Server-side traffic report from page_hits. Human aggregates exclude bots and
-  // error responses; botHits and `recent` deliberately include bots (flagged).
+  // error responses; botHits always counts bots, and `recent` and byClass include
+  // them (flagged) unless bots=exclude. mine=exclude (legacy alias self=exclude)
+  // drops the owner's hits and clicks from every page_hits/click_events query.
   app.get('/api/admin/traffic', async (req, reply) => {
     const email = await requireAdmin(req, reply);
     if (!email) return;
 
-    const q = req.query as { days?: string; slug?: string; self?: string };
+    const q = req.query as { days?: string; slug?: string };
     const days = Math.min(Math.max(parseInt(q.days || '7', 10) || 7, 1), 90);
     const slug = q.slug ? q.slug.slice(0, 100) : null;
     const since = Date.now() - days * 86_400_000;
 
-    // Default includes the owner's own traffic; self=exclude drops is_admin rows.
-    const selfSql = q.self === 'exclude' ? ' AND COALESCE(is_admin, 0) = 0' : '';
-    const slugSql = (slug ? ' AND slug = ?' : '') + selfSql;
-    const slugArgs: string[] = slug ? [slug] : [];
+    const filters = parseTrafficFilters(req.query);
+    // Loaded every time: the ids also feed recent[].isMine and filters.mineHits.
+    const ownerIds = await loadOwnerIds();
+    const mineExcl = filters.excludeMine ? mineExclusionSql(ownerIds, MINE_COLS) : NO_SQL;
+    const mineMatch = mineMatchSql(ownerIds, MINE_COLS);
+    const slugOnlySql = slug ? ' AND slug = ?' : '';
+    const slugOnlyArgs: string[] = slug ? [slug] : [];
+    // Every query appends slugSql right after `ts_ms >= ?`, so the mine clause rides
+    // on it and its args follow the slug arg in placeholder order.
+    const slugSql = slugOnlySql + mineExcl.sql;
+    const slugArgs: string[] = [...slugOnlyArgs, ...mineExcl.args];
+    // bots=exclude touches only `recent` and byClass; the human aggregates already exclude bots.
+    const botSql = filters.excludeBots ? ' AND is_bot = 0' : '';
     const human = `ts_ms >= ? AND is_bot = 0 AND status < 400${slugSql}`;
     const VKEY = 'COALESCE(visitor_id, visitor_hash)';
     const humanArgs = [since, ...slugArgs];
     // All visitor classes (agents included); legacy NULL-class rows derive from is_bot.
     const CLASS_SQL = "COALESCE(visitor_class, CASE WHEN is_bot = 1 THEN 'script' ELSE 'human' END)";
-    const allClasses = `ts_ms >= ? AND status < 400${slugSql}`;
+    const allClasses = `ts_ms >= ? AND status < 400${botSql}${slugSql}`;
 
-    const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest, clickTotal, topClicks, visitorRows, visitorClicks] = await Promise.all([
+    const [totals, botRow, notFoundRow, byDay, topPages, topReferrers, bySlug, byCountry, byDevice, byBrowser, recent, earliest, clickTotal, topClicks, visitorRows, visitorClicks, mineRow] = await Promise.all([
       safeQuery(() => dbGet<{ hits: number; visitors: number }>(
         `SELECT COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors FROM page_hits WHERE ${human}`,
         ...humanArgs,
@@ -280,12 +300,12 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         country: string | null; device: string; browser: string; os: string; is_bot: number;
         ip: string | null; ua: string | null; referrer: string | null; visitor_id: string | null;
         visitor_hash: string | null; user_email: string | null; is_admin: number | null;
-        session_id: string | null; visitor_class: string;
+        session_id: string | null; visitor_class: string; client_vid: string | null;
       }>(
         `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, is_bot,
                 ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin, session_id,
-                ${CLASS_SQL} AS visitor_class
-           FROM page_hits WHERE ts_ms >= ?${slugSql} ORDER BY ts_ms DESC LIMIT 200`,
+                ${CLASS_SQL} AS visitor_class, client_vid
+           FROM page_hits WHERE ts_ms >= ?${botSql}${slugSql} ORDER BY ts_ms DESC LIMIT 200`,
         since, ...slugArgs,
       ), []),
       safeQuery(() => dbGet<{ d: string | null }>(`SELECT MIN(date) AS d FROM page_hits`), undefined),
@@ -319,6 +339,13 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
           WHERE ts_ms >= ? AND is_bot = 0${slugSql} AND ${VKEY} IS NOT NULL GROUP BY vid`,
         since, ...slugArgs,
       ), []),
+      // The owner's human hits in the window whatever the toggles, so the console
+      // can say how much MINE hides; slug-only, never the mine exclusion.
+      safeQuery(() => dbGet<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM page_hits
+          WHERE ts_ms >= ? AND is_bot = 0 AND status < 400${slugOnlySql}${mineMatch.sql}`,
+        since, ...slugOnlyArgs, ...mineMatch.args,
+      ), undefined),
     ]);
     const [classRows, classPageRows] = await Promise.all([
       safeQuery(() => dbAll<{ cls: string; hits: number; visitors: number }>(
@@ -398,6 +425,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         visitorId: r.visitor_id ?? r.visitor_hash,
         userEmail: r.user_email,
         isAdmin: r.is_admin === 1,
+        isMine: isOwnerRow(ownerIds, { isAdmin: r.is_admin, hashId: r.visitor_id, cookieId: r.client_vid }),
         sessionId: r.session_id ?? null,
         visitorClass: r.visitor_class,
       })),
@@ -421,6 +449,11 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         singleHitVisitors: singleHitRow?.n ?? 0,
         cookieVisitors: cookieRow?.n ?? 0,
         cookieSince: cookieSince?.d ?? null,
+      },
+      filters: {
+        mine: toggle(filters.excludeMine),
+        bots: toggle(filters.excludeBots),
+        mineHits: mineRow?.n ?? 0,
       },
       earliestDate: earliest?.d ?? null,
       generatedAt: Math.floor(Date.now() / 1000),

@@ -451,13 +451,15 @@ describe('Session Manager panel — /api/admin/observability/installs', () => {
 
 async function insertHit(opts: {
   path: string; slug: string | null; visitor: string; status?: number; isBot?: number;
+  visitorId?: string | null; clientVid?: string | null; isAdmin?: number;
 }) {
   const ts = Date.now() - 60_000;
   await dbRun(
-    `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot)
-     VALUES (?, ?, ?, ?, ?, NULL, ?, 'US', 'desktop', 'Chrome', 'Linux', ?)`,
+    `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, visitor_id, client_vid, is_admin)
+     VALUES (?, ?, ?, ?, ?, NULL, ?, 'US', 'desktop', 'Chrome', 'Linux', ?, ?, ?, ?)`,
     ts, new Date(ts).toISOString().slice(0, 10), opts.path, opts.slug,
     opts.status ?? 200, opts.visitor, opts.isBot ?? 0,
+    opts.visitorId ?? null, opts.clientVid ?? null, opts.isAdmin ?? 0,
   );
 }
 
@@ -669,6 +671,117 @@ describe('GET /api/admin/traffic full detail', () => {
     const body = JSON.parse((await get('/api/admin/traffic/visitor/vid1')).body);
     expect(body.events.map((e: any) => [e.kind, e.path])).toEqual([['hit', '/a'], ['click', '/a'], ['hit', '/b']]);
     expect(body.events[1]).toMatchObject({ label: 'Buy', href: '/go', ip: '1.2.3.4' });
+  });
+});
+
+describe('GET /api/admin/traffic mine and bots filters', () => {
+  type RecentHit = { path: string; isBot: boolean; isMine: boolean };
+  type ClassRow = { class: string; hits: number; visitors: number };
+
+  // The admin row is where both owner ids come from: visitor_id own-h (ip+ua hash) and client_vid own-c (bilko_vid cookie).
+  async function seedOwnerTraffic() {
+    await insertHit({ path: '/p/admin', slug: 'demo', visitor: 'x1', isAdmin: 1, visitorId: 'own-h', clientVid: 'own-c' });
+    // Signed out on another network: only the cookie ties it to the owner.
+    await insertHit({ path: '/p/signed-out', slug: 'demo', visitor: 'x2', visitorId: 'net-h', clientVid: 'own-c' });
+    // Same ip+ua hash as the admin row, no cookie.
+    await insertHit({ path: '/p/same-hash', slug: 'demo', visitor: 'x3', visitorId: 'own-h' });
+    await insertHit({ path: '/p/stranger', slug: 'demo', visitor: 'x4', visitorId: 'str-h', clientVid: 'str-c' });
+    await insertHit({ path: '/p/bot', slug: 'demo', visitor: 'x5', visitorId: 'bot-h', isBot: 1 });
+  }
+  async function traffic(qs = '') {
+    const res = await get(`/api/admin/traffic${qs}`);
+    expect(res.statusCode).toBe(200);
+    return JSON.parse(res.body);
+  }
+  const recentPaths = (body: { recent: RecentHit[] }) => body.recent.map(r => r.path).sort();
+  const withoutClock = (body: Record<string, unknown>) => ({ ...body, generatedAt: 0 });
+
+  // loadOwnerIds also reads page_views; keep it empty so the owner ids come only from the seed.
+  beforeEach(async () => {
+    await dbRun('DELETE FROM page_views');
+  });
+
+  it('default counts every human, flags the owner hits in recent and echoes the filters', async () => {
+    asAdmin();
+    await seedOwnerTraffic();
+    const body = await traffic();
+    expect(body.totals).toEqual({ hits: 4, visitors: 3, botHits: 1, notFound: 0, clicks: 0 });
+    expect(body.visitors.map((v: { visitorId: string }) => v.visitorId).sort()).toEqual(['net-h', 'own-h', 'str-h']);
+    expect(body.recent).toHaveLength(5);
+    expect(Object.fromEntries((body.recent as RecentHit[]).map(r => [r.path, r.isMine]))).toEqual({
+      '/p/admin': true,
+      '/p/signed-out': true,
+      '/p/same-hash': true,
+      '/p/stranger': false,
+      '/p/bot': false,
+    });
+    expect(body.filters).toEqual({ mine: 'include', bots: 'include', mineHits: 3 });
+  });
+
+  it('mine=exclude and self=exclude both drop the three owner hits from totals, visitors and recent', async () => {
+    asAdmin();
+    await seedOwnerTraffic();
+    const mine = await traffic('?mine=exclude');
+    expect(mine.totals).toEqual({ hits: 1, visitors: 1, botHits: 1, notFound: 0, clicks: 0 });
+    expect(mine.visitors.map((v: { visitorId: string }) => v.visitorId)).toEqual(['str-h']);
+    expect(recentPaths(mine)).toEqual(['/p/bot', '/p/stranger']);
+    expect((mine.recent as RecentHit[]).some(r => r.isMine)).toBe(false);
+    expect(mine.filters).toEqual({ mine: 'exclude', bots: 'include', mineHits: 3 });
+
+    const self = await traffic('?self=exclude');
+    expect(withoutClock(self)).toEqual(withoutClock(mine));
+  });
+
+  it('bots=exclude drops bots from recent and byClass while totals.botHits still counts them', async () => {
+    asAdmin();
+    await seedOwnerTraffic();
+    const all = await traffic();
+    expect((all.byClass as ClassRow[]).find(c => c.class === 'script')).toEqual({ class: 'script', hits: 1, visitors: 1 });
+
+    const body = await traffic('?bots=exclude');
+    expect(body.totals).toEqual({ hits: 4, visitors: 3, botHits: 1, notFound: 0, clicks: 0 });
+    expect(recentPaths(body)).toEqual(['/p/admin', '/p/same-hash', '/p/signed-out', '/p/stranger']);
+    expect((body.recent as RecentHit[]).some(r => r.isBot)).toBe(false);
+    const byClass = body.byClass as ClassRow[];
+    expect(byClass).toHaveLength(6);
+    expect(byClass.find(c => c.class === 'human')).toEqual({ class: 'human', hits: 4, visitors: 3 });
+    expect(byClass.filter(c => c.class !== 'human' && c.hits !== 0)).toEqual([]);
+    expect((body.topPagesByClass as ClassRow[]).filter(r => r.class !== 'human')).toEqual([]);
+    expect(body.filters).toEqual({ mine: 'include', bots: 'exclude', mineHits: 3 });
+
+    const both = await traffic('?mine=exclude&bots=exclude');
+    expect(recentPaths(both)).toEqual(['/p/stranger']);
+    expect(both.filters).toEqual({ mine: 'exclude', bots: 'exclude', mineHits: 3 });
+  });
+
+  it('binds the mine clause after the slug, and mineHits follows the slug', async () => {
+    asAdmin();
+    await seedOwnerTraffic();
+    const demo = await traffic('?slug=demo&mine=exclude');
+    expect(demo.totals.hits).toBe(1);
+    expect(recentPaths(demo)).toEqual(['/p/bot', '/p/stranger']);
+    expect(demo.filters.mineHits).toBe(3);
+    expect((await traffic('?slug=other')).filters.mineHits).toBe(0);
+  });
+
+  it('mine=exclude drops the owner clicks from clicks and visitor click counts', async () => {
+    asAdmin();
+    await seedOwnerTraffic();
+    for (const [visitorId, clientVid] of [['net-h', 'own-c'], ['str-h', 'str-c']] as const) {
+      const now = Date.now();
+      await dbRun(
+        `INSERT INTO click_events (ts_ms, date, path, slug, tag, label, href, visitor_hash, is_bot, visitor_id, client_vid, is_admin)
+         VALUES (?, ?, '/p/demo', 'demo', 'button', 'Go', NULL, ?, 0, ?, ?, 0)`,
+        now, new Date(now).toISOString().slice(0, 10), visitorId, visitorId, clientVid,
+      );
+    }
+    expect((await traffic()).totals.clicks).toBe(2);
+    const ex = await traffic('?mine=exclude');
+    expect(ex.totals.clicks).toBe(1);
+    expect(ex.topClicks).toHaveLength(1);
+    expect(ex.topClicks[0]).toMatchObject({ label: 'Go', clicks: 1, visitors: 1 });
+    expect(ex.visitors).toHaveLength(1);
+    expect(ex.visitors[0]).toMatchObject({ visitorId: 'str-h', clicks: 1 });
   });
 });
 

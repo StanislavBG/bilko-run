@@ -14,7 +14,7 @@ const APP_SLUG = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
 
 /** Who mine=exclude drops. */
 const OWNER =
-  "the owner: rows flagged is_admin (signed in as admin), every device seen signed in as admin in the last 30 days, and every device marked as the owner's on /admin/secrets (any age)";
+  "the owner: rows flagged is_admin (signed in as admin), every device seen signed in as admin in the last 30 days, every device marked as the owner's on /admin/secrets (any age), and every row sent with the bilko_internal marker (cookie or ?bilko_internal=1, see the host contract's Internal traffic marker)";
 
 /** What bots=exclude drops on /api/admin/flows and /api/admin/sessions. */
 const BOTS =
@@ -22,10 +22,10 @@ const BOTS =
 
 /** Which sessions mine=exclude drops on /api/admin/sessions. */
 const OWNER_SESSIONS =
-  "every session with a signed-in admin (is_admin) page view, or from a device seen signed in as admin in the last 30 days or marked as the owner's on /admin/secrets (any age)";
+  "every session with a signed-in admin (is_admin) page view, or from a device seen signed in as admin in the last 30 days or marked as the owner's on /admin/secrets (any age), or with a page view sent with the bilko_internal marker";
 
 const NOT_CAUGHT =
-  'Automation that shows a normal browser user agent without navigator.webdriver, on a device never signed in as admin or marked, still counts.';
+  'Automation that shows a normal browser user agent without navigator.webdriver, on a device never signed in as admin or marked, still counts unless it sends the bilko_internal marker (docs/host-contract.md#internal-traffic-marker).';
 
 const ECHO =
   '`filters` echoes what the host applied ({ mine, bots }); null means a host older than these filters, which applied neither.';

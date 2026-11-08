@@ -157,7 +157,7 @@ export function mapTrafficToReport(body, days, requested = { excludeSelf: true, 
             'Visitors are classified into six classes: human, search_crawler, ai_crawler, ai_user_agent, api_client, script. `byClass` covers all classes, so its hits sum to all non-error hits; `visitors.human` stays human-only. Undeclared bots with a browser UA and no navigator.webdriver flag still land in `human`; `humanSingleHit` is the main signal for them.',
             'Human aggregates exclude status >= 400. Hits are HTML documents only, not assets or API calls.',
             mine === 'exclude'
-                ? "mine=exclude: the owner's own hits and clicks are left out of every count: is_admin rows, any visitor id (IP+UA hash or bilko_vid cookie) seen signed in as admin in the last 30 days, and every device marked as the owner's on /admin/secrets. `filters.mineHits` is the owner's human hits in the window."
+                ? "mine=exclude: the owner's own hits and clicks are left out of every count: is_admin rows, any visitor id (IP+UA hash or bilko_vid cookie) seen signed in as admin in the last 30 days, every device marked as the owner's on /admin/secrets, and every hit or click sent with the bilko_internal marker. `filters.mineHits` is the owner's human hits in the window."
                 : "mine=include: the owner's own hits and clicks are counted (excludeSelf: false). `filters.mineHits` is the owner's human hits in the window.",
             bots === 'exclude'
                 ? 'bots=exclude: byClass and topPagesByClass keep only non-bot hits. The human aggregates exclude bot hits either way (UA-flagged, HeadlessChrome/Playwright included, or re-flagged after a navigator.webdriver page view).'

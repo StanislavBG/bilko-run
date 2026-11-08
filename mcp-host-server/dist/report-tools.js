@@ -9,12 +9,12 @@ import { ok, err } from './tool-result.js';
 export const ADMIN_KEY = 'with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key)';
 const APP_SLUG = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
 /** Who mine=exclude drops. */
-const OWNER = "the owner: rows flagged is_admin (signed in as admin), every device seen signed in as admin in the last 30 days, and every device marked as the owner's on /admin/secrets (any age)";
+const OWNER = "the owner: rows flagged is_admin (signed in as admin), every device seen signed in as admin in the last 30 days, every device marked as the owner's on /admin/secrets (any age), and every row sent with the bilko_internal marker (cookie or ?bilko_internal=1, see the host contract's Internal traffic marker)";
 /** What bots=exclude drops on /api/admin/flows and /api/admin/sessions. */
 const BOTS = "UA-flagged automation: page views and clicks whose user agent is a crawler, script, AI agent or API client (HeadlessChrome and Playwright included) or whose browser reported navigator.webdriver, and telemetry events and errors whose request user agent is not a person's browser (the telemetry UA class)";
 /** Which sessions mine=exclude drops on /api/admin/sessions. */
-const OWNER_SESSIONS = "every session with a signed-in admin (is_admin) page view, or from a device seen signed in as admin in the last 30 days or marked as the owner's on /admin/secrets (any age)";
-const NOT_CAUGHT = 'Automation that shows a normal browser user agent without navigator.webdriver, on a device never signed in as admin or marked, still counts.';
+const OWNER_SESSIONS = "every session with a signed-in admin (is_admin) page view, or from a device seen signed in as admin in the last 30 days or marked as the owner's on /admin/secrets (any age), or with a page view sent with the bilko_internal marker";
+const NOT_CAUGHT = 'Automation that shows a normal browser user agent without navigator.webdriver, on a device never signed in as admin or marked, still counts unless it sends the bilko_internal marker (docs/host-contract.md#internal-traffic-marker).';
 const ECHO = '`filters` echoes what the host applied ({ mine, bots }); null means a host older than these filters, which applied neither.';
 /**
  * What flows_report's env filter keeps (server/routes/telemetry.ts envPredicate) and where a record's env comes from

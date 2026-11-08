@@ -112,10 +112,19 @@ export function classBadge(r: { visitorClass?: string; isBot: boolean }): string
   return r.isBot ? 'BOT' : null;
 }
 
+/** The owner's own hit: the server's isMine when it sends one, else the older isAdmin flag. */
+export function isMineHit(r: { isMine?: boolean; isAdmin?: boolean }): boolean {
+  return typeof r.isMine === 'boolean' ? r.isMine : !!r.isAdmin;
+}
+
+/** Same chip as the Sessions YOU marker. */
+const MINE_CHIP = { flex: 'none', font: `600 8.5px/1 ${FONT.mono}`, padding: '2px 4px', borderRadius: 2, background: 'rgba(242,106,46,.18)', color: C.orange } as const;
+
 function TickerItem({ r }: { r: RecentRow }) {
   const bad = r.status >= 400;
   const tag = classBadge(r);
   const badge = tag ?? (bad ? String(r.status) : null);
+  const mine = isMineHit(r);
   const body = (
     <>
       <span style={{ color: C.faint }}>{fmtClock(new Date(r.ts))}</span>
@@ -123,6 +132,7 @@ function TickerItem({ r }: { r: RecentRow }) {
       <span style={{ color: r.isBot ? C.amber : C.text }}>{r.path}</span>
       <span>{r.country ?? '—'}</span>
       <span style={{ color: C.faint }}>{r.device}/{r.browser}/{r.os}</span>
+      {mine && <span style={MINE_CHIP}>MINE</span>}
       {badge && (
         <span style={{ padding: '2px 5px', borderRadius: 2, background: tag ? 'rgba(244,185,66,.16)' : 'rgba(255,90,74,.16)', color: tag ? C.amber : C.redSoft, fontSize: 9 }}>
           {badge}

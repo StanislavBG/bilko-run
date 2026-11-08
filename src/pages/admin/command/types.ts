@@ -35,6 +35,8 @@ export interface RecentRow {
   isAdmin: boolean;
   sessionId?: string | null;
   visitorClass?: string;
+  /** The owner's own hit (admin sign-in or a known owner visitor id); absent on older servers. */
+  isMine?: boolean;
 }
 export interface VisitorRow {
   visitorId: string;
@@ -52,6 +54,9 @@ export interface VisitorRow {
   lastSeen: number;
 }
 
+/** The mine/bots filter the server applied, echoed on traffic, sessions and flows responses. */
+export type FilterEcho = { mine: 'include' | 'exclude'; bots: 'include' | 'exclude' };
+
 /** GET /api/admin/traffic */
 export interface TrafficData {
   days: number;
@@ -68,6 +73,8 @@ export interface TrafficData {
   topPagesByClass?: { path: string; class: string; hits: number; visitors: number }[];
   recent: RecentRow[];
   visitors: VisitorRow[];
+  /** mineHits: the owner's human hits in the window, counted whatever the toggles. */
+  filters?: FilterEcho & { mineHits: number };
   earliestDate: string | null;
   generatedAt: number;
 }
@@ -111,9 +118,13 @@ export interface SessionRow {
   event_count: number;
   error_count: number;
   apps: string[];
+  /** The owner's session (an owner visitor id or any admin page view); absent on older servers. */
+  mine?: boolean;
+  /** Any bot page view in the session; absent on older servers. */
+  bot?: boolean;
 }
 /** GET /api/admin/sessions */
-export interface SessionsList { sessions: SessionRow[] }
+export interface SessionsList { sessions: SessionRow[]; filters?: FilterEcho }
 
 /** The raw `sessions` table row returned by the detail endpoint. */
 export interface SessionHeadRow {
@@ -155,7 +166,7 @@ export interface AppHealth {
 export interface FlowStep { step: string; sessions: number; first_seen_ms: number }
 export interface Flow { app: string; flow: string; steps: FlowStep[]; total_sessions: number }
 /** GET /api/admin/flows */
-export interface FlowsData { apps: AppHealth[]; flows: Flow[] }
+export interface FlowsData { apps: AppHealth[]; flows: Flow[]; filters?: FilterEcho }
 
 export interface EgressRouteRow { method: string; route: string; requests: number; bytes: number; bytesPerRequest: number }
 export interface EgressSlugRow { slug: string; requests: number; bytes: number; bytesPerRequest: number }

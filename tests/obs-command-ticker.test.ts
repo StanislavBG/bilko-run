@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tickerDurationSeconds, parseTickerSpeed } from '../src/pages/admin/command/KpiStrip.js';
+import { tickerDurationSeconds, parseTickerSpeed, isMineHit } from '../src/pages/admin/command/KpiStrip.js';
 
 describe('tickerDurationSeconds', () => {
   it('scales with count per speed', () => {
@@ -26,5 +26,22 @@ describe('parseTickerSpeed', () => {
     expect(parseTickerSpeed(null)).toBe('crawl');
     expect(parseTickerSpeed('fast')).toBe('crawl');
     expect(parseTickerSpeed('')).toBe('crawl');
+  });
+});
+
+describe('isMineHit', () => {
+  it('is true when the server marks the hit isMine', () => {
+    expect(isMineHit({ isMine: true })).toBe(true);
+    expect(isMineHit({ isMine: true, isAdmin: false })).toBe(true);
+  });
+  it('isMine false wins over isAdmin true', () => {
+    expect(isMineHit({ isMine: false, isAdmin: true })).toBe(false);
+  });
+  it('falls back to isAdmin when isMine is absent', () => {
+    expect(isMineHit({ isAdmin: true })).toBe(true);
+  });
+  it('is false when neither flag is set', () => {
+    expect(isMineHit({})).toBe(false);
+    expect(isMineHit({ isAdmin: false })).toBe(false);
   });
 });

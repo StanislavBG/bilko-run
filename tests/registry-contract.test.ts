@@ -227,6 +227,13 @@ describe('listing and content standards', () => {
     if (result.success) expect(result.data.listing).toEqual(listing);
   });
 
+  it('accepts the service offering', () => {
+    const listing = { offering: 'service', pricing: 'freemium' };
+    const result = RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.listing).toEqual(listing);
+  });
+
   it('rejects an unknown offering', () => {
     expect(
       RegistryProjectSchema.safeParse({ ...BASE_ENTRY, listing: { offering: 'startup' } }).success

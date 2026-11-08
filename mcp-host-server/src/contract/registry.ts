@@ -44,6 +44,7 @@ export const ListingOfferingSchema = z.enum([
   'game',
   'content',
   'experiment',
+  'service',
 ]);
 
 export const ListingPricingSchema = z.enum(['free', 'freemium', 'paid', 'none']);

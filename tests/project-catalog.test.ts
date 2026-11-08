@@ -103,7 +103,7 @@ describe('marketing enums', () => {
   it('serves offering and pricing as "" or a known enum value for every public project', async () => {
     const projects = (await app.inject({ method: 'GET', url: '/api/projects' })).json().projects as
       { offering: string; pricing: string }[];
-    const offerings = ['', 'saas', 'free-tool', 'showcase', 'open-source', 'game', 'content', 'experiment'];
+    const offerings = ['', 'saas', 'free-tool', 'showcase', 'open-source', 'game', 'content', 'experiment', 'service'];
     const pricings = ['', 'free', 'freemium', 'paid', 'none'];
     for (const p of projects) {
       expect(offerings).toContain(p.offering);

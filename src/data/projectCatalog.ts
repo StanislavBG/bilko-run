@@ -40,7 +40,7 @@ export interface CatalogProject {
   audience: string;
   /** Plain factual claims a promoter may state. May be empty. */
   talking_points: string[];
-  /** saas | free-tool | showcase | open-source | game | content | experiment, or ''. */
+  /** saas | free-tool | showcase | open-source | game | content | experiment | service, or ''. */
   offering: string;
   /** free | freemium | paid | none, or ''. */
   pricing: string;

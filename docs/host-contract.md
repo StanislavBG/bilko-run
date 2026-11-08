@@ -148,7 +148,7 @@ Sibling sessions never ask Bilko to change card copy. They edit it themselves. B
 | `listing.lang` | 1–40 chars |
 | `listing.audience` | up to 200 chars |
 | `listing.talkingPoints` | up to 5, each 1–200 chars |
-| `listing.offering` | one of `saas`, `free-tool`, `showcase`, `open-source`, `game`, `content`, `experiment` |
+| `listing.offering` | one of `saas`, `free-tool`, `showcase`, `open-source`, `game`, `content`, `experiment`, `service` |
 | `listing.pricing` | one of `free`, `freemium`, `paid`, `none` |
 | `listing.callToAction` | 1–120 chars |
 | `listing.avoidClaims` | up to 5, each 1–200 chars |
@@ -198,6 +198,7 @@ Each project owns the marketing fields in its own `listing`. Fill them in; promo
 - `game` — something to play.
 - `content` — articles, courses or other material to read or watch.
 - `experiment` — early or exploratory; no promise it stays.
+- `service` — booked hours of work, such as consultation or design. The time is the offering, not software.
 
 `pricing` is `free`, `freemium`, `paid` or `none` (nothing to buy, e.g. a showcase).
 
@@ -279,7 +280,7 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
       "detail": "…",                           // drawer story; falls back to tagline
       "audience": "…",                         // who it is for; may be ""
       "talking_points": ["…"],                 // plain facts a promoter may state; may be []
-      "offering": "showcase",                  // saas | free-tool | showcase | open-source | game | content | experiment; "" when unset
+      "offering": "showcase",                  // saas | free-tool | showcase | open-source | game | content | experiment | service; "" when unset
       "pricing": "none",                       // free | freemium | paid | none; "" when unset
       "call_to_action": "…",                   // the one action to ask for; "" when unset
       "avoid_claims": ["…"],                   // claims promoters must never make; [] when unset

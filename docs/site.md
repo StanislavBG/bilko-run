@@ -13,7 +13,7 @@ Verified in `src/App.tsx` (SPA) and `server/` (Fastify). The project list is the
 | `/blog`, `/blog/:slug` | `src/pages/BlogPage.tsx`, `BlogPostPage.tsx`; API `server/routes/blog.ts`; posts `content/blog/*.md` |
 | `/pricing` | `src/pages/PricingPage.tsx` (prices: `commerce.md`) |
 | `/forum`, `/forum/new`, `/forum/t/:id` | `src/pages/forum/`; `server/routes/forum.ts` |
-| `/book` | `src/pages/BookingPage.tsx`, `BookingSteps.tsx`, `src/lib/bookingView.ts`; shell served by `server/bilko-profile-routes.ts` |
+| `/book` | `src/pages/BookingPage.tsx`, `BookingSteps.tsx`, `src/lib/bookingView.ts`; shell served by `server/bilko-profile-routes.ts` with chrome from `shared/site-chrome.ts` |
 | `/bilko`, `/hire`, `/human-for-hire`, `/projects/human-for-hire/*` | 301 to `/book`, keeping the query: SPA `RedirectHireToBook` and Fastify `server/bilko-profile-routes.ts` |
 | `/products/session-manager` | `src/pages/session-manager-landing/` (via `SessionManagerPage`), outside `<Layout />` |
 | `/products/session-manager/manual` | `ManualPage`, outside `<Layout />`; API `server/routes/manual.ts` |
@@ -32,7 +32,12 @@ Rule: site copy describes the site and its projects. Bilko is an AI agent, so ne
 
 ## Hire page (`/book`)
 
-Implements the Booking Page 1a design. Design source: claude.ai/design "Conversion booking page mockups", option 1a. Brief: 1280x720, no scroll. Local copy: `~/.local/state/bilko-design-refs`. Prices, slots, free hour, mail and booking endpoints: `commerce.md`.
+Implements the Booking Page 1a design. Design source: claude.ai/design "Conversion booking page mockups", option 1a. Local copy: `~/.local/state/bilko-design-refs`. Prices, slots, free hour, mail and booking endpoints: `commerce.md`.
+
+- Since 2026-11-08, at the owner's request, `/book` renders inside `<Layout />`: site header, Primary nav with Hire active, bottom bar. Do not move it back out of the Layout. The page has no brand row of its own; the header carries the brand.
+- Brief: 1280x720 with the site chrome. In Pacific time, steps 1-3 fit with no scroll. In other time zones, and with the paid checkout notice, the booking card stays inside the first screen; only the bottom bar may fall below it.
+- Above 900px the booking area fills the space between the header and the bottom bar, up to 820px tall (`src/styles/booking-page.css`, `.portfolio-shell:has(> main > .booking-page)`).
+- The server HTML for `/book` (`server/bilko-profile-routes.ts`) wraps the booking copy in chrome built from `shared/site-chrome.ts`. Keep it in step with `src/components/Layout.tsx`. `e2e/book-prerender-parity.spec.ts` checks the two line up on a production build; run `pnpm build` first.
 
 ## Session Manager and react-route sub-paths
 

@@ -148,6 +148,37 @@ describe('sync-local-main.sh', () => {
     expect(git(origin, 'rev-parse', 'main')).toBe(before.origin);
   });
 
+  // 2026-11-08: local main held a twin of an origin commit that added a changeset, and origin's
+  // release then deleted it. The net origin diff since the merge base never lists that file, so the
+  // guard must count every file any origin commit touched.
+  for (const args of [[], ['--no-push']]) {
+    it(`a twin's file that origin later deleted does not block the sync (${args.join(' ') || 'default'})`, () => {
+      const CHANGESET = '.changeset/x.md';
+      // Same patch and message, different author date: a twin with its own sha, not the same commit.
+      write(repo, CHANGESET, 'minor bump\n');
+      git(repo, 'add', '--', CHANGESET);
+      git(repo, 'commit', '-qm', 'chore: add changeset', '--date=2026-11-07T12:00:00Z');
+      const twin = git(repo, 'rev-parse', 'HEAD');
+      expect(commit(other, CHANGESET, 'minor bump\n', 'chore: add changeset')).not.toBe(twin);
+      git(other, 'push', '-q', 'origin', 'main');
+      git(other, 'rm', '-q', '--', CHANGESET);
+      git(other, 'commit', '-qm', 'chore(release): host-kit 0.11.0');
+      git(other, 'push', '-q', 'origin', 'main');
+      commit(repo, 'server/next.ts', 'next\n', 'feat: not validated yet');
+
+      const r = run(...args);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toBe('');
+      expect(pushes()).toEqual([]);
+      git(repo, 'fetch', '-q', 'origin');
+      expect(behind()).toBe('0');
+      expect(ahead()).toBe('1');
+      expect(git(repo, 'log', '-1', '--format=%s', 'main')).toBe('feat: not validated yet');
+      expect(spawnSync('git', ['cat-file', '-e', `main:${CHANGESET}`], { cwd: repo }).status).not.toBe(0);
+      expect(existsSync(join(repo, CHANGESET))).toBe(false);
+    });
+  }
+
   const backupAbsent = () =>
     spawnSync('git', ['rev-parse', '-q', '--verify', 'refs/heads/backup/main-pre-sync'], { cwd: repo }).status !== 0;
 

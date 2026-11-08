@@ -120,9 +120,11 @@ if [[ "$NEW" == "$OLD" && "$RECORDS_TIP" == "$BASE" ]]; then
 fi
 
 # The rebuild may only bring in what origin/main changed. A file it alters beyond that would be
-# local work lost in a replay.
+# local work lost in a replay. Count every file any origin commit since the merge base touched, not
+# the net diff: a changeset that local main holds through a twin and that a release on origin then
+# deleted nets out of MB..BASE, yet dropping it is origin's change, not lost local work.
 MB="$(git merge-base "$OLD" "$BASE")"
-LOST="$(comm -23 <(git diff --name-only "$OLD" "$NEW" | sort) <(git diff --name-only "$MB" "$BASE" | sort))"
+LOST="$(comm -23 <(git diff --name-only "$OLD" "$NEW" | sort) <(git log --format= --name-only --no-renames "$MB..$BASE" | sort -u))"
 [[ -z "$LOST" ]] || die "the rebuild would change files origin/main never touched: $(echo $LOST); local main untouched"
 BLOCKED="$(comm -12 <(git diff --name-only "$OLD" "$NEW" | sort) <(git status --porcelain --no-renames | cut -c4- | sort))"
 [[ -z "$BLOCKED" ]] || die "uncommitted changes in files the sync must update: $(echo $BLOCKED); local main untouched"

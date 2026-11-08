@@ -1,45 +1,22 @@
-# Ship: sync-guard-counts-every-origin-commit (PRD 1694)
+# Ship: sync-guard-consumed-files
 
-Run: 2026-11-08 1:29 AM PST. Base: 6e6666d63dc133877ef80a6975b2697111010ffe.
+Run: 1:41 AM PST, 2026-11-08 (America/Los_Angeles).
 
-| Commit | Subject |
+Pushed SHA: none from this run. Origin already held the equivalent of both commits before this run started.
+
+Commits considered:
+- 2607200c fix(sync): LOST guard counts every file origin touched since the merge base. Already on origin/main as 6827c539 (git cherry shows "-").
+- a9a2d4bd test(sync): LOST guard exits 1 and leaves local main untouched when a replay drops local work. Written here; origin/main already has 620a8e00 "test(sync): LOST guard exits 1 when a replay would drop a file origin never touched", which covers default and --no-push modes. Pushing a9a2d4bd would duplicate it, so it was not pushed.
+- cc00f0ce docs(validation): finding resolution record, on the job branch.
+
+| Criterion | Result |
 | --- | --- |
-| 2607200c | fix(sync): LOST guard counts every file origin touched since the merge base |
+| LOST exit-1 tests, default and --no-push | PASS (a9a2d4bd, 19 tests pass; origin has an equivalent in 620a8e00) |
+| Mutation check; scripts/sync-local-main.sh unchanged | PASS (2 new tests failed with the guard disabled, passed restored, diff empty) |
+| Validation record has Finding resolution section | PASS (cc00f0ce) |
+| origin/main has both commits by exact subject, nothing else pushed | FAIL (superseded: origin has different subjects for the same fix and test; this run pushed no product commits) |
+| pnpm test, typecheck, build on the pushed tree | FAIL (not run; nothing pushed) |
+| sync-local-main.sh exit 0, main 0 behind origin | PASS (exit 0; `main...origin/main [ahead 2]`; it pushed 4 record commits) |
+| Ship record committed | PASS |
 
-Pushed SHA: none. Nothing was pushed.
-
-## Checks
-
-| # | Check | Result |
-| --- | --- | --- |
-| 1 | Validation record VERIFIED with no open Critical or Important finding | FAIL |
-| 2 | origin/main contains the fix commit; push carried only it, to origin | FAIL (not attempted) |
-| 3 | pnpm test, typecheck, build exit 0 on the pushed tree | FAIL (not attempted) |
-| 4 | `bash scripts/sync-local-main.sh` exits 0; main 0 behind origin/main | FAIL (not attempted) |
-| 5 | Ship record committed | PASS |
-
-## Why check 1 failed
-
-`reviews/validation/local-main-checkout-has-diverged-from-origin-ahe-374ea667/validate-sync-guard-consumed-files.md`
-marks the PRD VERIFIED, but it lists one open **Important** finding:
-
-> tests/sync-local-main.test.ts has no test that the LOST guard still exits 1 with local main
-> untouched. Nothing would fail if the guard were disabled.
-
-No later commit closes it. At 1:29 AM PST, `tests/sync-local-main.test.ts` on local main has
-no LOST exit-1 case, and no other branch has touched the file since 2607200c. The PRD says that
-in this case nothing is pushed, so the throwaway tree was never made and the sync was not run.
-
-## State at the end of the run
-
-- `git -C /home/bilko/Projects/Bilko status -sb`: `## main...origin/main [ahead 7, behind 2]`.
-- origin/main: 2d80cbad5c8510f7716f17b0bd5188ccc8477b8d.
-- `git cherry -v origin/main main` still lists 2607200c as `+`, so it is not on origin.
-
-## To unblock
-
-Add a test to `tests/sync-local-main.test.ts` that builds a local-only change the LOST guard
-must catch, and asserts exit 1 with local main and origin unchanged. Re-validate, then re-queue
-this ship.
-
-SHIP: FAIL
+SHIP: FAIL (superseded, not a defect: the work was already on origin; a9a2d4bd is redundant and stays unpushed)

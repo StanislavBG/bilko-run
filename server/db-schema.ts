@@ -691,6 +691,14 @@ export const MIGRATIONS = [
     consent_at INTEGER,
     created_at INTEGER NOT NULL
   )`,
+  // The owner's own devices, by bilko_vid cookie id, marked on /admin/secrets
+  // (server/routes/admin-internal-device.ts). loadOwnerIds() in server/traffic-filters.ts
+  // counts every row as the owner's, however old; marked_at_ms is the first mark, epoch ms.
+  `CREATE TABLE IF NOT EXISTS internal_devices (
+    visitor_id   TEXT PRIMARY KEY,
+    label        TEXT,
+    marked_at_ms INTEGER NOT NULL
+  )`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

@@ -60,6 +60,14 @@ async function view(s: { ts: number | null; isAdmin?: number | null; visitorId?:
   );
 }
 
+// A device the owner marked as internal on /admin/secrets (bilko_vid cookie id).
+async function mark(visitorId: string, markedAtMs: number) {
+  await dbRun(
+    `INSERT INTO internal_devices (visitor_id, label, marked_at_ms) VALUES (?, NULL, ?)`,
+    visitorId, markedAtMs,
+  );
+}
+
 beforeAll(async () => {
   await initDb();
 });
@@ -69,6 +77,7 @@ beforeEach(async () => {
   await dbRun('DELETE FROM page_hits');
   await dbRun('DELETE FROM click_events');
   await dbRun('DELETE FROM page_views');
+  await dbRun('DELETE FROM internal_devices');
 });
 
 describe('parseTrafficFilters', () => {
@@ -183,6 +192,68 @@ describe('loadOwnerIds', () => {
     // A failure confined to one list's query blanks only that list.
     dbFail.match = /page_views/;
     await expect(loadOwnerIds(NOW)).resolves.toEqual({ hashIds: ['hash-x'], cookieIds: [] });
+  });
+});
+
+describe('loadOwnerIds with marked internal devices', () => {
+  it('includes a device marked 90 days ago that has no is_admin rows, in cookieIds only', async () => {
+    await hit({ ts: NOW - HOUR, isAdmin: 1, visitorId: 'hash-admin', clientVid: 'cookie-admin' });
+    // The marked device has only ever browsed signed out.
+    await hit({ ts: NOW - HOUR, isAdmin: 0, visitorId: 'hash-marked', clientVid: 'cookie-marked' });
+    await mark('cookie-marked', NOW - 90 * DAY);
+
+    expect(await loadOwnerIds(NOW)).toEqual({
+      hashIds: ['hash-admin'],
+      cookieIds: ['cookie-admin', 'cookie-marked'],
+    });
+  });
+
+  it('appends marked ids after the seen ids, newest mark first, without duplicating a seen id', async () => {
+    await hit({ ts: NOW - HOUR, isAdmin: 1, visitorId: 'hash-a', clientVid: 'cookie-a' });
+    await view({ ts: NOW - 2 * HOUR, isAdmin: 1, visitorId: 'cookie-b' });
+    await mark('cookie-b', NOW - 200 * DAY);
+    await mark('cookie-old', NOW - 400 * DAY);
+    await mark('cookie-new', NOW - 10 * DAY);
+
+    expect(await loadOwnerIds(NOW)).toEqual({
+      hashIds: ['hash-a'],
+      cookieIds: ['cookie-a', 'cookie-b', 'cookie-new', 'cookie-old'],
+    });
+  });
+
+  it('keeps every marked id when the seen ids fill the 500 cap, dropping the oldest unmarked ones instead', async () => {
+    // 520 distinct admin hits, n minutes ago: c1 is the newest, c520 the oldest.
+    await dbRun(
+      `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 520)
+       INSERT INTO page_hits (ts_ms, date, path, status, is_bot, visitor_id, client_vid, is_admin)
+       SELECT ? - n * 60000, '2026-11-07', '/', 200, 0, 'h' || n, 'c' || n, 1 FROM seq`,
+      NOW,
+    );
+    // One marked id is also seen (c10, keeps its place); the other is not seen at all.
+    await mark('c10', NOW - 90 * DAY);
+    await mark('cookie-marked', NOW - 90 * DAY);
+
+    const { hashIds, cookieIds } = await loadOwnerIds(NOW);
+    expect(hashIds).toHaveLength(500);
+    expect(cookieIds).toHaveLength(500);
+    expect(new Set(cookieIds).size).toBe(500);
+    expect(cookieIds.slice(0, 3)).toEqual(['c1', 'c2', 'c3']);
+    expect(cookieIds[9]).toBe('c10');
+    expect(cookieIds[498]).toBe('c499');
+    expect(cookieIds[499]).toBe('cookie-marked');
+    expect(cookieIds).not.toContain('c500');
+  });
+
+  it('a failing marked-device query leaves the seen lists intact, and the reverse', async () => {
+    await hit({ ts: NOW - HOUR, isAdmin: 1, visitorId: 'hash-x', clientVid: 'cookie-x' });
+    await mark('cookie-marked', NOW - 90 * DAY);
+    await expect(loadOwnerIds(NOW)).resolves.toEqual({ hashIds: ['hash-x'], cookieIds: ['cookie-x', 'cookie-marked'] });
+
+    dbFail.match = /internal_devices/;
+    await expect(loadOwnerIds(NOW)).resolves.toEqual({ hashIds: ['hash-x'], cookieIds: ['cookie-x'] });
+
+    dbFail.match = /page_views/;
+    await expect(loadOwnerIds(NOW)).resolves.toEqual({ hashIds: ['hash-x'], cookieIds: ['cookie-marked'] });
   });
 });
 
@@ -365,5 +436,30 @@ describe('mine filters against real rows', () => {
       NOW - DAY, ...where.args,
     );
     expect(rows.map((r) => r.visitor_id)).toEqual([null, 'stranger-cookie']);
+  });
+
+  it('drops a signed-out page_hits row carrying a device marked 90 days ago, with no is_admin rows anywhere', async () => {
+    await mark('marked-cookie', NOW - 90 * DAY);
+    // The marked device browsing signed out: is_admin = 0, and a hash id never seen as admin.
+    await hit({ ts: NOW - HOUR, isAdmin: 0, visitorId: 'owner-hash', clientVid: 'marked-cookie' });
+    await hit({ ts: NOW - HOUR, isAdmin: 0, visitorId: 'stranger', clientVid: 'stranger-cookie' });
+    await hit({ ts: NOW - HOUR, isAdmin: null, visitorId: 'legacy', clientVid: null });
+
+    const kept = async (ids: OwnerIds) => {
+      const where = mineExclusionSql(ids, COLS);
+      const rows = await dbAll<{ visitor_id: string }>(
+        `SELECT visitor_id FROM page_hits WHERE ts_ms >= ?${where.sql} ORDER BY visitor_id`,
+        NOW - DAY, ...where.args,
+      );
+      return rows.map((r) => r.visitor_id);
+    };
+
+    const ids = await loadOwnerIds(NOW);
+    expect(ids).toEqual({ hashIds: [], cookieIds: ['marked-cookie'] });
+    expect(await kept(ids)).toEqual(['legacy', 'stranger']);
+
+    // Unmarked, the same hit counts as a stranger's.
+    await dbRun('DELETE FROM internal_devices');
+    expect(await kept(await loadOwnerIds(NOW))).toEqual(['legacy', 'owner-hash', 'stranger']);
   });
 });

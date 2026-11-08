@@ -294,6 +294,149 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
   );
 }
 
+interface InternalDeviceRow {
+  visitorId: string;
+  label: string | null;
+  markedAtMs: number;
+}
+
+/** GET/POST/DELETE /api/admin/internal-device (server/routes/admin-internal-device.ts). */
+interface InternalDeviceState {
+  current: { visitorId: string | null; marked: boolean };
+  devices: InternalDeviceRow[];
+}
+
+const agoFromMs = (ms: number) => humanizeAgo(Math.floor(ms / 1000));
+
+function ThisDevicePanel({ enabled }: { enabled: boolean }) {
+  const adminFetch = useAdminFetch();
+  const { data, error: loadError, loading, reload } = useAdminResource<InternalDeviceState>('/admin/internal-device', { enabled });
+  const [label, setLabel] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error = actionError ?? loadError;
+  const current = data?.current ?? null;
+  const devices = data?.devices ?? [];
+  const thisDevice = current?.visitorId ? devices.find(d => d.visitorId === current.visitorId) : undefined;
+
+  async function setMarked(mark: boolean) {
+    setBusy(true);
+    try {
+      const res = await adminFetch(
+        '/admin/internal-device',
+        mark
+          ? {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ label: label.trim() || undefined }),
+            }
+          : { method: 'DELETE' },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? `Request failed (${res.status})`);
+      }
+      setActionError(null);
+      setLabel('');
+      await reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-xl font-extrabold text-warm-900">This device</h2>
+        <p className="text-warm-500 text-sm mt-1">
+          Mark this browser as yours and the Mine filter in the traffic console drops its visits, even when you are
+          signed out and however long since you last signed in here.
+        </p>
+      </div>
+
+      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {loading && <div className="text-warm-400 text-sm">Loading…</div>}
+
+      {!loading && current && (
+        <div className="rounded-xl border border-warm-200/60 bg-white p-4 space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="space-y-1">
+              {current.marked ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">
+                  Marked as yours
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-warm-100 text-warm-600">
+                  Not marked: counted as a visitor when signed out
+                </span>
+              )}
+              {current.visitorId ? (
+                <p className="text-xs text-warm-500">
+                  Visitor id <code className="font-mono text-warm-800">{current.visitorId}</code>
+                  {thisDevice && <> · {thisDevice.label ?? 'no label'} · marked {agoFromMs(thisDevice.markedAtMs)}</>}
+                </p>
+              ) : (
+                <p className="text-xs text-warm-500">This browser has no bilko_vid cookie yet. Reload the page, then mark it.</p>
+              )}
+            </div>
+
+            {current.marked ? (
+              <button
+                onClick={() => void setMarked(false)}
+                disabled={busy}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-warm-100 text-warm-700 hover:bg-warm-200 transition-colors disabled:opacity-50"
+              >
+                Unmark this device
+              </button>
+            ) : (
+              <form
+                onSubmit={e => { e.preventDefault(); void setMarked(true); }}
+                className="flex flex-wrap items-end gap-3"
+              >
+                <label className="text-xs font-semibold text-warm-500 space-y-1">
+                  <span className="block">Label (optional)</span>
+                  <input
+                    value={label}
+                    maxLength={80}
+                    onChange={e => setLabel(e.target.value)}
+                    placeholder="e.g. work laptop"
+                    className="border border-warm-200 rounded-lg px-3 py-2 text-sm font-normal text-warm-900 focus:outline-none focus:ring-2 focus:ring-fire-400"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={busy || !current.visitorId}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-fire-500 text-white hover:bg-fire-600 transition-colors disabled:opacity-50"
+                >
+                  Mark this device
+                </button>
+              </form>
+            )}
+          </div>
+
+          {devices.length > 0 && (
+            <div className="border-t border-warm-100 pt-3 space-y-2">
+              <p className="text-xs font-bold text-warm-400 uppercase tracking-wide">Marked devices ({devices.length})</p>
+              <ul className="space-y-1">
+                {devices.map(d => (
+                  <li key={d.visitorId} className="flex flex-wrap gap-x-3 text-xs text-warm-600">
+                    <code className="font-mono font-semibold text-warm-800">{d.visitorId.slice(0, 8)}…</code>
+                    <span>{d.label ?? '—'}</span>
+                    <span>marked {agoFromMs(d.markedAtMs)}</span>
+                    {d.visitorId === current.visitorId && <span className="font-bold text-fire-600">this device</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function SecretsPage() {
   const { isLoaded } = useUser();
   const isAdmin = useIsAdmin();
@@ -422,6 +565,8 @@ export function SecretsPage() {
       )}
 
       <ApiKeysPanel enabled={isAdmin} />
+
+      <ThisDevicePanel enabled={isAdmin} />
     </div>
   );
 }

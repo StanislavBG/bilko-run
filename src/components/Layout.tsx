@@ -126,7 +126,7 @@ export function Layout() {
             <span style={{ opacity: 0.6 }}>{searchShortcutLabel()}</span>
           </button>
           <SignedOut>
-            <SignInButton mode="modal" forceRedirectUrl={window.location.pathname}>
+            <SignInButton mode="modal" forceRedirectUrl={window.location.pathname + window.location.search}>
               <button onClick={() => track('signin_click')} className="bk-chip bk-chip-strong">
                 Sign in
               </button>

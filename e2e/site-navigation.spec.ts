@@ -5,10 +5,10 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const FLIP = { timeout: 3000 };
-const PAGES = ['/', '/projects', '/blog', '/contact', '/forum'] as const;
+const PAGES = ['/', '/projects', '/book', '/blog', '/contact', '/forum'] as const;
 const PILLS = [
   { name: '01 Projects', path: '/projects' },
-  { name: '02 Hire', path: '/bilko' },
+  { name: '02 Hire', path: '/book' },
   { name: '03 Blog', path: '/blog' },
   { name: '04 Contact', path: '/contact' },
   { name: '05 Forum', path: '/forum' },

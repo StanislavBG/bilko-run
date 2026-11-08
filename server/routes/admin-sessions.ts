@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { isValidId } from '../session-identity.js';
-import { parseTrafficFilters, loadOwnerIds, isOwnerRow } from '../traffic-filters.js';
+import { parseTrafficFilters, loadOwnerIds, isOwnerRow, mineExclusionSql, type SqlFragment } from '../traffic-filters.js';
 import type { TimelineItem } from '../../shared/session-timeline.js';
 
 const TIMELINE_CAP = 1000;
@@ -100,6 +100,24 @@ function sqlUtc(ms: number): string {
   return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
 }
 
+/** Concatenates WHERE fragments in order, so the args stay in placeholder order. */
+function joinSql(parts: SqlFragment[]): SqlFragment {
+  return { sql: parts.map((p) => p.sql).join(''), args: parts.flatMap((p) => p.args) };
+}
+
+/**
+ * Drops rows whose session has a page view flagged `flag` on or after `sinceDay`. page_views.date is the view's UTC
+ * day, so the bound keeps the subquery on idx_page_views_date. The subquery skips NULL session ids, because one NULL
+ * in a NOT IN list would drop every row, and rows with no session id of their own are kept.
+ */
+function flaggedSessionExclusion(flag: 'is_admin' | 'is_bot', sinceDay: string): SqlFragment {
+  return {
+    sql: ` AND (session_id IS NULL OR session_id NOT IN (SELECT session_id FROM page_views
+             WHERE date >= ? AND ${flag} = 1 AND session_id IS NOT NULL))`,
+    args: [sinceDay],
+  };
+}
+
 export function registerAdminSessionRoutes(app: FastifyInstance): void {
   app.get('/api/admin/flows', async (req, reply) => {
     const admin = await requireAdmin(req, reply);
@@ -127,38 +145,71 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     const appTool = appFilter ? ' AND tool = ?' : '';
     const toolParams = appFilter ? [appFilter] : [];
 
+    // mine=exclude (legacy self=exclude) and bots=exclude; both default to include.
+    const filters = parseTrafficFilters(req.query);
+    // Extra WHERE fragments per table, appended last to each query so their args follow the query's own.
+    const pvParts: SqlFragment[] = [];
+    const ceParts: SqlFragment[] = [];
+    const feParts: SqlFragment[] = [];
+    const aeParts: SqlFragment[] = [];
+    const sinceDay = new Date(sinceMs).toISOString().slice(0, 10);
+    if (filters.excludeMine) {
+      const ownerIds = await loadOwnerIds();
+      const ownerSessions = flaggedSessionExclusion('is_admin', sinceDay);
+      // Cookie ids are page_views/funnel_events/app_errors.visitor_id and click_events.client_vid;
+      // click_events.visitor_id is the ip+ua hash.
+      pvParts.push(mineExclusionSql(ownerIds, { isAdmin: 'is_admin', cookieId: 'visitor_id' }));
+      ceParts.push(mineExclusionSql(ownerIds, { isAdmin: 'is_admin', hashId: 'visitor_id', cookieId: 'client_vid' }));
+      // funnel_events.is_admin flags the owner's checkouts; app_errors has no owner flag of its own.
+      feParts.push(mineExclusionSql(ownerIds, { isAdmin: 'is_admin', cookieId: 'visitor_id' }), ownerSessions);
+      aeParts.push(mineExclusionSql(ownerIds, { cookieId: 'visitor_id' }), ownerSessions);
+    }
+    if (filters.excludeBots) {
+      const human: SqlFragment = { sql: ' AND COALESCE(is_bot, 0) = 0', args: [] };
+      // funnel_events and app_errors carry no bot flag, so they follow their session's page views.
+      const botSessions = flaggedSessionExclusion('is_bot', sinceDay);
+      pvParts.push(human);
+      ceParts.push(human);
+      feParts.push(botSessions);
+      aeParts.push(botSessions);
+    }
+    const pvWhere = joinSql(pvParts);
+    const ceWhere = joinSql(ceParts);
+    const feWhere = joinSql(feParts);
+    const aeWhere = joinSql(aeParts);
+
     const [views, clicks, events, errors, steps, totals] = await Promise.all([
       dbAll<{ path: string; session_id: string | null; n: number; last_ms: number }>(
         `SELECT path, session_id, COUNT(*) AS n, MAX(created_at_ms) AS last_ms FROM page_views
-          WHERE created_at_ms >= ? AND (path LIKE '/projects/%' OR path LIKE '/products/%')
-          GROUP BY path, session_id`, sinceMs),
+          WHERE created_at_ms >= ? AND (path LIKE '/projects/%' OR path LIKE '/products/%')${pvWhere.sql}
+          GROUP BY path, session_id`, sinceMs, ...pvWhere.args),
       dbAll<{ path: string; session_id: string | null; n: number; last_ms: number }>(
         `SELECT path, session_id, COUNT(*) AS n, MAX(ts_ms) AS last_ms FROM click_events
-          WHERE ts_ms >= ? AND (path LIKE '/projects/%' OR path LIKE '/products/%')
-          GROUP BY path, session_id`, sinceMs),
+          WHERE ts_ms >= ? AND (path LIKE '/projects/%' OR path LIKE '/products/%')${ceWhere.sql}
+          GROUP BY path, session_id`, sinceMs, ...ceWhere.args),
       dbAll<{ tool: string; session_id: string | null; n: number; last_ms: number }>(
         `SELECT tool, session_id, COUNT(*) AS n,
                 MAX(CAST(strftime('%s', created_at) AS INTEGER)) * 1000 AS last_ms
-           FROM funnel_events WHERE created_at >= ? AND tool IS NOT NULL AND tool != ''${appTool}
-          GROUP BY tool, session_id`, sinceUtc, ...toolParams),
+           FROM funnel_events WHERE created_at >= ? AND tool IS NOT NULL AND tool != ''${appTool}${feWhere.sql}
+          GROUP BY tool, session_id`, sinceUtc, ...toolParams, ...feWhere.args),
       dbAll<{ app: string; session_id: string | null; n: number; last_s: number }>(
         `SELECT app, session_id, COUNT(*) AS n, MAX(created_at) AS last_s FROM app_errors
-          WHERE created_at >= ?${appFilter ? ' AND app = ?' : ''}
-          GROUP BY app, session_id`, sinceSec, ...toolParams),
+          WHERE created_at >= ?${appFilter ? ' AND app = ?' : ''}${aeWhere.sql}
+          GROUP BY app, session_id`, sinceSec, ...toolParams, ...aeWhere.args),
       dbAll<{ tool: string; flow: string; step: string | null; sessions: number; first_ms: number }>(
         `SELECT tool, json_extract(metadata, '$.flow') AS flow, json_extract(metadata, '$.step') AS step,
                 COUNT(DISTINCT session_id) AS sessions,
                 MIN(CAST(strftime('%s', created_at) AS INTEGER)) * 1000 AS first_ms
            FROM funnel_events
           WHERE created_at >= ? AND tool IS NOT NULL AND tool != '' AND json_valid(metadata)
-            AND json_extract(metadata, '$.flow') IS NOT NULL${appTool}
-          GROUP BY tool, flow, step`, sinceUtc, ...toolParams),
+            AND json_extract(metadata, '$.flow') IS NOT NULL${appTool}${feWhere.sql}
+          GROUP BY tool, flow, step`, sinceUtc, ...toolParams, ...feWhere.args),
       dbAll<{ tool: string; flow: string; sessions: number }>(
         `SELECT tool, json_extract(metadata, '$.flow') AS flow, COUNT(DISTINCT session_id) AS sessions
            FROM funnel_events
           WHERE created_at >= ? AND tool IS NOT NULL AND tool != '' AND json_valid(metadata)
-            AND json_extract(metadata, '$.flow') IS NOT NULL${appTool}
-          GROUP BY tool, flow`, sinceUtc, ...toolParams),
+            AND json_extract(metadata, '$.flow') IS NOT NULL${appTool}${feWhere.sql}
+          GROUP BY tool, flow`, sinceUtc, ...toolParams, ...feWhere.args),
     ]);
 
     for (const r of views) {
@@ -219,7 +270,14 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
       }))
       .sort((x, y) => x.app.localeCompare(y.app) || x.flow.localeCompare(y.flow));
 
-    return { apps, flows };
+    return {
+      apps,
+      flows,
+      filters: {
+        mine: filters.excludeMine ? 'exclude' : 'include',
+        bots: filters.excludeBots ? 'exclude' : 'include',
+      },
+    };
   });
 
   app.get('/api/admin/sessions', async (req, reply) => {

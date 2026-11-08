@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbAll, dbGet } from '../db.js';
 import { requireAdmin } from '../clerk.js';
 import { isValidId } from '../session-identity.js';
+import { parseTrafficFilters, loadOwnerIds, isOwnerRow } from '../traffic-filters.js';
 import type { TimelineItem } from '../../shared/session-timeline.js';
 
 const TIMELINE_CAP = 1000;
@@ -74,6 +75,25 @@ async function appsForSessions(ids: string[]): Promise<Map<string, string[]>> {
     }
   }
   return new Map([...bySession].map(([id, set]) => [id, [...set].sort()]));
+}
+
+interface SessionFlags {
+  admin: boolean;
+  bot: boolean;
+}
+
+/** Whether any page view of each session has is_admin = 1 or is_bot = 1, in one grouped query. */
+async function sessionFlags(ids: string[]): Promise<Map<string, SessionFlags>> {
+  const flags = new Map<string, SessionFlags>();
+  if (!ids.length) return flags;
+  const rows = await dbAll<{ session_id: string; a: number; b: number }>(
+    `SELECT session_id, MAX(COALESCE(is_admin, 0)) AS a, MAX(COALESCE(is_bot, 0)) AS b
+       FROM page_views WHERE session_id IN (${ids.map(() => '?').join(',')})
+      GROUP BY session_id`,
+    ...ids,
+  );
+  for (const r of rows) flags.set(r.session_id, { admin: Number(r.a) === 1, bot: Number(r.b) === 1 });
+  return flags;
 }
 
 function sqlUtc(ms: number): string {
@@ -226,6 +246,33 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
       );
       params.push(`/projects/${esc}/%`, `/products/${slug}`, `/products/${esc}/%`);
     }
+
+    // mine=exclude (legacy self=exclude) and bots=exclude; both default to include.
+    const filters = parseTrafficFilters(req.query);
+    // Never rejects. Started here so it overlaps the main query unless the mine exclusion needs it first.
+    const ownerIdsP = loadOwnerIds();
+    // page_views.date is the view's UTC day, so bounding on it keeps the subqueries on idx_page_views_date.
+    // The subqueries skip NULL session ids: one NULL in a NOT IN list would drop every session.
+    const sinceDay = new Date(since).toISOString().slice(0, 10);
+    if (filters.excludeMine) {
+      const { cookieIds } = await ownerIdsP;
+      if (cookieIds.length) {
+        where.push(`s.visitor_id NOT IN (${cookieIds.map(() => '?').join(',')})`);
+        params.push(...cookieIds);
+      }
+      where.push(
+        `s.session_id NOT IN (SELECT session_id FROM page_views
+           WHERE date >= ? AND is_admin = 1 AND session_id IS NOT NULL)`,
+      );
+      params.push(sinceDay);
+    }
+    if (filters.excludeBots) {
+      where.push(
+        `s.session_id NOT IN (SELECT session_id FROM page_views
+           WHERE date >= ? AND is_bot = 1 AND session_id IS NOT NULL)`,
+      );
+      params.push(sinceDay);
+    }
     params.push(limit);
 
     const rows = await dbAll<SessionRow>(
@@ -242,7 +289,10 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
       ...params,
     );
 
-    const appsBySession = await appsForSessions(rows.map(r => r.session_id));
+    const ids = rows.map(r => r.session_id);
+    const [ownerIds, appsBySession, flagsBySession] = await Promise.all([
+      ownerIdsP, appsForSessions(ids), sessionFlags(ids),
+    ]);
 
     return {
       sessions: rows.map(r => ({
@@ -265,7 +315,14 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
         event_count: r.event_count,
         error_count: r.error_count,
         apps: appsBySession.get(r.session_id) ?? [],
+        // The owner's: a known owner cookie id, or any is_admin page view in the session.
+        mine: isOwnerRow(ownerIds, { isAdmin: flagsBySession.get(r.session_id)?.admin, cookieId: r.visitor_id }),
+        bot: flagsBySession.get(r.session_id)?.bot ?? false,
       })),
+      filters: {
+        mine: filters.excludeMine ? 'exclude' : 'include',
+        bots: filters.excludeBots ? 'exclude' : 'include',
+      },
     };
   });
 

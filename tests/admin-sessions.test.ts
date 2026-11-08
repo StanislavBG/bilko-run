@@ -134,6 +134,111 @@ describe('admin sessions', () => {
     expect(timeline[5]).toMatchObject({ app: 'sudoku', msg: 'boom' });
   });
 
+  describe('mine and bots filters', () => {
+    const OWNER_SID = '77777777-7777-4777-8777-777777777777';
+    const BOT_SID = '88888888-8888-4888-8888-888888888888';
+    const STRANGER_SID = '99999999-9999-4999-8999-999999999999';
+    const OWNER_VID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const BOT_VID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const STRANGER_VID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+    type Listed = { session_id: string; mine: boolean; bot: boolean };
+    type ListBody = { sessions: Listed[]; filters: { mine: string; bots: string } };
+
+    const session = (sid: string, vid: string, ms: number, email: string | null = null) => dbRun(
+      `INSERT INTO sessions (session_id, visitor_id, started_at, ended_at, page_count, email) VALUES (?, ?, ?, ?, 1, ?)`,
+      sid, vid, ms, ms + 1000, email);
+    // date is the view's UTC day, as /api/analytics/pageview writes it.
+    const view = (sid: string | null, vid: string | null, ms: number, isAdmin = 0, isBot = 0) => dbRun(
+      `INSERT INTO page_views (path, date, visitor_id, session_id, is_admin, is_bot, created_at_ms)
+       VALUES ('/projects/sudoku/', ?, ?, ?, ?, ?, ?)`,
+      new Date(ms).toISOString().slice(0, 10), vid, sid, isAdmin, isBot, ms);
+    const list = async (qs = ''): Promise<ListBody> => {
+      const res = await app.inject({ method: 'GET', url: `/api/admin/sessions${qs}` });
+      expect(res.statusCode).toBe(200);
+      return res.json();
+    };
+    const ids = (body: ListBody) => body.sessions.map((s) => s.session_id);
+
+    beforeEach(async () => {
+      for (const t of ['sessions', 'page_views', 'click_events', 'funnel_events', 'app_errors']) {
+        await dbRun(`DELETE FROM ${t}`);
+      }
+      const now = Date.now();
+      await session(OWNER_SID, OWNER_VID, now - 30_000);
+      await view(OWNER_SID, OWNER_VID, now - 30_000, 1, 0);
+      await session(BOT_SID, BOT_VID, now - 40_000);
+      await view(BOT_SID, BOT_VID, now - 40_000, 0, 1);
+      await session(STRANGER_SID, STRANGER_VID, now - 50_000, 's@x.co');
+      await view(STRANGER_SID, STRANGER_VID, now - 50_000);
+    });
+
+    it('lists the owner, bot and stranger sessions by default with their flags', async () => {
+      const body = await list();
+      expect(body.sessions.map((s) => [s.session_id, s.mine, s.bot])).toEqual([
+        [OWNER_SID, true, false],
+        [BOT_SID, false, true],
+        [STRANGER_SID, false, false],
+      ]);
+      expect(body.filters).toEqual({ mine: 'include', bots: 'include' });
+    });
+
+    it('mine=exclude drops the owner session', async () => {
+      const body = await list('?mine=exclude');
+      expect(ids(body)).toEqual([BOT_SID, STRANGER_SID]);
+      expect(body.filters).toEqual({ mine: 'exclude', bots: 'include' });
+    });
+
+    it('bots=exclude drops the bot session', async () => {
+      const body = await list('?bots=exclude');
+      expect(ids(body)).toEqual([OWNER_SID, STRANGER_SID]);
+      expect(body.filters).toEqual({ mine: 'include', bots: 'exclude' });
+    });
+
+    it('mine=exclude and bots=exclude together leave only the stranger', async () => {
+      const body = await list('?mine=exclude&bots=exclude');
+      expect(ids(body)).toEqual([STRANGER_SID]);
+      expect(body.sessions[0]).toMatchObject({ mine: false, bot: false });
+      expect(body.filters).toEqual({ mine: 'exclude', bots: 'exclude' });
+    });
+
+    it('marks and drops a signed-out owner session by its cookie id alone', async () => {
+      const SID_OUT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const t = Date.now() - 20_000;
+      await session(SID_OUT, OWNER_VID, t);
+      await view(SID_OUT, OWNER_VID, t); // is_admin 0: the owner browsing signed out
+      expect((await list()).sessions[0]).toMatchObject({ session_id: SID_OUT, mine: true, bot: false });
+      expect(ids(await list('?mine=exclude'))).toEqual([BOT_SID, STRANGER_SID]);
+    });
+
+    it('marks and drops a session by its admin page view alone', async () => {
+      const SID_ADMIN = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      const VID_X = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      const t = Date.now() - 20_000;
+      await session(SID_ADMIN, VID_X, t);
+      // No visitor id on the admin view, so VID_X never joins the owner cookie ids.
+      await view(SID_ADMIN, null, t, 1, 0);
+      expect((await list()).sessions[0]).toMatchObject({ session_id: SID_ADMIN, mine: true, bot: false });
+      expect(ids(await list('?mine=exclude'))).toEqual([BOT_SID, STRANGER_SID]);
+    });
+
+    it('keeps every session when admin and bot views have no session id', async () => {
+      // A NULL in a NOT IN list would turn the predicate NULL and empty the list.
+      await view(null, null, Date.now() - 10_000, 1, 1);
+      expect(ids(await list('?mine=exclude&bots=exclude'))).toEqual([STRANGER_SID]);
+    });
+
+    it('combines with the email, visitor and app filters', async () => {
+      expect(ids(await list('?app=sudoku&bots=exclude'))).toEqual([OWNER_SID, STRANGER_SID]);
+      expect(ids(await list(
+        `?email=s%40x.co&visitor=${STRANGER_VID}&app=sudoku&mine=exclude&bots=exclude`,
+      ))).toEqual([STRANGER_SID]);
+      expect(ids(await list(`?visitor=${OWNER_VID}&mine=exclude`))).toEqual([]);
+      expect(ids(await list(`?visitor=${BOT_VID}&mine=exclude`))).toEqual([BOT_SID]);
+      expect(ids(await list('?app=nope&mine=exclude&bots=exclude'))).toEqual([]);
+    });
+  });
+
   describe('flows', () => {
     const seedFlow = async () => {
       const iso = (offset: number) =>

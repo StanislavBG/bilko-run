@@ -71,7 +71,7 @@ const MARKED_IDS_SQL = `SELECT visitor_id AS id FROM internal_devices
 export function parseTrafficFilters(q: unknown): TrafficFilters {
   const p = q !== null && typeof q === 'object' ? (q as Record<string, unknown>) : {};
   return {
-    // `self` is the legacy alias that mcp-host-server's traffic_report still sends.
+    // `self` is the legacy alias. traffic_report now sends mine/bots; the alias stays for older bilko-host MCP builds.
     excludeMine: p.mine === 'exclude' || p.self === 'exclude',
     excludeBots: p.bots === 'exclude',
   };

@@ -24,9 +24,12 @@ Per the [host contract](../docs/host-contract.md), each app lives in its own rep
 | `usage_report` | admin key | no | Per-project egress (bytes out + requests) over a trailing window. Calls `/api/admin/egress` on bilko.run with the admin key. Capacity-signal numbers measured at the origin, not Render billing figures; they under-report by up to the flush interval (60s) on every process restart. |
 | `errors_report` | admin key | no | App errors grouped by app + signature over a trailing window (`/api/admin/observability/errors`). |
 | `error_detail` | admin key | no | One `app_errors` row by id (`/api/admin/observability/errors/:id`). |
-| `traffic_report` | admin key | no | Visitors, bot/human split, top pages and referrers (`/api/admin/traffic`). |
-| `funnel_report` | admin key | no | Per-UTM revenue funnel: visits, sign-ins, checkout, paid, booked (`/api/admin/funnel`). |
-| `flows_report` | admin key | no | Per-app sessions, views, clicks, events and errors (`/api/admin/flows`). |
+| `traffic_report` | admin key | no | Visitors, bot/human split, top pages and referrers (`/api/admin/traffic`). `excludeSelf` defaults to true (sends `mine=exclude`); `excludeSelf: false` sends `mine=include`. `includeBots` defaults to true (sends `bots=include`), because the human numbers exclude bots either way; `includeBots: false` sends `bots=exclude`, which only trims `byClass`/`topPagesByClass`. |
+| `funnel_report` | admin key | no | Per-UTM revenue funnel: visits, sign-ins, checkout, paid, booked (`/api/admin/funnel`). Always excludes the owner and bot sessions (the host's defaults; no opt-out). |
+| `flows_report` | admin key | no | Per-app sessions, views, clicks, events, errors and flow steps (`/api/admin/flows`). Sends `mine=exclude&bots=exclude` unless `includeMine` / `includeBots` is true. Returns the host's `filters` echo. |
+| `sessions_report` | admin key | no | Per-session audit (`/api/admin/sessions`): landing and exit path, referrer host, utm, country, device, counts, apps and the owner/bot flags. `timeline: true` adds each session's timeline (`/api/admin/sessions/:id`, at most 50 sessions, 5 requests at a time); `sessionId` reads one session. Same defaults and opt-outs as `flows_report`. Never returns an email. |
+
+The four visitor reports count real visitors by default. What the owner (`mine`) and bot (`bots`) filters exclude, and what they miss: [Observability §11](../docs/observability.md#11-reading-your-numbers-through-the-bilko-host-mcp).
 
 Mutating tools commit and push to `origin`, so Render auto-deploys.
 
@@ -78,7 +81,7 @@ See the [host contract](../docs/host-contract.md). `publish_static_project` need
 | `BILKO_PUBLISH_CHECKOUT` | No | Absolute path to the dedicated git checkout the server uses for every mutating call (commit + push happen here, never in your working tree). Defaults to `~/.local/state/bilko-host/publish-checkout`; missing parent directories are created on first use. |
 | `TURSO_DATABASE_URL` | No | Turso database URL for manifest rows and publish-override audit logs. |
 | `TURSO_AUTH_TOKEN` | No | Auth token paired with `TURSO_DATABASE_URL`. |
-| `BILKO_ADMIN_KEY` | For `usage_report` / `errors_report` / `error_detail` / `traffic_report` / `funnel_report` | Personal read-only admin API key (`bka_...`), minted at https://bilko.run/admin/secrets. Sent as `Authorization: Bearer` to the bilko.run admin API. Wins over the key file. |
+| `BILKO_ADMIN_KEY` | For `usage_report` / `errors_report` / `error_detail` / `traffic_report` / `funnel_report` / `flows_report` / `sessions_report` | Personal read-only admin API key (`bka_...`), minted at https://bilko.run/admin/secrets. Sent as `Authorization: Bearer` to the bilko.run admin API. Wins over the key file. |
 | `BILKO_ADMIN_KEY_FILE` | No | Key file read when `BILKO_ADMIN_KEY` is unset. Defaults to `~/.config/bilko-host/admin-key`. Must be mode `0600` (refused otherwise). |
 | `BILKO_BASE_URL` | No | Base URL of the host the admin API is called on. Defaults to `https://bilko.run`. |
 

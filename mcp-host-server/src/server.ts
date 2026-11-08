@@ -24,6 +24,10 @@
  *   - traffic_report             → visitors, bot/human split, top pages/referrers via admin API (read-only)
  *   - funnel_report              → per-UTM revenue funnel (visits → paid → booked) via admin API (read-only)
  *   - flows_report               → per-app sessions, views, clicks, events and errors via admin API (read-only)
+ *   - sessions_report            → per-session landing, source, owner/bot flags and timelines via admin API (read-only, no emails)
+ *
+ * The four visitor reports (traffic, funnel, flows, sessions) live in report-tools.ts and count real visitors by
+ * default: the owner and automation are excluded unless the caller opts in.
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -45,7 +49,9 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { ManifestSchema } from './manifest-schema.js';
 import { getHostDb, mcpRun, ensureGateTables } from './db.js';
-import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage, trafficReport, funnelReport, flowsReport } from './errors-report.js';
+import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage } from './errors-report.js';
+import { registerReportTools } from './report-tools.js';
+import { ok, err } from './tool-result.js';
 import { runGates, gateSummary, gateLines, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
@@ -124,12 +130,6 @@ async function gitInHost(...args: string[]): Promise<string> {
   return stdout.trim();
 }
 
-function ok(text: string) {
-  return { content: [{ type: 'text' as const, text }] };
-}
-function err(text: string) {
-  return { content: [{ type: 'text' as const, text: `ERROR: ${text}` }], isError: true };
-}
 function checkoutErr<T>(outcome: PublishOutcome<T> & { ok: false }) {
   return err(`publish checkout failed at stage "${outcome.stage}": ${outcome.error}`);
 }
@@ -694,70 +694,8 @@ server.registerTool(
   },
 );
 
-// 10) traffic_report ─────────────────────────────────────────────────────
-server.registerTool(
-  'traffic_report',
-  {
-    title: 'Visitor traffic report',
-    description:
-      'Read-only. Calls the bilko.run admin API (GET /api/admin/traffic) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for a trailing window: human vs bot visitors and hits (bots are UA-flagged), human visitors seen only once (undeclared-bot/bounce signal), bilko_vid cookie uniques, per-page and per-project hits + uniques, a per-visitor-class breakdown (`byClass`, `topPagesByClass`: human, search_crawler, ai_crawler, ai_user_agent, api_client, script), top referrers, countries, devices, and the date each metric became valid. ' +
-      'Visitors are a salted IP+user-agent hash, not a cookie. Per-visitor IP/UA/email rows are omitted. The top-level `source` field is the base URL queried.',
-    inputSchema: {
-      days: z.number().int().positive().default(30).describe('Trailing window in days. Default 30 (host caps at 90).'),
-      slug: z.string().optional().describe('Restrict to one /projects/<slug>/ app.'),
-      excludeSelf: z.boolean().default(false).describe("Drop the owner's own signed-in visits."),
-    },
-  },
-  async ({ days, slug, excludeSelf }) => {
-    try {
-      return ok(JSON.stringify(await trafficReport({ days, slug, excludeSelf }), null, 2));
-    } catch (e: unknown) {
-      return err((e as Error).message);
-    }
-  },
-);
-
-// 11) funnel_report ──────────────────────────────────────────────────────
-server.registerTool(
-  'funnel_report',
-  {
-    title: 'Per-UTM revenue funnel',
-    description:
-      'Read-only. Calls the bilko.run admin API (GET /api/admin/funnel) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns, for sessions since a date that landed with the given utm_source or viewed a page tagged with it (in-site links such as utm_source=session-manager): visits (sessions), sign_ins, checkout_start, paid (visitors), booked (paid service bookings) and free_hours_booked (free-hour bookings, never part of booked). Admin and bot traffic are excluded. The top-level `source` field is the base URL queried.',
-    inputSchema: {
-      utmSource: z.string().min(1).describe('utm_source to attribute, e.g. "burrow".'),
-      since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Start date YYYY-MM-DD (UTC). Host default: 7 days ago.'),
-    },
-  },
-  async ({ utmSource, since }) => {
-    try {
-      return ok(JSON.stringify(await funnelReport({ utmSource, since }), null, 2));
-    } catch (e: unknown) {
-      return err((e as Error).message);
-    }
-  },
-);
-
-// 12) flows_report ───────────────────────────────────────────────────────
-server.registerTool(
-  'flows_report',
-  {
-    title: 'Per-app flows',
-    description:
-      'Read-only. Calls the bilko.run admin API (GET /api/admin/flows) with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key). Returns per-app sessions, views, clicks, events and errors, so a sibling can see page- or lesson-level drop-off. Admin and bot traffic are handled as the host does. The top-level `source` field is the base URL queried.',
-    inputSchema: {
-      days: z.number().int().min(1).max(30).optional().describe('Window in days (1-30). Host default applies if omitted.'),
-      app: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,59}$/i).optional().describe('Limit to one app slug, e.g. "academy".'),
-    },
-  },
-  async ({ days, app }) => {
-    try {
-      return ok(JSON.stringify(await flowsReport({ days, app }), null, 2));
-    } catch (e: unknown) {
-      return err((e as Error).message);
-    }
-  },
-);
+// 10)-13) traffic_report, funnel_report, flows_report, sessions_report ────────
+registerReportTools(server);
 
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {

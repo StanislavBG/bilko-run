@@ -2,7 +2,7 @@
 
 Every project on bilko.run reports into one shared pipeline, so one visitor's trip across the host and any number of sibling apps reads as a single **session**. This doc is the process to adopt it. The admin view is `/admin/observability`.
 
-Code of record: `server/session-identity.ts`, `server/click-beacon.ts`, `packages/host-kit/src/telemetry.ts`, `server/routes/telemetry.ts`, `server/routes/admin-sessions.ts`.
+Code of record: `server/session-identity.ts`, `server/click-beacon.ts`, `packages/host-kit/src/telemetry.ts`, `server/routes/telemetry.ts`, `server/routes/admin-sessions.ts`, `server/traffic-filters.ts`, `mcp-host-server/src/report-tools.ts`.
 
 ## 1. What you get for free
 
@@ -180,3 +180,40 @@ An install POST may carry `seeds`: the client's first-run setup steps and how ea
 ### Admin surface
 
 `GET /api/admin/observability/installs?app=<slug>` returns installs, 7-day actives, platform/arch splits, installs per setup step and outcome (`installs.bySeed`), and an errors-by-version rollup. Admin-only. `GET /api/admin/session-manager/usage` has the same per-step rollup as `installs.seeds` and each machine's steps as `perInstall[].seeds`.
+
+## 11. Reading your numbers through the bilko-host MCP
+
+From your own repo, read your app's numbers with the `bilko-host` MCP report tools. They need the admin key (`mcp-host-server/README.md`). They count **real visitors by default**, so the owner and automation are left out unless you opt in.
+
+| Tool | Admin API | Default | Opt-out |
+|---|---|---|---|
+| `flows_report` | `GET /api/admin/flows` | `mine=exclude&bots=exclude` | `includeMine: true` sends `mine=include`; `includeBots: true` sends `bots=include` |
+| `sessions_report` | `GET /api/admin/sessions` (`/:id` for timelines) | `mine=exclude&bots=exclude` | same as `flows_report` |
+| `traffic_report` | `GET /api/admin/traffic` | `mine=exclude&bots=include` | `excludeSelf: false` sends `mine=include`; `includeBots: false` sends `bots=exclude` |
+| `funnel_report` | `GET /api/admin/funnel` | owner and bot sessions excluded (the host's defaults) | none |
+
+**The owner (`mine=exclude`)** means:
+
+- rows flagged `is_admin` (requests made while signed in as admin);
+- every device seen signed in as admin in the last 30 days, including its signed-out visits: its `bilko_vid` cookie id, and for page hits and clicks its IP+user-agent hash;
+- every device marked as the owner's on `/admin/secrets`, however long ago it last signed in.
+
+`flows_report` also drops events and errors from any session with an admin page view. `sessions_report` drops the whole session.
+
+**Bots (`bots=exclude`)** means UA-flagged automation:
+
+- page views and clicks whose user agent is a crawler, script, AI agent or API client, HeadlessChrome and Playwright included;
+- page views and clicks from a browser that reported `navigator.webdriver`. Headed Playwright and agent browsers keep a normal Chrome user agent, so this flag is their tell. It also re-flags that device's last 24 hours;
+- telemetry events and errors whose request user agent is not a person's browser (the telemetry UA class, flagged at ingest).
+
+`flows_report` also drops events and errors from any session with a bot-flagged page view. `sessions_report` drops every session with a bot-flagged page view, event or error.
+
+`traffic_report` keeps `bots=include` by default because its human numbers (visitors, hits, pages, referrers, countries, devices) exclude bot hits either way. `bots=exclude` only trims `byClass` and `topPagesByClass` to the non-bot classes.
+
+`funnel_report` has no opt-out. It drops sessions with an admin or bot-flagged page view, sessions from the owner's devices (seen signed in as admin in the last 30 days, or marked), the owner's own checkout and free-hour events, and anything under an admin email.
+
+**Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, on a device never signed in as admin or marked, still counts as a visitor.
+
+Every report but `funnel_report` returns the host's `filters` echo (`{ mine, bots }`, plus `mineHits` from `traffic_report`), so you can see what was applied. `filters: null` means a host older than these filters, which applied neither.
+
+`sessions_report` never returns an email. Its fields are allowlisted, event `props` lose every email-named key at any depth, and an email address inside any string becomes `[email]`.

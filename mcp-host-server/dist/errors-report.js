@@ -98,9 +98,20 @@ export function mapEgressToUsage(body, days) {
 }
 const rows = (v) => Array.isArray(v) ? v.filter((x) => !!x && typeof x === 'object') : [];
 const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
+const toggle = (include) => (include ? 'include' : 'exclude');
+const isToggle = (v) => v === 'include' || v === 'exclude';
+/** The host's `filters` echo ({ mine, bots, ... }) as sent, or null from a host older than the owner/bot filters. */
+function filtersEcho(b) {
+    const f = b.filters;
+    return f && typeof f === 'object' && !Array.isArray(f) ? f : null;
+}
 /** Shape GET /api/admin/traffic into the traffic_report output. Drops per-visitor IP/UA/email rows. */
-export function mapTrafficToReport(body, days, excludeSelf = false) {
+export function mapTrafficToReport(body, days, requested = { excludeSelf: true, includeBots: true }) {
     const b = (body && typeof body === 'object' ? body : {});
+    const filters = filtersEcho(b);
+    // The notes describe what the host applied; a host that echoes nothing gets what was asked for.
+    const mine = isToggle(filters?.mine) ? filters.mine : toggle(!requested.excludeSelf);
+    const bots = isToggle(filters?.bots) ? filters.bots : toggle(requested.includeBots);
     const t = (b.totals && typeof b.totals === 'object' ? b.totals : {});
     const q = (b.quality && typeof b.quality === 'object' ? b.quality : {});
     const humanHits = num(t.hits);
@@ -111,7 +122,8 @@ export function mapTrafficToReport(body, days, excludeSelf = false) {
     const firstDay = typeof b.earliestDate === 'string' ? b.earliestDate : null;
     return {
         source: baseUrl(),
-        window: { requestedDays: days, days: num(b.days) || days, excludeSelf },
+        window: { requestedDays: days, days: num(b.days) || days, excludeSelf: requested.excludeSelf, includeBots: requested.includeBots },
+        filters,
         visitors: {
             human: humanVisitors,
             bot: botVisitors,
@@ -142,25 +154,36 @@ export function mapTrafficToReport(body, days, excludeSelf = false) {
         notes: [
             '`visitors.human` counts a salted IP+user-agent hash (page_hits.visitor_id), NOT the bilko_vid cookie. One person on two devices counts twice; many people behind one NAT with the same browser count once.',
             '`visitors.bilkoVidCookie` counts bilko_vid cookie UUIDs. Clients that drop cookies (most crawlers) mint a new one on every request, so this over-counts non-browser traffic.',
-            'Visitors are classified into six classes: human, search_crawler, ai_crawler, ai_user_agent, api_client, script. `byClass` covers all classes, so its hits sum to all non-error hits; `visitors.human` stays human-only. Undeclared bots with browser UAs still land in `human`; `humanSingleHit` is the main signal for them.',
+            'Visitors are classified into six classes: human, search_crawler, ai_crawler, ai_user_agent, api_client, script. `byClass` covers all classes, so its hits sum to all non-error hits; `visitors.human` stays human-only. Undeclared bots with a browser UA and no navigator.webdriver flag still land in `human`; `humanSingleHit` is the main signal for them.',
             'Human aggregates exclude status >= 400. Hits are HTML documents only, not assets or API calls.',
-            excludeSelf ? 'Excludes the owner\'s own signed-in visits (is_admin rows).' : 'Includes the owner\'s own visits (is_admin rows); pass excludeSelf to drop them.',
+            mine === 'exclude'
+                ? "mine=exclude: the owner's own hits and clicks are left out of every count: is_admin rows, any visitor id (IP+UA hash or bilko_vid cookie) seen signed in as admin in the last 30 days, and every device marked as the owner's on /admin/secrets. `filters.mineHits` is the owner's human hits in the window."
+                : "mine=include: the owner's own hits and clicks are counted (excludeSelf: false). `filters.mineHits` is the owner's human hits in the window.",
+            bots === 'exclude'
+                ? 'bots=exclude: byClass and topPagesByClass keep only non-bot hits. The human aggregates exclude bot hits either way (UA-flagged, HeadlessChrome/Playwright included, or re-flagged after a navigator.webdriver page view).'
+                : 'bots=include: byClass and topPagesByClass keep every class, bots included. The human aggregates exclude bot hits either way (UA-flagged, HeadlessChrome/Playwright included, or re-flagged after a navigator.webdriver page view).',
             'A window that starts before `metricValidSince.visitors` only covers the days since then. page_hits keeps 90 days; the host caps the window at 90.',
             'Under-reports by up to the 60s flush interval on every process restart.',
         ],
     };
 }
+/**
+ * GET /api/admin/traffic. excludeSelf (default true) sends mine=exclude. includeBots (default true) sends bots=include:
+ * the human aggregates exclude bots either way, so bots=exclude would only trim byClass/topPagesByClass. Never sends
+ * the legacy self= alias.
+ */
 export async function trafficReport(opts) {
+    const requested = { excludeSelf: opts.excludeSelf ?? true, includeBots: opts.includeBots ?? true };
     const p = new URLSearchParams();
     p.set('days', String(opts.days));
     if (opts.slug)
         p.set('slug', opts.slug);
-    if (opts.excludeSelf)
-        p.set('self', 'exclude');
+    p.set('mine', toggle(!requested.excludeSelf));
+    p.set('bots', toggle(requested.includeBots));
     const body = await adminGet(`/api/admin/traffic?${p.toString()}`);
     if (!body)
         throw new Error('bilko.run returned 404 for /api/admin/traffic');
-    return mapTrafficToReport(body, opts.days, !!opts.excludeSelf);
+    return mapTrafficToReport(body, opts.days, requested);
 }
 /** GET /api/admin/funnel: per-UTM revenue funnel (visits → sign_ins → checkout_start → paid → booked), plus free_hours_booked. */
 export async function funnelReport(opts) {
@@ -184,17 +207,159 @@ export async function funnelReport(opts) {
         free_hours_booked: num(b.free_hours_booked),
     };
 }
-/** GET /api/admin/flows: per-app sessions, views, clicks, events and errors. Body passed through as-is. */
+/**
+ * GET /api/admin/flows: per-app sessions, views, clicks, events and errors. Sends mine=exclude&bots=exclude unless the
+ * caller opts in, so the counts are real visitors. The body is passed through with the host's `filters` echo, or
+ * `filters: null` from a host that echoes none.
+ */
 export async function flowsReport(opts) {
     const p = new URLSearchParams();
     if (opts.days !== undefined)
         p.set('days', String(opts.days));
     if (opts.app)
         p.set('app', opts.app);
-    const qs = p.toString();
-    const body = await adminGet(`/api/admin/flows${qs ? `?${qs}` : ''}`);
+    p.set('mine', toggle(!!opts.includeMine));
+    p.set('bots', toggle(!!opts.includeBots));
+    const body = await adminGet(`/api/admin/flows?${p.toString()}`);
     if (!body)
         throw new Error('bilko.run returned 404 for /api/admin/flows');
     const b = (typeof body === 'object' ? body : {});
-    return { source: baseUrl(), ...b };
+    return { source: baseUrl(), ...b, filters: filtersEcho(b) };
+}
+/**
+ * A session id as the host accepts it (server/session-identity.ts isValidId). Case is spelled out instead of an `i` flag
+ * because the tool's JSON Schema `pattern` carries no flags.
+ */
+export const SESSION_ID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const str = (v) => (typeof v === 'string' ? v : null);
+const EMAIL_KEY = /e[-_]?mail/i;
+const EMAIL_ADDRESS = /[a-z0-9._%+-]+(?:@|%40)[a-z0-9.-]+\.[a-z]{2,}/gi;
+/**
+ * Deep copy that drops every object key naming an email and turns each email address inside a string into [email],
+ * so free-form values (event props, paths, error messages, mailto: hrefs) cannot carry one out.
+ */
+function scrubEmails(v) {
+    if (typeof v === 'string')
+        return v.includes('@') || v.includes('%40') ? v.replace(EMAIL_ADDRESS, '[email]') : v;
+    if (Array.isArray(v))
+        return v.map(scrubEmails);
+    if (!v || typeof v !== 'object')
+        return v;
+    return Object.fromEntries(Object.entries(v)
+        .filter(([k]) => !EMAIL_KEY.test(k))
+        .map(([k, x]) => [k, scrubEmails(x)]));
+}
+function refHost(raw) {
+    const s = str(raw);
+    if (!s)
+        return null;
+    try {
+        return new URL(s).hostname || null;
+    }
+    catch {
+        return null;
+    }
+}
+// The session fields sessions_report returns, plus any utm_* column. The host's rows also carry `email`, never copied.
+const SESSION_FIELDS = new Set([
+    'session_id', 'visitor_id', 'started_at', 'ended_at', 'duration_ms', 'landing_path', 'exit_path', 'page_count',
+    'source_bucket', 'referrer_host', 'country', 'device', 'converted', 'purchased',
+    'click_count', 'event_count', 'error_count', 'apps', 'mine', 'bot',
+]);
+function pickSession(r) {
+    const out = {};
+    for (const [k, v] of Object.entries(r))
+        if (SESSION_FIELDS.has(k) || k.startsWith('utm_'))
+            out[k] = v;
+    // GET /api/admin/sessions/:id returns the raw sessions row, which has no duration_ms.
+    if (out.duration_ms === undefined && typeof r.started_at === 'number' && typeof r.ended_at === 'number') {
+        out.duration_ms = Math.max(0, r.ended_at - r.started_at);
+    }
+    return out;
+}
+/** One timeline item reduced to its kind's fields; a view keeps only its referrer's host. */
+function pickTimelineItem(r) {
+    const base = { ts: num(r.ts), kind: str(r.kind) };
+    switch (r.kind) {
+        case 'view':
+            return { ...base, path: str(r.path), referrer_host: refHost(r.referrer) };
+        case 'click':
+            return { ...base, path: str(r.path), label: str(r.label), href: str(r.href), track_name: str(r.track_name) };
+        case 'event':
+            return { ...base, name: str(r.name), app: str(r.app), path: str(r.path), props: r.props ?? null };
+        case 'error':
+            return { ...base, app: str(r.app), name: str(r.name), msg: str(r.msg) };
+        default:
+            return base;
+    }
+}
+/** GET /api/admin/sessions/:id with the session and timeline allowlisted (not yet scrubbed). Null on 404. */
+async function readSession(id) {
+    if (!SESSION_ID_RE.test(id))
+        throw new Error('invalid session id: expected a UUID');
+    const body = await adminGet(`/api/admin/sessions/${encodeURIComponent(id)}`);
+    if (!body || typeof body !== 'object')
+        return null;
+    const b = body;
+    return {
+        session: b.session && typeof b.session === 'object' ? pickSession(b.session) : null,
+        apps: Array.isArray(b.apps) ? b.apps.filter((a) => typeof a === 'string') : [],
+        timeline: rows(b.timeline).map(pickTimelineItem),
+    };
+}
+/** GET /api/admin/sessions/:id as { session, apps, timeline } with no email. Null when the host has no such session. */
+export async function sessionDetail(id) {
+    const detail = await readSession(id);
+    return detail && scrubEmails(detail);
+}
+const TIMELINE_SESSION_CAP = 50;
+const TIMELINE_CONCURRENCY = 5;
+/** Maps fn over items with at most `size` calls in flight, keeping input order. No new call starts after one fails. */
+async function mapLimit(items, size, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    let failed = false;
+    const worker = async () => {
+        while (!failed && next < items.length) {
+            const i = next++;
+            try {
+                out[i] = await fn(items[i]);
+            }
+            catch (e) {
+                failed = true;
+                throw e;
+            }
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(size, items.length) }, worker));
+    return out;
+}
+/**
+ * GET /api/admin/sessions as allowlisted rows with no email. Sends mine=exclude&bots=exclude unless the caller opts in.
+ * With `timeline`, at most 50 sessions are listed and each gets its GET /api/admin/sessions/:id timeline, 5 requests
+ * at a time.
+ */
+export async function sessionsReport(opts) {
+    const limit = opts.timeline ? Math.min(opts.limit ?? TIMELINE_SESSION_CAP, TIMELINE_SESSION_CAP) : opts.limit;
+    const p = new URLSearchParams();
+    if (opts.days !== undefined)
+        p.set('days', String(opts.days));
+    if (opts.app)
+        p.set('app', opts.app);
+    if (limit !== undefined)
+        p.set('limit', String(limit));
+    p.set('mine', toggle(!!opts.includeMine));
+    p.set('bots', toggle(!!opts.includeBots));
+    const body = await adminGet(`/api/admin/sessions?${p.toString()}`);
+    if (!body)
+        throw new Error('bilko.run returned 404 for /api/admin/sessions');
+    const b = (typeof body === 'object' ? body : {});
+    let sessions = rows(b.sessions).map(pickSession);
+    if (opts.timeline) {
+        sessions = sessions.slice(0, TIMELINE_SESSION_CAP);
+        const details = await mapLimit(sessions, TIMELINE_CONCURRENCY, (s) => readSession(String(s.session_id ?? '')));
+        sessions = sessions.map((s, i) => ({ ...s, timeline: details[i]?.timeline ?? [] }));
+    }
+    const report = { source: baseUrl(), filters: filtersEcho(b), count: sessions.length, sessions };
+    return scrubEmails(report);
 }

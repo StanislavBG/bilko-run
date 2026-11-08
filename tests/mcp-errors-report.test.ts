@@ -341,7 +341,7 @@ describe('mcp sessions_report', () => {
     },
     apps: ['academy'],
     timeline: [
-      { ts: 1000, kind: 'view', path: '/projects/academy/?ref=burrow', referrer: 'https://www.linkedin.com/feed/?x=1' },
+      { ts: 1000, kind: 'view', path: '/projects/academy/?ref=burrow', referrer: 'https://www.linkedin.com/feed/?x=1', referrer_host: 'www.linkedin.com' },
       { ts: 2000, kind: 'click', path: '/projects/academy/', label: 'Start', href: 'mailto:owner@example.com', track_name: 'course-start', tag: 'a' },
       {
         ts: 3000, kind: 'event', name: 'quiz.start', app: 'academy', path: '/projects/academy/q',

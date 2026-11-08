@@ -54,7 +54,10 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  for (const t of ['sessions', 'page_views', 'funnel_events', 'web_product_orders', 'service_bookings', 'admin_api_keys']) {
+  for (const t of [
+    'sessions', 'page_views', 'page_hits', 'internal_devices', 'funnel_events', 'web_product_orders', 'service_bookings',
+    'admin_api_keys',
+  ]) {
     await dbRun(`DELETE FROM ${t}`);
   }
   key = (await mintAdminApiKey(ADMIN_EMAIL, 'test')).key;
@@ -145,6 +148,27 @@ describe('GET /api/admin/funnel', () => {
     const body = (await get(`?since=${since}&utm_source=burrow&include_bots=1&exclude_self=0`)).json();
     expect(body.visits).toBe(5);
     expect(body.checkout_start).toBe(3);
+  });
+
+  it("exclude_self also drops the owner's signed-out devices by their bilko_vid cookie id", async () => {
+    // v9 signed in as the owner once (an is_admin page hit carrying its cookie id), then came from burrow signed out.
+    await dbRun(
+      'INSERT INTO page_hits (ts_ms, date, path, status, is_bot, is_admin, client_vid) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      now - DAY, new Date(now - DAY).toISOString().slice(0, 10), '/admin', 200, 0, 1, 'v9',
+    );
+    await session('s9', 'v9', 'burrow', { email: 'owner-alt@t.dev' });
+    await checkoutStart('v9', 'cs_9');
+    // v10 is a device the owner marked as internal; it never signed in.
+    await dbRun('INSERT INTO internal_devices (visitor_id, label, marked_at_ms) VALUES (?, ?, ?)', 'v10', 'phone', now);
+    await session('s10', 'v10', 'burrow', { purchased: 1 });
+    expect((await get(`?since=${since}&utm_source=burrow`)).json()).toEqual({
+      since, utm_source: 'burrow',
+      visits: 3, sign_ins: 2, checkout_start: 2, paid: 2, booked: 1, free_hours_booked: 0,
+    });
+    // exclude_self=0 is unchanged: both devices count, with the admin session s6.
+    expect((await get(`?since=${since}&utm_source=burrow&exclude_self=0`)).json()).toMatchObject({
+      visits: 6, sign_ins: 4, checkout_start: 4, paid: 3,
+    });
   });
 
   it('a wider since window picks up older sessions', async () => {

@@ -92,6 +92,35 @@ describe('admin sessions', () => {
     expect(none.json().sessions).toEqual([]);
   });
 
+  it('filters by app through funnel events or errors when no page view is under the app', async () => {
+    const S_EVENT = '12121212-1212-4212-8212-121212121212';
+    const S_ERROR = '13131313-1313-4313-8313-131313131313';
+    const t = Date.now() - 30_000;
+    // Both sessions only ever viewed '/', so the page-view match alone misses them.
+    for (const [sid, ms] of [[S_EVENT, t], [S_ERROR, t - 1000]] as const) {
+      await dbRun(
+        `INSERT INTO sessions (session_id, visitor_id, started_at, ended_at, page_count) VALUES (?, ?, ?, ?, 1)`,
+        sid, VID, ms, ms + 1000);
+      await dbRun(
+        `INSERT INTO page_views (path, referrer, date, session_id, created_at_ms) VALUES ('/', 'ref', '2026-10-18', ?, ?)`,
+        sid, ms);
+    }
+    await dbRun(
+      `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id) VALUES ('repo_open', 'git-viewer', '{}', ?, ?)`,
+      new Date(t).toISOString().slice(0, 19).replace('T', ' '), S_EVENT);
+    await dbRun(
+      `INSERT INTO app_errors (app, name, msg, session_id, created_at) VALUES ('git-viewer', 'TypeError', 'boom', ?, ?)`,
+      S_ERROR, Math.floor(t / 1000));
+    const res = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=git-viewer' });
+    expect(res.json().sessions.map((s: any) => [s.session_id, s.event_count, s.error_count])).toEqual([
+      [S_EVENT, 1, 0],
+      [S_ERROR, 0, 1],
+    ]);
+    // A slug only matches its own tool and app exactly.
+    const part = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=git' });
+    expect(part.json().sessions).toEqual([]);
+  });
+
   it('400s on an invalid app value', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/admin/sessions?app=bad%20slug' })).statusCode).toBe(400);
   });
@@ -228,6 +257,43 @@ describe('admin sessions', () => {
       expect(ids(await list('?mine=exclude&bots=exclude'))).toEqual([STRANGER_SID]);
     });
 
+    it('flags and drops sessions whose funnel events or errors were flagged is_bot at ingest', async () => {
+      // An agent whose page views look human: only its telemetry carries the automation flag.
+      const EVENT_SID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const ERROR_SID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      const AGENT_VID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      const sqlTs = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+      const event = (sid: string | null, ms: number, isBot: number) => dbRun(
+        `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id, visitor_id, is_bot)
+         VALUES ('main.open', 'sudoku', '{}', ?, ?, ?, ?)`,
+        sqlTs(ms), sid, AGENT_VID, isBot);
+      const error = (sid: string | null, ms: number, isBot: number) => dbRun(
+        `INSERT INTO app_errors (app, name, msg, session_id, visitor_id, created_at, is_bot)
+         VALUES ('sudoku', 'TypeError', 'boom', ?, ?, ?, ?)`,
+        sid, AGENT_VID, Math.floor(ms / 1000), isBot);
+      const t = Date.now() - 20_000;
+      await session(EVENT_SID, AGENT_VID, t);
+      await view(EVENT_SID, AGENT_VID, t);
+      await event(EVENT_SID, t, 1);
+      await session(ERROR_SID, AGENT_VID, t - 5_000);
+      await view(ERROR_SID, AGENT_VID, t - 5_000);
+      await error(ERROR_SID, t - 5_000, 1);
+      // Unflagged telemetry leaves the stranger human, and flagged rows with no session id drop no session.
+      await event(STRANGER_SID, t, 0);
+      await error(STRANGER_SID, t, 0);
+      await event(null, t, 1);
+      await error(null, t, 1);
+      expect((await list()).sessions.map((s) => [s.session_id, s.bot])).toEqual([
+        [EVENT_SID, true],
+        [ERROR_SID, true],
+        [OWNER_SID, false],
+        [BOT_SID, true],
+        [STRANGER_SID, false],
+      ]);
+      expect(ids(await list('?bots=exclude'))).toEqual([OWNER_SID, STRANGER_SID]);
+      expect(ids(await list('?app=sudoku&mine=exclude&bots=exclude'))).toEqual([STRANGER_SID]);
+    });
+
     it('combines with the email, visitor and app filters', async () => {
       expect(ids(await list('?app=sudoku&bots=exclude'))).toEqual([OWNER_SID, STRANGER_SID]);
       expect(ids(await list(
@@ -320,14 +386,16 @@ describe('admin sessions', () => {
         `INSERT INTO click_events (ts_ms, date, path, session_id, visitor_id, client_vid, is_admin, is_bot)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         ms, day(ms), PATH, sid, hash, vid, isAdmin, isBot);
-      const event = (sid: string | null, vid: string | null, ms: number, isAdmin = 0) => dbRun(
-        `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id, visitor_id, is_admin)
-         VALUES ('main.open', ?, ?, ?, ?, ?, ?)`,
+      // funnel_events and app_errors.is_bot is set at ingest from the request's UA.
+      const event = (sid: string | null, vid: string | null, ms: number, isAdmin = 0, isBot = 0) => dbRun(
+        `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id, visitor_id, is_admin, is_bot)
+         VALUES ('main.open', ?, ?, ?, ?, ?, ?, ?)`,
         APP, JSON.stringify({ flow: 'main', step: 'open' }), new Date(ms).toISOString().slice(0, 19).replace('T', ' '),
-        sid, vid, isAdmin);
-      const error = (sid: string | null, vid: string | null, ms: number) => dbRun(
-        `INSERT INTO app_errors (app, name, msg, session_id, visitor_id, created_at) VALUES (?, 'TypeError', 'boom', ?, ?, ?)`,
-        APP, sid, vid, Math.floor(ms / 1000));
+        sid, vid, isAdmin, isBot);
+      const error = (sid: string | null, vid: string | null, ms: number, isBot = 0) => dbRun(
+        `INSERT INTO app_errors (app, name, msg, session_id, visitor_id, created_at, is_bot)
+         VALUES (?, 'TypeError', 'boom', ?, ?, ?, ?)`,
+        APP, sid, vid, Math.floor(ms / 1000), isBot);
       // n page views, clicks, funnel events and app errors, all in one session.
       const activity = async (n: number, sid: string, vid: string, hash: string, isAdmin = 0, isBot = 0) => {
         const t = Date.now() - 60_000;
@@ -385,6 +453,24 @@ describe('admin sessions', () => {
         const body = await getFlows('?bots=exclude');
         expectCounts(body, 2, 5);
         expect(body.filters).toEqual({ mine: 'include', bots: 'exclude' });
+      });
+
+      it('bots=exclude also drops funnel events and errors flagged is_bot at ingest, in every query', async () => {
+        const t = Date.now() - 30_000;
+        const AGENT_SID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        // A funnel-only agent session: no page view or click is flagged, so the session join alone keeps it.
+        await event(AGENT_SID, 'agent-vid', t, 0, 1);
+        await error(AGENT_SID, 'agent-vid', t, 1);
+        // Flagged rows with no session id at all.
+        await event(null, null, t, 0, 1);
+        await error(null, null, t, 1);
+        const all = await getFlows();
+        expect(health(all)).toMatchObject({ sessions: 4, views: 7, clicks: 7, events: 9, errors: 9, error_sessions: 4 });
+        const flow = all.flows.find((f) => f.app === APP);
+        expect(flow?.total_sessions).toBe(4);
+        expect(flow?.steps.map((s) => [s.step, s.sessions])).toEqual([['open', 4]]);
+        expectCounts(await getFlows('?bots=exclude'), 2, 5);
+        expectCounts(await getFlows(`?app=${APP}&bots=exclude`), 2, 5);
       });
 
       it('mine=exclude and bots=exclude together leave only the stranger, with or without the app filter', async () => {

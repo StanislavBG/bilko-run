@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet } from '../db.js';
 import { requireAdmin, ADMIN_EMAILS } from '../clerk.js';
 import { FREE_HOUR_SLUG } from '../services/service-bookings.js';
+import { loadOwnerIds, mineExclusionSql, type SqlFragment } from '../traffic-filters.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_DAYS = 7;
@@ -30,7 +31,10 @@ export interface FunnelCounts {
  *   booked             paid service bookings matched by checkout session id or email
  *   free_hours_booked  free-hour bookings matched by booking id (the server's
  *                      free_hour_booked event) or email; never part of booked
- * Admin traffic and bots are excluded unless exclude_self=0 / include_bots=1.
+ * Admin traffic and bots are excluded unless exclude_self=0 / include_bots=1. Admin
+ * traffic is admin emails, is_admin page views and checkouts, and every session from
+ * one of the owner's devices by its bilko_vid cookie id (loadOwnerIds().cookieIds),
+ * signed in or not; the later steps key on the attributed sessions' visitors.
  */
 export async function funnelCounts(opts: {
   since: string; utmSource: string; excludeSelf: boolean; includeBots: boolean;
@@ -45,6 +49,10 @@ export async function funnelCounts(opts: {
     ? ` AND NOT EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = s.session_id AND (${badFlags.join(' OR ')}))`
     : '';
   const feAdmin = opts.excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : '';
+  // sessions.visitor_id is the bilko_vid cookie id; loadOwnerIds never throws.
+  const ownerDevices: SqlFragment = opts.excludeSelf
+    ? mineExclusionSql(await loadOwnerIds(), { cookieId: 's.visitor_id' })
+    : { sql: '', args: [] };
 
   // funnel_events.created_at is TEXT 'YYYY-MM-DD HH:MM:SS', so a bare date compares correctly.
   const row = await dbGet<Record<string, number>>(
@@ -54,7 +62,7 @@ export async function funnelCounts(opts: {
          AND (LOWER(s.utm_source) = LOWER(?) OR s.session_id IN (
            SELECT t.session_id FROM page_views t
            WHERE t.date >= ? AND t.session_id IS NOT NULL AND LOWER(t.utm_source) = LOWER(?)
-         ))${inAdmins('s.email')}${pvFilter}
+         ))${inAdmins('s.email')}${pvFilter}${ownerDevices.sql}
      ),
      v AS (SELECT DISTINCT visitor_id FROM s),
      ve AS (
@@ -96,7 +104,7 @@ export async function funnelCounts(opts: {
            AND b.slug = ?
            AND (b.id IN (SELECT booking_id FROM fh WHERE booking_id IS NOT NULL)
                 OR LOWER(b.email) IN (SELECT email FROM ve))) AS free_hours_booked`,
-    sinceMs, opts.utmSource, opts.since, opts.utmSource, ...admins,
+    sinceMs, opts.utmSource, opts.since, opts.utmSource, ...admins, ...ownerDevices.args,
     sinceMs, ...admins,
     opts.since,
     sinceMs, ...admins,

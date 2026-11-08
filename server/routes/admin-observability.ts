@@ -460,7 +460,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
     };
   });
 
-  // Per-visitor timeline: page hits and clicks merged, oldest first, latest 500.
+  // Per-visitor timeline: page hits and clicks merged, oldest first, latest 500. The id is either the ip+ua hash the
+  // traffic lists show (COALESCE(visitor_id, visitor_hash)) or a bilko_vid cookie id (client_vid), the id that
+  // sessions.visitor_id holds, which follows one browser across networks.
   app.get('/api/admin/traffic/visitor/:id', async (req, reply) => {
     const email = await requireAdmin(req, reply);
     if (!email) return;
@@ -477,14 +479,14 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       `SELECT * FROM (
          SELECT ts_ms, 'hit' AS kind, path, status, NULL AS label, NULL AS href,
                 COALESCE(referrer, referrer_host) AS referrer, ip, ua
-           FROM page_hits WHERE ts_ms >= ? AND COALESCE(visitor_id, visitor_hash) = ?
+           FROM page_hits WHERE ts_ms >= ? AND (COALESCE(visitor_id, visitor_hash) = ? OR client_vid = ?)
          UNION ALL
          SELECT ts_ms, 'click' AS kind, path, NULL AS status, label, href,
                 NULL AS referrer, ip, NULL AS ua
-           FROM click_events WHERE ts_ms >= ? AND COALESCE(visitor_id, visitor_hash) = ?
+           FROM click_events WHERE ts_ms >= ? AND (COALESCE(visitor_id, visitor_hash) = ? OR client_vid = ?)
           ORDER BY ts_ms DESC LIMIT 500
        ) ORDER BY ts_ms ASC`,
-      since, id, since, id,
+      since, id, id, since, id, id,
     ), []);
 
     return {

@@ -82,15 +82,24 @@ interface SessionFlags {
   bot: boolean;
 }
 
-/** Whether any page view of each session has is_admin = 1 or is_bot = 1, in one grouped query. */
+/**
+ * Per session, in one grouped query: admin when any page view has is_admin = 1; bot when any page view, funnel event
+ * or app error has is_bot = 1 (funnel_events and app_errors are flagged at ingest from the request UA).
+ */
 async function sessionFlags(ids: string[]): Promise<Map<string, SessionFlags>> {
   const flags = new Map<string, SessionFlags>();
   if (!ids.length) return flags;
+  const list = ids.map(() => '?').join(',');
   const rows = await dbAll<{ session_id: string; a: number; b: number }>(
-    `SELECT session_id, MAX(COALESCE(is_admin, 0)) AS a, MAX(COALESCE(is_bot, 0)) AS b
-       FROM page_views WHERE session_id IN (${ids.map(() => '?').join(',')})
-      GROUP BY session_id`,
-    ...ids,
+    `SELECT session_id, MAX(a) AS a, MAX(b) AS b FROM (
+       SELECT session_id, COALESCE(is_admin, 0) AS a, COALESCE(is_bot, 0) AS b
+         FROM page_views WHERE session_id IN (${list})
+       UNION ALL
+       SELECT session_id, 0 AS a, 1 AS b FROM funnel_events WHERE session_id IN (${list}) AND is_bot = 1
+       UNION ALL
+       SELECT session_id, 0 AS a, 1 AS b FROM app_errors WHERE session_id IN (${list}) AND is_bot = 1
+     ) GROUP BY session_id`,
+    ...ids, ...ids, ...ids,
   );
   for (const r of rows) flags.set(r.session_id, { admin: Number(r.a) === 1, bot: Number(r.b) === 1 });
   return flags;
@@ -166,12 +175,13 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     }
     if (filters.excludeBots) {
       const human: SqlFragment = { sql: ' AND COALESCE(is_bot, 0) = 0', args: [] };
-      // funnel_events and app_errors carry no bot flag, so they follow their session's page views.
+      // funnel_events and app_errors carry their own is_bot, set at ingest from the request UA, which catches agent
+      // sessions with no flagged page view (or none at all); they also follow their session's flagged page views.
       const botSessions = flaggedSessionExclusion('is_bot', sinceDay);
       pvParts.push(human);
       ceParts.push(human);
-      feParts.push(botSessions);
-      aeParts.push(botSessions);
+      feParts.push(human, botSessions);
+      aeParts.push(human, botSessions);
     }
     const pvWhere = joinSql(pvParts);
     const ceWhere = joinSql(ceParts);
@@ -298,11 +308,16 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
       const slug = String(q.app);
       // '_' is a LIKE wildcard and the slug regex allows it, so escape it.
       const esc = slug.replace(/_/g, '\\_');
+      // A page view under the app, or the app's own telemetry as /api/admin/flows counts it (funnel_events.tool,
+      // app_errors.app), so sessions that only sent events or errors match too. Each EXISTS is a session id lookup
+      // (idx_page_views_session, idx_funnel_events_session, idx_app_errors_session).
       where.push(
-        `EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = s.session_id AND
-           (pv.path LIKE ? ESCAPE '\\' OR pv.path = ? OR pv.path LIKE ? ESCAPE '\\'))`,
+        `(EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = s.session_id AND
+            (pv.path LIKE ? ESCAPE '\\' OR pv.path = ? OR pv.path LIKE ? ESCAPE '\\'))
+          OR EXISTS (SELECT 1 FROM funnel_events f WHERE f.session_id = s.session_id AND f.tool = ?)
+          OR EXISTS (SELECT 1 FROM app_errors e WHERE e.session_id = s.session_id AND e.app = ?))`,
       );
-      params.push(`/projects/${esc}/%`, `/products/${slug}`, `/products/${esc}/%`);
+      params.push(`/projects/${esc}/%`, `/products/${slug}`, `/products/${esc}/%`, slug, slug);
     }
 
     // mine=exclude (legacy self=exclude) and bots=exclude; both default to include.
@@ -330,6 +345,12 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
            WHERE date >= ? AND is_bot = 1 AND session_id IS NOT NULL)`,
       );
       params.push(sinceDay);
+      // Also any funnel event or app error flagged at ingest, the same rows that set the bot flag below.
+      // Session id lookups (idx_funnel_events_session, idx_app_errors_session), so NULL session ids cannot match.
+      where.push(
+        `NOT EXISTS (SELECT 1 FROM funnel_events f WHERE f.session_id = s.session_id AND f.is_bot = 1)`,
+        `NOT EXISTS (SELECT 1 FROM app_errors e WHERE e.session_id = s.session_id AND e.is_bot = 1)`,
+      );
     }
     params.push(limit);
 

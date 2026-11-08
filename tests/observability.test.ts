@@ -582,19 +582,21 @@ describe('observability rollup traffic24h', () => {
 });
 
 describe('GET /api/admin/traffic full detail', () => {
-  async function hit(o: { ts: number; path: string; visitorId?: string | null; hash?: string; isAdmin?: number; email?: string | null; ip?: string; ua?: string; ref?: string | null }) {
+  // visitorId is the ip+ua hash; clientVid is the bilko_vid cookie id that sessions.visitor_id holds.
+  async function hit(o: { ts: number; path: string; visitorId?: string | null; hash?: string; isAdmin?: number; email?: string | null; ip?: string; ua?: string; ref?: string | null; clientVid?: string | null }) {
     await dbRun(
-      `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin)
-       VALUES (?, ?, ?, NULL, 200, NULL, ?, 'US', 'desktop', 'Chrome', 'Linux', 0, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin, client_vid)
+       VALUES (?, ?, ?, NULL, 200, NULL, ?, 'US', 'desktop', 'Chrome', 'Linux', 0, ?, ?, ?, ?, ?, ?, ?)`,
       o.ts, new Date(o.ts).toISOString().slice(0, 10), o.path, o.hash ?? 'h',
       o.ip ?? '1.2.3.4', o.ua ?? 'UA/1', o.ref ?? null, o.visitorId ?? null, o.email ?? null, o.isAdmin ?? 0,
+      o.clientVid ?? null,
     );
   }
-  async function click(ts: number, visitorId: string, label: string) {
+  async function click(ts: number, visitorId: string, label: string, clientVid: string | null = null) {
     await dbRun(
-      `INSERT INTO click_events (ts_ms, date, path, slug, tag, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin)
-       VALUES (?, ?, '/a', NULL, 'button', ?, '/go', 'h', 0, '1.2.3.4', ?, NULL, 0)`,
-      ts, new Date(ts).toISOString().slice(0, 10), label, visitorId,
+      `INSERT INTO click_events (ts_ms, date, path, slug, tag, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin, client_vid)
+       VALUES (?, ?, '/a', NULL, 'button', ?, '/go', 'h', 0, '1.2.3.4', ?, NULL, 0, ?)`,
+      ts, new Date(ts).toISOString().slice(0, 10), label, visitorId, clientVid,
     );
   }
 
@@ -671,6 +673,23 @@ describe('GET /api/admin/traffic full detail', () => {
     const body = JSON.parse((await get('/api/admin/traffic/visitor/vid1')).body);
     expect(body.events.map((e: any) => [e.kind, e.path])).toEqual([['hit', '/a'], ['click', '/a'], ['hit', '/b']]);
     expect(body.events[1]).toMatchObject({ label: 'Buy', href: '/go', ip: '1.2.3.4' });
+  });
+
+  it('timeline takes a bilko_vid cookie id and follows that browser across ip+ua hashes', async () => {
+    asAdmin();
+    const now = Date.now();
+    // One browser (cookie c-1) on two networks, so two ip+ua hashes.
+    await hit({ ts: now - 3000, path: '/a', visitorId: 'hash-home', clientVid: 'c-1' });
+    await click(now - 2000, 'hash-home', 'Buy', 'c-1');
+    await hit({ ts: now - 1000, path: '/b', visitorId: 'hash-cafe', clientVid: 'c-1' });
+    await hit({ ts: now - 1500, path: '/z', visitorId: 'hash-other', clientVid: 'c-2' });
+    const body = JSON.parse((await get('/api/admin/traffic/visitor/c-1')).body);
+    expect(body.visitorId).toBe('c-1');
+    expect(body.events.map((e: any) => [e.kind, e.path])).toEqual([['hit', '/a'], ['click', '/a'], ['hit', '/b']]);
+    expect(body.events[1]).toMatchObject({ label: 'Buy', href: '/go' });
+    // An ip+ua hash still matches only its own rows.
+    const home = JSON.parse((await get('/api/admin/traffic/visitor/hash-home')).body);
+    expect(home.events.map((e: any) => [e.kind, e.path])).toEqual([['hit', '/a'], ['click', '/a']]);
   });
 });
 

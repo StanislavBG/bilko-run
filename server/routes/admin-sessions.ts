@@ -4,6 +4,7 @@ import { requireAdmin } from '../clerk.js';
 import { isValidId } from '../session-identity.js';
 import { parseTrafficFilters, loadOwnerIds, isOwnerRow, mineExclusionSql, type SqlFragment } from '../traffic-filters.js';
 import type { TimelineItem } from '../../shared/session-timeline.js';
+import { parseEnvSelector, envPredicate } from './telemetry.js';
 
 const TIMELINE_CAP = 1000;
 const APP_FILTER_RE = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
@@ -132,7 +133,7 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     const admin = await requireAdmin(req, reply);
     if (!admin) return;
 
-    const q = (req.query ?? {}) as { days?: string; app?: string };
+    const q = (req.query ?? {}) as { days?: string; app?: string; env?: string };
     const days = intParam(q.days, 7, 1, 30);
     if (q.app !== undefined && !APP_FILTER_RE.test(String(q.app))) {
       return reply.status(400).send({ error: 'Invalid app.' });
@@ -161,6 +162,14 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     const ceParts: SqlFragment[] = [];
     const feParts: SqlFragment[] = [];
     const aeParts: SqlFragment[] = [];
+    // env=prod (the default, and any unrecognised value) keeps rows with no env, from clients that predate the tag,
+    // and drops dev and test; env=all is a no-op. page_views and click_events have no env column: only the bilko.run
+    // beacon writes them.
+    const env = parseEnvSelector(q.env);
+    const envPred = envPredicate(env);
+    const envPart: SqlFragment = { sql: ` AND ${envPred.sql}`, args: envPred.args };
+    feParts.push(envPart);
+    aeParts.push(envPart);
     const sinceDay = new Date(sinceMs).toISOString().slice(0, 10);
     if (filters.excludeMine) {
       const ownerIds = await loadOwnerIds();
@@ -286,6 +295,7 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
       filters: {
         mine: filters.excludeMine ? 'exclude' : 'include',
         bots: filters.excludeBots ? 'exclude' : 'include',
+        env,
       },
     };
   });

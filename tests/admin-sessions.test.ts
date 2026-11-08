@@ -337,7 +337,7 @@ describe('admin sessions', () => {
       expect(apps.map((a: any) => a.app)).toEqual(['flowapp']);
       expect(flows.map((f: any) => f.app)).toEqual(['flowapp']);
       const none = (await app.inject({ method: 'GET', url: '/api/admin/flows?app=nope' })).json();
-      expect(none).toEqual({ apps: [], flows: [], filters: { mine: 'include', bots: 'include' } });
+      expect(none).toEqual({ apps: [], flows: [], filters: { mine: 'include', bots: 'include', env: 'prod' } });
     });
 
     it('counts per-app errors and sessions', async () => {
@@ -372,7 +372,7 @@ describe('admin sessions', () => {
       type FlowsBody = {
         apps: Health[];
         flows: { app: string; flow: string; steps: { step: string; sessions: number }[]; total_sessions: number }[];
-        filters: { mine: string; bots: string };
+        filters: { mine: string; bots: string; env: string };
       };
 
       const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -440,19 +440,19 @@ describe('admin sessions', () => {
         const body = await getFlows();
         expect(body.apps.map((a) => a.app)).toEqual([APP]);
         expectCounts(body, 3, 7);
-        expect(body.filters).toEqual({ mine: 'include', bots: 'include' });
+        expect(body.filters).toEqual({ mine: 'include', bots: 'include', env: 'prod' });
       });
 
       it('mine=exclude drops the owner rows from every table', async () => {
         const body = await getFlows('?mine=exclude');
         expectCounts(body, 2, 6);
-        expect(body.filters).toEqual({ mine: 'exclude', bots: 'include' });
+        expect(body.filters).toEqual({ mine: 'exclude', bots: 'include', env: 'prod' });
       });
 
       it('bots=exclude drops the bot rows from every table', async () => {
         const body = await getFlows('?bots=exclude');
         expectCounts(body, 2, 5);
-        expect(body.filters).toEqual({ mine: 'include', bots: 'exclude' });
+        expect(body.filters).toEqual({ mine: 'include', bots: 'exclude', env: 'prod' });
       });
 
       it('bots=exclude also drops funnel events and errors flagged is_bot at ingest, in every query', async () => {
@@ -476,7 +476,7 @@ describe('admin sessions', () => {
       it('mine=exclude and bots=exclude together leave only the stranger, with or without the app filter', async () => {
         const body = await getFlows('?mine=exclude&bots=exclude');
         expectCounts(body, 1, 4);
-        expect(body.filters).toEqual({ mine: 'exclude', bots: 'exclude' });
+        expect(body.filters).toEqual({ mine: 'exclude', bots: 'exclude', env: 'prod' });
         const one = await getFlows(`?app=${APP}&mine=exclude&bots=exclude`);
         expect(one.apps.map((a) => a.app)).toEqual([APP]);
         expectCounts(one, 1, 4);
@@ -518,6 +518,90 @@ describe('admin sessions', () => {
         await event(OLD_SID, null, Date.now() - 30_000);
         expect(health(await getFlows('?days=1&mine=exclude'))?.events).toBe(7);
         expect(health(await getFlows('?days=7&mine=exclude'))?.events).toBe(6);
+      });
+    });
+
+    describe('env filter', () => {
+      const APP = 'envapp';
+      // 1 no-env, 2 prod, 4 dev and 8 test sessions with one funnel event each, so every total shows which envs are left.
+      const SEEDED: [string | null, number][] = [[null, 1], ['prod', 2], ['dev', 4], ['test', 8]];
+
+      type EnvBody = {
+        apps: { app: string; sessions: number; events: number; errors: number; error_sessions: number }[];
+        flows: { app: string; steps: { step: string; sessions: number }[]; total_sessions: number }[];
+        filters: { mine: string; bots: string; env: string };
+      };
+
+      const getFlows = async (qs = ''): Promise<EnvBody> => {
+        const res = await app.inject({ method: 'GET', url: `/api/admin/flows${qs}` });
+        expect(res.statusCode).toBe(200);
+        return res.json();
+      };
+      // `sessions` sessions and events in the app row and in both flow queries, and `errors` errors, one per session.
+      const expectCounts = (body: EnvBody, sessions: number, errors: number) => {
+        expect(body.apps.find((a) => a.app === APP)).toMatchObject({
+          sessions, events: sessions, errors, error_sessions: errors,
+        });
+        const flow = body.flows.find((f) => f.app === APP);
+        expect(flow?.total_sessions).toBe(sessions);
+        expect(flow?.steps.map((s) => [s.step, s.sessions])).toEqual([['open', sessions]]);
+      };
+
+      beforeEach(async () => {
+        for (const t of ['sessions', 'page_views', 'click_events', 'funnel_events', 'app_errors']) {
+          await dbRun(`DELETE FROM ${t}`);
+        }
+        const ms = Date.now() - 60_000;
+        const at = new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+        // A NULL env is a client that predates the tag; it counts as prod.
+        for (const [env, n] of SEEDED) {
+          for (let i = 0; i < n; i++) {
+            await dbRun(
+              `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id, env)
+               VALUES ('main.open', ?, ?, ?, ?, ?)`,
+              APP, JSON.stringify({ flow: 'main', step: 'open' }), at, `env-${env ?? 'none'}-${i}`, env);
+          }
+        }
+        // A dev error, and one from a client that sends no env.
+        for (const [env, sid] of [['dev', 'env-dev-0'], [null, 'env-none-0']] as const) {
+          await dbRun(
+            `INSERT INTO app_errors (app, name, msg, session_id, created_at, env) VALUES (?, 'TypeError', 'boom', ?, ?, ?)`,
+            APP, sid, Math.floor(ms / 1000), env);
+        }
+      });
+
+      it('defaults to prod: keeps no-env and prod rows and drops dev and test, in every query', async () => {
+        const body = await getFlows();
+        expect(body.apps.map((a) => a.app)).toEqual([APP]);
+        expectCounts(body, 3, 1);
+        expect(body.filters).toEqual({ mine: 'include', bots: 'include', env: 'prod' });
+      });
+
+      it('env=all counts every env', async () => {
+        const body = await getFlows('?env=all');
+        expectCounts(body, 15, 2);
+        expect(body.filters).toEqual({ mine: 'include', bots: 'include', env: 'all' });
+      });
+
+      it('env=test and env=dev select only that env', async () => {
+        const test = await getFlows('?env=test');
+        expectCounts(test, 8, 0);
+        expect(test.filters).toEqual({ mine: 'include', bots: 'include', env: 'test' });
+        const dev = await getFlows('?env=dev');
+        expectCounts(dev, 4, 1);
+        expect(dev.filters).toEqual({ mine: 'include', bots: 'include', env: 'dev' });
+      });
+
+      it('an unrecognised env means prod', async () => {
+        const body = await getFlows('?env=garbage');
+        expectCounts(body, 3, 1);
+        expect(body.filters).toEqual({ mine: 'include', bots: 'include', env: 'prod' });
+      });
+
+      it('binds the env value in order with the app, mine and bots filters', async () => {
+        const body = await getFlows(`?app=${APP}&env=dev&mine=exclude&bots=exclude`);
+        expectCounts(body, 4, 1);
+        expect(body.filters).toEqual({ mine: 'exclude', bots: 'exclude', env: 'dev' });
       });
     });
   });

@@ -10,7 +10,7 @@ Sibling apps in the workspace depend on it locally:
 "host-kit": "file:../Bilko/packages/host-kit"
 ```
 
-The npm package name is `host-kit` (`pnpm add host-kit`). Peer deps: `react` ^18, and `@playwright/test` >=1.40 only if you use `host-kit/testing`.
+The npm package name is `host-kit` (`pnpm add host-kit@^0.11.0`; 0.11.0 is the first release that tags every telemetry record with `env`, see [Telemetry](#telemetry)). Peer deps: `react` ^18, and `@playwright/test` >=1.40 only if you use `host-kit/testing`.
 
 - **Tailwind.** Tailwind skips `node_modules`, so apps that render kit components need `@source "<rel>/node_modules/host-kit/dist";` in their Tailwind CSS.
 - **After changing host-kit.** Run `pnpm --filter host-kit build` in the Bilko repo, then `pnpm install` in each app (pnpm copies the untracked `dist/` into the app).

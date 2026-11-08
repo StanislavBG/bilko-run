@@ -473,25 +473,26 @@ describe('Telemetry ingest — session cookie stamping', () => {
   });
 });
 
-// funnel_events / app_errors carry is_bot from the request's own User-Agent header
-// (classifyVisitor !== 'human'), so automation runs drop out of every bots filter
-// even in sessions that never send a page view.
+// funnel_events / app_errors carry is_bot from isBotRequest (request headers):
+// browser automation and crawlers are bots, first-party desktop and CLI clients
+// are not, so automation runs drop out of every bots filter even in sessions that
+// never send a page view while Session Manager's own reports stay visible.
 describe('Telemetry ingest — is_bot from the request UA', () => {
   const HEADLESS_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36';
   const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-  function injectUa(url: string, body: unknown, ua: string, ip: string) {
+  function injectUa(url: string, body: unknown, ua: string, ip: string, extra: Record<string, string> = {}) {
     return app.inject({
       method: 'POST',
       url,
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, 'user-agent': ua },
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip, 'user-agent': ua, ...extra },
       body: JSON.stringify(body),
     });
   }
 
-  async function ingest(tool: string, ua: string, ip: string) {
-    const ev = await injectUa('/api/telemetry/event', { batch: [{ app: tool, name: 'repo_opened', visitor_id: `${tool}-v`, props: {} }] }, ua, ip);
-    const er = await injectUa('/api/telemetry/error', { batch: [{ app: tool, version: '1.0.0', name: 'TypeError', msg: 'boom', visitor_id: `${tool}-v`, ts: Date.now() }] }, ua, ip);
+  async function ingest(tool: string, ua: string, ip: string, extra: Record<string, string> = {}) {
+    const ev = await injectUa('/api/telemetry/event', { batch: [{ app: tool, name: 'repo_opened', visitor_id: `${tool}-v`, props: {} }] }, ua, ip, extra);
+    const er = await injectUa('/api/telemetry/error', { batch: [{ app: tool, version: '1.0.0', name: 'TypeError', msg: 'boom', visitor_id: `${tool}-v`, ts: Date.now() }] }, ua, ip, extra);
     expect([ev.statusCode, er.statusCode]).toEqual([200, 200]);
     const events = await dbAll<{ is_bot: number }>('SELECT is_bot FROM funnel_events WHERE tool = ?', tool);
     const errors = await dbAll<{ is_bot: number }>('SELECT is_bot FROM app_errors WHERE app = ?', tool);
@@ -499,7 +500,8 @@ describe('Telemetry ingest — is_bot from the request UA', () => {
   }
 
   beforeEach(async () => {
-    await dbRun("DELETE FROM funnel_events WHERE tool IN ('ua-headless', 'ua-chrome')");
+    await dbRun("DELETE FROM funnel_events WHERE tool LIKE 'ua-%'");
+    await dbRun("DELETE FROM app_errors WHERE app LIKE 'ua-%'");
   });
 
   it('a HeadlessChrome UA stores is_bot = 1 on funnel_events and app_errors', async () => {
@@ -508,5 +510,68 @@ describe('Telemetry ingest — is_bot from the request UA', () => {
 
   it('a desktop Chrome UA stores is_bot = 0 on funnel_events and app_errors', async () => {
     expect(await ingest('ua-chrome', CHROME_UA, '10.6.0.2')).toEqual({ events: [0], errors: [0] });
+  });
+
+  // What Session Manager's desktop client sends: Node's fetch UA plus its beacon tag.
+  it('a Session Manager beacon request stores is_bot = 0', async () => {
+    expect(await ingest('ua-sm', 'node', '10.6.0.3', { 'x-sm-beacon': 'session-manager/1.4.2' })).toEqual({ events: [0], errors: [0] });
+  });
+
+  it('first-party non-browser clients (node, undici, Electron, a CLI) store is_bot = 0', async () => {
+    const uas = ['node', 'undici', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) session-manager/1.4.2 Chrome/130.0.0.0 Electron/33.2.0 Safari/537.36', 'bilko-cli/0.3.1', ''];
+    for (const [i, ua] of uas.entries()) {
+      expect(await ingest(`ua-client-${i}`, ua, `10.6.1.${i + 1}`)).toEqual({ events: [0], errors: [0] });
+    }
+  });
+
+  it('browser automation and crawler UAs store is_bot = 1', async () => {
+    const uas = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Playwright/1.48.0',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Puppeteer Chrome/131.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Unknown; Linux x86_64) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1',
+      'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.2; +https://openai.com/gptbot)',
+      'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)',
+    ];
+    for (const [i, ua] of uas.entries()) {
+      expect(await ingest(`ua-auto-${i}`, ua, `10.6.2.${i + 1}`)).toEqual({ events: [1], errors: [1] });
+    }
+  });
+
+  it('an invalid X-SM-Beacon tag does not clear a HeadlessChrome flag', async () => {
+    expect(await ingest('ua-badtag', HEADLESS_UA, '10.6.0.4', { 'x-sm-beacon': 'not a tag' })).toEqual({ events: [1], errors: [1] });
+  });
+});
+
+// One-time repair: Session Manager desktop rows stored with is_bot = 1 after
+// 80a49fe2 (2026-11-07 23:00 PST) go back to 0; nothing else moves.
+describe('initDb — repair of mis-flagged Session Manager telemetry', () => {
+  const MIGRATION = '2026-11-08-session-manager-telemetry-not-bot';
+  const CUTOFF_SEC = 1794121200; // 2026-11-07 23:00 PST
+
+  it('resets is_bot on SM funnel_events/app_errors since the cutoff, once', async () => {
+    await dbRun("DELETE FROM funnel_events WHERE event LIKE 'repair-%'");
+    await dbRun("DELETE FROM app_errors WHERE name LIKE 'repair-%'");
+    const ev = (event: string, tool: string, at: string, bot: number) =>
+      dbRun('INSERT INTO funnel_events (event, tool, created_at, is_bot) VALUES (?, ?, ?, ?)', event, tool, at, bot);
+    const er = (name: string, app: string, at: number, bot: number) =>
+      dbRun('INSERT INTO app_errors (app, name, msg, created_at, is_bot) VALUES (?, ?, ?, ?, ?)', app, name, 'boom', at, bot);
+    await ev('repair-sm-after', 'session-manager', '2026-11-08 07:30:00', 1);
+    await ev('repair-sm-before', 'session-manager', '2026-11-08 06:59:59', 1);
+    await ev('repair-other-after', 'git-viewer', '2026-11-08 07:30:00', 1);
+    await er('repair-sm-after', 'session-manager', CUTOFF_SEC + 60, 1);
+    await er('repair-other-after', 'git-viewer', CUTOFF_SEC + 60, 1);
+    await dbRun('DELETE FROM data_migrations WHERE id = ?', MIGRATION);
+
+    await initDb();
+    const evs = await dbAll<{ event: string; is_bot: number }>("SELECT event, is_bot FROM funnel_events WHERE event LIKE 'repair-%' ORDER BY event");
+    const ers = await dbAll<{ name: string; is_bot: number }>("SELECT name, is_bot FROM app_errors WHERE name LIKE 'repair-%' ORDER BY name");
+    expect(evs.map((r) => [r.event, r.is_bot])).toEqual([['repair-other-after', 1], ['repair-sm-after', 0], ['repair-sm-before', 1]]);
+    expect(ers.map((r) => [r.name, r.is_bot])).toEqual([['repair-other-after', 1], ['repair-sm-after', 0]]);
+
+    // Idempotent: a later SM row flagged for a real reason is not touched by the next boot.
+    await dbRun("UPDATE funnel_events SET is_bot = 1 WHERE event = 'repair-sm-after'");
+    await initDb();
+    expect((await dbAll<{ is_bot: number }>("SELECT is_bot FROM funnel_events WHERE event = 'repair-sm-after'"))[0].is_bot).toBe(1);
   });
 });

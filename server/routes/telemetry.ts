@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { dbRun, dbGet, dbAll } from '../db.js';
 import { readSessionIds } from '../session-identity.js';
 import { internalFlag } from '../internal-traffic.js';
-import { classifyVisitor } from '../services/analytics.js';
+import { beaconTag, isBotRequest } from '../services/analytics.js';
 
 const MAX_BATCH = 50;
 const MAX_FIELD_BYTES = 4_000;
@@ -30,17 +30,14 @@ function bumpAndCheck(key: string, limit: number): boolean {
   return e.count <= limit;
 }
 
-// funnel_events / app_errors is_bot: 1 when the request's own User-Agent header is
-// not a person's browser (HeadlessChrome, Playwright, curl, crawlers, no UA). The
-// body's `ua` field is client-written; the header is what actually made the request.
-function uaBotFlag(req: { headers: Record<string, string | string[] | undefined> }): number {
-  return classifyVisitor(String(req.headers['user-agent'] ?? '')) !== 'human' ? 1 : 0;
-}
+// funnel_events / app_errors is_bot comes from the request's own headers
+// (isBotRequest: browser automation and crawlers only). The body's `ua` field is
+// client-written; the headers are what actually made the request.
 
 function ipKey(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
   const fwd = req.headers['x-forwarded-for'];
   const raw = Array.isArray(fwd) ? fwd[0] : (fwd ?? req.ip ?? '');
-  const tag = beaconTag(req);
+  const tag = beaconTag(req.headers);
   return `tel:${tag}:${raw.split(',')[0].trim()}`;
 }
 
@@ -207,24 +204,15 @@ export function envPredicate(sel: EnvSelector, column = 'env'): { sql: string; a
   return { sql: `${column} = ?`, args: [sel] };
 }
 
-// A build-constant tag compiled into a client package (e.g.
-// `X-SM-Beacon: session-manager/1.2.3`). It ships inside a public npm package,
-// so it is NOT a secret and nothing here treats it as authentication. Its only
-// job is to give recognised client traffic its own per-IP bucket, so a scanner
-// hammering a public POST route cannot exhaust the budget of a real install that
-// happens to share an egress IP with it. Untagged traffic is never dropped for
-// being untagged — the browser SDK does not send it.
+// X-SM-Beacon (beaconTag, server/services/analytics.ts) is a public build-constant
+// tag, not authentication. Here it gives recognised client traffic its own per-IP
+// bucket, so a scanner hammering a public POST route cannot exhaust the budget of
+// a real install that happens to share an egress IP with it. Untagged traffic is
+// never dropped for being untagged — the browser SDK does not send it.
 //
 // The desktop client also sends `X-SM-Beacon-Key`. It is deliberately ignored:
 // its value is a public fallback constant compiled into the npm package, so
 // checking it would authenticate nothing.
-const BEACON_RE = /^[a-z0-9][a-z0-9._-]{0,39}\/[0-9][0-9a-z.\-+]{0,19}$/i;
-
-function beaconTag(req: { headers: Record<string, string | string[] | undefined> }): string {
-  const h = req.headers['x-sm-beacon'];
-  const raw = Array.isArray(h) ? h[0] : (h ?? '');
-  return BEACON_RE.test(raw) ? raw.split('/')[0].toLowerCase() : '';
-}
 
 function clamp(s: unknown, n: number): string {
   return typeof s === 'string' ? s.slice(0, n) : String(s ?? '').slice(0, n);
@@ -399,7 +387,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     if (!bumpAndCheck(ipKey(req as any), 1200)) return reply.code(429).send({ error: 'rate_limited' });
     const admitted = admit(batchOf(req));
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
-    const isBotUa = uaBotFlag(req);
+    const isBotUa = isBotRequest(req.headers) ? 1 : 0;
     for (const e of admitted.records) {
       await dbRun(
         `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env, is_bot, is_internal)
@@ -450,7 +438,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     if (!bumpAndCheck(ipKey(req as any), 300)) return reply.code(429).send({ error: 'rate_limited' });
     const admitted = admit(batchOf(req));
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
-    const isBotUa = uaBotFlag(req);
+    const isBotUa = isBotRequest(req.headers) ? 1 : 0;
     for (const e of admitted.records) {
       await dbRun(
         `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at, env, is_bot)

@@ -119,7 +119,48 @@ export function classifyVisitor(
   return 'human';
 }
 
-export function isBot(ua: string): boolean {
+// ── Request-level bot rule (every ingest path) ───────────────────────────────
+// One rule for is_bot on page_views, click_events, funnel_events and app_errors
+// and for git-viewer's built_by = 'automation'. A bot is browser automation or a
+// crawler. A first-party non-browser client is not: Session Manager's desktop
+// telemetry (Node fetch, UA `node`, plus X-SM-Beacon), a CLI, undici, Electron,
+// curl. docs/observability.md §10 says CLIs and desktop apps report here, so the
+// bots=exclude defaults must keep them. classifyVisitor stays the finer-grained
+// visitor_class for page_hits; this rule is deliberately narrower.
+
+export type RequestHeaders = Record<string, string | string[] | undefined>;
+
+function headerValue(h: string | string[] | undefined): string {
+  return String((Array.isArray(h) ? h[0] : h) ?? '');
+}
+
+// A build-constant tag compiled into a client package (e.g.
+// `X-SM-Beacon: session-manager/1.2.3`). It ships inside a public npm package,
+// so it is NOT a secret and nothing treats it as authentication: it gives
+// recognised client traffic its own per-IP telemetry bucket and marks it as a
+// first-party client. Spoofing it only un-flags the spoofer's own rows.
+const BEACON_RE = /^[a-z0-9][a-z0-9._-]{0,39}\/[0-9][0-9a-z.\-+]{0,19}$/i;
+
+/** The client name from a valid X-SM-Beacon header (lowercased), or ''. */
+export function beaconTag(headers: RequestHeaders): string {
+  const raw = headerValue(headers['x-sm-beacon']);
+  return BEACON_RE.test(raw) ? raw.split('/')[0].toLowerCase() : '';
+}
+
+const RE_BROWSER_AUTOMATION = /headlesschrome|playwright|puppeteer|phantomjs|selenium/i;
+const RE_GENERIC_CRAWLER = /bot|spider|crawler/i;
+
+/**
+ * True when the request is browser automation or a crawler. A valid X-SM-Beacon
+ * tag, an empty UA and any other non-browser client UA are not bots.
+ */
+export function isBotRequest(headers: RequestHeaders): boolean {
+  if (beaconTag(headers)) return false;
+  const ua = headerValue(headers['user-agent']);
   if (!ua) return false;
-  return classifyVisitor(ua) !== 'human';
+  return RE_BROWSER_AUTOMATION.test(ua)
+    || RE_AI_USER_AGENT.test(ua)
+    || RE_AI_CRAWLER.test(ua)
+    || RE_SEARCH_CRAWLER.test(ua)
+    || RE_GENERIC_CRAWLER.test(ua);
 }

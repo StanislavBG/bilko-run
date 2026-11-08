@@ -442,5 +442,20 @@ export async function initDb(): Promise<void> {
     args: ['cs_live_b1oju3z0hzzxgnvQE67XKXv1heBoeu0ymbhkN6VmPQDjzDnWQB5x6BM3U5'],
   }], doneIds);
 
+  // 80a49fe2 (deployed after 2026-11-07 23:00 PST) stored is_bot = 1 for every
+  // non-Mozilla request UA, so Session Manager's desktop telemetry (Node fetch,
+  // X-SM-Beacon) landed as bots. Its rows are the ones its client writes:
+  // funnel_events.tool / app_errors.app = 'session-manager'. is_bot = 1 on those
+  // tables can only exist since that commit added the column; funnel_events also
+  // carries the server-time bound (app_errors.created_at is the client's ts, so a
+  // replayed backlog may predate the cutoff). Both statements are idempotent.
+  await applyDataMigrationOnce('2026-11-08-session-manager-telemetry-not-bot', [
+    {
+      sql: "UPDATE funnel_events SET is_bot = 0 WHERE is_bot = 1 AND tool = ? AND created_at >= ?",
+      args: ['session-manager', '2026-11-08 07:00:00'],
+    },
+    { sql: 'UPDATE app_errors SET is_bot = 0 WHERE is_bot = 1 AND app = ?', args: ['session-manager'] },
+  ], doneIds);
+
   console.log('[DB] Initialized' + (process.env.TURSO_DATABASE_URL ? ' (Turso)' : ' (local SQLite)'));
 }

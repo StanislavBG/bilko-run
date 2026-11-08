@@ -139,6 +139,26 @@ describe('POST /api/analytics/pageview — automation flags', () => {
   });
 });
 
+describe('empty User-Agent: the same class on every ingest path', () => {
+  it('an empty-UA pageview, click and event all store is_bot = 0', async () => {
+    const pv = await pageview({ path: '/no-ua', visitor_id: VID, session_id: SID }, '', VID);
+    expect(pv.statusCode).toBe(200);
+    expect(await viewBot('/no-ua')).toBe(0);
+    const ev = await app.inject({
+      method: 'POST', url: '/api/analytics/event', headers: { 'user-agent': '' },
+      payload: { event: 'view_tool', tool: 'git-viewer', visitor_id: 'ev-empty' },
+    });
+    expect(ev.statusCode).toBe(200);
+    expect((await dbGet<{ is_bot: number }>("SELECT is_bot FROM funnel_events WHERE visitor_id = 'ev-empty'"))?.is_bot).toBe(0);
+    const click = await app.inject({
+      method: 'POST', url: '/api/analytics/click', headers: { 'content-type': 'text/plain;charset=UTF-8', 'user-agent': '' },
+      payload: JSON.stringify({ path: '/no-ua', tag: 'button' }),
+    });
+    expect(click.statusCode).toBeLessThan(300);
+    expect((await dbGet<{ is_bot: number }>("SELECT is_bot FROM click_events WHERE path = '/no-ua'"))?.is_bot).toBe(0);
+  });
+});
+
 describe('POST /api/analytics/event — is_bot from the request UA', () => {
   it('stores is_bot = 1 for a HeadlessChrome UA and 0 for desktop Chrome', async () => {
     for (const [ua, vid] of [[HEADLESS_UA, 'ev-headless'], [CHROME_UA, 'ev-chrome']]) {

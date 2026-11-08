@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyVisitor, isBot, VISITOR_CLASSES } from '../server/services/analytics.js';
+import { classifyVisitor, isBotRequest, VISITOR_CLASSES } from '../server/services/analytics.js';
 
 const CHROME =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -79,13 +79,21 @@ describe('classifyVisitor', () => {
   });
 });
 
-describe('isBot', () => {
+describe('isBotRequest', () => {
+  const ua = (u: string, extra: Record<string, string> = {}) => isBotRequest({ 'user-agent': u, ...extra });
   it('keeps empty UA as not-a-bot', () => {
-    expect(isBot('')).toBe(false);
+    expect(ua('')).toBe(false);
+    expect(isBotRequest({})).toBe(false);
   });
-  it('flags AI agents and crawlers, not browsers', () => {
-    expect(isBot('Mozilla/5.0 (compatible; ChatGPT-User/1.0)')).toBe(true);
-    expect(isBot('curl/8.5.0')).toBe(true);
-    expect(isBot(CHROME)).toBe(false);
+  it('flags AI agents, crawlers and browser automation, not browsers or first-party clients', () => {
+    expect(ua('Mozilla/5.0 (compatible; ChatGPT-User/1.0)')).toBe(true);
+    expect(ua('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36')).toBe(true);
+    expect(ua(CHROME)).toBe(false);
+    expect(ua('curl/8.5.0')).toBe(false);
+    expect(ua('node')).toBe(false);
+  });
+  it('a valid X-SM-Beacon tag is a first-party client; an invalid one is ignored', () => {
+    expect(ua('HeadlessChrome/131', { 'x-sm-beacon': 'session-manager/1.4.2' })).toBe(false);
+    expect(ua('HeadlessChrome/131', { 'x-sm-beacon': 'session manager' })).toBe(true);
   });
 });

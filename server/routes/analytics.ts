@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
-import { classifyReferrer, parseUa, isBot, classifyVisitor } from '../services/analytics.js';
+import { classifyReferrer, parseUa, isBotRequest } from '../services/analytics.js';
 import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, flushPageHits } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
 import { internalFlag } from '../internal-traffic.js';
@@ -143,7 +143,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       // only tell. The identity lookup below still keys on the UA alone, so a
       // signed-in automated run keeps its email and is_admin.
       const webdriver = body?.webdriver === true;
-      const uaBot = isBot(ua);
+      const uaBot = isBotRequest(req.headers);
       const bot = uaBot || webdriver ? 1 : 0;
 
       const refHost = parseRefHost(referrer);
@@ -255,8 +255,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         try { metadata = JSON.stringify(body.metadata).slice(0, 2000); } catch { metadata = null; }
       }
 
-      // Same rule as the telemetry ingest: the request's own UA decides is_bot.
-      const isBotUa = classifyVisitor(String(req.headers['user-agent'] ?? '')) !== 'human' ? 1 : 0;
+      // Same rule as every other ingest path: the request's own headers decide is_bot.
+      const isBotUa = isBotRequest(req.headers) ? 1 : 0;
       await dbRun(
         'INSERT INTO funnel_events (event, ip_hash, tool, email, metadata, session_id, visitor_id, path, is_bot, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         event, null, tool, null, metadata, sessionId, visitorId, path, isBotUa, internalFlag(req),
@@ -306,7 +306,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const ua = String(req.headers['user-agent'] ?? '').slice(0, 300);
       const nowMs = Date.now();
       const date = new Date(nowMs).toISOString().slice(0, 10);
-      const bot = isBot(ua);
+      const bot = isBotRequest(req.headers);
       // Same identity rules as page_hits: Clerk session cookie, skipped for bots.
       let userEmail: string | null = null;
       const token = bot ? null : sessionCookie(req.headers.cookie);

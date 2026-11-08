@@ -533,6 +533,11 @@ describe('builder attribution: created_at + built_by, stamped by the first inser
     expect(await buildAs('headless', { 'user-agent': HEADLESS_UA })).toMatchObject({ built_by: 'automation' });
   });
 
+  it('visitor: a first-party node CLI or Session Manager beacon is not automation', async () => {
+    expect(await buildAs('from-cli', { 'user-agent': 'node' })).toMatchObject({ built_by: 'visitor' });
+    expect(await buildAs('from-sm', { 'user-agent': 'node', 'x-sm-beacon': 'session-manager/1.4.2' })).toMatchObject({ built_by: 'visitor' });
+  });
+
   it('automation: a browser UA whose bilko_vid sent a bot page view in the last 24h; an older one is a visitor', async () => {
     await dbRun(
       `INSERT INTO page_views (path, date, visitor_id, is_bot, created_at_ms)

@@ -3,7 +3,7 @@ import { dbAll, dbGet, dbRun } from '../../db.js';
 import { ADMIN_EMAILS, verifyClerkGitHubUser, verifyClerkToken } from '../../clerk.js';
 import { sessionCookie } from '../../page-hits.js';
 import { readSessionIds } from '../../session-identity.js';
-import { classifyVisitor } from '../../services/analytics.js';
+import { isBotRequest } from '../../services/analytics.js';
 import { getActiveSubscriptionLive } from '../../services/stripe.js';
 import { loadOwnerIds } from '../../traffic-filters.js';
 import { getUsageCount, hashIp, incrementUsage } from './_shared.js';
@@ -45,7 +45,7 @@ import type { OgMeta } from '../../og-meta.js';
 // A GET that creates a row is classed, first match wins:
 //   owner       its verified Clerk token or __session cookie is an ADMIN_EMAILS
 //               account, or its bilko_vid is in loadOwnerIds().cookieIds
-//   automation  classifyVisitor(UA) is not 'human', or its bilko_vid sent a
+//   automation  isBotRequest(headers) (browser automation or a crawler), or its bilko_vid sent a
 //               page view with is_bot = 1 in the last 24h
 //   visitor     anyone else
 // The refresh sweep stamps the showcase logins it seeds 'showcase'; a claim's
@@ -405,7 +405,7 @@ async function builderClass(headers: FastifyRequest['headers'], bearerEmail: str
   if (session && isAdminEmail(await verifyClerkToken(`Bearer ${session}`))) return 'owner';
   const vid = readSessionIds(headers.cookie).visitorId;
   if (vid && (await loadOwnerIds()).cookieIds.includes(vid)) return 'owner';
-  if (classifyVisitor(String(headers['user-agent'] ?? '')) !== 'human') return 'automation';
+  if (isBotRequest(headers)) return 'automation';
   const botView = vid && await dbGet<{ n: number }>(
     'SELECT 1 AS n FROM page_views WHERE visitor_id = ? AND is_bot = 1 AND created_at_ms >= ? LIMIT 1',
     vid, Date.now() - BOT_VIEW_WINDOW_MS,

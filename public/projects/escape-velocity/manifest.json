@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "slug": "escape-velocity",
   "version": "1.0.0",
-  "builtAt": "2026-11-08T06:13:26.562Z",
-  "gitSha": "f5a2f3b",
-  "gitBranch": "sm-job/775-publish-boss-scaling-build",
+  "builtAt": "2026-11-08T07:03:55.129Z",
+  "gitSha": "4bc1db9",
+  "gitBranch": "sm-job/781-publish-boss-scaling-followups",
   "hostKit": {
     "version": "0.0.0"
   },
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 30745106,
+    "sizeBytesGz": 30745552,
     "fileCount": 10
   }
 }

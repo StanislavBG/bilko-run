@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { swapToStage, layoutGrid, DEFAULT_POS } from '../src/pages/admin/command/CommandShell.js';
+import { swapToStage, layoutGrid, DEFAULT_POS, parsePersistedFilters } from '../src/pages/admin/command/CommandShell.js';
 import { MODULES } from '../src/pages/admin/command/types.js';
 
 describe('swapToStage', () => {
@@ -49,5 +49,37 @@ describe('layoutGrid', () => {
     expect(g.cols).toBe('minmax(0,1fr)');
     expect(g.rows).toBe('minmax(0,1fr)');
     expect(Object.keys(g.slots)).toEqual(['stage']);
+  });
+});
+
+describe('parsePersistedFilters', () => {
+  it('accepts an object with boolean mine and bots', () => {
+    expect(parsePersistedFilters({ mine: true, bots: false })).toEqual({ mine: true, bots: false });
+    expect(parsePersistedFilters({ mine: false, bots: true })).toEqual({ mine: false, bots: true });
+  });
+
+  it('returns only mine and bots, dropping unknown keys', () => {
+    expect(parsePersistedFilters({ mine: true, bots: true, extra: 'x' })).toEqual({ mine: true, bots: true });
+  });
+
+  it('rejects an object with a missing key', () => {
+    expect(parsePersistedFilters({ mine: true })).toBeUndefined();
+    expect(parsePersistedFilters({ bots: false })).toBeUndefined();
+    expect(parsePersistedFilters({})).toBeUndefined();
+  });
+
+  it('rejects non-boolean values', () => {
+    expect(parsePersistedFilters({ mine: 'true', bots: false })).toBeUndefined();
+    expect(parsePersistedFilters({ mine: true, bots: 1 })).toBeUndefined();
+    expect(parsePersistedFilters({ mine: null, bots: null })).toBeUndefined();
+  });
+
+  it('rejects null, undefined and junk input', () => {
+    expect(parsePersistedFilters(null)).toBeUndefined();
+    expect(parsePersistedFilters(undefined)).toBeUndefined();
+    expect(parsePersistedFilters('junk')).toBeUndefined();
+    expect(parsePersistedFilters(42)).toBeUndefined();
+    expect(parsePersistedFilters(true)).toBeUndefined();
+    expect(parsePersistedFilters([true, false])).toBeUndefined();
   });
 });

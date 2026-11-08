@@ -1,6 +1,6 @@
 // DEV-only preview of the Observability Command console fed by the design prototype's sample data (no auth, no network).
 import { useEffect, useMemo, useState } from 'react';
-import { CommandShell, type RefreshOpt, type WindowOpt } from './CommandShell.js';
+import { CommandShell, type RefreshOpt, type TrafficFilterState, type WindowOpt } from './CommandShell.js';
 import { KpiStrip, Ticker } from './KpiStrip.js';
 import { AppsModule, appTiles, appsSubtitle } from './AppsModule.js';
 import { AudienceModule } from './AudienceModule.js';
@@ -241,6 +241,7 @@ const noData = { error: null } as const;
 export function PreviewPage() {
   const [win, setWin] = useState<WindowOpt>('7D');
   const [refresh, setRefresh] = useState<RefreshOpt>('5M');
+  const [filters, setFilters] = useState<TrafficFilterState>({ mine: false, bots: false });
   const days = WINDOW_DAYS[win];
 
   useEffect(() => {
@@ -274,6 +275,8 @@ export function PreviewPage() {
       onWindow={setWin}
       refresh={refresh}
       onRefresh={setRefresh}
+      filters={filters}
+      onFilters={setFilters}
       status={{ label: led.label, tone: led.tone === 'amber' ? 'warn' : led.tone === 'red' ? 'err' : 'ok' }}
       kpis={<KpiStrip tiles={kpis} />}
       ticker={<Ticker recent={traffic.data.recent} />}

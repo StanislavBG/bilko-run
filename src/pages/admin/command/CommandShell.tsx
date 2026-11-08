@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { C, FONT, MonoLabel, Seg, StatusLine, fmtClock, useCommandFonts } from './theme.js';
+import { C, FONT, MonoLabel, Seg, StatusLine, ToggleSet, fmtClock, useCommandFonts } from './theme.js';
 import { MODULES, type ModuleKey } from './types.js';
 
 export type LayoutName = 'rails' | 'dock' | 'wing';
 export type WindowOpt = '1D' | '7D' | '30D';
 export type RefreshOpt = '30S' | '1M' | '5M' | 'OFF';
 export type SlotName = 'stage' | 'l1' | 'l2' | 'l3' | 'r1' | 'r2' | 'r3';
+/** Traffic the console hides: the owner's own hits (`mine`) and bot/crawler hits (`bots`). */
+export type TrafficFilterState = { mine: boolean; bots: boolean };
 export type Positions = Record<ModuleKey, SlotName>;
 export interface GridSpec { cols: string; rows: string; slots: Partial<Record<SlotName, [string, string]>> }
 
@@ -38,8 +40,29 @@ const STORAGE_KEY = 'obs-cmd:v1';
 const LAYOUTS: LayoutName[] = ['rails', 'dock', 'wing'];
 const WINDOWS: readonly WindowOpt[] = ['1D', '7D', '30D'];
 const REFRESHES: readonly RefreshOpt[] = ['30S', '1M', '5M', 'OFF'];
+const NO_FILTERS: TrafficFilterState = { mine: false, bots: false };
+const EXCLUDES = ['MINE', 'BOT'] as const;
+const EXCLUDE_TITLES = {
+  MINE: 'Hide the owner’s own traffic (signed-in or recognised devices)',
+  BOT: 'Hide bot and crawler traffic',
+} as const;
+/** Optional header pieces, hidden in this order while the header row would overflow; the controls never hide. */
+const SHED = ['command', 'wordmark', 'clock', 'excludingText', 'focusText'] as const;
+type ShedPiece = (typeof SHED)[number];
 
-interface Persisted { layout?: LayoutName; pos?: Positions; window?: WindowOpt }
+interface Persisted { layout?: LayoutName; pos?: Positions; window?: WindowOpt; filters?: TrafficFilterState }
+
+/** Accepts only `{ mine: boolean, bots: boolean }` (extra keys dropped); anything else is undefined. */
+export function parsePersistedFilters(raw: unknown): TrafficFilterState | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  const { mine, bots } = raw as Record<string, unknown>;
+  return typeof mine === 'boolean' && typeof bots === 'boolean' ? { mine, bots } : undefined;
+}
+
+/** 'MINE', 'BOT' or 'MINE + BOT'; null when nothing is excluded. */
+function excludedList(f: TrafficFilterState): string | null {
+  return [f.mine && 'MINE', f.bots && 'BOT'].filter(Boolean).join(' + ') || null;
+}
 
 function loadPersisted(): Persisted {
   try {
@@ -47,6 +70,8 @@ function loadPersisted(): Persisted {
     const out: Persisted = {};
     if (raw.layout && LAYOUTS.includes(raw.layout)) out.layout = raw.layout;
     if (raw.window && WINDOWS.includes(raw.window)) out.window = raw.window;
+    const filters = parsePersistedFilters(raw.filters);
+    if (filters) out.filters = filters;
     const p = raw.pos;
     if (p && MODULES.every(m => typeof p[m.key] === 'string')) {
       const slots = MODULES.map(m => p[m.key]);
@@ -83,6 +108,10 @@ export interface CommandShellProps {
   onWindow: (w: WindowOpt) => void;
   refresh: RefreshOpt;
   onRefresh: (r: RefreshOpt) => void;
+  /** Current exclusions: drive the EXCLUDE toggles, the amber header indicator and the RECENT HITS suffix. */
+  filters?: TrafficFilterState;
+  /** Shows the EXCLUDE control and receives every change, including the persisted value adopted on mount. */
+  onFilters?: (f: TrafficFilterState) => void;
   status: { label: string; tone: 'ok' | 'warn' | 'err' };
   kpis: ReactNode;
   ticker: ReactNode;
@@ -94,7 +123,9 @@ const TONE = { ok: C.green, warn: C.amber, err: C.red } as const;
 const labelBase = `500 10px/1 ${FONT.mono}`;
 
 export function CommandShell(props: CommandShellProps) {
-  const { window: win, onWindow, refresh, onRefresh, status, kpis, ticker, headers, render, onLayout } = props;
+  const { window: win, onWindow, refresh, onRefresh, filters, onFilters, status, kpis, ticker, headers, render, onLayout } = props;
+  const fl = filters ?? NO_FILTERS;
+  const excluded = excludedList(fl);
   useCommandFonts();
 
   const [initial] = useState(loadPersisted);
@@ -102,12 +133,47 @@ export function CommandShell(props: CommandShellProps) {
   const [pos, setPos] = useState<Positions>(initial.pos ?? DEFAULT_POS);
   const [max, setMax] = useState(false);
   const [now, setNow] = useState(() => new Date());
-  const [wide, setWide] = useState(() => window.innerWidth >= 1360);
-  useEffect(() => {
-    const onResize = () => setWide(window.innerWidth >= 1360);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+
+  // Header fit: while the row overflows, hide the next SHED piece; bring it back once the row is as wide as
+  // that fuller header needed (need[i] = the row's scrollWidth measured at level i; unknown means try it).
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [shed, setShed] = useState(0);
+  const shedRef = useRef(shed);
+  shedRef.current = shed;
+  const need = useRef<number[]>([]);
+  const fit = useCallback(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const level = shedRef.current;
+    if (el.scrollWidth > el.clientWidth) {
+      if (level < SHED.length) {
+        need.current[level] = el.scrollWidth;
+        setShed(level + 1);
+      }
+    } else if (level > 0 && el.clientWidth >= (need.current[level - 1] ?? 0)) {
+      setShed(level - 1);
+    }
   }, []);
+  const hasFilterCtl = Boolean(onFilters);
+  // Optional content changed width, so the remembered widths are stale.
+  useLayoutEffect(() => {
+    need.current = [];
+  }, [excluded, status.label, max, hasFilterCtl]);
+  useLayoutEffect(() => fit());
+  useEffect(() => {
+    const fonts = document.fonts;
+    const refit = () => {
+      need.current = [];
+      fit();
+    };
+    window.addEventListener('resize', fit);
+    fonts?.addEventListener('loadingdone', refit);
+    return () => {
+      window.removeEventListener('resize', fit);
+      fonts?.removeEventListener('loadingdone', refit);
+    };
+  }, [fit]);
+  const shown = (piece: ShedPiece) => SHED.indexOf(piece) >= shed;
 
   // Adopt the persisted window once; afterwards the prop is the source of truth.
   const onWindowRef = useRef(onWindow);
@@ -117,6 +183,18 @@ export function CommandShell(props: CommandShellProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => savePersisted({ window: win }), [win]);
+
+  // Same for the filters: adopt the persisted value once, then persist whatever the prop says.
+  const onFiltersRef = useRef(onFilters);
+  onFiltersRef.current = onFilters;
+  useEffect(() => {
+    const saved = initial.filters;
+    if (saved && (saved.mine !== fl.mine || saved.bots !== fl.bots)) onFiltersRef.current?.(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (filters) savePersisted({ filters: { mine: filters.mine, bots: filters.bots } });
+  }, [filters]);
   useEffect(() => savePersisted({ layout, pos }), [layout, pos]);
 
   useEffect(() => {
@@ -182,7 +260,7 @@ export function CommandShell(props: CommandShellProps) {
   return (
     <div style={{ width: '100%', height: '100vh', overflow: 'auto', background: C.bg }}>
       <div style={rootStyle}>
-        <div style={{ flex: 'none', height: 38, display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px' }}>
+        <div ref={headerRef} style={{ flex: 'none', height: 38, display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px', whiteSpace: 'nowrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden', flex: 'none' }}>
             <div
               style={{
@@ -192,13 +270,20 @@ export function CommandShell(props: CommandShellProps) {
             >
               B
             </div>
-            <div style={{ font: `400 19px/1 ${FONT.serif}`, color: C.ink, letterSpacing: '-.01em', whiteSpace: 'nowrap', flex: 'none' }}>
-              Bilko <span style={{ fontStyle: 'italic', color: C.orange }}>Bibitkov</span>
-            </div>
+            {shown('wordmark') && (
+              <div style={{ font: `400 19px/1 ${FONT.serif}`, color: C.ink, letterSpacing: '-.01em', whiteSpace: 'nowrap', flex: 'none' }}>
+                Bilko <span style={{ fontStyle: 'italic', color: C.orange }}>Bibitkov</span>
+              </div>
+            )}
             <div style={{ width: 1, height: 18, background: C.line }} />
             <div style={{ font: `500 11px/1 ${FONT.mono}`, letterSpacing: '.22em', color: C.text, whiteSpace: 'nowrap' }}>OBSERVABILITY</div>
-            {wide && <div style={{ font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint, whiteSpace: 'nowrap', flex: 'none' }}>{'// COMMAND'}</div>}
+            {shown('command') && <div style={{ font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint, whiteSpace: 'nowrap', flex: 'none' }}>{'// COMMAND'}</div>}
           </div>
+          {excluded && (
+            <div title={`Excluding ${excluded} traffic`} style={{ flex: 'none' }}>
+              <StatusLine color={C.amber}>{shown('excludingText') ? `EXCLUDING ${excluded}` : null}</StatusLine>
+            </div>
+          )}
           <div style={{ flex: 1, minWidth: 0 }} />
           {ctl('LAYOUT', (
             <Seg
@@ -208,23 +293,35 @@ export function CommandShell(props: CommandShellProps) {
             />
           ))}
           {ctl('WINDOW', <Seg options={WINDOWS} value={win} onChange={onWindow} />)}
+          {onFilters && ctl('EXCLUDE', (
+            <ToggleSet
+              options={EXCLUDES}
+              value={{ MINE: fl.mine, BOT: fl.bots }}
+              titles={EXCLUDE_TITLES}
+              onChange={(k, next) => onFilters(k === 'MINE' ? { mine: next, bots: fl.bots } : { mine: fl.mine, bots: next })}
+            />
+          ))}
           {ctl('REFRESH', <Seg options={REFRESHES} value={refresh} onChange={onRefresh} />)}
           <button
             type="button"
             onClick={toggleMax}
+            title={shown('focusText') ? undefined : max ? 'Restore (Esc)' : 'Focus (F)'}
+            aria-label={shown('focusText') ? undefined : max ? 'Restore' : 'Focus'}
             style={{
               border: `1px solid ${C.lineStrong}`, margin: 0, cursor: 'pointer', padding: '6px 10px', borderRadius: 3,
               background: C.panel, color: C.text, font: labelBase, letterSpacing: '.12em', whiteSpace: 'nowrap',
             }}
           >
-            {max ? '⤡ RESTORE' : '⤢ FOCUS'}
+            {shown('focusText') ? (max ? '⤡ RESTORE' : '⤢ FOCUS') : max ? '⤡' : '⤢'}
           </button>
           <div style={{ paddingLeft: 4 }}>
             <StatusLine color={TONE[status.tone]}>{status.label}</StatusLine>
           </div>
-          <div style={{ font: `500 13px/1 ${FONT.mono}`, color: C.ink, fontVariantNumeric: 'tabular-nums', minWidth: 66, textAlign: 'right' }}>
-            {fmtClock(now)}
-          </div>
+          {shown('clock') && (
+            <div style={{ font: `500 13px/1 ${FONT.mono}`, color: C.ink, fontVariantNumeric: 'tabular-nums', minWidth: 66, textAlign: 'right' }}>
+              {fmtClock(now)}
+            </div>
+          )}
           <Link
             to="/admin/sessions"
             style={{ font: labelBase, letterSpacing: '.12em', color: C.muted, textDecoration: 'none', border: `1px solid ${C.line}`, borderRadius: 3, padding: '6px 10px', whiteSpace: 'nowrap' }}
@@ -295,6 +392,7 @@ export function CommandShell(props: CommandShellProps) {
           <span style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 7, font: labelBase, letterSpacing: '.16em', color: C.orange }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.orange, boxShadow: `0 0 8px ${C.orange}` }} />
             RECENT HITS
+            {excluded && <span style={{ color: C.amber }}> · FILTERED</span>}
           </span>
           <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>{ticker}</div>
           <span style={{ flex: 'none', font: `400 10px/1 ${FONT.mono}`, letterSpacing: '.08em', color: C.faint }}>1–7 SWAP · F FOCUS · ESC</span>

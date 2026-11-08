@@ -140,6 +140,61 @@ export function Seg<T extends string>({
   );
 }
 
+/** Independent on/off toggles in Seg's exact styling; an on toggle is orange on near-black. */
+export function ToggleSet<T extends string>({
+  options,
+  value,
+  onChange,
+  titles,
+}: {
+  options: readonly T[];
+  value: Record<T, boolean>;
+  onChange: (key: T, next: boolean) => void;
+  titles?: Partial<Record<T, string>>;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 2,
+        padding: 2,
+        border: `1px solid ${C.line}`,
+        borderRadius: 3,
+        background: C.panel,
+      }}
+    >
+      {options.map(o => {
+        const on = value[o] === true;
+        return (
+          <button
+            key={o}
+            type="button"
+            aria-pressed={on}
+            title={titles?.[o]}
+            onClick={e => {
+              e.stopPropagation();
+              onChange(o, !on);
+            }}
+            style={{
+              border: 0,
+              margin: 0,
+              cursor: 'pointer',
+              padding: '5px 8px',
+              borderRadius: 2,
+              font: `500 10px/1 ${FONT.mono}`,
+              letterSpacing: '.1em',
+              background: on ? C.orange : 'transparent',
+              color: on ? C.bg : C.muted,
+            }}
+          >
+            {o}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 2px bar pinned to the bottom of a positioned row; `pct` is 0-100. */
 export function UnderlineBar({ pct, color = C.orange }: { pct: number; color?: string }) {
   return (

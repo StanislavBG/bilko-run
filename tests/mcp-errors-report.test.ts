@@ -287,13 +287,13 @@ describe('mcp funnel_report', () => {
     expect(r).toMatchObject({ since: '2026-10-14', utm_source: 'burrow', visits: 9, sign_ins: 3, checkout_start: 2, paid: 1, booked: 0, free_hours_booked: 2 });
   });
 
-  it('flowsReport sends mine=exclude&bots=exclude by default and returns the filters echo', async () => {
-    fetchMock.mockResolvedValue(res(200, { apps: [{ app: 'academy', sessions: 3 }], filters: { mine: 'exclude', bots: 'exclude' } }));
+  it('flowsReport sends mine=exclude&bots=exclude&env=prod by default and returns the filters echo', async () => {
+    fetchMock.mockResolvedValue(res(200, { apps: [{ app: 'academy', sessions: 3 }], filters: { mine: 'exclude', bots: 'exclude', env: 'prod' } }));
     const r = await flowsReport({ days: 7, app: 'academy' });
     const u = new URL(fetchMock.mock.calls[0][0] as string);
     expect(u.pathname).toBe('/api/admin/flows');
-    expect(Object.fromEntries(u.searchParams)).toEqual({ days: '7', app: 'academy', mine: 'exclude', bots: 'exclude' });
-    expect(r).toMatchObject({ apps: [{ app: 'academy', sessions: 3 }], filters: { mine: 'exclude', bots: 'exclude' } });
+    expect(Object.fromEntries(u.searchParams)).toEqual({ days: '7', app: 'academy', mine: 'exclude', bots: 'exclude', env: 'prod' });
+    expect(r).toMatchObject({ apps: [{ app: 'academy', sessions: 3 }], filters: { mine: 'exclude', bots: 'exclude', env: 'prod' } });
     expect(typeof r.source).toBe('string');
   });
 
@@ -302,7 +302,7 @@ describe('mcp funnel_report', () => {
     const r = await flowsReport({ includeMine: true });
     await flowsReport({ includeBots: true });
     const q = fetchMock.mock.calls.map((c) => Object.fromEntries(new URL(c[0] as string).searchParams));
-    expect(q).toEqual([{ mine: 'include', bots: 'exclude' }, { mine: 'exclude', bots: 'include' }]);
+    expect(q).toEqual([{ mine: 'include', bots: 'exclude', env: 'prod' }, { mine: 'exclude', bots: 'include', env: 'prod' }]);
     expect(r.filters).toBeNull();
   });
 

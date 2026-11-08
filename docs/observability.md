@@ -56,6 +56,7 @@ try { await save(); } catch (e) { logError(e as Error, { where: 'save' }); }
 ```
 
 - `initTelemetry({ app, version })`: idempotent. Also installs `window.error` and `unhandledrejection` capture. `app` is your slug. Optional `sampleInfo` (default 0.1) and `endpoint`.
+- `env`: host-kit 0.11.0+ stamps every event, log and error with `env`, resolved once at init: `prod` on bilko.run and www.bilko.run (automation there included; the bot filters handle it), otherwise `test` when the browser reports `navigator.webdriver` (Playwright, Selenium) and `dev` for everything else (localhost, LAN addresses, any other host). `initTelemetry({ app, version, env })` overrides it; any value but `prod`, `dev` or `test` is ignored. The host counts a record without `env` as prod, and host-kit before 0.11.0 sends none, so its local runs land in production numbers until you upgrade. `flows_report` and `errors_report` read `env=prod` by default (section 11).
 - `track(name, props)` → `POST /api/telemetry/event` → `funnel_events`. Auto-inits (app from `/projects/<slug>/`, version `unknown`) if you never called `initTelemetry`. `props.path` defaults to the current pathname.
 - `trackFlow(flow, step, props)`: sugar for `track('<flow>.<step>', { ...props, flow, step })`. Both parts must match `^[a-z0-9][a-z0-9-]{0,39}$`; otherwise the call is silently dropped.
 - `log.info|warn|error(msg, fields)` → `/api/telemetry/log` → `app_logs`. `info` is sampled (10% by default); `warn` and `error` are kept; `error` flushes immediately.
@@ -187,8 +188,8 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 | Tool | Admin API | Default | Opt-out |
 |---|---|---|---|
-| `flows_report` | `GET /api/admin/flows` | `mine=exclude&bots=exclude` | `includeMine: true` sends `mine=include`; `includeBots: true` sends `bots=include` |
-| `sessions_report` | `GET /api/admin/sessions` (`/:id` for timelines) | `mine=exclude&bots=exclude` | same as `flows_report` |
+| `flows_report` | `GET /api/admin/flows` | `mine=exclude&bots=exclude&env=prod` | `includeMine: true` sends `mine=include`; `includeBots: true` sends `bots=include`; `env: 'dev'`, `'test'` or `'all'` sends that `env` |
+| `sessions_report` | `GET /api/admin/sessions` (`/:id` for timelines) | `mine=exclude&bots=exclude` | `includeMine` / `includeBots`, as `flows_report`; no `env` filter |
 | `traffic_report` | `GET /api/admin/traffic` | `mine=exclude&bots=include` | `excludeSelf: false` sends `mine=include`; `includeBots: false` sends `bots=exclude` |
 | `funnel_report` | `GET /api/admin/funnel` | owner and bot sessions excluded (the host's defaults) | none |
 
@@ -214,6 +215,13 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 **Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, on a device never signed in as admin or marked, still counts as a visitor.
 
-Every report but `funnel_report` returns the host's `filters` echo (`{ mine, bots }`, plus `mineHits` from `traffic_report`), so you can see what was applied. `filters: null` means a host older than these filters, which applied neither.
+**Telemetry env (`env=prod`)**, `flows_report` only. It always sends `env`, `prod` by default, so local dev and automated test runs stay out of your numbers:
+
+- `prod` counts rows tagged `prod` and rows with no `env` (host-kit before 0.11.0 and other clients). `dev` and `test` rows are left out.
+- host-kit 0.11.0+ tags a run `dev` on localhost and any other non-bilko.run host, and `test` there when the browser reports `navigator.webdriver` (section 4). Automation on bilko.run itself stays `prod`; the bot filters handle it.
+- `env: 'dev'` or `env: 'test'` counts only that env; `env: 'all'` turns the filter off.
+- It covers telemetry events, errors and flow steps. Page views and clicks carry no `env`: only the bilko.run beacon writes them.
+
+Every report but `funnel_report` returns the host's `filters` echo (`{ mine, bots }`, plus `env` from `flows_report` and `mineHits` from `traffic_report`), so you can see what was applied. `filters: null` means a host older than these filters, which applied neither. A `flows_report` echo without `env` means a host older than the env filter, which counted every env.
 
 `sessions_report` never returns an email. Its fields are allowlisted, event `props` lose every email-named key at any depth, and an email address inside any string becomes `[email]`.

@@ -209,8 +209,9 @@ export async function funnelReport(opts) {
 }
 /**
  * GET /api/admin/flows: per-app sessions, views, clicks, events and errors. Sends mine=exclude&bots=exclude unless the
- * caller opts in, so the counts are real visitors. The body is passed through with the host's `filters` echo, or
- * `filters: null` from a host that echoes none.
+ * caller opts in, so the counts are real visitors, and always sends env (prod unless given), so local dev and automated
+ * test runs stay out. The body is passed through with the host's `filters` echo, or `filters: null` from a host that
+ * echoes none.
  */
 export async function flowsReport(opts) {
     const p = new URLSearchParams();
@@ -220,6 +221,7 @@ export async function flowsReport(opts) {
         p.set('app', opts.app);
     p.set('mine', toggle(!!opts.includeMine));
     p.set('bots', toggle(!!opts.includeBots));
+    p.set('env', opts.env ?? 'prod');
     const body = await adminGet(`/api/admin/flows?${p.toString()}`);
     if (!body)
         throw new Error('bilko.run returned 404 for /api/admin/flows');

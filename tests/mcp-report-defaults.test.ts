@@ -43,7 +43,7 @@ const sent = (): string[] =>
 beforeEach(() => {
   fetchMock = vi.fn(async (url: string) => {
     const path = new URL(url).pathname;
-    if (path === '/api/admin/flows') return res(200, { apps: [], flows: [], filters: { mine: 'exclude', bots: 'exclude' } });
+    if (path === '/api/admin/flows') return res(200, { apps: [], flows: [], filters: { mine: 'exclude', bots: 'exclude', env: 'prod' } });
     if (path === '/api/admin/traffic') return res(200, { days: 30, totals: {}, filters: { mine: 'exclude', bots: 'include', mineHits: 7 } });
     if (path === '/api/admin/funnel') return res(200, { since: '2026-11-01', utm_source: 'burrow', visits: 1 });
     if (path === '/api/admin/sessions') {
@@ -74,11 +74,11 @@ afterEach(() => {
 });
 
 describe('flows_report defaults to real visitors', () => {
-  it('sends mine=exclude&bots=exclude by default and returns the filters echo', async () => {
+  it('sends mine=exclude&bots=exclude&env=prod by default and returns the filters echo', async () => {
     const out = await call('flows_report', { days: 30, app: 'academy' });
     expect(out.isError).toBeFalsy();
-    expect(sent()).toEqual(['/api/admin/flows?days=30&app=academy&mine=exclude&bots=exclude']);
-    expect(JSON.parse(out.content[0].text).filters).toEqual({ mine: 'exclude', bots: 'exclude' });
+    expect(sent()).toEqual(['/api/admin/flows?days=30&app=academy&mine=exclude&bots=exclude&env=prod']);
+    expect(JSON.parse(out.content[0].text).filters).toEqual({ mine: 'exclude', bots: 'exclude', env: 'prod' });
   });
 
   it('includeMine / includeBots are the raw opt-outs', async () => {
@@ -86,10 +86,31 @@ describe('flows_report defaults to real visitors', () => {
     await call('flows_report', { includeBots: true });
     await call('flows_report', { includeMine: true, includeBots: true });
     expect(sent()).toEqual([
-      '/api/admin/flows?mine=include&bots=exclude',
-      '/api/admin/flows?mine=exclude&bots=include',
-      '/api/admin/flows?mine=include&bots=include',
+      '/api/admin/flows?mine=include&bots=exclude&env=prod',
+      '/api/admin/flows?mine=exclude&bots=include&env=prod',
+      '/api/admin/flows?mine=include&bots=include&env=prod',
     ]);
+  });
+});
+
+describe('flows_report reads prod telemetry by default', () => {
+  it("sends env=prod when env is not given; env: 'all' sends env=all, dev and test pick that env", async () => {
+    await call('flows_report');
+    await call('flows_report', { env: 'all' });
+    await call('flows_report', { env: 'dev' });
+    await call('flows_report', { env: 'test', includeBots: true });
+    expect(sent()).toEqual([
+      '/api/admin/flows?mine=exclude&bots=exclude&env=prod',
+      '/api/admin/flows?mine=exclude&bots=exclude&env=all',
+      '/api/admin/flows?mine=exclude&bots=exclude&env=dev',
+      '/api/admin/flows?mine=exclude&bots=include&env=test',
+    ]);
+  });
+
+  it('refuses an env other than prod, dev, test or all before any request', async () => {
+    const out = await call('flows_report', { env: 'staging' });
+    expect(out.isError).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

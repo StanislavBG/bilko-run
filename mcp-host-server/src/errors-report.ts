@@ -243,21 +243,30 @@ export async function funnelReport(opts: { utmSource: string; since?: string }):
 }
 
 /**
+ * The host's telemetry `env` selector (server/routes/telemetry.ts parseEnvSelector): one env, or 'all' for no filter.
+ * prod keeps rows without env too, from clients that predate the tag.
+ */
+export type EnvFilter = 'prod' | 'dev' | 'test' | 'all';
+
+/**
  * GET /api/admin/flows: per-app sessions, views, clicks, events and errors. Sends mine=exclude&bots=exclude unless the
- * caller opts in, so the counts are real visitors. The body is passed through with the host's `filters` echo, or
- * `filters: null` from a host that echoes none.
+ * caller opts in, so the counts are real visitors, and always sends env (prod unless given), so local dev and automated
+ * test runs stay out. The body is passed through with the host's `filters` echo, or `filters: null` from a host that
+ * echoes none.
  */
 export async function flowsReport(opts: {
   days?: number;
   app?: string;
   includeMine?: boolean;
   includeBots?: boolean;
+  env?: EnvFilter;
 }): Promise<Record<string, unknown>> {
   const p = new URLSearchParams();
   if (opts.days !== undefined) p.set('days', String(opts.days));
   if (opts.app) p.set('app', opts.app);
   p.set('mine', toggle(!!opts.includeMine));
   p.set('bots', toggle(!!opts.includeBots));
+  p.set('env', opts.env ?? 'prod');
   const body = await adminGet(`/api/admin/flows?${p.toString()}`);
   if (!body) throw new Error('bilko.run returned 404 for /api/admin/flows');
   const b = (typeof body === 'object' ? body : {}) as Record<string, unknown>;

@@ -2,6 +2,7 @@
 // their funnels through these, so each one counts real visitors by default (the owner and automation left out), names
 // exactly what it excludes, and has a raw opt-out. The exclusions themselves live in the host: server/traffic-filters.ts,
 // server/routes/admin-sessions.ts, server/routes/admin-observability.ts and server/routes/admin-funnel.ts.
+// flows_report also counts prod telemetry only (env=prod) unless asked; that filter is server/routes/telemetry.ts.
 import { z } from 'zod';
 import { baseUrl, trafficReport, funnelReport, flowsReport, sessionsReport, sessionDetail, SESSION_ID_RE } from './errors-report.js';
 import { ok, err } from './tool-result.js';
@@ -15,6 +16,16 @@ const BOTS = "UA-flagged automation: page views and clicks whose user agent is a
 const OWNER_SESSIONS = "every session with a signed-in admin (is_admin) page view, or from a device seen signed in as admin in the last 30 days or marked as the owner's on /admin/secrets (any age)";
 const NOT_CAUGHT = 'Automation that shows a normal browser user agent without navigator.webdriver, on a device never signed in as admin or marked, still counts.';
 const ECHO = '`filters` echoes what the host applied ({ mine, bots }); null means a host older than these filters, which applied neither.';
+/**
+ * What flows_report's env filter keeps (server/routes/telemetry.ts envPredicate) and where a record's env comes from
+ * (packages/host-kit/src/telemetry.ts resolveEnv).
+ */
+const ENV_FILTER = 'env defaults to prod and is always sent (env=prod), so local dev and automated test runs stay out. ' +
+    'host-kit 0.11.0+ stamps every telemetry record with env: prod on bilko.run (automation there included, left to the bots filter); anywhere else, test when the browser reports navigator.webdriver (Playwright and other automation runs) and dev otherwise (localhost and other dev servers). ' +
+    'Rows without env, from host-kit before 0.11.0 and other clients, count as prod, so localhost runs on an older host-kit still count until it is upgraded. ' +
+    "env: 'dev' or 'test' counts only that env; env: 'all' turns the filter off. " +
+    'env covers telemetry events, errors and flow steps; page views and clicks carry no env (only the bilko.run beacon writes them).';
+const FLOWS_ECHO = '`filters` echoes what the host applied ({ mine, bots, env }). An echo without env means a host older than the env filter, which counted every env; null means a host older than all three filters, which applied none.';
 const SOURCE = 'The top-level `source` field is the base URL queried.';
 export function registerReportTools(server) {
     // 10) traffic_report ───────────────────────────────────────────────────
@@ -72,7 +83,7 @@ export function registerReportTools(server) {
             `mine=exclude drops ${OWNER}, plus events and errors from any session with an admin page view. ` +
             `bots=exclude drops ${BOTS}, plus events and errors from any session with a bot-flagged page view. ` +
             'Opt-outs: includeMine: true sends mine=include and includeBots: true sends bots=include (both default false). ' +
-            `${NOT_CAUGHT} ${ECHO} ${SOURCE}`,
+            `${ENV_FILTER} ${NOT_CAUGHT} ${FLOWS_ECHO} ${SOURCE}`,
         inputSchema: {
             days: z.number().int().min(1).max(30).optional().describe('Window in days (1-30). Host default 7.'),
             app: z.string().regex(APP_SLUG).optional().describe('Limit to one app slug, e.g. "academy".'),
@@ -84,10 +95,14 @@ export function registerReportTools(server) {
                 .boolean()
                 .default(false)
                 .describe('Count UA-flagged automation (sends bots=include). Default false: bots=exclude.'),
+            env: z
+                .enum(['prod', 'dev', 'test', 'all'])
+                .default('prod')
+                .describe("Telemetry env to count (sends env=<value>). Default prod: rows tagged prod plus rows without env. 'dev' or 'test' reads only that env; 'all' turns the filter off."),
         },
-    }, async ({ days, app, includeMine, includeBots }) => {
+    }, async ({ days, app, includeMine, includeBots, env }) => {
         try {
-            return ok(JSON.stringify(await flowsReport({ days, app, includeMine, includeBots }), null, 2));
+            return ok(JSON.stringify(await flowsReport({ days, app, includeMine, includeBots, env }), null, 2));
         }
         catch (e) {
             return err(e.message);

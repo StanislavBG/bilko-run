@@ -22,6 +22,8 @@ export interface OwnerIds {
 /** The query's column for each owner signal; an absent column drops that clause. */
 export interface MineColumns {
   isAdmin?: string;
+  /** is_internal: the row was sent with the bilko_internal marker (server/internal-traffic.ts), the owner's automation. */
+  isInternal?: string;
   hashId?: string;
   cookieId?: string;
 }
@@ -34,6 +36,7 @@ export interface SqlFragment {
 
 export interface OwnerRow {
   isAdmin?: boolean | number | null;
+  isInternal?: boolean | number | null;
   hashId?: string | null;
   cookieId?: string | null;
 }
@@ -129,22 +132,30 @@ function checkColumn(name: string | undefined): string | undefined {
 }
 
 /** Validates every column, then pairs each present id column with its non-empty id list. */
-function ownerSignals(ids: OwnerIds, cols: MineColumns): { isAdmin?: string; idCols: Array<[string, string[]]> } {
+function ownerSignals(
+  ids: OwnerIds,
+  cols: MineColumns,
+): { isAdmin?: string; isInternal?: string; idCols: Array<[string, string[]]> } {
   const isAdmin = checkColumn(cols.isAdmin);
+  const isInternal = checkColumn(cols.isInternal);
   const hashId = checkColumn(cols.hashId);
   const cookieId = checkColumn(cols.cookieId);
   const idCols: Array<[string, string[]]> = [];
   if (hashId && ids.hashIds.length) idCols.push([hashId, ids.hashIds]);
   if (cookieId && ids.cookieIds.length) idCols.push([cookieId, ids.cookieIds]);
-  return { isAdmin, idCols };
+  return { isAdmin, isInternal, idCols };
 }
 
 const placeholders = (n: number): string => Array.from({ length: n }, () => '?').join(', ');
 
-/** WHERE fragment that drops the owner's rows: not is_admin and neither id in its owner list (NULL ids are kept). */
+/**
+ * WHERE fragment that drops the owner's rows: not is_admin, not is_internal and neither id in its owner list
+ * (NULL ids are kept).
+ */
 export function mineExclusionSql(ids: OwnerIds, cols: MineColumns): SqlFragment {
-  const { isAdmin, idCols } = ownerSignals(ids, cols);
+  const { isAdmin, isInternal, idCols } = ownerSignals(ids, cols);
   let sql = isAdmin ? ` AND COALESCE(${isAdmin}, 0) = 0` : '';
+  if (isInternal) sql += ` AND COALESCE(${isInternal}, 0) = 0`;
   const args: string[] = [];
   for (const [col, list] of idCols) {
     sql += ` AND (${col} IS NULL OR ${col} NOT IN (${placeholders(list.length)}))`;
@@ -155,8 +166,9 @@ export function mineExclusionSql(ids: OwnerIds, cols: MineColumns): SqlFragment 
 
 /** WHERE fragment that keeps only the owner's rows; with no usable signal it matches nothing. */
 export function mineMatchSql(ids: OwnerIds, cols: MineColumns): SqlFragment {
-  const { isAdmin, idCols } = ownerSignals(ids, cols);
+  const { isAdmin, isInternal, idCols } = ownerSignals(ids, cols);
   const ors = isAdmin ? [`COALESCE(${isAdmin}, 0) = 1`] : [];
+  if (isInternal) ors.push(`COALESCE(${isInternal}, 0) = 1`);
   const args: string[] = [];
   for (const [col, list] of idCols) {
     ors.push(`${col} IN (${placeholders(list.length)})`);
@@ -167,7 +179,7 @@ export function mineMatchSql(ids: OwnerIds, cols: MineColumns): SqlFragment {
 
 /** In-memory twin of mineMatchSql for rows already fetched. */
 export function isOwnerRow(ids: OwnerIds, row: OwnerRow): boolean {
-  if (row.isAdmin) return true;
+  if (row.isAdmin || row.isInternal) return true;
   if (row.hashId && ids.hashIds.includes(row.hashId)) return true;
   return !!row.cookieId && ids.cookieIds.includes(row.cookieId);
 }

@@ -349,6 +349,7 @@ describe('SQL builder safety', () => {
         expect(() => builder(IDS, { isAdmin: col }), col).toThrow(/column/i);
         expect(() => builder(IDS, { hashId: col }), col).toThrow(/column/i);
         expect(() => builder(IDS, { cookieId: col }), col).toThrow(/column/i);
+        expect(() => builder(IDS, { isInternal: col }), col).toThrow(/column/i);
         // Checked even when an empty id list would drop the clause.
         expect(() => builder(NONE, { hashId: col }), col).toThrow(/column/i);
         expect(() => builder(NONE, { cookieId: col }), col).toThrow(/column/i);
@@ -367,6 +368,31 @@ describe('SQL builder safety', () => {
       expect(args).toEqual([...hostile.hashIds, ...hostile.cookieIds]);
     });
   }
+});
+
+describe('isInternal column', () => {
+  it('mineExclusionSql drops is_internal rows after the is_admin clause', () => {
+    expect(mineExclusionSql(NONE, { isAdmin: 'is_admin', isInternal: 'is_internal' })).toEqual({
+      sql: ' AND COALESCE(is_admin, 0) = 0 AND COALESCE(is_internal, 0) = 0', args: [],
+    });
+    expect(mineExclusionSql(NONE, { isInternal: 'pv.is_internal' })).toEqual({
+      sql: ' AND COALESCE(pv.is_internal, 0) = 0', args: [],
+    });
+  });
+
+  it('mineMatchSql ORs is_internal rows in', () => {
+    expect(mineMatchSql({ hashIds: [], cookieIds: ['c1'] }, { isAdmin: 'is_admin', isInternal: 'is_internal', cookieId: 'client_vid' })).toEqual({
+      sql: ' AND (COALESCE(is_admin, 0) = 1 OR COALESCE(is_internal, 0) = 1 OR client_vid IN (?))', args: ['c1'],
+    });
+    expect(mineMatchSql(NONE, { isInternal: 'is_internal' })).toEqual({ sql: ' AND (COALESCE(is_internal, 0) = 1)', args: [] });
+  });
+
+  it('isOwnerRow treats an internal row as the owner\'s', () => {
+    expect(isOwnerRow(NONE, { isInternal: 1 })).toBe(true);
+    expect(isOwnerRow(NONE, { isInternal: true, hashId: 'stranger' })).toBe(true);
+    expect(isOwnerRow(NONE, { isInternal: 0, isAdmin: 0, hashId: 'stranger' })).toBe(false);
+    expect(isOwnerRow(NONE, { isInternal: null })).toBe(false);
+  });
 });
 
 describe('isOwnerRow', () => {

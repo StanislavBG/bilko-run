@@ -197,9 +197,10 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 - rows flagged `is_admin` (requests made while signed in as admin);
 - every device seen signed in as admin in the last 30 days, including its signed-out visits: its `bilko_vid` cookie id, and for page hits and clicks its IP+user-agent hash;
-- every device marked as the owner's on `/admin/secrets`, however long ago it last signed in.
+- every device marked as the owner's on `/admin/secrets`, however long ago it last signed in;
+- rows sent with the `bilko_internal=1` marker cookie (the owner's automation): see [Internal traffic marker](host-contract.md#internal-traffic-marker).
 
-`flows_report` also drops events and errors from any session with an admin page view. `sessions_report` drops the whole session.
+`flows_report` also drops events and errors from any session with an admin or marked page view. `sessions_report` drops the whole session.
 
 **Bots (`bots=exclude`)** means UA-flagged automation:
 
@@ -213,7 +214,7 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 `funnel_report` has no opt-out. It drops sessions with an admin or bot-flagged page view, sessions from the owner's devices (seen signed in as admin in the last 30 days, or marked), the owner's own checkout and free-hour events, and anything under an admin email.
 
-**Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, on a device never signed in as admin or marked, still counts as a visitor.
+**Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, on a device never signed in as admin or marked, still counts as a visitor unless it sends the [internal traffic marker](host-contract.md#internal-traffic-marker).
 
 **Telemetry env (`env=prod`)**, `flows_report` only. It always sends `env`, `prod` by default, so local dev and automated test runs stay out of your numbers:
 

@@ -386,6 +386,20 @@ The full adoption process, SDK reference, endpoints, rate limits and retention a
 - **Never put emails, tokens or free text in props**, fields or context.
 - Verify in `/admin/observability` (Sessions and Flows).
 
+## Internal traffic marker
+
+The owner's automation (Playwright, a Chrome attached over CDP, link checkers, curl) often shows a normal browser user agent and never signs in, so neither the bot nor the admin signal catches it. Mark it with the `bilko_internal=1` cookie. Code: `server/internal-traffic.ts`.
+
+- **Cookie:** `bilko_internal=1`. Any request that sends it is marked.
+- **Query param:** `?bilko_internal=1` on any HTML page load sets that cookie for a day (`Path=/; SameSite=Lax; Max-Age=86400`, `Secure` on https) and marks that request too. `?bilko_internal=0` clears it (`Max-Age=0`). No other request sets or clears it.
+- **What it does:** page hits, page views, clicks and funnel events sent with the marker are stored with `is_internal = 1` and count as **MINE**: every admin report and `bilko-host` MCP report that defaults to `mine=exclude` drops them, and `/api/admin/flows` and `/api/admin/sessions` drop the whole session once it has a marked page view. `mine=include` counts them again; sessions report `internal: true` (and `mine: true`). Rows are marked, not visitors: the marker never adds a visitor id to the owner's devices.
+- **Playwright:** set the cookie before the first `goto`:
+  `await context.addCookies([{ name: 'bilko_internal', value: '1', url: 'https://bilko.run' }]);`
+  or add `?bilko_internal=1` to the first URL; the cookie then rides on every later page load and beacon (same-origin `fetch` and `navigator.sendBeacon` both send it).
+- **curl and link checkers:** send the cookie on every request, e.g. `curl -b bilko_internal=1 https://bilko.run/projects/`. A checker that does not keep cookies is marked only on the requests that carry it.
+
+**Never publish or share a link that carries `?bilko_internal=1`** (posts, social, emails, READMEs, sitemaps, redirects). A real visitor who follows it gets the cookie and is hidden from every report for a day.
+
 ## Manifest contract
 
 Every `static-path` sibling MUST emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool's `manifest` gate validates this file and refuses to publish if it's absent or invalid — this is the one gate that cannot be bypassed. The host stores the latest manifest per app in the `app_manifests` Turso table, visible at `/admin` → Manifests tab.

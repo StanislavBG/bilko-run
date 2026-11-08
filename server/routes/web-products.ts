@@ -4,6 +4,7 @@ import { ADMIN_EMAILS, verifyClerkToken } from '../clerk.js';
 import { dbGet, dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import { readSessionIds } from '../session-identity.js';
+import { internalFlag } from '../internal-traffic.js';
 import {
   countLiveOrders, countSessionDownloads, findOrder, getRelease, hasOrderForEmail, recordDownload, recordOrder,
   storeRelease,
@@ -326,10 +327,10 @@ export function registerWebProductRoutes(
           // checkout (and its order and booking) back to the visit's UTM source.
           const { visitorId, sessionId } = readSessionIds(req.headers.cookie);
           await dbRun(
-            'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin, session_id, visitor_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin, session_id, visitor_id, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             'checkout_start', hashIp(req.ip), product.slug,
             JSON.stringify({ path: `/projects/${productPageSlug(product)}/`, checkout_session_id: session.id }), ownerIp ? 1 : 0,
-            sessionId, visitorId,
+            sessionId, visitorId, internalFlag(req),
           );
         } catch (err: any) {
           console.error('[web-products] funnel insert failed:', err?.message);

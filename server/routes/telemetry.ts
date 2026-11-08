@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { dbRun, dbGet, dbAll } from '../db.js';
 import { readSessionIds } from '../session-identity.js';
+import { internalFlag } from '../internal-traffic.js';
 import { classifyVisitor } from '../services/analytics.js';
 
 const MAX_BATCH = 50;
@@ -401,8 +402,8 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     const isBotUa = uaBotFlag(req);
     for (const e of admitted.records) {
       await dbRun(
-        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env, is_bot)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env, is_bot, is_internal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         clamp(e.name, 80),
         clamp(e.app, 60),
         safeMeta(e.props, MAX_FIELD_BYTES),
@@ -412,6 +413,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
         eventVersion(e),
         envOf(e),
         isBotUa,
+        internalFlag(req),
       );
     }
     return { ok: true, ingested: admitted.records.length };

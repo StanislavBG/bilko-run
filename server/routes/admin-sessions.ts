@@ -81,28 +81,33 @@ async function appsForSessions(ids: string[]): Promise<Map<string, string[]>> {
 interface SessionFlags {
   admin: boolean;
   bot: boolean;
+  /** Any page view in the session carried the bilko_internal marker (server/internal-traffic.ts). */
+  internal: boolean;
 }
 
 /**
- * Per session, in one grouped query: admin when any page view has is_admin = 1; bot when any page view, funnel event
+ * Per session, in one grouped query: admin when any page view has is_admin = 1; internal when any page view has
+ * is_internal = 1; bot when any page view, funnel event
  * or app error has is_bot = 1 (funnel_events and app_errors are flagged at ingest from the request UA).
  */
 async function sessionFlags(ids: string[]): Promise<Map<string, SessionFlags>> {
   const flags = new Map<string, SessionFlags>();
   if (!ids.length) return flags;
   const list = ids.map(() => '?').join(',');
-  const rows = await dbAll<{ session_id: string; a: number; b: number }>(
-    `SELECT session_id, MAX(a) AS a, MAX(b) AS b FROM (
-       SELECT session_id, COALESCE(is_admin, 0) AS a, COALESCE(is_bot, 0) AS b
+  const rows = await dbAll<{ session_id: string; a: number; b: number; i: number }>(
+    `SELECT session_id, MAX(a) AS a, MAX(b) AS b, MAX(i) AS i FROM (
+       SELECT session_id, COALESCE(is_admin, 0) AS a, COALESCE(is_bot, 0) AS b, COALESCE(is_internal, 0) AS i
          FROM page_views WHERE session_id IN (${list})
        UNION ALL
-       SELECT session_id, 0 AS a, 1 AS b FROM funnel_events WHERE session_id IN (${list}) AND is_bot = 1
+       SELECT session_id, 0 AS a, 1 AS b, 0 AS i FROM funnel_events WHERE session_id IN (${list}) AND is_bot = 1
        UNION ALL
-       SELECT session_id, 0 AS a, 1 AS b FROM app_errors WHERE session_id IN (${list}) AND is_bot = 1
+       SELECT session_id, 0 AS a, 1 AS b, 0 AS i FROM app_errors WHERE session_id IN (${list}) AND is_bot = 1
      ) GROUP BY session_id`,
     ...ids, ...ids, ...ids,
   );
-  for (const r of rows) flags.set(r.session_id, { admin: Number(r.a) === 1, bot: Number(r.b) === 1 });
+  for (const r of rows) {
+    flags.set(r.session_id, { admin: Number(r.a) === 1, bot: Number(r.b) === 1, internal: Number(r.i) === 1 });
+  }
   return flags;
 }
 
@@ -116,14 +121,16 @@ function joinSql(parts: SqlFragment[]): SqlFragment {
 }
 
 /**
- * Drops rows whose session has a page view flagged `flag` on or after `sinceDay`. page_views.date is the view's UTC
+ * Drops rows whose session has a page view flagged `flag` on or after `sinceDay`; 'owner' means is_admin = 1 or
+ * is_internal = 1 (the bilko_internal marker). page_views.date is the view's UTC
  * day, so the bound keeps the subquery on idx_page_views_date. The subquery skips NULL session ids, because one NULL
  * in a NOT IN list would drop every row, and rows with no session id of their own are kept.
  */
-function flaggedSessionExclusion(flag: 'is_admin' | 'is_bot', sinceDay: string): SqlFragment {
+function flaggedSessionExclusion(flag: 'owner' | 'is_bot', sinceDay: string): SqlFragment {
+  const pred = flag === 'owner' ? '(is_admin = 1 OR is_internal = 1)' : 'is_bot = 1';
   return {
     sql: ` AND (session_id IS NULL OR session_id NOT IN (SELECT session_id FROM page_views
-             WHERE date >= ? AND ${flag} = 1 AND session_id IS NOT NULL))`,
+             WHERE date >= ? AND ${pred} AND session_id IS NOT NULL))`,
     args: [sinceDay],
   };
 }
@@ -173,13 +180,19 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     const sinceDay = new Date(sinceMs).toISOString().slice(0, 10);
     if (filters.excludeMine) {
       const ownerIds = await loadOwnerIds();
-      const ownerSessions = flaggedSessionExclusion('is_admin', sinceDay);
+      const ownerSessions = flaggedSessionExclusion('owner', sinceDay);
       // Cookie ids are page_views/funnel_events/app_errors.visitor_id and click_events.client_vid;
       // click_events.visitor_id is the ip+ua hash.
-      pvParts.push(mineExclusionSql(ownerIds, { isAdmin: 'is_admin', cookieId: 'visitor_id' }));
-      ceParts.push(mineExclusionSql(ownerIds, { isAdmin: 'is_admin', hashId: 'visitor_id', cookieId: 'client_vid' }));
+      // is_internal marks rows sent with the bilko_internal marker (the owner's automation).
+      pvParts.push(mineExclusionSql(ownerIds, { isAdmin: 'is_admin', isInternal: 'is_internal', cookieId: 'visitor_id' }));
+      ceParts.push(mineExclusionSql(ownerIds, {
+        isAdmin: 'is_admin', isInternal: 'is_internal', hashId: 'visitor_id', cookieId: 'client_vid',
+      }));
       // funnel_events.is_admin flags the owner's checkouts; app_errors has no owner flag of its own.
-      feParts.push(mineExclusionSql(ownerIds, { isAdmin: 'is_admin', cookieId: 'visitor_id' }), ownerSessions);
+      feParts.push(
+        mineExclusionSql(ownerIds, { isAdmin: 'is_admin', isInternal: 'is_internal', cookieId: 'visitor_id' }),
+        ownerSessions,
+      );
       aeParts.push(mineExclusionSql(ownerIds, { cookieId: 'visitor_id' }), ownerSessions);
     }
     if (filters.excludeBots) {
@@ -343,9 +356,10 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
         where.push(`s.visitor_id NOT IN (${cookieIds.map(() => '?').join(',')})`);
         params.push(...cookieIds);
       }
+      // is_internal: a page view sent with the bilko_internal marker (the owner's automation).
       where.push(
         `s.session_id NOT IN (SELECT session_id FROM page_views
-           WHERE date >= ? AND is_admin = 1 AND session_id IS NOT NULL)`,
+           WHERE date >= ? AND (is_admin = 1 OR is_internal = 1) AND session_id IS NOT NULL)`,
       );
       params.push(sinceDay);
     }
@@ -404,8 +418,13 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
         event_count: r.event_count,
         error_count: r.error_count,
         apps: appsBySession.get(r.session_id) ?? [],
-        // The owner's: a known owner cookie id, or any is_admin page view in the session.
-        mine: isOwnerRow(ownerIds, { isAdmin: flagsBySession.get(r.session_id)?.admin, cookieId: r.visitor_id }),
+        // The owner's: a known owner cookie id, or any is_admin or is_internal page view in the session.
+        mine: isOwnerRow(ownerIds, {
+          isAdmin: flagsBySession.get(r.session_id)?.admin,
+          isInternal: flagsBySession.get(r.session_id)?.internal,
+          cookieId: r.visitor_id,
+        }),
+        internal: flagsBySession.get(r.session_id)?.internal ?? false,
         bot: flagsBySession.get(r.session_id)?.bot ?? false,
       })),
       filters: {

@@ -264,7 +264,10 @@ describe('GET /buy/:offerId', () => {
     expect((await get(app, '/buy/launch-kit')).statusCode).toBe(302);
     expect(sessionsCreate.mock.calls[0][0].metadata).toMatchObject({ web_product: 'launch-kit', owner_ip: 'true' });
     const call = dbRun.mock.calls.find((c: any[]) => String(c[0]).includes('funnel_events'))!;
-    expect(call[call.length - 1]).toBe(1);
+    // Read each flag by its column, so adding a column cannot shift the assertion.
+    const cols = /\(([^)]*)\)\s*VALUES/.exec(String(call[0]))![1].split(',').map((c) => c.trim());
+    expect(call[1 + cols.indexOf('is_admin')]).toBe(1);
+    expect(call[1 + cols.indexOf('is_internal')]).toBe(0);
     await app.close();
   });
 

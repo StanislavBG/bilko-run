@@ -22,6 +22,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import { internalCookieHeader } from './internal-traffic.js';
 
 export const VID_COOKIE = 'bilko_vid';
 export const SID_COOKIE = 'bilko_sid';
@@ -88,6 +89,7 @@ export function registerSessionIdentity(app: FastifyInstance): void {
     const fwd = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase();
     const secure = req.protocol === 'https' || fwd === 'https' ? '; Secure' : '';
     const attrs = `Path=/; SameSite=Lax${secure}`;
+    const internal = internalCookieHeader(req.url, attrs);
 
     const existing = reply.getHeader('set-cookie');
     const prior = existing === undefined ? [] : Array.isArray(existing) ? existing.map(String) : [String(existing)];
@@ -95,6 +97,8 @@ export function registerSessionIdentity(app: FastifyInstance): void {
       ...prior,
       `${VID_COOKIE}=${ids.visitorId}; Max-Age=${VID_MAX_AGE_S}; ${attrs}`,
       `${SID_COOKIE}=${ids.sessionId}; Max-Age=${SID_IDLE_S}; ${attrs}`,
+      // ?bilko_internal=1 / =0 on a page load sets / clears the internal traffic marker (server/internal-traffic.ts).
+      ...(internal ? [internal] : []),
     ]);
     return payload;
   });

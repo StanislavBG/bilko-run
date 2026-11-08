@@ -714,6 +714,8 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['session_id', 'TEXT'],
     ['client_vid', 'TEXT'],
     ['track_name', 'TEXT'],
+    // 1 = the request carried the bilko_internal marker (server/internal-traffic.ts); counts as MINE.
+    ['is_internal', 'INTEGER DEFAULT 0'],
   ],
   page_hits: [
     ['ip', 'TEXT'],
@@ -725,6 +727,7 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['session_id', 'TEXT'],
     ['client_vid', 'TEXT'],
     ['visitor_class', 'TEXT'],
+    ['is_internal', 'INTEGER DEFAULT 0'],
   ],
   page_views: [
     ['email', 'TEXT'],
@@ -744,6 +747,7 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['is_bot', 'INTEGER DEFAULT 0'],
     ['is_admin', 'INTEGER DEFAULT 0'],
     ['created_at_ms', 'INTEGER'],
+    ['is_internal', 'INTEGER DEFAULT 0'],
   ],
   funnel_events: [
     ['session_id', 'TEXT'],
@@ -757,6 +761,8 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     // 1 = the request UA is not a person's browser (classifyVisitor !== 'human');
     // set by /api/analytics/event and /api/telemetry/event.
     ['is_bot', 'INTEGER NOT NULL DEFAULT 0'],
+    // 1 = the request carried the bilko_internal marker; every funnel_events insert that has a request sets it.
+    ['is_internal', 'INTEGER DEFAULT 0'],
   ],
   // SEQUENCE of the booking's .ics: 0 when claimed, +1 per reschedule (server/services/service-bookings.ts).
   service_bookings: [['ics_sequence', 'INTEGER NOT NULL DEFAULT 0']],

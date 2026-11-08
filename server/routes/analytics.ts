@@ -4,6 +4,7 @@ import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBot, classifyVisitor } from '../services/analytics.js';
 import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, flushPageHits } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
+import { internalFlag } from '../internal-traffic.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
 // Event allowlist (must match client-side enum).
@@ -166,15 +167,15 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
           path, referrer, country, ua, screen, email, date,
           utm_source, utm_medium, utm_campaign, utm_term, utm_content,
           visitor_id, session_id, is_new_visitor, referrer_host, source_bucket,
-          device, browser, os, is_bot, is_admin, created_at_ms
+          device, browser, os, is_bot, is_admin, is_internal, created_at_ms
         ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM page_views WHERE visitor_id = ?) THEN 1 ELSE 0 END,
-          ?, ?, ?, ?, ?, ?, ?, ?`,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?`,
         args: [
           path, referrer, country, ua || null, screen, email, date,
           utmSource, utmMedium, utmCampaign, utmTerm, utmContent,
           visitorId, sessionId, visitorId, visitorId, refHost, sourceBucket,
-          device, browser, os, bot, isAdmin, nowMs,
+          device, browser, os, bot, isAdmin, internalFlag(req), nowMs,
         ],
       }];
       if (sessionId && visitorId) {
@@ -257,8 +258,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       // Same rule as the telemetry ingest: the request's own UA decides is_bot.
       const isBotUa = classifyVisitor(String(req.headers['user-agent'] ?? '')) !== 'human' ? 1 : 0;
       await dbRun(
-        'INSERT INTO funnel_events (event, ip_hash, tool, email, metadata, session_id, visitor_id, path, is_bot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        event, null, tool, null, metadata, sessionId, visitorId, path, isBotUa,
+        'INSERT INTO funnel_events (event, ip_hash, tool, email, metadata, session_id, visitor_id, path, is_bot, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        event, null, tool, null, metadata, sessionId, visitorId, path, isBotUa, internalFlag(req),
       );
 
       // Flip sessions.converted only when the visitor_id on the request matches
@@ -314,12 +315,12 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       } catch { /* anonymous */ }
       const isAdmin = userEmail && ADMIN_EMAILS.includes(userEmail.toLowerCase()) ? 1 : 0;
       await dbRun(
-        `INSERT INTO click_events (ts_ms, date, path, slug, tag, el_id, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin, session_id, client_vid, track_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO click_events (ts_ms, date, path, slug, tag, el_id, label, href, visitor_hash, is_bot, ip, visitor_id, user_email, is_admin, session_id, client_vid, track_name, is_internal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         nowMs, date, path, slugFromPath(path), tag, elId, label, href,
         visitorHash(date, ip ?? '', ua), bot ? 1 : 0,
         ip, stableVisitorId(ip ?? '', String(req.headers['user-agent'] ?? '')), userEmail, isAdmin,
-        clickSid, clientVid, trackName,
+        clickSid, clientVid, trackName, internalFlag(req),
       );
     } catch { /* never fail */ }
     reply.status(204);

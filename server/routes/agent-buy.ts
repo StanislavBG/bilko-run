@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { internalFlag } from '../internal-traffic.js';
 import { getStripe } from '../services/stripe.js';
 import { dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
@@ -175,9 +176,10 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
 
     try {
       await dbRun(
-        'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin, is_internal) VALUES (?, ?, ?, ?, ?, ?)',
         'checkout_start', hashIp(req.ip), offer.id,
         JSON.stringify({ via: 'agent-buy', offer: offer.id, checkout_session_id: session.id }), ownerIp ? 1 : 0,
+        internalFlag(req),
       );
     } catch (err: any) {
       console.error('[agent-buy] funnel insert failed:', err?.message);

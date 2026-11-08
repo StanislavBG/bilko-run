@@ -32,7 +32,8 @@ export interface FunnelCounts {
  *   free_hours_booked  free-hour bookings matched by booking id (the server's
  *                      free_hour_booked event) or email; never part of booked
  * Admin traffic and bots are excluded unless exclude_self=0 / include_bots=1. Admin
- * traffic is admin emails, is_admin page views and checkouts, and every session from
+ * traffic is admin emails, is_admin page views and checkouts, is_internal page views and events (the
+ * bilko_internal marker), and every session from
  * one of the owner's devices by its bilko_vid cookie id (loadOwnerIds().cookieIds),
  * signed in or not; the later steps key on the attributed sessions' visitors.
  */
@@ -44,11 +45,12 @@ export async function funnelCounts(opts: {
   const inAdmins = (col: string) => admins.length
     ? ` AND (${col} IS NULL OR LOWER(${col}) NOT IN (${admins.map(() => '?').join(', ')}))`
     : '';
-  const badFlags = [opts.includeBots ? null : 'pv.is_bot = 1', opts.excludeSelf ? 'pv.is_admin = 1' : null].filter(Boolean);
+  const badFlags = [opts.includeBots ? null : 'pv.is_bot = 1', opts.excludeSelf ? 'pv.is_admin = 1 OR pv.is_internal = 1' : null].filter(Boolean);
   const pvFilter = badFlags.length
     ? ` AND NOT EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = s.session_id AND (${badFlags.join(' OR ')}))`
     : '';
-  const feAdmin = opts.excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : '';
+  // is_internal: rows sent with the bilko_internal marker (server/internal-traffic.ts), the owner's automation.
+  const feAdmin = opts.excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0 AND COALESCE(fe.is_internal, 0) = 0' : '';
   // sessions.visitor_id is the bilko_vid cookie id; loadOwnerIds never throws.
   const ownerDevices: SqlFragment = opts.excludeSelf
     ? mineExclusionSql(await loadOwnerIds(), { cookieId: 's.visitor_id' })

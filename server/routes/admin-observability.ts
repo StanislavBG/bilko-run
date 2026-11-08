@@ -14,7 +14,8 @@ import {
 } from '../traffic-filters.js';
 
 // The owner-signal columns, same names in page_hits and click_events.
-const MINE_COLS: MineColumns = { isAdmin: 'is_admin', hashId: 'visitor_id', cookieId: 'client_vid' };
+// is_internal: rows sent with the bilko_internal marker (server/internal-traffic.ts), the owner's automation.
+const MINE_COLS: MineColumns = { isAdmin: 'is_admin', isInternal: 'is_internal', hashId: 'visitor_id', cookieId: 'client_vid' };
 const NO_SQL: SqlFragment = { sql: '', args: [] };
 const toggle = (excluded: boolean): 'include' | 'exclude' => (excluded ? 'exclude' : 'include');
 
@@ -299,11 +300,11 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         ts_ms: number; path: string; status: number; referrer_host: string | null;
         country: string | null; device: string; browser: string; os: string; is_bot: number;
         ip: string | null; ua: string | null; referrer: string | null; visitor_id: string | null;
-        visitor_hash: string | null; user_email: string | null; is_admin: number | null;
+        visitor_hash: string | null; user_email: string | null; is_admin: number | null; is_internal: number | null;
         session_id: string | null; visitor_class: string; client_vid: string | null;
       }>(
         `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, is_bot,
-                ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin, session_id,
+                ip, ua, referrer, visitor_id, visitor_hash, user_email, is_admin, is_internal, session_id,
                 ${CLASS_SQL} AS visitor_class, client_vid
            FROM page_hits WHERE ts_ms >= ?${botSql}${slugSql} ORDER BY ts_ms DESC LIMIT 200`,
         since, ...slugArgs,
@@ -425,7 +426,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         visitorId: r.visitor_id ?? r.visitor_hash,
         userEmail: r.user_email,
         isAdmin: r.is_admin === 1,
-        isMine: isOwnerRow(ownerIds, { isAdmin: r.is_admin, hashId: r.visitor_id, cookieId: r.client_vid }),
+        isMine: isOwnerRow(ownerIds, {
+          isAdmin: r.is_admin, isInternal: r.is_internal, hashId: r.visitor_id, cookieId: r.client_vid,
+        }),
         sessionId: r.session_id ?? null,
         visitorClass: r.visitor_class,
       })),

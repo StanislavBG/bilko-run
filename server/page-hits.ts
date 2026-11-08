@@ -5,6 +5,7 @@ import { getClient, dbAll, dbTransaction, txRun } from './db.js';
 import { dayKey } from './egress.js';
 import { parseUa, classifyVisitor } from './services/analytics.js';
 import { readSessionIds } from './session-identity.js';
+import { isInternalRequest } from './internal-traffic.js';
 import { verifyClerkToken, ADMIN_EMAILS } from './clerk.js';
 
 // Server-side page-hit recorder: logs every HTML document response, so pages
@@ -34,6 +35,8 @@ export interface PageHitInput {
   clientVid?: string | null;
   botId?: string | null;
   mcp?: boolean;
+  /** The request carried the bilko_internal marker (server/internal-traffic.ts). */
+  internal?: boolean;
 }
 
 interface PageHitRow {
@@ -55,6 +58,7 @@ interface PageHitRow {
   visitor_id: string;
   user_email: string | null;
   is_admin: number;
+  is_internal: number;
   session_id: string | null;
   client_vid: string | null;
   visitor_class: string;
@@ -138,6 +142,7 @@ export function recordPageHit(input: PageHitInput): void {
     visitor_id: stableVisitorId(input.ip, input.ua),
     user_email: input.userEmail ?? null,
     is_admin: input.userEmail && ADMIN_EMAILS.includes(input.userEmail.toLowerCase()) ? 1 : 0,
+    is_internal: input.internal ? 1 : 0,
     session_id: input.sessionId ?? null,
     client_vid: input.clientVid ?? null,
     visitor_class: visitorClass,
@@ -152,9 +157,9 @@ export async function flushPageHits(): Promise<void> {
       buffer = [];
       const client = getClient();
       const stmts: InStatement[] = rows.map((r) => ({
-        sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin, session_id, client_vid, visitor_class)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot, r.ip, r.ua, r.referrer, r.visitor_id, r.user_email, r.is_admin, r.session_id, r.client_vid, r.visitor_class],
+        sql: `INSERT INTO page_hits (ts_ms, date, path, slug, status, referrer_host, visitor_hash, country, device, browser, os, is_bot, ip, ua, referrer, visitor_id, user_email, is_admin, is_internal, session_id, client_vid, visitor_class)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [r.ts_ms, r.date, r.path, r.slug, r.status, r.referrer_host, r.visitor_hash, r.country, r.device, r.browser, r.os, r.is_bot, r.ip, r.ua, r.referrer, r.visitor_id, r.user_email, r.is_admin, r.is_internal, r.session_id, r.client_vid, r.visitor_class],
       }));
       for (let i = 0; i < stmts.length; i += BATCH_CHUNK) {
         try {
@@ -232,6 +237,7 @@ export function registerPageHitRecorder(app: FastifyInstance, opts: { flush?: bo
         country,
         mcp: isMcp,
         botId: typeof h['x-bot-id'] === 'string' ? h['x-bot-id'].slice(0, 100) : null,
+        internal: isInternalRequest(req),
       };
       const ids = req.bilkoIds ?? readSessionIds(h.cookie);
       input.sessionId = ids.sessionId;

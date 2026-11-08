@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { internalFlag } from '../internal-traffic.js';
 import { dbAll, dbGet, dbRun } from '../db.js';
 import { requireAdmin, requireAuth } from '../clerk.js';
 import { SIGNIN_SOURCES, isSigninSource } from '../../shared/signin-capture.js';
@@ -57,8 +58,8 @@ export function registerSigninCaptureRoutes(app: FastifyInstance): void {
         key, body.source, consent ? 1 : 0, consent ? now : null, now,
       );
       await dbRun(
-        'INSERT INTO funnel_events (event, tool, path, metadata) VALUES (?, ?, ?, ?)',
-        'signin_completed', body.source, null, JSON.stringify({ consent }),
+        'INSERT INTO funnel_events (event, tool, path, metadata, is_internal) VALUES (?, ?, ?, ?, ?)',
+        'signin_completed', body.source, null, JSON.stringify({ consent }), internalFlag(req),
       ).catch(() => { /* analytics never fails the capture */ });
     } else if (consent && !existing.consent) {
       await dbRun('UPDATE signin_captures SET consent = 1, consent_at = ? WHERE email = ?', now, key);

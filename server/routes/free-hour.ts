@@ -7,6 +7,7 @@ import {
 import { parseTopicTags } from '../../shared/free-hour-topics.js';
 import { dbRun } from '../db.js';
 import { readSessionIds } from '../session-identity.js';
+import { internalFlag } from '../internal-traffic.js';
 import { SERVICE_SLOT_CONFIG, buildIcs, generateSlots } from '../../shared/service-slots.js';
 
 const PAGE = 'human-for-hire';
@@ -70,8 +71,8 @@ export function registerFreeHourRoutes(app: FastifyInstance): void {
       // to the visit's UTM source (free_hours_booked). Never the cancel token.
       const { visitorId, sessionId } = readSessionIds(req.headers.cookie);
       await dbRun(
-        'INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path) VALUES (?, ?, ?, ?, ?, ?)',
-        'free_hour_booked', PAGE, JSON.stringify({ booking_id: claim.booking.id }), sessionId, visitorId, '/book',
+        'INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'free_hour_booked', PAGE, JSON.stringify({ booking_id: claim.booking.id }), sessionId, visitorId, '/book', internalFlag(req),
       );
     } catch (err: any) {
       console.error('[free-hour] funnel insert failed:', err?.message);

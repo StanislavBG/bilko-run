@@ -251,6 +251,22 @@ describe('admin sessions', () => {
       expect(ids(await list('?mine=exclude'))).toEqual([BOT_SID, STRANGER_SID]);
     });
 
+    it('marks and drops a session by its is_internal page view alone, and reports internal', async () => {
+      const SID_INT = '12121212-1212-4121-8121-121212121212';
+      const VID_INT = '13131313-1313-4131-8131-131313131313';
+      const t = Date.now() - 20_000;
+      await session(SID_INT, VID_INT, t);
+      // The owner's automation with the bilko_internal marker: not admin, not a bot, an unknown cookie id.
+      await dbRun(
+        `INSERT INTO page_views (path, date, visitor_id, session_id, is_admin, is_bot, is_internal, created_at_ms)
+         VALUES ('/projects/sudoku/', ?, ?, ?, 0, 0, 1, ?)`,
+        new Date(t).toISOString().slice(0, 10), VID_INT, SID_INT, t);
+      const all = await list();
+      expect(all.sessions[0]).toMatchObject({ session_id: SID_INT, mine: true, internal: true, bot: false });
+      expect(all.sessions.find((x) => x.session_id === STRANGER_SID)).toMatchObject({ mine: false, internal: false });
+      expect(ids(await list('?mine=exclude'))).toEqual([BOT_SID, STRANGER_SID]);
+    });
+
     it('keeps every session when admin and bot views have no session id', async () => {
       // A NULL in a NOT IN list would turn the predicate NULL and empty the list.
       await view(null, null, Date.now() - 10_000, 1, 1);

@@ -21,6 +21,9 @@ interface SessionRow {
   page_count: number | null;
   source_bucket: string | null;
   referrer_host: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
   country: string | null;
   device: string | null;
   converted: number | null;
@@ -57,23 +60,38 @@ interface AppAgg {
   lastSeen: number;
 }
 
-/** Distinct app slugs per session, derived from page views under /projects|products/<slug>. */
+/**
+ * Distinct app slugs per session: page views under /projects|products/<slug>, plus the app's own telemetry
+ * (funnel_events.tool, app_errors.app), the same signals the ?app= filter matches on.
+ */
 async function appsForSessions(ids: string[]): Promise<Map<string, string[]>> {
   const bySession = new Map<string, Set<string>>();
+  const add = (sid: string, slug: string | null | undefined): void => {
+    if (!slug) return;
+    let set = bySession.get(sid);
+    if (!set) bySession.set(sid, (set = new Set()));
+    set.add(slug);
+  };
   if (ids.length) {
-    const paths = await dbAll<{ session_id: string; path: string }>(
-      `SELECT DISTINCT session_id, path FROM page_views
-        WHERE session_id IN (${ids.map(() => '?').join(',')})
-          AND (path LIKE '/projects/%' OR path LIKE '/products/%')`,
-      ...ids,
-    );
-    for (const p of paths) {
-      const slug = appSlugFromPath(p.path);
-      if (!slug) continue;
-      let set = bySession.get(p.session_id);
-      if (!set) bySession.set(p.session_id, (set = new Set()));
-      set.add(slug);
-    }
+    const list = ids.map(() => '?').join(',');
+    const [paths, telemetry] = await Promise.all([
+      dbAll<{ session_id: string; path: string }>(
+        `SELECT DISTINCT session_id, path FROM page_views
+          WHERE session_id IN (${list})
+            AND (path LIKE '/projects/%' OR path LIKE '/products/%')`,
+        ...ids,
+      ),
+      dbAll<{ session_id: string; app: string }>(
+        `SELECT DISTINCT session_id, tool AS app FROM funnel_events
+          WHERE session_id IN (${list}) AND tool IS NOT NULL AND tool != ''
+         UNION
+         SELECT DISTINCT session_id, app FROM app_errors
+          WHERE session_id IN (${list}) AND app IS NOT NULL AND app != ''`,
+        ...ids, ...ids,
+      ),
+    ]);
+    for (const p of paths) add(p.session_id, appSlugFromPath(p.path));
+    for (const t of telemetry) add(t.session_id, t.app);
   }
   return new Map([...bySession].map(([id, set]) => [id, [...set].sort()]));
 }
@@ -381,7 +399,7 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     const rows = await dbAll<SessionRow>(
       `SELECT s.session_id, s.visitor_id, s.email, s.started_at, s.ended_at,
               s.landing_path, s.exit_path, s.page_count, s.source_bucket, s.referrer_host,
-              s.country, s.device, s.converted, s.purchased,
+              s.utm_source, s.utm_medium, s.utm_campaign, s.country, s.device, s.converted, s.purchased,
               (SELECT COUNT(*) FROM click_events c WHERE c.session_id = s.session_id) AS click_count,
               (SELECT COUNT(*) FROM funnel_events f WHERE f.session_id = s.session_id) AS event_count,
               (SELECT COUNT(*) FROM app_errors e WHERE e.session_id = s.session_id) AS error_count
@@ -410,6 +428,9 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
         page_count: r.page_count ?? 0,
         source_bucket: r.source_bucket,
         referrer_host: r.referrer_host,
+        utm_source: r.utm_source ?? null,
+        utm_medium: r.utm_medium ?? null,
+        utm_campaign: r.utm_campaign ?? null,
         country: r.country,
         device: r.device,
         converted: r.converted ?? 0,
@@ -443,8 +464,8 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
 
     const [session, views, clicks, events, errors] = await Promise.all([
       dbGet<SessionRow>(`SELECT * FROM sessions WHERE session_id = ?`, id),
-      dbAll<{ ts: number; path: string; referrer: string | null }>(
-        `SELECT created_at_ms AS ts, path, referrer FROM page_views
+      dbAll<{ ts: number; path: string; referrer: string | null; referrer_host: string | null }>(
+        `SELECT created_at_ms AS ts, path, referrer, referrer_host FROM page_views
           WHERE session_id = ? AND created_at_ms IS NOT NULL ORDER BY created_at_ms ASC LIMIT ${TIMELINE_CAP}`, id),
       dbAll<{ ts: number; path: string; label: string | null; href: string | null; track_name: string | null }>(
         `SELECT ts_ms AS ts, path, label, href, track_name FROM click_events
@@ -458,7 +479,7 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
     ]);
 
     const timeline: TimelineItem[] = [
-      ...views.map(r => ({ ts: r.ts, kind: 'view' as const, path: r.path, referrer: r.referrer })),
+      ...views.map(r => ({ ts: r.ts, kind: 'view' as const, path: r.path, referrer: r.referrer, referrer_host: r.referrer_host })),
       ...clicks.map(r => ({ ts: r.ts, kind: 'click' as const, path: r.path, label: r.label, href: r.href, track_name: r.track_name })),
       ...events.map(r => ({ ts: r.ts, kind: 'event' as const, name: r.event, app: r.tool, path: r.path, props: parseProps(r.metadata) })),
       ...errors.map(r => ({ ts: r.ts, kind: 'error' as const, app: r.app, name: r.name, msg: r.msg, url: r.url })),
@@ -468,8 +489,30 @@ export function registerAdminSessionRoutes(app: FastifyInstance): void {
 
     if (!session && timeline.length === 0) return reply.status(404).send({ error: 'Session not found.' });
 
-    const apps = (await appsForSessions([id])).get(id) ?? [];
+    const [appsBySession, flagsBySession, ownerIds, counts] = await Promise.all([
+      appsForSessions([id]),
+      sessionFlags([id]),
+      loadOwnerIds(),
+      dbGet<{ click_count: number; event_count: number; error_count: number }>(
+        `SELECT (SELECT COUNT(*) FROM click_events WHERE session_id = ?) AS click_count,
+                (SELECT COUNT(*) FROM funnel_events WHERE session_id = ?) AS event_count,
+                (SELECT COUNT(*) FROM app_errors WHERE session_id = ?) AS error_count`,
+        id, id, id,
+      ),
+    ]);
+    const flags = flagsBySession.get(id);
+    // The same counts and mine/bot flags the list rows carry, so sessions_report's sessionId mode has them too.
+    const sessionOut = session
+      ? {
+          ...session,
+          click_count: Number(counts?.click_count ?? 0),
+          event_count: Number(counts?.event_count ?? 0),
+          error_count: Number(counts?.error_count ?? 0),
+          mine: isOwnerRow(ownerIds, { isAdmin: flags?.admin, cookieId: session.visitor_id }),
+          bot: flags?.bot ?? false,
+        }
+      : null;
 
-    return { session: session ?? null, timeline, apps };
+    return { session: sessionOut, timeline, apps: appsBySession.get(id) ?? [] };
   });
 }

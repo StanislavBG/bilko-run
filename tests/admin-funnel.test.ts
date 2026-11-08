@@ -150,6 +150,17 @@ describe('GET /api/admin/funnel', () => {
     expect(body.checkout_start).toBe(3);
   });
 
+  it('bots excluded also drops a session whose funnel event was flagged is_bot at ingest', async () => {
+    // An agent run with a clean page view but a UA-flagged funnel event.
+    await session('s9', 'v9', 'burrow');
+    await dbRun(
+      'INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, is_bot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'repo_open', 'git-viewer', '{}', 's9', 'v9', 1, sqlTs(now - DAY),
+    );
+    expect((await get(`?since=${since}&utm_source=burrow`)).json().visits).toBe(3);
+    expect((await get(`?since=${since}&utm_source=burrow&include_bots=1`)).json().visits).toBe(5);
+  });
+
   it("exclude_self also drops the owner's signed-out devices by their bilko_vid cookie id", async () => {
     // v9 signed in as the owner once (an is_admin page hit carrying its cookie id), then came from burrow signed out.
     await dbRun(

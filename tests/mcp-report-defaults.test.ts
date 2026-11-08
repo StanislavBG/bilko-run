@@ -137,6 +137,56 @@ describe('sessions_report defaults to real visitors and never returns an email',
     expect(out.content[0].text).not.toMatch(/@/);
   });
 
+  it('timeline: true keeps every listed session; a legacy non-UUID id gets an empty timeline and a note', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path === '/api/admin/sessions') {
+        return res(200, {
+          sessions: [
+            { session_id: 'legacy-abc', visitor_id: 'v0', utm_source: 'burrow', utm_medium: 'post', utm_campaign: 'launch' },
+            { session_id: SID, visitor_id: 'v1' },
+          ],
+          filters: { mine: 'exclude', bots: 'exclude' },
+        });
+      }
+      if (path === `/api/admin/sessions/${SID}`) {
+        return res(200, {
+          session: { session_id: SID },
+          apps: [],
+          timeline: [{ ts: 1, kind: 'view', path: '/', referrer: 'https://ignored.example/x', referrer_host: 'news.example' }],
+        });
+      }
+      return res(404, {});
+    });
+    const out = await call('sessions_report', { timeline: true });
+    expect(out.isError).toBeFalsy();
+    expect(sent()).toEqual(['/api/admin/sessions?limit=50&mine=exclude&bots=exclude', `/api/admin/sessions/${SID}?`]);
+    const body = JSON.parse(out.content[0].text);
+    expect(body.count).toBe(2);
+    expect(body.sessions[0]).toMatchObject({
+      session_id: 'legacy-abc', timeline: [], utm_source: 'burrow', utm_medium: 'post', utm_campaign: 'launch',
+    });
+    expect(body.sessions[0].timeline_note).toMatch(/not a UUID/);
+    expect(body.sessions[1].timeline).toEqual([{ ts: 1, kind: 'view', path: '/', referrer_host: 'news.example' }]);
+    expect(body.sessions[1].timeline_note).toBeUndefined();
+  });
+
+  it('drops object keys that are email addresses', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path === `/api/admin/sessions/${SID}`) {
+        return res(200, {
+          session: { session_id: SID },
+          apps: [],
+          timeline: [{ ts: 1, kind: 'event', name: 'x', app: 'a', path: null, props: { 'someone@example.com': 1, 'a%40b.co': 2, ok: 3 } }],
+        });
+      }
+      return res(404, {});
+    });
+    const out = await call('sessions_report', { sessionId: SID });
+    expect(JSON.parse(out.content[0].text).timeline[0].props).toEqual({ ok: 3 });
+  });
+
   it('sessionId reads one session and its timeline; a non-UUID id is refused before any request', async () => {
     const out = await call('sessions_report', { sessionId: SID });
     expect(sent()).toEqual([`/api/admin/sessions/${SID}?`]);

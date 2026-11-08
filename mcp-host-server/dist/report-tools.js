@@ -113,12 +113,12 @@ export function registerReportTools(server) {
         title: 'Per-session audit',
         description: `Read-only. Calls the bilko.run admin API (GET /api/admin/sessions, and GET /api/admin/sessions/:id for timelines) ${ADMIN_KEY}. ` +
             "Lists the newest sessions in the window, each with session_id, visitor_id, started_at, ended_at, duration_ms, landing_path, exit_path, page_count, source_bucket, referrer_host, utm_*, country, device, converted, purchased, click/event/error counts, apps, and the host's mine and bot flags. " +
-            "timeline: true adds each listed session's timeline (at most 50 sessions, fetched 5 at a time). sessionId returns that one session and its timeline instead of a list. " +
+            "timeline: true adds each listed session's timeline (at most 50 sessions, fetched 5 at a time). A listed session whose legacy id is not a UUID keeps its row with timeline: [] and a timeline_note. sessionId returns that one session and its timeline instead of a list. " +
             'Timeline items: view (path, referrer_host), click (path, label, href, track_name), event (name, app, path, props), error (app, name, msg). ' +
             `Counts real visitors by default, as flows_report does: it sends mine=exclude&bots=exclude. mine=exclude drops the owner: ${OWNER_SESSIONS}. ` +
             `bots=exclude drops every session with a bot-flagged page view, event or error (${BOTS}). ` +
             'Opt-outs: includeMine: true sends mine=include and includeBots: true sends bots=include (both default false). ' +
-            'Never returns an email: fields are allowlisted (the host rows carry email; it is not copied), event props lose every email-named key at any depth, and an email address inside any string becomes [email]. ' +
+            'Never returns an email: fields are allowlisted (the host rows carry email; it is not copied), event props lose every key that names an email or is an email address, at any depth, and an email address inside any string becomes [email]. ' +
             `${NOT_CAUGHT} ${ECHO} ${SOURCE}`,
         inputSchema: {
             sessionId: z

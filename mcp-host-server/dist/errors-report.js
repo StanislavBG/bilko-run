@@ -236,8 +236,10 @@ export const SESSION_ID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9
 const str = (v) => (typeof v === 'string' ? v : null);
 const EMAIL_KEY = /e[-_]?mail/i;
 const EMAIL_ADDRESS = /[a-z0-9._%+-]+(?:@|%40)[a-z0-9.-]+\.[a-z]{2,}/gi;
+// Non-global copy for .test(), which would otherwise carry lastIndex between calls.
+const HAS_EMAIL_ADDRESS = new RegExp(EMAIL_ADDRESS.source, 'i');
 /**
- * Deep copy that drops every object key naming an email and turns each email address inside a string into [email],
+ * Deep copy that drops every object key naming an email or holding an email address, and turns each email address inside a string into [email],
  * so free-form values (event props, paths, error messages, mailto: hrefs) cannot carry one out.
  */
 function scrubEmails(v) {
@@ -248,19 +250,8 @@ function scrubEmails(v) {
     if (!v || typeof v !== 'object')
         return v;
     return Object.fromEntries(Object.entries(v)
-        .filter(([k]) => !EMAIL_KEY.test(k))
+        .filter(([k]) => !EMAIL_KEY.test(k) && !HAS_EMAIL_ADDRESS.test(k))
         .map(([k, x]) => [k, scrubEmails(x)]));
-}
-function refHost(raw) {
-    const s = str(raw);
-    if (!s)
-        return null;
-    try {
-        return new URL(s).hostname || null;
-    }
-    catch {
-        return null;
-    }
 }
 // The session fields sessions_report returns, plus any utm_* column. The host's rows also carry `email`, never copied.
 const SESSION_FIELDS = new Set([
@@ -279,12 +270,12 @@ function pickSession(r) {
     }
     return out;
 }
-/** One timeline item reduced to its kind's fields; a view keeps only its referrer's host. */
+/** One timeline item reduced to its kind's fields; a view keeps only the host's stored referrer_host. */
 function pickTimelineItem(r) {
     const base = { ts: num(r.ts), kind: str(r.kind) };
     switch (r.kind) {
         case 'view':
-            return { ...base, path: str(r.path), referrer_host: refHost(r.referrer) };
+            return { ...base, path: str(r.path), referrer_host: str(r.referrer_host) };
         case 'click':
             return { ...base, path: str(r.path), label: str(r.label), href: str(r.href), track_name: str(r.track_name) };
         case 'event':
@@ -359,8 +350,17 @@ export async function sessionsReport(opts) {
     let sessions = rows(b.sessions).map(pickSession);
     if (opts.timeline) {
         sessions = sessions.slice(0, TIMELINE_SESSION_CAP);
-        const details = await mapLimit(sessions, TIMELINE_CONCURRENCY, (s) => readSession(String(s.session_id ?? '')));
-        sessions = sessions.map((s, i) => ({ ...s, timeline: details[i]?.timeline ?? [] }));
+        // The host still stores legacy non-UUID session ids, which GET /api/admin/sessions/:id refuses: those keep their
+        // row with an empty timeline and a note instead of failing the whole report.
+        const details = await mapLimit(sessions, TIMELINE_CONCURRENCY, async (s) => {
+            const id = String(s.session_id ?? '');
+            if (!SESSION_ID_RE.test(id)) {
+                return { timeline: [], timeline_note: 'timeline unavailable: legacy session id is not a UUID' };
+            }
+            const d = await readSession(id);
+            return d ? { timeline: d.timeline } : { timeline: [], timeline_note: 'timeline unavailable: host returned 404' };
+        });
+        sessions = sessions.map((s, i) => ({ ...s, ...details[i] }));
     }
     const report = { source: baseUrl(), filters: filtersEcho(b), count: sessions.length, sessions };
     return scrubEmails(report);

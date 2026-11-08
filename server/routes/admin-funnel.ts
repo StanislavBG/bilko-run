@@ -31,7 +31,8 @@ export interface FunnelCounts {
  *   booked             paid service bookings matched by checkout session id or email
  *   free_hours_booked  free-hour bookings matched by booking id (the server's
  *                      free_hour_booked event) or email; never part of booked
- * Admin traffic and bots are excluded unless exclude_self=0 / include_bots=1. Admin
+ * Admin traffic and bots are excluded unless exclude_self=0 / include_bots=1. Bots are sessions
+ * with an is_bot page view or funnel event. Admin
  * traffic is admin emails, is_admin page views and checkouts, is_internal page views and events (the
  * bilko_internal marker), and every session from
  * one of the owner's devices by its bilko_vid cookie id (loadOwnerIds().cookieIds),
@@ -50,6 +51,10 @@ export async function funnelCounts(opts: {
     ? ` AND NOT EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = s.session_id AND (${badFlags.join(' OR ')}))`
     : '';
   // is_internal: rows sent with the bilko_internal marker (server/internal-traffic.ts), the owner's automation.
+  // funnel_events.is_bot is set at ingest from the request UA, so an agent run with clean page views is still a bot.
+  const feBotFilter = opts.includeBots
+    ? ''
+    : ' AND NOT EXISTS (SELECT 1 FROM funnel_events fb WHERE fb.session_id = s.session_id AND fb.is_bot = 1)';
   const feAdmin = opts.excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0 AND COALESCE(fe.is_internal, 0) = 0' : '';
   // sessions.visitor_id is the bilko_vid cookie id; loadOwnerIds never throws.
   const ownerDevices: SqlFragment = opts.excludeSelf
@@ -64,7 +69,7 @@ export async function funnelCounts(opts: {
          AND (LOWER(s.utm_source) = LOWER(?) OR s.session_id IN (
            SELECT t.session_id FROM page_views t
            WHERE t.date >= ? AND t.session_id IS NOT NULL AND LOWER(t.utm_source) = LOWER(?)
-         ))${inAdmins('s.email')}${pvFilter}${ownerDevices.sql}
+         ))${inAdmins('s.email')}${pvFilter}${feBotFilter}${ownerDevices.sql}
      ),
      v AS (SELECT DISTINCT visitor_id FROM s),
      ve AS (

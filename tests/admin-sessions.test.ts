@@ -143,11 +143,53 @@ describe('admin sessions', () => {
     expect(pct.statusCode).toBe(400);
   });
 
-  it('returns apps on the session detail from page views only', async () => {
+  it('returns apps on the session detail from page views and telemetry', async () => {
     const res = await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID}` });
     expect(res.json().apps).toEqual(['session-manager', 'sudoku']);
     const none = await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID2}` });
     expect(none.json().apps).toEqual([]);
+  });
+
+  it('lists the app a session matched through telemetry alone', async () => {
+    const S4 = '44444444-4444-4444-8444-444444444444';
+    const S5 = '55555555-5555-4555-8555-555555555555';
+    const now = Date.now();
+    for (const sid of [S4, S5]) {
+      await dbRun(
+        `INSERT INTO sessions (session_id, visitor_id, started_at, ended_at, page_count) VALUES (?, ?, ?, ?, 1)`,
+        sid, VID, now - 5_000, now - 4_000,
+      );
+    }
+    await dbRun(
+      `INSERT INTO funnel_events (event, tool, metadata, created_at, session_id) VALUES ('repo_open', 'git-viewer', '{}', ?, ?)`,
+      new Date(now).toISOString().slice(0, 19).replace('T', ' '), S4,
+    );
+    await dbRun(
+      `INSERT INTO app_errors (app, name, msg, session_id, created_at) VALUES ('outdoor-hours', 'TypeError', 'boom', ?, ?)`,
+      S5, Math.floor(now / 1000),
+    );
+    const gv = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=git-viewer' });
+    expect(gv.json().sessions.map((s: any) => [s.session_id, s.apps])).toEqual([[S4, ['git-viewer']]]);
+    const oh = await app.inject({ method: 'GET', url: '/api/admin/sessions?app=outdoor-hours' });
+    expect(oh.json().sessions.map((s: any) => [s.session_id, s.apps])).toEqual([[S5, ['outdoor-hours']]]);
+    const detail = await app.inject({ method: 'GET', url: `/api/admin/sessions/${S4}` });
+    expect(detail.json().apps).toEqual(['git-viewer']);
+  });
+
+  it('lists utm_source, utm_medium and utm_campaign', async () => {
+    await dbRun(`UPDATE sessions SET utm_source = 'burrow', utm_medium = 'post', utm_campaign = 'launch' WHERE session_id = ?`, SID);
+    const res = await app.inject({ method: 'GET', url: '/api/admin/sessions' });
+    const byId = new Map(res.json().sessions.map((s: any) => [s.session_id, s]));
+    expect(byId.get(SID)).toMatchObject({ utm_source: 'burrow', utm_medium: 'post', utm_campaign: 'launch' });
+    expect(byId.get(SID2)).toMatchObject({ utm_source: null, utm_medium: null, utm_campaign: null });
+  });
+
+  it('returns counts, mine/bot flags and stored view referrer hosts on the session detail', async () => {
+    await dbRun(`UPDATE page_views SET referrer_host = 'news.example' WHERE session_id = ?`, SID);
+    const res = await app.inject({ method: 'GET', url: `/api/admin/sessions/${SID}` });
+    const { session, timeline } = res.json();
+    expect(session).toMatchObject({ click_count: 1, event_count: 1, error_count: 1, mine: false, bot: false });
+    expect(timeline.find((t: any) => t.kind === 'view')).toMatchObject({ referrer_host: 'news.example' });
   });
 
   it('returns a merged ascending timeline', async () => {

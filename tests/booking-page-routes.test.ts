@@ -30,6 +30,8 @@ describe('booking page routes', () => {
       expect(res.body).toContain('og:title');
       expect(res.body).toContain('<div class="booking-page"><div class="bk-inner"><div class="bk-left">');
       expect(res.body).toContain('class="bk-top"');
+      expect(res.body).toMatch(/<div class="bk-top">\s*<p class="bk-eyebrow">/);
+      expect(res.body).not.toContain('bk-avatar');
     }
   });
 

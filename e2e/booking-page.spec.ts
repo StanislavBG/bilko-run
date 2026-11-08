@@ -38,8 +38,8 @@ test('a taken slot is not clickable', async ({ page }) => {
   await mock(page);
   await page.goto('/book');
   await expect(page.locator('button.bk-slot')).toHaveCount(2);
-  await expect(page.locator('.bk-slot.taken')).toHaveCount(1);
-  await expect(page.locator('.bk-slot.taken')).toContainText('Taken');
+  await expect(page.locator('.booking-page .bk-slot.taken')).toHaveCount(1);
+  await expect(page.locator('.booking-page .bk-slot.taken')).toContainText('Taken');
 });
 
 test('switching zone changes the shown time', async ({ page }) => {
@@ -56,7 +56,7 @@ test('empty and error states', async ({ page }) => {
   await mock(page, { slots: [], taken: [] });
   await page.goto('/book');
   await expect(page.getByText('No open times right now. Write to')).toBeVisible();
-  await expect(page.locator('.bk-card a[href^="mailto:"]')).toBeVisible();
+  await expect(page.locator('.booking-page .bk-card a[href^="mailto:"]')).toBeVisible();
 });
 
 test('load error shows Retry', async ({ page }) => {
@@ -125,7 +125,7 @@ test('already_booked shows a notice in the card', async ({ page }) => {
   await page.route('**/api/services/human-for-hire/free-hour', (r) => r.fulfill({ status: 409, json: { error: 'already_booked' } }));
   await toDetails(page);
   await page.getByRole('button', { name: 'Book my free hour' }).click();
-  await expect(page.locator('.bk-card [role="alert"]')).toContainText("You've already booked your free hour");
+  await expect(page.locator('.booking-page .bk-card [role="alert"]')).toContainText("You've already booked your free hour");
 });
 
 test('reschedule shows the new time', async ({ page }) => {
@@ -151,7 +151,7 @@ test('cancel returns to step 1 with a notice', async ({ page }) => {
   await page.getByRole('button', { name: 'Book my free hour' }).click();
   await page.getByRole('button', { name: 'Cancel booking' }).click();
   await expect(page.getByRole('heading', { name: 'Pick a time' })).toBeVisible();
-  await expect(page.locator('.bk-card [role="alert"]')).toContainText("Cancelled. Pick another time whenever you're ready.");
+  await expect(page.locator('.booking-page .bk-card [role="alert"]')).toContainText("Cancelled. Pick another time whenever you're ready.");
 });
 
 for (const [w, h] of [[1280, 720], [390, 844]] as const) {
@@ -175,22 +175,63 @@ const nineSlots = {
   taken: [],
 };
 
-test('fits 1280x720 on every step', async ({ page }) => {
-  await mockBook(page);
-  await mock(page, nineSlots);
-  await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto('/book');
-  await expect(page.locator('button.bk-slot').first()).toBeVisible();
-  await page.getByLabel('Times in').selectOption('Europe/Berlin');
-  const h = () => page.evaluate(() => document.documentElement.scrollHeight);
-  expect(await h()).toBeLessThanOrEqual(720);
-  await page.locator('button.bk-slot').first().click();
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByPlaceholder('you@company.com').fill('me@example.com');
-  expect(await h()).toBeLessThanOrEqual(720);
-  await page.getByRole('button', { name: 'Book my free hour' }).click();
-  await expect(page.getByRole('heading', { name: "You're booked." })).toBeVisible();
-  expect(await h()).toBeLessThanOrEqual(720);
+test.describe('fits 1280x720 in Pacific time', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+  test('fits 1280x720 on every step', async ({ page }) => {
+    await mockBook(page);
+    await mock(page, nineSlots);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/book');
+    await expect(page.locator('button.bk-slot').first()).toBeVisible();
+    const check = async () => {
+      const m = await page.evaluate(() => {
+        const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+        return { sh: document.documentElement.scrollHeight, head: r('header.bk-header'), bar: r('footer.bk-bottombar') };
+      });
+      expect(m.sh).toBeLessThanOrEqual(720);
+      expect(m.head.top).toBeGreaterThanOrEqual(0);
+      expect(m.head.bottom).toBeLessThanOrEqual(720);
+      expect(m.bar.top).toBeGreaterThanOrEqual(0);
+      expect(m.bar.bottom).toBeLessThanOrEqual(720);
+    };
+    await check();
+    await page.locator('button.bk-slot').first().click();
+    await page.getByRole('button', { name: 'Continue →' }).click();
+    await page.getByPlaceholder('you@company.com').fill('me@example.com');
+    await check();
+    await page.getByRole('button', { name: 'Book my free hour' }).click();
+    await expect(page.getByRole('heading', { name: "You're booked." })).toBeVisible();
+    await check();
+  });
+});
+
+const contentBottoms = (page: Page) => page.evaluate(() => ({
+  card: document.querySelector('.booking-page .bk-card')!.getBoundingClientRect().bottom,
+  left: document.querySelector('.booking-page .bk-left')!.getBoundingClientRect().bottom,
+}));
+
+test.describe('booking content in the first screen in Berlin time', () => {
+  test.use({ timezoneId: 'Europe/Berlin' });
+  test('card and left column are inside 1280x720 on every step', async ({ page }) => {
+    await mockBook(page);
+    await mock(page, nineSlots);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/book');
+    await expect(page.locator('button.bk-slot').first()).toBeVisible();
+    const check = async () => {
+      const b = await contentBottoms(page);
+      expect(b.card).toBeLessThanOrEqual(720);
+      expect(b.left).toBeLessThanOrEqual(720);
+    };
+    await check();
+    await page.locator('button.bk-slot').first().click();
+    await page.getByRole('button', { name: 'Continue →' }).click();
+    await page.getByPlaceholder('you@company.com').fill('me@example.com');
+    await check();
+    await page.getByRole('button', { name: 'Book my free hour' }).click();
+    await expect(page.getByRole('heading', { name: "You're booked." })).toBeVisible();
+    await check();
+  });
 });
 
 test('left column spacing matches the design at 1280x720', async ({ page }) => {
@@ -200,10 +241,36 @@ test('left column spacing matches the design at 1280x720', async ({ page }) => {
   await expect(page.locator('button.bk-slot').first()).toBeVisible();
   const r = await page.evaluate(() => {
     const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
-    return { brand: b('.bk-brand'), eyebrow: b('.bk-eyebrow'), h1: b('.bk-h1') };
+    return {
+      card: b('.booking-page .bk-card'), eyebrow: b('.booking-page .bk-eyebrow'), h1: b('.booking-page .bk-h1'),
+      brandRows: document.querySelectorAll('.booking-page .bk-brand').length,
+    };
   });
-  expect(Math.abs(r.eyebrow.top - r.brand.bottom - 56)).toBeLessThanOrEqual(2);
+  expect(r.brandRows).toBe(0);
+  expect(Math.abs(r.eyebrow.top - r.card.top)).toBeLessThanOrEqual(2);
   expect(Math.abs(r.h1.top - r.eyebrow.bottom - 16)).toBeLessThanOrEqual(2);
+});
+
+test('topic chips keep the booking look inside the site shell', async ({ page }) => {
+  await mockBook(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await toDetails(page);
+  const chip = page.locator('.booking-page .bk-chip').first();
+  await expect(chip).toHaveAttribute('aria-pressed', 'false');
+  const style = () => chip.evaluate((e) => { const c = getComputedStyle(e); return { display: c.display, color: c.color, font: c.fontFamily }; });
+  const rest = await style();
+  expect(rest.display).toBe('inline-block');
+  expect(rest.color).toBe('rgb(58, 52, 43)');
+  expect(rest.font.replace(/["']/g, '')).toMatch(/^Inter Tight/);
+  await chip.hover();
+  expect((await style()).color).toBe('rgb(58, 52, 43)');
+  await chip.click();
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  await chip.hover();
+  expect((await style()).color).toBe('rgb(245, 240, 230)');
+  const page16 = await page.evaluate(() => { const c = getComputedStyle(document.querySelector('.booking-page')!); return { fs: c.fontSize, lh: c.lineHeight }; });
+  expect(page16.fs).toBe('16px');
+  expect(page16.lh).toBe('24px');
 });
 
 test.describe('phone fold at 390x844', () => {
@@ -231,7 +298,7 @@ test.describe('phone fold at 390x844', () => {
     const m = await page.evaluate(() => {
       const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
       const de = document.documentElement;
-      return { slotBottom: r('.bk-slot').bottom, footTop: r('.bk-foot').top, cardBottom: r('.bk-card').bottom, over: de.scrollWidth > de.clientWidth };
+      return { slotBottom: r('.booking-page .bk-slot').bottom, footTop: r('.booking-page .bk-foot').top, cardBottom: r('.booking-page .bk-card').bottom, over: de.scrollWidth > de.clientWidth };
     });
     expect(m.slotBottom).toBeLessThanOrEqual(844);
     expect(m.footTop).toBeGreaterThanOrEqual(m.cardBottom);
@@ -242,8 +309,8 @@ test.describe('phone fold at 390x844', () => {
   test('no slot content overflows, before and after a pick, including the Tomorrow badge', async ({ page }) => {
     await open(page);
     const overflowing = () => page.evaluate(() =>
-      [...document.querySelectorAll('.bk-slot')].filter((e) => e.scrollWidth > e.clientWidth).length);
-    await expect(page.locator('.bk-badge', { hasText: 'Tomorrow' }).first()).toBeVisible();
+      [...document.querySelectorAll('.booking-page .bk-slot')].filter((e) => e.scrollWidth > e.clientWidth).length);
+    await expect(page.locator('.booking-page .bk-badge', { hasText: 'Tomorrow' }).first()).toBeVisible();
     expect(await overflowing()).toBe(0);
     await page.locator('button.bk-slot').nth(4).click();
     await expect(page.locator('button.bk-slot').nth(4)).toContainText('✓ Selected');
@@ -254,33 +321,46 @@ test.describe('phone fold at 390x844', () => {
   });
 });
 
-test('frame and time step match the design at 1280x720 and 1440x900', async ({ page }) => {
+test('frame and time step match the design at 1280x720, 1440x900 and 1920x1080', async ({ page }) => {
   await mock(page, nineSlots);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/book');
   await expect(page.locator('button.bk-slot').first()).toBeVisible();
   const m = await page.evaluate(() => {
     const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
-    const h2 = [...document.querySelectorAll('.bk-card h2')].find((e) => e.textContent === 'Pick a time')!.getBoundingClientRect();
-    return { h2, sel: b('#bk-tz'), card: b('.bk-card') };
+    const h2 = [...document.querySelectorAll('.booking-page .bk-card h2')].find((e) => e.textContent === 'Pick a time')!.getBoundingClientRect();
+    const inner = document.querySelector('.booking-page .bk-inner')!;
+    const cs = getComputedStyle(inner);
+    const innerH = inner.getBoundingClientRect().height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    return { h2, sel: b('#bk-tz'), card: b('.booking-page .bk-card'), innerH };
   });
   const mid = m.sel.top + m.sel.height / 2;
   expect(mid).toBeGreaterThanOrEqual(m.h2.top);
   expect(mid).toBeLessThanOrEqual(m.h2.bottom);
-  expect(m.card.height).toBeGreaterThanOrEqual(620);
+  expect(Math.abs(m.card.height - m.innerH)).toBeLessThanOrEqual(2);
+
+  const frame = () => page.evaluate(() => {
+    const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+    const inner = r('.booking-page .bk-inner');
+    const head = r('header.bk-header');
+    const bar = r('footer.bk-bottombar');
+    return { h: inner.height, top: inner.top - head.bottom, bottom: bar.top - inner.bottom };
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const f = await frame();
+  expect(Math.abs(f.top)).toBeLessThanOrEqual(2);
+  expect(Math.abs(f.bottom)).toBeLessThanOrEqual(2);
+
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const g = await frame();
+  expect(Math.abs(g.h - 820)).toBeLessThanOrEqual(2);
+  expect(Math.abs(g.top - g.bottom)).toBeLessThanOrEqual(2);
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  const f = await page.evaluate(() => {
-    const r = document.querySelector('.bk-inner')!.getBoundingClientRect();
-    return { h: r.height, top: r.top, bottom: window.innerHeight - r.bottom };
-  });
-  expect(Math.abs(f.h - 820)).toBeLessThanOrEqual(2);
-  expect(Math.abs(f.top - f.bottom)).toBeLessThanOrEqual(2);
-
   await page.locator('button.bk-slot').first().click();
-  await expect(page.locator('.bk-pick-date')).toBeVisible();
-  await expect(page.locator('.bk-pick-time')).toContainText('Video call');
-  expect(await page.locator('.bk-pick-date').textContent()).not.toContain('Video call');
+  await expect(page.locator('.booking-page .bk-pick-date')).toBeVisible();
+  await expect(page.locator('.booking-page .bk-pick-time')).toContainText('Video call');
+  expect(await page.locator('.booking-page .bk-pick-date').textContent()).not.toContain('Video call');
 });
 
 test('details and done steps match the design at 1280x720', async ({ page }) => {
@@ -288,15 +368,15 @@ test('details and done steps match the design at 1280x720', async ({ page }) => 
   await page.setViewportSize({ width: 1280, height: 720 });
   await toDetails(page);
   const d = await page.evaluate(() => {
-    const hidden = [...document.querySelectorAll('.bk-card *')]
+    const hidden = [...document.querySelectorAll('.booking-page .bk-card *')]
       .filter((el) => el.children.length === 0 && el.textContent?.trim() === 'Your details')
       .every((el) => { const r = el.getBoundingClientRect(); return r.width <= 1 || r.height <= 1; });
-    const card = document.querySelector('.bk-card')!.getBoundingClientRect();
-    const cs = getComputedStyle(document.querySelector('.bk-card')!);
+    const card = document.querySelector('.booking-page .bk-card')!.getBoundingClientRect();
+    const cs = getComputedStyle(document.querySelector('.booking-page .bk-card')!);
     const contentBottom = card.bottom - parseFloat(cs.paddingBottom);
     const btn = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Book my free hour')!.getBoundingClientRect();
-    const opt = [...document.querySelectorAll('.bk-card *')].find((el) => el.children.length === 0 && el.textContent === 'Optional')!.getBoundingClientRect();
-    const lab = [...document.querySelectorAll('.bk-card *')].find((el) => el.children.length === 0 && el.textContent?.trim() === 'What are you working on?')!.getBoundingClientRect();
+    const opt = [...document.querySelectorAll('.booking-page .bk-card *')].find((el) => el.children.length === 0 && el.textContent === 'Optional')!.getBoundingClientRect();
+    const lab = [...document.querySelectorAll('.booking-page .bk-card *')].find((el) => el.children.length === 0 && el.textContent?.trim() === 'What are you working on?')!.getBoundingClientRect();
     return { hidden, gap: contentBottom - btn.bottom, optMid: opt.top + opt.height / 2, labMid: lab.top + lab.height / 2 };
   });
   expect(d.hidden).toBe(true);
@@ -307,7 +387,7 @@ test('details and done steps match the design at 1280x720', async ({ page }) => 
   const h = page.getByRole('heading', { name: "You're booked." });
   await expect(h).toBeVisible();
   const c = await page.evaluate(() => {
-    const el = document.querySelector('.bk-done-check')!.getBoundingClientRect();
+    const el = document.querySelector('.booking-page .bk-done-check')!.getBoundingClientRect();
     return { w: el.width, h: el.height, right: el.right };
   });
   const hb = (await h.boundingBox())!;
@@ -317,6 +397,7 @@ test('details and done steps match the design at 1280x720', async ({ page }) => 
 });
 
 test.describe('checkout notice', () => {
+  test.use({ timezoneId: 'Europe/Berlin' });
   test('paid hour return shows the thank-you in role=status', async ({ page }) => {
     await mock(page);
     await page.goto('/book?offer=bilko-hour&session_id=cs_test_1');
@@ -327,14 +408,14 @@ test.describe('checkout notice', () => {
     await page.goto('/book?checkout=cancel');
     await expect(page.getByRole('status').filter({ hasText: 'Checkout cancelled. No charge.' })).toBeVisible();
   });
-  test('plain /book has no notice and still fits 1280x720 with one', async ({ page }) => {
+  test('plain /book has no notice and the card still fits 1280x720 with one', async ({ page }) => {
     await mock(page, nineSlots);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/book');
     await expect(page.locator('button.bk-slot').first()).toBeVisible();
-    await expect(page.locator('.bk-status')).toHaveCount(0);
+    await expect(page.locator('.booking-page .bk-status')).toHaveCount(0);
     await page.goto('/book?offer=bilko-hour&session_id=cs_test_1');
-    await expect(page.locator('.bk-status')).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(720);
+    await expect(page.locator('.booking-page .bk-status')).toBeVisible();
+    expect((await contentBottoms(page)).card).toBeLessThanOrEqual(720);
   });
 });

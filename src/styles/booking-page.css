@@ -1,13 +1,23 @@
 /* Booking Page 1a. Approved split-card look; every rule is scoped under .booking-page.
    Light only, like the rest of the site. Responsive rules go beyond the 1280x720 mockup. */
-.booking-page{--bk-bg:#f5f0e6;--bk-card:#fbf8f1;--bk-ink:#1a1612;--bk-body:#3a342b;--bk-muted:#5d5648;--bk-faint:#9c937f;--bk-line:#d4ccb8;--bk-accent:#a83818;--bk-accent-ink:#fff8ef;--bk-green:#2e5a3e;--bk-sand:#e3dcc8;--bk-summary:#ede6d6;--bk-badge:#f4b942;--bk-serif:'Source Serif 4',Georgia,serif;--bk-sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif;--bk-mono:'JetBrains Mono',ui-monospace,monospace;background:var(--bk-bg);color:var(--bk-ink);font-family:var(--bk-sans);min-height:100vh;overflow-x:hidden}
+.booking-page{--bk-bg:#f5f0e6;--bk-card:#fbf8f1;--bk-ink:#1a1612;--bk-body:#3a342b;--bk-muted:#5d5648;--bk-faint:#9c937f;--bk-line:#d4ccb8;--bk-accent:#a83818;--bk-accent-ink:#fff8ef;--bk-green:#2e5a3e;--bk-sand:#e3dcc8;--bk-summary:#ede6d6;--bk-badge:#f4b942;--bk-serif:'Source Serif 4',Georgia,serif;--bk-sans:'Inter Tight',-apple-system,'Helvetica Neue',Arial,sans-serif;--bk-mono:'JetBrains Mono',ui-monospace,monospace;background:var(--bk-bg);color:var(--bk-ink);font-family:var(--bk-sans);font-size:16px;line-height:1.5;flex:1 0 auto;overflow-x:hidden}
 .booking-page *,.booking-page *::before,.booking-page *::after{box-sizing:border-box}
-.booking-page .bk-inner{max-width:1280px;margin:0 auto;padding:48px 56px;display:flex;flex-wrap:wrap;gap:48px 64px;align-items:stretch}
+.booking-page .bk-inner{max-width:1280px;margin:0 auto;padding:32px 56px;display:flex;flex-wrap:wrap;gap:48px 64px;align-items:stretch}
 .booking-page button,.booking-page input,.booking-page select,.booking-page textarea{font-family:inherit}
 
+/* Frame: inside the site Layout the shell is a full-height column, so the booking area fills the
+   space between the sticky header and the bottom bar, and the bottom bar sits at the viewport bottom. */
+.portfolio-shell:has(> main > .booking-page){display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
+.portfolio-shell:has(> main > .booking-page) > main{flex:1 0 auto;display:flex;flex-direction:column}
+
 @media (min-width:901px){
-  .booking-page{display:flex;align-items:center;justify-content:center}
-  .booking-page .bk-inner{width:100%;min-height:min(100vh,820px)}
+  .booking-page{display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .booking-page .bk-inner{width:100%;flex:1 0 auto}
+}
+/* Columns side by side (400 + 620 + 64 gap + 112 padding): cap the frame at 820px, centered.
+   Below this the columns wrap and must be free to grow. */
+@media (min-width:1196px){
+  .booking-page .bk-inner{flex:1 0 auto;max-height:820px}
 }
 
 /* Step 1 (time) */
@@ -28,11 +38,7 @@
 /* Left column */
 .booking-page .bk-left{flex:1 1 400px;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:32px}
 .booking-page .bk-top{display:flex;flex-direction:column;gap:0}
-.booking-page .bk-brand{display:flex;align-items:center;gap:12px}
-.booking-page .bk-avatar{flex:none;width:40px;height:40px;border-radius:50%;background:var(--bk-accent);color:var(--bk-bg);display:flex;align-items:center;justify-content:center;font:italic 600 21px/1 var(--bk-serif)}
-.booking-page .bk-name{font:600 17px/1.1 var(--bk-serif)}
-.booking-page .bk-sub{font:400 13px/1.2 var(--bk-sans);color:var(--bk-muted);margin-top:4px}
-.booking-page .bk-eyebrow{margin:56px 0 0;font:500 12px/1 var(--bk-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--bk-accent)}
+.booking-page .bk-eyebrow{margin:0;font:500 12px/1 var(--bk-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--bk-accent)}
 .booking-page .bk-h1{margin:16px 0 0;font:600 46px/1.08 var(--bk-serif);letter-spacing:-.01em;text-wrap:balance;color:var(--bk-ink)}
 .booking-page .bk-lead{margin:18px 0 0;max-width:460px;font:400 17px/1.55 var(--bk-sans);color:var(--bk-body);text-wrap:pretty}
 .booking-page .bk-points{list-style:none;padding:0;margin:28px 0 0;display:flex;flex-direction:column;gap:12px;font:500 15px/1.35 var(--bk-sans)}
@@ -83,8 +89,9 @@
 .booking-page .bk-input:hover,.booking-page .bk-textarea:hover{border-color:var(--bk-faint)}
 .booking-page .bk-input:focus,.booking-page .bk-textarea:focus,.booking-page .bk-input:focus-visible,.booking-page .bk-textarea:focus-visible{border-color:var(--bk-ink);box-shadow:0 0 0 3px rgba(168,56,24,.14);outline:2px solid transparent}
 
-.booking-page .bk-chip{appearance:none;cursor:pointer;font:500 13px/1 var(--bk-sans);color:var(--bk-body);background:transparent;border:1px solid var(--bk-line);border-radius:999px;padding:8px 12px;transition:border-color .15s}
-.booking-page .bk-chip:hover{border-color:var(--bk-ink)}
+.booking-page .bk-chip{appearance:none;cursor:pointer;font:500 13px/1 var(--bk-sans);color:var(--bk-body);background:transparent;border:1px solid var(--bk-line);border-radius:999px;padding:8px 12px;display:inline-block;transition:border-color .15s}
+/* .portfolio-shell .bk-chip (site-chrome.css) styles the header chips; keep the topic chips' own look. */
+.booking-page .bk-chip:hover{border-color:var(--bk-ink);color:var(--bk-body)}
 .booking-page .bk-chip.on,.booking-page .bk-chip[aria-pressed="true"]{color:var(--bk-bg);background:var(--bk-ink);border-color:var(--bk-ink)}
 
 .booking-page .bk-cta{appearance:none;border:0;cursor:pointer;min-height:52px;padding:15px 24px;border-radius:10px;background:var(--bk-accent);color:var(--bk-accent-ink);font:600 16px/1 var(--bk-sans);transition:filter .15s}
@@ -111,7 +118,9 @@
 .booking-page .bk-field{display:flex;flex-direction:column;gap:8px}
 .booking-page .bk-label-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font:600 13.5px/1 var(--bk-sans)}
 .booking-page .bk-hint{font:400 12.5px/1 var(--bk-sans);color:var(--bk-muted)}
-.booking-page .bk-chips{display:flex;flex-wrap:wrap;gap:6px}
+/* Inline flow (not flex) so the chips stay inline-block; margins stand in for the 6px gap. */
+.booking-page .bk-chips{display:block;line-height:0;margin-bottom:-6px}
+.booking-page .bk-chips .bk-chip{margin:0 6px 6px 0;vertical-align:top}
 .booking-page .bk-cta-block{margin-top:auto;display:flex;flex-direction:column;gap:10px}
 .booking-page .bk-cta-note{text-align:center;font:400 12.5px/1 var(--bk-sans);color:var(--bk-muted)}
 .booking-page .bk-cta-block .bk-notice{margin:0!important}
@@ -137,7 +146,6 @@
   .booking-page .bk-inner{min-height:0}
   .booking-page .bk-inner{flex-direction:column;flex-wrap:nowrap;gap:40px}
   .booking-page .bk-left,.booking-page .bk-card{flex:0 0 auto;width:100%}
-  .booking-page .bk-eyebrow{margin-top:40px}
   /* Phone reading order: pitch, then the card, then the footer. Visual only; the DOM keeps .bk-foot inside .bk-left. */
   .booking-page .bk-left{display:contents}
   .booking-page .bk-top{order:1}
@@ -148,7 +156,6 @@
   .booking-page .bk-inner{padding:20px 16px;gap:28px}
   .booking-page .bk-card{padding:20px 16px}
   .booking-page .bk-h1{font-size:34px}
-  .booking-page .bk-eyebrow{margin-top:32px}
   .booking-page .bk-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
   .booking-page .bk-slot{padding:10px}
   .booking-page .bk-slot .bk-slot-top,.booking-page .bk-slot .bk-slot-bottom{flex-direction:column;align-items:flex-start;justify-content:flex-start}

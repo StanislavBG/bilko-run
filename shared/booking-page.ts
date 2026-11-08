@@ -6,7 +6,6 @@ export const BOOKING_PAGE_DESCRIPTION = `A relaxed hour on what you're building:
 
 export const BOOKING_PAGE_LEFT_HTML = `<div class="bk-left">
 <div class="bk-top">
-<div class="bk-brand"><div class="bk-avatar">B</div><div><div class="bk-name">Bilko Bibitkov</div><div class="bk-sub">AI projects for founders &amp; small teams</div></div></div>
 <p class="bk-eyebrow">Free · 60 min · Video call</p>
 <h1 class="bk-h1">Bring your AI idea. Leave with a plan.</h1>
 <p class="bk-lead">A relaxed hour on what you're building — the idea, the repo, or the part that keeps breaking. You'll leave with a clear next step, whether or not we work together.</p>

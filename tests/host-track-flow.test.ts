@@ -1,20 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import Fastify from 'fastify';
+import { initDb, dbAll } from '../server/db.js';
+import { registerTelemetryRoutes } from '../server/routes/telemetry.js';
 
 const sent: { url: string; body: string }[] = [];
-
-beforeEach(() => {
-  sent.length = 0;
-  vi.stubGlobal('navigator', {
-    sendBeacon: (url: string, blob: Blob) => {
-      sent.push({ url, body: (blob as unknown as { __b: string }).__b });
-      return true;
-    },
-  });
-  vi.stubGlobal('Blob', class { __b: string; constructor(parts: string[]) { this.__b = parts.join(''); } });
-  vi.stubGlobal('location', { pathname: '/pricing', protocol: 'https:' });
-  vi.stubGlobal('document', { cookie: '' });
-  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} });
-});
 
 async function load() {
   return import('../src/lib/telemetry');
@@ -23,6 +12,26 @@ async function load() {
 const evt = () => JSON.parse(sent[0].body).batch[0];
 
 describe('host trackFlow', () => {
+  // Browser globals for the host client lib; unstubbed after each test so the
+  // server-side ingest tests below run against real Node globals.
+  beforeEach(() => {
+    sent.length = 0;
+    vi.stubGlobal('navigator', {
+      sendBeacon: (url: string, blob: Blob) => {
+        sent.push({ url, body: (blob as unknown as { __b: string }).__b });
+        return true;
+      },
+    });
+    vi.stubGlobal('Blob', class { __b: string; constructor(parts: string[]) { this.__b = parts.join(''); } });
+    vi.stubGlobal('location', { pathname: '/pricing', protocol: 'https:' });
+    vi.stubGlobal('document', { cookie: '' });
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('sends the host-kit payload shape to /api/telemetry/event', async () => {
     const { trackFlow } = await load();
     trackFlow('download', 'click', { plan: 'x' });
@@ -52,5 +61,45 @@ describe('host trackFlow', () => {
     expect(p.email).toBe('[redacted]');
     expect(p.apiKey).toBe('[redacted]');
     expect(p.ok).toBe(1);
+  });
+});
+
+describe('host-kit env on POST /api/telemetry/event', () => {
+  const app = Fastify({ trustProxy: true, logger: false });
+  registerTelemetryRoutes(app, { scheduledPrune: false });
+
+  beforeAll(async () => {
+    await initDb();
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("stores funnel_events.env 'dev' for env 'dev' and NULL for env 'bogus'", async () => {
+    // Record shape as host-kit's track() sends it from a localhost dev server.
+    const rec = (name: string, env: string) => ({
+      app: 'host-kit-env', name, env, ts: Date.now(),
+      visitor_id: '44444444-4444-4444-8444-444444444444',
+      session_id: '55555555-5555-4555-8555-555555555555',
+      props: { path: '/' },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/telemetry/event',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.77.0.1' },
+      body: JSON.stringify({ batch: [rec('dev.view', 'dev'), rec('bogus.view', 'bogus')] }),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, ingested: 2 });
+    const rows = await dbAll<{ event: string; env: string | null }>(
+      'SELECT event, env FROM funnel_events WHERE tool = ? ORDER BY id',
+      'host-kit-env',
+    );
+    expect(rows).toEqual([
+      { event: 'dev.view', env: 'dev' },
+      { event: 'bogus.view', env: null },
+    ]);
   });
 });

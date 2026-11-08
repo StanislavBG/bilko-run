@@ -381,6 +381,7 @@ The full adoption process, SDK reference, endpoints, rate limits and retention a
 
 - **Nothing for pageviews and clicks.** The host injects a beacon into every HTML page; tag important buttons with `data-track="<area>-<action>"`.
 - **Call `initTelemetry({ app, version })` from `host-kit` once at boot** (`>=0.10.0` for `trackFlow`). Then use `trackFlow(flow, step, props)` (kebab-case), `log.*` and `logError`.
+- **Every record carries `env`** (`>=0.11.0`), resolved once at init: `prod` on bilko.run and www.bilko.run, otherwise `test` when `navigator.webdriver` is true (Playwright, Selenium), otherwise `dev` (localhost and any other host). `initTelemetry({ app, version, env })` overrides it; a value other than `prod`, `dev` or `test` is ignored. The host stores `env` per record and counts a record without one as prod, so rows from older host-kit (no `env`) count as prod, local and test runs included.
 - **Never put emails, tokens or free text in props**, fields or context.
 - Verify in `/admin/observability` (Sessions and Flows).
 

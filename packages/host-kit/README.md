@@ -59,12 +59,22 @@ Clerk-backed sign-in state for the host's `/api`. Import from `host-kit`.
 
 Full process: [docs/observability.md](https://github.com/StanislavBG/bilko-run/blob/main/docs/observability.md). The host already captures pageviews and clicks for you; the SDK adds flows, logs and errors.
 
-- `initTelemetry({ app, version }): void` — call once at boot; wires error capture and batching (5s, flushed on page hide).
+- `initTelemetry({ app, version, env? }): void` — call once at boot; wires error capture and batching (5s, flushed on page hide).
 - `track(name: string, props?: Record<string, unknown>): void` — one event to `/api/telemetry/event` (`funnel_events`). Auto-inits if you skip `initTelemetry`.
 - `trackFlow(flow: string, step: string, props?): void` — `track('<flow>.<step>', ...)`; kebab-case names, e.g. `trackFlow('checkout', 'click-buy', { product })`.
 - `flush(): void` — send the buffered events now.
 - `log.info|warn|error(msg, fields)` — structured logs (`info` sampled at 10%).
 - `logError(err: Error, context?: Record<string, unknown>): void` — report a caught error (`app_errors`, de-duped).
+- `resolveEnv(): TelemetryEnv` — the env this page would report as (see below).
+- Type: `TelemetryEnv` (`'prod' | 'dev' | 'test'`).
+
+Every event, log and error record carries `env`, resolved once when telemetry initializes (also when `track()` auto-initializes):
+
+1. `'prod'` on `bilko.run` and `www.bilko.run`, even under automation (the host's bot filters handle that).
+2. Otherwise `'test'` when `navigator.webdriver` is `true` (Playwright, Selenium).
+3. Otherwise `'dev'` (localhost, `127.0.0.1` and any other host).
+
+`initTelemetry({ app, version, env: 'test' })` overrides the resolved value; anything other than `'prod'`, `'dev'` or `'test'` is ignored. The host stores `env` per record and counts a record without one as prod, which is what host-kit before 0.11.0 sends: off-host runs on an older host-kit still land as prod until you upgrade.
 
 No emails, tokens or free text in props; keys like `email`/`token`/`key` are redacted.
 

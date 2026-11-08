@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { track, trackFlow, logError, flush, initTelemetry, _resetForTest } from '../src/telemetry';
+import { track, trackFlow, log, logError, flush, initTelemetry, resolveEnv, _resetForTest } from '../src/telemetry';
+import type { TelemetryEnv } from '../src/telemetry';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VID_A = '11111111-1111-4111-8111-111111111111';
@@ -209,5 +210,75 @@ describe('trackFlow and props', () => {
     track('x', { email: 'a@b.c', ok: 1 });
     flush();
     expect(sent()[0].body.batch[0].props).toMatchObject({ email: '[redacted]', ok: 1 });
+  });
+});
+
+describe('env', () => {
+  function onHost(hostname: string, webdriver = false) {
+    const protocol = hostname.endsWith('bilko.run') ? 'https:' : 'http:';
+    vi.stubGlobal('location', { ...window.location, hostname, pathname: '/', protocol, href: `${protocol}//${hostname}/` });
+    if (webdriver) Object.defineProperty(navigator, 'webdriver', { value: true, configurable: true });
+  }
+  const envs = (kind = 'event') =>
+    sent().find((c) => c.url.endsWith(`/${kind}`))!.body.batch.map((r: { env?: string }) => r.env);
+
+  afterEach(() => {
+    delete (navigator as { webdriver?: boolean }).webdriver;
+  });
+
+  it.each<[string, boolean, TelemetryEnv]>([
+    ['bilko.run', false, 'prod'],
+    ['www.bilko.run', false, 'prod'],
+    ['localhost', false, 'dev'],
+    ['127.0.0.1', false, 'dev'],
+    ['localhost', true, 'test'],
+    ['bilko.run', true, 'prod'],
+  ])('%s with webdriver %s resolves to %s', (host, webdriver, env) => {
+    onHost(host, webdriver);
+    expect(resolveEnv()).toBe(env);
+    initTelemetry({ app: 't', version: '1' });
+    track('x');
+    flush();
+    expect(envs()).toEqual([env]);
+  });
+
+  it("initTelemetry({ env: 'test' }) overrides the resolved env on bilko.run", () => {
+    onHost('bilko.run');
+    initTelemetry({ app: 't', version: '1', env: 'test' });
+    track('x');
+    flush();
+    expect(envs()).toEqual(['test']);
+  });
+
+  it('ignores an env that is not prod, dev or test', () => {
+    onHost('localhost');
+    initTelemetry({ app: 't', version: '1', env: 'staging' as unknown as TelemetryEnv });
+    track('x');
+    flush();
+    expect(envs()).toEqual(['dev']);
+  });
+
+  it('stamps env on the flushed event, log and error batches', () => {
+    onHost('localhost');
+    initTelemetry({ app: 't', version: '1' });
+    track('x');
+    log.warn('careful');
+    logError(new Error('boom'));
+    flush();
+    expect(sent().map((c) => c.url)).toEqual([
+      'https://bilko.run/api/telemetry/event',
+      'https://bilko.run/api/telemetry/log',
+      'https://bilko.run/api/telemetry/error',
+    ]);
+    expect([envs('event'), envs('log'), envs('error')]).toEqual([['dev'], ['dev'], ['dev']]);
+  });
+
+  it('track() auto-init resolves env once, at init', () => {
+    onHost('localhost', true);
+    track('a');
+    delete (navigator as { webdriver?: boolean }).webdriver;
+    track('b');
+    flush();
+    expect(envs()).toEqual(['test', 'test']);
   });
 });

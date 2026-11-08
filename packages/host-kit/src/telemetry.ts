@@ -11,6 +11,10 @@
  *
  * If initTelemetry has not been called, track() auto-initializes (app derived
  * from /projects/<slug>/) — so track() is always safe to use.
+ *
+ * Every event, log and error record carries `env` ('prod' | 'dev' | 'test'),
+ * resolved once at init (see resolveEnv) so the host can keep local dev and
+ * automated test runs out of production reports.
  */
 
 const HOST = 'https://bilko.run';
@@ -20,9 +24,35 @@ const FLUSH_MS = 5_000;
 const MAX_BATCH = 50;
 const MAX_ERR_PER_KEY_PER_MIN = 3;
 
-function defaultEndpoint(): string {
+function onBilkoHost(): boolean {
   const h = typeof location !== 'undefined' ? location.hostname : '';
-  return h === 'bilko.run' || h === 'www.bilko.run' ? '/api/telemetry' : `${HOST}/api/telemetry`;
+  return h === 'bilko.run' || h === 'www.bilko.run';
+}
+
+function defaultEndpoint(): string {
+  return onBilkoHost() ? '/api/telemetry' : `${HOST}/api/telemetry`;
+}
+
+/** Deployment environment stamped on every record; the host stores it per row. */
+export type TelemetryEnv = 'prod' | 'dev' | 'test';
+
+const ENVS: ReadonlySet<string> = new Set<TelemetryEnv>(['prod', 'dev', 'test']);
+
+/**
+ * The env this page reports as. Hostname wins: on bilko.run / www.bilko.run it is
+ * always 'prod', so automation driving the live site stays visible there and is
+ * left to the host's bot filters. Off bilko.run (every sibling dev server, LAN
+ * address and Playwright webServer) it is 'test' when the browser is
+ * automation-controlled (navigator.webdriver) and 'dev' otherwise.
+ */
+export function resolveEnv(): TelemetryEnv {
+  if (onBilkoHost()) return 'prod';
+  if (typeof navigator !== 'undefined' && navigator.webdriver === true) return 'test';
+  return 'dev';
+}
+
+function validEnv(v: unknown): TelemetryEnv | null {
+  return typeof v === 'string' && ENVS.has(v) ? (v as TelemetryEnv) : null;
 }
 
 interface InitOpts {
@@ -30,6 +60,8 @@ interface InitOpts {
   version: string;
   sampleInfo?: number;
   endpoint?: string;
+  /** Overrides resolveEnv(); any value other than 'prod' | 'dev' | 'test' is ignored. */
+  env?: TelemetryEnv;
 }
 
 interface BufferedEvent { kind: 'event'; payload: unknown }
@@ -91,7 +123,8 @@ function touchSession(): { vid: string; sid: string } {
 
 export function initTelemetry(opts: InitOpts): void {
   if (cfg) return; // idempotent
-  cfg = { sampleInfo: 0.1, endpoint: defaultEndpoint(), ...opts };
+  // env goes after the spread so an absent or invalid opts.env cannot clobber it.
+  cfg = { sampleInfo: 0.1, endpoint: defaultEndpoint(), ...opts, env: validEnv(opts.env) ?? resolveEnv() };
   if (typeof window === 'undefined') return; // SSR no-op
   window.addEventListener('error', (e) => {
     logError(e.error ?? new Error(e.message), { source: e.filename, line: e.lineno, col: e.colno });
@@ -128,7 +161,7 @@ export function logError(err: Error, context?: Record<string, unknown>): void {
   buf.push({
     kind: 'error',
     payload: {
-      app: cfg.app, version: cfg.version,
+      app: cfg.app, version: cfg.version, env: cfg.env,
       visitor_id: vid, session_id: sid,
       ts: now, msg: err.message, name: err.name,
       stack: err.stack ?? null,
@@ -154,7 +187,7 @@ export function track(name: string, props?: Record<string, unknown>): void {
     buf.push({
       kind: 'event',
       payload: {
-        app: cfg.app, name,
+        app: cfg.app, env: cfg.env, name,
         visitor_id: vid, session_id: sid,
         ts: Date.now(), props: stripPII(p),
       },
@@ -192,7 +225,7 @@ function enqueueLog(level: 'info' | 'warn' | 'error', msg: string, fields?: Reco
   buf.push({
     kind: 'log',
     payload: {
-      app: cfg.app, version: cfg.version, level, msg,
+      app: cfg.app, version: cfg.version, env: cfg.env, level, msg,
       visitor_id: vid, session_id: sid,
       ts: Date.now(), fields: stripPII(fields ?? {}),
     },

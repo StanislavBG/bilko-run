@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { baseUrl, trafficReport, funnelReport, flowsReport, sessionsReport, sessionDetail, SESSION_ID_RE } from './errors-report.js';
 import { ok, err } from './tool-result.js';
-const ADMIN_KEY = 'with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key)';
+export const ADMIN_KEY = 'with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key)';
 const APP_SLUG = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
 /** Who mine=exclude drops. */
 const OWNER = "the owner: rows flagged is_admin (signed in as admin), every device seen signed in as admin in the last 30 days, and every device marked as the owner's on /admin/secrets (any age)";

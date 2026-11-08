@@ -28,6 +28,7 @@ Per the [host contract](../docs/host-contract.md), each app lives in its own rep
 | `funnel_report` | admin key | no | Per-UTM revenue funnel: visits, sign-ins, checkout, paid, booked (`/api/admin/funnel`). Always excludes the owner and bot sessions (the host's defaults; no opt-out). |
 | `flows_report` | admin key | no | Per-app sessions, views, clicks, events, errors and flow steps (`/api/admin/flows`). Sends `mine=exclude&bots=exclude` unless `includeMine` / `includeBots` is true. Returns the host's `filters` echo. |
 | `sessions_report` | admin key | no | Per-session audit (`/api/admin/sessions`): landing and exit path, referrer host, utm, country, device, counts, apps and the owner/bot flags. `timeline: true` adds each session's timeline (`/api/admin/sessions/:id`, at most 50 sessions, 5 requests at a time); `sessionId` reads one session. Same defaults and opt-outs as `flows_report`. Never returns an email. |
+| `git_viewer_report` | admin key | no | Hosted Git Viewer portfolios and `git_viewer` subscriptions in one call (`/api/admin/git-viewer/profiles`). `totals` (all, byTier, claimed/unclaimed, byBuiltBy) leave out the showcase logins (`SHOWCASE_LOGINS`, the owner's own portfolio) and nothing else, so the owner's and automation's builds show up in `byBuiltBy`; `subscriptions` (`active`, `total`) count every `git_viewer` subscription, the owner's included; `rows` list every login newest first, the showcase ones flagged, at most 500. Never returns an email, payload or allowlist. |
 
 The four visitor reports count real visitors by default. What the owner (`mine`) and bot (`bots`) filters exclude, and what they miss: [Observability §11](../docs/observability.md#11-reading-your-numbers-through-the-bilko-host-mcp).
 
@@ -81,7 +82,7 @@ See the [host contract](../docs/host-contract.md). `publish_static_project` need
 | `BILKO_PUBLISH_CHECKOUT` | No | Absolute path to the dedicated git checkout the server uses for every mutating call (commit + push happen here, never in your working tree). Defaults to `~/.local/state/bilko-host/publish-checkout`; missing parent directories are created on first use. |
 | `TURSO_DATABASE_URL` | No | Turso database URL for manifest rows and publish-override audit logs. |
 | `TURSO_AUTH_TOKEN` | No | Auth token paired with `TURSO_DATABASE_URL`. |
-| `BILKO_ADMIN_KEY` | For `usage_report` / `errors_report` / `error_detail` / `traffic_report` / `funnel_report` / `flows_report` / `sessions_report` | Personal read-only admin API key (`bka_...`), minted at https://bilko.run/admin/secrets. Sent as `Authorization: Bearer` to the bilko.run admin API. Wins over the key file. |
+| `BILKO_ADMIN_KEY` | For `usage_report` / `errors_report` / `error_detail` / `traffic_report` / `funnel_report` / `flows_report` / `sessions_report` / `git_viewer_report` | Personal read-only admin API key (`bka_...`), minted at https://bilko.run/admin/secrets. Sent as `Authorization: Bearer` to the bilko.run admin API. Wins over the key file. |
 | `BILKO_ADMIN_KEY_FILE` | No | Key file read when `BILKO_ADMIN_KEY` is unset. Defaults to `~/.config/bilko-host/admin-key`. Must be mode `0600` (refused otherwise). |
 | `BILKO_BASE_URL` | No | Base URL of the host the admin API is called on. Defaults to `https://bilko.run`. |
 

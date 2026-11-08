@@ -25,9 +25,11 @@
  *   - funnel_report              → per-UTM revenue funnel (visits → paid → booked) via admin API (read-only)
  *   - flows_report               → per-app sessions, views, clicks, events and errors via admin API (read-only)
  *   - sessions_report            → per-session landing, source, owner/bot flags and timelines via admin API (read-only, no emails)
+ *   - git_viewer_report          → hosted Git Viewer portfolio totals, git_viewer subscriptions and rows via admin API (read-only, no emails)
  *
  * The four visitor reports (traffic, funnel, flows, sessions) live in report-tools.ts and count real visitors by
  * default: the owner and automation are excluded unless the caller opts in.
+ * git_viewer_report lives in git-viewer-report.ts; its totals leave out the showcase logins.
  *
  * App sessions wire it up via .mcp.json:
  *   {
@@ -51,6 +53,7 @@ import { ManifestSchema } from './manifest-schema.js';
 import { getHostDb, mcpRun, ensureGateTables } from './db.js';
 import { errorsReport, errorDetail, baseUrl, adminGet, mapEgressToUsage } from './errors-report.js';
 import { registerReportTools } from './report-tools.js';
+import { registerGitViewerReportTool } from './git-viewer-report.js';
 import { ok, err } from './tool-result.js';
 import { runGates, gateSummary, gateLines, type GateContext } from './gates/index.js';
 import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
@@ -696,6 +699,9 @@ server.registerTool(
 
 // 10)-13) traffic_report, funnel_report, flows_report, sessions_report ────────
 registerReportTools(server);
+
+// 14) git_viewer_report ─────────────────────────────────────────────────
+registerGitViewerReportTool(server);
 
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {

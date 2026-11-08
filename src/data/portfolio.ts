@@ -1,3 +1,4 @@
+import { SITE_SECTIONS, NOW_ITEMS } from '../../shared/site-chrome.js';
 import { PROJECTS, type Project, projectHref, isReactRoute } from './projectsRegistry.js';
 
 export interface Section {
@@ -64,14 +65,21 @@ export const PORTFOLIO_PROJECTS: readonly PortfolioProject[] = PROJECTS.map((p, 
 const PROJECT_COUNT = PORTFOLIO_PROJECTS.length;
 const LIVE_COUNT = PORTFOLIO_PROJECTS.filter(p => p.status === 'Live').length;
 
-export const SECTIONS: readonly Section[] = [
-  { id: 'home',      label: 'Home',        path: '/',          icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
-  { id: 'projects',  label: 'Projects',    path: '/projects',  icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
-  { id: 'hire',      label: 'Hire',        path: '/book',      icon: '✺', desc: 'A free hour with Bilko, then $100 / hour.', tag: 'free hour' },
-  { id: 'blog',      label: 'Blog',        path: '/blog',      icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
-  { id: 'contact',   label: 'Contact',     path: '/contact',   icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
-  { id: 'forum',     label: 'Forum',       path: '/forum',     icon: '❝', desc: 'Threads, hellos, and people who stick around.', tag: 'new' },
-];
+const SECTION_EXTRAS: Readonly<Record<string, Pick<Section, 'icon' | 'desc' | 'tag'>>> = {
+  home:     { icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },
+  projects: { icon: '◐', desc: 'Live tools, games, and open-source packages — newest work on top.', tag: `${LIVE_COUNT} live` },
+  hire:     { icon: '✺', desc: 'A free hour with Bilko, then $100 / hour.', tag: 'free hour' },
+  blog:     { icon: '❡', desc: 'Notes from the workshop. AI, craft, and rough thinking out loud.', tag: 'weekly' },
+  contact:  { icon: '✎', desc: 'Say hi. Pitch a collab. Send a bug.', tag: 'open' },
+  forum:    { icon: '❝', desc: 'Threads, hellos, and people who stick around.', tag: 'new' },
+};
+
+export const SECTIONS: readonly Section[] = SITE_SECTIONS.map(s => ({
+  id: s.id,
+  label: s.label,
+  path: s.path,
+  ...SECTION_EXTRAS[s.id],
+}));
 
 export const CHANNELS: readonly Channel[] = [
   { id: 'x-bilko',     kind: 'x',        label: 'X · CEO / builder',         handle: '@BilkoBibitkov',         href: 'https://x.com/BilkoBibitkov' },
@@ -81,12 +89,7 @@ export const CHANNELS: readonly Channel[] = [
   { id: 'blog',        kind: 'blog',     label: 'Blog',                      handle: 'bilko.run/blog',         href: '/blog' },
 ];
 
-export const NOW_ITEMS: readonly string[] = [
-  'Social Signals Trader running live, in public',
-  'signal-builder split out into its own hosted MCP service',
-  'Academy: 13 free, plain-language lessons on using Claude',
-  'New build log up on the blog',
-];
+export { NOW_ITEMS };
 
 export const TICKER_ITEMS: readonly string[] = [
   `${LIVE_COUNT} projects live · ${PROJECT_COUNT} total`,

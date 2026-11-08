@@ -5,6 +5,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { registerBilkoProfileRoutes } from '../server/bilko-profile-routes';
 import { resolveOg } from '../server/og-meta';
 import { BOOKING_PAGE_TITLE } from '../shared/booking-page';
+import { SITE_SECTIONS } from '../shared/site-chrome';
 
 const shell = readFileSync(resolve(__dirname, '..', 'index.html'), 'utf-8');
 let app: FastifyInstance;
@@ -33,6 +34,27 @@ describe('booking page routes', () => {
       expect(res.body).toMatch(/<div class="bk-top">\s*<p class="bk-eyebrow">/);
       expect(res.body).not.toContain('bk-avatar');
     }
+  });
+
+  it('wraps /book in the site header, Primary nav and bottom bar', async () => {
+    const res = await app.inject({ method: 'GET', url: '/book' });
+    const body = res.body;
+    const order = [
+      'class="portfolio-shell"',
+      'class="bk-header"',
+      '<main>',
+      'class="booking-page"',
+      'class="bk-bottombar"',
+    ].map(s => body.indexOf(s));
+    for (const i of order) expect(i).toBeGreaterThan(-1);
+    for (let k = 1; k < order.length; k++) expect(order[k]).toBeGreaterThan(order[k - 1]);
+    expect(body).toContain('aria-label="Primary"');
+    for (const s of SITE_SECTIONS.filter(x => x.id !== 'home')) {
+      expect(body).toMatch(new RegExp(`<a [^>]*href="${s.path}"[^>]*>(?:<span class="bk-num">\\d+</span>)?${s.label}</a>`));
+    }
+    const current = [...body.matchAll(/<a [^>]*aria-current="page"[^>]*>/g)];
+    expect(current).toHaveLength(1);
+    expect(current[0][0]).toContain('href="/book"');
   });
 
   it('redirects /bilko to /book', async () => {

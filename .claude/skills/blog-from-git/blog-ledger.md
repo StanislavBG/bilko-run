@@ -10,7 +10,6 @@ scan — is what tells you whether you're about to break the consecutive-rule or
 
 | Date | Slug | Project | On /projects? | Tone |
 |---|---|---|---|---|
-| 2026-11-05 | a-minesweeper-that-never-makes-you-guess | mindswiffer (admin-only) | ❌ not public | unspecified (burrow) |
 | 2026-11-02 | your-build-now-carries-to-the-next-planet | escape-velocity | ✅ | unspecified (burrow) |
 | 2026-10-29 | the-web-remote-now-drives-any-computer-you-pair | session-manager | ✅ | unspecified (burrow) |
 | 2026-10-26 | no-subscription-bilkos-help-now-costs-50-cents-to-9 | bilko-run (credits wallet, host feature) | ❌ not public | unspecified (burrow) |

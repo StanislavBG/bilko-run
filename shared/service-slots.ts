@@ -36,9 +36,9 @@ export const SERVICE_SLOT_CONFIG: Record<string, SlotConfig> = {
   'human-for-hire': {
     timeZone: 'America/Los_Angeles',
     weekly: [
-      { weekday: 2, time: '18:30' },
-      { weekday: 3, time: '18:30' },
-      { weekday: 4, time: '18:30' },
+      { weekday: 2, time: '22:00' },
+      { weekday: 3, time: '22:00' },
+      { weekday: 4, time: '22:00' },
     ],
     durationMinutes: 60,
     horizonDays: 21,

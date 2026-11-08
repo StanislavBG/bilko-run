@@ -14,17 +14,38 @@ describe('generateSlots', () => {
   });
 
   it('excludes slots inside the minimum lead time', () => {
-    // 10-27 18:30 PDT = 10-28 01:30Z; now one hour before it
-    const now = Date.UTC(2026, 9, 28, 0, 30);
+    // 10-27 22:00 PDT = 10-28 05:00Z; now one hour before it
+    const now = Date.UTC(2026, 9, 28, 4, 0);
     const slots = generateSlots(cfg, now);
     expect(slots.every((s) => s.startMs > now + 24 * 3600_000)).toBe(true);
-    expect(slots.some((s) => s.startMs === Date.UTC(2026, 9, 28, 1, 30))).toBe(false);
+    expect(slots.some((s) => s.startMs === Date.UTC(2026, 9, 28, 5, 0))).toBe(false);
   });
 
   it('converts PT wall time across DST', () => {
     const starts = generateSlots(cfg, NOW).map((s) => s.startMs);
-    expect(starts).toContain(Date.UTC(2026, 9, 29, 1, 30)); // Wed 10-28 PDT
-    expect(starts).toContain(Date.UTC(2026, 10, 4, 2, 30)); // Tue 11-03 PST
+    expect(starts).toContain(Date.UTC(2026, 9, 29, 5, 0)); // Wed 10-28 22:00 PDT
+    expect(starts).toContain(Date.UTC(2026, 10, 4, 6, 0)); // Tue 11-03 22:00 PST
+  });
+
+  it('every human-for-hire slot is 22:00 Pacific on Tue, Wed or Thu', () => {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles',
+      hourCycle: 'h23',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    for (const now of [NOW, Date.UTC(2027, 5, 1)]) {
+      const slots = generateSlots(cfg, now);
+      expect(slots.length).toBeGreaterThan(0);
+      for (const s of slots) {
+        const parts = Object.fromEntries(fmt.formatToParts(new Date(s.startMs)).map((p) => [p.type, p.value]));
+        expect(['Tue', 'Wed', 'Thu']).toContain(parts.weekday);
+        expect(parts.hour).toBe('22');
+        expect(parts.minute).toBe('00');
+        expect(s.endMs - s.startMs).toBe(3600000);
+      }
+    }
   });
 });
 

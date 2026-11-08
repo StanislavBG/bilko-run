@@ -19,6 +19,7 @@ pushes product code.
 |---|---|---|---|
 | Blog post seed: `scripts/blog-seed.sh`, run by Burrow's `blog_publish` (Mon and Thu, 9:05 AM Pacific) | the live checkout | `content/blog/<slug>.md`, `public/blog-images/<slug>/`, the blog ledger | one commit built in a throwaway worktree at a fresh `origin/main`, guarded (exactly one commit, own paths only), pushed as `<sha>:main`, then mirrored onto local `main` |
 | Blog and project videos: Burrow's `app/pipelines/marketing_video/publish.py` | Burrow | `public/blog-videos/<slug>/index.html` | the same pattern as the seed (Burrow `52fe2be`) |
+| Blog post withdraw: Burrow's `app/pipelines/blog_post/withdraw.py`, also run by `app/pipelines/blog_post/replace.py` (by hand, `python -m app.pipelines.blog_post.replace --post-id <id> --reason <text>`; not scheduled) | Burrow, against the live checkout | deletes `content/blog/<slug>.md`, `public/blog-images/<slug>/` and `public/blog-videos/<slug>/` and drops the slug's blog-ledger row. Burrow is adding an append of the slug to `content/blog/withdrawn.txt`, which unpublishes the live post (`d2e59329`) | one guarded commit (exactly one commit on a fresh `origin/main`, only those changes), built in a throwaway no-checkout worktree and pushed as `<sha>:refs/heads/main` under `.git/blog-seed.lock`. It then mirrors onto local `main`: a fast-forward when local `main` is the push base, otherwise `cherry-pick -x`, which made twin `47bf41f6` of `c8e179f7` on 2026-11-07 at 7:17 PM PST |
 | Static-path app publishes: bilko-host MCP `publish_static_project` (`mcp-host-server/src/publish-checkout.ts`) | `~/.local/state/bilko-host/publish-checkout` | `public/projects/<slug>/`, the registry | its own checkout pushes `HEAD:main`. Local `main` only falls behind, and the sync fast-forwards it |
 | Scheduler PRDs: dev-lead, validator, `Ship:` | the live checkout, on local `main` | any code; plan records under `session-manager-operations/reviews/` | a `Ship:` PRD cherry-picks the feature commit onto a throwaway `origin/main` tree and pushes it. Records stay local until `scripts/sync-local-main.sh` publishes them |
 | Epic sessions | their own worktree under `~/.local/state/session-manager/session-manager-epic-worktrees/` | their own work | `git push origin HEAD:main` once the branch is on `origin/main`. Session Manager later merges the epic into local `main` |
@@ -29,11 +30,28 @@ pushes product code.
 | Session Manager Project Home | Session Manager | `session-manager-operations/project-pages/home.html` and `demo-video/index.html` | written into the live checkout's working tree; not committed or pushed by the writer. They show as dirty until committed by hand or by a scheduler PRD |
 
 `.git/blog-seed.lock` serializes everything that moves local `main` from outside a session: the
-seed, the video publisher and the sync.
+seed, the video publisher, the blog withdraw and the sync.
 
 social-signals-trader's publisher takes its own lock, `.git/publish-to-bilko.lock`, because it never moves
 local `main`. Its old merge retry left merge commit `b1f82963` on `origin/main` on 2026-11-06. It stays:
 the sync stops only on merge commits that are not on `origin/main` yet.
+
+## Callers of `scripts/sync-local-main.sh` outside this repo
+
+Burrow is moving its video publisher and blog withdraw off the cherry-pick (Burrow PRDs 2058-2060,
+queued 2026-11-07). After its push, when local `main` is not the push base, each will release
+`.git/blog-seed.lock` and run `bash <checkout>/scripts/sync-local-main.sh --no-push` with
+`BILKO_SYNC_REPO_ROOT` set to the checkout. A non-zero exit is only a warning there; the publish
+still counts. Until Bilko PRD 1663 adds `--no-push`, the script rejects the flag with exit 1 before
+it takes the lock or runs git, so local `main` only lags by that commit.
+
+Burrow relies on the following, so tell Burrow (`/send-feedback`) before changing any of it:
+
+- the flag names `--no-push` and `--dry-run`;
+- the exit codes: 0 in sync or synced, 1 error with local `main` untouched, 3 needs a human;
+- `flock -w 120` on `.git/blog-seed.lock`;
+- the `BILKO_SYNC_REPO_ROOT` override, which is no longer test-only;
+- log lines on stderr only. Burrow's warning quotes the last one.
 
 ## Rules
 

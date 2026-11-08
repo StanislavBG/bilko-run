@@ -2,10 +2,11 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 // Passthrough db module: dbAll fails only while `dbFail.match` matches the SQL,
 // so loadOwnerIds can be driven through a real database error path.
-const dbFail = vi.hoisted(() => ({ match: null as RegExp | null }));
+const dbFail = vi.hoisted(() => ({ match: null as RegExp | null, calls: [] as string[] }));
 vi.mock('../server/db.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../server/db.js')>();
   const dbAll = (async (sql: string, ...args: unknown[]) => {
+    dbFail.calls.push(sql);
     if (dbFail.match?.test(sql)) throw new Error('simulated database failure');
     return original.dbAll(sql, ...args);
   }) as typeof original.dbAll;
@@ -16,6 +17,9 @@ import { initDb, dbRun, dbAll, dbGet } from '../server/db.js';
 import {
   parseTrafficFilters,
   loadOwnerIds,
+  cachedOwnerIds,
+  resetOwnerIdsCache,
+  OWNER_IDS_TTL_MS,
   mineExclusionSql,
   mineMatchSql,
   isOwnerRow,
@@ -74,6 +78,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   dbFail.match = null;
+  dbFail.calls = [];
+  resetOwnerIdsCache();
   await dbRun('DELETE FROM page_hits');
   await dbRun('DELETE FROM click_events');
   await dbRun('DELETE FROM page_views');
@@ -254,6 +260,32 @@ describe('loadOwnerIds with marked internal devices', () => {
 
     dbFail.match = /page_views/;
     await expect(loadOwnerIds(NOW)).resolves.toEqual({ hashIds: ['hash-x'], cookieIds: ['cookie-marked'] });
+  });
+});
+
+describe('cachedOwnerIds', () => {
+  const loads = () => dbFail.calls.filter((sql) => sql.includes('FROM internal_devices')).length;
+
+  it('runs loadOwnerIds at most once per TTL, sharing one in-flight load between concurrent callers', async () => {
+    await view({ ts: NOW - HOUR, isAdmin: 1, visitorId: 'c-old' });
+    const [a, b] = await Promise.all([cachedOwnerIds(NOW), cachedOwnerIds(NOW)]);
+    expect(a.cookieIds).toEqual(['c-old']);
+    expect(b).toBe(a);
+    expect(loads()).toBe(1);
+
+    await view({ ts: NOW, isAdmin: 1, visitorId: 'c-new' });
+    expect((await cachedOwnerIds(NOW + OWNER_IDS_TTL_MS - 1)).cookieIds).toEqual(['c-old']);
+    expect(loads()).toBe(1);
+
+    expect((await cachedOwnerIds(NOW + OWNER_IDS_TTL_MS)).cookieIds).toEqual(['c-new', 'c-old']);
+    expect(loads()).toBe(2);
+  });
+
+  it('reloads after resetOwnerIdsCache', async () => {
+    await cachedOwnerIds(NOW);
+    resetOwnerIdsCache();
+    await cachedOwnerIds(NOW);
+    expect(loads()).toBe(2);
   });
 });
 

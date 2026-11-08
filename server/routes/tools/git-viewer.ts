@@ -1,12 +1,12 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { dbAll, dbGet, dbRun } from '../../db.js';
-import { ADMIN_EMAILS, verifyClerkGitHubUser, verifyClerkToken } from '../../clerk.js';
-import { sessionCookie } from '../../page-hits.js';
+import { verifyClerkGitHubUser, verifyClerkToken } from '../../clerk.js';
+import { sessionCookie, stableVisitorId } from '../../page-hits.js';
 import { readSessionIds } from '../../session-identity.js';
 import { isBotRequest } from '../../services/analytics.js';
 import { getActiveSubscriptionLive } from '../../services/stripe.js';
-import { loadOwnerIds } from '../../traffic-filters.js';
-import { getUsageCount, hashIp, incrementUsage } from './_shared.js';
+import { cachedOwnerIds, isOwnerRow, resetOwnerIdsCache } from '../../traffic-filters.js';
+import { getUsageCount, hashIp, incrementUsage, isAdminEmail } from './_shared.js';
 import type { OgMeta } from '../../og-meta.js';
 
 // Hosted Git Viewer portfolios — gateway for the git-viewer sibling
@@ -44,7 +44,9 @@ import type { OgMeta } from '../../og-meta.js';
 // refreshes, claims and rows built before 2026-11-07 (NULL) keep theirs.
 // A GET that creates a row is classed, first match wins:
 //   owner       its verified Clerk token or __session cookie is an ADMIN_EMAILS
-//               account, or its bilko_vid is in loadOwnerIds().cookieIds
+//               account, or isOwnerRow matches its bilko_vid (cookie id) or its
+//               stableVisitorId(ip, user-agent) hash against the owner ids
+//               (cachedOwnerIds: one loadOwnerIds() per 5 minutes at most)
 //   automation  isBotRequest(headers) (browser automation or a crawler), or its bilko_vid sent a
 //               page view with is_bot = 1 in the last 24h
 //   visitor     anyone else
@@ -73,8 +75,10 @@ export const CLAIMED_FREE_REFRESH_SEC = 7 * 24 * 60 * 60;
 export const SHOWCASE_LOGINS: readonly string[] = ['stanislavbg'];
 
 type Tier = 'free' | 'paid';
+/** Every git_viewer_profiles.built_by class (see header comment). */
+export const BUILT_BY = ['owner', 'automation', 'visitor', 'showcase'] as const;
 /** Who caused a portfolio's first build: git_viewer_profiles.built_by (see header comment). */
-type BuiltBy = 'owner' | 'automation' | 'visitor' | 'showcase';
+export type BuiltBy = (typeof BUILT_BY)[number];
 type SignedInUser = NonNullable<Awaited<ReturnType<typeof verifyClerkGitHubUser>>>;
 
 export type BuildPortfolio = (opts: {
@@ -162,6 +166,7 @@ export function resetGitViewerState(): void {
   failed.clear();
   githubBudgetUntil = 0;
   lastBudgetCheck = null;
+  resetOwnerIdsCache();
 }
 
 function isFresh(map: Map<string, number>, login: string): boolean {
@@ -390,8 +395,7 @@ async function exemptFromIpLimit(login: string, row: ProfileRow | undefined, use
 
 const BOT_VIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-const isAdminEmail = (email: string | null | undefined): boolean =>
-  !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+const isAdmin = (email: string | null | undefined): boolean => !!email && isAdminEmail(email);
 
 /**
  * The built_by class of a request that creates a profile row (see header comment).
@@ -399,12 +403,14 @@ const isAdminEmail = (email: string | null | undefined): boolean =>
  * up by the caller. Owner signals go first, so the owner's own headless runs count
  * as the owner's. Reads the cookies; stores nothing.
  */
-async function builderClass(headers: FastifyRequest['headers'], bearerEmail: string | null): Promise<BuiltBy> {
-  if (isAdminEmail(bearerEmail)) return 'owner';
+async function builderClass(req: FastifyRequest, bearerEmail: string | null): Promise<BuiltBy> {
+  const headers = req.headers;
+  if (isAdmin(bearerEmail)) return 'owner';
   const session = sessionCookie(headers.cookie);
-  if (session && isAdminEmail(await verifyClerkToken(`Bearer ${session}`))) return 'owner';
+  if (session && isAdmin(await verifyClerkToken(`Bearer ${session}`))) return 'owner';
   const vid = readSessionIds(headers.cookie).visitorId;
-  if (vid && (await loadOwnerIds()).cookieIds.includes(vid)) return 'owner';
+  const hashId = stableVisitorId(req.ip, String(headers['user-agent'] ?? ''));
+  if (isOwnerRow(await cachedOwnerIds(), { hashId, cookieId: vid })) return 'owner';
   if (isBotRequest(headers)) return 'automation';
   const botView = vid && await dbGet<{ n: number }>(
     'SELECT 1 AS n FROM page_views WHERE visitor_id = ? AND is_bot = 1 AND created_at_ms >= ? LIMIT 1',
@@ -493,7 +499,7 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: secondsToUtcMidnight() });
     }
     // A row that already exists (a claim's placeholder) keeps its own stamp; only a build that creates the row is classed.
-    const builtBy = row ? row.built_by : await builderClass(req.headers, user?.email ?? null);
+    const builtBy = row ? row.built_by : await builderClass(req, user?.email ?? null);
     if (!enqueue(login, jobFor(row, await tierFor(login, row), builtBy))) {
       return reply.code(429).send({ status: 'rate_limited', retryAfterSec: 60 });
     }
@@ -522,8 +528,10 @@ export function registerGitViewerRoutes(app: FastifyInstance): void {
     }
 
     const allowlistJson = allowlist.length ? JSON.stringify(allowlist) : null;
-    // A new placeholder row takes the claimer's class; claiming a built portfolio keeps its original stamp.
-    const builtBy = await builderClass(req.headers, user.email);
+    // A new placeholder row takes the claimer's class; claiming an existing row keeps its original stamp,
+    // so builderClass (and its owner-id lookup) runs only when the claim creates the row.
+    const existing = await dbGet<Pick<ProfileRow, 'built_by'>>('SELECT built_by FROM git_viewer_profiles WHERE login = ?', login);
+    const builtBy = existing ? existing.built_by : await builderClass(req, user.email);
     await dbRun(
       `INSERT INTO git_viewer_profiles (login, payload, tier, locked_count, owner_email, allowlist, updated_at, created_at, built_by)
        VALUES (?, '', 'free', 0, ?, ?, 0, ?, ?)

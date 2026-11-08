@@ -183,3 +183,23 @@ export function isOwnerRow(ids: OwnerIds, row: OwnerRow): boolean {
   if (row.hashId && ids.hashIds.includes(row.hashId)) return true;
   return !!row.cookieId && ids.cookieIds.includes(row.cookieId);
 }
+
+/** How long cachedOwnerIds serves one loadOwnerIds() result. */
+export const OWNER_IDS_TTL_MS = 5 * 60_000;
+let ownerIdsCache: { at: number; ids: Promise<OwnerIds> } | null = null;
+
+/**
+ * loadOwnerIds() reused for up to OWNER_IDS_TTL_MS, for hot public paths (a git-viewer new build) that must not run its
+ * scans per request. Concurrent callers share one in-flight load, so the scans run at most once per TTL.
+ */
+export function cachedOwnerIds(nowMs: number = Date.now()): Promise<OwnerIds> {
+  if (!ownerIdsCache || nowMs - ownerIdsCache.at >= OWNER_IDS_TTL_MS || nowMs < ownerIdsCache.at) {
+    ownerIdsCache = { at: nowMs, ids: loadOwnerIds(nowMs) };
+  }
+  return ownerIdsCache.ids;
+}
+
+/** Drops the cachedOwnerIds entry (tests, or right after the owner marks a device). */
+export function resetOwnerIdsCache(): void {
+  ownerIdsCache = null;
+}

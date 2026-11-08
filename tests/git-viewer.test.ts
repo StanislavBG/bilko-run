@@ -16,6 +16,8 @@ import Fastify from 'fastify';
 import { initDb, dbAll, dbGet, dbRun } from '../server/db.js';
 import { verifyClerkGitHubUser, verifyClerkToken } from '../server/clerk.js';
 import { getActiveSubscriptionLive } from '../server/services/stripe.js';
+import { stableVisitorId } from '../server/page-hits.js';
+import { OWNER_IDS_TTL_MS } from '../server/traffic-filters.js';
 import {
   registerGitViewerRoutes, setPortfolioBuilder, drainGitViewerQueue, resetGitViewerState,
   runGitViewerRefresh, failedTtlMs, getGitViewerHealth, checkGitHubRateBudget, isGitHubRateLimited, PLAN_LIMITS, COMMIT_PAGE_LIMITS, NEW_BUILDS_PER_IP, SHOWCASE_LOGINS,
@@ -36,6 +38,7 @@ beforeEach(async () => {
   await dbRun('DELETE FROM git_viewer_profiles');
   await dbRun('DELETE FROM usage_tracking');
   await dbRun('DELETE FROM page_views');
+  await dbRun('DELETE FROM page_hits');
   await dbRun('DELETE FROM internal_devices');
   resetGitViewerState();
   build.mockReset();
@@ -522,6 +525,39 @@ describe('builder attribution: created_at + built_by, stamped by the first inser
     expect(await buildAs('byvid', { 'user-agent': HEADLESS_UA, cookie: `bilko_vid=${VID}` })).toMatchObject({ built_by: 'owner' });
   });
 
+  it("owner: the request's stableVisitorId(ip, user-agent) hash among the owner's hash ids, ahead of a headless UA", async () => {
+    const now = Date.now();
+    await dbRun(
+      `INSERT INTO page_hits (ts_ms, date, path, status, is_bot, visitor_id, client_vid, is_admin)
+       VALUES (?, ?, '/admin', 200, 0, ?, NULL, 1)`,
+      now - HOUR_MS, today(), stableVisitorId(IP, HEADLESS_UA),
+    );
+    expect(await buildAs('byhash', { 'user-agent': HEADLESS_UA })).toMatchObject({ built_by: 'owner' });
+    // Same IP, another user agent: a different hash, so not the owner.
+    expect(await buildAs('otherua', { 'user-agent': CHROME_UA })).toMatchObject({ built_by: 'visitor' });
+  });
+
+  it('new builds read the owner ids at most once per 5 minutes', async () => {
+    const real = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(real);
+    try {
+      // First build loads the (empty) owner ids and caches them.
+      expect(await buildAs('first', { 'user-agent': CHROME_UA, cookie: `bilko_vid=${VID}` })).toMatchObject({ built_by: 'visitor' });
+      await dbRun(
+        `INSERT INTO page_views (path, date, visitor_id, is_admin, created_at_ms) VALUES ('/admin', ?, ?, 1, ?)`,
+        today(), VID, real - HOUR_MS,
+      );
+      // Inside the TTL the cached ids are reused: the new owner id is not seen yet.
+      clock.mockReturnValue(real + OWNER_IDS_TTL_MS - 1000);
+      expect(await buildAs('second', { 'user-agent': CHROME_UA, cookie: `bilko_vid=${VID}` })).toMatchObject({ built_by: 'visitor' });
+      // Once the TTL lapses the ids reload, and the device is the owner's.
+      clock.mockReturnValue(real + OWNER_IDS_TTL_MS);
+      expect(await buildAs('third', { 'user-agent': CHROME_UA, cookie: `bilko_vid=${VID}` })).toMatchObject({ built_by: 'owner' });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('a non-admin signed-in account is not the owner', async () => {
     vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'dev@x.com', githubLogins: [] });
     vi.mocked(verifyClerkToken).mockResolvedValue('dev@x.com');
@@ -601,6 +637,15 @@ describe('builder attribution: created_at + built_by, stamped by the first inser
       expect(r.payload).not.toBe(''); // the build landed on the placeholder
       expect(r.created_at).toBeGreaterThan(LONG_AGO);
     }
+  });
+
+  it('claiming an existing row skips the builder classing entirely', async () => {
+    expect(await buildAs('already', { 'user-agent': CHROME_UA })).toMatchObject({ built_by: 'visitor' });
+    vi.mocked(verifyClerkToken).mockClear();
+    vi.mocked(verifyClerkGitHubUser).mockResolvedValue({ email: 'admin@x.com', githubLogins: ['already'] });
+    expect((await claim({ login: 'already' }, { 'user-agent': CHROME_UA, cookie: '__session=sess.jwt' })).statusCode).toBe(200);
+    expect(verifyClerkToken).not.toHaveBeenCalled();
+    expect(await stamp('already')).toMatchObject({ built_by: 'visitor' });
   });
 
   it("claiming a built portfolio, and the claimed-profile sweep, keep the original builder's stamp", async () => {

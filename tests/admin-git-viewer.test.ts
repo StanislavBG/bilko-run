@@ -73,6 +73,8 @@ async function seed() {
   await profile({
     login: 'carol', tier: 'free', ownerEmail: 'carol@example.com', payload: '', updatedAt: 0, createdAt: T0 + 35, builtBy: 'visitor',
   });
+  // A built legacy free row whose updated_at the 2026-10-14 free-tier migration zeroed: updated_at 0 but built.
+  await profile({ login: 'zeroed', tier: 'free', updatedAt: 0, createdAt: null, builtBy: null });
 
   await subscription('sub_gv_active', 'alice@example.com', GIT_VIEWER_TIER, 'active');
   await subscription('sub_gv_canceled', 'bob@example.com', GIT_VIEWER_TIER, 'canceled');
@@ -81,22 +83,27 @@ async function seed() {
 }
 
 const TOTALS = {
-  all: 7,
-  byTier: { free: 5, paid: 2 },
+  all: 8,
+  built: 7,
+  neverBuilt: 1,
+  byTier: { free: 6, paid: 2 },
   claimed: 3,
-  unclaimed: 4,
-  byBuiltBy: { owner: 1, automation: 1, visitor: 2, showcase: 1, unknown: 2 },
+  unclaimed: 5,
+  byBuiltBy: { owner: 1, automation: 1, visitor: 2, unknown: 3 },
+  showcaseStamped: 1,
 };
+const SHOWCASE_TOTALS = { logins: SHOWCASE_LOGINS.length, rows: 1, built: 1 };
 
 const ROWS = [
-  { login: SHOWCASE, tier: 'paid', claimed: true, showcase: true, builtBy: 'showcase', createdAt: iso(T0 + 50), updatedAt: iso(T0 + 55) },
-  { login: 'alice', tier: 'paid', claimed: true, showcase: false, builtBy: 'owner', createdAt: iso(T0 + 40), updatedAt: iso(T0 + 45) },
-  { login: 'carol', tier: 'free', claimed: true, showcase: false, builtBy: 'visitor', createdAt: iso(T0 + 35), updatedAt: null },
-  { login: 'bob', tier: 'free', claimed: false, showcase: false, builtBy: 'visitor', createdAt: iso(T0 + 30), updatedAt: iso(T0 + 31) },
-  { login: 'crawler-x', tier: 'free', claimed: false, showcase: false, builtBy: 'automation', createdAt: iso(T0 + 20), updatedAt: iso(T0 + 21) },
-  { login: 'former-showcase', tier: 'free', claimed: false, showcase: false, builtBy: 'showcase', createdAt: iso(T0 + 10), updatedAt: iso(T0 + 11) },
-  { login: 'legacy-paid', tier: 'paid', claimed: true, showcase: false, builtBy: null, createdAt: null, updatedAt: iso(T0 + 5) },
-  { login: 'legacy-old', tier: 'free', claimed: false, showcase: false, builtBy: null, createdAt: null, updatedAt: iso(T0 - 100) },
+  { login: SHOWCASE, tier: 'paid', built: true, claimed: true, showcase: true, builtBy: 'showcase', createdAt: iso(T0 + 50), updatedAt: iso(T0 + 55) },
+  { login: 'alice', tier: 'paid', built: true, claimed: true, showcase: false, builtBy: 'owner', createdAt: iso(T0 + 40), updatedAt: iso(T0 + 45) },
+  { login: 'carol', tier: 'free', built: false, claimed: true, showcase: false, builtBy: 'visitor', createdAt: iso(T0 + 35), updatedAt: null },
+  { login: 'bob', tier: 'free', built: true, claimed: false, showcase: false, builtBy: 'visitor', createdAt: iso(T0 + 30), updatedAt: iso(T0 + 31) },
+  { login: 'crawler-x', tier: 'free', built: true, claimed: false, showcase: false, builtBy: 'automation', createdAt: iso(T0 + 20), updatedAt: iso(T0 + 21) },
+  { login: 'former-showcase', tier: 'free', built: true, claimed: false, showcase: false, builtBy: 'showcase', createdAt: iso(T0 + 10), updatedAt: iso(T0 + 11) },
+  { login: 'legacy-paid', tier: 'paid', built: true, claimed: true, showcase: false, builtBy: null, createdAt: null, updatedAt: iso(T0 + 5) },
+  { login: 'legacy-old', tier: 'free', built: true, claimed: false, showcase: false, builtBy: null, createdAt: null, updatedAt: iso(T0 - 100) },
+  { login: 'zeroed', tier: 'free', built: true, claimed: false, showcase: false, builtBy: null, createdAt: null, updatedAt: null },
 ];
 
 beforeAll(async () => {
@@ -124,14 +131,23 @@ describe('GET /api/admin/git-viewer/profiles', () => {
   it('counts totals without the showcase logins, and git_viewer subscriptions only', async () => {
     await seed();
     const body = (await get()).json();
-    expect(Object.keys(body).sort()).toEqual(['rows', 'subscriptions', 'totals']);
+    expect(Object.keys(body).sort()).toEqual(['rows', 'showcase', 'subscriptions', 'totals']);
     expect(body.totals).toEqual(TOTALS);
+    expect(body.showcase).toEqual(SHOWCASE_TOTALS);
     expect(body.subscriptions).toEqual({ active: 1, total: 3 });
   });
 
   it('lists every row newest first, showcase flagged, with ISO dates and null for 0 or NULL', async () => {
     await seed();
     expect((await get()).json().rows).toEqual(ROWS);
+  });
+
+  it('decides built from the payload, not updated_at: a zeroed built free row is built, a claim placeholder is not', async () => {
+    await seed();
+    const rows = (await get()).json().rows as Array<{ login: string; built: boolean; updatedAt: string | null }>;
+    const by = Object.fromEntries(rows.map((r) => [r.login, r]));
+    expect(by.zeroed).toMatchObject({ built: true, updatedAt: null });
+    expect(by.carol).toMatchObject({ built: false, updatedAt: null });
   });
 
   it('never returns an owner email, payload, allowlist or any email', async () => {
@@ -141,7 +157,7 @@ describe('GET /api/admin/git-viewer/profiles', () => {
       expect(res.body).not.toContain(banned);
     }
     for (const row of res.json().rows) {
-      expect(Object.keys(row).sort()).toEqual(['builtBy', 'claimed', 'createdAt', 'login', 'showcase', 'tier', 'updatedAt']);
+      expect(Object.keys(row).sort()).toEqual(['built', 'builtBy', 'claimed', 'createdAt', 'login', 'showcase', 'tier', 'updatedAt']);
     }
   });
 
@@ -149,11 +165,15 @@ describe('GET /api/admin/git-viewer/profiles', () => {
     expect((await get()).json()).toEqual({
       totals: {
         all: 0,
+        built: 0,
+        neverBuilt: 0,
         byTier: { free: 0, paid: 0 },
         claimed: 0,
         unclaimed: 0,
-        byBuiltBy: { owner: 0, automation: 0, visitor: 0, showcase: 0, unknown: 0 },
+        byBuiltBy: { owner: 0, automation: 0, visitor: 0, unknown: 0 },
+        showcaseStamped: 0,
       },
+      showcase: { logins: SHOWCASE_LOGINS.length, rows: 0, built: 0 },
       subscriptions: { active: 0, total: 0 },
       rows: [],
     });
@@ -222,6 +242,7 @@ describe('bilko-host git_viewer_report', () => {
     const out = JSON.parse(result.content[0].text);
     expect(out.source).toBe('http://host.test');
     expect(out.totals).toEqual(TOTALS);
+    expect(out.showcase).toEqual(SHOWCASE_TOTALS);
     expect(out.subscriptions).toEqual({ active: 1, total: 3 });
     expect(out.rows).toEqual(ROWS);
   });

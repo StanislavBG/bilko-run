@@ -316,7 +316,6 @@
       "Experiment",
       "Free"
     ],
-    "public": true,
     "listing": {
       "detail": "Burrow, a Reddit-reading pipeline, tallies which stocks r/wallstreetbets is talking about and which way the crowd leans. Scheduled jobs then bet against that lean with defined-risk options spreads on an Alpaca paper account and close them by written rules, with no one approving each order. The dashboard shows open positions and past trades, and scores the whole account against SPY.",
       "audience": "People curious whether trading on Reddit chatter can work, and builders who want to watch an automated trader run in the open, losing trades included.",

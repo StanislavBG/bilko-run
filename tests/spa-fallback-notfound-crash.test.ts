@@ -127,3 +127,28 @@ describe('/projects/<slug>/ with no published bundle', () => {
   });
 });
 
+
+describe('non-page paths answer 404 with the site shell', () => {
+  // Scanner probes and missing asset files are never SPA pages: they must 404
+  // (so the observability 404s tile counts them) while still serving the
+  // normal shell body, which is uncacheable because it carries a CSP nonce.
+  it('probe and missing-asset paths return 404 text/html, no-store', async () => {
+    for (const path of ['/wp-config.php', '/.env', '/.git/HEAD', '/assets/index-doesnotexist123.js']) {
+      const res = await fetch(`${BASE}${path}`, { redirect: 'manual' });
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get('content-type'), path).toMatch(/^text\/html/);
+      expect(res.headers.get('cache-control'), path).toBe('private, no-store');
+    }
+    const health = await fetch(`${BASE}/api/health`);
+    expect(health.status).toBe(200);
+  });
+
+  it('real pages still return 200', async () => {
+    for (const path of ['/', '/book']) {
+      const res = await fetch(`${BASE}${path}`, { redirect: 'manual' });
+      expect(res.status, path).toBe(200);
+    }
+    const health = await fetch(`${BASE}/api/health`);
+    expect(health.status).toBe(200);
+  });
+});

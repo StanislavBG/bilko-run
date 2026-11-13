@@ -58,6 +58,7 @@ import { normalizeStaticMtimes, registerEncodingVary, registerStaticCorsTrim, se
 import { createShutdown, drainWindowMs } from './shutdown.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
+import { isNonPagePath } from './non-page-paths.js';
 import { registerClickBeacon } from './click-beacon.js';
 import { registerSessionIdentity } from './session-identity.js';
 
@@ -373,6 +374,9 @@ if (isProd) {
       // published bundle: real 404 status. The SPA renders a terminal
       // "not published" page there (src/lib/projectPaths.ts), never a redirect.
       if (/^\/projects\/[^/]+\/(?:index\.html)?$/.test(path)) reply.status(404);
+      // Scanner probes (/.env, /wp-config.php) and missing files (/assets/x.js)
+      // are never SPA pages: same shell body, but a real 404 status.
+      if (isNonPagePath(path)) reply.status(404);
       // Never cacheable: the onSend hook stamps a per-request CSP nonce into
       // this HTML, so a shared or reused copy would carry a nonce that no
       // longer matches the response's CSP header.

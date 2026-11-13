@@ -94,7 +94,6 @@ export { NOW_ITEMS };
 export const TICKER_ITEMS: readonly string[] = [
   `${LIVE_COUNT} projects live · ${PROJECT_COUNT} total`,
   'OutdoorHours — KOUT-7 weather report',
-  'Social Signals Trader — reading Reddit, trading in public',
   'Git Viewer — live dashboard of everything on GitHub',
   'Session Manager — schedules the whole studio',
   'Bilko Host MCP — the plumbing under bilko.run',

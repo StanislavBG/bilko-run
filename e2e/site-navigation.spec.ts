@@ -3,6 +3,7 @@
  * Back, and the shared bottom bar across Home, Projects, Blog and Contact.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { NOW_ITEMS } from '../shared/site-chrome.js';
 
 const FLIP = { timeout: 3000 };
 const PAGES = ['/', '/projects', '/book', '/blog', '/contact', '/forum'] as const;
@@ -148,7 +149,7 @@ test.describe('bottom bar text is calm and readable', () => {
         await page.goto(path);
         await expect(now).not.toHaveText('');
         const seen = new Set<string>();
-        for (let i = 0; i < 6 && seen.size < 4; i++) {
+        for (let i = 0; i < NOW_ITEMS.length + 2 && seen.size < NOW_ITEMS.length; i++) {
           const text = (await now.textContent()) ?? '';
           if (!seen.has(text)) {
             seen.add(text);
@@ -156,13 +157,13 @@ test.describe('bottom bar text is calm and readable', () => {
             expect(m.sw, `${path}@${width} "${text}"`).toBeLessThanOrEqual(m.cw);
             expect((await bar.boundingBox())!.height).toBe(52);
           }
-          if (seen.size < 4) {
+          if (seen.size < NOW_ITEMS.length) {
             await page.clock.fastForward(NOW_ROTATE_MS);
             await page.clock.runFor(NOW_FADE_MS + 100);
             await expect(now).not.toHaveText(text);
           }
         }
-        expect(seen.size).toBe(4);
+        expect(seen.size).toBe(NOW_ITEMS.length);
       });
     }
   }

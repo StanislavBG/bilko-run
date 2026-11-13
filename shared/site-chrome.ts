@@ -17,8 +17,7 @@ export const SITE_SECTIONS: readonly SiteSection[] = [
 ];
 
 export const NOW_ITEMS: readonly string[] = [
-  'Social Signals Trader running live, in public',
-  'signal-builder split out into its own hosted MCP service',
   'Academy: 13 free, plain-language lessons on using Claude',
+  'signal-builder split out into its own hosted MCP service',
   'New build log up on the blog',
 ];

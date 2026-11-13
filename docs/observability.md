@@ -222,7 +222,7 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 `visitors.human` counts a salted IP+user-agent hash per server page hit. It needs no JavaScript, so a crawler with a browser user agent counts the same as a person. To tell them apart, `GET /api/admin/traffic` returns `totals.confirmedVisitors` (`server/routes/admin-observability.ts`). A human visitor is **confirmed** when at least one of its human page hits in the window has:
 
-- a `bilko_vid` cookie id (`client_vid`) that appears in `page_views` (the pageview beacon ran), in `click_events` (the click beacon ran), or on 2 or more `page_hits` (the browser kept the cookie across requests); or
+- a `bilko_vid` cookie id (`client_vid`) that appears in `page_views` (the pageview beacon ran), in `click_events` (the click beacon ran), or on 2 or more `page_hits` that all carry the same user agent (the browser kept the cookie across requests). A cookie returned under several user agents is a crawler's shared cookie jar and confirms nobody; or
 - a `bilko_sid` session id that appears in `page_views`.
 
 Those lookups reach back 30 days before the window start, so a returning visitor confirmed last week stays confirmed. The count is capped at `totals.visitors`.

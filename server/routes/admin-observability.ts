@@ -393,8 +393,10 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
 
     // Confirmed visitors: a human visitor key whose browser provably ran the beacon
     // (page_views visitor/session, click_events cookie id) or kept the bilko_vid cookie
-    // across 2+ page hits. Browser-UA scrapers that never run JS or keep cookies stay
-    // unconfirmed. Set queries bounded by date/ts_ms, joined here in JS.
+    // across 2+ page hits that all carry the same user agent. A cookie seen under more
+    // than one user agent is a crawler's shared cookie jar and confirms nobody. Browser-UA
+    // scrapers that never run JS or keep cookies stay unconfirmed. Set queries bounded by
+    // date/ts_ms, joined here in JS.
     const lookbackMs = since - 30 * 86_400_000;
     const lookbackDay = new Date(lookbackMs).toISOString().slice(0, 10);
     const [humanHitRows, pvVisitorRows, pvSessionRows, clickVidRows, repeatVidRows] = await Promise.all([
@@ -416,7 +418,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       ), []),
       safeQuery(() => dbAll<{ id: string | null }>(
         `SELECT client_vid AS id FROM page_hits WHERE ts_ms >= ? AND client_vid IS NOT NULL
-          GROUP BY client_vid HAVING COUNT(*) >= 2`,
+          GROUP BY client_vid HAVING COUNT(*) >= 2 AND COUNT(DISTINCT COALESCE(ua, '')) = 1`,
         lookbackMs,
       ), []),
     ]);

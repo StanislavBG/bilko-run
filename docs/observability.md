@@ -214,7 +214,34 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 `funnel_report` has no opt-out. It drops sessions with an admin or bot-flagged page view, sessions from the owner's devices (seen signed in as admin in the last 30 days, or marked), the owner's own checkout and free-hour events, and anything under an admin email.
 
-**Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, on a device never signed in as admin or marked, still counts as a visitor unless it sends the [internal traffic marker](host-contract.md#internal-traffic-marker).
+**Secret-file probes are bots.** A page hit on a probe path (`server/non-page-paths.ts` `isProbePath`: a dotfile segment such as `/.env` or `/.git/HEAD` except `/.well-known`, a scanner extension such as `.php`, `.bak` or `.sql`, or a config filename such as `config.json`) is recorded as class `script`, whatever its user agent (`server/page-hits.ts`). Its IP+user-agent visitor is marked too: every hit from that visitor from 24 hours before to 24 hours after its first probe becomes a bot hit, including hits already written.
+
+**Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, never probes a secret file, and runs on a device never signed in as admin or marked, still counts as a visitor unless it sends the [internal traffic marker](host-contract.md#internal-traffic-marker). If it never runs the beacon and never keeps the `bilko_vid` cookie, it is counted in `visitors.human` but lands in `visitors.unverified`, not `visitors.confirmed` (below).
+
+### Confirmed vs unverified visitors
+
+`visitors.human` counts a salted IP+user-agent hash per server page hit. It needs no JavaScript, so a crawler with a browser user agent counts the same as a person. To tell them apart, `GET /api/admin/traffic` returns `totals.confirmedVisitors` (`server/routes/admin-observability.ts`). A human visitor is **confirmed** when at least one of its human page hits in the window has:
+
+- a `bilko_vid` cookie id (`client_vid`) that appears in `page_views` (the pageview beacon ran), in `click_events` (the click beacon ran), or on 2 or more `page_hits` (the browser kept the cookie across requests); or
+- a `bilko_sid` session id that appears in `page_views`.
+
+Those lookups reach back 30 days before the window start, so a returning visitor confirmed last week stays confirmed. The count is capped at `totals.visitors`.
+
+`traffic_report` maps this to `visitors.confirmed` and `visitors.unverified` (`human - confirmed`, never below 0). Unverified visitors are no-JS clients, crawlers with a browser user agent, and people whose ad blocker stops the beacon. Both fields are `null` from a host older than `confirmedVisitors`, never a misleading 0.
+
+The dashboard's UNIQUE VISITORS tile (`src/pages/admin/command/useCommandData.ts` `deriveKpis`) shows the confirmed count, with the sub-line `of N fetched`, where N is `totals.visitors`. Against an older host it falls back to the plain visitor count with a countries sub-line.
+
+### Why visitors can exceed sessions
+
+Sessions are created only by the pageview beacon (`POST /api/analytics/pageview`, section 1). A server page hit alone counts a visitor but makes no session. So UNIQUE VISITORS can be well above the session count, and is never a session count. Visitors with no session include:
+
+- crawlers and scripts that fetch HTML but never run its JavaScript;
+- `/blog-videos/` pages: they run under a sandboxed, no-network policy and the host injects no beacon there, by design;
+- people using uBlock Origin or AdGuard. EasyPrivacy, their default privacy list, has a rule for `/analytics/pageview` that blocks the beacon. The host deliberately does not work around it (no renamed or proxied endpoint). These people count as visitors, usually unverified, but never as sessions.
+
+### 404s count real missing pages
+
+Paths that are not pages answer `404` with the site shell instead of a `200` SPA page (`server/index.ts` `setNotFoundHandler`, `server/non-page-paths.ts` `isNonPagePath`). That covers dotfile segments (except `/.well-known`), probe extensions and filenames, and any last segment with a file extension the static server did not serve (`/assets/missing.js`). So a scanner probe or a missing file is never counted as a working page. The 404s tile counts only non-bot hits with status 404, and probe hits are bots, so the tile counts real missing pages and files that people asked for.
 
 **Telemetry env (`env=prod`)**, `flows_report` only. It always sends `env`, `prod` by default, so local dev and automated test runs stay out of your numbers:
 

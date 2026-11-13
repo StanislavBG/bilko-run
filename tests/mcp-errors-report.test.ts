@@ -225,7 +225,7 @@ describe('mcp traffic_report', () => {
 
   it('maps visitors, bot/human split, pages, referrers and metric dates; drops PII rows', () => {
     const r = mapTrafficToReport(BODY, 30) as Record<string, any>;
-    expect(r.visitors).toEqual({ human: 400, bot: 100, humanSingleHit: 300, humanMultiHit: 100, bilkoVidCookie: 350 });
+    expect(r.visitors).toEqual({ human: 400, bot: 100, humanSingleHit: 300, humanMultiHit: 100, bilkoVidCookie: 350, confirmed: null, unverified: null });
     expect(r.hits).toEqual({ human: 900, bot: 100, notFound: 12, clicks: 30 });
     expect(r.split).toEqual({ botHitPct: 10, botVisitorPct: 20, humanSingleHitPct: 75 });
     expect(r.topPages[0]).toEqual({ path: '/', hits: 300, visitors: 200 });
@@ -236,6 +236,24 @@ describe('mcp traffic_report', () => {
     expect(json).not.toContain('9.9.9.9');
     expect(json).not.toContain('secret-ua');
     expect(json).not.toContain('a@b.c');
+  });
+
+  it('computes confirmed and unverified visitors from totals.confirmedVisitors', () => {
+    const r = mapTrafficToReport({ ...BODY, totals: { ...BODY.totals, confirmedVisitors: 120 } }, 30) as Record<string, any>;
+    expect(r.visitors).toEqual({ human: 400, bot: 100, humanSingleHit: 300, humanMultiHit: 100, bilkoVidCookie: 350, confirmed: 120, unverified: 280 });
+    expect(r.hits).toEqual({ human: 900, bot: 100, notFound: 12, clicks: 30 });
+    const over = mapTrafficToReport({ ...BODY, totals: { ...BODY.totals, confirmedVisitors: 500 } }, 30) as Record<string, any>;
+    expect(over.visitors.unverified).toBe(0);
+    const zero = mapTrafficToReport({ ...BODY, totals: { ...BODY.totals, confirmedVisitors: 0 } }, 30) as Record<string, any>;
+    expect(zero.visitors).toMatchObject({ confirmed: 0, unverified: 400 });
+  });
+
+  it('reports confirmed and unverified as null when an older host omits confirmedVisitors', () => {
+    const r = mapTrafficToReport(BODY, 30) as Record<string, any>;
+    expect(r.visitors.confirmed).toBeNull();
+    expect(r.visitors.unverified).toBeNull();
+    const garbage = mapTrafficToReport({ ...BODY, totals: { ...BODY.totals, confirmedVisitors: '7' } }, 30) as Record<string, any>;
+    expect(garbage.visitors).toMatchObject({ confirmed: null, unverified: null });
   });
 
   it('passes through byClass and topPagesByClass', () => {

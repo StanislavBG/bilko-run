@@ -150,6 +150,8 @@ export function mapTrafficToReport(
   const humanVisitors = num(t.visitors);
   const botVisitors = num(q.botVisitors);
   const singleHit = num(q.singleHitVisitors);
+  // Older hosts omit confirmedVisitors; report null rather than a misleading 0.
+  const confirmed = typeof t.confirmedVisitors === 'number' && Number.isFinite(t.confirmedVisitors) ? t.confirmedVisitors : null;
   const firstDay = typeof b.earliestDate === 'string' ? b.earliestDate : null;
   return {
     source: baseUrl(),
@@ -161,6 +163,8 @@ export function mapTrafficToReport(
       humanSingleHit: singleHit,
       humanMultiHit: Math.max(humanVisitors - singleHit, 0),
       bilkoVidCookie: num(q.cookieVisitors),
+      confirmed,
+      unverified: confirmed === null ? null : Math.max(humanVisitors - confirmed, 0),
     },
     hits: { human: humanHits, bot: botHits, notFound: num(t.notFound), clicks: num(t.clicks) },
     split: {
@@ -184,6 +188,7 @@ export function mapTrafficToReport(
     },
     notes: [
       '`visitors.human` counts a salted IP+user-agent hash (page_hits.visitor_id), NOT the bilko_vid cookie. One person on two devices counts twice; many people behind one NAT with the same browser count once.',
+      '`visitors.confirmed` counts human visitors whose browser ran the page script (page view or click beacon) or came back with the bilko_vid cookie; `visitors.unverified` is `human - confirmed` (no-JS clients, crawlers with a browser UA, blocked beacons). Both are null from a host older than confirmedVisitors.',
       '`visitors.bilkoVidCookie` counts bilko_vid cookie UUIDs. Clients that drop cookies (most crawlers) mint a new one on every request, so this over-counts non-browser traffic.',
       'Visitors are classified into six classes: human, search_crawler, ai_crawler, ai_user_agent, api_client, script. `byClass` covers all classes, so its hits sum to all non-error hits; `visitors.human` stays human-only. Undeclared bots with a browser UA and no navigator.webdriver flag still land in `human`; `humanSingleHit` is the main signal for them.',
       'Human aggregates exclude status >= 400. Hits are HTML documents only, not assets or API calls.',

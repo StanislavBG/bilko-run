@@ -55,6 +55,7 @@ export function registerReportTools(server: McpServer): void {
       description:
         `Read-only. Calls the bilko.run admin API (GET /api/admin/traffic) ${ADMIN_KEY}. Returns, for a trailing window: human vs bot visitors and hits, human visitors seen only once (undeclared-bot/bounce signal), bilko_vid cookie uniques, per-page and per-project hits + uniques, a per-visitor-class breakdown (\`byClass\`, \`topPagesByClass\`: human, search_crawler, ai_crawler, ai_user_agent, api_client, script), top referrers, countries, devices, and the date each metric became valid. ` +
         'Visitors are a salted IP+user-agent hash, not a cookie. Per-visitor IP/UA/email rows are omitted. ' +
+        '`visitors.confirmed` counts human visitors whose browser ran the page script or kept the bilko_vid cookie, and `visitors.unverified` is the rest of `visitors.human` (both null from an older host). ' +
         `excludeSelf defaults to true and sends mine=exclude, which drops ${OWNER} from every count; excludeSelf: false sends mine=include. ` +
         'includeBots defaults to true and sends bots=include, because the human aggregates already exclude bot hits (UA-flagged, HeadlessChrome/Playwright included, or re-flagged after a navigator.webdriver page view); includeBots: false sends bots=exclude, which only trims byClass/topPagesByClass to the non-bot classes. ' +
         "`window` echoes the request. `filters` echoes what the host applied ({ mine, bots, mineHits: the owner's human hits in the window }); null from a host older than these filters. " +

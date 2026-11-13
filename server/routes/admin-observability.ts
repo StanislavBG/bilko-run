@@ -391,11 +391,52 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       ), undefined),
     ]);
 
+    // Confirmed visitors: a human visitor key whose browser provably ran the beacon
+    // (page_views visitor/session, click_events cookie id) or kept the bilko_vid cookie
+    // across 2+ page hits. Browser-UA scrapers that never run JS or keep cookies stay
+    // unconfirmed. Set queries bounded by date/ts_ms, joined here in JS.
+    const lookbackMs = since - 30 * 86_400_000;
+    const lookbackDay = new Date(lookbackMs).toISOString().slice(0, 10);
+    const [humanHitRows, pvVisitorRows, pvSessionRows, clickVidRows, repeatVidRows] = await Promise.all([
+      safeQuery(() => dbAll<{ vid: string | null; client_vid: string | null; session_id: string | null }>(
+        `SELECT ${VKEY} AS vid, client_vid, session_id FROM page_hits WHERE ${human}`,
+        ...humanArgs,
+      ), []),
+      safeQuery(() => dbAll<{ id: string | null }>(
+        `SELECT DISTINCT visitor_id AS id FROM page_views WHERE date >= ? AND visitor_id IS NOT NULL`,
+        lookbackDay,
+      ), []),
+      safeQuery(() => dbAll<{ id: string | null }>(
+        `SELECT DISTINCT session_id AS id FROM page_views WHERE date >= ? AND session_id IS NOT NULL`,
+        lookbackDay,
+      ), []),
+      safeQuery(() => dbAll<{ id: string | null }>(
+        `SELECT DISTINCT client_vid AS id FROM click_events WHERE date >= ? AND client_vid IS NOT NULL`,
+        lookbackDay,
+      ), []),
+      safeQuery(() => dbAll<{ id: string | null }>(
+        `SELECT client_vid AS id FROM page_hits WHERE ts_ms >= ? AND client_vid IS NOT NULL
+          GROUP BY client_vid HAVING COUNT(*) >= 2`,
+        lookbackMs,
+      ), []),
+    ]);
+    const idSet = (rows: { id: string | null }[]) => new Set(rows.map(r => r.id).filter((x): x is string => !!x));
+    const confirmingVids = idSet([...pvVisitorRows, ...clickVidRows, ...repeatVidRows]);
+    const confirmingSessions = idSet(pvSessionRows);
+    const confirmedVids = new Set<string>();
+    for (const h of humanHitRows) {
+      if (!h.vid || confirmedVids.has(h.vid)) continue;
+      if ((h.client_vid && confirmingVids.has(h.client_vid)) || (h.session_id && confirmingSessions.has(h.session_id))) {
+        confirmedVids.add(h.vid);
+      }
+    }
+
     return {
       days,
       totals: {
         hits: totals?.hits ?? 0,
         visitors: totals?.visitors ?? 0,
+        confirmedVisitors: Math.min(confirmedVids.size, totals?.visitors ?? 0),
         botHits: botRow?.n ?? 0,
         notFound: notFoundRow?.n ?? 0,
         clicks: clickTotal?.n ?? 0,
@@ -446,6 +487,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         pages: v.pages,
         firstSeen: v.first_seen,
         lastSeen: v.last_seen,
+        confirmed: confirmedVids.has(v.vid),
       })),
       quality: {
         botVisitors: botVisitorsRow?.n ?? 0,

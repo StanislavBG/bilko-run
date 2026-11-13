@@ -483,7 +483,7 @@ describe('GET /api/admin/traffic', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.days).toBe(7);
-    expect(body.totals).toEqual({ hits: 2, visitors: 2, botHits: 1, notFound: 1, clicks: 0 });
+    expect(body.totals).toEqual({ hits: 2, visitors: 2, confirmedVisitors: 0, botHits: 1, notFound: 1, clicks: 0 });
     expect(body.topClicks).toEqual([]);
     expect(body.bySlug[0].slug).toBe('demo');
     expect(body.recent.length).toBe(4);
@@ -724,7 +724,7 @@ describe('GET /api/admin/traffic mine and bots filters', () => {
     asAdmin();
     await seedOwnerTraffic();
     const body = await traffic();
-    expect(body.totals).toEqual({ hits: 4, visitors: 3, botHits: 1, notFound: 0, clicks: 0 });
+    expect(body.totals).toEqual({ hits: 4, visitors: 3, confirmedVisitors: 2, botHits: 1, notFound: 0, clicks: 0 });
     expect(body.visitors.map((v: { visitorId: string }) => v.visitorId).sort()).toEqual(['net-h', 'own-h', 'str-h']);
     expect(body.recent).toHaveLength(5);
     expect(Object.fromEntries((body.recent as RecentHit[]).map(r => [r.path, r.isMine]))).toEqual({
@@ -741,7 +741,7 @@ describe('GET /api/admin/traffic mine and bots filters', () => {
     asAdmin();
     await seedOwnerTraffic();
     const mine = await traffic('?mine=exclude');
-    expect(mine.totals).toEqual({ hits: 1, visitors: 1, botHits: 1, notFound: 0, clicks: 0 });
+    expect(mine.totals).toEqual({ hits: 1, visitors: 1, confirmedVisitors: 0, botHits: 1, notFound: 0, clicks: 0 });
     expect(mine.visitors.map((v: { visitorId: string }) => v.visitorId)).toEqual(['str-h']);
     expect(recentPaths(mine)).toEqual(['/p/bot', '/p/stranger']);
     expect((mine.recent as RecentHit[]).some(r => r.isMine)).toBe(false);
@@ -758,7 +758,7 @@ describe('GET /api/admin/traffic mine and bots filters', () => {
     expect((all.byClass as ClassRow[]).find(c => c.class === 'script')).toEqual({ class: 'script', hits: 1, visitors: 1 });
 
     const body = await traffic('?bots=exclude');
-    expect(body.totals).toEqual({ hits: 4, visitors: 3, botHits: 1, notFound: 0, clicks: 0 });
+    expect(body.totals).toEqual({ hits: 4, visitors: 3, confirmedVisitors: 2, botHits: 1, notFound: 0, clicks: 0 });
     expect(recentPaths(body)).toEqual(['/p/admin', '/p/same-hash', '/p/signed-out', '/p/stranger']);
     expect((body.recent as RecentHit[]).some(r => r.isBot)).toBe(false);
     const byClass = body.byClass as ClassRow[];

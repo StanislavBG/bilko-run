@@ -7,6 +7,7 @@ import { parseUa, classifyVisitor } from './services/analytics.js';
 import { readSessionIds } from './session-identity.js';
 import { isInternalRequest } from './internal-traffic.js';
 import { verifyClerkToken, ADMIN_EMAILS } from './clerk.js';
+import { isProbePath } from './non-page-paths.js';
 
 // Server-side page-hit recorder: logs every HTML document response, so pages
 // that never run client JS (static-path apps) still show up in observability.
@@ -122,7 +123,14 @@ export function recordPageHit(input: PageHitInput): void {
   const date = dayKey(input.ts);
   const path = input.path.split('?')[0].slice(0, 300);
   const { device, browser, os } = parseUa(input.ua);
-  const visitorClass = classifyVisitor(input.ua, { botId: input.botId, mcp: input.mcp });
+  const visitorId = stableVisitorId(input.ip, input.ua);
+  let visitorClass = classifyVisitor(input.ua, { botId: input.botId, mcp: input.mcp });
+  if (isProbePath(path)) {
+    visitorClass = 'script';
+    markProbeVisitor(visitorId, input.ts);
+  } else if (visitorClass === 'human' && isProbeMarked(visitorId, input.ts)) {
+    visitorClass = 'script';
+  }
   buffer.push({
     ts_ms: input.ts,
     date,
@@ -139,7 +147,7 @@ export function recordPageHit(input: PageHitInput): void {
     ip: input.ip.slice(0, 64),
     ua: input.ua.slice(0, 400),
     referrer: input.referer ? input.referer.slice(0, 500) : null,
-    visitor_id: stableVisitorId(input.ip, input.ua),
+    visitor_id: visitorId,
     user_email: input.userEmail ?? null,
     is_admin: input.userEmail && ADMIN_EMAILS.includes(input.userEmail.toLowerCase()) ? 1 : 0,
     is_internal: input.internal ? 1 : 0,
@@ -147,6 +155,47 @@ export function recordPageHit(input: PageHitInput): void {
     client_vid: input.clientVid ?? null,
     visitor_class: visitorClass,
   });
+}
+
+// Probe visitors: a visitor_id (salted ip+ua hash) that requested a probe path
+// (server/non-page-paths.ts isProbePath, e.g. /.env) is a scanner, whatever its
+// user agent. Its hits from 24h before to 24h after the first probe are bots.
+// In memory only: a restart forgets the mark, and the one-time backfill UPDATE at
+// flush covers the earlier hits.
+const PROBE_WINDOW_MS = 86_400_000;
+let probeVisitors = new Map<string, number>(); // visitor_id -> first probe ts_ms
+let pendingProbeBackfill = new Map<string, number>(); // newly marked, not yet backfilled
+
+function isProbeMarked(vid: string, ts: number): boolean {
+  const first = probeVisitors.get(vid);
+  if (first === undefined) return false;
+  if (ts - first > PROBE_WINDOW_MS) {
+    probeVisitors.delete(vid); // expired: prune when touched
+    return false;
+  }
+  return ts >= first - PROBE_WINDOW_MS;
+}
+
+function markProbeVisitor(vid: string, ts: number): void {
+  if (isProbeMarked(vid, ts)) return;
+  for (const [v, first] of probeVisitors) {
+    if (ts - first > PROBE_WINDOW_MS) probeVisitors.delete(v);
+  }
+  probeVisitors.set(vid, ts);
+  pendingProbeBackfill.set(vid, ts);
+}
+
+/** Test hook: forget every probe-visitor mark. */
+export function resetProbeVisitorCache(): void {
+  probeVisitors = new Map<string, number>();
+  pendingProbeBackfill = new Map<string, number>();
+}
+
+function probeBackfillStmt(vid: string, firstProbeTs: number): InStatement {
+  return {
+    sql: 'UPDATE page_hits SET is_bot = ?, visitor_class = ? WHERE visitor_id = ? AND ts_ms >= ? AND is_bot IS NOT ?',
+    args: [1, 'script', vid, firstProbeTs - PROBE_WINDOW_MS, 1],
+  };
 }
 
 // Automation visitors (bilko_vid cookie ids from a navigator.webdriver === true
@@ -218,6 +267,18 @@ export async function flushPageHits(): Promise<void> {
     try {
       const rows = buffer;
       buffer = [];
+      // Swapped with the buffer: every row recorded before a probe is in `rows`
+      // or already in the table, so this flush's backfill covers it.
+      const probes = pendingProbeBackfill;
+      pendingProbeBackfill = new Map<string, number>();
+      for (const r of rows) {
+        const first = probes.get(r.visitor_id);
+        if (first !== undefined && r.is_bot !== 1 && r.ts_ms >= first - PROBE_WINDOW_MS && r.ts_ms - first <= PROBE_WINDOW_MS) {
+          r.is_bot = 1;
+          r.visitor_class = 'script';
+        }
+      }
+      const probeStmts = [...probes].map(([vid, first]) => probeBackfillStmt(vid, first));
       const client = getClient();
       await loadAutomationVisitors();
       for (let i = 0; i < rows.length; i += BATCH_CHUNK) {
@@ -225,9 +286,14 @@ export async function flushPageHits(): Promise<void> {
         // an earlier chunk was in flight is still caught.
         const chunk = rows.slice(i, i + BATCH_CHUNK);
         chunk.forEach(stampAutomation);
+        const isLast = i + BATCH_CHUNK >= rows.length;
         try {
-          await client.batch(chunk.map(insertStmt), 'write');
+          // The probe backfill rides in the last insert batch, after every row is written.
+          await client.batch([...chunk.map(insertStmt), ...(isLast ? probeStmts : [])], 'write');
         } catch { /* dropped chunk: don't re-queue, avoids unbounded growth */ }
+      }
+      if (rows.length === 0 && probeStmts.length > 0) {
+        try { await client.batch(probeStmts, 'write'); } catch { /* best effort */ }
       }
       // A visitor first detected while this flush's batches were in flight may have
       // run its one-time backfill before these rows landed: flag them now.

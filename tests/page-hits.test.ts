@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { initDb, dbRun, dbAll } from '../server/db.js';
-import { registerPageHitRecorder, flushPageHits, slugFromPath, stableVisitorId, sessionCookie, recordPageHit, backfillVisitorClass } from '../server/page-hits.js';
+import { registerPageHitRecorder, flushPageHits, slugFromPath, stableVisitorId, sessionCookie, recordPageHit, backfillVisitorClass, resetProbeVisitorCache } from '../server/page-hits.js';
 
 const app = Fastify({ logger: false });
 registerPageHitRecorder(app, { flush: false });
@@ -295,5 +295,73 @@ describe('visitor class', () => {
     const r = await dbAll<{ visitor_class: string }>('SELECT visitor_class FROM page_hits ORDER BY id');
     expect(r.map((x) => x.visitor_class)).toEqual(['ai_user_agent', 'human']);
     expect(await backfillVisitorClass()).toBe(0);
+  });
+});
+
+describe('probe visitors', () => {
+  const DAY = 86_400_000;
+  const T0 = Date.UTC(2026, 0, 10, 12);
+  const SCANNER = { ip: '192.0.2.50', ua: CHROME, status: 404 };
+  const OTHER = { ip: '192.0.2.51', ua: CHROME, status: 200 };
+  const hits = () => dbAll<{ path: string; ts_ms: number; ip: string; is_bot: number; visitor_class: string }>(
+    'SELECT path, ts_ms, ip, is_bot, visitor_class FROM page_hits ORDER BY ts_ms, id');
+
+  beforeEach(() => { resetProbeVisitorCache(); });
+
+  it('stores a probe hit as script whatever its user agent', async () => {
+    recordPageHit({ ...SCANNER, ts: T0, path: '/.env' });
+    recordPageHit({ ...SCANNER, ua: 'Mozilla/5.0 (compatible; Googlebot/2.1)', ts: T0, path: '/wp-config.php' });
+    await flushPageHits();
+    const r = await hits();
+    expect(r.map((x) => [x.is_bot, x.visitor_class])).toEqual([[1, 'script'], [1, 'script']]);
+  });
+
+  it('flags the earlier same-visitor hits (flushed and buffered) and later ones within 24h', async () => {
+    recordPageHit({ ...SCANNER, ts: T0 - 2 * 3600_000, path: '/' });
+    recordPageHit({ ...SCANNER, ts: T0 - 2 * DAY, path: '/old' });
+    await flushPageHits();
+    expect((await hits()).every((x) => x.is_bot === 0)).toBe(true);
+
+    recordPageHit({ ...SCANNER, ts: T0 - 60_000, path: '/blog' });
+    recordPageHit({ ...OTHER, ts: T0 - 30_000, path: '/' });
+    recordPageHit({ ...SCANNER, ts: T0, path: '/.git/HEAD' });
+    recordPageHit({ ...SCANNER, ts: T0 + 3600_000, path: '/projects' });
+    recordPageHit({ ...OTHER, ts: T0 + 3600_000, path: '/projects' });
+    await flushPageHits();
+    const r = await hits();
+    const byKey = (path: string, ip: string) => r.find((x) => x.path === path && x.ip === ip);
+    expect(byKey('/old', SCANNER.ip)).toMatchObject({ is_bot: 0, visitor_class: 'human' });
+    expect(byKey('/', SCANNER.ip)).toMatchObject({ is_bot: 1, visitor_class: 'script' });
+    expect(byKey('/blog', SCANNER.ip)).toMatchObject({ is_bot: 1, visitor_class: 'script' });
+    expect(byKey('/.git/HEAD', SCANNER.ip)).toMatchObject({ is_bot: 1, visitor_class: 'script' });
+    expect(byKey('/projects', SCANNER.ip)).toMatchObject({ is_bot: 1, visitor_class: 'script' });
+    expect(byKey('/', OTHER.ip)).toMatchObject({ is_bot: 0, visitor_class: 'human' });
+    expect(byKey('/projects', OTHER.ip)).toMatchObject({ is_bot: 0, visitor_class: 'human' });
+  });
+
+  it('flags a later hit in a later flush and keeps an already-bot row class', async () => {
+    recordPageHit({ ...SCANNER, ua: 'Mozilla/5.0 ChatGPT-User/1.0', ts: T0 - 1000, path: '/' });
+    await flushPageHits();
+    recordPageHit({ ...SCANNER, ua: 'Mozilla/5.0 ChatGPT-User/1.0', ts: T0, path: '/.env' });
+    await flushPageHits();
+    recordPageHit({ ...SCANNER, ts: T0 - 5000, path: '/x' }); // different UA: different visitor
+    await flushPageHits();
+    const r = await hits();
+    expect(r.find((x) => x.path === '/')).toMatchObject({ is_bot: 1, visitor_class: 'ai_user_agent' });
+    expect(r.find((x) => x.path === '/x')).toMatchObject({ is_bot: 0, visitor_class: 'human' });
+    recordPageHit({ ...SCANNER, ua: 'Mozilla/5.0 ChatGPT-User/1.0', ts: T0 + 1000, path: '/later' });
+    await flushPageHits();
+    expect((await hits()).find((x) => x.path === '/later')).toMatchObject({ is_bot: 1, visitor_class: 'ai_user_agent' });
+  });
+
+  it('marks later human-UA hits as script in a later flush, and the mark expires after 24h', async () => {
+    recordPageHit({ ...SCANNER, ts: T0, path: '/.env' });
+    await flushPageHits();
+    recordPageHit({ ...SCANNER, ts: T0 + DAY - 1000, path: '/in' });
+    recordPageHit({ ...SCANNER, ts: T0 + DAY + 3600_000, path: '/out' });
+    await flushPageHits();
+    const r = await hits();
+    expect(r.find((x) => x.path === '/in')).toMatchObject({ is_bot: 1, visitor_class: 'script' });
+    expect(r.find((x) => x.path === '/out')).toMatchObject({ is_bot: 0, visitor_class: 'human' });
   });
 });

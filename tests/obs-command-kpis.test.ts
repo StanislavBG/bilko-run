@@ -177,3 +177,28 @@ describe('deriveStatus', () => {
     expect(deriveStatus(obs([3]), true)).toEqual({ label: 'STALE', tone: 'red' });
   });
 });
+
+describe('deriveKpis UNIQUE VISITORS confirmed count', () => {
+  const ex = (mine: 'include' | 'exclude') => ({ filters: { mine, bots: 'include' as const, mineHits: 0 } });
+
+  it('shows confirmed of fetched when the server sends confirmedVisitors', () => {
+    const k = byLabel(deriveKpis(traffic({ visitors: 54, confirmedVisitors: 0 }), null, null, null), 'UNIQUE');
+    expect(k.value).toBe('0');
+    expect(k.sub).toBe('of 54 fetched');
+  });
+
+  it('appends the excl. mine note to the confirmed sub', () => {
+    const k = byLabel(deriveKpis(traffic({ visitors: 1200, confirmedVisitors: 7 }, ex('exclude')), null, null, null), 'UNIQUE');
+    expect(k.value).toBe('7');
+    expect(k.sub).toBe('of 1,200 fetched · excl. mine');
+  });
+
+  it('keeps the countries tile when confirmedVisitors is absent (older server)', () => {
+    const plain = byLabel(deriveKpis(traffic({ visitors: 54 }), null, null, null), 'UNIQUE');
+    expect(plain.value).toBe('54');
+    expect(plain.sub).toBe('2 countries');
+    const mine = byLabel(deriveKpis(traffic({ visitors: 54 }, ex('exclude')), null, null, null), 'UNIQUE');
+    expect(mine.value).toBe('54');
+    expect(mine.sub).toBe('2 countries · excl. mine');
+  });
+});

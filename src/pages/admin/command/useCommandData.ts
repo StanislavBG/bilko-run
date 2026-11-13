@@ -67,6 +67,7 @@ export function deriveKpis(
   const botsOut = echo?.bots === 'exclude';
   const mineNote = echo?.mine === 'exclude' ? ' · excl. mine' : '';
   const top = traffic?.topClicks?.[0];
+  const confirmed = typeof t?.confirmedVisitors === 'number' ? t.confirmedVisitors : null;
 
   const apps = flows?.apps ?? null;
   const sessions = apps ? apps.reduce((s, a) => s + a.sessions, 0) : 0;
@@ -83,7 +84,9 @@ export function deriveKpis(
 
   return [
     tile('HITS', t ? num(t.hits) : null, '', 'neutral', traffic?.byDay?.map((d) => d.hits)),
-    tile('UNIQUE VISITORS', t ? num(t.visitors) : null, `${traffic?.byCountry?.length ?? 0} countries${mineNote}`),
+    t && confirmed !== null
+      ? tile('UNIQUE VISITORS', num(confirmed), `of ${num(t.visitors)} fetched${mineNote}`)
+      : tile('UNIQUE VISITORS', t ? num(t.visitors) : null, `${traffic?.byCountry?.length ?? 0} countries${mineNote}`),
     tile('BOT HITS', t ? num(t.botHits) : null, botsOut ? 'excluded' : `${botPct}% of hits`, botsOut ? 'neutral' : 'amber'),
     tile('404S', t ? num(t.notFound) : null, t && t.notFound === 0 ? 'clean' : 'not found', t ? (t.notFound === 0 ? 'green' : 'red') : 'neutral'),
     tile('CLICKS', t ? num(t.clicks) : null, top?.label ? `top · ${top.label}` : top ? `top · ${top.path}` : ''),

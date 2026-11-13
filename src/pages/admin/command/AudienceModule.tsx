@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useAdminFetch } from '../../../hooks/useAdmin.js';
 import { C, Donut, FONT, MonoLabel, fmtClock, fmtDay, fmtNum, type DonutSegment } from './theme.js';
 import type { Source } from './useCommandData.js';
@@ -6,7 +6,7 @@ import type { AdminFetcher, TrafficData, VisitorRow, VisitorTimeline } from './t
 
 const PALETTE = [C.orange, C.slate, C.amber, C.green] as const;
 const TOP_N = 4;
-const GRID = '86px 130px 34px 64px minmax(0,1fr) 46px 46px 92px';
+const GRID = '148px 130px 34px 64px minmax(0,1fr) 46px 46px 92px';
 
 export interface DonutResult {
   segments: DonutSegment[];
@@ -139,7 +139,10 @@ function Timeline({ visitorId, days, onBack, fetcher }: { visitorId: string; day
   );
 }
 
-function VisitorTable({ rows, onPick }: { rows: VisitorRow[]; onPick: (id: string) => void }) {
+// Same row-chip style as SessionsModule's MINE/BOT chips.
+const chip: CSSProperties = { flex: 'none', font: `600 8.5px/1 ${FONT.mono}`, padding: '2px 4px', borderRadius: 2 };
+
+export function VisitorTable({ rows, onPick }: { rows: VisitorRow[]; onPick: (id: string) => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 10, paddingBottom: 7, borderBottom: `1px solid ${C.line}`, font: `500 9.5px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.faint }}>
@@ -153,7 +156,12 @@ function VisitorTable({ rows, onPick }: { rows: VisitorRow[]; onPick: (id: strin
             onClick={e => { e.stopPropagation(); onPick(v.visitorId); }}
             style={{ display: 'grid', gridTemplateColumns: GRID, gap: 10, alignItems: 'center', height: 27, borderBottom: `1px solid ${C.rule}`, font: `400 10.5px/1.4 ${FONT.mono}`, color: C.text, cursor: 'pointer' }}
           >
-            <span title={v.visitorId} style={{ color: v.userEmail ? C.orange : C.text }}>{idPrefix(v.visitorId)}</span>
+            <span title={v.visitorId} style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, color: v.userEmail ? C.orange : C.text }}>
+              {idPrefix(v.visitorId)}
+              {v.confirmed === false && (
+                <span title="Fetched pages but no beacon, session or click confirmed a real browser" style={{ ...chip, background: 'rgba(244,185,66,.16)', color: C.amber }}>UNVERIFIED</span>
+              )}
+            </span>
             <span style={{ color: C.muted }}>{v.ip ?? '—'}</span>
             <span>{v.country ?? '—'}</span>
             <span style={{ color: C.muted }}>{v.device ?? '—'}</span>

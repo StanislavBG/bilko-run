@@ -52,6 +52,8 @@ export interface VisitorRow {
   pages: number;
   firstSeen: number;
   lastSeen: number;
+  /** False when no beacon/session/click ever confirmed a real browser for this visitor (older servers omit it). */
+  confirmed?: boolean;
 }
 
 /** The mine/bots filter the server applied, echoed on traffic, sessions and flows responses. */
@@ -60,7 +62,8 @@ export type FilterEcho = { mine: 'include' | 'exclude'; bots: 'include' | 'exclu
 /** GET /api/admin/traffic */
 export interface TrafficData {
   days: number;
-  totals: { hits: number; visitors: number; botHits: number; notFound: number; clicks: number };
+  /** confirmedVisitors: visitors a beacon, session or click confirmed as a real browser (older servers omit it). */
+  totals: { hits: number; visitors: number; botHits: number; notFound: number; clicks: number; confirmedVisitors?: number };
   byDay: DayRow[];
   topPages: PageRow[];
   topReferrers: ReferrerRow[];

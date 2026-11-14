@@ -191,6 +191,11 @@ export async function initDb(): Promise<void> {
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_tool ON funnel_events(tool)',
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_session ON funnel_events(session_id)',
     'CREATE INDEX IF NOT EXISTS idx_funnel_events_tool_version ON funnel_events(tool, version)',
+    // Telemetry resends (retried flushes, replayed backlogs) carry the same recordId; these make
+    // the ingest's ON CONFLICT DO NOTHING drop them. Partial, so rows without an id never collide.
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_funnel_events_record ON funnel_events(tool, record_id) WHERE record_id IS NOT NULL',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_app_logs_record ON app_logs(app, record_id) WHERE record_id IS NOT NULL',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_app_errors_record ON app_errors(app, record_id) WHERE record_id IS NOT NULL',
     'CREATE INDEX IF NOT EXISTS idx_page_views_email ON page_views(email)',
     'CREATE INDEX IF NOT EXISTS idx_sessions_email ON sessions(email)',
     'CREATE INDEX IF NOT EXISTS idx_token_transactions_reason ON token_transactions(reason)',

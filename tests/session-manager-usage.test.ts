@@ -114,7 +114,7 @@ describe('GET /api/admin/session-manager/usage', () => {
       specs: { medianTotalMemMb: 0, medianCpuCount: 0 },
       seeds: [],
     });
-    expect(b.usage).toEqual({ daily: [], byVersion: [] });
+    expect(b.usage).toEqual({ daily: [], byVersion: [], sessionsBySurface: [], jobsByStatus: [] });
     expect(b.issues).toEqual([]);
     expect(b.errors).toEqual({ byVersion: [], daily: [] });
   });
@@ -393,7 +393,9 @@ describe('GET /api/admin/session-manager/usage', () => {
     expect(def.installs.byVersion.map((r: any) => r.version)).toEqual(['0.119.1']);
     expect(def.issues.map((i: any) => i.name)).toEqual(['RealError']);
     expect(def.usage.daily[0].launches).toBe(1);
-    expect(def.errors.byVersion).toEqual([]);
+    expect(def.errors.byVersion).toEqual([
+      { version: '0.119.1', errors: 1, warns: 0, installsAffected: 1 },
+    ]);
     expect(def.perInstall).toHaveLength(1);
 
     const all = (await get('/api/admin/session-manager/usage?includeTest=1')).json();
@@ -401,7 +403,8 @@ describe('GET /api/admin/session-manager/usage', () => {
     expect(all.installs.total).toBe(5);
     expect(all.issues.map((i: any) => i.name).sort()).toEqual(['E2eOnly', 'RealError', 'StubError']);
     expect(all.usage.daily[0].launches).toBe(2);
-    expect(all.errors.byVersion).toHaveLength(1);
+    expect(all.errors.byVersion.map((r: any) => r.version).sort())
+      .toEqual(['0.0.0-stub', '0.119.1', '42.11.10', 'unknown']);
   });
 
   it('?excludeInstall= and exclude_self drop those installs from every section', async () => {
@@ -427,7 +430,8 @@ describe('GET /api/admin/session-manager/usage', () => {
     expect(b.installs.total).toBe(1);
     expect(b.issues.map((i: any) => i.name)).toEqual(['Err-keep']);
     expect(b.usage.daily[0]).toMatchObject({ launches: 1, installsSeen: 1 });
-    expect(b.errors.byVersion[0]).toMatchObject({ errors: 1, installsAffected: 1 });
+    // One app_errors row + one app_logs error line, both from 'keep'.
+    expect(b.errors.byVersion[0]).toMatchObject({ errors: 2, installsAffected: 1 });
     expect(b.perInstall.map((r: any) => r.id)).toEqual(['keep']);
 
     const withSelf = (await get('/api/admin/session-manager/usage?exclude_self=0')).json();
@@ -462,11 +466,100 @@ describe('GET /api/admin/session-manager/usage', () => {
       arch: 'arm64',
       firstSeen: now - 20 * 86_400,
       lastSeen: now - 3_600,
+      lastActive: now - 600,  // error A, newer than the install report
       seeds: null,
       last7: { launches: 2, sessions: 1, epics: 0, errors: 1 },
       prev7: { launches: 1, sessions: 0, epics: 1, errors: 1 },
     }]);
     expect(res.payload).not.toContain(id);
+  });
+
+  it('counts app_errors crash reports as errors, next to app_logs warns', async () => {
+    asAdmin();
+    await addError({ name: 'crash.unclean-shutdown', stack: 'at boot', visitor: 'a', version: '0.130.0' });
+    await addError({ name: 'uncaughtException', stack: 'at main', visitor: 'b', version: '0.130.0' });
+    await addError({ name: 'Old', stack: 'at old', visitor: 'a', version: '0.130.0', created: now - 40 * 86_400 });
+    await dbRun(
+      `INSERT INTO app_logs (app, version, level, msg, visitor_id, created_at)
+       VALUES (?, '0.130.0', 'warn', 'crash.child-restartable', 'a', ?)`,
+      APP, now - 600,
+    );
+
+    const { errors } = (await get()).json();
+    expect(errors.byVersion).toEqual([
+      { version: '0.130.0', errors: 2, warns: 1, installsAffected: 2 },
+    ]);
+    expect(errors.daily).toHaveLength(1);
+    expect(errors.daily[0]).toMatchObject({ errors: 2, warns: 1 });
+  });
+
+  it('counts an install as active from its latest telemetry row, not only its install report', async () => {
+    asAdmin();
+    const iso = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    // All four last reported their install profile 20 days ago.
+    for (const id of ['byEvent', 'byLog', 'byError', 'idle']) {
+      await addInstall(id, { first: now - 60 * 86_400, last: now - 20 * 86_400 });
+    }
+    await dbRun(
+      `INSERT INTO funnel_events (event, tool, visitor_id, version, created_at) VALUES ('app.launch', ?, 'byEvent', '0.81.0', ?)`,
+      APP, iso(now - 3_600),
+    );
+    await dbRun(
+      `INSERT INTO app_logs (app, version, level, msg, visitor_id, created_at) VALUES (?, '0.81.0', 'warn', 'm', 'byLog', ?)`,
+      APP, now - 2 * 86_400,
+    );
+    await addError({ name: 'E', stack: 'at e', visitor: 'byError', created: now - 3 * 86_400 });
+    // Another app's row and a dev row for the idle install must not count.
+    await dbRun(
+      `INSERT INTO funnel_events (event, tool, visitor_id, created_at) VALUES ('app.launch', 'other-app', 'idle', ?)`,
+      iso(now - 3_600),
+    );
+    await dbRun(
+      `INSERT INTO funnel_events (event, tool, visitor_id, env, created_at) VALUES ('app.launch', ?, 'idle', 'dev', ?)`,
+      APP, iso(now - 3_600),
+    );
+
+    const b = (await get()).json();
+    expect(b.installs.total).toBe(4);
+    expect(b.installs.active7).toBe(3);
+    expect(b.installs.active30).toBe(4);   // idle's install report is 20d old
+    expect(b.installs.byVersion).toEqual([{ version: '0.81.0', installs: 4, active7: 3 }]);
+    const ids = b.perInstall.map((r: any) => r.id);
+    expect(ids.slice(0, 3)).toEqual(['byEvent', 'byLog', 'byError']);
+    const idle = b.perInstall.find((r: any) => r.id === 'idle');
+    expect(idle.lastActive).toBe(now - 20 * 86_400);
+  });
+
+  it('splits session.open by surface and scheduler.job.finish by status', async () => {
+    asAdmin();
+    const ev = (event: string, props: Record<string, unknown> | string, visitor = 'i1') => dbRun(
+      `INSERT INTO funnel_events (event, tool, metadata, visitor_id, version) VALUES (?, ?, ?, ?, '0.81.0')`,
+      event, APP, typeof props === 'string' ? props : JSON.stringify(props), visitor,
+    );
+    await ev('session.open', { surface: 'terminal' });
+    await ev('session.open', { surface: 'terminal' });
+    await ev('session.open', { surface: 'chat' });
+    await ev('session.open', {});                     // client before the surface prop
+    await ev('session.open', { surface: 'weird' });
+    await ev('session.open', '{"surface":"chat"');    // clipped blob, not JSON
+    await ev('scheduler.job.finish', { status: 'completed' });
+    await ev('scheduler.job.finish', { status: 'completed' }, 'i2');
+    await ev('scheduler.job.finish', { status: 'failed' });
+    await ev('scheduler.job.finish', { status: null });
+
+    const { usage } = (await get()).json();
+    expect(usage.sessionsBySurface).toEqual([
+      { surface: 'unknown', sessions: 3 },
+      { surface: 'terminal', sessions: 2 },
+      { surface: 'chat', sessions: 1 },
+    ]);
+    expect(usage.jobsByStatus).toEqual([
+      { status: 'completed', jobs: 2, installsSeen: 2 },
+      expect.objectContaining({ jobs: 1 }),
+      expect.objectContaining({ jobs: 1 }),
+    ]);
+    expect(usage.jobsByStatus.map((r: any) => r.status).sort()).toEqual(['completed', 'failed', 'unknown']);
+    expect(usage.daily[0].sessions).toBe(6);
   });
 
   it('returns no field that could carry PII', async () => {

@@ -13,6 +13,12 @@ const MAX_DAYS = 90;
 const EV_LAUNCH = 'app.launch';
 const EV_SESSION = 'session.open';
 const EV_EPIC = 'epic.create';
+const EV_JOB_FINISH = 'scheduler.job.finish';
+// session.open props.surface: a fresh PTY spawn or a Chat turn that starts a CLI session.
+const SESSION_SURFACES = ['terminal', 'chat'];
+const STATUS_LIMIT = 20;
+// How far back an install's latest telemetry row is looked for (= the widest ?days).
+const ACTIVITY_LOOKBACK_DAYS = MAX_DAYS;
 
 // funnel_events.created_at is a DATETIME string ('YYYY-MM-DD HH:MM:SS', UTC);
 // app_logs/app_errors.created_at are epoch seconds. Two window forms needed.
@@ -92,6 +98,56 @@ function rowFilter(
   return andAll(parts);
 }
 
+// Each install's latest telemetry row of any kind, as `latest(id, at)` (epoch
+// seconds). app_installs.last_seen_at moves only when the client re-sends its
+// install profile (a version change or a 30-day heartbeat), so a long-running
+// install that is still sending events, logs and errors would otherwise fall
+// out of "active". Callers take MAX(last_seen_at, latest.at). `env` filters the
+// rows the same way it filters every other section.
+function latestActivityCte(env: Filter, sinceSec: number, sinceIso: string): Filter {
+  return {
+    sql: `WITH seen(id, at) AS (
+            SELECT visitor_id, CAST(strftime('%s', MAX(created_at)) AS INTEGER)
+              FROM funnel_events
+             WHERE tool = ? AND created_at > ? AND visitor_id IS NOT NULL AND ${env.sql}
+             GROUP BY visitor_id
+            UNION ALL
+            SELECT visitor_id, MAX(created_at) FROM app_logs
+             WHERE app = ? AND created_at > ? AND visitor_id IS NOT NULL AND ${env.sql}
+             GROUP BY visitor_id
+            UNION ALL
+            SELECT visitor_id, MAX(created_at) FROM app_errors
+             WHERE app = ? AND created_at > ? AND visitor_id IS NOT NULL AND ${env.sql}
+             GROUP BY visitor_id
+          ),
+          latest(id, at) AS (SELECT id, MAX(at) FROM seen GROUP BY id)`,
+    args: [APP, sinceIso, ...env.args, APP, sinceSec, ...env.args, APP, sinceSec, ...env.args],
+  };
+}
+
+// One row per error-panel record: app_errors rows count as errors, app_logs
+// rows as an error or a warn by level. Columns: version, visitor_id,
+// created_at (epoch seconds), is_error, is_warn. Placeholders follow
+// errorRowsArgs().
+function errorRowsSql(errF: Filter, logF: Filter): string {
+  return `SELECT version, visitor_id, created_at, 1 AS is_error, 0 AS is_warn
+            FROM app_errors
+           WHERE app = ? AND created_at > ? AND ${errF.sql}
+          UNION ALL
+          SELECT version, visitor_id, created_at,
+                 CASE WHEN level = 'error' THEN 1 ELSE 0 END,
+                 CASE WHEN level = 'warn'  THEN 1 ELSE 0 END
+            FROM app_logs
+           WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${logF.sql}`;
+}
+
+function errorRowsArgs(since: number, errF: Filter, logF: Filter): unknown[] {
+  return [APP, since, ...errF.args, APP, since, ...logF.args];
+}
+
+// Last activity of an app_installs row joined as `i` to `latest` as `l`.
+const LAST_ACTIVE = 'MAX(i.last_seen_at, COALESCE(l.at, 0))';
+
 async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
 }
@@ -147,6 +203,8 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
     const sinceIso = toIso(since);
     const since7Iso = toIso(since7);
     const since14Iso = toIso(since14);
+    const sinceActivity = now - ACTIVITY_LOOKBACK_DAYS * 86_400;
+    const activity = latestActivityCte(ev, sinceActivity, toIso(sinceActivity));
 
     const [
       installTotals,
@@ -156,6 +214,8 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       installSeeds,
       usageDaily,
       usageByVersion,
+      sessionsBySurface,
+      jobsByStatus,
       issues,
       issueVersions,
       issuePlatforms,
@@ -171,24 +231,30 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       // beacon sends as visitor_id. safeQuery still wraps these so a migration
       // that has not run yet yields zeros rather than a 500; the dashboard's
       // empty state is a first-class view.
+      // Active = the install's last activity (latest telemetry row or install
+      // report, whichever is newer) falls inside the window.
       safeQuery(() => dbGet<{ total: number; active7: number; active30: number; new7: number }>(
-        `SELECT COUNT(*) AS total,
-                SUM(CASE WHEN last_seen_at  > ? THEN 1 ELSE 0 END) AS active7,
-                SUM(CASE WHEN last_seen_at  > ? THEN 1 ELSE 0 END) AS active30,
-                SUM(CASE WHEN first_seen_at > ? THEN 1 ELSE 0 END) AS new7
-         FROM app_installs WHERE app = ? AND ${instF.sql}`,
-        since7, since30, since7, APP, ...instF.args,
+        `${activity.sql}
+         SELECT COUNT(*) AS total,
+                SUM(CASE WHEN ${LAST_ACTIVE} > ? THEN 1 ELSE 0 END) AS active7,
+                SUM(CASE WHEN ${LAST_ACTIVE} > ? THEN 1 ELSE 0 END) AS active30,
+                SUM(CASE WHEN i.first_seen_at > ? THEN 1 ELSE 0 END) AS new7
+         FROM app_installs i LEFT JOIN latest l ON l.id = i.install_id
+         WHERE i.app = ? AND ${instF.sql}`,
+        ...activity.args, since7, since30, since7, APP, ...instF.args,
       ), null),
 
       safeQuery(() => dbAll<{ version: string | null; installs: number; active7: number }>(
-        `SELECT app_version AS version,
+        `${activity.sql}
+         SELECT i.app_version AS version,
                 COUNT(*) AS installs,
-                SUM(CASE WHEN last_seen_at > ? THEN 1 ELSE 0 END) AS active7
-         FROM app_installs WHERE app = ? AND ${instF.sql}
-         GROUP BY app_version
+                SUM(CASE WHEN ${LAST_ACTIVE} > ? THEN 1 ELSE 0 END) AS active7
+         FROM app_installs i LEFT JOIN latest l ON l.id = i.install_id
+         WHERE i.app = ? AND ${instF.sql}
+         GROUP BY i.app_version
          ORDER BY installs DESC
          LIMIT 50`,
-        since7, APP, ...instF.args,
+        ...activity.args, since7, APP, ...instF.args,
       ), []),
 
       safeQuery(() => dbAll<{ platform: string | null; arch: string | null; installs: number }>(
@@ -235,6 +301,36 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
          ORDER BY launches DESC
          LIMIT 50`,
         EV_LAUNCH, EV_SESSION, APP, sinceIso, ...evtF.args,
+      ), []),
+
+      // session.open by the view that opened it. Rows from clients that predate
+      // the surface prop (or send anything else) are 'unknown'. json_valid
+      // guards the extract: a metadata blob clipped by safeMeta is not JSON.
+      safeQuery(() => dbAll<{ surface: string; sessions: number }>(
+        `SELECT CASE WHEN json_valid(metadata)
+                      AND json_extract(metadata, '$.surface') IN (${SESSION_SURFACES.map(() => '?').join(', ')})
+                     THEN json_extract(metadata, '$.surface') ELSE 'unknown' END AS surface,
+                COUNT(*) AS sessions
+         FROM funnel_events
+         WHERE tool = ? AND event = ? AND created_at > ? AND ${evtF.sql}
+         GROUP BY surface
+         ORDER BY sessions DESC`,
+        ...SESSION_SURFACES, APP, EV_SESSION, sinceIso, ...evtF.args,
+      ), []),
+
+      // scheduler.job.finish by the job's final status (props.status).
+      safeQuery(() => dbAll<{ status: string; jobs: number; installsSeen: number }>(
+        `SELECT COALESCE(CASE WHEN json_valid(metadata)
+                              THEN SUBSTR(CAST(json_extract(metadata, '$.status') AS TEXT), 1, 40) END,
+                         'unknown') AS status,
+                COUNT(*) AS jobs,
+                COUNT(DISTINCT visitor_id) AS installsSeen
+         FROM funnel_events
+         WHERE tool = ? AND event = ? AND created_at > ? AND ${evtF.sql}
+         GROUP BY status
+         ORDER BY jobs DESC
+         LIMIT ?`,
+        APP, EV_JOB_FINISH, sinceIso, ...evtF.args, STATUS_LIMIT,
       ), []),
 
       // ---- issues ---------------------------------------------------------
@@ -291,31 +387,33 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       ), []),
 
       // ---- errors ---------------------------------------------------------
+      // errors = app_errors rows (crash and exception reports, POST
+      // /api/telemetry/error) + app_logs error lines; warns = app_logs warns.
+      // Session Manager sends every error to /error and only warns to /log,
+      // so reading app_logs alone left errors at 0.
       safeQuery(() => dbAll<{
         version: string | null; errors: number; warns: number; installsAffected: number;
       }>(
         `SELECT version,
-                SUM(CASE WHEN level = 'error' THEN 1 ELSE 0 END) AS errors,
-                SUM(CASE WHEN level = 'warn'  THEN 1 ELSE 0 END) AS warns,
+                SUM(is_error) AS errors,
+                SUM(is_warn) AS warns,
                 COUNT(DISTINCT visitor_id) AS installsAffected
-         FROM app_logs
-         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${logF.sql}
+         FROM (${errorRowsSql(errF, logF)})
          GROUP BY version
-         ORDER BY errors DESC
+         ORDER BY errors DESC, warns DESC
          LIMIT 50`,
-        APP, since, ...logF.args,
+        ...errorRowsArgs(since, errF, logF),
       ), []),
 
       safeQuery(() => dbAll<{ date: string; errors: number; warns: number }>(
         `SELECT DATE(created_at, 'unixepoch') AS date,
-                SUM(CASE WHEN level = 'error' THEN 1 ELSE 0 END) AS errors,
-                SUM(CASE WHEN level = 'warn'  THEN 1 ELSE 0 END) AS warns
-         FROM app_logs
-         WHERE app = ? AND created_at > ? AND level IN ('error', 'warn') AND ${logF.sql}
+                SUM(is_error) AS errors,
+                SUM(is_warn) AS warns
+         FROM (${errorRowsSql(errF, logF)})
          GROUP BY date
          ORDER BY date DESC
          LIMIT ?`,
-        APP, since, ...logF.args, days,
+        ...errorRowsArgs(since, errF, logF), days,
       ), []),
 
       // ---- per install ----------------------------------------------------
@@ -323,13 +421,16 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
       // Last 7d vs the 7d before it, independent of ?days.
       safeQuery(() => dbAll<{
         install_id: string; app_version: string | null; platform: string | null; arch: string | null;
-        first_seen_at: number; last_seen_at: number; seeds: string | null;
+        first_seen_at: number; last_seen_at: number; last_active: number; seeds: string | null;
       }>(
-        `SELECT install_id, app_version, platform, arch, first_seen_at, last_seen_at, seeds
-         FROM app_installs WHERE app = ? AND ${instF.sql}
-         ORDER BY last_seen_at DESC
+        `${activity.sql}
+         SELECT i.install_id, i.app_version, i.platform, i.arch, i.first_seen_at, i.last_seen_at,
+                ${LAST_ACTIVE} AS last_active, i.seeds
+         FROM app_installs i LEFT JOIN latest l ON l.id = i.install_id
+         WHERE i.app = ? AND ${instF.sql}
+         ORDER BY last_active DESC
          LIMIT ?`,
-        APP, ...instF.args, PER_INSTALL_LIMIT,
+        ...activity.args, APP, ...instF.args, PER_INSTALL_LIMIT,
       ), []),
 
       safeQuery(() => dbAll<{
@@ -392,6 +493,7 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
         arch: r.arch ?? 'unknown',
         firstSeen: r.first_seen_at ?? 0,
         lastSeen: r.last_seen_at ?? 0,
+        lastActive: r.last_active ?? r.last_seen_at ?? 0,
         seeds: parseStoredSeeds(r.seeds),
         last7: {
           launches: u?.launches7 ?? 0, sessions: u?.sessions7 ?? 0,
@@ -447,6 +549,15 @@ export function registerSessionManagerUsageRoutes(app: FastifyInstance): void {
           version: r.version ?? 'unknown',
           launches: r.launches ?? 0,
           sessions: r.sessions ?? 0,
+        })),
+        sessionsBySurface: sessionsBySurface.map((r) => ({
+          surface: r.surface ?? 'unknown',
+          sessions: r.sessions ?? 0,
+        })),
+        jobsByStatus: jobsByStatus.map((r) => ({
+          status: r.status ?? 'unknown',
+          jobs: r.jobs ?? 0,
+          installsSeen: r.installsSeen ?? 0,
         })),
       },
       issues: issues.map((r) => ({

@@ -130,7 +130,7 @@ Unauthenticated POST endpoints on bilko.run that any app (a browser bundle, a CL
 
 | Route | Table | Shape | Per-IP limit |
 |---|---|---|---|
-| `POST /api/telemetry/event` | `funnel_events` | `{ batch: [{ name, app, props, visitor_id, session_id }] }` | 1200/min |
+| `POST /api/telemetry/event` | `funnel_events` | `{ batch: [{ name, app, props, visitor_id, session_id, ts }] }` | 1200/min |
 | `POST /api/telemetry/log` | `app_logs` | `{ batch: [{ app, version, level, msg, visitor_id, session_id, fields, ts }] }` | 600/min |
 | `POST /api/telemetry/error` | `app_errors` | `{ batch: [{ app, version, name, msg, stack, url, ua, visitor_id, session_id, context, ts }] }` | 300/min |
 | `POST /api/telemetry/install` | `app_installs` | single object (machine profile + optional `seeds`), upsert keyed on `install_id` | 60/min |
@@ -138,6 +138,9 @@ Unauthenticated POST endpoints on bilko.run that any app (a browser bundle, a CL
 | `POST /api/analytics/click` | `click_events` | `{ path, tag, id, label, href, visitor_id, session_id, track }` (injected beacon; `track` is the `data-track` name) | event-rate limiter |
 
 `MAX_BATCH` is 50 records; the server body limit is 2 MB (`server/index.ts`); stacks clamp at 16 KB, other strings at their column widths. Session columns are listed in section 2.
+
+- **Event time.** An event's `ts` (epoch ms) becomes `funnel_events.created_at` when it is a number, not in the future and at most 30 days old. Anything else, or no `ts`, is dated by server time. A desktop client that flushes its queue at the next boot still has its events counted on the day they happened.
+- **Resends.** A `recordId` string (`[A-Za-z0-9._:-]`, up to 80 chars) in an event's `props`, a log's `fields` or an error's `context` is stored as `record_id`. A partial UNIQUE index per app makes the insert skip a record whose id is already stored, so a retried flush or a replayed backlog never adds a second row. A record with no valid id is always inserted.
 
 ### Design constraint: zero user-facing auth
 

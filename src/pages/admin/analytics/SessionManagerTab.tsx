@@ -30,6 +30,8 @@ interface UsageResponse {
   usage: {
     daily: Array<{ date: string; launches: number; sessions: number; epics: number; installsSeen: number }>;
     byVersion: Array<{ version: string; launches: number; sessions: number }>;
+    sessionsBySurface?: Array<{ surface: string; sessions: number }>;
+    jobsByStatus?: Array<{ status: string; jobs: number; installsSeen: number }>;
   };
   issues: Array<{
     signature: string;
@@ -53,6 +55,7 @@ interface UsageResponse {
     arch: string;
     firstSeen: number;
     lastSeen: number;
+    lastActive?: number;
     seeds?: Record<string, string> | null;
     last7: InstallCounts;
     prev7: InstallCounts;
@@ -211,7 +214,7 @@ export function SessionManagerTab({ days, excludeSelf }: TabProps) {
             { label: 'Version' },
             { label: 'Platform' },
             { label: 'First seen' },
-            { label: 'Last seen' },
+            { label: 'Last active' },
             { label: 'Setup' },
             { label: 'Launches', right: true },
             { label: 'Sessions', right: true },
@@ -223,7 +226,7 @@ export function SessionManagerTab({ days, excludeSelf }: TabProps) {
             r.version,
             `${r.platform}/${r.arch}`,
             formatPtSeconds(r.firstSeen),
-            formatPtSeconds(r.lastSeen),
+            formatPtSeconds(r.lastActive ?? r.lastSeen),
             setupSummary(r.seeds),
             vsPrev(r.last7.launches, r.prev7.launches),
             vsPrev(r.last7.sessions, r.prev7.sessions),
@@ -299,6 +302,22 @@ export function SessionManagerTab({ days, excludeSelf }: TabProps) {
           headers={[{ label: 'Version' }, { label: 'Launches', right: true }, { label: 'Sessions', right: true }]}
           rows={usage.byVersion.map(r => [r.version, r.launches, r.sessions])}
           empty="No usage in this window"
+        />
+      </Panel>
+
+      <Panel title="Sessions by surface">
+        <Table
+          headers={[{ label: 'Surface' }, { label: 'Sessions', right: true }]}
+          rows={(usage.sessionsBySurface ?? []).map(r => [r.surface, r.sessions])}
+          empty="No sessions in this window"
+        />
+      </Panel>
+
+      <Panel title="Scheduler jobs by status">
+        <Table
+          headers={[{ label: 'Status' }, { label: 'Jobs', right: true }, { label: 'Installs', right: true }]}
+          rows={(usage.jobsByStatus ?? []).map(r => [r.status, r.jobs, r.installsSeen])}
+          empty="No finished jobs in this window"
         />
       </Panel>
 

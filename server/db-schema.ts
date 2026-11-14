@@ -771,14 +771,18 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['is_bot', 'INTEGER NOT NULL DEFAULT 0'],
     // 1 = the request carried the bilko_internal marker; every funnel_events insert that has a request sets it.
     ['is_internal', 'INTEGER DEFAULT 0'],
+    // The telemetry client's props.recordId; partial UNIQUE index per tool (server/db.ts).
+    ['record_id', 'TEXT'],
   ],
   // SEQUENCE of the booking's .ics: 0 when claimed, +1 per reschedule (server/services/service-bookings.ts).
   service_bookings: [['ics_sequence', 'INTEGER NOT NULL DEFAULT 0']],
-  app_logs: [['env', 'TEXT']],
+  // record_id: the client's recordId, deduplicated by a partial UNIQUE index (server/db.ts).
+  app_logs: [['env', 'TEXT'], ['record_id', 'TEXT']],
   app_errors: [
     ['env', 'TEXT'],
     // 1 = the request UA is not a person's browser; set by /api/telemetry/error.
     ['is_bot', 'INTEGER NOT NULL DEFAULT 0'],
+    ['record_id', 'TEXT'],
   ],
   app_installs: [
     ['env', 'TEXT'],

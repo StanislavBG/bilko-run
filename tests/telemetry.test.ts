@@ -413,6 +413,87 @@ describe('Telemetry ingest — /api/telemetry/event version attribution', () => 
   });
 });
 
+describe('Telemetry ingest — /api/telemetry/event client time', () => {
+  beforeEach(async () => {
+    await dbRun("DELETE FROM funnel_events WHERE tool = 'ts-app'");
+  });
+
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+
+  it('dates an event by its own ts when plausible, else by server time', async () => {
+    const before = Date.now();
+    const twoDaysAgo = before - 2 * 86_400_000;
+    const res = await inject('POST', '/api/telemetry/event', {
+      batch: [
+        { app: 'ts-app', name: 'late', visitor_id: 'ts1', ts: twoDaysAgo },
+        { app: 'ts-app', name: 'future', visitor_id: 'ts1', ts: before + 86_400_000 },
+        { app: 'ts-app', name: 'ancient', visitor_id: 'ts1', ts: before - 31 * 86_400_000 },
+        { app: 'ts-app', name: 'string', visitor_id: 'ts1', ts: String(twoDaysAgo) },
+        { app: 'ts-app', name: 'none', visitor_id: 'ts1' },
+      ],
+    }, '10.12.0.1');
+    expect(res.statusCode).toBe(200);
+    const after = Date.now();
+    const rows = await dbAll<{ event: string; created_at: string }>(
+      'SELECT event, created_at FROM funnel_events WHERE tool = ?', 'ts-app',
+    );
+    const at = Object.fromEntries(rows.map((r) => [r.event, r.created_at]));
+    expect(at.late).toBe(iso(twoDaysAgo));
+    for (const name of ['future', 'ancient', 'string', 'none']) {
+      expect(at[name] >= iso(before - 1000) && at[name] <= iso(after)).toBe(true);
+    }
+  });
+});
+
+describe('Telemetry ingest — recordId deduplication', () => {
+  beforeEach(async () => {
+    await dbRun("DELETE FROM funnel_events WHERE tool IN ('dedup-app', 'dedup-other')");
+  });
+
+  it('stores an event once per recordId, across batches and inside one batch', async () => {
+    const rec = (recordId?: string, app = 'dedup-app') => ({
+      app, name: 'app.launch', visitor_id: 'd1', props: recordId ? { recordId } : {},
+    });
+    const first = await inject('POST', '/api/telemetry/event', {
+      batch: [rec('r-1'), rec('r-1'), rec('r-2'), rec(), rec()],
+    }, '10.13.0.1');
+    expect(first.statusCode).toBe(200);
+    // A replayed backlog: the same records again, plus the same id under another app.
+    const replay = await inject('POST', '/api/telemetry/event', {
+      batch: [rec('r-1'), rec('r-2'), rec('r-1', 'dedup-other')],
+    }, '10.13.0.1');
+    expect(replay.statusCode).toBe(200);
+    const rows = await dbAll<{ tool: string; record_id: string | null }>(
+      "SELECT tool, record_id FROM funnel_events WHERE tool IN ('dedup-app', 'dedup-other') ORDER BY tool, record_id",
+    );
+    expect(rows).toEqual([
+      { tool: 'dedup-app', record_id: null },
+      { tool: 'dedup-app', record_id: null },
+      { tool: 'dedup-app', record_id: 'r-1' },
+      { tool: 'dedup-app', record_id: 'r-2' },
+      { tool: 'dedup-other', record_id: 'r-1' },
+    ]);
+  });
+
+  it('stores a log line once per fields.recordId and an error once per context.recordId', async () => {
+    const log = { app: 'dedup-app', level: 'warn', msg: 'w', visitor_id: 'd2', fields: { recordId: 'l-1' } };
+    const err = { app: 'dedup-app', name: 'E', msg: 'e', stack: 'at x', visitor_id: 'd2', context: { recordId: 'e-1' } };
+    for (let i = 0; i < 2; i++) {
+      expect((await inject('POST', '/api/telemetry/log', { batch: [log, log] }, '10.13.0.2')).statusCode).toBe(200);
+      expect((await inject('POST', '/api/telemetry/error', { batch: [err, err] }, '10.13.0.2')).statusCode).toBe(200);
+    }
+    // A malformed id is kept as NULL and never deduplicated.
+    const bad = { ...err, context: { recordId: 'has spaces' } };
+    await inject('POST', '/api/telemetry/error', { batch: [bad, bad] }, '10.13.0.2');
+    const logs = await dbAll<{ record_id: string | null }>("SELECT record_id FROM app_logs WHERE app = 'dedup-app'");
+    expect(logs).toEqual([{ record_id: 'l-1' }]);
+    const errors = await dbAll<{ record_id: string | null }>(
+      "SELECT record_id FROM app_errors WHERE app = 'dedup-app' ORDER BY record_id",
+    );
+    expect(errors).toEqual([{ record_id: null }, { record_id: null }, { record_id: 'e-1' }]);
+  });
+});
+
 describe('Telemetry ingest — env discriminator', () => {
   it('stores env only when it is prod, dev or test', async () => {
     await dbRun("DELETE FROM funnel_events WHERE tool = 'env-app'");

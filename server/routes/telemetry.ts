@@ -239,6 +239,35 @@ function safeMeta(val: unknown, maxBytes: number): string {
   try { return JSON.stringify(val ?? {}).slice(0, maxBytes); } catch { return '{}'; }
 }
 
+// --- Client time and record identity -----------------------------------------
+// Desktop clients queue records and flush them on a cadence (boot, daily, quit),
+// so an event can arrive days after it happened. Its own `ts` (epoch ms) dates
+// it when plausible: not in the future and not older than EVENT_TS_MAX_AGE_MS.
+// Anything else, including no ts at all, falls back to server time.
+const EVENT_TS_MAX_AGE_MS = 30 * DAY_MS;
+
+/** funnel_events.created_at ('YYYY-MM-DD HH:MM:SS', UTC) for an incoming event. */
+export function eventCreatedAt(ts: unknown, nowMs: number = Date.now()): string {
+  const plausible = typeof ts === 'number' && Number.isFinite(ts)
+    && ts <= nowMs && ts >= nowMs - EVENT_TS_MAX_AGE_MS;
+  return new Date(plausible ? ts : nowMs).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+// Clients stamp every record with a recordId inside its JSON blob (props for
+// events, fields for logs, context for errors) and may resend it: a retried
+// flush or a replayed backlog. The id is stored in record_id, which has a
+// partial UNIQUE index per app (server/db.ts), and every insert is
+// ON CONFLICT DO NOTHING, so a resend never becomes a second row. A missing or
+// malformed id is stored as NULL and never deduplicated.
+const RECORD_ID_RE = /^[A-Za-z0-9._:-]{1,80}$/;
+
+/** The record's recordId from its props/fields/context blob, or null. */
+export function recordIdOf(blob: unknown): string | null {
+  if (!blob || typeof blob !== 'object' || Array.isArray(blob)) return null;
+  const id = (blob as Record<string, unknown>).recordId;
+  return typeof id === 'string' && RECORD_ID_RE.test(id) ? id : null;
+}
+
 // --- Install seeds -----------------------------------------------------------
 // A desktop client's first-run setup steps and how each one ended, sent as
 // `seeds` in its install profile (Session Manager sends devPlugin, schedulerMcp
@@ -390,8 +419,10 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     const isBotUa = isBotRequest(req.headers) ? 1 : 0;
     for (const e of admitted.records) {
       await dbRun(
-        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env, is_bot, is_internal)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO funnel_events (event, tool, metadata, session_id, visitor_id, path, version, env, is_bot, is_internal,
+                                    created_at, record_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT DO NOTHING`,
         clamp(e.name, 80),
         clamp(e.app, 60),
         safeMeta(e.props, MAX_FIELD_BYTES),
@@ -402,6 +433,8 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
         envOf(e),
         isBotUa,
         internalFlag(req),
+        eventCreatedAt(e.ts),
+        recordIdOf(e.props),
       );
     }
     return { ok: true, ingested: admitted.records.length };
@@ -417,8 +450,9 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     if (!admitted.ok) return sendThrottled(reply, admitted.retryAfterSec);
     for (const l of admitted.records) {
       await dbRun(
-        `INSERT INTO app_logs (app, version, level, msg, visitor_id, session_id, fields_json, created_at, env)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO app_logs (app, version, level, msg, visitor_id, session_id, fields_json, created_at, env, record_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT DO NOTHING`,
         clamp(l.app, 60),
         clamp(l.version, 20),
         String(l.level),
@@ -428,6 +462,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
         safeMeta(l.fields, MAX_FIELD_BYTES),
         Math.floor((typeof l.ts === 'number' ? l.ts : Date.now()) / 1000),
         envOf(l),
+        recordIdOf(l.fields),
       );
     }
     await maybePrune();
@@ -441,8 +476,10 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
     const isBotUa = isBotRequest(req.headers) ? 1 : 0;
     for (const e of admitted.records) {
       await dbRun(
-        `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at, env, is_bot)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO app_errors (app, version, name, msg, stack, url, ua, visitor_id, session_id, context_json, created_at, env, is_bot,
+                                 record_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT DO NOTHING`,
         clamp(e.app, 60),
         clamp(e.version, 20),
         clamp(e.name, 60),
@@ -456,6 +493,7 @@ export function registerTelemetryRoutes(app: FastifyInstance, opts: { scheduledP
         Math.floor((typeof e.ts === 'number' ? e.ts : Date.now()) / 1000),
         envOf(e),
         isBotUa,
+        recordIdOf(e.context),
       );
     }
     await maybePrune();

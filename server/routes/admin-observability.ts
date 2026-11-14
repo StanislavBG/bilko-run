@@ -348,7 +348,7 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
         since, ...slugOnlyArgs, ...mineMatch.args,
       ), undefined),
     ]);
-    const [classRows, classPageRows] = await Promise.all([
+    const [classRows, classPageRows, notFoundPathRows] = await Promise.all([
       safeQuery(() => dbAll<{ cls: string; hits: number; visitors: number }>(
         `SELECT ${CLASS_SQL} AS cls, COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors
            FROM page_hits WHERE ${allClasses} GROUP BY cls`,
@@ -357,6 +357,14 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       safeQuery(() => dbAll<{ path: string; cls: string; hits: number; visitors: number }>(
         `SELECT path, ${CLASS_SQL} AS cls, COUNT(*) AS hits, COUNT(DISTINCT ${VKEY}) AS visitors
            FROM page_hits WHERE ${allClasses} GROUP BY path, cls ORDER BY hits DESC LIMIT 100`,
+        since, ...slugArgs,
+      ), []),
+      // Top 404 paths, bots included (scanner probes); bots=exclude never applies here.
+      safeQuery(() => dbAll<{ path: string; hits: number; botHits: number; visitors: number }>(
+        `SELECT path, COUNT(*) AS hits, SUM(CASE WHEN is_bot = 1 THEN 1 ELSE 0 END) AS botHits,
+                COUNT(DISTINCT ${VKEY}) AS visitors
+           FROM page_hits WHERE ts_ms >= ? AND status = 404${slugSql}
+          GROUP BY path ORDER BY hits DESC, path ASC LIMIT 25`,
         since, ...slugArgs,
       ), []),
     ]);
@@ -445,6 +453,9 @@ export function registerObservabilityRoutes(app: FastifyInstance): void {
       },
       byDay,
       topPages,
+      notFoundPaths: notFoundPathRows.map(r => ({
+        path: r.path, hits: Number(r.hits), botHits: Number(r.botHits ?? 0), visitors: Number(r.visitors),
+      })),
       byClass,
       topPagesByClass,
       topReferrers,

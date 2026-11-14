@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { initDb, dbRun, dbAll } from '../server/db.js';
-import { registerPageHitRecorder, flushPageHits, slugFromPath, stableVisitorId, sessionCookie, recordPageHit, backfillVisitorClass, resetProbeVisitorCache } from '../server/page-hits.js';
+import { registerPageHitRecorder, flushPageHits, slugFromPath, stableVisitorId, sessionCookie, recordPageHit, backfillVisitorClass, resetProbeVisitorCache, BURST_HITS, BURST_WINDOW_MS } from '../server/page-hits.js';
 
 const app = Fastify({ logger: false });
 registerPageHitRecorder(app, { flush: false });
@@ -363,5 +363,70 @@ describe('probe visitors', () => {
     const r = await hits();
     expect(r.find((x) => x.path === '/in')).toMatchObject({ is_bot: 1, visitor_class: 'script' });
     expect(r.find((x) => x.path === '/out')).toMatchObject({ is_bot: 0, visitor_class: 'human' });
+  });
+});
+
+describe('burst visitors', () => {
+  const T0 = Date.UTC(2026, 0, 20, 12);
+  const CRAWLER = { ip: '192.0.2.60', ua: CHROME, status: 200 };
+  const OTHER = { ip: '192.0.2.61', ua: CHROME, status: 200 };
+  const hits = () => dbAll<{ path: string; ip: string; is_bot: number; visitor_class: string }>(
+    'SELECT path, ip, is_bot, visitor_class FROM page_hits ORDER BY ts_ms, id');
+
+  beforeEach(() => { resetProbeVisitorCache(); });
+
+  it('exports the burst threshold', () => {
+    expect(BURST_HITS).toBe(20);
+    expect(BURST_WINDOW_MS).toBe(60_000);
+  });
+
+  it('flags every hit of a visitor with 20 hits inside 60s, including an earlier flushed one', async () => {
+    recordPageHit({ ...CRAWLER, ts: T0 - 3600_000, path: '/earlier' });
+    await flushPageHits();
+    expect((await hits())[0]).toMatchObject({ is_bot: 0, visitor_class: 'human' });
+    for (let i = 0; i < BURST_HITS; i++) recordPageHit({ ...CRAWLER, ts: T0 + i * 1000, path: `/p${i}` });
+    recordPageHit({ ...OTHER, ts: T0 + 5000, path: '/other' });
+    recordPageHit({ ...CRAWLER, ts: T0 + 3600_000, path: '/after' });
+    await flushPageHits();
+    const r = await hits();
+    const mine = r.filter((x) => x.ip === CRAWLER.ip);
+    expect(mine).toHaveLength(BURST_HITS + 2);
+    expect(mine.every((x) => x.is_bot === 1 && x.visitor_class === 'script')).toBe(true);
+    expect(r.find((x) => x.ip === OTHER.ip)).toMatchObject({ is_bot: 0, visitor_class: 'human' });
+  });
+
+  it('keeps 19 hits inside 60s human', async () => {
+    for (let i = 0; i < BURST_HITS - 1; i++) recordPageHit({ ...CRAWLER, ts: T0 + i * 1000, path: `/p${i}` });
+    await flushPageHits();
+    const r = await hits();
+    expect(r).toHaveLength(BURST_HITS - 1);
+    expect(r.every((x) => x.is_bot === 0 && x.visitor_class === 'human')).toBe(true);
+  });
+
+  it('keeps 20 hits spread over 10 minutes human', async () => {
+    for (let i = 0; i < BURST_HITS; i++) recordPageHit({ ...CRAWLER, ts: T0 + i * 30_000, path: `/p${i}` });
+    await flushPageHits();
+    const r = await hits();
+    expect(r).toHaveLength(BURST_HITS);
+    expect(r.every((x) => x.is_bot === 0 && x.visitor_class === 'human')).toBe(true);
+  });
+
+  it('does not count another visitor toward the burst', async () => {
+    for (let i = 0; i < BURST_HITS / 2; i++) {
+      recordPageHit({ ...CRAWLER, ts: T0 + i * 1000, path: `/c${i}` });
+      recordPageHit({ ...OTHER, ts: T0 + i * 1000 + 500, path: `/o${i}` });
+    }
+    await flushPageHits();
+    const r = await hits();
+    expect(r).toHaveLength(BURST_HITS);
+    expect(r.every((x) => x.is_bot === 0 && x.visitor_class === 'human')).toBe(true);
+  });
+
+  it('resetProbeVisitorCache clears the burst tracking', async () => {
+    for (let i = 0; i < BURST_HITS - 1; i++) recordPageHit({ ...CRAWLER, ts: T0 + i * 1000, path: `/p${i}` });
+    resetProbeVisitorCache();
+    recordPageHit({ ...CRAWLER, ts: T0 + 20_000, path: '/next' });
+    await flushPageHits();
+    expect((await hits()).every((x) => x.is_bot === 0)).toBe(true);
   });
 });

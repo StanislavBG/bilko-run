@@ -207,6 +207,7 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 - page views and clicks whose user agent is a crawler, script, AI agent or API client, HeadlessChrome and Playwright included;
 - page views and clicks from a browser that reported `navigator.webdriver`. Headed Playwright and agent browsers keep a normal Chrome user agent, so this flag is their tell. It also re-flags that device's last 24 hours;
 - telemetry events and errors whose request user agent is not a person's browser (the telemetry UA class, flagged at ingest).
+- page views from a visitor (IP + user agent) with 20 or more page loads inside a minute: that visitor is counted as a script from 24 hours before to 24 hours after the burst, hits already written included (`server/page-hits.ts`).
 
 `flows_report` also drops events and errors from any session with a bot-flagged page view. `sessions_report` drops every session with a bot-flagged page view, event or error.
 
@@ -216,7 +217,7 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 **Secret-file probes are bots.** A page hit on a probe path (`server/non-page-paths.ts` `isProbePath`: a dotfile segment such as `/.env` or `/.git/HEAD` except `/.well-known`, a scanner extension such as `.php`, `.bak` or `.sql`, or a config filename such as `config.json`) is recorded as class `script`, whatever its user agent (`server/page-hits.ts`). Its IP+user-agent visitor is marked too: every hit from that visitor from 24 hours before to 24 hours after its first probe becomes a bot hit, including hits already written.
 
-**Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, never probes a secret file, and runs on a device never signed in as admin or marked, still counts as a visitor unless it sends the [internal traffic marker](host-contract.md#internal-traffic-marker). If it never runs the beacon and never keeps the `bilko_vid` cookie, it is counted in `visitors.human` but lands in `visitors.unverified`, not `visitors.confirmed` (below).
+**Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, never probes a secret file, loads fewer than 20 pages a minute, and runs on a device never signed in as admin or marked, still counts as a visitor unless it sends the [internal traffic marker](host-contract.md#internal-traffic-marker). If it never runs the beacon and never keeps the `bilko_vid` cookie, it is counted in `visitors.human` but lands in `visitors.unverified`, not `visitors.confirmed` (below).
 
 ### Confirmed vs unverified visitors
 

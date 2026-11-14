@@ -130,6 +130,9 @@ export function recordPageHit(input: PageHitInput): void {
     markProbeVisitor(visitorId, input.ts);
   } else if (visitorClass === 'human' && isProbeMarked(visitorId, input.ts)) {
     visitorClass = 'script';
+  } else if (visitorClass === 'human' && isBurst(visitorId, input.ts)) {
+    visitorClass = 'script';
+    markProbeVisitor(visitorId, input.ts);
   }
   buffer.push({
     ts_ms: input.ts,
@@ -185,10 +188,38 @@ function markProbeVisitor(vid: string, ts: number): void {
   pendingProbeBackfill.set(vid, ts);
 }
 
-/** Test hook: forget every probe-visitor mark. */
+// Burst visitors: a visitor_id with BURST_HITS HTML hits inside BURST_WINDOW_MS is
+// a script (a person does not load 20 pages a minute). It reuses the probe mark,
+// so its hits from 24h before to 24h after become bots. Only human-class hits are
+// tracked: UA-flagged bots keep their own class.
+export const BURST_HITS = 20;
+export const BURST_WINDOW_MS = 60_000;
+const BURST_MAX_KEYS = 5000;
+let burstHits = new Map<string, number[]>(); // visitor_id -> recent hit ts_ms
+
+function isBurst(vid: string, ts: number): boolean {
+  const since = ts - BURST_WINDOW_MS;
+  let recent = burstHits.get(vid);
+  if (!recent) {
+    if (burstHits.size >= BURST_MAX_KEYS) {
+      for (const [v, list] of burstHits) {
+        if (Math.max(...list) < since) burstHits.delete(v);
+      }
+    }
+    recent = [];
+    burstHits.set(vid, recent);
+  }
+  recent.push(ts);
+  const kept = recent.filter((t) => t > since);
+  burstHits.set(vid, kept);
+  return kept.length >= BURST_HITS;
+}
+
+/** Test hook: forget every probe-visitor mark and the burst tracking. */
 export function resetProbeVisitorCache(): void {
   probeVisitors = new Map<string, number>();
   pendingProbeBackfill = new Map<string, number>();
+  burstHits = new Map<string, number[]>();
 }
 
 function probeBackfillStmt(vid: string, firstProbeTs: number): InStatement {

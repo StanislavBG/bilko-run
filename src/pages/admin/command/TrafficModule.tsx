@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { C, FONT, UnderlineBar, fmtNum } from './theme.js';
+import { C, FONT, MonoLabel, UnderlineBar, fmtNum } from './theme.js';
 import type { Source } from './useCommandData.js';
 import type { DayRow, TrafficData } from './types.js';
 
@@ -36,6 +36,41 @@ export function classRows(t: TrafficData): ClassRow[] {
         top: top?.path ?? null,
       };
     });
+}
+
+const MISSING_MAX = 8;
+const MISSING_PATH_MAX = 48;
+
+export interface NotFoundRow { path: string; full: string; hits: number; botHits: number; humanHits: number }
+
+/** Top 404 paths in API order, capped at 8; path is cut to 48 chars for display (full keeps the original). */
+export function notFoundRows(t: TrafficData): NotFoundRow[] {
+  return (t.notFoundPaths ?? []).slice(0, MISSING_MAX).map(r => ({
+    path: r.path.length > MISSING_PATH_MAX ? `${r.path.slice(0, MISSING_PATH_MAX - 1)}…` : r.path,
+    full: r.path,
+    hits: r.hits,
+    botHits: r.botHits,
+    humanHits: Math.max(0, r.hits - r.botHits),
+  }));
+}
+
+/** Paths are untrusted request strings: rendered as React text only, never as links or HTML. */
+function MissingPages({ rows, compact }: { rows: NotFoundRow[]; compact?: boolean }) {
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0, flex: 'none' }}>
+      <MonoLabel>MISSING PAGES</MonoLabel>
+      <div style={{ display: 'grid', gridTemplateColumns: compact ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))', columnGap: 18 }}>
+        {rows.map((r, i) => (
+          <div key={`${r.full}-${i}`} title={r.full} style={{ display: 'flex', alignItems: 'center', gap: 8, height: 18, font: `400 10.5px/1.4 ${FONT.mono}`, borderBottom: `1px solid ${C.rule}`, minWidth: 0 }}>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: PROBE.test(r.full) ? C.redSoft : C.text }}>{r.path}</span>
+            <span style={{ color: C.text }}>{fmtNum(r.hits)}</span>
+            {r.botHits > 0 && <span style={{ color: C.faint }}>bot {fmtNum(r.botHits)}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 const mmdd = (date: string): string => date.slice(5, 10);
@@ -95,10 +130,11 @@ function Stage({ t }: { t: TrafficData }) {
   const maxRef = refs.reduce((m, r) => Math.max(m, r.hits), 0);
   const maxProj = projects.reduce((m, r) => Math.max(m, r.hits), 0);
   const classes = classRows(t);
+  const missing = notFoundRows(t);
 
   return (
     <>
-      <div style={{ position: 'absolute', inset: 0, padding: '14px 16px', display: 'grid', gridTemplateRows: 'minmax(0,1.05fr) minmax(0,1fr)', gap: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, padding: '14px 16px', display: 'grid', gridTemplateRows: missing.length ? 'minmax(0,1.05fr) minmax(0,1fr) auto' : 'minmax(0,1.05fr) minmax(0,1fr)', gap: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, font: `500 10px/1 ${FONT.mono}`, letterSpacing: '.14em', color: C.muted }}>
             <span>HITS PER DAY</span>
@@ -154,6 +190,7 @@ function Stage({ t }: { t: TrafficData }) {
             />
           )}
         </div>
+        <MissingPages rows={missing} />
       </div>
       <div style={{ position: 'absolute', inset: 0, border: `1px solid ${C.stageOutline}`, pointerEvents: 'none' }} />
     </>
@@ -166,6 +203,7 @@ function Compact({ t }: { t: TrafficData }) {
   const maxUv = days.reduce((m, d) => Math.max(m, d.visitors), 0);
   const top = t.topReferrers[0];
   const classes = classRows(t);
+  const missing = notFoundRows(t);
   return (
     <div style={{ position: 'absolute', inset: 0, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -191,6 +229,7 @@ function Compact({ t }: { t: TrafficData }) {
           {classes.map(r => `${r.name} ${r.vals[0]}`).join(' · ')}
         </div>
       )}
+      <MissingPages rows={missing.slice(0, 3)} compact />
     </div>
   );
 }

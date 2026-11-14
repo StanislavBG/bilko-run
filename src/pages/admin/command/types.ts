@@ -74,6 +74,8 @@ export interface TrafficData {
   topClicks: ClickRow[];
   byClass?: { class: string; hits: number; visitors: number }[];
   topPagesByClass?: { path: string; class: string; hits: number; visitors: number }[];
+  /** Paths answered 404 in the window, busiest first (older servers omit it). */
+  notFoundPaths?: { path: string; hits: number; botHits: number; visitors: number }[];
   recent: RecentRow[];
   visitors: VisitorRow[];
   /** mineHits: the owner's human hits in the window, counted whatever the toggles. */

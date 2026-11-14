@@ -10,6 +10,20 @@ const ROOT = join(__dirname, '..');
 const SCRIPT = join(ROOT, 'scripts/blog-draft.sh');
 const DRAFTS = join(ROOT, '.claude/skills/blog-from-git/drafts');
 const SLOT = '2026-10-13T16:00:00Z';
+// Burrow's draft context: the public set and the posts already covered.
+const CONTEXT = {
+  schema_version: 1,
+  slot_at: SLOT,
+  public_projects: [{ slug: 'public-one', name: 'Public One' }, { slug: 'public-two', name: 'Public Two' }],
+  blog_posts: [],
+};
+const BRIEF = {
+  project: 'public-one',
+  angle: 'The v2 release.',
+  sources: [{ repo: 'owner/public-one', from_ref: 'v1', to_ref: 'v2' }],
+  facts: ['v2 shipped on Nov 13.'],
+  avoid_claims: ['It is a hosted service.'],
+};
 
 const FAKE_CLAUDE = `#!/bin/bash
 echo "$@" > "$FAKE_DIR/claude-args.txt"
@@ -52,16 +66,7 @@ describe('blog-draft.sh', () => {
       '#!/bin/sh\ncase "$2" in *blog-subjects.ts) shift; exec "$REAL_TSX" "$@" ;; esac\nexit "${FAKE_READABILITY_RC:-0}"\n',
       { mode: 0o755 },
     );
-    // Burrow's draft context: the public set and the posts already covered.
-    writeFileSync(
-      join(tmp, 'context.json'),
-      JSON.stringify({
-        schema_version: 1,
-        slot_at: SLOT,
-        public_projects: [{ slug: 'public-one', name: 'Public One' }, { slug: 'public-two', name: 'Public Two' }],
-        blog_posts: [],
-      }),
-    );
+    writeFileSync(join(tmp, 'context.json'), JSON.stringify(CONTEXT));
     writeFileSync(join(fake, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   });
   afterEach(() => {
@@ -93,6 +98,9 @@ describe('blog-draft.sh', () => {
     );
   }
   const result = () => JSON.parse(readFileSync(join(out, 'result.json'), 'utf8'));
+  const claudeArgs = () => readFileSync(join(fake, 'claude-args.txt'), 'utf8');
+  const withBrief = (brief: unknown) =>
+    writeFileSync(join(tmp, 'context.json'), JSON.stringify({ ...CONTEXT, brief }));
   const draftsListing = () => (existsSync(DRAFTS) ? readdirSync(DRAFTS).sort() : []);
 
   it('drafts: exit 0, exact result.json, post.md and images, model pinned', () => {
@@ -109,8 +117,76 @@ describe('blog-draft.sh', () => {
     });
     expect(existsSync(join(out, 'post.md'))).toBe(true);
     expect(existsSync(join(out, 'images/home.jpg'))).toBe(true);
-    expect(readFileSync(join(fake, 'claude-args.txt'), 'utf8')).toContain('--model claude-sonnet-5');
+    expect(claudeArgs()).toContain('--model claude-sonnet-5');
+    expect(claudeArgs()).not.toContain('OWNER-COMMISSIONED');
+    expect(claudeArgs()).not.toContain('brief_project');
     expect(draftsListing()).toEqual(before);
+  });
+
+  it('a brief: the prompt commissions a focused post on brief.project from brief.sources', () => {
+    withBrief(BRIEF);
+    const r = run('drafted');
+    expect(r.status).toBe(0);
+    expect(result()).toMatchObject({ status: 'drafted', project: 'public-one' });
+    const prompt = claudeArgs();
+    expect(prompt).toContain('owner-commissioned post about public-one');
+    expect(prompt).toContain('Mode: Focused');
+    expect(prompt).toContain('project: public-one');
+    expect(prompt).toContain('take it from brief.sources');
+    expect(prompt).toContain('brief.facts are leads');
+    expect(prompt).toContain('Never make a claim listed in brief.avoid_claims');
+    expect(prompt).toContain('"candidates":[{"slug":"public-one"');
+    expect(prompt).not.toContain('"slug":"public-two","name":"Public Two","last_covered"');
+    expect(prompt).toContain('"brief_project":"public-one"');
+  });
+
+  it("a brief: refuses a post about another project, naming both", () => {
+    withBrief({ ...BRIEF, project: 'public-two' });
+    const r = run('drafted');
+    expect(r.status).toBe(1);
+    expect(result().status).toBe('error');
+    expect(result().error).toContain("subject refused: commissioned post is about public-one, not the brief's project public-two");
+  });
+
+  it('a brief whose project is not in public_projects: blog-subjects exits 2 and claude never runs', () => {
+    withBrief({ ...BRIEF, project: 'admin-only' });
+    const r = run('drafted');
+    expect(r.status).toBe(1);
+    expect(result().error).toContain('could not compute blog subjects (exit 2)');
+    expect(result().error).toContain('brief project is not in public_projects: admin-only');
+    expect(existsSync(join(fake, 'claude-args.txt'))).toBe(false);
+  });
+
+  it('a brief on a cooling-off project: skipped with a reason naming it', () => {
+    writeFileSync(join(tmp, 'context.json'), JSON.stringify({
+      ...CONTEXT,
+      blog_posts: [{ slot_at: '2026-10-10T16:00:00Z', slug: 'last-one', project: 'public-one' }],
+      brief: BRIEF,
+    }));
+    const r = run('drafted');
+    expect(r.status).toBe(0);
+    expect(result()).toEqual({ status: 'skipped', reason: 'the commissioned project public-one is cooling off or retired' });
+    expect(existsSync(join(fake, 'claude-args.txt'))).toBe(false);
+  });
+
+  it('bp_draft_prompt: a brief adds exactly one paragraph; without one the prompt is unchanged', () => {
+    const file = join(tmp, 'prompt-context.json');
+    const prompt = () => {
+      const r = spawnSync('bash', ['-c', 'source "$1" && bp_draft_prompt /tmp/out "$2" 2026-10-13T15:00:00Z "{}" "$3"', '_',
+        join(ROOT, 'scripts/blog-pipeline-lib.sh'), SLOT, file], { encoding: 'utf8' });
+      expect(r.status).toBe(0);
+      return r.stdout;
+    };
+    writeFileSync(file, JSON.stringify(CONTEXT));
+    const plain = prompt();
+    writeFileSync(file, JSON.stringify({ ...CONTEXT, brief: BRIEF }));
+    const briefed = prompt();
+    const start = briefed.indexOf('\n\nOWNER-COMMISSIONED POST:');
+    const end = briefed.indexOf('\n\nContent DAG:');
+    expect(plain).not.toContain('OWNER-COMMISSIONED');
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    expect(briefed.slice(0, start) + briefed.slice(end)).toBe(plain);
   });
 
   it('refuses a post whose project is not public: non-zero exit, error result.json', () => {

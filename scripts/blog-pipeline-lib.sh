@@ -9,7 +9,7 @@ source "$BP_LIB_DIR/blog-watchdog-env.sh"
 # Same model as blog-cadence-watchdog.sh's `claude -p` call.
 BP_CLAUDE_MODEL="claude-sonnet-5"
 
-BP_DRAFT_REQUIRED_BINARIES=(claude git npx pnpm timeout)
+BP_DRAFT_REQUIRED_BINARIES=(claude git jq npx pnpm timeout)
 BP_SEED_REQUIRED_BINARIES=(awk curl flock git jq node npx pnpm timeout)
 
 # Echoes the space-separated required binaries that do not resolve. Empty = all fine.
@@ -83,13 +83,35 @@ bp_validate_post() {
   return 0
 }
 
+# bp_brief_project <context_file> — the draft context's brief.project, trimmed; empty when the
+# context has no brief object. Returns 1 when jq cannot read the file. scripts/blog-subjects.ts
+# validates the brief (its project must be one of public_projects) before the prompt is built.
+bp_brief_project() {
+  jq -r 'if (.brief | type) == "object" then ((.brief.project // "") | tostring | gsub("^\\s+|\\s+$"; "")) else "" end' "$1"
+}
+
 # bp_draft_prompt <out_dir> <slot> <authored_at> <subjects_json> [context_file] — the unattended
-# phases 1-5d prompt. subjects_json is scripts/blog-subjects.ts candidates output.
+# phases 1-5d prompt. subjects_json is scripts/blog-subjects.ts candidates output. A context with
+# a brief object (an owner-commissioned post) adds one paragraph; without one the prompt is
+# unchanged. Returns 1 when the context's brief cannot be read.
 bp_draft_prompt() {
-  local out="$1" slot="$2" authored_at="$3" subjects="$4" context="${5:-}" context_note=""
+  local out="$1" slot="$2" authored_at="$3" subjects="$4" context="${5:-}" context_note="" brief_note="" brief_project=""
   if [[ -n "$context" ]]; then
     context_note="
 Burrow's draft context is the JSON file ${context}: read it. Its public_projects list is the public set above, and its blog_posts (newest queued or published posts, newest first) are already counted in cooling_off — Burrow's queued drafts are not in blog-ledger.md yet."
+    brief_project="$(bp_brief_project "$context")" || { echo "cannot read the brief in draft context $context" >&2; return 1; }
+    if [[ -n "$brief_project" ]]; then
+      brief_note="
+
+OWNER-COMMISSIONED POST: the draft context has a brief object, so this slot is an owner-commissioned post about ${brief_project}. The brief sets the mode, the angle and the scan range; blog.config.yaml's truth rules, the subject rule and the readability policy still apply.
+- Mode: Focused (the SKILL.md mode table), on brief.project. Write post.md's frontmatter as project: ${brief_project}; scripts/blog-draft.sh refuses a post about any other project.
+- Angle: take it from brief.angle.
+- Scan range: take it from brief.sources (a repo's from_ref..to_ref, files, packages), not from the date of the last post. The range may start before the last post; scan all of it.
+- Facts: brief.facts are leads, not sources. Verify each one against brief.sources before you use it, and leave out any you cannot verify.
+- Links: use brief.links for the post's links and its call to action.
+- Never make a claim listed in brief.avoid_claims.
+Where the brief leaves a field out, follow the skill's default for that step."
+    fi
   fi
   cat <<PROMPT
 You are running unattended, called by Burrow's blog drafter (scripts/blog-draft.sh). There is NO human present. The intended publish slot is ${slot}; Burrow owns the slot and the publishing, you only draft. This run started at ${authored_at}.
@@ -97,7 +119,7 @@ You are running unattended, called by Burrow's blog drafter (scripts/blog-draft.
 Follow the blog-from-git skill (.claude/skills/blog-from-git/SKILL.md) but run PHASES 1-5d ONLY: 1 Rotation (read rotation.md + blog-ledger.md — the subject rule below replaces the ledger's own cooldown reading), 2 Scan, 3 Research, 4 Ground, 5 Draft (voice.md), 5d Illustrate (images.md). Obey blog.config.yaml truth rules and the readability policy.
 
 SUBJECT RULE (owner, 2026-11-05; scripts/blog-draft.sh refuses a post that breaks it): the post is about exactly ONE project from "candidates" below — the projects https://bilko.run/projects shows without admin, minus cooling_off and retired, best first (never covered, then longest since last covered). Spotlight mode takes the FIRST candidate. A post driven by new work may take any candidate with new work in the window. Never write about, link, or screenshot any project outside "public" (admin-only projects such as mindswiffer or sudoku, and untiled ones such as burrow, are never a subject). Name the subject in post.md's frontmatter as project: <its slug from the list>.
-Subjects (scripts/blog-subjects.ts): ${subjects}${context_note}
+Subjects (scripts/blog-subjects.ts): ${subjects}${context_note}${brief_note}
 
 Content DAG: follow .claude/skills/blog-from-git/dag.md, but write every pipeline artifact (questions.json, evidence.json, outline.json, renditions/linkedin.md, renditions/x.md) under ${out}/artifacts/<slug>/ — NOT under .claude/skills/blog-from-git/drafts/.
 

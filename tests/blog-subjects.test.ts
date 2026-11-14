@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   checkPost,
   linkedProjectSlugs,
+  parseDraftContext,
   planSubjects,
   registryPublicProjects,
+  SubjectInputError,
   type CoveredPost,
 } from '../scripts/blog-subjects';
 
@@ -69,5 +71,69 @@ describe('blog-subjects', () => {
     const r = checkPost(md('cool-app', 'Try https://bilko.run/projects/admin-app now.'), plan);
     expect(r).toHaveProperty('problem', 'links non-public project: admin-app');
     expect(linkedProjectSlugs('https://bilko.run/projects/Cool-App and bilko.run/products/x')).toEqual(['cool-app', 'x']);
+  });
+
+  // Burrow's owner-commissioned slots (BLOG_DRAFT_CONTEXT brief).
+  const context = (brief?: unknown) => JSON.stringify({
+    schema_version: 1,
+    slot_at: '2026-11-16T17:00:00Z',
+    public_projects: [{ slug: 'open-app', name: 'Open App' }, { slug: 'cool-app' }],
+    blog_posts: [],
+    ...(brief === undefined ? {} : { brief }),
+  });
+
+  it('parseDraftContext: an absent or null brief is no brief', () => {
+    expect(parseDraftContext(context()).brief).toBeNull();
+    expect(parseDraftContext(context(null)).brief).toBeNull();
+  });
+
+  it('parseDraftContext accepts a brief whose project is in public_projects', () => {
+    const brief = {
+      kind: 'commissioned',
+      project: ' cool-app ',
+      angle: 'The v2 release.',
+      sources: [{ repo: 'owner/repo', from_ref: 'v1', to_ref: 'v2' }, { file: '/tmp/matrix.json' }],
+      facts: ['v2 shipped on Nov 13.'],
+      links: [{ url: 'https://bilko.run/products/cool-app' }, { call_to_action: 'Try it.' }],
+      avoid_claims: ['It is a hosted service.'],
+    };
+    expect(parseDraftContext(context(brief)).brief).toEqual({ project: 'cool-app' });
+  });
+
+  it.each([
+    ['is a string', 'cool-app', 'brief must be an object'],
+    ['is an array', ['cool-app'], 'brief must be an object'],
+    ['has no project', { angle: 'x' }, 'brief has no project'],
+    ['names a project outside public_projects', { project: 'admin-app' }, 'brief project is not in public_projects: admin-app'],
+    ['has a non-string angle', { project: 'cool-app', angle: 3 }, 'brief angle must be a string'],
+    ['has sources that are not an array', { project: 'cool-app', sources: 'v1..v2' }, 'brief sources must be an array'],
+    ['has facts that are not strings', { project: 'cool-app', facts: [1] }, 'brief facts must be an array of strings'],
+    ['has avoid_claims that is not an array', { project: 'cool-app', avoid_claims: 'x' }, 'brief avoid_claims must be an array of strings'],
+  ])('parseDraftContext rejects a brief that %s', (_n, brief, why) => {
+    expect(() => parseDraftContext(context(brief))).toThrow(SubjectInputError);
+    expect(() => parseDraftContext(context(brief))).toThrow(why);
+  });
+
+  it("a brief makes its project the only candidate and check refuses any other project", () => {
+    const publicProjects = registryPublicProjects(registry);
+    const briefPlan = planSubjects({ publicProjects, posts: [], policy, briefProject: 'cool-app' });
+    expect(briefPlan.candidates.map((c) => c.slug)).toEqual(['cool-app']);
+    expect(briefPlan.brief_project).toBe('cool-app');
+    expect(checkPost(md('cool-app'), briefPlan)).toEqual({ project: 'cool-app' });
+    expect(checkPost(md('open-app'), briefPlan)).toEqual({
+      problem: "commissioned post is about open-app, not the brief's project cool-app",
+    });
+    expect('brief_project' in planSubjects({ publicProjects, posts: [], policy })).toBe(false);
+  });
+
+  it('a brief does not lift the cooldown: a cooling-off brief project leaves no candidate', () => {
+    const briefPlan = planSubjects({
+      publicProjects: registryPublicProjects(registry),
+      posts: [post('p1', 'cool-app', '2026-11-01')],
+      policy,
+      briefProject: 'cool-app',
+    });
+    expect(briefPlan.candidates).toEqual([]);
+    expect(checkPost(md('cool-app'), briefPlan)).toHaveProperty('problem', expect.stringContaining('cooldown'));
   });
 });

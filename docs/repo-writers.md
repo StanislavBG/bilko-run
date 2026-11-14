@@ -72,6 +72,21 @@ tell Burrow (`/send-feedback`) before changing any of it:
 - the `BILKO_SYNC_REPO_ROOT` override, which is no longer test-only;
 - log lines on stderr only. Burrow's warning quotes the last one.
 
+## Burrow's blog drafter and `BLOG_DRAFT_CONTEXT`
+
+Burrow's blog drafter (`app/pipelines/blog_post/drafter.py`, also run by its owner-commission CLI
+`python -m app.pipelines.blog_post.commission`) runs `scripts/blog-draft.sh` from the live checkout.
+It commits nothing here, but it is the only writer of the JSON file that `BLOG_DRAFT_CONTEXT` names.
+Its keys (`schema_version` 1): `slot_at`, `rule`, `public_projects` (the public set), `blog_posts`
+(queued or published posts, counted toward the cooldown) and an optional `brief`. A brief makes the
+slot an owner-commissioned post: `brief.project` must be one of `public_projects` (otherwise
+`scripts/blog-subjects.ts` exits 2), it becomes the only candidate, and a post about any other
+project is refused. The draft prompt adds one paragraph that follows `brief.angle`, `brief.sources`
+(the scan range, which may start before the last post), `brief.facts` (verified before use),
+`brief.links` and `brief.avoid_claims`; without a brief the prompt is unchanged. The cooldown and
+the cadence gate still apply. `parseDraftContext` in `scripts/blog-subjects.ts` is the schema; tell
+Burrow (`/send-feedback`) before changing it.
+
 ## Rules
 
 1. Never push local `main` as a whole unless `git status -sb` shows only your own commits ahead

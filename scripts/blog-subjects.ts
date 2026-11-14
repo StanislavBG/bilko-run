@@ -5,15 +5,20 @@
  * entry with `public: true`, the same set GET /api/projects serves. Admin-only and untiled
  * projects are never a subject, in any mode. When Burrow passes a draft context (the
  * BLOG_DRAFT_CONTEXT file), its public_projects list is the public set and its blog_posts rows
- * (queued or published) count toward the cooldown alongside the ledger.
+ * (queued or published) count toward the cooldown alongside the ledger. An optional `brief` object
+ * makes the slot an owner-commissioned post: brief.project must name one of public_projects, it
+ * becomes the only candidate, and check refuses a post about any other project. Its other keys
+ * (angle, sources, facts, links, avoid_claims) are for the draft prompt (scripts/blog-pipeline-lib.sh).
  *
  *   pnpm tsx scripts/blog-subjects.ts candidates --root <repo> [--slot <ISO>] [--context <file>]
  *   pnpm tsx scripts/blog-subjects.ts check --root <repo> --post <post.md> [--slot <ISO>] [--context <file>]
  *
- * candidates prints one JSON line {public, retired, cooling_off, candidates}; candidates are
- * ordered never-covered first, then longest since last covered. Exit 0, or 3 when empty.
- * check prints the post's project and exits 0 when it is a candidate and the post links no
- * non-public project; otherwise prints the reason and exits 1. Exit 2 = bad arguments or inputs.
+ * candidates prints one JSON line {public, retired, cooling_off, candidates}, plus brief_project
+ * when the context has a brief; candidates are ordered never-covered first, then longest since
+ * last covered. Exit 0, or 3 when empty.
+ * check prints the post's project and exits 0 when it is a candidate (the brief's project, when
+ * there is a brief) and the post links no non-public project; otherwise prints the reason and
+ * exits 1. Exit 2 = bad arguments or inputs, including a malformed brief.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -37,11 +42,17 @@ export interface CoveredPost {
   project: string | null;
 }
 
+/** The owner-commission brief from the draft context. Only `project` is used here. */
+export interface DraftBrief {
+  project: string;
+}
+
 export interface DraftContext {
   slotAt: string;
   rule: string;
   publicProjects: PublicProject[];
   blogPosts: CoveredPost[];
+  brief: DraftBrief | null;
 }
 
 export interface RotationPolicy {
@@ -61,6 +72,8 @@ export interface SubjectPlan {
   retired: string[];
   cooling_off: string[];
   candidates: Candidate[];
+  /** Only when the draft context has a brief: the one project the post may be about. */
+  brief_project?: string;
 }
 
 export class SubjectInputError extends Error {}
@@ -103,6 +116,34 @@ export function ledgerPosts(ledger: string): CoveredPost[] {
   return out;
 }
 
+const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+/**
+ * The context's optional brief. Absent or null means none. Otherwise it must be an object whose
+ * project is one of public_projects; angle must be a string, sources and links arrays, and facts
+ * and avoid_claims arrays of strings, when present. Other keys are ignored.
+ */
+function parseBrief(raw: unknown, publicProjects: PublicProject[]): DraftBrief | null {
+  if (raw === undefined || raw === null) return null;
+  const bad = (why: string) => new SubjectInputError(`draft context brief ${why}`);
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw bad('must be an object');
+  const brief = raw as Record<string, unknown>;
+  const project = str(brief.project);
+  if (!project) throw bad('has no project');
+  if (!publicProjects.some((p) => p.slug === project)) throw bad(`project is not in public_projects: ${project}`);
+  if (brief.angle !== undefined && typeof brief.angle !== 'string') throw bad('angle must be a string');
+  for (const key of ['sources', 'links']) {
+    if (brief[key] !== undefined && !Array.isArray(brief[key])) throw bad(`${key} must be an array`);
+  }
+  for (const key of ['facts', 'avoid_claims']) {
+    const v = brief[key];
+    if (v !== undefined && !(Array.isArray(v) && v.every((s) => typeof s === 'string'))) {
+      throw bad(`${key} must be an array of strings`);
+    }
+  }
+  return { project };
+}
+
 export function parseDraftContext(raw: string): DraftContext {
   let data: Record<string, unknown>;
   try {
@@ -111,7 +152,6 @@ export function parseDraftContext(raw: string): DraftContext {
     throw new SubjectInputError(`draft context is not JSON: ${(err as Error).message}`);
   }
   if (data?.schema_version !== 1) throw new SubjectInputError('draft context schema_version must be 1');
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
   if (!Array.isArray(data.public_projects) || !Array.isArray(data.blog_posts)) {
     throw new SubjectInputError('draft context needs public_projects and blog_posts arrays');
   }
@@ -125,7 +165,13 @@ export function parseDraftContext(raw: string): DraftContext {
     if (!date) throw new SubjectInputError('draft context blog_posts entry has no slot_at');
     return { date, slug: str(p.slug) ?? '', project: str(p.project) };
   });
-  return { slotAt: str(data.slot_at) ?? '', rule: str(data.rule) ?? '', publicProjects, blogPosts };
+  return {
+    slotAt: str(data.slot_at) ?? '',
+    rule: str(data.rule) ?? '',
+    publicProjects,
+    blogPosts,
+    brief: parseBrief(data.brief, publicProjects),
+  };
 }
 
 /**
@@ -157,18 +203,21 @@ export function coolingOff(posts: CoveredPost[], n: number, slot?: string): stri
   return out;
 }
 
+/** With briefProject (an owner-commissioned slot) that project is the only possible candidate. */
 export function planSubjects(input: {
   publicProjects: PublicProject[];
   posts: CoveredPost[];
   policy: RotationPolicy;
   slot?: string;
+  briefProject?: string;
 }): SubjectPlan {
-  const { publicProjects, posts, policy, slot } = input;
+  const { publicProjects, posts, policy, slot, briefProject } = input;
   const cooling = coolingOff(posts, policy.cooldownPosts, slot);
   const lastCovered = (slug: string) =>
     posts.filter((p) => p.project === slug).map((p) => p.date.slice(0, 10)).sort().pop() ?? null;
   const ranked = publicProjects
     .filter((p) => !policy.retired.includes(p.slug) && !cooling.includes(p.slug))
+    .filter((p) => !briefProject || p.slug === briefProject)
     .map((p, i) => ({ ...p, last_covered: lastCovered(p.slug), i }))
     .sort((a, b) =>
       a.last_covered === b.last_covered ? a.i - b.i
@@ -180,6 +229,7 @@ export function planSubjects(input: {
     retired: policy.retired,
     cooling_off: cooling,
     candidates: ranked.map(({ i: _i, ...c }) => c),
+    ...(briefProject ? { brief_project: briefProject } : {}),
   };
 }
 
@@ -209,6 +259,9 @@ export function checkPost(post: string, plan: SubjectPlan): { project: string } 
   }
   const project = typeof fm.project === 'string' ? fm.project.trim() : '';
   if (!project) return problem("post.md frontmatter is missing 'project' (the registry slug of its one subject)");
+  if (plan.brief_project && project !== plan.brief_project) {
+    return problem(`commissioned post is about ${project}, not the brief's project ${plan.brief_project}`);
+  }
   for (const slug of linkedProjectSlugs(post)) {
     if (!plan.public.includes(slug)) return problem(`links non-public project: ${slug}`);
   }
@@ -250,6 +303,7 @@ export function planFromRoot(root: string, opts: { slot?: string; contextFile?: 
     posts: mergePosts(ledger, context?.blogPosts),
     policy,
     slot: opts.slot || context?.slotAt || undefined,
+    briefProject: context?.brief?.project,
   });
 }
 

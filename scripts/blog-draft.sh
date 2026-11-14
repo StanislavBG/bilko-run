@@ -9,6 +9,8 @@
 # The subject must be a public bilko.run/projects project off cooldown (scripts/blog-subjects.ts
 # picks the candidates before the claude call and checks post.md after it). When the env var
 # BLOG_DRAFT_CONTEXT names Burrow's draft-context JSON, its public_projects and blog_posts are used.
+# A context with a brief object is an owner-commissioned slot: the post must be about brief.project,
+# and the prompt gains one paragraph (bp_draft_prompt); a malformed brief is an error before claude.
 #   images/*.jpg referenced as /blog-images/<slug>/<file>
 #   artifacts/   content-DAG files
 # Exit 0 = drafted or skipped, 1 = error, 2 = bad arguments.
@@ -85,14 +87,19 @@ SUBJECTS="$(timeout "$READABILITY_TIMEOUT" npx tsx scripts/blog-subjects.ts cand
 RC=$?
 if [[ $RC -eq 3 ]]; then
   REASON="every public bilko.run/projects project is cooling off or retired"
-  printf '{"status":"skipped","reason":"%s"}\n' "$REASON" > "$OUT/result.json"
+  if [[ -n "${BLOG_DRAFT_CONTEXT:-}" ]]; then
+    BRIEF_PROJECT="$(bp_brief_project "$BLOG_DRAFT_CONTEXT" 2>/dev/null)" || BRIEF_PROJECT=""
+    [[ -n "$BRIEF_PROJECT" ]] && REASON="the commissioned project $BRIEF_PROJECT is cooling off or retired"
+  fi
+  printf '{"status":"skipped","reason":"%s"}\n' "$(bp_json_escape "$REASON")" > "$OUT/result.json"
   echo "[blog-draft] skipped: $REASON"
   exit 0
 fi
 [[ $RC -eq 0 ]] || fail "could not compute blog subjects (exit $RC): $SUBJECTS"
 
 AUTHORED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-PROMPT="$(bp_draft_prompt "$OUT" "$SLOT" "$AUTHORED_AT" "$SUBJECTS" "${BLOG_DRAFT_CONTEXT:-}")"
+PROMPT="$(bp_draft_prompt "$OUT" "$SLOT" "$AUTHORED_AT" "$SUBJECTS" "${BLOG_DRAFT_CONTEXT:-}")" \
+  || fail "could not build the draft prompt from ${BLOG_DRAFT_CONTEXT:-}"
 
 echo "[blog-draft] slot=$SLOT out=$OUT — invoking claude -p"
 CLAUDE_OUTPUT="$(timeout "$CLAUDE_TIMEOUT" claude -p "$PROMPT" \

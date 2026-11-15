@@ -639,6 +639,26 @@ export const MIGRATIONS = [
     created_at   INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_wallet_transactions_email ON wallet_transactions(email)`,
+  // Per-app play currency (Three Winds taels first), separate from the Bilko Credits wallet (server/services/play-currency.ts).
+  `CREATE TABLE IF NOT EXISTS play_balances (
+    app        TEXT NOT NULL,
+    email      TEXT NOT NULL,
+    balance    INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
+    held       INTEGER NOT NULL DEFAULT 0 CHECK (held >= 0),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (app, email)
+  )`,
+  `CREATE TABLE IF NOT EXISTS play_ledger (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    app        TEXT NOT NULL,
+    account    TEXT NOT NULL,
+    amount     INTEGER NOT NULL,
+    kind       TEXT NOT NULL,
+    ref        TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (app, account, ref)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_play_ledger_account ON play_ledger(app, account)`,
   // Menu orders: one row per credit-bought item (the Agent Factory Kit). created_day is 'YYYY-MM-DD' in America/Los_Angeles.
   `CREATE TABLE IF NOT EXISTS menu_orders (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -76,6 +76,20 @@ describe('projectsView share-card thumbnails', () => {
   });
 });
 
+describe('projectsView card video', () => {
+  it("each project card's video is assetUrl(listing.video) when set, undefined otherwise; packages have none", () => {
+    const bySlug = new Map(PROJECTS.map(p => [p.slug, p]));
+    for (const c of HUB_CARDS) {
+      if (c.type === 'package') {
+        expect(c.video, c.slug).toBeUndefined();
+        continue;
+      }
+      const video = bySlug.get(c.slug)?.listing?.video;
+      expect(c.video, c.slug).toBe(video ? assetUrl(video) : undefined);
+    }
+  });
+});
+
 describe('projectsView listing-driven enrichment', () => {
   const byslug = (s: string) => HUB_CARDS.find(c => c.slug === s);
 

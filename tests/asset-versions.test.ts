@@ -39,7 +39,7 @@ describe('asset-versions', () => {
       slug: 'fx', name: 'Fx', displayName: 'Fixture X', tagline: 'A fixture', category: 'Test',
       icon: '/projects/fx/icon.png', shareImage: '/projects/fx/og.png',
     });
-    expect([...LISTING_ASSET_KEYS]).toEqual(['icon', 'shareImage']);
+    expect([...LISTING_ASSET_KEYS]).toEqual(['icon', 'shareImage', 'video']);
   });
 
   it('cardVersion equals the v= the server puts in og:image', () => {
@@ -73,6 +73,19 @@ describe('asset-versions', () => {
       const av = buildAssetVersions([{ slug: 'fx', name: 'Fx', tagline: 't', category: 'c', listing: { shareImage } }], staticRoot);
       expect(av.files).toEqual({});
     }
+  });
+
+  it('a declared listing.video gets a files entry that tracks its bytes; cardVersion ignores it', () => {
+    writeFileSync(join(staticRoot, 'projects', 'fx', 'card.mp4'), Buffer.from('clip-v1'));
+    const withVideo = { ...raw, listing: { ...raw.listing, video: '/projects/fx/card.mp4' } };
+    const before = buildAssetVersions([withVideo], staticRoot);
+    expect(before.files['/projects/fx/card.mp4']).toBe(sha8('clip-v1'));
+    expect(before.cards.fx).toBe(buildAssetVersions([raw], staticRoot).cards.fx);
+    writeFileSync(join(staticRoot, 'projects', 'fx', 'card.mp4'), Buffer.from('clip-v2'));
+    const after = buildAssetVersions([withVideo], staticRoot);
+    expect(after.files['/projects/fx/card.mp4']).toBe(sha8('clip-v2'));
+    expect(after.files['/projects/fx/card.mp4']).not.toBe(before.files['/projects/fx/card.mp4']);
+    expect(after.cards.fx).toBe(before.cards.fx);
   });
 
   it('an entry with no listing gets a cards entry and no files entry', () => {

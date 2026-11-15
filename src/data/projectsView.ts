@@ -18,7 +18,7 @@
  * (e.g. session-manager, stepproof). Project wins; package metadata is merged in.
  */
 import { PROJECTS, projectHref, isReactRoute, type Project } from './projectsRegistry.js';
-import { cardImageUrl } from './assetVersions.js';
+import { cardImageUrl, assetUrl } from './assetVersions.js';
 import { PACKAGES, type Package } from './packages.js';
 import commitOrder from './commit-order.json' with { type: 'json' };
 import commitCounts from './commit-counts.json' with { type: 'json' };
@@ -70,6 +70,8 @@ export interface HubCard {
   avoidClaims?: readonly string[];
   /** Screenshot path from the registry entry; the Projects Ring hero shows it when present. */
   thumbnail?: string;
+  /** Muted looping card clip from the registry `listing.video`, content-versioned (?v=<sha1 of its bytes>). */
+  video?: string;
 }
 
 function commitMs(slug: string): number {
@@ -116,6 +118,7 @@ function projectCard(p: Project): HubCard {
     callToAction: p.listing?.callToAction,
     avoidClaims: p.listing?.avoidClaims,
     thumbnail: cardImageUrl(p.slug),
+    video: p.listing?.video ? assetUrl(p.listing.video) : undefined,
   };
 }
 

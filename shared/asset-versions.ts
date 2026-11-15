@@ -15,7 +15,7 @@ export interface CardProject {
 }
 
 /** Listing keys whose declared file paths get a per-file version. Add new asset keys here. */
-export const LISTING_ASSET_KEYS = ['icon', 'shareImage'] as const;
+export const LISTING_ASSET_KEYS = ['icon', 'shareImage', 'video'] as const;
 
 export interface AssetVersions {
   /** slug -> 8-hex card version (the same v= the server puts in og:image). */

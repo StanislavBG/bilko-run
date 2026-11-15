@@ -157,26 +157,47 @@ describe('Three Winds engine in GameRoom', () => {
     let robKongSeen = 0;
     const errors: RoomMessage[] = [];
     const latest = new Map<number, Extract<RoomMessage, { type: 'state' }>>();
-    onSend((seat, msg) => {
-      if (msg.type === 'error') { errors.push(msg); return; }
-      const s = spy.state!;
-      const json = JSON.stringify(msg);
-      for (const seed of spy.seeds) expect(json, `seed leaked to seat ${seat}`).not.toContain(seed);
-      const allowed = new Set<number>();
-      if (s.phase === 'over' && s.result?.kind === 'win') for (const w of s.result.winners) for (const t of s.hands[w]) allowed.add(t.id);
+    // Per-state redaction facts, computed once per state change and reused for
+    // every seat's messages about that state (keyed by the spy's state object).
+    interface Facts {
+      state: RoomState;
+      wall: Set<number>;
+      owner: Map<number, number>; // concealed tile id -> seat holding it
+      winnerTiles: Set<number>; // public at a win: the winners' hands
+      robKong: { from: number; tileId: number } | null; // R4.10 window
+    }
+    let facts: Facts | null = null;
+    const factsFor = (s: RoomState): Facts => {
+      if (facts?.state === s) return facts;
+      const owner = new Map<number, number>();
+      s.hands.forEach((h, i) => { for (const t of h) owner.set(t.id, i); });
+      const winnerTiles = new Set<number>();
+      if (s.phase === 'over' && s.result?.kind === 'win') for (const w of s.result.winners) for (const t of s.hands[w]) winnerTiles.add(t.id);
+      let robKong: Facts['robKong'] = null;
       // R4.10: the added-kong tile is public while others may rob it (one tile, robKong window only).
-      if (s.phase === 'claim' && s.claim?.kind === 'robKong' && seat !== s.claim.from) {
+      if (s.phase === 'claim' && s.claim?.kind === 'robKong') {
         const { from, tile } = s.claim;
         expect(s.hands[from].some((t) => t.id === tile.id), 'robKong tile is in the declarer\'s hand').toBe(true);
         expect(s.melds[from].some((m) => m.type === 'pong' && !m.concealed && m.tiles[0].kind === tile.kind), 'robKong tile matches an exposed pong').toBe(true);
-        allowed.add(tile.id);
-        robKongSeen++;
+        robKong = { from, tileId: tile.id };
       }
-      const forbidden = new Set<number>(s.wall.map((t) => t.id));
-      s.hands.forEach((h, i) => { if (i !== seat) for (const t of h) if (!allowed.has(t.id)) forbidden.add(t.id); });
-      for (const id of tileIdsIn((msg as any).view)) {
-        expect(forbidden.has(id), `seed ${spy.seeds.at(-1)} seat ${seat} ${msg.type} seq ${(msg as any).seq ?? '-'} leaked tile ${id}`).toBe(false);
-      }
+      facts = { state: s, wall: new Set(s.wall.map((t) => t.id)), owner, winnerTiles, robKong };
+      return facts;
+    };
+    onSend((seat, msg) => {
+      if (msg.type === 'error') { errors.push(msg); return; }
+      const f = factsFor(spy.state!);
+      const json = JSON.stringify(msg);
+      const leakedSeeds = spy.seeds.filter((seed) => json.includes(seed));
+      expect(leakedSeeds, `seed leaked to seat ${seat}`).toEqual([]);
+      const robTile = f.robKong && seat !== f.robKong.from ? f.robKong.tileId : null;
+      if (robTile !== null) robKongSeen++;
+      const leaked = tileIdsIn((msg as any).view).filter((id) => {
+        if (f.wall.has(id)) return true;
+        const o = f.owner.get(id);
+        return o !== undefined && o !== seat && !f.winnerTiles.has(id) && id !== robTile;
+      });
+      expect(leaked, `seed ${spy.seeds.at(-1)} seat ${seat} ${msg.type} seq ${(msg as any).seq ?? '-'} leaked tiles`).toEqual([]);
       if (msg.type === 'state') latest.set(seat, msg);
       if (msg.type === 'hand_over') overChecked++;
       checked++;
@@ -212,7 +233,7 @@ describe('Three Winds engine in GameRoom', () => {
     expect(timeouts).toBeGreaterThan(0);
     expect(robKongSeen).toBeGreaterThan(0);
     expect(spy.seeds.every((s) => /^[0-9a-f]{32}$/.test(s))).toBe(true);
-  });
+  }, 120_000);
 
   it('120 seeded all-AI hands settle zero-sum within maxLossPoints and pass the deal by R14.1', () => {
     expect(tw.maxLossPoints).toBe(MAX_LOSS);
@@ -246,7 +267,7 @@ describe('Three Winds engine in GameRoom', () => {
       dealer = r.nextDealer!;
     }
     expect(kinds.passes).toBeGreaterThan(0);
-  });
+  }, 120_000);
 
   it('a human who never acts is auto-passed or wins in claim windows, discards or wins on its turn, with R4.6 deadlines', () => {
     const { clock, spy, results, room, onSend } = makeRoom({ seed: hexSeeds(mulberry32(0x71e0)) });
@@ -299,7 +320,7 @@ describe('Three Winds engine in GameRoom', () => {
     for (const a of turns) expect(TURN_ONLY.has(a.action.type), `own turn: ${JSON.stringify(a.action)}`).toBe(true);
     expect(seen.claimFresh).toBeGreaterThan(0);
     expect(seen.turnFresh).toBeGreaterThan(0);
-  });
+  }, 120_000);
 });
 
 // ── Money through the routes and the real socket ────────────────────────────

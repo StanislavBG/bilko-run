@@ -6,12 +6,16 @@
 // human sits. At each hand start every human seat's maximum loss is escrowed;
 // at hand end settleHand pays the module's zero-sum points x stake through the
 // play ledger (AI seats against the house), then deals again after NEXT_HAND_MS
-// or closes the table. Rooms live only in memory, so a sweeper releases held
-// escrows whose table no longer exists in this process (deploy, crash).
+// or closes the table. A sweeper releases held escrows whose table is neither
+// live in this process nor saved in the room store, and voids saved tables
+// nobody came back to within ABANDONED_TABLE_MS.
 // Each live table is also written to the room store (server/services/room-store.ts)
 // on every GameRoom change, under a lease owned by this process (renewed every
 // HEARTBEAT_MS); closing a table deletes its row, and on shutdown
 // suspendRoomTables saves and suspends every table so the next instance can resume it.
+// Resume is lazy: the first ticket of a seated human claims the saved table
+// (claimTable, lease TABLE_LEASE_STALE_MS) and rebuilds it, hand and escrows
+// included; while another instance holds a fresh lease the answer is 503 table_moving.
 // ROOM_MODULES (server/rooms/modules.ts) binds each app id to its game module;
 // today that is Three Winds from @threewinds/engine.
 import crypto from 'node:crypto';
@@ -27,7 +31,11 @@ import { PLAY_APPS, findTier, type PlayTier } from '../../shared/play-currency-c
 import {
   getPlayBalance, escrowPlay, settlePlayHand, releasePlayEscrow, listHeldEscrows, HOUSE_ACCOUNT, type PlayEntry,
 } from '../services/play-currency.js';
-import { saveTable, heartbeatTables, suspendTables, deleteTable } from '../services/room-store.js';
+import {
+  saveTable, heartbeatTables, suspendTables, deleteTable, claimTable, loadTable, findTableIdForEmail, listTables,
+  type StoredRoomTable,
+} from '../services/room-store.js';
+import type { RoomSnapshot } from '../rooms/runtime.js';
 
 /** Game modules by app id (re-exported from ../rooms/modules.js). */
 export { ROOM_MODULES };
@@ -42,6 +50,10 @@ export const ESCROW_SWEEP_MS = 60_000;
 export const ESCROW_ORPHAN_AGE_SEC = 60;
 /** How often this process renews the lease on the tables it owns. */
 export const HEARTBEAT_MS = 15_000;
+/** A lease whose heartbeat is older than this may be claimed by another instance. */
+export const TABLE_LEASE_STALE_MS = 60_000;
+/** A saved table not resumed (suspended, or with no heartbeat) for this long is voided by the sweeper. */
+export const ABANDONED_TABLE_MS = 10 * 60_000;
 const ROOM_REF_RE = /^room:(.+):hand:\d+$/;
 const ID_RE = /^[a-z0-9-]{1,32}$/;
 const RATE_WINDOW_MS = 60_000;
@@ -313,8 +325,10 @@ async function settleHand(t: TableRoom, r: HandResult): Promise<void> {
     });
     if (anyAi) entries.push({ account: HOUSE_ACCOUNT, delta: house });
     try {
-      await exclusive(() => settlePlayHand(t.app, ref, entries));
-      deltas = r.points.map((p) => p * stake);
+      // A ref settled before (e.g. by the instance this table was restored from) pays nothing again.
+      const { settled } = await exclusive(() => settlePlayHand(t.app, ref, entries));
+      if (settled) deltas = r.points.map((p) => p * stake);
+      else console.error(`[rooms] ${ref} was already settled; nothing paid again`);
     } catch (err) {
       const n = await releaseAll(t.app, held, ref);
       console.error(`[rooms] settle failed for ${ref}: ${(err as Error)?.message ?? err}; released ${n} escrow(s)`);
@@ -359,13 +373,36 @@ function onSeatClose(t: TableRoom, seat: number, code: number): void {
  * room that is not a live table in this process. Returns how many were released.
  */
 export async function sweepOrphanedEscrows(): Promise<number> {
+  const nowMs = Date.now();
+  const saved = new Map<string, StoredRoomTable>();
+  for (const row of await listTables()) saved.set(row.id, row);
+  const isAbandoned = (row: StoredRoomTable) => !rooms.has(row.id) && !restoring.has(row.id) && (
+    row.status === 'suspended' ? row.updatedAt < nowMs - ABANDONED_TABLE_MS : row.heartbeatAt < nowMs - ABANDONED_TABLE_MS);
+  // Fence each abandoned table with a claim first, so a player resuming it right now wins and it is kept.
+  const voiding = new Set<string>();
+  for (const row of saved.values()) {
+    if (!isAbandoned(row)) continue;
+    try {
+      if (await storeWrite(() => claimTable(row.id, OWNER, Date.now(), ABANDONED_TABLE_MS))) voiding.add(row.id);
+    } catch (err) { logStoreError('void claim', row.id, err); }
+  }
+
   let released = 0;
+  const failed = new Set<string>();
   for (const esc of await listHeldEscrows(ESCROW_ORPHAN_AGE_SEC)) {
     const m = ROOM_REF_RE.exec(esc.ref);
-    if (!m || rooms.has(m[1])) continue;
+    if (!m || rooms.has(m[1]) || restoring.has(m[1])) continue;
+    if (saved.has(m[1]) && !voiding.has(m[1])) continue; // a saved table may still be resumed
     try {
       if ((await exclusive(() => releasePlayEscrow(esc.app, esc.email, esc.ref))).released) released++;
-    } catch { /* retried next sweep */ }
+    } catch { failed.add(m[1]); /* retried next sweep */ }
+  }
+  for (const id of voiding) {
+    if (failed.has(id) || rooms.has(id)) continue;
+    try {
+      await storeWrite(() => deleteTable(id));
+      console.error(`[rooms] voided abandoned table ${id}`);
+    } catch (err) { logStoreError('void delete', id, err); }
   }
   return released;
 }
@@ -394,9 +431,11 @@ interface RoomRouteOptions {
   nextHandMs?: number;
 }
 
-function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o: Required<Omit<RoomRouteOptions, 'modules'>>): TableRoom {
-  let id = `${app}-${tier.id}-${randomBase36(8)}`;
-  while (rooms.has(id)) id = `${app}-${tier.id}-${randomBase36(8)}`;
+type Timing = Required<Omit<RoomRouteOptions, 'modules'>>;
+
+function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o: Timing, restoredId?: string): TableRoom {
+  let id = restoredId ?? `${app}-${tier.id}-${randomBase36(8)}`;
+  while (!restoredId && rooms.has(id)) id = `${app}-${tier.id}-${randomBase36(8)}`;
   const results: HandResult[] = [];
   const hooks = createRoomHooks(id, (r) => {
       results.push(r);
@@ -433,6 +472,87 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
     },
     onClose(seat: number, code: number) { onSeatClose(t, seat, code); },
   });
+  return t;
+}
+
+/** Restores in flight in this process, by table id, so concurrent tickets share one claim. */
+const restoring = new Map<string, Promise<TableRoom | 'moving' | null>>();
+
+/**
+ * Claims a saved table from the store and rebuilds it in this process: seats, hand,
+ * dealer, tier and the current hand's escrowed set (never escrowed again), with the
+ * live hand resumed through GameRoom.restore. 'moving' when another instance holds a
+ * fresh lease; null when there is nothing to resume (the caller then sits as new).
+ */
+function resumeTable(id: string, modules: Record<string, RoomGameModule<any>>, o: Timing): Promise<TableRoom | 'moving' | null> {
+  const live = rooms.get(id);
+  if (live) return Promise.resolve(live);
+  let run = restoring.get(id);
+  if (!run) {
+    run = doResume(id, modules, o).finally(() => { restoring.delete(id); });
+    restoring.set(id, run);
+  }
+  return run;
+}
+
+async function doResume(id: string, modules: Record<string, RoomGameModule<any>>, o: Timing): Promise<TableRoom | 'moving' | null> {
+  if (persistenceStopped) return 'moving'; // shutting down: the next instance resumes it
+  if (!(await storeWrite(() => claimTable(id, OWNER, Date.now(), TABLE_LEASE_STALE_MS)))) {
+    return (await loadTable(id)) ? 'moving' : null;
+  }
+  const row = await loadTable(id);
+  if (!row) return null;
+  const live = rooms.get(id);
+  if (live) return live;
+  const escrowed = new Map<number, string>();
+  for (const [k, v] of Object.entries((row.escrowed ?? {}) as Record<string, unknown>)) {
+    if (/^\d+$/.test(k) && typeof v === 'string') escrowed.set(Number(k), v);
+  }
+  const module = moduleFor(modules, row.app);
+  const tier = module ? findTier(row.app, row.tier) : undefined;
+  if (!module || !tier || rooms.size >= MAX_ROOMS) {
+    // Cannot run it here: void the current hand and drop the table so nobody is stuck on it.
+    await releaseAll(row.app, escrowed, `room:${id}:hand:${row.hand}`);
+    await storeWrite(() => deleteTable(id)).catch((err) => { logStoreError('delete', id, err); });
+    return null;
+  }
+  const seats = new Map<number, string>();
+  for (const [k, v] of Object.entries(row.seats)) {
+    const seat = Number(k);
+    if (Number.isInteger(seat) && seat >= 0 && seat < module.seats && typeof v === 'string') seats.set(seat, v);
+  }
+
+  const t = createTable(row.app, tier, module, o, id);
+  t.hand = Number.isInteger(row.hand) && row.hand >= 0 ? row.hand : 0;
+  t.dealer = Number.isInteger(row.dealer) && row.dealer >= 0 && row.dealer < module.seats ? row.dealer : 0;
+  t.state = t.hand > 0 ? 'playing' : 'waiting';
+  t.seats = seats;
+  if (row.snapshot) t.room.restore(row.snapshot as RoomSnapshot);
+  if (t.room.inHand) {
+    for (const seat of t.room.humanSeats()) if (!seats.has(seat)) t.room.release(seat);
+    for (const seat of [...seats.keys()]) if (!t.room.humanSeats().includes(seat)) seats.delete(seat);
+    t.escrowed = escrowed; // the live hand settles against the escrows already held
+  } else {
+    // No live hand to resume: seat the humans at their own seats, holding the gaps with placeholders.
+    const holders: number[] = [];
+    const top = Math.max(-1, ...seats.keys());
+    for (let s = 0; s <= top; s++) {
+      const got = t.room.seatHuman(seats.has(s) ? seats.get(s)! : `\u0000restore:${s}`);
+      if (!seats.has(s) && got !== 'full') holders.push(got);
+    }
+    for (const s of holders) t.room.release(s);
+    // A hand that was escrowed but cannot continue is voided (a settled escrow is not held, so nothing moves).
+    if (escrowed.size > 0) await releaseAll(t.app, escrowed, escrowRef(t, t.hand));
+    if (rooms.get(id) !== t) return null;
+    if (seats.size === 0) { closeTable(t); return null; }
+    if (t.state === 'playing') scheduleNextHand(t);
+    else {
+      t.fillTimer = setTimeout(() => { t.fillTimer = null; kickoff(t.id); }, o.aiFillMs);
+      t.fillTimer.unref?.();
+    }
+  }
+  void scheduleSave(t);
+  console.log(`[rooms] resumed table ${id} at hand ${t.hand}${t.room.inHand ? ' (in hand)' : ''}`);
   return t;
 }
 
@@ -522,10 +642,35 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
     };
 
     // Rejoin: already seated at a live table of this app, whatever tier was asked for.
-    for (const t of rooms.values()) {
-      if (t.app !== appId) continue;
-      for (const [seat, e] of t.seats) if (e === email) return issue(t, seat);
+    const seatedAt = () => {
+      for (const t of rooms.values()) {
+        if (t.app !== appId) continue;
+        for (const [seat, e] of t.seats) if (e === email) return { t, seat };
+      }
+      return null;
+    };
+    let mine = seatedAt();
+    if (mine) return issue(mine.t, mine.seat);
+
+    // Resume: seated at a saved table (restart, deploy or another instance's table).
+    // A store that cannot be read must not block play: the caller then sits as new.
+    let savedId: string | null = null;
+    try {
+      savedId = await findTableIdForEmail(appId, email);
+    } catch (err) { logStoreError('seat lookup', appId, err); }
+    if (savedId && !rooms.has(savedId)) {
+      let resumed: TableRoom | 'moving' | null = null;
+      try {
+        resumed = await resumeTable(savedId, modules, timing);
+      } catch (err) { logStoreError('resume', savedId, err); }
+      if (resumed === 'moving') {
+        mine = seatedAt();
+        if (mine) return issue(mine.t, mine.seat);
+        return reply.code(503).header('retry-after', '5').send({ error: 'table_moving' });
+      }
     }
+    mine = seatedAt();
+    if (mine) return issue(mine.t, mine.seat);
 
     const required = tier.stake * module.maxLossPoints;
     const { balance } = await getPlayBalance(appId, email);

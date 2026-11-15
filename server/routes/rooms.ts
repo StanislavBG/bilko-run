@@ -3,8 +3,11 @@
 // POST /api/rooms/ticket seats a signed-in player at a table of the requested
 // stake tier and returns a single-use socket ticket; GET /api/rooms/tiers lists
 // open seats per tier. Empty seats are filled with AI aiFillMs after the first
-// human sits. At each hand start every human seat's maximum loss is escrowed.
-// Settlement is not wired here: onHandOver only records the result.
+// human sits. At each hand start every human seat's maximum loss is escrowed;
+// at hand end settleHand pays the module's zero-sum points x stake through the
+// play ledger (AI seats against the house), then deals again after NEXT_HAND_MS
+// or closes the table. Rooms live only in memory, so a sweeper releases held
+// escrows whose table no longer exists in this process (deploy, crash).
 // ROOM_MODULES is empty until the @threewinds/engine binding lands, so in
 // production every app is unknown_app and nothing is live yet.
 import crypto from 'node:crypto';
@@ -15,7 +18,9 @@ import {
   ROOM_SOCKET_PREFIX, issueRoomTicket, registerLiveRoom, unregisterLiveRoom, sendToSeat, createRoomHooks,
 } from '../rooms/socket.js';
 import { PLAY_APPS, findTier, type PlayTier } from '../../shared/play-currency-catalog.js';
-import { getPlayBalance, escrowPlay } from '../services/play-currency.js';
+import {
+  getPlayBalance, escrowPlay, settlePlayHand, releasePlayEscrow, listHeldEscrows, HOUSE_ACCOUNT, type PlayEntry,
+} from '../services/play-currency.js';
 
 /** Game modules by app id. Empty in production until the engine binding lands. */
 export const ROOM_MODULES: Record<string, RoomGameModule<any>> = {};
@@ -24,6 +29,11 @@ export const MAX_ROOMS = 200;
 export const DEFAULT_AI_FILL_MS = 8000;
 export const DEFAULT_TURN_MS = 20_000;
 export const DEFAULT_AI_DELAY_MS = 800;
+export const NEXT_HAND_MS = 5000;
+export const ESCROW_SWEEP_MS = 60_000;
+/** A held escrow younger than this is never swept (its table may still be starting). */
+export const ESCROW_ORPHAN_AGE_SEC = 60;
+const ROOM_REF_RE = /^room:(.+):hand:\d+$/;
 const ID_RE = /^[a-z0-9-]{1,32}$/;
 const RATE_WINDOW_MS = 60_000;
 
@@ -63,8 +73,16 @@ interface TableRoom {
   /** Hands started so far. */
   hand: number;
   fillTimer: ReturnType<typeof setTimeout> | null;
-  /** Results recorded by onHandOver; the room-settlement PRD consumes them. */
+  /** Results recorded by onHandOver, in order. */
   results: HandResult[];
+  /** seat → email escrowed for the current hand (the hand's settlement set). */
+  escrowed: Map<number, string>;
+  /** Seats whose socket closed normally (1000) mid-hand: unseated once the hand settles. */
+  leaving: Set<number>;
+  /** Settlement of the last hand, while it runs. */
+  settling: Promise<void> | null;
+  nextTimer: ReturnType<typeof setTimeout> | null;
+  nextHandMs: number;
 }
 
 const rooms = new Map<string, TableRoom>();
@@ -81,6 +99,7 @@ function escrowRef(t: TableRoom, hand: number): string {
 
 function closeTable(t: TableRoom): void {
   if (t.fillTimer) { clearTimeout(t.fillTimer); t.fillTimer = null; }
+  if (t.nextTimer) { clearTimeout(t.nextTimer); t.nextTimer = null; }
   rooms.delete(t.id);
   unregisterLiveRoom(t.id);
 }
@@ -94,6 +113,7 @@ export async function startTableHand(roomId: string): Promise<void> {
   const t = rooms.get(roomId);
   if (!t) return;
   if (t.fillTimer) { clearTimeout(t.fillTimer); t.fillTimer = null; }
+  if (t.nextTimer) { clearTimeout(t.nextTimer); t.nextTimer = null; }
   t.state = 'playing';
   t.hand++;
   const hand = t.hand;
@@ -115,8 +135,113 @@ export async function startTableHand(roomId: string): Promise<void> {
     }
   }
   if (t.seats.size === 0) { closeTable(t); return; }
+  t.escrowed = new Map(t.seats);
+  t.leaving.clear();
   t.room.fillWithAi();
   t.room.startHand((hand - 1) % t.module.seats);
+}
+
+function unseat(t: TableRoom, seat: number): void {
+  t.seats.delete(seat);
+  t.room.release(seat);
+}
+
+async function releaseAll(app: string, held: Map<number, string>, ref: string): Promise<number> {
+  let released = 0;
+  for (const email of held.values()) {
+    try {
+      if ((await releasePlayEscrow(app, email, ref)).released) released++;
+    } catch { /* the sweeper retries a held escrow once its table is gone */ }
+  }
+  return released;
+}
+
+/**
+ * Settles one finished hand from the module's points x the table stake. Human
+ * seats settle against their escrow; AI seats' deltas go to the house account
+ * as one ledger row (play_ledger is UNIQUE (app, account, ref)). A voided hand
+ * or a failed settlement releases every escrow and changes no balance. Then
+ * the next hand is scheduled, or the table closes if no human is left.
+ */
+async function settleHand(t: TableRoom, r: HandResult): Promise<void> {
+  // t.hand and the room's hand counter advance together; t.hand names the escrow.
+  const hand = t.hand;
+  const ref = escrowRef(t, hand);
+  const held = t.escrowed;
+  t.escrowed = new Map();
+  const stake = t.tier.stake;
+  let deltas: number[] | null = null;
+  if (!r.voided && Array.isArray(r.points) && r.points.length === t.module.seats) {
+    const entries: PlayEntry[] = [];
+    let house = 0;
+    let anyAi = false;
+    r.points.forEach((p, seat) => {
+      const email = held.get(seat);
+      if (email !== undefined) entries.push({ account: email, delta: p * stake, escrowRef: ref });
+      else { house += p * stake; anyAi = true; }
+    });
+    if (anyAi) entries.push({ account: HOUSE_ACCOUNT, delta: house });
+    try {
+      await settlePlayHand(t.app, ref, entries);
+      deltas = r.points.map((p) => p * stake);
+    } catch (err) {
+      const n = await releaseAll(t.app, held, ref);
+      console.error(`[rooms] settle failed for ${ref}: ${(err as Error)?.message ?? err}; released ${n} escrow(s)`);
+    }
+  } else {
+    const n = await releaseAll(t.app, held, ref);
+    console.error(`[rooms] hand voided for ${ref}; released ${n} escrow(s)`);
+  }
+
+  if (rooms.get(t.id) !== t) return; // closed meanwhile
+  if (deltas) {
+    for (const seat of held.keys()) {
+      sendToSeat(t.id, seat, { type: 'settled', hand, deltas } as unknown as RoomMessage);
+    }
+  }
+  for (const seat of t.leaving) unseat(t, seat);
+  t.leaving.clear();
+  scheduleNextHand(t);
+}
+
+function scheduleNextHand(t: TableRoom): void {
+  if (t.seats.size === 0) { closeTable(t); return; }
+  if (t.nextTimer) clearTimeout(t.nextTimer);
+  t.nextTimer = setTimeout(() => { t.nextTimer = null; kickoff(t.id); }, t.nextHandMs);
+  t.nextTimer.unref?.();
+}
+
+/** A seat's socket closed. Mid-hand the seat is kept (autoplayed, still escrowed); a normal close (1000) leaves the table. */
+function onSeatClose(t: TableRoom, seat: number, code: number): void {
+  if (rooms.get(t.id) !== t || code !== 1000 || !t.seats.has(seat)) return;
+  if (t.room.inHand || t.settling) { t.leaving.add(seat); return; }
+  if (t.state !== 'playing') return; // still waiting for the first hand: the seat is kept
+  unseat(t, seat);
+  if (t.seats.size === 0) closeTable(t);
+}
+
+/**
+ * Releases every held escrow older than ESCROW_ORPHAN_AGE_SEC whose ref names a
+ * room that is not a live table in this process. Returns how many were released.
+ */
+export async function sweepOrphanedEscrows(): Promise<number> {
+  let released = 0;
+  for (const esc of await listHeldEscrows(ESCROW_ORPHAN_AGE_SEC)) {
+    const m = ROOM_REF_RE.exec(esc.ref);
+    if (!m || rooms.has(m[1])) continue;
+    try {
+      if ((await releasePlayEscrow(esc.app, esc.email, esc.ref)).released) released++;
+    } catch { /* retried next sweep */ }
+  }
+  return released;
+}
+
+let sweepTimer: ReturnType<typeof setInterval> | null = null;
+
+function runSweep(): void {
+  sweepOrphanedEscrows().catch((err) => {
+    console.error(`[rooms] escrow sweep failed: ${(err as Error)?.message ?? err}`);
+  });
 }
 
 function kickoff(roomId: string): void {
@@ -131,6 +256,8 @@ interface RoomRouteOptions {
   aiFillMs?: number;
   turnMs?: number;
   aiDelayMs?: number;
+  /** Delay between a settled hand and the next deal. Default NEXT_HAND_MS. */
+  nextHandMs?: number;
 }
 
 function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o: Required<Omit<RoomRouteOptions, 'modules'>>): TableRoom {
@@ -139,18 +266,26 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
   const results: HandResult[] = [];
   const room = new GameRoom<unknown>(
     id, module, { turnMs: o.turnMs, aiDelayMs: o.aiDelayMs },
-    createRoomHooks(id, (r) => { results.push(r); }),
+    createRoomHooks(id, (r) => {
+      results.push(r);
+      const run = settleHand(t, r)
+        .catch((err) => { console.error(`[rooms] settlement crashed for ${id}: ${(err as Error)?.message ?? err}`); })
+        .finally(() => { if (t.settling === run) t.settling = null; });
+      t.settling = run;
+    }),
   );
   const t: TableRoom = {
     id, app, tier, module, room, seats: new Map(), state: 'waiting', createdAt: Date.now(), hand: 0, fillTimer: null, results,
+    escrowed: new Map(), leaving: new Set(), settling: null, nextTimer: null, nextHandMs: o.nextHandMs,
   };
   rooms.set(id, t);
   registerLiveRoom(id, {
     room,
     seatFor(email: string) {
-      for (const [seat, e] of t.seats) if (e === email) return seat;
+      for (const [seat, e] of t.seats) if (e === email) { t.leaving.delete(seat); return seat; }
       return undefined;
     },
+    onClose(seat: number, code: number) { onSeatClose(t, seat, code); },
   });
   return t;
 }
@@ -187,6 +322,7 @@ export function roomSnapshot(roomId: string): { app: string; tier: string; state
 export function resetRooms(): void {
   for (const t of [...rooms.values()]) closeTable(t);
   ticketRate.clear();
+  if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
 }
 
 export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions = {}): void {
@@ -195,7 +331,13 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
     aiFillMs: opts.aiFillMs ?? DEFAULT_AI_FILL_MS,
     turnMs: opts.turnMs ?? DEFAULT_TURN_MS,
     aiDelayMs: opts.aiDelayMs ?? DEFAULT_AI_DELAY_MS,
+    nextHandMs: opts.nextHandMs ?? NEXT_HAND_MS,
   };
+
+  runSweep();
+  if (sweepTimer) clearInterval(sweepTimer);
+  sweepTimer = setInterval(runSweep, ESCROW_SWEEP_MS);
+  sweepTimer.unref?.();
 
   app.post('/api/rooms/ticket', { bodyLimit: 1024 }, async (req, reply) => {
     const email = await requireAuth(req, reply);

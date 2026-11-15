@@ -89,8 +89,8 @@ export interface LiveRoomBinding {
   room: Pick<GameRoom<unknown>, 'act' | 'resync'>;
   /** The ticket holder's seat, or undefined if they have none (close 4001). */
   seatFor(email: string): number | undefined;
-  /** A seat's socket went away. The seat stays; the turn timer autoplays it until a reconnect. */
-  onClose?(seat: number): void;
+  /** A seat's socket went away (close code given). The seat stays; the turn timer autoplays it until a reconnect. */
+  onClose?(seat: number, code: number): void;
 }
 
 interface Conn {
@@ -190,12 +190,12 @@ function join(roomId: string, email: string, ws: WebSocket): void {
   ws.on('pong', () => { c.isAlive = true; });
   ws.on('message', (data, isBinary) => handleFrame(roomId, c, data as Buffer, isBinary));
   ws.on('error', () => { c.dead = true; ws.terminate(); });
-  ws.on('close', () => {
+  ws.on('close', (code: number) => {
     c.dead = true;
     const current = live.get(roomId);
     if (current !== entry || entry.sockets.get(seat!) !== c) return; // superseded or drained
     entry.sockets.delete(seat!);
-    try { binding.onClose?.(seat!); } catch { /* the room keeps the seat either way */ }
+    try { binding.onClose?.(seat!, code); } catch { /* the room keeps the seat either way */ }
   });
 
   startHeartbeat();

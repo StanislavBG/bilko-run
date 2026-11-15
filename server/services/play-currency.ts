@@ -198,6 +198,15 @@ export async function settlePlayHand(app: string, ref: string, entries: PlayEntr
   }));
 }
 
+/** Held escrows created at least olderThanSec seconds ago (the room sweeper's input). */
+export async function listHeldEscrows(olderThanSec: number): Promise<Array<{ app: string; email: string; ref: string; amount: number; createdAt: number }>> {
+  if (!Number.isFinite(olderThanSec) || olderThanSec < 0) throw new RangeError('olderThanSec must be a non-negative number');
+  const rows = await dbAll<{ app: string; email: string; ref: string; amount: number; created_at: number }>(
+    "SELECT app, email, ref, amount, created_at FROM play_escrows WHERE status = 'held' AND created_at <= ? ORDER BY created_at",
+    now() - Math.floor(olderThanSec));
+  return rows.map((r) => ({ app: r.app, email: r.email, ref: r.ref, amount: Number(r.amount), createdAt: Number(r.created_at) }));
+}
+
 /** Return a held escrow to balance (voided hand). Idempotent: a settled or released escrow changes nothing. */
 export async function releasePlayEscrow(app: string, email: string, ref: string): Promise<{ released: boolean; balance: number; held: number }> {
   checkApp(app);

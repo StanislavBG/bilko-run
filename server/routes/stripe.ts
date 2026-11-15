@@ -22,6 +22,8 @@ import { recordOrder } from '../services/web-products.js';
 import { creditWallet } from '../services/wallet.js';
 import { pppBonusCents } from '../../shared/ppp-bonus.js';
 import { WALLET_TOPUP_CENTS } from '../../shared/bilko-menu.js';
+import { creditPlay } from '../services/play-currency.js';
+import { findPack } from '../../shared/play-currency-catalog.js';
 
 /**
  * Same-origin guard for caller-supplied redirect URLs (checkout success/cancel,
@@ -228,8 +230,26 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         const wpSlug = typeof data.metadata?.web_product === 'string' ? data.metadata.web_product : '';
         const webProduct = wpSlug ? webProductBySlug(wpSlug, WEB_PRODUCTS) : undefined;
 
-        // Wallet top-ups are handled first and never fall through to the generic branches.
-        if (typeof data.metadata?.wallet_topup === 'string' && data.metadata.wallet_topup) {
+        // Play-currency packs (taels) credit the play ledger only, never the Bilko Credits
+        // wallet, and never fall through to the generic branches. No sales-gate check here:
+        // a session paid while sales were open is honored even if they have since closed.
+        if (typeof data.metadata?.play_pack === 'string' && data.metadata.play_pack) {
+          const playAppId = String(data.metadata.play_app ?? '');
+          const pack = findPack(playAppId, data.metadata.play_pack);
+          const playEmail = ((data.metadata.play_email ?? data.customer_details?.email ?? '') as string).trim().toLowerCase();
+          const sessionCurrency = String(data.currency ?? data.metadata.play_currency ?? '').toLowerCase();
+          const expected = !pack ? undefined : sessionCurrency === 'usd' ? pack.usdCents : sessionCurrency === 'myr' ? pack.myrSen : undefined;
+          const paid = data.payment_status === 'paid';
+          if (!pack || !paid || expected === undefined || data.amount_subtotal !== expected || !playEmail) {
+            console.error(
+              `[stripe_webhook] play pack session ${data.id} not credited — ` +
+              `pack=${pack ? 'known' : 'unknown'} payment_status=${data.payment_status} currency=${sessionCurrency || 'missing'} ` +
+              `subtotalMatch=${expected !== undefined && data.amount_subtotal === expected} email=${playEmail ? 'present' : 'missing'}`,
+            );
+          } else {
+            await creditPlay(playAppId, playEmail, pack.taels, 'purchase_stripe', 'stripe:' + data.id);
+          }
+        } else if (typeof data.metadata?.wallet_topup === 'string' && data.metadata.wallet_topup) {
           const cents = Number(data.metadata.wallet_topup);
           const walletEmail = ((data.metadata.wallet_email ?? data.customer_details?.email ?? '') as string).trim().toLowerCase();
           const centsOk = (WALLET_TOPUP_CENTS as readonly number[]).includes(cents);

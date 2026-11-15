@@ -82,13 +82,62 @@ describe('room routes', () => {
     expect(tw.deadlineMs!({ phase: 'discard' } as any, 0)).toBeUndefined();
   });
 
-  it('GET /api/rooms/tiers?app=threewinds lists every tier with the default modules', async () => {
-    const app = await buildApp('default');
-    const res = await app.inject({ method: 'GET', url: '/api/rooms/tiers?app=threewinds' });
-    expect(res.statusCode).toBe(200);
-    const body = JSON.stringify(res.json());
-    for (const t of ['tea', 'jade', 'peony', 'imperial']) expect(body).toContain(`"${t}"`);
-    await app.close();
+  describe('ROOMS_OPEN switch (default registry)', () => {
+    let saved: string | undefined;
+    beforeEach(() => { saved = process.env.ROOMS_OPEN; delete process.env.ROOMS_OPEN; });
+    afterEach(() => { if (saved === undefined) delete process.env.ROOMS_OPEN; else process.env.ROOMS_OPEN = saved; });
+
+    it('with ROOMS_OPEN unset, both endpoints answer 409 rooms_closed', async () => {
+      const app = await buildApp('default');
+      const tiers = await app.inject({ method: 'GET', url: '/api/rooms/tiers?app=threewinds' });
+      expect(tiers.statusCode).toBe(409);
+      expect(tiers.json()).toEqual({ error: 'rooms_closed' });
+      const t = await ticket(app, A, { app: 'threewinds', tier: 'tea' });
+      expect(t.statusCode).toBe(409);
+      expect(t.json()).toEqual({ error: 'rooms_closed' });
+      expect(getPlayBalance).not.toHaveBeenCalled();
+      await app.close();
+    });
+
+    it('an unregistered app gets 404 unknown_app whether rooms are open or closed', async () => {
+      for (const open of [undefined, 'threewinds,nope']) {
+        if (open === undefined) delete process.env.ROOMS_OPEN; else process.env.ROOMS_OPEN = open;
+        const app = await buildApp('default');
+        const tiers = await app.inject({ method: 'GET', url: '/api/rooms/tiers?app=nope' });
+        expect(tiers.statusCode).toBe(404);
+        expect(tiers.json()).toEqual({ error: 'unknown_app' });
+        const t = await ticket(app, A, { app: 'nope', tier: 'tea' });
+        expect(t.statusCode).toBe(404);
+        expect(t.json()).toEqual({ error: 'unknown_app' });
+        await app.close();
+      }
+    });
+
+    it("with ROOMS_OPEN=' threewinds , other', tiers lists every tier and tickets work", async () => {
+      process.env.ROOMS_OPEN = ' threewinds , other';
+      const app = await buildApp('default');
+      const res = await app.inject({ method: 'GET', url: '/api/rooms/tiers?app=threewinds' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.stringify(res.json());
+      for (const t of ['tea', 'jade', 'peony', 'imperial']) expect(body).toContain(`"${t}"`);
+      balances.set(A, 1_000_000); // real engine: 400 × stake
+      const ok = await ticket(app, A, { app: 'threewinds', tier: 'tea' });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().roomId).toMatch(/^threewinds-tea-/);
+      balances.set(B, 0);
+      const poor = await ticket(app, B, { app: 'threewinds', tier: 'tea' });
+      expect(poor.statusCode).toBe(402);
+      expect((await ticket(app, C, { app: 'threewinds', tier: 'nope' })).statusCode).toBe(404);
+      await app.close();
+    });
+
+    it('explicit opts.modules are open even with ROOMS_OPEN unset', async () => {
+      const app = await buildApp();
+      const res = await app.inject({ method: 'GET', url: '/api/rooms/tiers?app=threewinds' });
+      expect(res.statusCode).toBe(200);
+      expect((await ticket(app, A, { app: 'threewinds', tier: 'tea' })).statusCode).toBe(200);
+      await app.close();
+    });
   });
 
   it('seats callers at the same waiting table and returns a socket ticket', async () => {

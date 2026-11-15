@@ -4,6 +4,7 @@ import { getStripe } from '../services/stripe.js';
 import { creditPlay, debitPlay, getPlayBalance, listPlayEntitlements, purchasePlayItem } from '../services/play-currency.js';
 import { getAppleVerifier, type AppleNotification, type AppleTransaction } from '../services/apple-iap.js';
 import { dbGet, dbRun } from '../db.js';
+import { envListIncludes } from '../env-list.js';
 import { PLAY_APPS, findPack, findPackByAppleProduct, type PlayPack } from '../../shared/play-currency-catalog.js';
 
 /**
@@ -24,8 +25,7 @@ export function packPriceMinor(pack: PlayPack, currency: string): number | undef
 
 /** True when `app` is listed in the comma-separated PLAY_CURRENCY_SALES_OPEN env var. */
 export function playSalesOpen(app: string): boolean {
-  const raw = process.env.PLAY_CURRENCY_SALES_OPEN ?? '';
-  return raw.split(',').map(s => s.trim()).filter(Boolean).includes(app);
+  return envListIncludes('PLAY_CURRENCY_SALES_OPEN', app);
 }
 
 function knownApp(app: unknown): app is string {

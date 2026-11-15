@@ -367,7 +367,10 @@ describe('Three Winds through the room routes', () => {
     rooms = await import('../server/routes/rooms.js');
   });
 
+  let savedRoomsOpen: string | undefined;
   beforeEach(async () => {
+    savedRoomsOpen = process.env.ROOMS_OPEN;
+    process.env.ROOMS_OPEN = 'threewinds';
     rooms.resetRooms();
     await dbRun('DELETE FROM play_ledger');
     await dbRun('DELETE FROM play_balances');
@@ -379,6 +382,7 @@ describe('Three Winds through the room routes', () => {
     rooms.resetRooms();
     closeAllGameRooms();
     await app?.close();
+    if (savedRoomsOpen === undefined) delete process.env.ROOMS_OPEN; else process.env.ROOMS_OPEN = savedRoomsOpen;
   });
 
   it('the 5000-tael signup grant buys a tea seat, not jade; the hand escrows 5 x 400 taels', async () => {

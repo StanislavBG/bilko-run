@@ -154,6 +154,7 @@ describe('Three Winds engine in GameRoom', () => {
 
     let checked = 0;
     let overChecked = 0;
+    let robKongSeen = 0;
     const errors: RoomMessage[] = [];
     const latest = new Map<number, Extract<RoomMessage, { type: 'state' }>>();
     onSend((seat, msg) => {
@@ -163,6 +164,14 @@ describe('Three Winds engine in GameRoom', () => {
       for (const seed of spy.seeds) expect(json, `seed leaked to seat ${seat}`).not.toContain(seed);
       const allowed = new Set<number>();
       if (s.phase === 'over' && s.result?.kind === 'win') for (const w of s.result.winners) for (const t of s.hands[w]) allowed.add(t.id);
+      // R4.10: the added-kong tile is public while others may rob it (one tile, robKong window only).
+      if (s.phase === 'claim' && s.claim?.kind === 'robKong' && seat !== s.claim.from) {
+        const { from, tile } = s.claim;
+        expect(s.hands[from].some((t) => t.id === tile.id), 'robKong tile is in the declarer\'s hand').toBe(true);
+        expect(s.melds[from].some((m) => m.type === 'pong' && !m.concealed && m.tiles[0].kind === tile.kind), 'robKong tile matches an exposed pong').toBe(true);
+        allowed.add(tile.id);
+        robKongSeen++;
+      }
       const forbidden = new Set<number>(s.wall.map((t) => t.id));
       s.hands.forEach((h, i) => { if (i !== seat) for (const t of h) if (!allowed.has(t.id)) forbidden.add(t.id); });
       for (const id of tileIdsIn((msg as any).view)) {
@@ -201,6 +210,7 @@ describe('Three Winds engine in GameRoom', () => {
     expect(overChecked).toBe(24 * 3);
     expect(checked).toBeGreaterThan(24 * 3 * 10);
     expect(timeouts).toBeGreaterThan(0);
+    expect(robKongSeen).toBeGreaterThan(0);
     expect(spy.seeds.every((s) => /^[0-9a-f]{32}$/.test(s))).toBe(true);
   });
 

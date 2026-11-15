@@ -192,6 +192,27 @@ async function publishUnderLock(hostRoot, checkoutDir, remote, branch, fn) {
     let sha;
     try {
         if (paths.length > 0) {
+            // `git add -A` honors .gitignore, so an ignored bundle file would be silently left out of
+            // the commit and 404 in production. Fail loudly instead (never force-add: it could be a .env).
+            const { stdout: ignoredOut } = await git(checkoutDir, [
+                'ls-files',
+                '-z',
+                '--others',
+                '--ignored',
+                '--exclude-standard',
+                '--',
+                ...paths,
+            ]);
+            const ignored = ignoredOut.split('\0').filter((f) => f.length > 0);
+            if (ignored.length > 0) {
+                const shown = ignored.slice(0, 20).join(', ');
+                const rest = ignored.length > 20 ? `, and ${ignored.length - 20} more` : '';
+                return {
+                    ok: false,
+                    stage: 'commit',
+                    error: `${ignored.length} file(s) under ${paths.join(', ')} match the host .gitignore and would not be committed, so they would 404 in production: ${shown}${rest}`,
+                };
+            }
             await git(checkoutDir, ['add', '-A', '--', ...paths]);
         }
         const { stdout: status } = await git(checkoutDir, [

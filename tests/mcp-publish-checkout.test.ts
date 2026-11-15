@@ -5,7 +5,10 @@ import { mkdtemp, rm, writeFile, readFile, mkdir } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { withPublishCheckout } from '../mcp-host-server/src/publish-checkout.js';
+
+const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 const exec = promisify(execFile);
 
@@ -402,5 +405,69 @@ describe('withPublishCheckout', () => {
       expect(outcome.localMain).toBeUndefined();
       expect(existsSync(recordFile)).toBe(false);
     });
+  });
+});
+
+describe('withPublishCheckout: ignored bundle files', () => {
+  async function seedGitignore(originDir: string, seedDir: string, gitignore: string): Promise<string> {
+    await exec('git', ['clone', originDir, seedDir]);
+    await git(seedDir, ['config', 'user.name', 'Test Author']);
+    await git(seedDir, ['config', 'user.email', 'test-author@example.com']);
+    await writeFile(join(seedDir, '.gitignore'), gitignore, 'utf8');
+    await git(seedDir, ['add', '.gitignore']);
+    await git(seedDir, ['commit', '-m', 'gitignore']);
+    await git(seedDir, ['push', 'origin', 'main']);
+    return (await git(originDir, ['rev-parse', 'main'])).stdout.trim();
+  }
+
+  it('fails at stage commit, naming the ignored file, and pushes nothing', async () => {
+    const originDir = resolve(tmp, 'origin.git');
+    const hostDir = resolve(tmp, 'host');
+    const checkoutDir = resolve(tmp, 'checkout');
+    await makeBareOrigin(originDir);
+    await cloneAndSeed(originDir, hostDir);
+    const shaBefore = await seedGitignore(originDir, resolve(tmp, 'seed'), '.env\n');
+
+    const outcome = await withPublishCheckout(
+      { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main' },
+      async (root) => {
+        await mkdir(join(root, 'public/projects/demo'), { recursive: true });
+        await writeFile(join(root, 'public/projects/demo/index.html'), '<html></html>\n', 'utf8');
+        await writeFile(join(root, 'public/projects/demo/.env'), 'SECRET=1\n', 'utf8');
+        return { result: 'ok', paths: ['public/projects/demo'], message: 'publish demo' };
+      },
+    );
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error('unreachable');
+    expect(outcome.stage).toBe('commit');
+    expect(outcome.error).toContain('public/projects/demo/.env');
+    expect((await git(originDir, ['rev-parse', 'main'])).stdout.trim()).toBe(shaBefore);
+  });
+
+  it('commits Expo/Metro node_modules assets under the real host .gitignore', async () => {
+    const originDir = resolve(tmp, 'origin.git');
+    const hostDir = resolve(tmp, 'host');
+    const checkoutDir = resolve(tmp, 'checkout');
+    await makeBareOrigin(originDir);
+    await cloneAndSeed(originDir, hostDir);
+    const realGitignore = await readFile(resolve(REPO_ROOT, '.gitignore'), 'utf8');
+    await seedGitignore(originDir, resolve(tmp, 'seed'), realGitignore);
+
+    const asset = 'public/projects/demo/assets/__node_modules/.pnpm/p@1/node_modules/p/a.png';
+    const outcome = await withPublishCheckout(
+      { hostRoot: hostDir, checkoutDir, remote: 'origin', branch: 'main' },
+      async (root) => {
+        await mkdir(join(root, 'public/projects/demo/assets/__node_modules/.pnpm/p@1/node_modules/p'), { recursive: true });
+        await writeFile(join(root, asset), 'png\n', 'utf8');
+        return { result: 'ok', paths: ['public/projects/demo'], message: 'publish demo' };
+      },
+    );
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error('unreachable');
+    expect(outcome.committed).toBe(true);
+    const tree = (await git(originDir, ['ls-tree', '-r', '--name-only', 'main'])).stdout;
+    expect(tree.split('\n')).toContain(asset);
   });
 });

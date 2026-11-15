@@ -44,7 +44,7 @@ Five subagents run in parallel against every live static-path target:
 | **Smoke** | Playwright golden-path; game flow for sudoku only (`scripts/sanity-qa-runners/smoke.ts`); no console errors |
 | **Security** | CSP headers, HSTS, frame-ancestors, no leaked secrets (sk-/AIza/JWT patterns), SSRF probe on `/api/page-fetch` (**known gap:** that route does not exist, so the probe tests nothing; `scripts/sanity-qa-runners/security.ts`) |
 | **Perf** | Lighthouse mobile audit — Performance ≥ 85, Accessibility ≥ 95, Best Practices ≥ 90, SEO ≥ 90; LCP ≤ 2.5s, CLS ≤ 0.1, TTI ≤ 3.5s |
-| **Size** | `manifest.bundle.sizeBytesGz` vs per-app budget from `mcp-host-server/src/contract/app-budgets.ts` (default 200 KB gz; overrides: academy 700 KB, session-manager 1.3 MB, escape-velocity ~30 MB, game-academy 5 MB; that file is the source, the publish gate reads it too); fileCount ≤ 30; stale-manifest drift detection |
+| **Size** | `manifest.bundle.sizeBytesGz` vs per-app budget from `mcp-host-server/src/contract/app-budgets.ts` (default 200 KB gz; per-app overrides are listed only in that file, which the publish gate reads too); fileCount ≤ 30 (slugs with an override are exempt); stale-manifest drift detection |
 | **A11y** | axe-core scan (WCAG 2.1 AA) in mobile + desktop viewports; zero serious/critical violations; reduced-motion honored |
 
 ### CLI

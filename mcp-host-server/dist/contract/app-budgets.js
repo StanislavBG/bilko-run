@@ -15,6 +15,11 @@ export const APP_BUDGETS_GZ_BYTES = Object.freeze({
     'escape-velocity': 30_400 * 1024,
     // Phaser game + ~117 downscaled WebP sprites (post-incident: sprites were 116 MB PNG).
     'game-academy': 5_000_000,
+    // Three Winds (3PMahjong): ~3.9 MB gz of self-hosted Source Serif 4 + Noto Serif TC woff2
+    // subsets, fetched by unicode-range. Interim cap, replacing publish_overrides rows 58-62:
+    // the 2026-11-15 build measured 4,456,087 bytes, ~2.7 MB of it byte-identical font copies
+    // under three weight names. Lower to 2_000_000 once each subset ships once (~1.75 MB gz).
+    threewinds: 5_000_000,
 });
 export function budgetFor(slug) {
     return APP_BUDGETS_GZ_BYTES[slug] ?? DEFAULT_BUDGET_GZ_BYTES;

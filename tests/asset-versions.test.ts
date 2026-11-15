@@ -28,7 +28,30 @@ const raw = {
   category: 'Test',
   listing: { icon: '/projects/fx/icon.png', shareImage: '/projects/fx/og.png' },
 };
-const sha8 = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 8);
+const sha8 = (s: string | Uint8Array) => createHash('sha1').update(s).digest('hex').slice(0, 8);
+
+function concat(...parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+const ascii = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0));
+/** ISO BMFF box: u32 size + 4-char type + payload. */
+function box(type: string, ...payload: Uint8Array[]): Uint8Array {
+  const body = concat(...payload);
+  const head = new Uint8Array(8);
+  new DataView(head.buffer).setUint32(0, 8 + body.length);
+  head.set(ascii(type), 4);
+  return concat(head, body);
+}
+/** hdlr full box: version/flags(4) + pre_defined(4) + handler_type(4) + reserved(12) + name. */
+const hdlr = (handler: string) => box('hdlr', new Uint8Array(8), ascii(handler), new Uint8Array(12), ascii('h\0'));
+const trak = (handler: string) => box('trak', box('mdia', hdlr(handler)));
+const mp4 = (...handlers: string[]) => concat(box('ftyp', ascii('isom')), box('moov', ...handlers.map(trak)));
 
 describe('asset-versions', () => {
   it('normalizes registry entries like loadOgProjects', () => {
@@ -92,5 +115,27 @@ describe('asset-versions', () => {
     const av = buildAssetVersions([{ slug: 'bare', name: 'Bare', tagline: 't', category: 'c' }], staticRoot);
     expect(av.cards.bare).toBe(sha8(JSON.stringify(['Bare', 't', 'c'])));
     expect(av.files).toEqual({});
+    expect(av.audio).toEqual([]);
+  });
+
+  it('audio lists, sorted, only declared videos whose bytes carry a sound track', () => {
+    const sound = mp4('vide', 'soun');
+    const silent = mp4('vide');
+    writeFileSync(join(staticRoot, 'projects', 'fx', 'sound.mp4'), sound);
+    writeFileSync(join(staticRoot, 'projects', 'other', 'silent.mp4'), silent);
+    writeFileSync(join(staticRoot, 'projects', 'other', 'loud.mp4'), sound);
+    const entries = [
+      { ...raw, listing: { ...raw.listing, video: '/projects/fx/sound.mp4' } },
+      { slug: 'other', name: 'O', tagline: 't', category: 'c', listing: { video: '/projects/other/silent.mp4' } },
+      { slug: 'missing', name: 'M', tagline: 't', category: 'c', listing: { video: '/projects/missing/clip.mp4' } },
+      { slug: 'other', name: 'O', tagline: 't', category: 'c', listing: { video: '/projects/other/loud.mp4' } },
+      // An icon whose bytes look like an audio mp4 is not a declared video.
+      { slug: 'other', name: 'O', tagline: 't', category: 'c', listing: { icon: '/projects/other/loud.mp4' } },
+    ];
+    const av = buildAssetVersions(entries, staticRoot);
+    expect(av.audio).toEqual(['/projects/fx/sound.mp4', '/projects/other/loud.mp4']);
+    expect(av.files['/projects/fx/sound.mp4']).toBe(sha8(sound));
+    expect(av.files['/projects/other/silent.mp4']).toBe(sha8(silent));
+    expect(av.files['/projects/missing/clip.mp4']).toBeUndefined();
   });
 });

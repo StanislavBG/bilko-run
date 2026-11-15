@@ -12,7 +12,7 @@ export type { AssetVersions };
 
 declare const __ASSET_VERSIONS__: AssetVersions | undefined;
 
-const EMPTY: AssetVersions = { cards: {}, files: {} };
+const EMPTY: AssetVersions = { cards: {}, files: {}, audio: [] };
 const BAKED: AssetVersions = typeof __ASSET_VERSIONS__ === 'undefined' ? EMPTY : (__ASSET_VERSIONS__ ?? EMPTY);
 
 /** /og/<slug>.png?v=<card version>, or /og/<slug>.png when no version is known. */
@@ -25,4 +25,9 @@ export function cardImageUrl(slug: string, versions: AssetVersions = BAKED): str
 export function assetUrl(path: string, versions: AssetVersions = BAKED): string {
   const v = versions.files[path];
   return v ? `${path}?v=${v}` : path;
+}
+
+/** True when the build-time sniff found an audio track in this declared listing.video; false when unknown. */
+export function assetHasAudio(path: string, versions: AssetVersions = BAKED): boolean {
+  return Array.isArray(versions.audio) && versions.audio.includes(path);
 }

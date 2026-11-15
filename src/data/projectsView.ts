@@ -18,7 +18,7 @@
  * (e.g. session-manager, stepproof). Project wins; package metadata is merged in.
  */
 import { PROJECTS, projectHref, isReactRoute, type Project } from './projectsRegistry.js';
-import { cardImageUrl, assetUrl } from './assetVersions.js';
+import { cardImageUrl, assetUrl, assetHasAudio } from './assetVersions.js';
 import { PACKAGES, type Package } from './packages.js';
 import commitOrder from './commit-order.json' with { type: 'json' };
 import commitCounts from './commit-counts.json' with { type: 'json' };
@@ -72,6 +72,8 @@ export interface HubCard {
   thumbnail?: string;
   /** Muted looping card clip from the registry `listing.video`, content-versioned (?v=<sha1 of its bytes>). */
   video?: string;
+  /** True when `video`'s file has an audio track (build-time sniff), so the card offers Unmute. Undefined without a video. */
+  videoHasAudio?: boolean;
 }
 
 function commitMs(slug: string): number {
@@ -119,6 +121,7 @@ function projectCard(p: Project): HubCard {
     avoidClaims: p.listing?.avoidClaims,
     thumbnail: cardImageUrl(p.slug),
     video: p.listing?.video ? assetUrl(p.listing.video) : undefined,
+    videoHasAudio: p.listing?.video ? assetHasAudio(p.listing.video) : undefined,
   };
 }
 

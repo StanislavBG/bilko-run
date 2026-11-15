@@ -10,7 +10,7 @@ import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import { resolveOg, loadOgProjects } from '../server/og-meta';
 import { buildAssetVersions } from '../shared/asset-versions';
-import { cardImageUrl, assetUrl } from '../src/data/assetVersions';
+import { cardImageUrl, assetUrl, assetHasAudio } from '../src/data/assetVersions';
 
 const COUNTS = commitCounts as Record<string, number>;
 const PUBLIC_PROJECTS = PROJECTS.filter(p => p.public === true);
@@ -72,7 +72,7 @@ describe('projectsView share-card thumbnails', () => {
 
   it('assetUrl returns the bare path for an unknown path', () => {
     expect(assetUrl('/projects/nope/clip.mp4')).toBe('/projects/nope/clip.mp4');
-    expect(assetUrl('/projects/nope/clip.mp4', { cards: {}, files: {} })).toBe('/projects/nope/clip.mp4');
+    expect(assetUrl('/projects/nope/clip.mp4', { cards: {}, files: {}, audio: [] })).toBe('/projects/nope/clip.mp4');
   });
 });
 
@@ -87,6 +87,25 @@ describe('projectsView card video', () => {
       const video = bySlug.get(c.slug)?.listing?.video;
       expect(c.video, c.slug).toBe(video ? assetUrl(video) : undefined);
     }
+  });
+
+  it('videoHasAudio is undefined without a video and assetHasAudio(listing.video) with one', () => {
+    const bySlug = new Map(PROJECTS.map(p => [p.slug, p]));
+    for (const c of HUB_CARDS) {
+      const video = c.type === 'project' ? bySlug.get(c.slug)?.listing?.video : undefined;
+      if (!video) {
+        expect(c.videoHasAudio, c.slug).toBeUndefined();
+        continue;
+      }
+      expect(c.videoHasAudio, c.slug).toBe(assetHasAudio(video));
+    }
+  });
+
+  it('assetHasAudio reads the audio list and is false when a map has none', () => {
+    const v = { cards: {}, files: {}, audio: ['/projects/a/clip.mp4'] };
+    expect(assetHasAudio('/projects/a/clip.mp4', v)).toBe(true);
+    expect(assetHasAudio('/projects/b/clip.mp4', v)).toBe(false);
+    expect(assetHasAudio('/projects/a/clip.mp4', { cards: {}, files: {} } as never)).toBe(false);
   });
 });
 

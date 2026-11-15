@@ -26,8 +26,11 @@ const START = 1000;
 
 /** Toy module whose settle() output we record, so the ledger is checked against the module itself. */
 const settled: number[][] = [];
+/** Dealer argument of every newHand call, in order. */
+const dealers: number[] = [];
 const toy: RoomGameModule<ToyState> = {
   ...toyGame,
+  newHand(seed, dealer) { dealers.push(dealer); return toyGame.newHand(seed, dealer); },
   settle(s) { const p = toyGame.settle(s); settled.push([...p]); return p; },
 };
 
@@ -88,6 +91,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   settled.length = 0;
+  dealers.length = 0;
   rooms.resetRooms();
   await dbRun('DELETE FROM play_ledger');
   await dbRun('DELETE FROM play_balances');
@@ -180,6 +184,42 @@ describe('room hand settlement', () => {
       expect(await ledgerFor(ref)).toEqual([]);
       expect(spy.mock.calls.filter((a) => String(a[0]).includes(ref))).toHaveLength(1);
       expect(c.msgs.some((m) => m.type === 'settled')).toBe(false);
+    } finally {
+      toy.settle = orig;
+      spy.mockRestore();
+    }
+  });
+
+  it('the next hand is dealt by the seat the module\'s nextDealer names', async () => {
+    toy.nextDealer = () => 2;
+    try {
+      await startServer({ turnMs: 10_000, nextHandMs: 20 });
+      await join(HUMAN, true);
+      await waitFor(() => dealers.length >= 3);
+      expect(dealers.slice(0, 3)).toEqual([0, 2, 2]);
+    } finally {
+      delete toy.nextDealer;
+    }
+  });
+
+  it('without a nextDealer hook the deal passes one seat each hand', async () => {
+    expect(toy.nextDealer).toBeUndefined();
+    await startServer({ turnMs: 10_000, nextHandMs: 20 });
+    await join(HUMAN, true);
+    await waitFor(() => dealers.length >= 4);
+    expect(dealers.slice(0, 4)).toEqual([0, 1, 2, 0]);
+  });
+
+  it('a voided hand is dealt again by the same dealer', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const orig = toy.settle;
+    let calls = 0;
+    toy.settle = (s) => (++calls === 2 ? [9, -9, 0] : orig(s)); // hand 2 voids
+    try {
+      await startServer({ turnMs: 10_000, nextHandMs: 20 });
+      await join(HUMAN, true);
+      await waitFor(() => dealers.length >= 4);
+      expect(dealers.slice(0, 4)).toEqual([0, 1, 1, 2]);
     } finally {
       toy.settle = orig;
       spy.mockRestore();

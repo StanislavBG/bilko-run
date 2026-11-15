@@ -709,6 +709,12 @@ export interface RoomGameModule<S> {
   isOver(state: S): boolean;
   /** Per-seat points; must be integers summing to 0. */
   settle(state: S): number[];
+  /** Optional. Seat that deals the next hand; default: the deal passes one seat. */
+  nextDealer?(state: S): number;
+  /** Optional. Action for a timed-out human seat; default aiAction. */
+  timeoutAction?(state: S, seat: number): unknown;
+  /** Optional. Ms a human seat has to act now; null or undefined means 20 s. Must not depend on concealed data. */
+  deadlineMs?(state: S, seat: number): number | null | undefined;
 }
 ```
 
@@ -717,6 +723,7 @@ export interface RoomGameModule<S> {
 - `apply` must be pure: return a new state or `{ ok: false }`. A client action it rejects gets `illegal_action`. An `aiAction` it rejects voids the hand.
 - `settle` must return one integer per seat, summing to 0, none below `-maxLossPoints`. Anything else voids the hand.
 - If any module method throws, the hand is voided: no balance changes and every escrow is released.
+- The optional hooks follow the same rule. If `nextDealer`, `timeoutAction` or `deadlineMs` throws or returns an invalid value, the hand is voided. Invalid means: `nextDealer` not an integer seat, a `timeoutAction` that `apply` rejects, or a `deadlineMs` that is not a positive integer, `null` or `undefined`.
 
 Modules are registered in `ROOM_MODULES` in `server/routes/rooms.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). `ROOM_MODULES` is empty in production today, so every app gets `unknown_app` until a module lands.
 
@@ -764,7 +771,7 @@ The handshake is refused with:
 
 | Message | When |
 |---|---|
-| `{ type: 'state', hand, seq, seat, view, toAct, deadline }` | After every state change, and on connect or reconnect. `view` is `module.view(state, seat)` for this seat only. `toAct` lists the seats that may act. `deadline` is the epoch ms at which a human to act is autoplayed, or `null` when only AI seats act. |
+| `{ type: 'state', hand, seq, seat, view, toAct, deadline }` | After every state change, and on connect or reconnect. `view` is `module.view(state, seat)` for this seat only. `toAct` lists the seats that may act. `deadline` is epoch ms. When this seat is a human seat to act, it is this seat's own autoplay time. Otherwise it is the latest autoplay time among the human seats to act. It is `null` when only AI seats act. |
 | `{ type: 'error', code, seq }` | A rejected action. `code` is `illegal_action`, `not_your_turn`, `stale_seq` or `no_hand`. `seq` is the current one. |
 | `{ type: 'error', code: 'insufficient_taels', seq: 0 }` | At a hand start the seat's escrow failed. The seat is taken over by AI and the player is unseated. |
 | `{ type: 'hand_over', hand, view, points }` | The hand ended. `view` is this seat's final view. `points` are the module's per-seat points (not yet × stake). |
@@ -802,8 +809,11 @@ A seat only ever receives `module.view(state, seat)`. The raw state, the seed an
 ### AI seat fill and autoplay
 
 - The first human to sit starts an 8 s fill timer. When it fires, or when every seat has a human, empty seats get AI and the first hand is dealt.
-- AI seats act after 800 ms. A human to act has 20 s (`deadline`); then `module.aiAction` plays for them.
-- After a hand settles the next hand is dealt 5 s later with the dealer rotated. A table with no humans left closes.
+- AI seats act after 800 ms.
+- A human to act has `module.deadlineMs` or 20 s (`deadline`). The time counts from when that seat became due to act. Another seat's move does not restart it.
+- A timed-out human is played by `module.timeoutAction` when the module has it, else by `module.aiAction`.
+- After a hand settles the next hand is dealt 5 s later. Its dealer is `module.nextDealer`; without that hook the deal passes one seat. A voided hand is dealt again by the same dealer. The first hand at a new table is dealt by seat 0.
+- A table with no humans left closes.
 - AI seats play against the house account: their point deltas × stake go to one house ledger row.
 
 ### Origin and native apps

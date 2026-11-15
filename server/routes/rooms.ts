@@ -72,6 +72,8 @@ interface TableRoom {
   createdAt: number;
   /** Hands started so far. */
   hand: number;
+  /** Seat that deals the next hand: 0 for a new table, then HandResult.nextDealer; a voided hand keeps it. */
+  dealer: number;
   fillTimer: ReturnType<typeof setTimeout> | null;
   /** Results recorded by onHandOver, in order. */
   results: HandResult[];
@@ -107,7 +109,8 @@ function closeTable(t: TableRoom): void {
 /**
  * Starts the table's next hand: escrows each human's maximum loss (a human who
  * cannot cover it is replaced by AI and told so), fills empty seats with AI,
- * rotates the dealer and deals. A table left with no humans is closed.
+ * and deals from t.dealer (set by the last settled hand's nextDealer; a voided
+ * hand is dealt again by the same dealer). A table left with no humans is closed.
  */
 export async function startTableHand(roomId: string): Promise<void> {
   const t = rooms.get(roomId);
@@ -138,7 +141,7 @@ export async function startTableHand(roomId: string): Promise<void> {
   t.escrowed = new Map(t.seats);
   t.leaving.clear();
   t.room.fillWithAi();
-  t.room.startHand((hand - 1) % t.module.seats);
+  t.room.startHand(t.dealer);
 }
 
 function unseat(t: TableRoom, seat: number): void {
@@ -268,6 +271,9 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
     id, module, { turnMs: o.turnMs, aiDelayMs: o.aiDelayMs },
     createRoomHooks(id, (r) => {
       results.push(r);
+      if (!r.voided && Number.isInteger(r.nextDealer) && (r.nextDealer as number) >= 0 && (r.nextDealer as number) < module.seats) {
+        t.dealer = r.nextDealer as number;
+      }
       const run = settleHand(t, r)
         .catch((err) => { console.error(`[rooms] settlement crashed for ${id}: ${(err as Error)?.message ?? err}`); })
         .finally(() => { if (t.settling === run) t.settling = null; });
@@ -275,7 +281,7 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
     }),
   );
   const t: TableRoom = {
-    id, app, tier, module, room, seats: new Map(), state: 'waiting', createdAt: Date.now(), hand: 0, fillTimer: null, results,
+    id, app, tier, module, room, seats: new Map(), state: 'waiting', createdAt: Date.now(), hand: 0, dealer: 0, fillTimer: null, results,
     escrowed: new Map(), leaving: new Set(), settling: null, nextTimer: null, nextHandMs: o.nextHandMs,
   };
   rooms.set(id, t);

@@ -59,12 +59,27 @@ describe('room routes', () => {
   });
   afterEach(() => rooms.resetRooms());
 
-  it('ROOM_MODULES is empty, so production knows no app', async () => {
-    expect(rooms.ROOM_MODULES).toEqual({});
+  it('ROOM_MODULES binds exactly threewinds to the engine module', () => {
+    expect(Object.keys(rooms.ROOM_MODULES)).toEqual(['threewinds']);
+    const tw = rooms.ROOM_MODULES.threewinds;
+    expect(tw.id).toBe('threewinds');
+    expect(tw.seats).toBe(3);
+    expect(tw.maxLossPoints).toBe(400);
+  });
+
+  it('the threewinds binding gives a 4 s deadline only in a claim window (R4.6)', () => {
+    const tw = rooms.ROOM_MODULES.threewinds;
+    expect(typeof tw.deadlineMs).toBe('function');
+    expect(tw.deadlineMs!({ phase: 'claim' } as any, 0)).toBe(4000);
+    expect(tw.deadlineMs!({ phase: 'discard' } as any, 0)).toBeUndefined();
+  });
+
+  it('GET /api/rooms/tiers?app=threewinds lists every tier with the default modules', async () => {
     const app = await buildApp('default');
-    const res = await ticket(app, A, { app: 'threewinds', tier: 'tea' });
-    expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ error: 'unknown_app' });
+    const res = await app.inject({ method: 'GET', url: '/api/rooms/tiers?app=threewinds' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.stringify(res.json());
+    for (const t of ['tea', 'jade', 'peony', 'imperial']) expect(body).toContain(`"${t}"`);
     await app.close();
   });
 

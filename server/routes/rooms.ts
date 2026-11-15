@@ -8,11 +8,12 @@
 // play ledger (AI seats against the house), then deals again after NEXT_HAND_MS
 // or closes the table. Rooms live only in memory, so a sweeper releases held
 // escrows whose table no longer exists in this process (deploy, crash).
-// ROOM_MODULES is empty until the @threewinds/engine binding lands, so in
-// production every app is unknown_app and nothing is live yet.
+// ROOM_MODULES (server/rooms/modules.ts) binds each app id to its game module;
+// today that is Three Winds from @threewinds/engine.
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../clerk.js';
+import { ROOM_MODULES } from '../rooms/modules.js';
 import { GameRoom, type HandResult, type RoomGameModule, type RoomMessage } from '../rooms/runtime.js';
 import {
   ROOM_SOCKET_PREFIX, issueRoomTicket, registerLiveRoom, unregisterLiveRoom, sendToSeat, createRoomHooks,
@@ -22,8 +23,8 @@ import {
   getPlayBalance, escrowPlay, settlePlayHand, releasePlayEscrow, listHeldEscrows, HOUSE_ACCOUNT, type PlayEntry,
 } from '../services/play-currency.js';
 
-/** Game modules by app id. Empty in production until the engine binding lands. */
-export const ROOM_MODULES: Record<string, RoomGameModule<any>> = {};
+/** Game modules by app id (re-exported from ../rooms/modules.js). */
+export { ROOM_MODULES };
 
 export const MAX_ROOMS = 200;
 export const DEFAULT_AI_FILL_MS = 8000;

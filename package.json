@@ -65,6 +65,7 @@
     "@libsql/client": "^0.17.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@resvg/resvg-js": "^2.6.2",
+    "@threewinds/engine": "npm:@bilkobibitkov/threewinds-engine@0.1.0",
     "d3-geo": "^3.1.1",
     "fastify": "^5.8.2",
     "js-yaml": "^4.1.1",

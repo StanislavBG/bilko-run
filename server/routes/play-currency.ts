@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../clerk.js';
 import { getStripe } from '../services/stripe.js';
-import { creditPlay, debitPlay, getPlayBalance } from '../services/play-currency.js';
+import { creditPlay, debitPlay, getPlayBalance, listPlayEntitlements, purchasePlayItem } from '../services/play-currency.js';
 import { getAppleVerifier, type AppleNotification, type AppleTransaction } from '../services/apple-iap.js';
 import { dbGet, dbRun } from '../db.js';
 import { PLAY_APPS, findPack, findPackByAppleProduct, type PlayPack } from '../../shared/play-currency-catalog.js';
@@ -55,6 +55,7 @@ function perUserRate(max: number) {
 
 const checkoutRate = perUserRate(10);
 const appleTxRate = perUserRate(30);
+const itemPurchaseRate = perUserRate(20);
 const APPLE_NOTIFICATION_BODY_LIMIT = 64 * 1024;
 /** Notification types that take a purchase's taels back. Everything else is acknowledged with no action. */
 const APPLE_REFUND_TYPES = new Set(['REFUND', 'REVOKE']);
@@ -95,6 +96,7 @@ const granted = new Set<string>();
 export function resetPlayCurrencyRouteState(): void {
   checkoutRate.clear();
   appleTxRate.clear();
+  itemPurchaseRate.clear();
   granted.clear();
 }
 
@@ -162,6 +164,35 @@ export function registerPlayCurrencyRoutes(app: FastifyInstance): void {
       console.error('[play-currency] checkout failed:', err?.message);
       return reply.code(503).send({ error: 'Checkout is not available right now.' });
     }
+  });
+
+  app.get('/api/play-currency/entitlements', async (req, reply) => {
+    const email = await requireAuth(req, reply);
+    if (!email) return;
+    const appId = (req.query as { app?: unknown } | undefined)?.app;
+    if (!knownApp(appId)) return reply.code(400).send({ error: 'unknown_app' });
+    reply.header('Cache-Control', 'private, no-store');
+    return { items: await listPlayEntitlements(appId, email) };
+  });
+
+  // Spend taels on a cosmetic item. The only taels sink besides play; no route moves taels between users.
+  app.post('/api/play-currency/items/:itemId/purchase', async (req, reply) => {
+    const email = await requireAuth(req, reply);
+    if (!email) return;
+    if (!itemPurchaseRate.take(email.trim().toLowerCase())) return reply.code(429).send({ error: 'rate_limited' });
+    const query = (req.query ?? {}) as { app?: unknown };
+    const body = (req.body ?? {}) as { app?: unknown };
+    const appId = query.app ?? body.app;
+    if (!knownApp(appId)) return reply.code(400).send({ error: 'unknown_app' });
+    const { itemId } = req.params as { itemId: string };
+
+    const result = await purchasePlayItem(appId, email, itemId);
+    reply.header('Cache-Control', 'private, no-store');
+    if (!result.ok) {
+      const code = result.error === 'insufficient_taels' ? 402 : result.error === 'unknown_item' ? 404 : 409;
+      return reply.code(code).send({ error: result.error });
+    }
+    return reply.code(201).send({ itemId: result.itemId, serial: result.serial, balance: result.balance });
   });
 
   // StoreKit 2: the iOS app posts each signed transaction. One transaction id credits one account once.

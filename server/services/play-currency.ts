@@ -1,4 +1,5 @@
-import { dbGet, dbTransaction, txGet, txRun } from '../db.js';
+import { dbAll, dbGet, dbTransaction, txGet, txRun } from '../db.js';
+import { PLAY_APPS, findItem } from '../../shared/play-currency-catalog.js';
 
 /**
  * Per-app play currency (Three Winds taels first). Fully separate from the Bilko Credits
@@ -214,4 +215,61 @@ export async function releasePlayEscrow(app: string, email: string, ref: string)
       "UPDATE play_escrows SET status = 'released' WHERE app = ? AND email = ? AND ref = ?", app, e, ref);
     return { released: true, ...(await txHolding(tx, app, e)) };
   }));
+}
+
+export type PurchasePlayItemResult =
+  | { ok: true; itemId: string; serial: number | null; balance: number }
+  | { ok: false; error: 'unknown_item' | 'already_owned' | 'sold_out' | 'insufficient_taels' };
+
+/**
+ * Buy a cosmetic item with play currency. In one transaction: refuses an owned item, refuses a
+ * sold-out limited item, debits the price (ledger ref item:<itemId>) and records the entitlement,
+ * numbering limited items 1..limit. Free default-owned items are never stored.
+ */
+export async function purchasePlayItem(app: string, email: string, itemId: string): Promise<PurchasePlayItemResult> {
+  const item = typeof app === 'string' && typeof itemId === 'string' ? findItem(app, itemId) : undefined;
+  if (!item) return { ok: false, error: 'unknown_item' };
+  checkApp(app);
+  const e = normEmail(email);
+  if (item.defaultOwned || item.price <= 0) return { ok: false, error: 'already_owned' };
+  checkAmount(item.price);
+  return serialized(() => dbTransaction(async (tx): Promise<PurchasePlayItemResult> => {
+    const owned = await txGet(tx, 'SELECT 1 FROM play_entitlements WHERE app = ? AND email = ? AND item_id = ?', app, e, item.id);
+    if (owned) return { ok: false, error: 'already_owned' };
+    let serial: number | null = null;
+    if (item.limit !== undefined) {
+      const row = await txGet<{ n: number }>(tx, 'SELECT COUNT(*) AS n FROM play_entitlements WHERE app = ? AND item_id = ?', app, item.id);
+      const sold = Number(row?.n ?? 0);
+      if (sold >= item.limit) return { ok: false, error: 'sold_out' };
+      serial = sold + 1;
+    }
+    const t = now();
+    const res = await txRun(tx,
+      'UPDATE play_balances SET balance = balance - ?, updated_at = ? WHERE app = ? AND email = ? AND balance >= ?',
+      item.price, t, app, e, item.price);
+    if (res.changes === 0) return { ok: false, error: 'insufficient_taels' };
+    await txRun(tx,
+      "INSERT INTO play_ledger (app, account, amount, kind, ref, created_at) VALUES (?, ?, ?, 'item_purchase', ?, ?)",
+      app, e, -item.price, `item:${item.id}`, t);
+    await txRun(tx,
+      'INSERT INTO play_entitlements (app, email, item_id, acquired_at, serial) VALUES (?, ?, ?, ?, ?)',
+      app, e, item.id, t, serial);
+    return { ok: true, itemId: item.id, serial, balance: await txBalance(tx, app, e) };
+  }));
+}
+
+/** Items the account owns: default-owned items first, then bought items (with serial for limited ones). */
+export async function listPlayEntitlements(app: string, email: string): Promise<Array<{ itemId: string; serial?: number }>> {
+  checkApp(app);
+  const playApp = Object.prototype.hasOwnProperty.call(PLAY_APPS, app) ? PLAY_APPS[app] : undefined;
+  const items: Array<{ itemId: string; serial?: number }> = (playApp?.items ?? [])
+    .filter((i) => i.defaultOwned)
+    .map((i) => ({ itemId: i.id }));
+  const rows = await dbAll<{ item_id: string; serial: number | null }>(
+    'SELECT item_id, serial FROM play_entitlements WHERE app = ? AND email = ? ORDER BY acquired_at, item_id', app, normEmail(email));
+  for (const r of rows) {
+    if (items.some((i) => i.itemId === r.item_id)) continue;
+    items.push(r.serial == null ? { itemId: String(r.item_id) } : { itemId: String(r.item_id), serial: Number(r.serial) });
+  }
+  return items;
 }

@@ -683,6 +683,17 @@ export const MIGRATIONS = [
     created_at  INTEGER NOT NULL,
     PRIMARY KEY (provider, external_id)
   )`,
+  // Cosmetic items bought with play currency. Free default-owned items never get a row.
+  // serial numbers limited items 1..limit per (app, item_id); NULL for unlimited items.
+  `CREATE TABLE IF NOT EXISTS play_entitlements (
+    app         TEXT NOT NULL,
+    email       TEXT NOT NULL,
+    item_id     TEXT NOT NULL,
+    acquired_at INTEGER NOT NULL,
+    serial      INTEGER,
+    PRIMARY KEY (app, email, item_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_play_entitlements_item ON play_entitlements(app, item_id)`,
   // Menu orders: one row per credit-bought item (the Agent Factory Kit). created_day is 'YYYY-MM-DD' in America/Los_Angeles.
   `CREATE TABLE IF NOT EXISTS menu_orders (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,

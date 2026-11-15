@@ -797,7 +797,7 @@
   {
     "slug": "threewinds",
     "name": "Three Winds",
-    "tagline": "Malaysian 3-player mahjong: practise a full hand against two AI players, with a tutor and the whole fan table.",
+    "tagline": "Malaysian 3-player mahjong: ten lessons with Ms. Lin, a practice table with a tutor, and tile sets to collect.",
     "category": "Game",
     "status": "live",
     "year": 2026,
@@ -811,6 +811,15 @@
       "Mahjong",
       "vs AI"
     ],
-    "displayName": "Three Winds 三風"
+    "displayName": "Three Winds 三風",
+    "listing": {
+      "audience": "People who want to learn and play Malaysian 3-player mahjong in the browser, from first tiles to the full fan table.",
+      "callToAction": "Play a practice hand",
+      "avoidClaims": [
+        "Online staked tables are open now",
+        "Taels can be cashed out, transferred or gifted",
+        "It is real-money gambling"
+      ]
+    }
   }
 ]

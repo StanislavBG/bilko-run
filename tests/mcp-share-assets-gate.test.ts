@@ -95,6 +95,52 @@ describe('shareAssetsGate', () => {
   });
 });
 
+const mp4 = (n: number) => Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), randomBytes(n)]);
+const webm = (n: number) => Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(n)]);
+
+describe('shareAssetsGate video', () => {
+  it('passes with a valid .mp4', async () => {
+    put('img/card.mp4', mp4(1000));
+    const r = await run({ video: '/projects/demo/img/card.mp4' });
+    expect(r).toMatchObject({ status: 'pass', details: 'valid: video' });
+  });
+
+  it('passes with a valid .webm', async () => {
+    put('img/card.webm', webm(1000));
+    expect((await run({ video: '/projects/demo/img/card.webm' })).status).toBe('pass');
+  });
+
+  it('fails when the video is missing', async () => {
+    const r = await run({ video: '/projects/demo/img/card.mp4' });
+    expect(r.status).toBe('fail');
+    expect(r.details).toBe('video /projects/demo/img/card.mp4: file not found in the staged bundle');
+  });
+
+  it('fails when an .mp4 holds WebM bytes', async () => {
+    put('img/card.mp4', webm(1000));
+    const r = await run({ video: '/projects/demo/img/card.mp4' });
+    expect(r.status).toBe('fail');
+    expect(r.details).toBe('video /projects/demo/img/card.mp4: not an MP4');
+  });
+
+  it('fails when a .webm holds MP4 bytes', async () => {
+    put('img/card.webm', mp4(1000));
+    expect((await run({ video: '/projects/demo/img/card.webm' })).details).toContain('not a WebM');
+  });
+
+  it('fails when the video exceeds 8 MB', async () => {
+    const big = Buffer.concat([mp4(0), Buffer.alloc(8 * 1024 * 1024 + 1 - 12)]);
+    put('img/card.mp4', big);
+    const r = await run({ video: '/projects/demo/img/card.mp4' });
+    expect(r.status).toBe('fail');
+    expect(r.details).toBe(`video /projects/demo/img/card.mp4: is ${8 * 1024 * 1024 + 1} bytes, over the 8 MB limit`);
+  });
+
+  it('fails when the video path escapes the bundle', async () => {
+    expect((await run({ video: '/projects/demo/../../etc/x.mp4' })).details).toContain('escapes');
+  });
+});
+
 describe('budgetGate share-asset exclusion', () => {
   const manifest = { bundle: { sizeBytesGz: 0, fileCount: 1 } } as unknown as GateContext['manifest'];
   const budget = (listing?: GateContext['listing']) =>
@@ -126,5 +172,18 @@ describe('budgetGate share-asset exclusion', () => {
     put('img/share.png', heavyShareImage());
     put('blob.bin', randomBytes(250_000));
     expect((await budget({ shareImage: '/projects/demo/img/share.png' })).status).toBe('fail');
+  });
+
+  it('a valid declared 6 MB video does not count against the budget', async () => {
+    put('img/card.mp4', mp4(6 * 1024 * 1024));
+    put('index.html', '<!doctype html><title>demo</title>');
+    const r = await budget({ video: '/projects/demo/img/card.mp4' });
+    expect(r.status).toBe('pass');
+    expect(r.details).toContain('excluding 1 share asset');
+  });
+
+  it('the same video counts when it is not declared', async () => {
+    put('img/card.mp4', mp4(6 * 1024 * 1024));
+    expect((await budget(undefined)).status).toBe('fail');
   });
 });

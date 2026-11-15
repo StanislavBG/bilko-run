@@ -20,7 +20,7 @@ export const budgetGate = async (ctx) => {
     if (!ctx.manifest)
         return { name: 'budget', status: 'fail', details: 'manifest not loaded' };
     const limit = budgetFor(ctx.slug);
-    // Valid declared icon/shareImage files are capped by the share-assets gate, not this budget.
+    // Valid declared icon/shareImage/video files are capped by the share-assets gate, not this budget.
     const shareAssets = validShareAssetFiles(ctx);
     const measured = measureGzBytes(ctx.bundleDir, shareAssets);
     const reported = ctx.manifest.bundle.sizeBytesGz;

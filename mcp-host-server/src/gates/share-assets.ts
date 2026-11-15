@@ -1,10 +1,39 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
+import { extname, resolve, sep } from 'node:path';
 import type { Gate, GateContext, GateResult } from './index.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const SHARE_IMAGE = { width: 1200, height: 630, maxBytes: 5 * 1024 * 1024 };
 const ICON = { min: 128, max: 1024, maxBytes: 512 * 1024 };
+const VIDEO = { maxBytes: 8 * 1024 * 1024 };
+const WEBM_SIGNATURE = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+
+type AssetField = 'icon' | 'shareImage' | 'video';
+
+/** Reads at most the first 12 bytes of a file; never the whole video. */
+function readHead(file: string): Buffer {
+  const fd = openSync(file, 'r');
+  try {
+    const head = Buffer.alloc(12);
+    const n = readSync(fd, head, 0, 12, 0);
+    return head.subarray(0, n);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Container signature must match the extension (.mp4: 'ftyp' at bytes 4-7; .webm: EBML magic), then size cap. */
+function checkVideo(file: string): string | undefined {
+  const head = readHead(file);
+  if (extname(file).toLowerCase() === '.webm') {
+    if (head.length < 4 || !head.subarray(0, 4).equals(WEBM_SIGNATURE)) return 'not a WebM';
+  } else if (head.length < 8 || head.subarray(4, 8).toString('latin1') !== 'ftyp') {
+    return 'not an MP4';
+  }
+  const bytes = statSync(file).size;
+  if (bytes > VIDEO.maxBytes) return `is ${bytes} bytes, over the 8 MB limit`;
+  return undefined;
+}
 
 /** Reads width/height from the PNG IHDR (signature, then width at 16, height at 20, big-endian). */
 function readPngSize(buf: Buffer): { width: number; height: number } | undefined {
@@ -22,10 +51,11 @@ function resolveAsset(ctxSlug: string, bundleDir: string, assetPath: string): st
 }
 
 /** Returns a problem description, or undefined when the asset is valid. */
-function checkAsset(ctxSlug: string, bundleDir: string, field: 'icon' | 'shareImage', assetPath: string): string | undefined {
+function checkAsset(ctxSlug: string, bundleDir: string, field: AssetField, assetPath: string): string | undefined {
   const file = resolveAsset(ctxSlug, bundleDir, assetPath);
   if (!file) return 'path escapes the bundle directory';
   if (!existsSync(file) || !statSync(file).isFile()) return 'file not found in the staged bundle';
+  if (field === 'video') return checkVideo(file);
 
   const buf = readFileSync(file);
   const size = readPngSize(buf);
@@ -45,8 +75,8 @@ function checkAsset(ctxSlug: string, bundleDir: string, field: 'icon' | 'shareIm
   return undefined;
 }
 
-function declaredAssets(ctx: GateContext): (readonly ['icon' | 'shareImage', string])[] {
-  return (['icon', 'shareImage'] as const).flatMap((field) => {
+function declaredAssets(ctx: GateContext): (readonly [AssetField, string])[] {
+  return (['icon', 'shareImage', 'video'] as const).flatMap((field) => {
     const p = ctx.listing?.[field];
     return p ? [[field, p] as const] : [];
   });
@@ -54,7 +84,7 @@ function declaredAssets(ctx: GateContext): (readonly ['icon' | 'shareImage', str
 
 /**
  * Absolute paths of declared share assets that pass this gate's checks. The budget gate
- * leaves these out of its gzip sum: they are already capped here, and PNGs barely gzip.
+ * leaves these out of its gzip sum: they are already capped here, and PNGs and videos barely gzip.
  */
 export function validShareAssetFiles(ctx: GateContext): Set<string> {
   const files = new Set<string>();

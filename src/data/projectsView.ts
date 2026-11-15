@@ -18,6 +18,7 @@
  * (e.g. session-manager, stepproof). Project wins; package metadata is merged in.
  */
 import { PROJECTS, projectHref, isReactRoute, type Project } from './projectsRegistry.js';
+import { cardImageUrl } from './assetVersions.js';
 import { PACKAGES, type Package } from './packages.js';
 import commitOrder from './commit-order.json' with { type: 'json' };
 import commitCounts from './commit-counts.json' with { type: 'json' };
@@ -114,7 +115,7 @@ function projectCard(p: Project): HubCard {
     pricing: p.listing?.pricing,
     callToAction: p.listing?.callToAction,
     avoidClaims: p.listing?.avoidClaims,
-    thumbnail: `/og/${p.slug}.png`,
+    thumbnail: cardImageUrl(p.slug),
   };
 }
 

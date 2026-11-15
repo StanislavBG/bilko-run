@@ -1,6 +1,17 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { buildAssetVersions } from './shared/asset-versions';
+
+// Content versions for /projects card images and listing assets, computed once from the
+// registry + public/ bytes being built (Vite copies public/ into dist/ byte for byte, so
+// this matches the server's og:image v=). Read by src/data/assetVersions.ts.
+const ASSET_VERSIONS = buildAssetVersions(
+  JSON.parse(readFileSync(resolve(__dirname, 'src/data/standalone-projects.json'), 'utf8')) as Record<string, unknown>[],
+  resolve(__dirname, 'public'),
+);
 
 // Registry fields no src/ file reads (server + mcp-host-server read the full JSON from disk).
 // Keeping them out of the client bundle avoids leaking the owner's local paths.
@@ -29,6 +40,7 @@ function slimStandaloneRegistry(): Plugin {
 export default defineConfig({
   define: {
     '__TEST_SEAMS__': JSON.stringify(process.env.NODE_ENV !== 'production'),
+    '__ASSET_VERSIONS__': JSON.stringify(ASSET_VERSIONS),
   },
   plugins: [react(), tailwindcss(), slimStandaloneRegistry()],
   server: {

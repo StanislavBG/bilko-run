@@ -5,6 +5,12 @@ import { PROJECTS } from '../src/data/projectsRegistry';
 import { projectMetadataRows } from '../src/data/projectMetadata';
 import commitCounts from '../src/data/commit-counts.json' with { type: 'json' };
 import { ListingSchema } from '../mcp-host-server/src/contract/registry';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join, resolve } from 'path';
+import { resolveOg, loadOgProjects } from '../server/og-meta';
+import { buildAssetVersions } from '../shared/asset-versions';
+import { cardImageUrl, assetUrl } from '../src/data/assetVersions';
 
 const COUNTS = commitCounts as Record<string, number>;
 const PUBLIC_PROJECTS = PROJECTS.filter(p => p.public === true);
@@ -29,11 +35,44 @@ describe('projectsView public cards', () => {
 });
 
 describe('projectsView share-card thumbnails', () => {
-  it('every project card uses its /og share card; packages have none', () => {
+  it('every project card uses its versioned /og share card (same v= as og:image); packages have none', () => {
+    const ctx = { projects: loadOgProjects(), blogPosts: [], staticRoot: resolve(__dirname, '..', 'public') };
     for (const c of HUB_CARDS) {
-      if (c.type === 'project') expect(c.thumbnail).toBe(`/og/${c.slug}.png`);
+      if (c.type === 'project') {
+        const image = resolveOg(`/projects/${c.slug}/`, ctx)?.image;
+        expect(image, c.slug).toBeDefined();
+        const v = new URL(image!).searchParams.get('v');
+        expect(v, c.slug).toMatch(/^[0-9a-f]{8}$/);
+        expect(c.thumbnail, c.slug).toBe(`/og/${c.slug}.png?v=${v}`);
+      }
       if (c.type === 'package') expect(c.thumbnail).toBeUndefined();
     }
+  });
+
+  it('cardImageUrl changes when the share image bytes change', () => {
+    const root = mkdtempSync(join(tmpdir(), 'projects-view-'));
+    try {
+      mkdirSync(join(root, 'projects', 'fx'), { recursive: true });
+      const raw = [{ slug: 'fx', name: 'Fx', tagline: 't', category: 'c', listing: { shareImage: '/projects/fx/og.png' } }];
+      writeFileSync(join(root, 'projects', 'fx', 'og.png'), Buffer.from('share-v1'));
+      const v1 = buildAssetVersions(raw, root);
+      writeFileSync(join(root, 'projects', 'fx', 'og.png'), Buffer.from('share-v2'));
+      const v2 = buildAssetVersions(raw, root);
+      const a = cardImageUrl('fx', v1);
+      const b = cardImageUrl('fx', v2);
+      expect(a).toBe(`/og/fx.png?v=${v1.cards.fx}`);
+      expect(b).toBe(`/og/fx.png?v=${v2.cards.fx}`);
+      expect(a).not.toBe(b);
+      expect(assetUrl('/projects/fx/og.png', v2)).toBe(`/projects/fx/og.png?v=${v2.files['/projects/fx/og.png']}`);
+      expect(cardImageUrl('nope', v2)).toBe('/og/nope.png');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('assetUrl returns the bare path for an unknown path', () => {
+    expect(assetUrl('/projects/nope/clip.mp4')).toBe('/projects/nope/clip.mp4');
+    expect(assetUrl('/projects/nope/clip.mp4', { cards: {}, files: {} })).toBe('/projects/nope/clip.mp4');
   });
 });
 

@@ -4,7 +4,10 @@
 // through the module, and plays AI seats and timed-out humans.
 // No sockets, tickets or DB here: send/onHandOver, timers and the clock are
 // injected, so the room is fully unit-testable (tests/rooms-runtime.test.ts).
-// The raw state and the seed never leave this class.
+// The raw state and the seed never leave this class, except the state inside
+// snapshot(), which is for server-side storage only (never send it to a client).
+// A module used with snapshot()/restore() must keep its state plain JSON: it has to
+// survive a JSON round trip unchanged (the Three Winds RoomState is plain JSON).
 import crypto from 'node:crypto';
 
 export interface RoomGameModule<S> {
@@ -54,7 +57,25 @@ export interface HandResult { hand: number; points?: number[]; voided?: boolean;
 export interface GameRoomHooks {
   send(seat: number, msg: RoomMessage): void;
   onHandOver(r: HandResult): void;
+  /** After every accepted state change (hand started, action applied or autoplayed, hand finished or voided): time to save a snapshot. */
+  onChange?(): void;
 }
+
+/**
+ * A live hand as plain JSON, so it can resume in a new process. Server-only, like the
+ * raw state: it holds every seat's concealed data. It never holds the seed.
+ * due: each seat whose timer was armed, with the seq its clock started at.
+ */
+export type RoomSnapshot = {
+  v: 1;
+  hand: number;
+  seq: number;
+  dealer: number;
+  state: unknown;
+  humans: Array<[number, string]>;
+  ai: number[];
+  due: Array<{ seat: number; startSeq: number }>;
+};
 
 const defaultTimers: RoomTimers = {
   set: (fn, ms) => setTimeout(fn, ms),
@@ -167,6 +188,118 @@ export class GameRoom<S> {
     if (msg) this.hooks.send(seat, msg);
   }
 
+  // ── Persistence ──────────────────────────────────────────────────────────
+
+  /** The live hand as JSON-safe data for server-side storage; null outside a hand (or if the state is not JSON). */
+  snapshot(): RoomSnapshot | null {
+    if (this.state === null) return null;
+    let state: unknown;
+    try {
+      state = JSON.parse(JSON.stringify(this.state));
+    } catch {
+      return null;
+    }
+    const due: RoomSnapshot['due'] = [];
+    for (const seat of this.toActNow) {
+      const t = this.seatTimers.get(seat);
+      if (t) due.push({ seat, startSeq: t.startSeq });
+    }
+    return {
+      v: 1,
+      hand: this.hand,
+      seq: this.seq,
+      dealer: this.dealer,
+      state,
+      humans: [...this.humans].sort((a, b) => a[0] - b[0]),
+      ai: [...this.ai].sort((a, b) => a - b),
+      due,
+    };
+  }
+
+  /**
+   * Loads a snapshot into this room, replacing anything it held, and arms a fresh timer
+   * for every seat to act (AI: aiDelayMs; human: deadlineMs or turnMs), keeping each
+   * seat's startSeq. Sends nothing: clients resync on reconnect. A snapshot that does
+   * not check out, or a state the module rejects, leaves the room empty with no timers.
+   */
+  restore(snap: RoomSnapshot): void {
+    this.clearTimers();
+    this.state = null;
+    this.#seed = null;
+    this.toActNow = [];
+    this.humans.clear();
+    this.ai.clear();
+    const parsed = this.parseSnapshot(snap);
+    if (!parsed) return;
+    const state = snap.state as S;
+    let toAct: number[];
+    try {
+      if (this.module.isOver(state)) return;
+      toAct = this.module.toAct(state);
+    } catch {
+      return;
+    }
+    if (!Array.isArray(toAct) || toAct.length === 0) return;
+    const seats = this.module.seats;
+    if (!toAct.every((x) => Number.isInteger(x) && x >= 0 && x < seats)) return;
+    const startSeqs = new Map(snap.due.map((d) => [d.seat, d.startSeq] as const));
+    const fresh = new Map<number, number>();
+    for (const seat of toAct) {
+      let ms: number;
+      if (parsed.ai.has(seat)) {
+        ms = this.opts.aiDelayMs;
+      } else {
+        let hook: unknown;
+        try {
+          hook = this.module.deadlineMs ? this.module.deadlineMs(state, seat) : undefined;
+        } catch {
+          return;
+        }
+        if (hook === null || hook === undefined) ms = this.opts.turnMs;
+        else if (typeof hook === 'number' && Number.isInteger(hook) && hook > 0) ms = hook;
+        else return;
+      }
+      fresh.set(seat, ms);
+    }
+    this.state = state;
+    this.hand = snap.hand;
+    this.seq = snap.seq;
+    this.dealer = snap.dealer;
+    for (const [seat, key] of parsed.humans) this.humans.set(seat, key);
+    for (const seat of parsed.ai) this.ai.add(seat);
+    this.toActNow = [...toAct];
+    const now = this.now();
+    for (const [seat, ms] of fresh) {
+      const token = ++this.nextToken;
+      const handle = this.timers.set(() => this.autoplay(seat, token), ms);
+      this.seatTimers.set(seat, { handle, deadline: now + ms, token, startSeq: startSeqs.get(seat) ?? this.seq });
+    }
+  }
+
+  private parseSnapshot(snap: RoomSnapshot): { humans: Map<number, string>; ai: Set<number> } | null {
+    if (!snap || typeof snap !== 'object' || snap.v !== 1) return null;
+    const seats = this.module.seats;
+    const isSeat = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 0 && (x as number) < seats;
+    const isCount = (x: unknown) => Number.isInteger(x) && (x as number) >= 0;
+    if (!isCount(snap.hand) || !isCount(snap.seq) || !isSeat(snap.dealer)) return null;
+    if (snap.state === null || snap.state === undefined) return null;
+    if (!Array.isArray(snap.humans) || !Array.isArray(snap.ai) || !Array.isArray(snap.due)) return null;
+    const humans = new Map<number, string>();
+    for (const h of snap.humans) {
+      if (!Array.isArray(h) || !isSeat(h[0]) || typeof h[1] !== 'string' || humans.has(h[0])) return null;
+      humans.set(h[0], h[1]);
+    }
+    const ai = new Set<number>();
+    for (const seat of snap.ai) {
+      if (!isSeat(seat) || humans.has(seat)) return null;
+      ai.add(seat);
+    }
+    for (const d of snap.due) {
+      if (!d || typeof d !== 'object' || !isSeat(d.seat) || !isCount(d.startSeq) || d.startSeq > snap.seq) return null;
+    }
+    return { humans, ai };
+  }
+
   // ── Internals ────────────────────────────────────────────────────────────
 
   private applyAction(seat: number, action: unknown, fromClient: boolean): void {
@@ -237,7 +370,8 @@ export class GameRoom<S> {
       const handle = this.timers.set(() => this.autoplay(seat, token), ms);
       this.seatTimers.set(seat, { handle, deadline: now + ms, token, startSeq: this.seq });
     }
-    this.broadcastState();
+    // A false broadcast voided the hand, and voidHand already reported the change.
+    if (this.broadcastState()) this.hooks.onChange?.();
   }
 
   private autoplay(seat: number, token: number): void {
@@ -309,6 +443,7 @@ export class GameRoom<S> {
     this.endHand();
     for (const [seat, view] of views) this.hooks.send(seat, { type: 'hand_over', hand, view, points: [...points] });
     this.hooks.onHandOver({ hand, points: [...points], nextDealer: nextDealer as number });
+    this.hooks.onChange?.();
   }
 
   private validPoints(points: unknown): points is number[] {
@@ -322,6 +457,7 @@ export class GameRoom<S> {
     const hand = this.hand;
     this.endHand();
     this.hooks.onHandOver({ hand, voided: true });
+    this.hooks.onChange?.();
   }
 
   private endHand(): void {

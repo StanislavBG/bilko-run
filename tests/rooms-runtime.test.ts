@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GameRoom, type RoomGameModule, type RoomMessage } from '../server/rooms/runtime.js';
+import { GameRoom, type RoomGameModule, type RoomMessage, type RoomSnapshot } from '../server/rooms/runtime.js';
 import { toyGame, TOY_TOKENS, type ToyState } from './fixtures/rooms-toy-game.js';
 import { claimWindowGame, type ClaimWindowState } from './fixtures/rooms-claim-game.js';
 
@@ -479,5 +479,205 @@ describe('GameRoom seq window', () => {
     // the seat's own new clock-start seq is still accepted
     room.act(1, cur, { how: 'human2' });
     expect(spy.state!.by.map((x) => x.how)).toEqual(['ai', 'human', 'human2']);
+  });
+});
+
+describe('GameRoom snapshot / restore', () => {
+  const SEED = 'seed-5ec2e7-do-not-leak';
+
+  function hooked(mod: RoomGameModule<ToyState> = toyGame) {
+    const clock = fakeClock();
+    const sent: Array<{ seat: number; msg: RoomMessage }> = [];
+    const results: Array<{ hand: number; points?: number[]; voided?: boolean }> = [];
+    let changes = 0;
+    const room = new GameRoom('rs', mod, { turnMs: TURN_MS, aiDelayMs: AI_MS, seed: () => SEED, timers: clock.timers, now: clock.now }, {
+      send: (seat, msg) => sent.push({ seat, msg }),
+      onHandOver: (r) => results.push(r),
+      onChange: () => { changes++; },
+    });
+    return { clock, sent, results, room, changes: () => changes };
+  }
+
+  /** Plays seat 0 (human) by discarding its last token; AI seats via the clock. Returns false when the hand ended. */
+  function step(r: ReturnType<typeof hooked>): boolean {
+    if (r.results.length > 0) return false;
+    const st = lastState(r.sent, 0)!;
+    if (st.toAct.includes(0)) {
+      const mine = (st.view as { mine: string[] }).mine;
+      r.room.act(0, st.seq, { discard: mine[mine.length - 1] });
+    } else {
+      r.clock.advance(AI_MS);
+    }
+    return r.results.length === 0;
+  }
+
+  it('a JSON round-tripped snapshot resumes in a new room exactly like an uninterrupted run', () => {
+    const a = hooked(); // uninterrupted
+    const b = hooked(); // interrupted after 3 accepted actions
+    for (const r of [a, b]) { r.room.seatHuman('alice'); r.room.fillWithAi(); r.room.startHand(0); }
+    for (let i = 0; i < 3; i++) { step(a); step(b); }
+    expect(lastState(b.sent, 0)!.toAct).toEqual([0]);
+
+    const snap = b.room.snapshot()!;
+    expect(snap).not.toBeNull();
+    const json = JSON.stringify(snap);
+    expect(json).not.toContain(SEED);
+    expect(snap).toMatchObject({ v: 1, hand: 1, dealer: 0, humans: [[0, 'alice']], ai: [1, 2] });
+    expect(snap.due).toEqual([{ seat: 0, startSeq: snap.seq }]);
+
+    const c = hooked();
+    c.room.restore(JSON.parse(json));
+    expect(c.sent).toEqual([]); // restore sends nothing; clients resync on reconnect
+    expect(c.changes()).toBe(0);
+    expect(c.room.inHand).toBe(true);
+    expect(c.room.humanSeats()).toEqual([0]);
+    expect(c.room.isAi(1) && c.room.isAi(2)).toBe(true);
+    expect(c.clock.pending()).toBe(1);
+    c.room.resync(0);
+    const ra = lastState(a.sent, 0)!;
+    const rc = lastState(c.sent, 0)!;
+    expect({ ...rc, deadline: null }).toEqual({ ...ra, deadline: null });
+    expect(rc.deadline).toBe(TURN_MS);
+
+    let guard = 0;
+    while (a.results.length === 0 || c.results.length === 0) {
+      if (++guard > 50) throw new Error('hand did not finish');
+      const sa = lastState(a.sent, 0)!;
+      const sc = lastState(c.sent, 0)!;
+      expect(sc.seq).toBe(sa.seq);
+      expect(sc.toAct).toEqual(sa.toAct);
+      expect(sc.view).toEqual(sa.view);
+      step(a); step(c);
+    }
+    expect(c.results).toEqual(a.results);
+    expect(c.results[0].points).toBeDefined();
+    expect(c.sent.filter((s) => s.msg.type === 'hand_over').map((s) => s.msg))
+      .toEqual(a.sent.filter((s) => s.msg.type === 'hand_over').map((s) => s.msg));
+    expect(c.clock.pending()).toBe(0);
+  });
+
+  it('snapshot() is null outside a hand and no snapshot carries the seed', () => {
+    const r = hooked();
+    expect(r.room.snapshot()).toBeNull();
+    r.room.seatHuman('a'); r.room.fillWithAi();
+    r.room.startHand(1);
+    while (r.results.length === 0) {
+      const s = r.room.snapshot();
+      expect(s).not.toBeNull();
+      expect(JSON.stringify(s)).not.toContain(SEED);
+      step(r);
+    }
+    expect(r.room.snapshot()).toBeNull();
+  });
+
+  it('the snapshot state is a copy, not the live state', () => {
+    const { mod, spy } = spyModule();
+    const r = hooked(mod);
+    r.room.seatHuman('a'); r.room.fillWithAi(); r.room.startHand(0);
+    const snap = r.room.snapshot()!;
+    expect(snap.state).toEqual(spy.state);
+    expect(snap.state).not.toBe(spy.state);
+  });
+
+  it('onChange fires once per accepted change, never for a refused action', () => {
+    const r = hooked();
+    r.room.seatHuman('a'); r.room.fillWithAi();
+    r.room.startHand(0);
+    expect(r.changes()).toBe(1);
+    const st = lastState(r.sent, 0)!;
+    r.room.act(0, st.seq, { discard: 'nope' }); // illegal
+    r.room.act(1, st.seq, { discard: 'nope' }); // not your turn
+    r.room.act(0, st.seq + 5, { discard: 'nope' }); // stale seq
+    expect(r.changes()).toBe(1);
+    let accepted = 0;
+    while (step(r)) accepted++;
+    accepted++; // the final action that ended the hand
+    // 6 turns: each applied action counts once, the finishing one included (not twice).
+    expect(accepted).toBe(6);
+    expect(r.changes()).toBe(1 + 6);
+    expect(r.results).toHaveLength(1);
+  });
+
+  it('onChange fires once for an autoplayed human and once for a voided hand', () => {
+    const r = hooked();
+    r.room.seatHuman('a'); r.room.fillWithAi();
+    r.room.startHand(0);
+    r.clock.advance(TURN_MS); // human autoplayed
+    expect(r.changes()).toBe(2);
+    const bad = hooked({ ...toyGame, settle: () => [5, 5, 5] });
+    bad.room.fillWithAi();
+    bad.room.startHand(0);
+    expect(bad.changes()).toBe(1);
+    bad.clock.advance(AI_MS * 5);
+    expect(bad.changes()).toBe(6);
+    bad.clock.advance(AI_MS);
+    expect(bad.results).toEqual([{ hand: 1, voided: true }]);
+    expect(bad.changes()).toBe(7); // the 6th action voided the hand: one change
+  });
+
+  it('a snapshot with the wrong version or a state the module rejects leaves the room empty, no timers', () => {
+    const src = hooked();
+    src.room.seatHuman('a'); src.room.fillWithAi(); src.room.startHand(0);
+    const snap = JSON.parse(JSON.stringify(src.room.snapshot()));
+
+    const v2 = hooked();
+    v2.room.restore({ ...snap, v: 2 });
+    expect(v2.room.inHand).toBe(false);
+    expect(v2.room.snapshot()).toBeNull();
+    expect(v2.room.humanSeats()).toEqual([]);
+    expect(v2.clock.pending()).toBe(0);
+
+    for (const broken of [
+      { ...toyGame, toAct: () => { throw new Error('bad'); } },
+      { ...toyGame, isOver: () => { throw new Error('bad'); } },
+    ] as RoomGameModule<ToyState>[]) {
+      const r = hooked(broken);
+      r.room.restore(snap);
+      expect(r.room.inHand).toBe(false);
+      expect(r.room.humanSeats()).toEqual([]);
+      expect(r.clock.pending()).toBe(0);
+      expect(r.sent).toEqual([]);
+      expect(r.results).toEqual([]);
+    }
+  });
+
+  it('restore keeps each due seat its startSeq and re-arms AI with aiDelayMs', () => {
+    const mk = () => {
+      const clock = fakeClock();
+      const spy = { state: null as ClaimWindowState | null };
+      const mod: RoomGameModule<ClaimWindowState> = {
+        ...claimWindowGame,
+        apply(state, seat, action) { const r = claimWindowGame.apply(state, seat, action); if (r.ok) spy.state = r.state; return r; },
+      };
+      const sent: Array<{ seat: number; msg: RoomMessage }> = [];
+      const room = new GameRoom('rw', mod, { turnMs: TURN_MS, aiDelayMs: AI_MS, seed: () => 'window', timers: clock.timers, now: clock.now }, {
+        send: (seat, msg) => sent.push({ seat, msg }),
+        onHandOver: () => {},
+      });
+      return { room, sent, clock, spy };
+    };
+    const src = mk();
+    src.room.seatHuman('a'); src.room.seatHuman('b'); src.room.fillWithAi();
+    src.room.startHand(0);
+    const opening = lastState(src.sent, 1)!.seq;
+    expect(lastState(src.sent, 1)!.toAct).toEqual([1, 2]);
+    const snap: RoomSnapshot = JSON.parse(JSON.stringify(src.room.snapshot()));
+    expect(snap.due).toEqual([{ seat: 1, startSeq: opening }, { seat: 2, startSeq: opening }]);
+
+    const dst = mk();
+    dst.clock.advance(123_456); // a new process: its clock is elsewhere
+    dst.room.restore(snap);
+    expect(dst.clock.pending()).toBe(2);
+    dst.room.resync(1);
+    expect(lastState(dst.sent, 1)!.deadline).toBe(123_456 + TURN_MS);
+    dst.clock.advance(AI_MS - 1);
+    expect(dst.spy.state).toBeNull();
+    dst.clock.advance(1); // AI seat 2 declares after aiDelayMs
+    expect(dst.spy.state!.by).toEqual([{ seat: 2, how: 'ai' }]);
+    expect(lastState(dst.sent, 1)!.seq).toBe(opening + 1);
+    const n = dst.sent.length;
+    dst.room.act(1, opening, { how: 'human' }); // the window's opening seq still counts
+    expect(dst.sent.slice(n).filter((s) => s.msg.type === 'error')).toEqual([]);
+    expect(dst.spy.state!.by).toEqual([{ seat: 2, how: 'ai' }, { seat: 1, how: 'human' }]);
   });
 });

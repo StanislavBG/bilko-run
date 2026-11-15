@@ -125,6 +125,16 @@ export function unregisterLiveRoom(roomId: string): void {
   if (live.size === 0) stopHeartbeat();
 }
 
+/** Closes and forgets a seat's live socket (e.g. 4001 once the seat is released). No onClose fires; later frames from it go nowhere. */
+export function closeSeatSocket(roomId: string, seat: number, code: number, reason: string): void {
+  const entry = live.get(roomId);
+  const c = entry?.sockets.get(seat);
+  if (!entry || !c) return;
+  entry.sockets.delete(seat);
+  c.dead = true;
+  c.ws.close(code, reason);
+}
+
 /** Delivers a room message to the seat's live socket. False if that seat has none. */
 export function sendToSeat(roomId: string, seat: number, msg: RoomMessage): boolean {
   const c = live.get(roomId)?.sockets.get(seat);

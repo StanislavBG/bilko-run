@@ -132,6 +132,21 @@ describe('GameRoom', () => {
     expect(lastState(sent, 1)!.seq).toBe(seq);
   });
 
+  it('refuses a client action for a seat the room has made AI, and changes nothing', () => {
+    const { sent, spy, room } = setup({ seed: () => 'cccc' });
+    room.seatHuman('a');
+    room.seatHuman('b');
+    room.fillWithAi();
+    room.startHand(2); // seat 2 (AI) is due first
+    const before = spy.state;
+    const seq = lastState(sent, 0)!.seq;
+    expect(room.isAi(2)).toBe(true);
+    const n = sent.length;
+    room.act(2, seq, { discard: spy.state!.hands[2][0] });
+    expect(sent.slice(n)).toEqual([{ seat: 2, msg: { type: 'error', code: 'not_your_turn', seq } }]);
+    expect(spy.state).toBe(before);
+  });
+
   it('rejects an illegal or throwing action with illegal_action and changes nothing', () => {
     const throwing: RoomGameModule<ToyState> = {
       ...toyGame,

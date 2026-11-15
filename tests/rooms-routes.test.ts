@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { toyGame } from './fixtures/rooms-toy-game.js';
 import type { RoomGameModule } from '../server/rooms/runtime.js';
+import type { AddressInfo } from 'node:net';
+import WebSocket from 'ws';
+import { handleRoomUpgrade, closeAllGameRooms, ROOM_CLOSE } from '../server/rooms/socket.js';
 
 vi.mock('../server/clerk.js', () => ({
   requireAuth: async (req: any, reply: any) => {
@@ -20,7 +23,12 @@ const escrowPlay = vi.fn(async (_app: string, email: string, amount: number, _re
   balances.set(email, b - amount);
   return { ok: true, balance: b - amount, held: amount };
 });
-vi.mock('../server/services/play-currency.js', () => ({ getPlayBalance, escrowPlay }));
+const settlePlayHand = vi.fn(async () => ({ settled: true }));
+const releasePlayEscrow = vi.fn(async () => ({ released: true, balance: 0, held: 0 }));
+const listHeldEscrows = vi.fn(async () => []);
+vi.mock('../server/services/play-currency.js', () => ({
+  getPlayBalance, escrowPlay, settlePlayHand, releasePlayEscrow, listHeldEscrows, HOUSE_ACCOUNT: 'house',
+}));
 
 // threewinds is in PLAY_APPS; toy maxLossPoints 10 → tea (stake 5) needs 50.
 const toy: RoomGameModule<any> = { ...toyGame, maxLossPoints: 10 };
@@ -217,5 +225,102 @@ describe('room routes', () => {
     expect((await app.inject({ method: 'GET', url: '/api/rooms/tiers?app=nope' })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/api/rooms/tiers' })).statusCode).toBe(400);
     await app.close();
+  });
+});
+
+
+describe('room seat lifecycle over real sockets', () => {
+  let rooms: typeof import('../server/routes/rooms.js');
+  let app: ReturnType<typeof Fastify>;
+  let port: number;
+  const sockets: WebSocket[] = [];
+
+  async function start(o: { aiFillMs: number; turnMs: number; aiDelayMs: number; nextHandMs: number }) {
+    const { registerRoomRoutes } = await import('../server/routes/rooms.js');
+    app = Fastify();
+    registerRoomRoutes(app, { modules: MODULES, ...o });
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    app.server.on('upgrade', (req, socket, head) => { if (!handleRoomUpgrade(req, socket as any, head)) socket.destroy(); });
+    port = (app.server.address() as AddressInfo).port;
+  }
+
+  async function seatAt(email: string) {
+    const res = await ticket(app, email, { app: 'threewinds', tier: 'tea' });
+    expect(res.statusCode).toBe(200);
+    return res.json() as { path: string; seat: number; roomId: string };
+  }
+
+  async function connect(path: string) {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+    sockets.push(ws);
+    const msgs: any[] = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(String(d))));
+    const closed = new Promise<number>((r) => ws.once('close', (code) => r(code)));
+    await new Promise<void>((r, j) => { ws.once('open', () => r()); ws.once('error', j); });
+    return { ws, msgs, closed };
+  }
+
+  const flush = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r)); };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    balances.clear();
+    for (const e of [A, B, C]) balances.set(e, 1000);
+    rooms = await import('../server/routes/rooms.js');
+    rooms.resetRooms();
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    for (const ws of sockets.splice(0)) ws.terminate();
+    rooms.resetRooms();
+    closeAllGameRooms();
+    await app?.close();
+  });
+
+  it('I1: a seat released because its escrow failed is cut off with 4001 and unseated', async () => {
+    await start({ aiFillMs: AI_FILL_MS, turnMs: 60_000, aiDelayMs: 60_000, nextHandMs: 60_000 });
+    const a = await seatAt(A);
+    const b = await seatAt(B);
+    const ca = await connect(a.path);
+    await connect(b.path);
+    balances.set(A, 10); // spent after sitting: seat 0's escrow fails at hand start
+    await vi.waitFor(() => expect(rooms.roomSnapshot(a.roomId)?.hand).toBe(1), { timeout: 2000 });
+    expect(await ca.closed).toBe(ROOM_CLOSE.NO_SEAT);
+    expect(ca.msgs.some((m) => m.type === 'error' && m.code === 'insufficient_taels')).toBe(true);
+    const snap = rooms.roomSnapshot(a.roomId)!;
+    expect(snap.ai).toContain(0);
+    expect(snap.humans).toEqual({ 1: B });
+    // A frame from the cut-off socket goes nowhere: the room sends A nothing more.
+    const n = ca.msgs.length;
+    ca.ws.send(JSON.stringify({ type: 'action', seq: 1, action: { discard: 't00' } }));
+    await flush();
+    expect(ca.msgs.length).toBe(n);
+  });
+
+  it('I2: a human whose socket closed with 1001 is unseated after the hand in progress, with no new escrow', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    await start({ aiFillMs: 150, turnMs: 1000, aiDelayMs: 100, nextHandMs: 200 });
+    const a = await seatAt(A);
+    const c = await connect(a.path);
+    await vi.advanceTimersByTimeAsync(200);
+    await flush();
+    expect(rooms.roomSnapshot(a.roomId)?.hand).toBe(1);
+    c.ws.close(1001);
+    await c.closed;
+    await flush();
+    for (let i = 0; i < 120; i++) { await vi.advanceTimersByTimeAsync(500); await flush(); }
+    const escrows = escrowPlay.mock.calls.filter((call) => call[1] === A);
+    expect(escrows.length).toBe(1);
+    expect(rooms.roomSnapshot(a.roomId)).toBeUndefined();
+  });
+
+  it('I2: a ticket whose socket never connects is unseated before the next deal', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    await start({ aiFillMs: 40_000, turnMs: 1000, aiDelayMs: 100, nextHandMs: 200 });
+    const a = await seatAt(A); // 30 s ticket, never used
+    await vi.advanceTimersByTimeAsync(41_000);
+    await flush();
+    expect(escrowPlay).not.toHaveBeenCalled();
+    expect(rooms.roomSnapshot(a.roomId)).toBeUndefined();
   });
 });

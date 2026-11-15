@@ -16,7 +16,7 @@ import { requireAuth } from '../clerk.js';
 import { ROOM_MODULES } from '../rooms/modules.js';
 import { GameRoom, type HandResult, type RoomGameModule, type RoomMessage } from '../rooms/runtime.js';
 import {
-  ROOM_SOCKET_PREFIX, issueRoomTicket, registerLiveRoom, unregisterLiveRoom, sendToSeat, createRoomHooks,
+  ROOM_SOCKET_PREFIX, ROOM_CLOSE, ROOM_TICKET_TTL_MS, issueRoomTicket, registerLiveRoom, unregisterLiveRoom, sendToSeat, closeSeatSocket, createRoomHooks,
 } from '../rooms/socket.js';
 import { PLAY_APPS, findTier, type PlayTier } from '../../shared/play-currency-catalog.js';
 import {
@@ -82,6 +82,12 @@ interface TableRoom {
   escrowed: Map<number, string>;
   /** Seats whose socket closed normally (1000) mid-hand: unseated once the hand settles. */
   leaving: Set<number>;
+  /** Seats with a live socket right now. */
+  connected: Set<number>;
+  /** Seats that had a live socket at any time since the last hand ended (or since they sat). */
+  heard: Set<number>;
+  /** seat → expiry of a ticket issued but not yet used to connect. */
+  ticketUntil: Map<number, number>;
   /** Settlement of the last hand, while it runs. */
   settling: Promise<void> | null;
   nextTimer: ReturnType<typeof setTimeout> | null;
@@ -118,6 +124,13 @@ export async function startTableHand(roomId: string): Promise<void> {
   if (!t) return;
   if (t.fillTimer) { clearTimeout(t.fillTimer); t.fillTimer = null; }
   if (t.nextTimer) { clearTimeout(t.nextTimer); t.nextTimer = null; }
+  // A human with no live socket since the last hand ended (and no unexpired ticket) has gone away.
+  const now = Date.now();
+  for (const seat of [...t.seats.keys()]) {
+    if (t.connected.has(seat) || t.heard.has(seat) || (t.ticketUntil.get(seat) ?? 0) > now) continue;
+    unseat(t, seat);
+  }
+  if (t.seats.size === 0) { closeTable(t); return; }
   t.state = 'playing';
   t.hand++;
   const hand = t.hand;
@@ -133,9 +146,8 @@ export async function startTableHand(roomId: string): Promise<void> {
     }
     if (rooms.get(roomId) !== t) return; // closed meanwhile
     if (!ok) {
-      t.seats.delete(seat);
-      t.room.release(seat);
       sendToSeat(t.id, seat, { type: 'error', code: 'insufficient_taels', seq: 0 } as unknown as RoomMessage);
+      unseat(t, seat);
     }
   }
   if (t.seats.size === 0) { closeTable(t); return; }
@@ -145,9 +157,14 @@ export async function startTableHand(roomId: string): Promise<void> {
   t.room.startHand(t.dealer);
 }
 
+/** Frees a human seat and cuts its socket (4001), so a released seat can never steer the AI that takes it over. */
 function unseat(t: TableRoom, seat: number): void {
   t.seats.delete(seat);
   t.room.release(seat);
+  t.connected.delete(seat);
+  t.heard.delete(seat);
+  t.ticketUntil.delete(seat);
+  closeSeatSocket(t.id, seat, ROOM_CLOSE.NO_SEAT, 'no_seat');
 }
 
 async function releaseAll(app: string, held: Map<number, string>, ref: string): Promise<number> {
@@ -205,6 +222,7 @@ async function settleHand(t: TableRoom, r: HandResult): Promise<void> {
   }
   for (const seat of t.leaving) unseat(t, seat);
   t.leaving.clear();
+  t.heard = new Set(t.connected);
   scheduleNextHand(t);
 }
 
@@ -217,6 +235,7 @@ function scheduleNextHand(t: TableRoom): void {
 
 /** A seat's socket closed. Mid-hand the seat is kept (autoplayed, still escrowed); a normal close (1000) leaves the table. */
 function onSeatClose(t: TableRoom, seat: number, code: number): void {
+  t.connected.delete(seat);
   if (rooms.get(t.id) !== t || code !== 1000 || !t.seats.has(seat)) return;
   if (t.room.inHand || t.settling) { t.leaving.add(seat); return; }
   if (t.state !== 'playing') return; // still waiting for the first hand: the seat is kept
@@ -283,13 +302,19 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
   );
   const t: TableRoom = {
     id, app, tier, module, room, seats: new Map(), state: 'waiting', createdAt: Date.now(), hand: 0, dealer: 0, fillTimer: null, results,
-    escrowed: new Map(), leaving: new Set(), settling: null, nextTimer: null, nextHandMs: o.nextHandMs,
+    escrowed: new Map(), leaving: new Set(), connected: new Set(), heard: new Set(), ticketUntil: new Map(), settling: null, nextTimer: null, nextHandMs: o.nextHandMs,
   };
   rooms.set(id, t);
   registerLiveRoom(id, {
     room,
     seatFor(email: string) {
-      for (const [seat, e] of t.seats) if (e === email) { t.leaving.delete(seat); return seat; }
+      for (const [seat, e] of t.seats) if (e === email) {
+        t.leaving.delete(seat);
+        t.connected.add(seat);
+        t.heard.add(seat);
+        t.ticketUntil.delete(seat);
+        return seat;
+      }
       return undefined;
     },
     onClose(seat: number, code: number) { onSeatClose(t, seat, code); },
@@ -301,6 +326,8 @@ function seatInTable(t: TableRoom, email: string, aiFillMs: number): number | nu
   const seat = t.room.seatHuman(email);
   if (seat === 'full') return null;
   t.seats.set(seat, email);
+  // The caller's ticket is issued right after this returns; a kickoff below must not see the seat as abandoned.
+  t.ticketUntil.set(seat, Date.now() + ROOM_TICKET_TTL_MS);
   if (t.seats.size >= t.module.seats) {
     kickoff(t.id);
   } else if (!t.fillTimer) {
@@ -366,6 +393,7 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
 
     const issue = (t: TableRoom, seat: number) => {
       const { ticket, expiresAt } = issueRoomTicket(email, t.id);
+      t.ticketUntil.set(seat, expiresAt);
       return { ticket, expiresAt, path: `${ROOM_SOCKET_PREFIX}${t.id}?ticket=${ticket}`, roomId: t.id, tier: t.tier.id, seat };
     };
 

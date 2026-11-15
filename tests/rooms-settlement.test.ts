@@ -139,7 +139,7 @@ describe('room hand settlement', () => {
     expect(c.msgs.find((m) => m.type === 'settled')).toEqual({ type: 'settled', hand: 1, deltas: points.map((p) => p * STAKE) });
   });
 
-  it('a mid-hand disconnect keeps the seat escrowed and autoplayed; the next hand re-escrows', async () => {
+  it('a mid-hand disconnect keeps the seat escrowed and autoplayed to the end of that hand, then unseats it', async () => {
     await startServer({ turnMs: 150, nextHandMs: 200 });
     const c = await join(HUMAN, false);
     const ref1 = `room:${c.roomId}:hand:1`;
@@ -151,12 +151,10 @@ describe('room hand settlement', () => {
 
     await waitFor(async () => (await escrowStatus(ref1)) === 'settled');
     const delta = settled[0][c.seat] * STAKE;
-    // Next hand starts after nextHandMs with the human still seated and escrowed again.
-    const ref2 = `room:${c.roomId}:hand:2`;
-    await waitFor(async () => (await escrowStatus(ref2)) !== undefined);
-    expect(rooms.roomSnapshot(c.roomId)).toMatchObject({ hand: 2, humans: { [c.seat]: HUMAN } });
-    const bal = await getPlayBalance(APP, HUMAN);
-    expect(bal.balance + bal.held).toBe(START + delta);
+    // Nobody reconnected: the absent human is unseated before hand 2 and nothing more is escrowed.
+    await waitFor(() => rooms.roomSnapshot(c.roomId) === undefined, 2000);
+    expect(await escrowStatus(`room:${c.roomId}:hand:2`)).toBeUndefined();
+    expect(await getPlayBalance(APP, HUMAN)).toEqual({ balance: START + delta, held: 0 });
   });
 
   it('a human who closes with 1000 between hands is unseated and the empty table is removed', async () => {

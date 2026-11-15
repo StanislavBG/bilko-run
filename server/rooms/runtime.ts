@@ -147,6 +147,8 @@ export class GameRoom<S> {
 
   act(seat: number, seq: number, action: unknown): void {
     if (this.state === null) return this.sendError(seat, 'no_hand');
+    // A seat released to AI is the house's now: a stale socket must not steer it.
+    if (this.ai.has(seat)) return this.sendError(seat, 'not_your_turn');
     if (!this.toActNow.includes(seat)) return this.sendError(seat, 'not_your_turn');
     if (seq !== this.seq) return this.sendError(seat, 'stale_seq');
     this.applyAction(seat, action, true);

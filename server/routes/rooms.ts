@@ -602,7 +602,8 @@ export function resetRooms(): void {
 
 export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions = {}): void {
   const modules = opts.modules ?? ROOM_MODULES;
-  // The default registry is gated by the owner's ROOMS_OPEN switch; explicit modules (tests) are always open.
+  // The default registry is open unless the owner lists the app in ROOMS_CLOSED (emergency switch);
+  // explicit modules (tests) are always open.
   const gated = opts.modules === undefined;
   const timing = {
     aiFillMs: opts.aiFillMs ?? DEFAULT_AI_FILL_MS,
@@ -631,7 +632,7 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
 
     const module = moduleFor(modules, appId);
     if (!module) return reply.code(404).send({ error: 'unknown_app' });
-    if (gated && !envListIncludes('ROOMS_OPEN', appId)) return reply.code(409).send({ error: 'rooms_closed' });
+    if (gated && envListIncludes('ROOMS_CLOSED', appId)) return reply.code(409).send({ error: 'rooms_closed' });
     const tier = findTier(appId, tierId);
     if (!tier) return reply.code(404).send({ error: 'unknown_tier' });
 
@@ -704,7 +705,7 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
     }
     const module = moduleFor(modules, appId);
     if (!module) return reply.code(404).send({ error: 'unknown_app' });
-    if (gated && !envListIncludes('ROOMS_OPEN', appId)) return reply.code(409).send({ error: 'rooms_closed' });
+    if (gated && envListIncludes('ROOMS_CLOSED', appId)) return reply.code(409).send({ error: 'rooms_closed' });
     const tiers = PLAY_APPS[appId].tiers.map((tier) => {
       let openSeats = 0;
       for (const t of rooms.values()) {

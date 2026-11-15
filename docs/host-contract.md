@@ -725,7 +725,7 @@ export interface RoomGameModule<S> {
 - If any module method throws, the hand is voided: no balance changes and every escrow is released.
 - The optional hooks follow the same rule. If `nextDealer`, `timeoutAction` or `deadlineMs` throws or returns an invalid value, the hand is voided. Invalid means: `nextDealer` not an integer seat, a `timeoutAction` that `apply` rejects, or a `deadlineMs` that is not a positive integer, `null` or `undefined`.
 
-Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). An app with no module or no `PLAY_APPS` entry gets `unknown_app`. A registered app gets `rooms_closed` until its id is in the owner's `ROOMS_OPEN` switch (~/Projects/Bilko/docs/deployment.md).
+Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). An app with no module or no `PLAY_APPS` entry gets `unknown_app`. A registered app's tables are open. It gets `rooms_closed` only while the owner lists its id in the `ROOMS_CLOSED` emergency switch (~/Projects/Bilko/docs/deployment.md).
 
 ### Endpoints
 
@@ -743,12 +743,13 @@ Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by 
 | 400 | `{ error: 'body must be { app, tier }, each 1-32 chars of [a-z0-9-]' }` | Missing or malformed `app` or `tier`. |
 | 429 | `{ error: 'rate_limited' }` | More than 30 tickets per minute per user. |
 | 404 | `{ error: 'unknown_app' }` | No game module or no `PLAY_APPS` entry for `app`. |
-| 409 | `{ error: 'rooms_closed' }` | The app is registered, but its tables are not open yet. |
+| 409 | `{ error: 'rooms_closed' }` | The app is registered, but the owner closed its tables with `ROOMS_CLOSED`. |
 | 404 | `{ error: 'unknown_tier' }` | `tier` is not one of the app's tiers. |
 | 402 | `{ error: 'insufficient_taels', balance, required }` | Balance is below `stake × maxLossPoints`. Not checked on a rejoin. |
 | 503 | `{ error: 'server_full' }` | 200 tables already open in this process. |
+| 503 | `{ error: 'table_moving' }`, `Retry-After: 5` | The caller is seated at a saved table that another instance still holds (a deploy in progress). Retry after the header's seconds; it lasts up to about 90 s. |
 
-**`GET /api/rooms/tiers` errors:** 400 `{ error: 'app must be 1-32 chars of [a-z0-9-]' }`, 404 `{ error: 'unknown_app' }`, 409 `{ error: 'rooms_closed' }` (the app is registered, but its tables are not open yet).
+**`GET /api/rooms/tiers` errors:** 400 `{ error: 'app must be 1-32 chars of [a-z0-9-]' }`, 404 `{ error: 'unknown_app' }`, 409 `{ error: 'rooms_closed' }` (the app is registered, but the owner closed its tables with `ROOMS_CLOSED`).
 
 ### Socket
 
@@ -788,7 +789,7 @@ The handshake is refused with:
 |---|---|---|
 | `1000` | `room_closed` | The table closed (no human left). |
 | `1009` | — | Frame over 16 KiB (refused before buffering). |
-| `1012` | `server_restart` | Deploy drain (SIGTERM). Every room is gone; fetch a new ticket. |
+| `1012` | `server_restart` | Deploy drain (SIGTERM). The table is saved; fetch a new ticket to resume it. |
 | `1012` | `room_gone` | The table vanished between the handshake and the join. |
 | `4000` | `superseded` | The same seat opened a newer socket. |
 | `4001` | `no_seat` | The ticket holder has no seat at this table. |
@@ -807,7 +808,7 @@ A seat only ever receives `module.view(state, seat)`. The raw state, the seed an
 - To reconnect, call `POST /api/rooms/ticket` again with the same `app`. It returns a ticket for the same table and seat. On connect the server sends the current `state`.
 - A second socket for the same seat replaces the first (`4000 superseded`).
 - A normal close (`1000`) during a hand marks the seat as leaving: it plays out (autoplayed) and is unseated after settlement. A `1000` close before the first hand keeps the seat. Any other close keeps the seat.
-- A deploy (`1012`) loses every table. Live hands are voided and their escrows released by the orphan sweeper.
+- A restart (deploy or spin-down, `1012`) no longer voids the hand. Every table is saved on each move. Reconnect with a fresh `POST /api/rooms/ticket`: the first seated player's ticket resumes the table, hand and escrows included. During a deploy the ticket can answer `503 { error: 'table_moving' }` with `Retry-After` for up to about 90 s, while the old instance still holds the table; retry after the header's seconds and the table resumes. A saved table nobody returns to within 10 minutes is voided and its escrows released.
 
 ### AI seat fill and autoplay
 
@@ -825,7 +826,7 @@ Unlike the relay, a **missing `Origin` header is allowed in production**, becaus
 
 ### Three Winds
 
-- **Tables closed.** The app id is `threewinds`. `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` from `@threewinds/engine` (`npm:@bilkobibitkov/threewinds-engine`), with no host overrides: its `nextDealer`, `timeoutAction` and `deadlineMs` (the R4.6 claim window) come from the engine, so a rule change is an engine release plus a pin bump here. Both room endpoints answer `409 rooms_closed` until `ROOMS_OPEN` includes `threewinds`.
+- **Tables open.** The app id is `threewinds`. `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` from `@threewinds/engine` (`npm:@bilkobibitkov/threewinds-engine`), with no host overrides: its `nextDealer`, `timeoutAction` and `deadlineMs` (the R4.6 claim window) come from the engine, so a rule change is an engine release plus a pin bump here. Both room endpoints are open; they answer `409 rooms_closed` only while `ROOMS_CLOSED` includes `threewinds`.
 - **Tiers** (`shared/play-currency-catalog.ts`), 3 seats each:
 
 | Tier id | Name | Stake (taels per point) |

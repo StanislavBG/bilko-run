@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { createHash } from 'crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -14,8 +15,9 @@ const HTML =
   '<html><head><title>Old</title><meta property="og:title" content="Page Roast"></head><body><script src="/a.js"></script></body></html>';
 
 const staticRoot = mkdtempSync(join(tmpdir(), 'og-static-'));
-const svgPng = (w: number, h: number) =>
-  Buffer.from(new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="#123456"/></svg>`).render().asPng());
+const svgPng = (w: number, h: number, fill = '#123456') =>
+  Buffer.from(new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${fill}"/></svg>`).render().asPng());
+const etagOf = (b: Buffer) => `"${createHash('sha1').update(b).digest('hex').slice(0, 16)}"`;
 const goodPng = svgPng(1200, 630);
 mkdirSync(join(staticRoot, 'projects', 'share-ok'), { recursive: true });
 mkdirSync(join(staticRoot, 'projects', 'share-other'), { recursive: true });
@@ -23,6 +25,8 @@ writeFileSync(join(staticRoot, 'projects', 'share-ok', 'og.png'), goodPng);
 writeFileSync(join(staticRoot, 'projects', 'share-ok', 'small.png'), svgPng(600, 315));
 writeFileSync(join(staticRoot, 'projects', 'share-ok', 'fake.png'), Buffer.from('not a png at all, just text'));
 writeFileSync(join(staticRoot, 'projects', 'share-other', 'og.png'), goodPng);
+mkdirSync(join(staticRoot, 'projects', 'share-mut'), { recursive: true });
+writeFileSync(join(staticRoot, 'projects', 'share-mut', 'og.png'), goodPng);
 
 const mk = (slug: string, shareImage: string) => ({ slug, name: slug, tagline: 't', category: 'c', shareImage });
 const projects = [
@@ -32,6 +36,7 @@ const projects = [
   mk('share-fake', '/projects/share-ok/fake.png'),
   mk('share-missing', '/projects/share-ok/missing.png'),
   mk('share-escape', '/projects/share-ok/../share-other/og.png'),
+  mk('share-mut', '/projects/share-mut/og.png'),
 ];
 const app = Fastify();
 
@@ -65,7 +70,8 @@ describe('OG image routes', () => {
     const res = await app.inject({ method: 'GET', url: '/og/page-roast.png' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('image/png');
-    expect(res.headers['cache-control']).toBe('public, max-age=86400');
+    expect(res.headers['cache-control']).toBe('public, max-age=300');
+    expect(res.headers.etag).toBe(etagOf(res.rawPayload));
   });
 
   it('renders the default card', async () => {
@@ -78,8 +84,73 @@ describe('OG image routes', () => {
     const res = await app.inject({ method: 'GET', url: '/og/share-ok.png' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('image/png');
-    expect(res.headers['cache-control']).toBe('public, max-age=86400');
+    expect(res.headers['cache-control']).toBe('public, max-age=300');
+    expect(res.headers.etag).toBe(etagOf(goodPng));
     expect(Buffer.compare(res.rawPayload, goodPng)).toBe(0);
+  });
+
+  it('carries a content ETag on the default and fallback cards', async () => {
+    for (const url of ['/og/default.png', '/og/share-small.png']) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers.etag).toMatch(/^"[0-9a-f]{16}"$/);
+      expect(res.headers.etag).toBe(etagOf(res.rawPayload));
+    }
+  });
+
+  it('answers a matching If-None-Match with an empty 304', async () => {
+    const tag = etagOf(goodPng);
+    for (const inm of [tag, `W/${tag}`, `"0000000000000000", ${tag}`, '*']) {
+      const res = await app.inject({ method: 'GET', url: '/og/share-ok.png', headers: { 'if-none-match': inm } });
+      expect(res.statusCode, inm).toBe(304);
+      expect(res.rawPayload.length).toBe(0);
+      expect(res.headers.etag).toBe(tag);
+      expect(res.headers['cache-control']).toBe('public, max-age=300');
+    }
+    const gen = await app.inject({ method: 'GET', url: '/og/page-roast.png' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/og/page-roast.png?v=abc12345',
+      headers: { 'if-none-match': gen.headers.etag as string },
+    });
+    expect(res.statusCode).toBe(304);
+    expect(res.headers['cache-control']).toBe('public, max-age=86400');
+  });
+
+  it('sends the full 200 on a stale If-None-Match', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/og/share-ok.png',
+      headers: { 'if-none-match': '"0000000000000000", W/"1111111111111111"' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(Buffer.compare(res.rawPayload, goodPng)).toBe(0);
+  });
+
+  it('caches versioned requests for a day', async () => {
+    const res = await app.inject({ method: 'GET', url: '/og/share-ok.png?v=abc12345' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=86400');
+    const empty = await app.inject({ method: 'GET', url: '/og/share-ok.png?v=' });
+    expect(empty.headers['cache-control']).toBe('public, max-age=300');
+  });
+
+  it('changes the ETag when the shareImage file is rewritten', async () => {
+    const before = await app.inject({ method: 'GET', url: '/og/share-mut.png' });
+    expect(before.headers.etag).toBe(etagOf(goodPng));
+    const next = svgPng(1200, 630, '#abcdef');
+    expect(Buffer.compare(next, goodPng)).not.toBe(0);
+    writeFileSync(join(staticRoot, 'projects', 'share-mut', 'og.png'), next);
+    const after = await app.inject({ method: 'GET', url: '/og/share-mut.png' });
+    expect(after.statusCode).toBe(200);
+    expect(after.headers.etag).toBe(etagOf(next));
+    expect(after.headers.etag).not.toBe(before.headers.etag);
+    const stale = await app.inject({
+      method: 'GET',
+      url: '/og/share-mut.png',
+      headers: { 'if-none-match': before.headers.etag as string },
+    });
+    expect(stale.statusCode).toBe(200);
   });
 
   it.each(['share-small', 'share-fake', 'share-missing', 'share-escape'])(

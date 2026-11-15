@@ -1,4 +1,5 @@
-import type { FastifyInstance } from 'fastify';
+import { createHash } from 'crypto';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { injectOgMeta, resolveOg, type OgContext } from './og-meta.js';
 import { buildOfferJsonLd, hasProductJsonLd, injectJsonLd, offersForPath } from './offer-jsonld.js';
 import { availableOffers } from './services/offer-availability.js';
@@ -10,8 +11,29 @@ const ICON_MAX_BYTES = 512 * 1024;
 
 const OG_FILE_RE = /^([a-z0-9-]+)\.png$/;
 
+type OgRoute = { Params: { file: string }; Querystring: { v?: string } };
+
+/** True when an If-None-Match header (exact, W/ weak form, comma list, or *) matches the strong tag. */
+export function ifNoneMatch(header: string | string[] | undefined, etag: string): boolean {
+  if (!header) return false;
+  const raw = Array.isArray(header) ? header.join(',') : header;
+  return raw.split(',').some(part => {
+    const t = part.trim();
+    return t === '*' || t.replace(/^W\//, '') === etag;
+  });
+}
+
+function sendPng(req: FastifyRequest<OgRoute>, reply: FastifyReply, bytes: Buffer) {
+  const etag = `"${createHash('sha1').update(bytes).digest('hex').slice(0, 16)}"`;
+  const v = req.query?.v;
+  reply.header('etag', etag);
+  reply.header('cache-control', typeof v === 'string' && v.length > 0 ? 'public, max-age=86400' : 'public, max-age=300');
+  if (ifNoneMatch(req.headers['if-none-match'], etag)) return reply.code(304).send();
+  return reply.type('image/png').send(bytes);
+}
+
 export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
-  app.get<{ Params: { file: string } }>('/og/:file', async (req, reply) => {
+  app.get<OgRoute>('/og/:file', async (req, reply) => {
     const m = OG_FILE_RE.exec(req.params.file);
     if (!m) return reply.status(404).type('text/plain').send('Not found');
     const slug = m[1];
@@ -26,8 +48,7 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
       if (p.shareImage && ctx.staticRoot) {
         const asset = readProjectPng(ctx.staticRoot, slug, p.shareImage, SHARE_MAX_BYTES);
         if (asset && asset.width === 1200 && asset.height === 630) {
-          reply.header('cache-control', 'public, max-age=86400');
-          return reply.type('image/png').send(asset.bytes);
+          return sendPng(req, reply, asset.bytes);
         }
         req.log.warn(
           `og: shareImage for ${slug} unusable (${asset ? `${asset.width}x${asset.height}, need 1200x630` : 'missing, oversize, escaped or not a PNG'}); using generated card`,
@@ -46,8 +67,7 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
         urlLabel: `bilko.run/projects/${slug}`,
       });
     }
-    reply.header('cache-control', 'public, max-age=86400');
-    return reply.type('image/png').send(png);
+    return sendPng(req, reply, png);
   });
 
   // Registered right after the security-headers hook: by now HTML payloads

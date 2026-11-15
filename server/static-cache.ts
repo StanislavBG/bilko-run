@@ -126,6 +126,44 @@ export interface NormalizeResult {
   ms: number;
 }
 
+/** A card video under a published project: `/projects/<slug>/<path>.mp4|.webm`. */
+const PROJECT_VIDEO = /^\/projects\/[a-z0-9-]+\/.+\.(mp4|webm)$/;
+
+/**
+ * Cache lifetime for a content-versioned card video URL, or undefined.
+ *
+ * The listing's card video is linked as `/projects/<slug>/<file>.mp4?v=<sha1>`,
+ * where `v` is the sha1 of the file's bytes computed at build time from the
+ * same tree the deploy serves. A changed file gets a new URL, so the versioned
+ * URL can be cached for a year. Without a non-empty `v`, the file keeps
+ * staticCacheControl()'s one-day media policy.
+ */
+export function versionedMediaCacheControl(url: string): string | undefined {
+  const q = url.indexOf('?');
+  if (q === -1) return undefined;
+  if (!PROJECT_VIDEO.test(url.slice(0, q))) return undefined;
+  const v = new URLSearchParams(url.slice(q + 1)).get('v');
+  return v ? `public, max-age=${YEAR}, immutable` : undefined;
+}
+
+/**
+ * Override Cache-Control on 200/206 responses for versioned card videos.
+ *
+ * Must be registered before registerStaticCorsTrim: onSend hooks run in
+ * registration order, and the trim keys off the `public` this sets.
+ */
+export function registerVersionedMediaCache(app: {
+  addHook(name: 'onSend', fn: (req: any, reply: any, payload: any) => Promise<any>): unknown;
+}): void {
+  app.addHook('onSend', async (req, reply, payload) => {
+    const status = reply.statusCode as number;
+    if (status !== 200 && status !== 206) return payload;
+    const policy = versionedMediaCacheControl(req.url as string);
+    if (policy) reply.header('cache-control', policy);
+    return payload;
+  });
+}
+
 /**
  * Rewrite every file's mtime under `root` to a content-derived value.
  *

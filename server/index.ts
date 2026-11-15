@@ -54,7 +54,7 @@ import { loadBlogPosts } from './blog-posts.js';
 import { projectNotFound } from './project-not-found.js';
 import { registerProjectsHubRoutes } from './projects-hub.js';
 import { registerBilkoProfileRoutes } from './bilko-profile-routes.js';
-import { normalizeStaticMtimes, registerEncodingVary, registerStaticCorsTrim, setStaticCacheHeaders } from './static-cache.js';
+import { normalizeStaticMtimes, registerEncodingVary, registerStaticCorsTrim, registerVersionedMediaCache, setStaticCacheHeaders } from './static-cache.js';
 import { createShutdown, drainWindowMs } from './shutdown.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
@@ -143,6 +143,8 @@ const distPath = distCandidates.find(p => existsSync(p)) ?? distCandidates[0];
 // @fastify/cors stamps on every response — Cloudflare won't edge-cache
 // anything that varies on a header other than Accept-Encoding, so without
 // this the static tree stays DYNAMIC no matter what Cache-Control says.
+// Versioned card videos (?v=<sha1>) go immutable first, so the trim sees `public`.
+registerVersionedMediaCache(app);
 registerStaticCorsTrim(app);
 
 // Origin-side response compression. Render bills origin egress, and

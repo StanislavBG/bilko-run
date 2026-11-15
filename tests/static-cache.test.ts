@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import staticPlugin from '@fastify/static';
 import cors from '@fastify/cors';
+import compress from '@fastify/compress';
+import { randomBytes } from 'crypto';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, statSync } from 'fs';
 import { tmpdir } from 'os';
@@ -10,6 +12,8 @@ import {
   setStaticCacheHeaders,
   normalizeStaticMtimes,
   registerStaticCorsTrim,
+  registerVersionedMediaCache,
+  versionedMediaCacheControl,
 } from '../server/static-cache.js';
 
 function makeTree(): string {
@@ -234,5 +238,97 @@ describe('Cloudflare-blocking CORS headers', () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(200);
     expect(res.headers.vary ?? '').toMatch(/origin/i);
+  });
+});
+
+describe('versionedMediaCacheControl', () => {
+  const IMMUTABLE = 'public, max-age=31536000, immutable';
+
+  it('marks a content-versioned card mp4 immutable', () => {
+    expect(versionedMediaCacheControl('/projects/demo/tile.mp4?v=3f2a9c')).toBe(IMMUTABLE);
+  });
+
+  it('marks a content-versioned card webm immutable', () => {
+    expect(versionedMediaCacheControl('/projects/demo/media/tile.webm?v=abc123')).toBe(IMMUTABLE);
+  });
+
+  it('leaves an unversioned mp4 alone', () => {
+    expect(versionedMediaCacheControl('/projects/demo/tile.mp4')).toBeUndefined();
+    expect(versionedMediaCacheControl('/projects/demo/tile.mp4?w=1')).toBeUndefined();
+  });
+
+  it('leaves an empty v alone', () => {
+    expect(versionedMediaCacheControl('/projects/demo/tile.mp4?v=')).toBeUndefined();
+    expect(versionedMediaCacheControl('/projects/demo/tile.mp4?v')).toBeUndefined();
+  });
+
+  it('leaves a versioned png alone', () => {
+    expect(versionedMediaCacheControl('/projects/demo/tile.png?v=3f2a9c')).toBeUndefined();
+  });
+
+  it('leaves paths outside /projects alone', () => {
+    expect(versionedMediaCacheControl('/media/tile.mp4?v=3f2a9c')).toBeUndefined();
+    expect(versionedMediaCacheControl('/api/projects/demo/tile.mp4?v=3f2a9c')).toBeUndefined();
+  });
+});
+
+describe('versioned card video responses', () => {
+  let app: ReturnType<typeof Fastify>;
+  let size: number;
+
+  beforeAll(async () => {
+    const root = makeTree();
+    // Minimal ISO-BMFF ftyp box, then incompressible random bytes.
+    const ftyp = Buffer.from([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, // size 24, 'ftyp'
+      0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00, // 'isom', minor 0x200
+      0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x31, // 'isom', 'mp41'
+    ]);
+    const bytes = Buffer.concat([ftyp, randomBytes(64 * 1024)]);
+    writeFileSync(join(root, 'projects', 'demo', 'tile.mp4'), bytes);
+    size = bytes.length;
+    normalizeStaticMtimes(root);
+
+    // Same hook order as server/index.ts: cors → versioned media → trim → compress → static.
+    app = Fastify({ logger: false });
+    await app.register(cors, { origin: ['https://bilko.run'], credentials: true });
+    registerVersionedMediaCache(app);
+    registerStaticCorsTrim(app);
+    await app.register(compress, {
+      threshold: 1024,
+      encodings: ['br', 'gzip'],
+      customTypes: /^text\/(?!event-stream)|(?:\+|\/)json(?:;|$)|(?:\+|\/)text(?:;|$)|(?:\+|\/)xml(?:;|$)|octet-stream(?:;|$)|javascript|^application\/wasm(?:;|$)/u,
+    });
+    await app.register(staticPlugin, {
+      root,
+      prefix: '/',
+      cacheControl: false,
+      setHeaders: (res, path) => setStaticCacheHeaders(res, path),
+      preCompressed: true,
+      redirect: true,
+    });
+    await app.ready();
+  });
+
+  it('serves a byte range of a versioned video uncompressed and immutable', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/projects/demo/tile.mp4?v=3f2a9c',
+      headers: { range: 'bytes=0-99', 'accept-encoding': 'br, gzip' },
+    });
+    expect(res.statusCode).toBe(206);
+    expect(res.headers['content-range']).toBe(`bytes 0-99/${size}`);
+    expect(res.rawPayload.length).toBe(100);
+    expect(res.headers['content-encoding']).toBeUndefined();
+    expect(res.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    // The CORS trim still applies after the override.
+    expect(res.headers.vary ?? '').not.toMatch(/origin/i);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('keeps the one-day policy for an unversioned video', async () => {
+    const res = await app.inject({ method: 'GET', url: '/projects/demo/tile.mp4' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=86400');
   });
 });

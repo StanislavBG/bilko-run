@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GameRoom, type RoomGameModule, type RoomMessage } from '../server/rooms/runtime.js';
 import { toyGame, TOY_TOKENS, type ToyState } from './fixtures/rooms-toy-game.js';
+import { claimWindowGame, type ClaimWindowState } from './fixtures/rooms-claim-game.js';
 
 const TURN_MS = 10_000;
 const AI_MS = 500;
@@ -417,5 +418,66 @@ describe('GameRoom module hooks', () => {
     expect(spy.state!.by).toEqual([{ seat: 1, how: 'human' }, { seat: 2, how: 'ai' }]);
     expect(results).toHaveLength(1);
     expect(clock.pending()).toBe(0);
+  });
+});
+
+describe('GameRoom seq window', () => {
+  function windowSetup() {
+    const clock = fakeClock();
+    const spy = { state: null as ClaimWindowState | null };
+    const mod: RoomGameModule<ClaimWindowState> = {
+      ...claimWindowGame,
+      newHand(seed, dealer) { spy.state = claimWindowGame.newHand(seed, dealer); return spy.state; },
+      apply(state, seat, action) { const r = claimWindowGame.apply(state, seat, action); if (r.ok) spy.state = r.state; return r; },
+    };
+    const sent: Array<{ seat: number; msg: RoomMessage }> = [];
+    const room = new GameRoom('r3', mod, { turnMs: TURN_MS, aiDelayMs: AI_MS, seed: () => 'window', timers: clock.timers, now: clock.now }, {
+      send: (seat, msg) => sent.push({ seat, msg }),
+      onHandOver: () => {},
+    });
+    room.seatHuman('a'); // seat 0: dealer
+    room.seatHuman('b'); // seat 1: human, due in the window
+    room.fillWithAi(); // seat 2: AI, due in the window
+    room.startHand(0);
+    return { clock, spy, sent, room };
+  }
+
+  const errorsSince = (sent: Array<{ seat: number; msg: RoomMessage }>, n: number) => sent.slice(n).filter((s) => s.msg.type === 'error');
+
+  it("applies a human's action sent with the window's opening seq after an AI declared first", () => {
+    const { clock, spy, sent, room } = windowSetup();
+    const opening = lastState(sent, 1)!.seq;
+    expect(lastState(sent, 1)!.toAct).toEqual([1, 2]);
+    clock.advance(AI_MS); // AI seat 2 declares: seq moves on
+    expect(spy.state!.by).toEqual([{ seat: 2, how: 'ai' }]);
+    expect(lastState(sent, 1)!.seq).toBe(opening + 1);
+    const n = sent.length;
+    room.act(1, opening, { how: 'human' });
+    expect(errorsSince(sent, n)).toEqual([]);
+    expect(spy.state!.by).toEqual([{ seat: 2, how: 'ai' }, { seat: 1, how: 'human' }]);
+  });
+
+  it('refuses a resent, too-old or future seq with stale_seq and changes nothing', () => {
+    const { clock, spy, sent, room } = windowSetup();
+    const opening = lastState(sent, 1)!.seq;
+    clock.advance(AI_MS); // seq opening+1 (AI)
+    room.act(1, opening, { how: 'human' }); // seq opening+2; seat 1's clock restarts here
+    const cur = lastState(sent, 1)!.seq;
+    expect(cur).toBe(opening + 2);
+    const before = spy.state;
+    const tries: Array<[string, number]> = [
+      ['resent applied seq', opening],
+      ['older than the clock start', opening + 1],
+      ['above the current seq', cur + 1],
+    ];
+    for (const [why, seq] of tries) {
+      const n = sent.length;
+      room.act(1, seq, { how: 'again' });
+      expect(sent.slice(n), why).toEqual([{ seat: 1, msg: { type: 'error', code: 'stale_seq', seq: cur } }]);
+      expect(spy.state, why).toBe(before);
+    }
+    // the seat's own new clock-start seq is still accepted
+    room.act(1, cur, { how: 'human2' });
+    expect(spy.state!.by.map((x) => x.how)).toEqual(['ai', 'human', 'human2']);
   });
 });

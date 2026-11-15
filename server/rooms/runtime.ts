@@ -79,8 +79,11 @@ export class GameRoom<S> {
   private seq = 0;
   private dealer = 0;
   private toActNow: number[] = [];
-  /** seat → its armed autoplay timer; a seat keeps it while it stays due. */
-  private readonly seatTimers = new Map<number, { handle: unknown; deadline: number; token: number }>();
+  /**
+   * seat → its armed autoplay timer; a seat keeps it while it stays due.
+   * startSeq is the seq when this clock started: the oldest seq the seat may still act on.
+   */
+  private readonly seatTimers = new Map<number, { handle: unknown; deadline: number; token: number; startSeq: number }>();
   private nextToken = 0;
 
   constructor(id: string, module: RoomGameModule<S>, opts: GameRoomOptions, hooks: GameRoomHooks) {
@@ -150,7 +153,10 @@ export class GameRoom<S> {
     // A seat released to AI is the house's now: a stale socket must not steer it.
     if (this.ai.has(seat)) return this.sendError(seat, 'not_your_turn');
     if (!this.toActNow.includes(seat)) return this.sendError(seat, 'not_your_turn');
-    if (seq !== this.seq) return this.sendError(seat, 'stale_seq');
+    // Any seq since the seat's own clock started: another seat's move in between does
+    // not change this seat's decision, and its own applied action restarts the clock.
+    const startSeq = this.seatTimers.get(seat)?.startSeq ?? this.seq;
+    if (!Number.isInteger(seq) || seq < startSeq || seq > this.seq) return this.sendError(seat, 'stale_seq');
     this.applyAction(seat, action, true);
   }
 
@@ -229,7 +235,7 @@ export class GameRoom<S> {
     for (const [seat, ms] of fresh) {
       const token = ++this.nextToken;
       const handle = this.timers.set(() => this.autoplay(seat, token), ms);
-      this.seatTimers.set(seat, { handle, deadline: now + ms, token });
+      this.seatTimers.set(seat, { handle, deadline: now + ms, token, startSeq: this.seq });
     }
     this.broadcastState();
   }

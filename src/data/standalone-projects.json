@@ -674,7 +674,8 @@
         "Do not claim a downloadable, Steam or app-store version exists.",
         "Do not claim in-app purchases or a paid tier; it is free."
       ],
-      "shareImage": "/projects/escape-velocity/og.png"
+      "shareImage": "/projects/escape-velocity/og.png",
+      "video": "/projects/escape-velocity/tile.mp4"
     }
   },
   {

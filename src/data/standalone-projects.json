@@ -793,5 +793,24 @@
         "Do not promise results, delivery dates or a fixed project price."
       ]
     }
+  },
+  {
+    "slug": "threewinds",
+    "name": "Three Winds",
+    "tagline": "Malaysian 3-player mahjong: practise a full hand against two AI players, with a tutor and the whole fan table.",
+    "category": "Game",
+    "status": "live",
+    "year": 2026,
+    "host": {
+      "kind": "static-path",
+      "path": "/projects/threewinds/",
+      "localPath": "~/Projects/3PMahjong"
+    },
+    "tags": [
+      "Free",
+      "Mahjong",
+      "vs AI"
+    ],
+    "displayName": "Three Winds 三風"
   }
 ]

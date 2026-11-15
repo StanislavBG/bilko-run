@@ -53,6 +53,16 @@
 }
 .pr-shot:has(img), .pr-shot:has(video) { background: #1b1714; }
 .pr-shot img, .pr-shot video { width: 100%; height: 100%; object-fit: contain; object-position: center; display: block; }
+.pr-shot { position: relative; }
+.pr-shot-ctl { position: absolute; bottom: 12px; right: 12px; display: flex; gap: 8px; z-index: 1; }
+.pr-shot-ctl button {
+  width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .6); color: #fff;
+}
+.pr-shot-ctl button:hover { background: rgba(0, 0, 0, .75); }
+.pr-shot-ctl button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(0, 0, 0, .6); }
+.pr-shot-ctl svg { display: block; }
 .pr-story { flex: 1 1 0; min-height: 0; overflow-y: auto; border: 1px solid var(--pr-rule-soft); padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .pr-title { font: 400 52px/1 var(--pr-serif); letter-spacing: -.02em; }
 .pr-desc { font-size: 17px; line-height: 1.5; color: var(--pr-ink-2); text-wrap: pretty; }

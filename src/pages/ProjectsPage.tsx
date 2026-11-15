@@ -139,6 +139,10 @@ export function ProjectsPage() {
     return i < 0 ? 0 : i;
   });
   const [storyOpen, setStoryOpen] = useState(false);
+  // The visitor's pause/mute choices carry across cards on this page.
+  const [playback, setPlayback] = useState({ muted: true, paused: false });
+  const setMuted = useCallback((muted: boolean) => setPlayback(p => ({ ...p, muted })), []);
+  const setPaused = useCallback((paused: boolean) => setPlayback(p => ({ ...p, paused })), []);
   const [stage, setStage] = useState({ w: 1280, h: 560 });
   const stageRef = useRef<HTMLDivElement>(null);
   const lastWheel = useRef(0);
@@ -314,7 +318,17 @@ export function ProjectsPage() {
                 {storyOpen ? (
                   <StoryPanel card={card} isAdmin={isAdmin} />
                 ) : (
-                  <ProjectCardShot name={card.name} thumbnail={card.thumbnail} video={card.video} allowMotion={allowMotion} />
+                  <ProjectCardShot
+                    name={card.name}
+                    thumbnail={card.thumbnail}
+                    video={card.video}
+                    allowMotion={allowMotion}
+                    hasAudio={card.videoHasAudio}
+                    muted={playback.muted}
+                    paused={playback.paused}
+                    onMutedChange={setMuted}
+                    onPausedChange={setPaused}
+                  />
                 )}
                 <div className="pr-title">{card.name}</div>
                 <div className="pr-desc">{card.blurb}</div>

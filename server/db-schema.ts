@@ -669,6 +669,20 @@ export const MIGRATIONS = [
     created_at INTEGER NOT NULL,
     PRIMARY KEY (app, email, ref)
   )`,
+  // Play-currency store purchases (Apple IAP first). PRIMARY KEY (provider, external_id) means one
+  // store transaction id can credit exactly one account; a refund marks it and records any shortfall.
+  `CREATE TABLE IF NOT EXISTS play_purchases (
+    provider    TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    app         TEXT NOT NULL,
+    email       TEXT NOT NULL,
+    pack_id     TEXT NOT NULL,
+    taels       INTEGER NOT NULL CHECK (taels > 0),
+    status      TEXT NOT NULL DEFAULT 'credited' CHECK (status IN ('credited', 'refunded')),
+    shortfall   INTEGER NOT NULL DEFAULT 0 CHECK (shortfall >= 0),
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (provider, external_id)
+  )`,
   // Menu orders: one row per credit-bought item (the Agent Factory Kit). created_day is 'YYYY-MM-DD' in America/Los_Angeles.
   `CREATE TABLE IF NOT EXISTS menu_orders (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,

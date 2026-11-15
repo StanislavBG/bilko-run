@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../clerk.js';
 import { getStripe } from '../services/stripe.js';
-import { creditPlay, getPlayBalance } from '../services/play-currency.js';
-import { PLAY_APPS, findPack, type PlayPack } from '../../shared/play-currency-catalog.js';
+import { creditPlay, debitPlay, getPlayBalance } from '../services/play-currency.js';
+import { getAppleVerifier, type AppleNotification, type AppleTransaction } from '../services/apple-iap.js';
+import { dbGet, dbRun } from '../db.js';
+import { PLAY_APPS, findPack, findPackByAppleProduct, type PlayPack } from '../../shared/play-currency-catalog.js';
 
 /**
  * Play-currency (Three Winds taels) balance and Stripe pack checkout.
@@ -52,11 +54,47 @@ function perUserRate(max: number) {
 }
 
 const checkoutRate = perUserRate(10);
+const appleTxRate = perUserRate(30);
+const APPLE_NOTIFICATION_BODY_LIMIT = 64 * 1024;
+/** Notification types that take a purchase's taels back. Everything else is acknowledged with no action. */
+const APPLE_REFUND_TYPES = new Set(['REFUND', 'REVOKE']);
+
+type PurchaseRow = { app: string; email: string; taels: number; status: string };
+
+function getPurchase(provider: string, externalId: string): Promise<PurchaseRow | undefined> {
+  return dbGet<PurchaseRow>(
+    'SELECT app, email, taels, status FROM play_purchases WHERE provider = ? AND external_id = ?', provider, externalId);
+}
+
+/**
+ * Take a refunded/revoked Apple purchase's taels back: debits min(balance, taels) with a fixed
+ * ref (so a replay debits nothing), marks the purchase refunded and records the shortfall.
+ * A purchase that is unknown or already refunded changes nothing.
+ */
+async function refundApplePurchase(transactionId: string): Promise<void> {
+  const purchase = await getPurchase('apple', transactionId);
+  if (!purchase || purchase.status !== 'credited') return;
+  const taels = Number(purchase.taels);
+  const ref = `apple_refund:${transactionId}`;
+  let debited = 0;
+  // Retry once: the balance can move (a spend or escrow) between the read and the debit.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { balance } = await getPlayBalance(purchase.app, purchase.email);
+    const amount = Math.min(balance, taels);
+    if (amount <= 0) break;
+    const res = await debitPlay(purchase.app, purchase.email, amount, 'refund_apple', ref);
+    if (res.ok) { debited = amount; break; }
+  }
+  await dbRun(
+    "UPDATE play_purchases SET status = 'refunded', shortfall = ? WHERE provider = 'apple' AND external_id = ? AND status = 'credited'",
+    taels - debited, transactionId);
+}
 /** app:email pairs whose signup grant is already in the ledger (skips a write per call). */
 const granted = new Set<string>();
 
 export function resetPlayCurrencyRouteState(): void {
   checkoutRate.clear();
+  appleTxRate.clear();
   granted.clear();
 }
 
@@ -124,5 +162,77 @@ export function registerPlayCurrencyRoutes(app: FastifyInstance): void {
       console.error('[play-currency] checkout failed:', err?.message);
       return reply.code(503).send({ error: 'Checkout is not available right now.' });
     }
+  });
+
+  // StoreKit 2: the iOS app posts each signed transaction. One transaction id credits one account once.
+  app.post('/api/play-currency/apple/transactions', { bodyLimit: APPLE_NOTIFICATION_BODY_LIMIT }, async (req, reply) => {
+    const email = await requireAuth(req, reply);
+    if (!email) return;
+    if (!appleTxRate.take(email)) return reply.code(429).send({ error: 'rate_limited' });
+
+    const body = (req.body ?? {}) as { app?: unknown; signedTransaction?: unknown };
+    if (!knownApp(body.app)) return reply.code(400).send({ error: 'unknown_app' });
+    const appId = body.app;
+    if (typeof body.signedTransaction !== 'string' || body.signedTransaction.length === 0) {
+      return reply.code(400).send({ error: 'invalid_transaction' });
+    }
+
+    const verifier = getAppleVerifier();
+    if (!verifier) return reply.code(503).send({ error: 'apple_iap_unavailable' });
+
+    let tx: AppleTransaction;
+    try {
+      tx = await verifier.verifyTransaction(body.signedTransaction);
+    } catch (err: any) {
+      // Never log the signed payload itself.
+      console.warn('[play-currency] apple transaction rejected:', err?.name ?? 'Error');
+      return reply.code(400).send({ error: 'invalid_transaction' });
+    }
+    if (tx.revocationDate !== undefined) return reply.code(400).send({ error: 'transaction_revoked' });
+    const pack = findPackByAppleProduct(appId, tx.productId);
+    if (!pack) return reply.code(400).send({ error: 'unknown_product' });
+
+    const playEmail = email.trim().toLowerCase();
+    // The PRIMARY KEY (provider, external_id) lets exactly one account own this transaction id.
+    await dbRun(
+      `INSERT OR IGNORE INTO play_purchases (provider, external_id, app, email, pack_id, taels, status, shortfall, created_at)
+       VALUES ('apple', ?, ?, ?, ?, ?, 'credited', 0, ?)`,
+      tx.transactionId, appId, playEmail, pack.id, pack.taels, Math.floor(Date.now() / 1000));
+    const owner = await getPurchase('apple', tx.transactionId);
+    if (!owner || owner.email !== playEmail || owner.app !== appId) {
+      return reply.code(409).send({ error: 'already_claimed' });
+    }
+
+    reply.header('Cache-Control', 'private, no-store');
+    if (owner.status !== 'credited') {
+      const { balance } = await getPlayBalance(appId, playEmail);
+      return { credited: false, balance };
+    }
+    // Idempotent on the ledger ref: a retry after a crash between insert and credit still credits once.
+    const { credited, balance } = await creditPlay(appId, playEmail, Number(owner.taels), 'purchase_apple', `apple:${tx.transactionId}`);
+    return { credited, balance };
+  });
+
+  // App Store Server Notifications v2. No session: the signed payload is the credential.
+  app.post('/api/play-currency/apple/notifications', { bodyLimit: APPLE_NOTIFICATION_BODY_LIMIT }, async (req, reply) => {
+    const body = (req.body ?? {}) as { signedPayload?: unknown };
+    if (typeof body.signedPayload !== 'string' || body.signedPayload.length === 0) {
+      return reply.code(400).send({ error: 'invalid_notification' });
+    }
+    const verifier = getAppleVerifier();
+    if (!verifier) return reply.code(503).send({ error: 'apple_iap_unavailable' });
+
+    let note: AppleNotification;
+    try {
+      note = await verifier.verifyNotification(body.signedPayload);
+    } catch (err: any) {
+      console.warn('[play-currency] apple notification rejected:', err?.name ?? 'Error');
+      return reply.code(400).send({ error: 'invalid_notification' });
+    }
+
+    if (APPLE_REFUND_TYPES.has(note.notificationType) && note.transaction) {
+      await refundApplePurchase(note.transaction.transactionId);
+    }
+    return { ok: true };
   });
 }

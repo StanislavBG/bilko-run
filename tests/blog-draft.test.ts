@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -58,6 +58,9 @@ describe('blog-draft.sh', () => {
     fake = join(tmp, 'bin');
     out = join(tmp, 'out');
     mkdirSync(fake);
+    // node_modules/.bin/tsx execs `node` from PATH. CI's setup-node installs it outside
+    // /usr/bin, so link just the running node binary into the stub dir.
+    symlinkSync(process.execPath, join(fake, 'node'));
     writeFileSync(join(fake, 'claude'), FAKE_CLAUDE, { mode: 0o755 });
     // npx stands in for `npx tsx scripts/blog-readability.ts`; blog-subjects.ts runs for real.
     // pnpm only needs to resolve.

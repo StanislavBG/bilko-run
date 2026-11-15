@@ -1,7 +1,7 @@
-import { createHash } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
-import { dirname, resolve, sep } from 'path';
+import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { cardVersion, toCardProject, type CardProject } from '../shared/asset-versions.js';
 import { BOOKING_PAGE_DESCRIPTION, BOOKING_PAGE_TITLE } from '../shared/booking-page.js';
 
 export interface OgMeta {
@@ -16,16 +16,8 @@ export interface OgMeta {
 /** Per-request override for one page, keyed by path + query (e.g. git-viewer `?u=`). */
 export type OgDynamicResolver = (path: string, query: URLSearchParams) => Promise<OgMeta | null>;
 
-export interface OgProject {
-  slug: string;
-  name: string;
-  displayName?: string;
-  tagline: string;
-  category: string;
-  /** Registry `listing.icon` / `listing.shareImage`: /projects/<slug>/... .png paths. */
-  icon?: string;
-  shareImage?: string;
-}
+/** Card fields of a registry entry; see shared/asset-versions.ts. */
+export type OgProject = CardProject;
 
 export interface OgContext {
   projects: readonly OgProject[];
@@ -77,19 +69,7 @@ export function loadOgProjects(file?: string): OgProject[] {
   const found = candidates.find(p => existsSync(p));
   if (!found) throw new Error(`og-meta: registry not found; tried ${candidates.join(', ')}`);
   const raw = JSON.parse(readFileSync(found, 'utf-8')) as Array<Record<string, unknown>>;
-  return raw.map(p => {
-    const out: OgProject = {
-      slug: String(p.slug),
-      name: String(p.name),
-      tagline: String(p.tagline ?? ''),
-      category: String(p.category ?? ''),
-    };
-    if (typeof p.displayName === 'string' && p.displayName) out.displayName = p.displayName;
-    const listing = p.listing as Record<string, unknown> | undefined;
-    if (typeof listing?.icon === 'string' && listing.icon) out.icon = listing.icon;
-    if (typeof listing?.shareImage === 'string' && listing.shareImage) out.shareImage = listing.shareImage;
-    return out;
-  });
+  return raw.map(toCardProject);
 }
 
 const versionCache = new Map<string, string>();
@@ -99,21 +79,7 @@ function projectVersion(p: OgProject, staticRoot?: string): string {
   const key = JSON.stringify([p.slug, p.displayName ?? p.name, p.tagline, p.category, p.icon ?? '', p.shareImage ?? '', staticRoot ?? '']);
   const hit = versionCache.get(key);
   if (hit) return hit;
-  const h = createHash('sha1').update(JSON.stringify([p.displayName ?? p.name, p.tagline, p.category]));
-  if (staticRoot) {
-    const base = resolve(staticRoot, 'projects', p.slug) + sep;
-    for (const asset of [p.icon, p.shareImage]) {
-      if (!asset) continue;
-      const file = resolve(staticRoot, asset.replace(/^\/+/, ''));
-      if (!file.startsWith(base)) continue;
-      try {
-        h.update(readFileSync(file));
-      } catch {
-        /* unreadable asset: version on text only */
-      }
-    }
-  }
-  const v = h.digest('hex').slice(0, 8);
+  const v = cardVersion(p, staticRoot);
   versionCache.set(key, v);
   return v;
 }

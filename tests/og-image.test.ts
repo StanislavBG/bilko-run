@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Resvg } from '@resvg/resvg-js';
-import { renderOgCard } from '../server/og-image';
+import { fontFiles, renderOgCard } from '../server/og-image';
 
 const icon = (fill: string) =>
   Buffer.from(new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="${fill}"/></svg>`).render().asPng());
@@ -35,5 +35,20 @@ describe('renderOgCard', () => {
     expect(red.equals(none)).toBe(false);
     expect(red.equals(blue)).toBe(false);
     expect(red.readUInt32BE(16)).toBe(1200);
+  });
+
+  it('draws CJK glyphs from the fallback font', () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><rect width="600" height="200" fill="#000"/><text x="20" y="150" font-weight="700" font-size="110" font-family="DejaVu Sans" fill="#fff">三風</text></svg>`;
+    const brightPixels = (files: string[]) => {
+      const img = new Resvg(svg, { font: { fontFiles: files, loadSystemFonts: false, defaultFontFamily: 'DejaVu Sans' } }).render();
+      const px = img.pixels;
+      let n = 0;
+      for (let i = 0; i < px.length; i += 4) if (px[i] > 128) n++;
+      return n;
+    };
+    const all = fontFiles();
+    const dejavuOnly = all.filter((f) => /DejaVuSans(-Bold)?\.ttf$/.test(f));
+    expect(dejavuOnly).toHaveLength(2);
+    expect(brightPixels(all)).toBeGreaterThanOrEqual(1.5 * brightPixels(dejavuOnly));
   });
 });

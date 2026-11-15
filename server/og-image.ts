@@ -41,10 +41,14 @@ const FONT_DIR_CANDIDATES = [
   resolve(here, '../../server/assets/fonts'),
 ];
 
-function fontFiles(): string[] {
+/**
+ * Bundled fonts in fallback order: DejaVu first (Latin output unchanged), then
+ * Droid Sans Fallback, which resvg uses per glyph for CJK that DejaVu lacks.
+ */
+export function fontFiles(): string[] {
   const dir = FONT_DIR_CANDIDATES.find((d) => existsSync(resolve(d, 'DejaVuSans.ttf')));
-  if (!dir) throw new Error('og-image: bundled fonts not found');
-  return [resolve(dir, 'DejaVuSans.ttf'), resolve(dir, 'DejaVuSans-Bold.ttf')];
+  if (!dir || !existsSync(resolve(dir, 'DroidSansFallbackFull.ttf'))) throw new Error('og-image: bundled fonts not found');
+  return [resolve(dir, 'DejaVuSans.ttf'), resolve(dir, 'DejaVuSans-Bold.ttf'), resolve(dir, 'DroidSansFallbackFull.ttf')];
 }
 
 function escapeXml(s: string): string {
@@ -140,6 +144,8 @@ ${iconSvg}${categorySvg}${titleSvg}${taglineSvg}
 
 const cache = new Map<string, Buffer>();
 
+// Bump CARD_RENDER_REV in shared/asset-versions.ts whenever the rendered PNG
+// output changes (fonts, layout, colors), so every cached card URL changes once.
 export function renderOgCard(input: OgCardInput): Buffer {
   const key = JSON.stringify([input.title, input.tagline, input.category ?? '', input.urlLabel, input.iconPng ? createHash('sha1').update(input.iconPng).digest('hex') : '']);
   const hit = cache.get(key);

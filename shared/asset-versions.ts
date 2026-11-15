@@ -53,9 +53,12 @@ function readAsset(staticRoot: string, slug: string, assetPath: string): Buffer 
   }
 }
 
+/** Bump when server/og-image.ts output changes, so og:image ?v= and the /projects thumbnail URL change. */
+export const CARD_RENDER_REV = 2;
+
 /** 8-hex content version for a project's card: copy plus icon/shareImage bytes when readable. */
 export function cardVersion(p: CardProject, staticRoot?: string): string {
-  const h = createHash('sha1').update(JSON.stringify([p.displayName ?? p.name, p.tagline, p.category]));
+  const h = createHash('sha1').update(JSON.stringify([CARD_RENDER_REV, p.displayName ?? p.name, p.tagline, p.category]));
   if (staticRoot) {
     for (const asset of [p.icon, p.shareImage]) {
       if (!asset) continue;

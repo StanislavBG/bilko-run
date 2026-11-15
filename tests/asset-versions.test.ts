@@ -9,6 +9,7 @@ import {
   fileVersion,
   toCardProject,
   LISTING_ASSET_KEYS,
+  CARD_RENDER_REV,
 } from '../shared/asset-versions.js';
 import { resolveOg } from '../server/og-meta.js';
 
@@ -65,6 +66,13 @@ describe('asset-versions', () => {
     expect([...LISTING_ASSET_KEYS]).toEqual(['icon', 'shareImage', 'video']);
   });
 
+  it('cardVersion hashes CARD_RENDER_REV before the copy fields', () => {
+    const p = toCardProject({ slug: 'plain', name: 'Plain', displayName: 'Three Winds 三風', tagline: 'T', category: 'Game' });
+    expect(cardVersion(p, staticRoot)).toBe(sha8(JSON.stringify([CARD_RENDER_REV, p.displayName ?? p.name, p.tagline, p.category])));
+    const q = toCardProject({ slug: 'plain', name: 'Plain', tagline: 'T', category: 'Game' });
+    expect(cardVersion(q)).toBe(sha8(JSON.stringify([CARD_RENDER_REV, q.name, q.tagline, q.category])));
+  });
+
   it('cardVersion equals the v= the server puts in og:image', () => {
     const p = toCardProject(raw);
     const img = resolveOg('/projects/fx/', { projects: [p], blogPosts: [], staticRoot })!.image;
@@ -113,7 +121,7 @@ describe('asset-versions', () => {
 
   it('an entry with no listing gets a cards entry and no files entry', () => {
     const av = buildAssetVersions([{ slug: 'bare', name: 'Bare', tagline: 't', category: 'c' }], staticRoot);
-    expect(av.cards.bare).toBe(sha8(JSON.stringify(['Bare', 't', 'c'])));
+    expect(av.cards.bare).toBe(sha8(JSON.stringify([CARD_RENDER_REV, 'Bare', 't', 'c'])));
     expect(av.files).toEqual({});
     expect(av.audio).toEqual([]);
   });

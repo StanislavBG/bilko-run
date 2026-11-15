@@ -164,6 +164,7 @@ function unseat(t: TableRoom, seat: number): void {
   t.connected.delete(seat);
   t.heard.delete(seat);
   t.ticketUntil.delete(seat);
+  t.leaving.delete(seat);
   closeSeatSocket(t.id, seat, ROOM_CLOSE.NO_SEAT, 'no_seat');
 }
 

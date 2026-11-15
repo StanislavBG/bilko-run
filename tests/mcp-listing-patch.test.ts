@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyListingPatch, PROJECT_OWNED_FIELDS, ListingPatchSchema, removedFields } from '../mcp-host-server/src/listing-patch.js';
-import type { RegistryProject } from '../mcp-host-server/src/contract/registry.js';
+import { RegistrySchema, type RegistryProject } from '../mcp-host-server/src/contract/registry.js';
 
 const staticEntry = (): RegistryProject => ({
   slug: 'demo-app',
@@ -124,6 +124,40 @@ describe('applyListingPatch', () => {
 
   it('rejects url on static-path', () => {
     expect(() => applyListingPatch(staticEntry(), { url: 'https://x.example.com' })).toThrow(/url/);
+  });
+
+  it('accepts a .mp4 or .webm listing.video in its own bundle and keeps the other listing keys', () => {
+    const mp4 = applyListingPatch(staticEntry(), { listing: { video: '/projects/demo-app/tile.mp4' } });
+    expect(mp4.listing).toEqual({ ...staticEntry().listing, video: '/projects/demo-app/tile.mp4' });
+    const webm = applyListingPatch(staticEntry(), { listing: { video: '/projects/demo-app/media/tile.webm' } });
+    expect(webm.listing?.video).toBe('/projects/demo-app/media/tile.webm');
+    expect(webm.listing?.detail).toBe('old detail');
+  });
+
+  it('a null listing.video deletes it and removedFields reports it', () => {
+    const before = staticEntry();
+    before.listing = { ...before.listing, video: '/projects/demo-app/tile.mp4' };
+    const after = applyListingPatch(before, { listing: { video: null } });
+    expect(after.listing).toEqual(staticEntry().listing);
+    expect(removedFields(before, after)).toEqual(['listing.video']);
+  });
+
+  it('rejects listing.video with a .mov, .gif or .png extension', () => {
+    for (const ext of ['mov', 'gif', 'png']) {
+      expect(() => applyListingPatch(staticEntry(), { listing: { video: `/projects/demo-app/tile.${ext}` } })).toThrow(/mp4 or \.webm/);
+    }
+  });
+
+  it("rejects listing.video under another slug's path at [index, 'listing', 'video']", () => {
+    // The own-slug prefix check lives in RegistrySchema, which updateListingInRegistry runs on the patched entry.
+    const patched = applyListingPatch(staticEntry(), { listing: { video: '/projects/other-app/tile.mp4' } });
+    const result = RegistrySchema.safeParse([patched]);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => i.path)).toEqual([[0, 'listing', 'video']]);
+  });
+
+  it('rejects listing.video with a ".." segment', () => {
+    expect(() => applyListingPatch(staticEntry(), { listing: { video: '/projects/demo-app/../other-app/tile.mp4' } })).toThrow(/must not contain/);
   });
 
   it('does not mutate the input entry', () => {

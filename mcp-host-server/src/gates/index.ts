@@ -7,7 +7,7 @@ export interface GateContext {
   manifest?:   Manifest;      // pre-validated by the manifest gate
   bypass:      Set<string>;   // gate names the caller asked to skip
   adminEmail?: string;        // for audit log
-  listing?:    { icon?: string; shareImage?: string }; // declared share assets (patch, else registry)
+  listing?:    { icon?: string; shareImage?: string; video?: string }; // declared share assets (patch, else registry)
 }
 
 export interface GateResult {

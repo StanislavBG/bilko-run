@@ -39,6 +39,11 @@ export const ProjectAssetPathSchema = z
     .max(200)
     .regex(/^\/projects\/[a-z0-9-]+\/[A-Za-z0-9._/-]+\.png$/, 'must be a /projects/<slug>/... .png path')
     .refine((s) => !s.includes('..') && !s.includes('//'), 'must not contain ".." or "//"');
+export const ProjectVideoPathSchema = z
+    .string()
+    .max(200)
+    .regex(/^\/projects\/[a-z0-9-]+\/[A-Za-z0-9._/-]+\.(mp4|webm)$/, 'must be a /projects/<slug>/... .mp4 or .webm path')
+    .refine((s) => !s.includes('..') && !s.includes('//'), 'must not contain ".." or "//"');
 export const ListingSchema = z
     .object({
     detail: z.string().min(1).max(400).optional(),
@@ -53,6 +58,7 @@ export const ListingSchema = z
     avoidClaims: z.array(z.string().min(1).max(200)).max(5).optional(),
     icon: ProjectAssetPathSchema.optional(),
     shareImage: ProjectAssetPathSchema.optional(),
+    video: ProjectVideoPathSchema.optional(),
 })
     .strict();
 export const RegistryProjectSchema = z
@@ -114,7 +120,7 @@ export const RegistrySchema = z.array(RegistryProjectSchema).superRefine((entrie
                 });
             }
         }
-        for (const key of ['icon', 'shareImage']) {
+        for (const key of ['icon', 'shareImage', 'video']) {
             const value = entry.listing?.[key];
             if (value !== undefined && !value.startsWith(`/projects/${entry.slug}/`)) {
                 ctx.addIssue({

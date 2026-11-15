@@ -694,6 +694,30 @@ export const MIGRATIONS = [
     PRIMARY KEY (app, email, item_id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_play_entitlements_item ON play_entitlements(app, item_id)`,
+  // Restart-proof realtime tables (server/services/room-store.ts). owner + heartbeat_at (ms) form a
+  // lease: another instance may claim the row only once it is suspended or the heartbeat goes stale.
+  `CREATE TABLE IF NOT EXISTS room_tables (
+    id           TEXT PRIMARY KEY,
+    app          TEXT NOT NULL,
+    tier         TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+    owner        TEXT,
+    heartbeat_at INTEGER NOT NULL DEFAULT 0,
+    hand         INTEGER NOT NULL DEFAULT 0,
+    dealer       INTEGER NOT NULL DEFAULT 0,
+    seats        TEXT NOT NULL DEFAULT '{}',
+    escrowed     TEXT NOT NULL DEFAULT '{}',
+    snapshot     TEXT,
+    updated_at   INTEGER NOT NULL
+  )`,
+  // Seat index: which table a player sits at, per app. Kept equal to room_tables.seats by saveTable.
+  `CREATE TABLE IF NOT EXISTS room_table_seats (
+    app      TEXT NOT NULL,
+    email    TEXT NOT NULL,
+    table_id TEXT NOT NULL,
+    PRIMARY KEY (app, email)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_room_table_seats_table ON room_table_seats(table_id)`,
   // Menu orders: one row per credit-bought item (the Agent Factory Kit). created_day is 'YYYY-MM-DD' in America/Los_Angeles.
   `CREATE TABLE IF NOT EXISTS menu_orders (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,

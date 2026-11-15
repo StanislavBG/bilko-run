@@ -187,6 +187,19 @@ describe('POST /api/play-currency/apple/notifications', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('a REFUND that arrives before the claim blocks the later pre-refund JWS (tombstone)', async () => {
+    expect((await notify(jwsNote('REFUND', tx('t1', { revocationDate: 1_700_000_200_000 })))).statusCode).toBe(200);
+    const late = await claim(jwsTx(tx('t1'))); // still validly signed, no revocationDate
+    expect(late.statusCode).toBe(409);
+    expect(await balance(ALICE)).toBe(0);
+    expect(await purchase('t1')).toMatchObject({ status: 'refunded' });
+    // A replayed REFUND neither errors nor double-inserts.
+    expect((await notify(jwsNote('REFUND', tx('t1', { revocationDate: 1_700_000_200_000 })))).statusCode).toBe(200);
+    expect(await balance(ALICE)).toBe(0);
+    const rows = await dbGet<{ n: number }>("SELECT COUNT(*) AS n FROM play_purchases WHERE provider = 'apple' AND external_id = 't1'");
+    expect(Number(rows!.n)).toBe(1);
+  });
+
   it('returns 503 when no verifier is configured', async () => {
     setAppleVerifierForTests(null);
     const res = await notify(jwsNote('REFUND', tx('2003')));

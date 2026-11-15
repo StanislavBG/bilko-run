@@ -68,27 +68,40 @@ function getPurchase(provider: string, externalId: string): Promise<PurchaseRow 
 }
 
 /**
- * Take a refunded/revoked Apple purchase's taels back: debits min(balance, taels) with a fixed
+ * Take a refunded/revoked purchase's taels back: debits min(balance, taels) with a fixed
  * ref (so a replay debits nothing), marks the purchase refunded and records the shortfall.
- * A purchase that is unknown or already refunded changes nothing.
+ * A purchase that is unknown or already refunded changes nothing, so a refund and a
+ * dispute for the same purchase claw back at most once in total.
  */
-async function refundApplePurchase(transactionId: string): Promise<void> {
-  const purchase = await getPurchase('apple', transactionId);
+export async function refundPlayPurchase(provider: string, externalId: string, kind: string, ref: string): Promise<void> {
+  const purchase = await getPurchase(provider, externalId);
   if (!purchase || purchase.status !== 'credited') return;
   const taels = Number(purchase.taels);
-  const ref = `apple_refund:${transactionId}`;
   let debited = 0;
   // Retry once: the balance can move (a spend or escrow) between the read and the debit.
   for (let attempt = 0; attempt < 2; attempt++) {
     const { balance } = await getPlayBalance(purchase.app, purchase.email);
     const amount = Math.min(balance, taels);
     if (amount <= 0) break;
-    const res = await debitPlay(purchase.app, purchase.email, amount, 'refund_apple', ref);
+    const res = await debitPlay(purchase.app, purchase.email, amount, kind, ref);
     if (res.ok) { debited = amount; break; }
   }
   await dbRun(
-    "UPDATE play_purchases SET status = 'refunded', shortfall = ? WHERE provider = 'apple' AND external_id = ? AND status = 'credited'",
-    taels - debited, transactionId);
+    "UPDATE play_purchases SET status = 'refunded', shortfall = ? WHERE provider = ? AND external_id = ? AND status = 'credited'",
+    taels - debited, provider, externalId);
+}
+
+/**
+ * An Apple refund. A REFUND that names a transaction nobody has claimed yet leaves a tombstone
+ * row (no account, status 'refunded'), so the still-validly-signed pre-refund JWS can never credit later.
+ */
+async function refundApplePurchase(transactionId: string): Promise<void> {
+  // taels has CHECK (taels > 0); the tombstone's 1 is a placeholder, never credited or debited.
+  await dbRun(
+    `INSERT OR IGNORE INTO play_purchases (provider, external_id, app, email, pack_id, taels, status, shortfall, created_at)
+     VALUES ('apple', ?, '', '', '', 1, 'refunded', 0, ?)`,
+    transactionId, Math.floor(Date.now() / 1000));
+  await refundPlayPurchase('apple', transactionId, 'refund_apple', `apple_refund:${transactionId}`);
 }
 /** app:email pairs whose signup grant is already in the ledger (skips a write per call). */
 const granted = new Set<string>();

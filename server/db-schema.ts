@@ -659,6 +659,16 @@ export const MIGRATIONS = [
     UNIQUE (app, account, ref)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_play_ledger_account ON play_ledger(app, account)`,
+  // Play escrow: a player's maximum loss held before a hand; released on settle or void.
+  `CREATE TABLE IF NOT EXISTS play_escrows (
+    app        TEXT NOT NULL,
+    email      TEXT NOT NULL,
+    ref        TEXT NOT NULL,
+    amount     INTEGER NOT NULL CHECK (amount > 0),
+    status     TEXT NOT NULL DEFAULT 'held' CHECK (status IN ('held', 'settled', 'released')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (app, email, ref)
+  )`,
   // Menu orders: one row per credit-bought item (the Agent Factory Kit). created_day is 'YYYY-MM-DD' in America/Los_Angeles.
   `CREATE TABLE IF NOT EXISTS menu_orders (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,

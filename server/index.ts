@@ -46,7 +46,7 @@ import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
 import { registerForumRoutes, getForumSeedHealth } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
-import { registerRoomRoutes } from './routes/rooms.js';
+import { registerRoomRoutes, suspendRoomTables } from './routes/rooms.js';
 import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
 import { handleRoomUpgrade } from './rooms/socket.js';
 import { registerSecurityHeaders, REQUEST_BODY_ENCODINGS } from './security-headers.js';
@@ -421,7 +421,11 @@ try {
   // in-flight downloads drain before exit (server/shutdown.ts). preClose hooks
   // close the WebSocket relays and flush the meters first; onClose hooks run
   // once the last response has finished.
-  const shutdown = createShutdown(app, { drainMs: drainWindowMs(process.env.SHUTDOWN_DRAIN_SECONDS) });
+  // preClose saves and suspends every live GameRoom table before its sockets close.
+  const shutdown = createShutdown(app, {
+    drainMs: drainWindowMs(process.env.SHUTDOWN_DRAIN_SECONDS),
+    preClose: suspendRoomTables,
+  });
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 } catch (err) {

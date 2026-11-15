@@ -17,7 +17,9 @@
  * Render's SIGKILL is the real bound.
  *
  * GameRoom sockets (server/rooms/socket.ts) are closed here, at the start of
- * the drain, with 1012 so their clients reconnect to the new instance.
+ * the drain, with 1012 so their clients reconnect to the new instance. The
+ * optional `preClose` hook runs first (e.g. suspendRoomTables saves and
+ * suspends every live table), bounded by the same drain cap.
  *
  * SIGINT (local Ctrl-C) keeps the short grace, and a second signal exits now.
  */
@@ -44,7 +46,7 @@ export const IDLE_SWEEP_MS = 500;
 
 export function createShutdown(
   app: { close(): Promise<unknown>; server?: { closeIdleConnections?(): void } },
-  opts: { drainMs: number; exit?: (code: number) => void; log?: (msg: string) => void },
+  opts: { drainMs: number; exit?: (code: number) => void; log?: (msg: string) => void; preClose?: () => Promise<void> },
 ): (signal: ShutdownSignal) => void {
   const exit = opts.exit ?? ((code: number) => process.exit(code));
   const log = opts.log ?? ((msg: string) => console.log(msg));
@@ -56,7 +58,6 @@ export function createShutdown(
       return;
     }
     shuttingDown = true;
-    closeAllGameRooms();
     const cap = shutdownCapMs(signal, opts.drainMs);
     log(`[Shutdown] ${signal} received, draining in-flight responses (up to ${Math.round(cap / 1000)} s)`);
     const killer = setTimeout(() => {
@@ -70,6 +71,8 @@ export function createShutdown(
     const sweep = setInterval(() => app.server?.closeIdleConnections?.(), IDLE_SWEEP_MS);
     sweep.unref();
     const done = (code: number) => { clearTimeout(killer); clearInterval(sweep); exit(code); };
-    app.close().then(() => done(0), () => done(1));
+    const close = () => { closeAllGameRooms(); app.close().then(() => done(0), () => done(1)); };
+    if (!opts.preClose) { close(); return; }
+    opts.preClose().catch((err) => log(`[Shutdown] preClose failed: ${(err as Error)?.message ?? err}`)).then(close);
   };
 }

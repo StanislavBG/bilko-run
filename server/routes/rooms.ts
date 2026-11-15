@@ -8,6 +8,10 @@
 // play ledger (AI seats against the house), then deals again after NEXT_HAND_MS
 // or closes the table. Rooms live only in memory, so a sweeper releases held
 // escrows whose table no longer exists in this process (deploy, crash).
+// Each live table is also written to the room store (server/services/room-store.ts)
+// on every GameRoom change, under a lease owned by this process (renewed every
+// HEARTBEAT_MS); closing a table deletes its row, and on shutdown
+// suspendRoomTables saves and suspends every table so the next instance can resume it.
 // ROOM_MODULES (server/rooms/modules.ts) binds each app id to its game module;
 // today that is Three Winds from @threewinds/engine.
 import crypto from 'node:crypto';
@@ -23,6 +27,7 @@ import { PLAY_APPS, findTier, type PlayTier } from '../../shared/play-currency-c
 import {
   getPlayBalance, escrowPlay, settlePlayHand, releasePlayEscrow, listHeldEscrows, HOUSE_ACCOUNT, type PlayEntry,
 } from '../services/play-currency.js';
+import { saveTable, heartbeatTables, suspendTables, deleteTable } from '../services/room-store.js';
 
 /** Game modules by app id (re-exported from ../rooms/modules.js). */
 export { ROOM_MODULES };
@@ -35,6 +40,8 @@ export const NEXT_HAND_MS = 5000;
 export const ESCROW_SWEEP_MS = 60_000;
 /** A held escrow younger than this is never swept (its table may still be starting). */
 export const ESCROW_ORPHAN_AGE_SEC = 60;
+/** How often this process renews the lease on the tables it owns. */
+export const HEARTBEAT_MS = 15_000;
 const ROOM_REF_RE = /^room:(.+):hand:\d+$/;
 const ID_RE = /^[a-z0-9-]{1,32}$/;
 const RATE_WINDOW_MS = 60_000;
@@ -93,9 +100,108 @@ interface TableRoom {
   settling: Promise<void> | null;
   nextTimer: ReturnType<typeof setTimeout> | null;
   nextHandMs: number;
+  /** Store writes for this table, chained so they never overlap or reorder. */
+  saveChain: Promise<void>;
+  /** A save is queued on saveChain and has not started yet (it will read the latest state). */
+  saveQueued: boolean;
 }
 
 const rooms = new Map<string, TableRoom>();
+
+/** Lease owner id of this process in the room store. */
+const OWNER = process.env.RENDER_INSTANCE_ID || `proc-${crypto.randomUUID()}`;
+export function roomOwnerId(): string { return OWNER; }
+
+/** Set once the shutdown hook has suspended the tables: no more writes from this process. */
+let persistenceStopped = false;
+
+// A local libSQL file allows one open write transaction per process, and the
+// ledger and the room store each serialize only their own writes. Every write
+// this file starts goes through one chain so a table save never collides with
+// an escrow or settlement; a store write also retries SQLITE_BUSY from writers elsewhere.
+let writeChain: Promise<unknown> = Promise.resolve();
+function exclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn);
+  writeChain = run.catch(() => undefined);
+  return run;
+}
+
+const STORE_BUSY_RETRIES = 5;
+async function storeWrite<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await exclusive(fn);
+    } catch (err) {
+      if (attempt >= STORE_BUSY_RETRIES || !/SQLITE_BUSY/.test(String((err as Error)?.message ?? err))) throw err;
+      await new Promise((r) => setTimeout(r, 20 * 2 ** attempt));
+    }
+  }
+}
+
+function logStoreError(what: string, id: string, err: unknown): void {
+  console.error(`[rooms] ${what} failed for ${id}: ${(err as Error)?.message ?? err}`);
+}
+
+async function writeTable(t: TableRoom): Promise<void> {
+  t.saveQueued = false;
+  if (persistenceStopped) return;
+  const seats: Record<string, string> = {};
+  for (const [seat, email] of t.seats) seats[String(seat)] = email;
+  const escrowed: Record<string, string> = {};
+  for (const [seat, email] of t.escrowed) escrowed[String(seat)] = email;
+  const row = {
+    id: t.id, app: t.app, tier: t.tier.id, status: 'active', owner: OWNER, heartbeatAt: Date.now(),
+    hand: t.hand, dealer: t.dealer, seats, escrowed, snapshot: t.room.snapshot(),
+  } as const;
+  const ok = await storeWrite(() => saveTable(row));
+  if (!ok) console.error(`[rooms] save skipped for ${t.id}: the stored row is owned by another instance`);
+}
+
+/** Queues a store write of the table's current state; never throws into the caller. */
+function scheduleSave(t: TableRoom): Promise<void> {
+  if (persistenceStopped || rooms.get(t.id) !== t) return t.saveChain;
+  if (t.saveQueued) return t.saveChain;
+  t.saveQueued = true;
+  t.saveChain = t.saveChain.then(() => writeTable(t)).catch((err) => { logStoreError('save', t.id, err); });
+  return t.saveChain;
+}
+
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+function ensureHeartbeat(): void {
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(() => {
+    if (rooms.size === 0 || persistenceStopped) {
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+      return;
+    }
+    storeWrite(() => heartbeatTables(OWNER, Date.now())).catch((err) => { logStoreError('heartbeat', OWNER, err); });
+  }, HEARTBEAT_MS);
+  heartbeatTimer.unref?.();
+}
+
+/**
+ * Shutdown hook (createShutdown preClose): waits for each table's pending save,
+ * writes a final snapshot, then suspends every table this process owns (owner NULL)
+ * so the next instance can claim it at once. Never throws.
+ */
+export async function suspendRoomTables(): Promise<void> {
+  if (persistenceStopped) return;
+  const tables = [...rooms.values()];
+  await Promise.all(tables.map(async (t) => {
+    await t.saveChain;
+    t.saveQueued = false; // force a fresh write of the final state
+    await scheduleSave(t);
+  }));
+  persistenceStopped = true;
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  try {
+    const n = await storeWrite(() => suspendTables(OWNER));
+    console.log(`[rooms] suspended ${n} table(s) for the next instance`);
+  } catch (err) {
+    logStoreError('suspend', OWNER, err);
+  }
+}
 
 function randomBase36(n: number): string {
   let s = '';
@@ -112,6 +218,8 @@ function closeTable(t: TableRoom): void {
   if (t.nextTimer) { clearTimeout(t.nextTimer); t.nextTimer = null; }
   rooms.delete(t.id);
   unregisterLiveRoom(t.id);
+  if (persistenceStopped) return; // suspended for the next instance: keep the row
+  t.saveChain = t.saveChain.then(() => storeWrite(() => deleteTable(t.id))).catch((err) => { logStoreError('delete', t.id, err); });
 }
 
 /**
@@ -141,7 +249,7 @@ export async function startTableHand(roomId: string): Promise<void> {
   for (const [seat, email] of [...t.seats]) {
     let ok = false;
     try {
-      ok = (await escrowPlay(t.app, email, amount, ref)).ok;
+      ok = (await exclusive(() => escrowPlay(t.app, email, amount, ref))).ok;
     } catch {
       ok = false;
     }
@@ -173,7 +281,7 @@ async function releaseAll(app: string, held: Map<number, string>, ref: string): 
   let released = 0;
   for (const email of held.values()) {
     try {
-      if ((await releasePlayEscrow(app, email, ref)).released) released++;
+      if ((await exclusive(() => releasePlayEscrow(app, email, ref))).released) released++;
     } catch { /* the sweeper retries a held escrow once its table is gone */ }
   }
   return released;
@@ -205,7 +313,7 @@ async function settleHand(t: TableRoom, r: HandResult): Promise<void> {
     });
     if (anyAi) entries.push({ account: HOUSE_ACCOUNT, delta: house });
     try {
-      await settlePlayHand(t.app, ref, entries);
+      await exclusive(() => settlePlayHand(t.app, ref, entries));
       deltas = r.points.map((p) => p * stake);
     } catch (err) {
       const n = await releaseAll(t.app, held, ref);
@@ -226,6 +334,7 @@ async function settleHand(t: TableRoom, r: HandResult): Promise<void> {
   t.leaving.clear();
   t.heard = new Set(t.connected);
   scheduleNextHand(t);
+  if (rooms.get(t.id) === t) void scheduleSave(t); // seats and dealer after settlement
 }
 
 function scheduleNextHand(t: TableRoom): void {
@@ -255,7 +364,7 @@ export async function sweepOrphanedEscrows(): Promise<number> {
     const m = ROOM_REF_RE.exec(esc.ref);
     if (!m || rooms.has(m[1])) continue;
     try {
-      if ((await releasePlayEscrow(esc.app, esc.email, esc.ref)).released) released++;
+      if ((await exclusive(() => releasePlayEscrow(esc.app, esc.email, esc.ref))).released) released++;
     } catch { /* retried next sweep */ }
   }
   return released;
@@ -289,9 +398,7 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
   let id = `${app}-${tier.id}-${randomBase36(8)}`;
   while (rooms.has(id)) id = `${app}-${tier.id}-${randomBase36(8)}`;
   const results: HandResult[] = [];
-  const room = new GameRoom<unknown>(
-    id, module, { turnMs: o.turnMs, aiDelayMs: o.aiDelayMs },
-    createRoomHooks(id, (r) => {
+  const hooks = createRoomHooks(id, (r) => {
       results.push(r);
       if (!r.voided && Number.isInteger(r.nextDealer) && (r.nextDealer as number) >= 0 && (r.nextDealer as number) < module.seats) {
         t.dealer = r.nextDealer as number;
@@ -300,13 +407,18 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
         .catch((err) => { console.error(`[rooms] settlement crashed for ${id}: ${(err as Error)?.message ?? err}`); })
         .finally(() => { if (t.settling === run) t.settling = null; });
       t.settling = run;
-    }),
+  });
+  const room = new GameRoom<unknown>(
+    id, module, { turnMs: o.turnMs, aiDelayMs: o.aiDelayMs },
+    { ...hooks, onChange: () => { void scheduleSave(t); } },
   );
   const t: TableRoom = {
     id, app, tier, module, room, seats: new Map(), state: 'waiting', createdAt: Date.now(), hand: 0, dealer: 0, fillTimer: null, results,
     escrowed: new Map(), leaving: new Set(), connected: new Set(), heard: new Set(), ticketUntil: new Map(), settling: null, nextTimer: null, nextHandMs: o.nextHandMs,
+    saveChain: Promise.resolve(), saveQueued: false,
   };
   rooms.set(id, t);
+  ensureHeartbeat();
   registerLiveRoom(id, {
     room,
     seatFor(email: string) {
@@ -354,11 +466,18 @@ export function roomSnapshot(roomId: string): { app: string; tier: string; state
   return { app: t.app, tier: t.tier.id, state: t.state, hand: t.hand, humans: Object.fromEntries(t.seats), ai, results: [...t.results] };
 }
 
+/** Test-only: the live GameRoom of a table. */
+export function tableGameRoom(roomId: string): GameRoom<unknown> | undefined {
+  return rooms.get(roomId)?.room;
+}
+
 /** Test-only: drop every table, timer and rate window. */
 export function resetRooms(): void {
   for (const t of [...rooms.values()]) closeTable(t);
   ticketRate.clear();
   if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  persistenceStopped = false;
 }
 
 export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions = {}): void {

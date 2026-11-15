@@ -811,6 +811,7 @@
       "Mahjong",
       "vs AI"
     ],
+    "public": true,
     "displayName": "Three Winds 三風",
     "listing": {
       "audience": "People who want to learn and play Malaysian 3-player mahjong in the browser, from first tiles to the full fan table.",

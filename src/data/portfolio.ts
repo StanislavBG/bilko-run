@@ -29,6 +29,8 @@ export interface PortfolioProject {
   href: string;
   /** True for in-repo React routes, false for static paths / external URLs. */
   isInternal: boolean;
+  /** Listed publicly (registry `public: true`); others are admin-only. */
+  isPublic: boolean;
 }
 
 
@@ -60,10 +62,21 @@ export const PORTFOLIO_PROJECTS: readonly PortfolioProject[] = PROJECTS.map((p, 
   color: COLORS[i % COLORS.length],
   href: projectHref(p),
   isInternal: isReactRoute(p),
+  isPublic: p.public === true,
 }));
 
+/**
+ * Projects reachable from the ⌘K palette. Mirrors the /projects hub rule:
+ * visitors see public entries only, the admin sees every entry.
+ * Postponed projects shouldn't be reachable via ⌘K (clicking them would
+ * open an unfinished game). Surface them on the Projects page only.
+ */
+export function paletteProjects(projects: readonly PortfolioProject[], isAdmin: boolean): PortfolioProject[] {
+  return projects.filter(p => p.status !== 'Postponed' && (isAdmin || p.isPublic));
+}
+
 const PROJECT_COUNT = PORTFOLIO_PROJECTS.length;
-const LIVE_COUNT = PORTFOLIO_PROJECTS.filter(p => p.status === 'Live').length;
+const LIVE_COUNT = PORTFOLIO_PROJECTS.filter(p => p.isPublic && p.status === 'Live').length;
 
 const SECTION_EXTRAS: Readonly<Record<string, Pick<Section, 'icon' | 'desc' | 'tag'>>> = {
   home:     { icon: '✦', desc: "Who Bilko is and what he's building right now.", tag: 'start here' },

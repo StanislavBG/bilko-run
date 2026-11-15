@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SECTIONS, PORTFOLIO_PROJECTS } from '../../data/portfolio.js';
+import { SECTIONS, PORTFOLIO_PROJECTS, paletteProjects } from '../../data/portfolio.js';
+import { useIsAdmin } from '../../hooks/useAdmin.js';
 
 interface Item {
   kind: string;
@@ -19,6 +20,7 @@ interface Props {
 
 export function CommandPalette({ open, onClose }: Props) {
   const navigate = useNavigate();
+  const isAdmin = useIsAdmin();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,10 +36,8 @@ export function CommandPalette({ open, onClose }: Props) {
   const items = useMemo<Item[]>(() => {
     const all: Item[] = [
       ...SECTIONS.map(s => ({ kind: 'Section', ic: s.icon, name: s.label, desc: s.desc, path: s.path, internal: true })),
-      ...PORTFOLIO_PROJECTS
-        // Postponed projects shouldn't be reachable via ⌘K (clicking them would
-        // open an unfinished game). Surface them on the Projects page only.
-        .filter(p => p.status !== 'Postponed')
+      // Public, non-Postponed projects only (admin sees every non-Postponed one).
+      ...paletteProjects(PORTFOLIO_PROJECTS, isAdmin)
         .map(p => ({
           kind: p.status === 'Cooking' ? 'Cooking' : 'Project',
           ic: '◐',
@@ -50,7 +50,7 @@ export function CommandPalette({ open, onClose }: Props) {
     if (!query) return all.slice(0, 12);
     const q = query.toLowerCase();
     return all.filter(i => (i.name + ' ' + i.desc + ' ' + i.kind).toLowerCase().includes(q)).slice(0, 12);
-  }, [query]);
+  }, [query, isAdmin]);
 
   const go = (it: Item) => {
     if (it.internal) navigate(it.path);

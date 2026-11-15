@@ -743,11 +743,12 @@ Modules are registered in `ROOM_MODULES` in `server/routes/rooms.ts`, keyed by a
 | 400 | `{ error: 'body must be { app, tier }, each 1-32 chars of [a-z0-9-]' }` | Missing or malformed `app` or `tier`. |
 | 429 | `{ error: 'rate_limited' }` | More than 30 tickets per minute per user. |
 | 404 | `{ error: 'unknown_app' }` | No game module or no `PLAY_APPS` entry for `app`. |
+| 409 | `{ error: 'rooms_closed' }` | The app is registered, but its tables are not open yet. |
 | 404 | `{ error: 'unknown_tier' }` | `tier` is not one of the app's tiers. |
 | 402 | `{ error: 'insufficient_taels', balance, required }` | Balance is below `stake × maxLossPoints`. Not checked on a rejoin. |
 | 503 | `{ error: 'server_full' }` | 200 tables already open in this process. |
 
-**`GET /api/rooms/tiers` errors:** 400 `{ error: 'app must be 1-32 chars of [a-z0-9-]' }`, 404 `{ error: 'unknown_app' }`.
+**`GET /api/rooms/tiers` errors:** 400 `{ error: 'app must be 1-32 chars of [a-z0-9-]' }`, 404 `{ error: 'unknown_app' }`, 409 `{ error: 'rooms_closed' }` (the app is registered, but its tables are not open yet).
 
 ### Socket
 
@@ -765,7 +766,9 @@ The handshake is refused with:
 
 | Message | Meaning |
 |---|---|
-| `{ type: 'action', seq, action }` | Play `action` (opaque to the host; the module reads it). `seq` is an integer and must equal the `seq` of the latest `state` message. |
+| `{ type: 'action', seq, action }` | Play `action` (opaque to the host; the module reads it). `seq` is an integer from this seat's current prompt (see below). |
+
+- **The seq window.** An action may carry any `seq` from the seat's latest turn or claim prompt. Another seat's move in between does not make it `stale_seq`. Resending an action that was already applied does.
 
 **Server → client.** Text JSON frames:
 

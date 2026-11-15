@@ -227,7 +227,7 @@ bilko.run generates each project's X/Twitter/OpenGraph share card from the regis
 
 ### Custom share image
 
-The same `https://bilko.run/og/<slug>.png` is two things: the X/LinkedIn link preview, and the hero image of your project's card on https://bilko.run/projects. There it is shown uncropped at 1200x630 on a dark background. So your `listing.shareImage` is your hero, not an afterthought social card. A project without one shows the plain generated text card in both places.
+The same `https://bilko.run/og/<slug>.png` is two things: the X/LinkedIn link preview, and the hero image of your project's card on https://bilko.run/projects. The card loads it as `/og/<slug>.png?v=<hash>`, with the same hash as your project page's `og:image`. The hash is computed when the site is built, from the card copy plus the `icon` and `shareImage` bytes. A publish rebuilds the site, so a new `shareImage` gets a new URL and returning visitors see it on their next visit after the deploy. On the card it is shown uncropped at 1200x630 on a dark background. So your `listing.shareImage` is your hero, not an afterthought social card. A project without one shows the plain generated text card in both places.
 
 Design it as a hero:
 
@@ -243,6 +243,8 @@ Design it as a hero:
 3. Otherwise the plain generated card.
 
 If a declared file is missing, oversize or the wrong size at serve time, the host logs it and falls back to the next step.
+
+Caching: every `/og/<slug>.png` response has an ETag. A versioned URL (with `?v=`) is cached for a day (`max-age=86400`), since a new image gets a new URL. An unversioned URL, such as an old link that was shared before, is cached for 5 minutes (`max-age=300`); after that the browser revalidates with the ETag and gets a `304` when the image has not changed.
 
 Recipe for a sibling:
 

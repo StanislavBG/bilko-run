@@ -19,7 +19,13 @@ const getPlayBalance = vi.fn(async (app: string, email: string) => {
 let stripeAvailable = true;
 
 vi.mock('../server/clerk.js', () => ({ requireAuth: vi.fn() }));
-vi.mock('../server/services/play-currency.js', () => ({ creditPlay, getPlayBalance }));
+const debitPlay = vi.fn(async (app: string, email: string, amount: number, kind: string, ref: string) => {
+  const key = `${app}|${email}|${ref}`;
+  if (playLedger.has(key)) return { ok: true, balance: 0 };
+  playLedger.set(key, { app, email, amount: -amount, kind });
+  return { ok: true, balance: 0 };
+});
+vi.mock('../server/services/play-currency.js', () => ({ creditPlay, getPlayBalance, debitPlay }));
 vi.mock('../server/services/wallet.js', () => ({ creditWallet }));
 vi.mock('../server/services/agent-api-keys.js', () => ({ mintAgentApiKey: vi.fn() }));
 vi.mock('../server/services/web-products.js', () => ({ recordOrder: async () => {} }));
@@ -44,7 +50,26 @@ vi.mock('../server/services/stripe.js', () => ({
 vi.mock('../server/services/tokens.js', () => ({
   creditTokens: async () => {}, grantFreeTokens: async () => {}, hasTokenAccount: async () => true,
 }));
-vi.mock('../server/db.js', () => ({ dbRun: vi.fn(async () => {}), dbGet: vi.fn(async () => undefined) }));
+// Just enough of play_purchases for the refund path: insert-or-ignore, lookup by payment_ref / key, and the refund UPDATE.
+type PurchaseRow = { provider: string; external_id: string; app: string; email: string; taels: number; status: string; shortfall: number; payment_ref: string | null };
+const purchases = new Map<string, PurchaseRow>();
+vi.mock('../server/db.js', () => ({
+  dbRun: vi.fn(async (sql: string, ...a: any[]) => {
+    if (sql.includes('INSERT OR IGNORE INTO play_purchases')) {
+      const [externalId, app, email, , taels, , paymentRef] = a;
+      if (!purchases.has(externalId)) purchases.set(externalId, { provider: 'stripe', external_id: externalId, app, email, taels, status: 'credited', shortfall: 0, payment_ref: paymentRef });
+    } else if (sql.includes('UPDATE play_purchases SET status')) {
+      const [shortfall, , externalId] = a;
+      const row = purchases.get(externalId);
+      if (row && row.status === 'credited') { row.status = 'refunded'; row.shortfall = shortfall; }
+    }
+  }),
+  dbGet: vi.fn(async (sql: string, ...a: any[]) => {
+    if (!sql.includes('FROM play_purchases')) return undefined;
+    if (sql.includes('payment_ref = ?')) return [...purchases.values()].find((r) => r.payment_ref === a[0]);
+    return purchases.get(a[1]);
+  }),
+}));
 
 import { requireAuth } from '../server/clerk.js';
 
@@ -91,6 +116,7 @@ describe('play-currency Stripe packs', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     playLedger.clear();
+    purchases.clear();
     await resetPlayCurrencyRouteState();
     stripeAvailable = true;
     process.env = { ...OLD_ENV, NODE_ENV: 'test' };
@@ -229,6 +255,59 @@ describe('play-currency Stripe packs', () => {
       expect(await webhook({ payment_status: 'unpaid' })).toBe(200);
       expect(creditPlay).not.toHaveBeenCalled();
       expect(creditWallet).not.toHaveBeenCalled();
+    });
+
+    describe('refunds and disputes', () => {
+      const KEY = 'threewinds|player@test.com|';
+      const PACK = 26000; // purse
+      async function event(type: string, obj: Record<string, unknown>) {
+        const app = await build();
+        const res = await app.inject({ method: 'POST', url: '/api/stripe/webhook', payload: { type, data: { object: obj } } });
+        await app.close();
+        return res.statusCode;
+      }
+      const refund = () => event('charge.refunded', { id: 'ch_1', payment_intent: 'pi_1', refunded: true });
+      const dispute = () => event('charge.dispute.created', { id: 'dp_1', payment_intent: 'pi_1' });
+      const debits = () => [...playLedger.entries()].filter(([k, v]) => k.startsWith(KEY) && v.amount < 0);
+
+      it('charge.refunded takes the pack back once; a replay debits nothing', async () => {
+        await webhook({});
+        expect(await refund()).toBe(200);
+        expect(debits()).toEqual([[`${KEY}stripe_refund:cs_test_p1`, { app: 'threewinds', email: 'player@test.com', amount: -PACK, kind: 'refund_stripe' }]]);
+        expect(purchases.get('cs_test_p1')).toMatchObject({ status: 'refunded', shortfall: 0 });
+        expect(await refund()).toBe(200);
+        expect(debits()).toHaveLength(1);
+        expect((await getPlayBalance('threewinds', 'player@test.com')).balance).toBe(0);
+      });
+
+      it('debits only min(balance, taels) and records the shortfall when the balance is short', async () => {
+        await webhook({});
+        playLedger.set(`${KEY}spent`, { app: 'threewinds', email: 'player@test.com', amount: -20000, kind: 'item' }); // 6000 left
+        expect(await refund()).toBe(200);
+        expect(debits().map(([, v]) => v.amount).sort((a, b) => a - b)).toEqual([-20000, -6000]);
+        expect(purchases.get('cs_test_p1')).toMatchObject({ status: 'refunded', shortfall: PACK - 6000 });
+        await refund();
+        expect(debits()).toHaveLength(2);
+      });
+
+      it('charge.dispute.created takes the pack back once, and refund plus dispute together only once', async () => {
+        await webhook({});
+        expect(await dispute()).toBe(200);
+        expect(debits()).toHaveLength(1);
+        expect(await dispute()).toBe(200);
+        expect(await refund()).toBe(200);
+        expect(debits()).toHaveLength(1);
+        expect(debits()[0][1].amount).toBe(-PACK);
+      });
+
+      it('ignores a partial refund, an unknown payment_intent and a non-play charge', async () => {
+        await webhook({});
+        expect(await event('charge.refunded', { id: 'ch_1', payment_intent: 'pi_1', refunded: false })).toBe(200);
+        expect(await event('charge.refunded', { id: 'ch_2', payment_intent: 'pi_other', refunded: true })).toBe(200);
+        expect(await event('charge.dispute.created', { id: 'dp_2' })).toBe(200);
+        expect(debits()).toHaveLength(0);
+        expect(purchases.get('cs_test_p1')?.status).toBe('credited');
+      });
     });
   });
 });

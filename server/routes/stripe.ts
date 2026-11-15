@@ -23,6 +23,7 @@ import { creditWallet } from '../services/wallet.js';
 import { pppBonusCents } from '../../shared/ppp-bonus.js';
 import { WALLET_TOPUP_CENTS } from '../../shared/bilko-menu.js';
 import { creditPlay } from '../services/play-currency.js';
+import { refundPlayPurchase } from './play-currency.js';
 import { findPack } from '../../shared/play-currency-catalog.js';
 
 /**
@@ -247,6 +248,13 @@ export function registerStripeRoutes(app: FastifyInstance): void {
               `subtotalMatch=${expected !== undefined && data.amount_subtotal === expected} email=${playEmail ? 'present' : 'missing'}`,
             );
           } else {
+            // Record the purchase (keyed by session, found again by PaymentIntent) before crediting, so a
+            // refund or dispute can claw it back; a retry after a crash between the two still credits once.
+            await dbRun(
+              `INSERT OR IGNORE INTO play_purchases (provider, external_id, app, email, pack_id, taels, status, shortfall, created_at, payment_ref)
+               VALUES ('stripe', ?, ?, ?, ?, ?, 'credited', 0, ?, ?)`,
+              String(data.id), playAppId, playEmail, pack.id, pack.taels, Math.floor(Date.now() / 1000),
+              typeof data.payment_intent === 'string' ? data.payment_intent : null);
             await creditPlay(playAppId, playEmail, pack.taels, 'purchase_stripe', 'stripe:' + data.id);
           }
         } else if (typeof data.metadata?.wallet_topup === 'string' && data.metadata.wallet_topup) {
@@ -402,6 +410,17 @@ export function registerStripeRoutes(app: FastifyInstance): void {
         if (wpSlug && webProductBySlug(wpSlug, WEB_PRODUCTS) && meta.test !== 'true' && meta.owner_ip !== 'true'
           && !(await ownerStartedCheckout(String(data.id)))) {
           await recordCheckoutOutcome('checkout_expired', wpSlug, data);
+        }
+      } else if (event.type === 'charge.refunded' || event.type === 'charge.dispute.created') {
+        // Play packs only: take the taels back once, whichever of refund and dispute arrives first.
+        // A partial refund (refunded === false) waits for the full one. Other payments are untouched.
+        const paymentIntent = typeof data?.payment_intent === 'string' ? data.payment_intent : '';
+        if (paymentIntent && !(event.type === 'charge.refunded' && data.refunded === false)) {
+          const purchase = await dbGet<{ external_id: string }>(
+            "SELECT external_id FROM play_purchases WHERE provider = 'stripe' AND payment_ref = ?", paymentIntent);
+          if (purchase) {
+            await refundPlayPurchase('stripe', purchase.external_id, 'refund_stripe', `stripe_refund:${purchase.external_id}`);
+          }
         }
       } else if (event.type === 'customer.subscription.updated') {
         await updateSubscriptionPeriod(data.id, data.status, data.current_period_end);

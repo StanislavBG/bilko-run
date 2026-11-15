@@ -854,6 +854,10 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['status_at', 'INTEGER'],
     ['receipt_hash', 'TEXT'],
   ],
+  // Stripe play-pack purchases keep the PaymentIntent id so a refund or dispute event finds its credit.
+  play_purchases: [
+    ['payment_ref', 'TEXT'],
+  ],
   // Builder attribution, stamped once by a row's first insert (server/routes/tools/git-viewer.ts).
   git_viewer_profiles: [
     ['created_at', 'INTEGER'],

@@ -63,6 +63,25 @@ Bilko Credits are a prepaid wallet (1 credit = 1 cent of balance, shown as dolla
 - **Page:** the Hire page is `/book` (the Booking Page 1a design). `/bilko`, `/hire`, `/human-for-hire` and the old `/projects/human-for-hire/` paths 301 to it, keeping the query. The paid-hour Checkout return notice shows there. The `bilko-hour` offer's page is `/pricing`. The contact email is in `shared/bilko-profile.ts`; routes in `server/bilko-profile-routes.ts`.
 
 
+## Play currency (Three Winds taels)
+
+Taels are a **separate play currency**, not Bilko Credits. They never touch the Bilko Credits wallet, cannot buy tools or credit products, and can never be transferred, gifted or cashed out. They live in their own play ledger, per app. The client contract (routes, errors, Apple IAP, env vars) is "Play currency" in [`docs/host-contract.md`](host-contract.md#play-currency); the catalog is `PLAY_APPS` in `shared/play-currency-catalog.ts`.
+
+| Pack id | Name | Taels | USD | MYR | Apple product id |
+|---|---|---|---|---|---|
+| `pouch` | A pouch | 5,000 | $0.99 | RM 4.90 | `threewinds.taels.pouch` |
+| `purse` | A purse | 26,000 | $4.99 | RM 22.90 | `threewinds.taels.purse` |
+| `box` | A brocade box | 55,000 | $9.99 | RM 44.90 | `threewinds.taels.box` |
+| `chest` | A treasure chest | 115,000 | $19.99 | RM 89.90 | `threewinds.taels.chest` |
+| `cabinet` | A silver cabinet | 300,000 | $49.99 | RM 229.90 | `threewinds.taels.cabinet` |
+| `vault` | The vault | 650,000 | $99.99 | RM 449.90 | `threewinds.taels.vault` |
+
+- **Signup grant:** 5,000 taels, once per user, on the first balance read.
+- **Web checkout** is `POST /api/play-currency/checkout`, priced inline (`price_data`) in USD or MYR. It stays closed (`409 sales_closed`) until the comma-separated `PLAY_CURRENCY_SALES_OPEN` env var lists the app (`threewinds`). It is unset today.
+- **Webhook branch:** the play-pack branch of `checkout.session.completed` in `server/routes/stripe.ts`, picked by `metadata.play_pack`. It runs before the wallet top-up branch and never falls through to it. It credits the play ledger (`purchase_stripe`, ref `stripe:<sessionId>`) only when the session is paid, the pack is known, the currency is `usd` or `myr` and the subtotal equals that pack's price. A session paid while sales were open is credited even if sales have since closed.
+- **Apple:** the iOS app sells the same packs through StoreKit 2 and posts each transaction to `POST /api/play-currency/apple/transactions`. Refunds and revocations come in on `POST /api/play-currency/apple/notifications`.
+- **Spending:** stakes at authoritative game rooms (escrow and settlement) and cosmetic items. Nothing else.
+
 ## MCP tools
 
 `POST /mcp` serves these tools. The list is asserted against `/llms.txt` in `tests/agent-storefront.test.ts`.

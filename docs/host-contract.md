@@ -680,6 +680,186 @@ Rooms and the lobby directory live in one process's memory, so the relay needs a
 
 Sign-in capture ("sign in for updates") lives in ~/Projects/Bilko/docs/site.md.
 
+## Authoritative game rooms
+
+A server-run table for turn-based games with hidden information and stakes, such as mahjong. The host deals from a secret seed, holds the full game state, checks every move through the game's module, plays AI seats, and sends each seat only what that seat may see. Three Winds (3PMahjong) is the first user.
+
+**Relay or rooms?** Use the [Realtime relay](#realtime-relay) when every client runs the same deterministic simulation and the host only forwards inputs (lockstep or rollback arenas). Use authoritative rooms when a client must not see the whole state (concealed hands, a shuffled wall), when the server must decide what is legal, or when play-currency stakes are settled. The relay never sees game state; rooms never trust the client with it.
+
+Code: `server/rooms/runtime.ts` (the game-agnostic room), `server/rooms/socket.ts` (WebSocket transport and tickets) and `server/routes/rooms.ts` (matchmaking, escrow and settlement). Tests: `tests/rooms-runtime.test.ts`, `tests/rooms-socket.test.ts`, `tests/rooms-routes.test.ts`, `tests/rooms-settlement.test.ts`.
+
+### Game module interface
+
+A game plugs in as a `RoomGameModule`, exactly as `server/rooms/runtime.ts` exports it:
+
+```ts
+export interface RoomGameModule<S> {
+  id: string;
+  seats: number;
+  /** Most points one seat can lose in one hand (the wallet escrows this). */
+  maxLossPoints: number;
+  newHand(seed: string, dealer: number): S;
+  /** What one seat may see. Must not include other seats' concealed data. */
+  view(state: S, seat: number): unknown;
+  toAct(state: S): number[];
+  apply(state: S, seat: number, action: unknown): { ok: true; state: S } | { ok: false; error: string };
+  aiAction(state: S, seat: number): unknown;
+  isOver(state: S): boolean;
+  /** Per-seat points; must be integers summing to 0. */
+  settle(state: S): number[];
+}
+```
+
+- `newHand` gets a fresh 16-byte hex seed per hand. The seed and the raw state never leave the room.
+- `toAct` returns the seats that may act now. More than one seat may act at once (for example a claim window).
+- `apply` must be pure: return a new state or `{ ok: false }`. A client action it rejects gets `illegal_action`. An `aiAction` it rejects voids the hand.
+- `settle` must return one integer per seat, summing to 0, none below `-maxLossPoints`. Anything else voids the hand.
+- If any module method throws, the hand is voided: no balance changes and every escrow is released.
+
+Modules are registered in `ROOM_MODULES` in `server/routes/rooms.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). `ROOM_MODULES` is empty in production today, so every app gets `unknown_app` until a module lands.
+
+### Endpoints
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `POST /api/rooms/ticket` | Required (Clerk Bearer) | Body `{ app, tier }`, each `[a-z0-9-]{1,32}`, ≤ 1 KiB. Seats the caller at a waiting table of that tier (or opens one) and returns `{ ticket, expiresAt, path, roomId, tier, seat }`. `path` is `/api/rooms/socket/<roomId>?ticket=<t>`. The ticket is single-use, lasts 30 s, and is bound to the caller's email and that room. A caller already seated at a live table of this app gets a ticket for that table and seat, whatever tier was asked for (rejoin). `cache-control: no-store`. |
+| `GET /api/rooms/tiers?app=<app>` | Public | `{ tiers: [{ id, stake, openSeats }] }`. `openSeats` counts empty seats at tables still waiting for their first hand. `cache-control: no-store`. |
+| `GET wss://bilko.run/api/rooms/socket/:roomId?ticket=<t>` | Ticket | WebSocket upgrade. See "Socket" below. |
+
+**`POST /api/rooms/ticket` errors**
+
+| Status | Body | When |
+|---|---|---|
+| 401 | per `requireAuth` | No or invalid Clerk token. |
+| 400 | `{ error: 'body must be { app, tier }, each 1-32 chars of [a-z0-9-]' }` | Missing or malformed `app` or `tier`. |
+| 429 | `{ error: 'rate_limited' }` | More than 30 tickets per minute per user. |
+| 404 | `{ error: 'unknown_app' }` | No game module or no `PLAY_APPS` entry for `app`. |
+| 404 | `{ error: 'unknown_tier' }` | `tier` is not one of the app's tiers. |
+| 402 | `{ error: 'insufficient_taels', balance, required }` | Balance is below `stake × maxLossPoints`. Not checked on a rejoin. |
+| 503 | `{ error: 'server_full' }` | 200 tables already open in this process. |
+
+**`GET /api/rooms/tiers` errors:** 400 `{ error: 'app must be 1-32 chars of [a-z0-9-]' }`, 404 `{ error: 'unknown_app' }`.
+
+### Socket
+
+URL: `wss://bilko.run` + the `path` from the ticket response. The socket is same-origin, so the page CSP's `connect-src 'self'` covers it.
+
+The handshake is refused with:
+
+| Status | When |
+|---|---|
+| 404 | Malformed room id (`[A-Za-z0-9_-]{1,64}`), or no live table with that id in this process. |
+| 403 | An `Origin` that is not allowed (see "Origin and native apps"). |
+| 401 | Missing, unknown, expired, reused or wrong-room ticket. A ticket is deleted the first time it is presented, whatever the outcome. |
+
+**Client → server.** Text JSON frames only, ≤ 2048 bytes, at most 20 per second per socket (token bucket, 20 burst):
+
+| Message | Meaning |
+|---|---|
+| `{ type: 'action', seq, action }` | Play `action` (opaque to the host; the module reads it). `seq` is an integer and must equal the `seq` of the latest `state` message. |
+
+**Server → client.** Text JSON frames:
+
+| Message | When |
+|---|---|
+| `{ type: 'state', hand, seq, seat, view, toAct, deadline }` | After every state change, and on connect or reconnect. `view` is `module.view(state, seat)` for this seat only. `toAct` lists the seats that may act. `deadline` is the epoch ms at which a human to act is autoplayed, or `null` when only AI seats act. |
+| `{ type: 'error', code, seq }` | A rejected action. `code` is `illegal_action`, `not_your_turn`, `stale_seq` or `no_hand`. `seq` is the current one. |
+| `{ type: 'error', code: 'insufficient_taels', seq: 0 }` | At a hand start the seat's escrow failed. The seat is taken over by AI and the player is unseated. |
+| `{ type: 'hand_over', hand, view, points }` | The hand ended. `view` is this seat's final view. `points` are the module's per-seat points (not yet × stake). |
+| `{ type: 'settled', hand, deltas }` | The ledger settled the hand. `deltas` are per-seat tael changes (points × stake). Sent only to seats that were escrowed. Not sent when the hand was voided or settlement failed (escrows released, no balance changed). |
+
+`hand_over`, `settled` and the `insufficient_taels` error come from `server/routes/rooms.ts`; the `RoomMessage` type in `server/rooms/runtime.ts` covers only `state`, `error` and `hand_over`.
+
+**Close codes**
+
+| Code | Reason | Meaning |
+|---|---|---|
+| `1000` | `room_closed` | The table closed (no human left). |
+| `1009` | — | Frame over 16 KiB (refused before buffering). |
+| `1012` | `server_restart` | Deploy drain (SIGTERM). Every room is gone; fetch a new ticket. |
+| `1012` | `room_gone` | The table vanished between the handshake and the join. |
+| `4000` | `superseded` | The same seat opened a newer socket. |
+| `4001` | `no_seat` | The ticket holder has no seat at this table. |
+| `4002` | `rate_limited` | More than 20 messages per second. |
+| `4003` | `text_frames_only`, `frame_too_large`, `bad_message` | Binary frame, text frame over 2048 bytes, or not `{ type: 'action', seq, action }`. |
+
+The server pings every 15 s. A socket that misses a pong is terminated; its seat is kept.
+
+### Redaction
+
+A seat only ever receives `module.view(state, seat)`. The raw state, the seed and other seats' views never go on the wire. AI seats get no messages. Keeping concealed data out of `view` is the module's job, and the module's tests must prove it.
+
+### Reconnection
+
+- A seat belongs to the user (the ticket's email). There is no hold timer: a seat whose socket drops stays seated and escrowed until the hand settles. While it is away, its turns are autoplayed when `deadline` passes.
+- To reconnect, call `POST /api/rooms/ticket` again with the same `app`. It returns a ticket for the same table and seat. On connect the server sends the current `state`.
+- A second socket for the same seat replaces the first (`4000 superseded`).
+- A normal close (`1000`) during a hand marks the seat as leaving: it plays out (autoplayed) and is unseated after settlement. A `1000` close before the first hand keeps the seat. Any other close keeps the seat.
+- A deploy (`1012`) loses every table. Live hands are voided and their escrows released by the orphan sweeper.
+
+### AI seat fill and autoplay
+
+- The first human to sit starts an 8 s fill timer. When it fires, or when every seat has a human, empty seats get AI and the first hand is dealt.
+- AI seats act after 800 ms. A human to act has 20 s (`deadline`); then `module.aiAction` plays for them.
+- After a hand settles the next hand is dealt 5 s later with the dealer rotated. A table with no humans left closes.
+- AI seats play against the house account: their point deltas × stake go to one house ledger row.
+
+### Origin and native apps
+
+Unlike the relay, a **missing `Origin` header is allowed in production**, because native iOS and Android apps send none. Browser pages must come from `https://bilko.run` or `https://www.bilko.run`. Outside production `localhost` and `127.0.0.1` are allowed too. The ticket is the only credential; the Origin check only stops cross-site browser pages. A native app gets its Clerk token, calls `POST /api/rooms/ticket`, and opens `wss://bilko.run<path>` without an `Origin`.
+
+### Three Winds
+
+- **Not live yet.** The app id is `threewinds`. Its module is registered in `ROOM_MODULES` only once `@threewinds/engine` is published on npm. Until then both room endpoints return `404 unknown_app` for it.
+- **Tiers** (`shared/play-currency-catalog.ts`), 3 seats each:
+
+| Tier id | Name | Stake (taels per point) |
+|---|---|---|
+| `tea` | Tea Pavilion | 5 |
+| `jade` | Jade Room | 25 |
+| `peony` | Peony Lounge | 100 |
+| `imperial` | Imperial Suite | 500 |
+
+- **Escrow.** At each hand start every human seat's maximum loss, `stake × maxLossPoints`, is escrowed (ref `room:<roomId>:hand:<n>`). A player who cannot cover it is replaced by AI. At hand end each human settles against their escrow; points × stake move through the play ledger.
+- **A disconnected player stays escrowed until the hand settles.** Leaving mid-hand does not release the escrow; the seat is autoplayed and settles like any other.
+- A voided hand or a failed settlement releases every escrow and changes no balance. A sweeper (every 60 s) releases held escrows older than 60 s whose table no longer exists in this process.
+- Rooms live in one process's memory. Staked tables need a Render tier that does not sleep: ~/Projects/Bilko/docs/deployment.md#realtime-relay-constraints.
+
+## Play currency
+
+A per-app play currency, separate from Bilko Credits. Today there is one: Three Winds **taels** (app id `threewinds`). The catalog (tiers, packs, cosmetic items, signup grant) is `PLAY_APPS` in `shared/play-currency-catalog.ts`. Code: `server/routes/play-currency.ts`, `server/services/play-currency.ts`, `server/services/apple-iap.ts`, and the play-pack branch of the Stripe webhook in `server/routes/stripe.ts`. Pack prices: ~/Projects/Bilko/docs/commerce.md#play-currency-three-winds-taels.
+
+**Taels can never be transferred, gifted or cashed out.** No route moves taels between users or pays them out. They come only from the signup grant, purchases and winning hands, and go only to losing hands and cosmetic items.
+
+### Endpoints
+
+All take `app` (a key of `PLAY_APPS`) and answer `private, no-store`.
+
+| Endpoint | Auth | Success | Errors |
+|---|---|---|---|
+| `GET /api/play-currency/balance?app=<app>` | Clerk Bearer | 200 `{ balance, held, salesOpen }`. `held` is escrowed in live hands. The first call per user credits the signup grant (5000 taels) once. | 401 · 400 `unknown_app` |
+| `POST /api/play-currency/checkout` | Clerk Bearer | Body `{ app, packId, currency }`, `currency` `usd` or `myr`. 200 `{ url }`: a Stripe Checkout session (`mode: payment`, metadata `play_app`, `play_pack`, `play_email`, `play_currency`; success → `/projects/<app>/?purchase=success`, cancel → `?purchase=cancel`). | 401 · 429 `rate_limited` (10/min/user) · 400 `unknown_app` / `unknown_pack` / `unknown_currency` · 409 `sales_closed` · 503 Stripe unconfigured or error |
+| `POST /api/play-currency/apple/transactions` | Clerk Bearer | Body `{ app, signedTransaction }` (StoreKit 2 JWS, ≤ 64 KiB). 200 `{ credited, balance }`. One transaction id credits one account once; a retry returns `credited: false`. | 401 · 429 `rate_limited` (30/min/user) · 400 `unknown_app` / `invalid_transaction` / `transaction_revoked` / `unknown_product` · 409 `already_claimed` (another account owns the transaction) · 503 `apple_iap_unavailable` |
+| `POST /api/play-currency/apple/notifications` | None; the signed payload is the credential | App Store Server Notifications v2. Body `{ signedPayload }`, ≤ 64 KiB. 200 `{ ok: true }`. `REFUND` and `REVOKE` take the purchase's taels back (up to the current balance; the shortfall is recorded). Other types are acknowledged and ignored. | 400 `invalid_notification` · 503 `apple_iap_unavailable` |
+| `GET /api/play-currency/entitlements?app=<app>` | Clerk Bearer | 200 `{ items }`: the caller's cosmetic items. | 401 · 400 `unknown_app` |
+| `POST /api/play-currency/items/:itemId/purchase` | Clerk Bearer | `app` in the query or body. Spends taels on a cosmetic item. 201 `{ itemId, serial, balance }`. | 401 · 429 `rate_limited` (20/min/user) · 400 `unknown_app` · 402 `insufficient_taels` · 404 `unknown_item` · 409 `already_owned` / `sold_out` |
+
+### Apple in-app purchase
+
+- Product ids are `threewinds.taels.<packId>` (for example `threewinds.taels.pouch`). A transaction whose product is not in the catalog gets `unknown_product`.
+- Set the App Store Server Notifications v2 URL to `https://bilko.run/api/play-currency/apple/notifications`.
+
+### Env vars
+
+| Var | Meaning |
+|---|---|
+| `APPLE_IAP_BUNDLE_ID` | The iOS app's bundle id. Required for any Apple route. |
+| `APPLE_IAP_ENVIRONMENT` | `Production` or `Sandbox`. Any other value turns Apple off. |
+| `APPLE_IAP_APP_APPLE_ID` | The app's numeric Apple id. Required when the environment is `Production`. |
+| `PLAY_CURRENCY_SALES_OPEN` | Comma-separated app ids whose web checkout is open (for example `threewinds`). Unset means `409 sales_closed` for every app. It gates only `POST /api/play-currency/checkout`; a session paid while sales were open is still credited. |
+
+Without a valid `APPLE_IAP_*` set, both Apple routes return `503 apple_iap_unavailable`.
+
 ## Selling a downloadable web product
 
 A web product is a paid zip sold from a static-path landing page at `/projects/<slug>/`. Declared once in `shared/web-products.ts` (`WEB_PRODUCTS`); routes, the Stripe webhook and `/admin` → Products read from it. Slugs not in `WEB_PRODUCTS` (or failing the slug regex) return 404 on every route below.

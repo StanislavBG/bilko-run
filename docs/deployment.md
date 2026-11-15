@@ -56,6 +56,8 @@ The WebSocket relay (`server/realtime/relay.ts`) and its lobby directory (`serve
 - **One instance only.** Scaling Render horizontally would split a room across instances. That needs room-to-instance routing (or a shared pub/sub) first.
 - A deploy drops every room (`1012`). Clients reconnect with a fresh ticket and resync from their own state. The server keeps no input log. The lobby directory is emptied too, and hosts re-announce on their next heartbeat (10 s or less).
 - **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. Free spins down after 15 minutes without inbound traffic, so the first ticket after an idle spell waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
+- **Authoritative game rooms** (`server/rooms/socket.ts`, `server/routes/rooms.ts`) have the same one-instance, in-memory limits. A deploy closes them with `1012` too.
+- **Staked Three Winds rooms must not go live until Render is on a paid tier that does not sleep.** A spin-down or a deploy loses every table: live hands are voided and their escrows are released, so players lose the hand in progress. Keep `PLAY_CURRENCY_SALES_OPEN` unset (web tael sales closed) until then.
 
 ## Never do
 

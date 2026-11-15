@@ -264,16 +264,19 @@ Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites
 
 `listing.video` is optional. It adds a short clip to your card on https://bilko.run/projects. The PNG stays in charge everywhere else.
 
-- The active `/projects` card plays `listing.video` muted, looping and inline. The card's share image (`/og/<slug>.png?v=<hash>`) is the poster.
+- The active `/projects` card plays `listing.video` looping and inline. The card's share image (`/og/<slug>.png?v=<hash>`) is the poster.
+- Clips may carry sound. The video starts muted, because browsers block autoplay with sound.
+- A Pause/Play button is always shown over the video.
+- An Unmute button appears only when the file has an audio track. The host detects the track at build time from the file's bytes.
+- The visitor's pause and mute choices carry to the next card on the page.
 - Only the active card loads the video. Other cards load nothing for it.
-- Under `prefers-reduced-motion: reduce` or Save-Data, the card shows the poster only. If the video fails to load or autoplay is blocked, the poster stays.
-- There is no sound. The card always plays it muted.
+- Under `prefers-reduced-motion: reduce` or Save-Data, the poster shows a Play button. No video bytes load until it is pressed. If the video fails to load or autoplay is blocked, the poster stays.
 - X/LinkedIn link previews keep the PNG. The video never appears in `og:*` or `twitter:*` tags.
 - The video URL carries `?v=<content hash>` of the file's bytes. A versioned `/projects/<slug>/….mp4` or `….webm` URL is cached for a year (`max-age=31536000, immutable`). A new file gets a new URL.
 
 Recipe for a sibling:
 
-1. Export H.264 MP4 (or VP9 WebM) at 1200x630, with no audio track, with faststart (`ffmpeg … -an -movflags +faststart`), about 60 s or less, under 8 MB.
+1. Export H.264 MP4 (or VP9 WebM) at 1200x630, about 60 s or less. Keep the soundtrack: AAC in MP4 (for example `ffmpeg … -c:a aac -b:a 128k -movflags +faststart`) or Opus in WebM. Do not pass `-an`. The 8 MB cap covers video plus audio.
 2. Put it in the build output. For example, `public/tile.mp4` lands at `/projects/<slug>/tile.mp4`.
 3. Set the path in `bilko.listing.json` (`{ "listing": { "video": "/projects/<slug>/tile.mp4" } }`), or call `update_project_listing` with the same patch.
 4. Keep `shareImage` set. It is the poster and the link preview.
@@ -281,7 +284,7 @@ Recipe for a sibling:
 
 The `share-assets` gate blocks the publish when a declared `video` is missing from the bundle, lacks the MP4 (`ftyp`) or WebM (EBML) signature for its extension, or is over 8 MB.
 
-Implemented in `mcp-host-server/src/contract/registry.ts` (`ProjectVideoPathSchema`), `mcp-host-server/src/gates/share-assets.ts` (signature and 8 MB cap), `src/components/ProjectCardShot.tsx` (the card player), `shared/asset-versions.ts` (`LISTING_ASSET_KEYS` includes `video`, so the file gets a build-time hash) read through `assetUrl` in `src/data/assetVersions.ts`, and `server/static-cache.ts` (`versionedMediaCacheControl`, the year-long cache).
+Implemented in `mcp-host-server/src/contract/registry.ts` (`ProjectVideoPathSchema`), `mcp-host-server/src/gates/share-assets.ts` (signature and 8 MB cap), `src/components/ProjectCardShot.tsx` (the card player), `shared/asset-versions.ts` (`LISTING_ASSET_KEYS` includes `video`, so the file gets a build-time hash; the `AssetVersions.audio` list names each video with an audio track) read through `assetUrl` and `assetHasAudio` in `src/data/assetVersions.ts`, `shared/video-audio.ts` (`hasAudioTrack`, the build-time audio sniff), and `server/static-cache.ts` (`versionedMediaCacheControl`, the year-long cache).
 
 ## Public project catalog
 

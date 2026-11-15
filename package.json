@@ -53,6 +53,7 @@
     "build:project-pages": "node scripts/project-pages/build-renderer.mjs"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "^2.0.0",
     "@bilkobibitkov/ai-tool-kit": "^0.1.0",
     "@bilkobibitkov/git-viewer": "^0.1.1",
     "@bilkobibitkov/page-roast": "^0.1.0",

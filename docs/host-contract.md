@@ -126,7 +126,7 @@ A project's `/projects` card is split between the sibling that owns the app and 
 
 | Owner | Fields |
 |---|---|
-| **Project** (its own repo) | `name`, `displayName`, `tagline`, `category`, `tags`, `status`, `thumbnail`, `listing` (`detail`, `metric`, `metricLabel`, `lang`, `audience`, `talkingPoints`, `offering`, `pricing`, `callToAction`, `avoidClaims`, `icon`, `shareImage`), and `url` on `external-url` entries |
+| **Project** (its own repo) | `name`, `displayName`, `tagline`, `category`, `tags`, `status`, `thumbnail`, `listing` (`detail`, `metric`, `metricLabel`, `lang`, `audience`, `talkingPoints`, `offering`, `pricing`, `callToAction`, `avoidClaims`, `icon`, `shareImage`, `video`), and `url` on `external-url` entries |
 | **Bilko** (host) | `slug`, `host` (kind, path), `year`, `launchedAt`, `public` |
 
 Sibling sessions never ask Bilko to change card copy. They edit it themselves. Bilko-owned fields are rejected in any listing patch.
@@ -154,6 +154,7 @@ Sibling sessions never ask Bilko to change card copy. They edit it themselves. B
 | `listing.avoidClaims` | up to 5, each 1–200 chars |
 | `listing.icon` | path starting with `/projects/<own-slug>/`, ending in `.png`; the `share-assets` gate also needs a square PNG, 128–1024 px, ≤512 KB |
 | `listing.shareImage` | path starting with `/projects/<own-slug>/`, ending in `.png`; the `share-assets` gate also needs exactly 1200x630, ≤5 MB |
+| `listing.video` | path starting with `/projects/<own-slug>/`, ending in `.mp4` or `.webm`; the `share-assets` gate also needs an MP4 (`ftyp`) or WebM (EBML) signature that matches the extension, ≤8 MB |
 
 Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `tags`, and every `listing` text field) may mention the retired ContentGrade product (`/content-?grade/i`). The write fails with the slug and field name.
 
@@ -255,9 +256,32 @@ Recipe for a sibling:
 
 The `share-assets` publish gate blocks the publish when a declared `icon` or `shareImage` is missing from the bundle, is not a PNG, or has the wrong size. The path must start with `/projects/<your-slug>/`.
 
-Share assets do not count against your gzip budget. The `budget` gate leaves a declared `icon`/`shareImage` out of its sum when it passes these checks, so a full-quality hero up to 5 MB fits even a near-budget app. The same PNG left undeclared, or declared but invalid, counts like any other file.
+Share assets do not count against your gzip budget. The `budget` gate leaves a declared `icon`/`shareImage` out of its sum when it passes these checks, so a full-quality hero up to 5 MB fits even a near-budget app. A declared `listing.video` that passes its checks is also left out of the gzip sum. The same file left undeclared, or declared but invalid, counts like any other file.
 
 Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
+
+### Card video
+
+`listing.video` is optional. It adds a short clip to your card on https://bilko.run/projects. The PNG stays in charge everywhere else.
+
+- The active `/projects` card plays `listing.video` muted, looping and inline. The card's share image (`/og/<slug>.png?v=<hash>`) is the poster.
+- Only the active card loads the video. Other cards load nothing for it.
+- Under `prefers-reduced-motion: reduce` or Save-Data, the card shows the poster only. If the video fails to load or autoplay is blocked, the poster stays.
+- There is no sound. The card always plays it muted.
+- X/LinkedIn link previews keep the PNG. The video never appears in `og:*` or `twitter:*` tags.
+- The video URL carries `?v=<content hash>` of the file's bytes. A versioned `/projects/<slug>/….mp4` or `….webm` URL is cached for a year (`max-age=31536000, immutable`). A new file gets a new URL.
+
+Recipe for a sibling:
+
+1. Export H.264 MP4 (or VP9 WebM) at 1200x630, with no audio track, with faststart (`ffmpeg … -an -movflags +faststart`), about 60 s or less, under 8 MB.
+2. Put it in the build output. For example, `public/tile.mp4` lands at `/projects/<slug>/tile.mp4`.
+3. Set the path in `bilko.listing.json` (`{ "listing": { "video": "/projects/<slug>/tile.mp4" } }`), or call `update_project_listing` with the same patch.
+4. Keep `shareImage` set. It is the poster and the link preview.
+5. Run `publish_static_project`.
+
+The `share-assets` gate blocks the publish when a declared `video` is missing from the bundle, lacks the MP4 (`ftyp`) or WebM (EBML) signature for its extension, or is over 8 MB.
+
+Implemented in `mcp-host-server/src/contract/registry.ts` (`ProjectVideoPathSchema`), `mcp-host-server/src/gates/share-assets.ts` (signature and 8 MB cap), `src/components/ProjectCardShot.tsx` (the card player), `shared/asset-versions.ts` (`LISTING_ASSET_KEYS` includes `video`, so the file gets a build-time hash) read through `assetUrl` in `src/data/assetVersions.ts`, and `server/static-cache.ts` (`versionedMediaCacheControl`, the year-long cache).
 
 ## Public project catalog
 
@@ -497,11 +521,11 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 | Gate | What it checks | Bypassable |
 |---|---|---|
 | `manifest` | `manifest.json` exists at the bundle root, parses, validates against the Zod schema, and its `slug` matches the registered slug | **No — never bypassable** |
-| `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz). A declared `listing.icon`/`listing.shareImage` that passes the `share-assets` checks is left out of the sum; it has its own cap there. An invalid one still counts | `budget` |
+| `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz). A declared `listing.icon`/`listing.shareImage`/`listing.video` that passes the `share-assets` checks is left out of the sum; it has its own cap there. An invalid one still counts | `budget` |
 | `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` (template: see below) | `golden` |
 | `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
 | `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath` (`npm audit --omit=dev --audit-level=high --json` instead when the repo has a `package-lock.json` and no `pnpm-lock.yaml`); the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
-| `share-assets` | Each declared `listing.icon`/`listing.shareImage` is in the bundle, is a PNG, and has the right size and byte cap (see "Custom share image") | **No** |
+| `share-assets` | Each declared `listing.icon`/`listing.shareImage` is in the bundle, is a PNG, and has the right size and byte cap (see "Custom share image"). A declared `listing.video` is in the bundle, has an MP4 (`ftyp`) or WebM (EBML) signature matching its extension, and is ≤8 MB (see "Card video") | **No** |
 
 The `manifest` gate short-circuits the pipeline — if it fails, the other five are skipped (their results would be meaningless without a valid manifest).
 

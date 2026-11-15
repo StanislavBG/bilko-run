@@ -8,6 +8,7 @@ import { HUB_CARDS, PUBLIC_CARDS, type HubCard } from '../data/projectsView.js';
 import { RING_DOTS, heroBox, pad3, ringOffset, ringStats, spineGeom, tickStyle } from '../data/projectsRing.js';
 import { track, trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
+import { ProjectCardShot, useAllowCardMotion } from '../components/ProjectCardShot.js';
 
 /**
  * Combined Projects + Packages hub, rendered as the "Projects Ring": a fixed
@@ -145,6 +146,7 @@ export function ProjectsPage() {
   storyOpenRef.current = storyOpen;
 
   useDocumentTitle('Projects — Bilko Bibitkov');
+  const allowMotion = useAllowCardMotion();
   useRingFonts();
 
   useEffect(() => {
@@ -312,11 +314,7 @@ export function ProjectsPage() {
                 {storyOpen ? (
                   <StoryPanel card={card} isAdmin={isAdmin} />
                 ) : (
-                  <div className="pr-shot">
-                    {card.thumbnail
-                      ? <img src={card.thumbnail} alt={card.name} />
-                      : <span>SCREENSHOT</span>}
-                  </div>
+                  <ProjectCardShot name={card.name} thumbnail={card.thumbnail} video={card.video} allowMotion={allowMotion} />
                 )}
                 <div className="pr-title">{card.name}</div>
                 <div className="pr-desc">{card.blurb}</div>

@@ -725,7 +725,7 @@ export interface RoomGameModule<S> {
 - If any module method throws, the hand is voided: no balance changes and every escrow is released.
 - The optional hooks follow the same rule. If `nextDealer`, `timeoutAction` or `deadlineMs` throws or returns an invalid value, the hand is voided. Invalid means: `nextDealer` not an integer seat, a `timeoutAction` that `apply` rejects, or a `deadlineMs` that is not a positive integer, `null` or `undefined`.
 
-Modules are registered in `ROOM_MODULES` in `server/routes/rooms.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). `ROOM_MODULES` is empty in production today, so every app gets `unknown_app` until a module lands.
+Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). An app with no module or no `PLAY_APPS` entry gets `unknown_app`. A registered app gets `rooms_closed` until its id is in the owner's `ROOMS_OPEN` switch (~/Projects/Bilko/docs/deployment.md).
 
 ### Endpoints
 
@@ -825,7 +825,7 @@ Unlike the relay, a **missing `Origin` header is allowed in production**, becaus
 
 ### Three Winds
 
-- **Not live yet.** The app id is `threewinds`. Its module is registered in `ROOM_MODULES` only once `@threewinds/engine` is published on npm. Until then both room endpoints return `404 unknown_app` for it.
+- **Tables closed.** The app id is `threewinds`. `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` from `@threewinds/engine` (`npm:@bilkobibitkov/threewinds-engine`), with no host overrides: its `nextDealer`, `timeoutAction` and `deadlineMs` (the R4.6 claim window) come from the engine, so a rule change is an engine release plus a pin bump here. Both room endpoints answer `409 rooms_closed` until `ROOMS_OPEN` includes `threewinds`.
 - **Tiers** (`shared/play-currency-catalog.ts`), 3 seats each:
 
 | Tier id | Name | Stake (taels per point) |

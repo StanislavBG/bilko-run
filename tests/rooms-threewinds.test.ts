@@ -1,15 +1,16 @@
 // The real Three Winds engine (@threewinds/engine via ROOM_MODULES.threewinds)
 // inside the host's GameRoom: redaction of every seat message, zero-sum
 // settlement within maxLossPoints, R14.1 dealer rotation, R4.6 timeout play and
-// deadlines, and one full hand through the real socket into the taels ledger.
+// the engine's own deadlines, and one full hand through the real socket into
+// the taels ledger.
 // If an invariant here fails, the fix belongs to 3PMahjong, not this file.
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
-import type { RoomState } from '@threewinds/engine';
+import { CLAIM_WINDOW_MS, type RoomState } from '@threewinds/engine';
 import { GameRoom, type RoomGameModule, type RoomMessage, type HandResult } from '../server/rooms/runtime.js';
-import { ROOM_MODULES, THREE_WINDS_CLAIM_MS } from '../server/rooms/modules.js';
+import { ROOM_MODULES } from '../server/rooms/modules.js';
 import { initDb, dbGet, dbRun } from '../server/db.js';
 import { creditPlay, getPlayBalance } from '../server/services/play-currency.js';
 import { handleRoomUpgrade, closeAllGameRooms } from '../server/rooms/socket.js';
@@ -286,7 +287,7 @@ describe('Three Winds engine in GameRoom', () => {
         const s = spy.state!;
         const fresh = !prevDue || spy.lastActor === HUMAN;
         if (fresh) {
-          const ms = s.phase === 'claim' ? THREE_WINDS_CLAIM_MS : TURN_MS;
+          const ms = s.phase === 'claim' ? CLAIM_WINDOW_MS : TURN_MS;
           expect(msg.deadline, `seed ${spy.seeds.at(-1)} seq ${msg.seq} phase ${s.phase}`).toBe(clock.now() + ms);
           if (s.phase === 'claim') seen.claimFresh++; else seen.turnFresh++;
         } else {

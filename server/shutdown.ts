@@ -16,8 +16,12 @@
  * instance. `drainMs` is only a backstop for a close that never resolves;
  * Render's SIGKILL is the real bound.
  *
+ * GameRoom sockets (server/rooms/socket.ts) are closed here, at the start of
+ * the drain, with 1012 so their clients reconnect to the new instance.
+ *
  * SIGINT (local Ctrl-C) keeps the short grace, and a second signal exits now.
  */
+import { closeAllGameRooms } from './rooms/socket.js';
 
 export const DEFAULT_DRAIN_SECONDS = 290;
 export const INTERRUPT_GRACE_MS = 10_000;
@@ -52,6 +56,7 @@ export function createShutdown(
       return;
     }
     shuttingDown = true;
+    closeAllGameRooms();
     const cap = shutdownCapMs(signal, opts.drainMs);
     log(`[Shutdown] ${signal} received, draining in-flight responses (up to ${Math.round(cap / 1000)} s)`);
     const killer = setTimeout(() => {

@@ -47,6 +47,7 @@ import { registerForumRoutes, getForumSeedHealth } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
 import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
+import { handleRoomUpgrade } from './rooms/socket.js';
 import { registerSecurityHeaders, REQUEST_BODY_ENCODINGS } from './security-headers.js';
 import { registerOgRoutes } from './og-routes.js';
 import { gitViewerOg, getGitViewerHealth } from './routes/tools/git-viewer.js';
@@ -400,11 +401,13 @@ try {
   await app.listen({ port: PORT, host: '0.0.0.0' });
   // WebSocket upgrades, same-origin. Each handler claims only its own path and
   // returns false otherwise: Session Manager web-remote relay, then the
-  // realtime input relay (/api/realtime/rooms/:roomId).
+  // realtime input relay (/api/realtime/rooms/:roomId), then the GameRoom
+  // socket (/api/rooms/socket/:roomId).
   app.server.on('upgrade', (req, socket, head) => {
     try {
       const handled = smRelayHandleUpgrade(req, socket as any, head)
-        || realtimeHandleUpgrade(req, socket as any, head);
+        || realtimeHandleUpgrade(req, socket as any, head)
+        || handleRoomUpgrade(req, socket as any, head);
       if (!handled) socket.destroy();
     } catch {
       socket.destroy();

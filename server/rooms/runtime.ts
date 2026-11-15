@@ -21,6 +21,12 @@ export interface RoomGameModule<S> {
   isOver(state: S): boolean;
   /** Per-seat points; must be integers summing to 0. */
   settle(state: S): number[];
+  /** Seat that deals the next hand; default (this hand's dealer + 1) % seats. */
+  nextDealer?(state: S): number;
+  /** Action for a timed-out human seat (connected or not); default aiAction. */
+  timeoutAction?(state: S, seat: number): unknown;
+  /** Ms a human seat has to act now (null/undefined = turnMs); must not depend on concealed data, since every seat sees when a seat is autoplayed. */
+  deadlineMs?(state: S, seat: number): number | null | undefined;
 }
 
 export type RoomErrorCode = 'illegal_action' | 'not_your_turn' | 'stale_seq' | 'no_hand';
@@ -43,7 +49,7 @@ export interface GameRoomOptions {
   now?: () => number;
 }
 
-export interface HandResult { hand: number; points?: number[]; voided?: boolean }
+export interface HandResult { hand: number; points?: number[]; voided?: boolean; nextDealer?: number }
 
 export interface GameRoomHooks {
   send(seat: number, msg: RoomMessage): void;
@@ -71,9 +77,11 @@ export class GameRoom<S> {
   #seed: string | null = null;
   private hand = 0;
   private seq = 0;
+  private dealer = 0;
   private toActNow: number[] = [];
-  private deadline: number | null = null;
-  private pending: unknown[] = [];
+  /** seat → its armed autoplay timer; a seat keeps it while it stays due. */
+  private readonly seatTimers = new Map<number, { handle: unknown; deadline: number; token: number }>();
+  private nextToken = 0;
 
   constructor(id: string, module: RoomGameModule<S>, opts: GameRoomOptions, hooks: GameRoomHooks) {
     this.id = id;
@@ -126,6 +134,7 @@ export class GameRoom<S> {
     this.hand++;
     this.seq++;
     this.#seed = this.opts.seed?.() ?? crypto.randomBytes(16).toString('hex');
+    this.dealer = dealer;
     try {
       this.state = this.module.newHand(this.#seed, dealer);
     } catch {
@@ -133,7 +142,7 @@ export class GameRoom<S> {
       this.voidHand();
       return;
     }
-    this.advance();
+    this.advance(null);
   }
 
   act(seat: number, seq: number, action: unknown): void {
@@ -167,13 +176,15 @@ export class GameRoom<S> {
     }
     this.state = r.state;
     this.seq++;
-    this.advance();
+    this.advance(seat);
   }
 
-  /** After a state change: finish the hand, or broadcast and arm timers. */
-  private advance(): void {
-    this.clearTimers();
-    if (this.state === null) return;
+  /**
+   * After a state change: finish the hand, or broadcast and arm timers.
+   * A seat that stays due keeps its timer; the actor and newly due seats get a fresh one.
+   */
+  private advance(actor: number | null): void {
+    if (this.state === null) return this.clearTimers();
     let over: boolean;
     let toAct: number[];
     try {
@@ -184,26 +195,67 @@ export class GameRoom<S> {
     }
     if (over) return this.finishHand();
     if (!Array.isArray(toAct) || toAct.length === 0) return this.voidHand(); // stuck hand
-    this.toActNow = [...toAct];
-    const humanToAct = toAct.some((s) => !this.ai.has(s));
-    this.deadline = humanToAct ? this.now() + this.opts.turnMs : null;
-    if (!this.broadcastState()) return;
-    const seqAtArm = this.seq;
-    for (const seat of toAct) {
-      const ms = this.ai.has(seat) ? this.opts.aiDelayMs : this.opts.turnMs;
-      this.pending.push(this.timers.set(() => this.autoplay(seat, seqAtArm), ms));
+    const due = [...toAct];
+    // Work out every fresh deadline before touching timers, so a bad deadlineMs voids cleanly.
+    const now = this.now();
+    const fresh = new Map<number, number>();
+    for (const seat of due) {
+      if (this.seatTimers.has(seat) && seat !== actor) continue;
+      let ms: number;
+      if (this.ai.has(seat)) {
+        ms = this.opts.aiDelayMs;
+      } else {
+        let hook: unknown;
+        try {
+          hook = this.module.deadlineMs ? this.module.deadlineMs(this.state, seat) : undefined;
+        } catch {
+          return this.voidHand();
+        }
+        if (hook === null || hook === undefined) ms = this.opts.turnMs;
+        else if (typeof hook === 'number' && Number.isInteger(hook) && hook > 0) ms = hook;
+        else return this.voidHand();
+      }
+      fresh.set(seat, ms);
     }
+    for (const [seat, t] of [...this.seatTimers]) {
+      if (!due.includes(seat) || fresh.has(seat)) {
+        this.timers.clear(t.handle);
+        this.seatTimers.delete(seat);
+      }
+    }
+    this.toActNow = due;
+    for (const [seat, ms] of fresh) {
+      const token = ++this.nextToken;
+      const handle = this.timers.set(() => this.autoplay(seat, token), ms);
+      this.seatTimers.set(seat, { handle, deadline: now + ms, token });
+    }
+    this.broadcastState();
   }
 
-  private autoplay(seat: number, seqAtArm: number): void {
-    if (this.state === null || this.seq !== seqAtArm || !this.toActNow.includes(seat)) return;
+  private autoplay(seat: number, token: number): void {
+    if (this.state === null || !this.toActNow.includes(seat) || this.seatTimers.get(seat)?.token !== token) return;
+    this.seatTimers.delete(seat);
     let action: unknown;
     try {
-      action = this.module.aiAction(this.state, seat);
+      action = !this.ai.has(seat) && this.module.timeoutAction
+        ? this.module.timeoutAction(this.state, seat)
+        : this.module.aiAction(this.state, seat);
     } catch {
       return this.voidHand();
     }
     this.applyAction(seat, action, false);
+  }
+
+  /** The seat's own deadline when it is a due human; else the latest due human deadline; null if only AI are due. */
+  private deadlineFor(seat: number): number | null {
+    const own = this.seatTimers.get(seat);
+    if (own && !this.ai.has(seat) && this.toActNow.includes(seat)) return own.deadline;
+    let latest: number | null = null;
+    for (const s of this.toActNow) {
+      const t = this.seatTimers.get(s);
+      if (t && !this.ai.has(s) && (latest === null || t.deadline > latest)) latest = t.deadline;
+    }
+    return latest;
   }
 
   private stateMessage(seat: number): RoomMessage | null {
@@ -215,7 +267,7 @@ export class GameRoom<S> {
       this.voidHand();
       return null;
     }
-    return { type: 'state', hand: this.hand, seq: this.seq, seat, view, toAct: [...this.toActNow], deadline: this.deadline };
+    return { type: 'state', hand: this.hand, seq: this.seq, seat, view, toAct: [...this.toActNow], deadline: this.deadlineFor(seat) };
   }
 
   /** Sends each human seat its view. AI seats receive nothing. False if the hand was voided. */
@@ -234,18 +286,21 @@ export class GameRoom<S> {
     const state = this.state;
     if (state === null) return;
     let points: number[];
+    let nextDealer: unknown;
     const views: Array<[number, unknown]> = [];
     try {
       points = this.module.settle(state);
+      nextDealer = this.module.nextDealer ? this.module.nextDealer(state) : (this.dealer + 1) % this.module.seats;
       for (const seat of this.humanSeats()) views.push([seat, this.module.view(state, seat)]);
     } catch {
       return this.voidHand();
     }
     if (!this.validPoints(points)) return this.voidHand();
+    if (!Number.isInteger(nextDealer) || (nextDealer as number) < 0 || (nextDealer as number) >= this.module.seats) return this.voidHand();
     const hand = this.hand;
     this.endHand();
     for (const [seat, view] of views) this.hooks.send(seat, { type: 'hand_over', hand, view, points: [...points] });
-    this.hooks.onHandOver({ hand, points: [...points] });
+    this.hooks.onHandOver({ hand, points: [...points], nextDealer: nextDealer as number });
   }
 
   private validPoints(points: unknown): points is number[] {
@@ -266,7 +321,6 @@ export class GameRoom<S> {
     this.state = null;
     this.#seed = null;
     this.toActNow = [];
-    this.deadline = null;
   }
 
   private sendError(seat: number, code: RoomErrorCode): void {
@@ -274,7 +328,7 @@ export class GameRoom<S> {
   }
 
   private clearTimers(): void {
-    for (const h of this.pending) this.timers.clear(h);
-    this.pending = [];
+    for (const t of this.seatTimers.values()) this.timers.clear(t.handle);
+    this.seatTimers.clear();
   }
 }

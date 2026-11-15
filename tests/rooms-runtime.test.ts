@@ -228,3 +228,179 @@ describe('GameRoom', () => {
     expect(room.seatHuman('d')).toBe(1);
   });
 });
+
+// ── Module hooks: nextDealer, timeoutAction, deadlineMs ───────────────────────
+
+interface ClaimState { dealer: number; passed: number[]; by: Array<{ seat: number; how: string }> }
+
+/** 3 seats; every non-dealer seat is due at once until it passes. */
+const claimGame: RoomGameModule<ClaimState> = {
+  id: 'claim',
+  seats: 3,
+  maxLossPoints: 1,
+  newHand: (_seed, dealer) => ({ dealer, passed: [], by: [] }),
+  view: (s) => ({ passed: [...s.passed] }),
+  toAct: (s) => [0, 1, 2].filter((x) => x !== s.dealer && !s.passed.includes(x)),
+  apply(s, seat, action) {
+    const how = (action as { how?: unknown } | null)?.how;
+    if (typeof how !== 'string' || how === 'bad') return { ok: false, error: 'bad action' };
+    if (seat === s.dealer || s.passed.includes(seat)) return { ok: false, error: 'not due' };
+    return { ok: true, state: { ...s, passed: [...s.passed, seat], by: [...s.by, { seat, how }] } };
+  },
+  aiAction: () => ({ how: 'ai' }),
+  isOver: (s) => s.passed.length === 2,
+  settle: () => [0, 0, 0],
+};
+
+function claimSetup(base: RoomGameModule<ClaimState>) {
+  const clock = fakeClock();
+  const spy = { state: null as ClaimState | null };
+  const mod: RoomGameModule<ClaimState> = {
+    ...base,
+    newHand(seed, dealer) { spy.state = base.newHand(seed, dealer); return spy.state; },
+    apply(state, seat, action) { const r = base.apply(state, seat, action); if (r.ok) spy.state = r.state; return r; },
+  };
+  const sent: Array<{ seat: number; msg: RoomMessage }> = [];
+  const results: Array<{ hand: number; points?: number[]; voided?: boolean; nextDealer?: number }> = [];
+  const room = new GameRoom('r2', mod, { turnMs: TURN_MS, aiDelayMs: AI_MS, seed: () => 'claim', timers: clock.timers, now: clock.now }, {
+    send: (seat, msg) => sent.push({ seat, msg }),
+    onHandOver: (r) => results.push(r),
+  });
+  return { clock, spy, sent, results, room };
+}
+
+describe('GameRoom module hooks', () => {
+  const allAiHand = (base: RoomGameModule<ToyState>, dealer: number) => {
+    const s = setup({ base, seed: () => 'hook' });
+    s.room.fillWithAi();
+    s.room.startHand(dealer);
+    for (let i = 0; i < 20 && s.results.length === 0; i++) s.clock.advance(AI_MS);
+    return s;
+  };
+
+  it('nextDealer comes from the module hook', () => {
+    const { results } = allAiHand({ ...toyGame, nextDealer: () => 2 }, 0);
+    expect(results).toHaveLength(1);
+    expect(results[0].voided).toBeUndefined();
+    expect(results[0].nextDealer).toBe(2);
+  });
+
+  it('nextDealer falls back to (dealer + 1) % seats', () => {
+    expect(allAiHand(toyGame, 0).results[0].nextDealer).toBe(1);
+    expect(allAiHand(toyGame, 1).results[0].nextDealer).toBe(2);
+    expect(allAiHand(toyGame, 2).results[0].nextDealer).toBe(0);
+  });
+
+  it('a throwing or out-of-range nextDealer voids the hand', () => {
+    const bad: Array<() => number> = [() => { throw new Error('bug'); }, () => 3, () => -1, () => 1.5, () => NaN, () => '1' as unknown as number];
+    for (const nextDealer of bad) {
+      const { results, sent } = allAiHand({ ...toyGame, nextDealer }, 0);
+      expect(results).toEqual([{ hand: 1, voided: true }]);
+      expect(sent.some((s) => s.msg.type === 'hand_over')).toBe(false);
+    }
+  });
+
+  it('a timed-out human is played with timeoutAction; AI seats still use aiAction', () => {
+    const { clock, spy, room } = claimSetup({ ...claimGame, timeoutAction: () => ({ how: 'timeout' }) });
+    room.seatHuman('a'); // seat 0: dealer
+    room.seatHuman('b'); // seat 1: human
+    room.fillWithAi(); // seat 2: AI
+    room.startHand(0);
+    clock.advance(AI_MS);
+    expect(spy.state!.by).toEqual([{ seat: 2, how: 'ai' }]);
+    clock.advance(TURN_MS);
+    expect(spy.state!.by).toEqual([{ seat: 2, how: 'ai' }, { seat: 1, how: 'timeout' }]);
+  });
+
+  it('a released human seat is also played with timeoutAction; without the hook, aiAction', () => {
+    const a = claimSetup({ ...claimGame, timeoutAction: () => ({ how: 'timeout' }) });
+    a.room.seatHuman('a'); a.room.seatHuman('b'); a.room.seatHuman('c');
+    a.room.startHand(0);
+    a.room.release(1);
+    a.clock.advance(TURN_MS);
+    expect(a.spy.state!.by.map((x) => x.how)).toEqual(['timeout', 'timeout']);
+
+    const b = claimSetup(claimGame);
+    b.room.seatHuman('a'); b.room.seatHuman('b'); b.room.seatHuman('c');
+    b.room.startHand(0);
+    b.clock.advance(TURN_MS);
+    expect(b.spy.state!.by.map((x) => x.how)).toEqual(['ai', 'ai']);
+  });
+
+  it('a throwing or rejected timeoutAction voids the hand', () => {
+    for (const timeoutAction of [() => { throw new Error('bug'); }, () => ({ how: 'bad' })]) {
+      const { clock, results, room } = claimSetup({ ...claimGame, timeoutAction });
+      room.seatHuman('a'); room.seatHuman('b'); room.seatHuman('c');
+      room.startHand(0);
+      clock.advance(TURN_MS);
+      expect(results).toEqual([{ hand: 1, voided: true }]);
+      expect(clock.pending()).toBe(0);
+    }
+  });
+
+  it('deadlineMs sets the human deadline; null/undefined means turnMs', () => {
+    const a = claimSetup({ ...claimGame, deadlineMs: () => 4000 });
+    a.room.seatHuman('a'); a.room.seatHuman('b'); a.room.seatHuman('c');
+    a.room.startHand(0);
+    expect(lastState(a.sent, 1)!.deadline).toBe(4000);
+    a.clock.advance(3999);
+    expect(a.spy.state!.by).toEqual([]);
+    a.clock.advance(1);
+    expect(a.results).toHaveLength(1);
+
+    for (const deadlineMs of [() => null, () => undefined]) {
+      const b = claimSetup({ ...claimGame, deadlineMs });
+      b.room.seatHuman('a'); b.room.seatHuman('b'); b.room.seatHuman('c');
+      b.room.startHand(0);
+      expect(lastState(b.sent, 1)!.deadline).toBe(TURN_MS);
+      b.clock.advance(TURN_MS - 1);
+      expect(b.spy.state!.by).toEqual([]);
+      b.clock.advance(1);
+      expect(b.results).toHaveLength(1);
+    }
+  });
+
+  it('a throwing or invalid deadlineMs voids the hand', () => {
+    const bad = [() => { throw new Error('bug'); }, () => 0, () => -5, () => 1.5, () => Infinity, () => NaN];
+    for (const deadlineMs of bad) {
+      const { results, room, clock } = claimSetup({ ...claimGame, deadlineMs });
+      room.seatHuman('a'); room.seatHuman('b'); room.seatHuman('c');
+      room.startHand(0);
+      expect(results).toEqual([{ hand: 1, voided: true }]);
+      expect(clock.pending()).toBe(0);
+    }
+  });
+
+  it('each seat sees its own deadline when due, else the latest human deadline; null for AI only', () => {
+    const { sent, room } = claimSetup({ ...claimGame, deadlineMs: (_s, seat) => (seat === 1 ? 4000 : 8000) });
+    room.seatHuman('a'); room.seatHuman('b'); room.seatHuman('c');
+    room.startHand(0);
+    expect(lastState(sent, 0)!.deadline).toBe(8000);
+    expect(lastState(sent, 1)!.deadline).toBe(4000);
+    expect(lastState(sent, 2)!.deadline).toBe(8000);
+    expect(lastState(sent, 1)!.toAct).toEqual([1, 2]);
+
+    const ai = claimSetup(claimGame);
+    ai.room.seatHuman('a'); // seat 0 dealer human, seats 1 and 2 AI
+    ai.room.fillWithAi();
+    ai.room.startHand(0);
+    expect(lastState(ai.sent, 0)!.deadline).toBeNull();
+  });
+
+  it("with two seats due, seat A acting does not restart seat B's timer", () => {
+    const { clock, spy, sent, results, room } = claimSetup(claimGame);
+    room.seatHuman('a'); room.seatHuman('b'); room.seatHuman('c');
+    room.startHand(0);
+    clock.advance(6000);
+    room.act(1, lastState(sent, 1)!.seq, { how: 'human' });
+    expect(spy.state!.by).toEqual([{ seat: 1, how: 'human' }]);
+    expect(lastState(sent, 2)!.deadline).toBe(TURN_MS);
+    expect(lastState(sent, 1)!.deadline).toBe(TURN_MS);
+    clock.advance(TURN_MS - 6000 - 1);
+    expect(spy.state!.by).toHaveLength(1);
+    clock.advance(1);
+    expect(spy.state!.by).toEqual([{ seat: 1, how: 'human' }, { seat: 2, how: 'ai' }]);
+    expect(results).toHaveLength(1);
+    expect(clock.pending()).toBe(0);
+  });
+});

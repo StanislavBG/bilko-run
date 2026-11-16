@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, openSync, ftruncateSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import type { GateContext } from '../mcp-host-server/src/gates/index.js';
@@ -43,7 +43,13 @@ vi.mock('node:fs', async () => {
 // ── Deferred imports (after mocks) ──────────────────────────────────────────
 
 import { manifestGate } from '../mcp-host-server/src/gates/manifest.js';
-import { budgetGate } from '../mcp-host-server/src/gates/budget.js';
+import { budgetGate, GITHUB_FILE_LIMIT_BYTES } from '../mcp-host-server/src/gates/budget.js';
+
+// A sparse file of n bytes: no real disk write, so 100 MiB fixtures stay fast.
+function sparse(path: string, n: number): void {
+  const fd = openSync(path, 'w');
+  try { ftruncateSync(fd, n); } finally { closeSync(fd); }
+}
 import { a11yGate } from '../mcp-host-server/src/gates/a11y.js';
 import { goldenGate } from '../mcp-host-server/src/gates/golden.js';
 import { auditGate } from '../mcp-host-server/src/gates/audit.js';
@@ -117,40 +123,47 @@ describe('manifestGate', () => {
 // rather than mocking a size.
 
 describe('budgetGate', () => {
-  it('pass: bundle within default 200 KB budget', async () => {
-    // valid/ fixture is a couple hundred real bytes gzipped — far under 200 KB.
+  it('pass: small bundle reports measured size, file count and largest file', async () => {
     const ctx = makeCtx({ manifest: VALID_MANIFEST });
     const result = await budgetGate(ctx);
     expect(result.status).toBe('pass');
-    expect(result.details).toContain('KB budget');
+    expect(result.details).toMatch(/^measured \d+\.\d KB gz over \d+ files \(manifest reported 48\.8 KB\); largest file \S+ \d+\.\d MiB; no size budget, only GitHub's 100 MiB per-file limit$/);
   });
 
-  it('fail: bundle exceeds default budget', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-over-'));
-    writeFileSync(join(dir, 'blob.bin'), randomBytes(250_000)); // incompressible, >200 KB budget
-    const ctx = makeCtx({ bundleDir: dir, manifest: VALID_MANIFEST });
-    const result = await budgetGate(ctx);
-    expect(result.status).toBe('fail');
-    expect(result.details).toContain('exceeds budget');
-  });
-
-  it('pass: app-specific override applies', async () => {
-    // academy's 700 KB override admits a bundle that would fail the 200 KB default.
-    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-override-'));
-    writeFileSync(join(dir, 'blob.bin'), randomBytes(300_000));
-    const ctx = makeCtx({ slug: 'academy', bundleDir: dir, manifest: VALID_MANIFEST });
-    const result = await budgetGate(ctx);
+  it.each(['threewinds', 'brand-new-app'])('pass: a 2,600,000-byte incompressible bundle passes for %s', async (slug) => {
+    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-big-'));
+    writeFileSync(join(dir, 'blob.bin'), randomBytes(2_600_000));
+    const result = await budgetGate(makeCtx({ slug, bundleDir: dir, manifest: VALID_MANIFEST }));
     expect(result.status).toBe('pass');
+    expect(result.details).toContain('over 1 files');
+    expect(result.details).toContain('largest file blob.bin 2.5 MiB');
   });
 
-  it('fail: manifest under-reports size but measured size still fails', async () => {
+  it('fail: one file over GitHub\'s 100 MiB per-file limit', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-huge-'));
+    mkdirSync(join(dir, 'assets'));
+    writeFileSync(join(dir, 'index.html'), '<!doctype html>');
+    sparse(join(dir, 'assets', 'huge.bin'), GITHUB_FILE_LIMIT_BYTES + 1);
+    const result = await budgetGate(makeCtx({ bundleDir: dir, manifest: VALID_MANIFEST }));
+    expect(result.status).toBe('fail');
+    expect(result.details).toBe('assets/huge.bin is 100.0 MiB; GitHub rejects files over 100 MiB, so this bundle cannot be pushed');
+  });
+
+  it('pass: a file of exactly 100 MiB is allowed', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'budget-gate-edge-'));
+    sparse(join(dir, 'edge.bin'), 104_857_600);
+    const result = await budgetGate(makeCtx({ bundleDir: dir, manifest: VALID_MANIFEST }));
+    expect(result.status).toBe('pass');
+    expect(result.details).toContain('largest file edge.bin 100.0 MiB');
+  });
+
+  it('pass: manifest under-reports size; details show measured and reported numbers', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'budget-gate-underreport-'));
     writeFileSync(join(dir, 'blob.bin'), randomBytes(250_000));
     const underReportingManifest = { ...VALID_MANIFEST, bundle: { sizeBytesGz: 50_000, fileCount: 1 } };
     const ctx = makeCtx({ bundleDir: dir, manifest: underReportingManifest });
     const result = await budgetGate(ctx);
-    expect(result.status).toBe('fail');
-    expect(result.details).toContain('exceeds budget');
+    expect(result.status).toBe('pass');
     // mentions both the measured (actual) and manifest-reported numbers
     expect(result.details).toContain('48.8 KB');
     expect(result.details).toMatch(/2\d\d\.\d KB/);
@@ -370,7 +383,7 @@ describe('runGates', () => {
       expect(gateSummary(results).ok).toBe(true);
 
       const budget = results.find(r => r.name === 'budget')!;
-      expect(budget.details).toMatch(/^measured \d+\.\d KB gz \(manifest reported 48\.8 KB\) \/ 195 KB budget$/);
+      expect(budget.details).toMatch(/^measured \d+\.\d KB gz over \d+ files \(manifest reported 48\.8 KB\); largest file \S+ \d+\.\d MiB; no size budget, only GitHub's 100 MiB per-file limit$/);
 
       const lines = gateLines(results);
       expect(lines[0]).toBe('gates: manifest=pass, budget=pass, golden=pass, a11y=pass, audit=pass, share-assets=pass');

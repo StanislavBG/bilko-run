@@ -145,7 +145,7 @@ describe('budgetGate share-asset exclusion', () => {
   const manifest = { bundle: { sizeBytesGz: 0, fileCount: 1 } } as unknown as GateContext['manifest'];
   const budget = (listing?: GateContext['listing']) =>
     budgetGate({ slug: 'demo', bundleDir: dir, bypass: new Set(), manifest, listing });
-  // A valid 1200x630 PNG padded with incompressible bytes: well over the 200 KB default budget.
+  // A valid 1200x630 PNG padded with incompressible bytes, so exclusion shows in the measured size.
   const heavyShareImage = () => Buffer.concat([png(1200, 630), randomBytes(250_000)]);
 
   it('a valid declared shareImage does not count against the budget', async () => {
@@ -156,22 +156,28 @@ describe('budgetGate share-asset exclusion', () => {
     expect(r.details).toContain('excluding 1 share asset');
   });
 
-  it('the same bytes count when the image is not declared', async () => {
+  it('the same bytes count when the image is not declared, and still pass (no size budget)', async () => {
     put('img/share.png', heavyShareImage());
-    expect((await budget(undefined)).status).toBe('fail');
+    const r = await budget(undefined);
+    expect(r.status).toBe('pass');
+    expect(r.details).not.toContain('excluding');
+    expect(r.details).toMatch(/^measured 2\d\d\.\d KB gz/);
   });
 
-  it('an invalid declared shareImage still counts against the budget', async () => {
+  it('an invalid declared shareImage is still measured, and passes', async () => {
     put('img/share.png', Buffer.concat([png(1200, 600), randomBytes(250_000)]));
     const r = await budget({ shareImage: '/projects/demo/img/share.png' });
-    expect(r.status).toBe('fail');
-    expect(r.details).toContain('exceeds budget');
+    expect(r.status).toBe('pass');
+    expect(r.details).not.toContain('excluding');
   });
 
   it('other bundle bytes still count', async () => {
     put('img/share.png', heavyShareImage());
     put('blob.bin', randomBytes(250_000));
-    expect((await budget({ shareImage: '/projects/demo/img/share.png' })).status).toBe('fail');
+    const r = await budget({ shareImage: '/projects/demo/img/share.png' });
+    expect(r.status).toBe('pass');
+    expect(r.details).toContain('excluding 1 share asset');
+    expect(r.details).toMatch(/^measured 2\d\d\.\d KB gz/);
   });
 
   it('a valid declared 6 MB video does not count against the budget', async () => {
@@ -182,8 +188,10 @@ describe('budgetGate share-asset exclusion', () => {
     expect(r.details).toContain('excluding 1 share asset');
   });
 
-  it('the same video counts when it is not declared', async () => {
+  it('the same video counts when it is not declared, and still passes', async () => {
     put('img/card.mp4', mp4(6 * 1024 * 1024));
-    expect((await budget(undefined)).status).toBe('fail');
+    const r = await budget(undefined);
+    expect(r.status).toBe('pass');
+    expect(r.details).not.toContain('excluding');
   });
 });

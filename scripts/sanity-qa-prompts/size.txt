@@ -7,7 +7,7 @@ Return ONLY a JSON object (no markdown fences):
   "perTarget": { "<slug>": "pass" | "warn" | "fail" },
   "details": "<summary>",
   "sizes": {
-    "<slug>": { "sizeKBgz": 213.4, "budget": 200, "fileCount": 5, "issues": ["..."] }
+    "<slug>": { "sizeKBgz": 213.4, "fileCount": 5, "issues": ["..."] }
   }
 }
 
@@ -18,26 +18,16 @@ $TARGETS  ← replaced by caller
 ~/Projects/Bilko/public/projects/<slug>/manifest.json
 
 # What to check per target
+There is no per-app size budget and no file-count limit; report sizeKBgz only.
 
 ## 1. Manifest existence
 If manifest.json missing → warn (not fail: might be old pre-manifest deploy)
 
-## 2. bundle.sizeBytesGz vs budget
-Per-app budgets (bytes):
-  sudoku, mindswiffer, game-academy → 250 * 1024 = 256000
-  academy → 400 * 1024 = 409600
-  everything else → 200 * 1024 = 204800
-
-If sizeBytesGz > budget → fail
-
-## 3. bundle.fileCount
-If fileCount > 30 → warn (suggests missed code-splitting or stray sourcemaps)
-
-## 4. Actual file count cross-check
+## 2. Actual file count cross-check
 Run: find ~/Projects/Bilko/public/projects/<slug>/ -type f | wc -l
 If |actual - manifest.fileCount| > 5 → warn
 
-## 5. Stale drift
+## 3. Stale drift
 If manifest.builtAt is older than 14 days AND
    git -C <localSourcePath> log --since="14 days ago" --oneline -- src/ has output
 → warn "stale manifest — source has recent commits"

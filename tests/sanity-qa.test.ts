@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SubagentResult, TargetStatus, SanityTarget } from '../scripts/sanity-qa-runners/types.js';
 import { runSize } from '../scripts/sanity-qa-runners/size.js';
-import { APP_BUDGETS_GZ_BYTES, budgetFor } from '../mcp-host-server/src/contract/app-budgets.js';
 
 // ── Pure helpers extracted from sanity-qa.ts for unit testing ───────────────
 
@@ -191,7 +190,7 @@ describe('report table', () => {
   });
 });
 
-// ── runSize — contract-driven budgets ────────────────────────────────────────
+// ── runSize — size reported, manifest drift checked ────────────────────────────────────────
 
 describe('runSize', () => {
   const dirs: string[] = [];
@@ -220,29 +219,34 @@ describe('runSize', () => {
     return { slug, name: slug, url: '', category: 'ai-tool', localPublicPath };
   }
 
-  it('uses the contract default budget for a slug with no override', async () => {
-    const target = makeTarget('some-default-tool', budgetFor('some-default-tool') + 1, 5);
+  it('passes a large target with many files: there is no size budget or file-count limit', async () => {
+    const target = makeTarget('big-app', 50_000_000, 500);
     const result = await runSize([target], false);
-    expect(result.perTarget['some-default-tool']).toBe('fail');
+    expect(result.perTarget['big-app']).toBe('pass');
+    expect(result.status).toBe('pass');
+    expect(result.details).toBe('1/1 targets pass');
   });
 
-  it('uses the contract override budget for a slug with one, e.g. academy', async () => {
-    const limit = APP_BUDGETS_GZ_BYTES['academy'];
-    const target = makeTarget('academy', limit - 1, 5);
+  it('warns when manifest fileCount is off by more than 5 from the files on disk', async () => {
+    const target = makeTarget('drift-app', 1000, 5);
+    writeFileSync(
+      join(target.localPublicPath, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        slug: 'drift-app',
+        version: '1.0.0',
+        builtAt: new Date().toISOString(),
+        bundle: { sizeBytesGz: 1000, fileCount: 20 },
+      }),
+    );
     const result = await runSize([target], false);
-    expect(result.perTarget['academy']).toBe('pass');
+    expect(result.perTarget['drift-app']).toBe('warn');
   });
 
-  it('exempts slugs with a contract budget override from the file-count check', async () => {
-    const limit = APP_BUDGETS_GZ_BYTES['escape-velocity'];
-    const target = makeTarget('escape-velocity', limit - 1, 40);
+  it('fails a target whose manifest.json is not valid JSON', async () => {
+    const target = makeTarget('broken-app', 1000, 5);
+    writeFileSync(join(target.localPublicPath, 'manifest.json'), '{not json');
     const result = await runSize([target], false);
-    expect(result.perTarget['escape-velocity']).toBe('pass');
-  });
-
-  it('still enforces the file-count check for default-budget slugs', async () => {
-    const target = makeTarget('some-default-tool', 1_000, 40);
-    const result = await runSize([target], false);
-    expect(result.perTarget['some-default-tool']).toBe('warn');
+    expect(result.perTarget['broken-app']).toBe('fail');
   });
 });

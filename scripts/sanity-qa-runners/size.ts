@@ -3,9 +3,7 @@ import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { SanityTarget, SubagentResult, TargetStatus } from './types.js';
-import { budgetFor, APP_BUDGETS_GZ_BYTES } from '../../mcp-host-server/src/contract/app-budgets.js';
 
-const MAX_FILE_COUNT = 30;
 const STALE_DAYS = 14;
 
 interface ManifestData {
@@ -63,7 +61,7 @@ export async function runSize(targets: SanityTarget[], failFast = false): Promis
     const manifestPath = join(target.localPublicPath, 'manifest.json');
     if (!existsSync(manifestPath)) {
       perTarget[target.slug] = 'warn';
-      rows.push(`| ${target.slug} | — | — | — | 🟡 no manifest.json |`);
+      rows.push(`| ${target.slug} | — | — | 🟡 no manifest.json |`);
       continue;
     }
 
@@ -72,28 +70,17 @@ export async function runSize(targets: SanityTarget[], failFast = false): Promis
       manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
     } catch {
       perTarget[target.slug] = 'fail';
-      rows.push(`| ${target.slug} | — | — | — | ❌ manifest.json parse error |`);
+      rows.push(`| ${target.slug} | — | — | ❌ manifest.json parse error |`);
+      if (failFast) break;
       continue;
     }
 
-    const budget = budgetFor(target.slug);
+    // No per-app size budget and no file-count limit (owner decision
+    // 2026-11-15): size is reported only; drift checks below can warn.
     const { sizeBytesGz, fileCount } = manifest.bundle;
     const sizeKB = (sizeBytesGz / 1024).toFixed(1);
-    const budgetKB = (budget / 1024).toFixed(0);
 
-    let issues: string[] = [];
-
-    // Size check
-    if (sizeBytesGz > budget) {
-      issues.push(`${sizeKB} KB gz > ${budgetKB} KB budget`);
-    }
-
-    // File count check — exempt bundles with a contract budget override: a
-    // raised size budget (e.g. escape-velocity's Godot wasm export) implies
-    // the app legitimately ships more files than the default-budget apps.
-    if (!(target.slug in APP_BUDGETS_GZ_BYTES) && fileCount > MAX_FILE_COUNT) {
-      issues.push(`${fileCount} files > ${MAX_FILE_COUNT} max`);
-    }
+    const issues: string[] = [];
 
     // Cross-check actual file count
     const actualFileCount = countFilesRecursive(target.localPublicPath);
@@ -106,38 +93,34 @@ export async function runSize(targets: SanityTarget[], failFast = false): Promis
       issues.push(`manifest stale (builtAt=${manifest.builtAt.slice(0, 10)}) but recent src commits found`);
     }
 
-    const status: TargetStatus = issues.length === 0 ? 'pass'
-      : issues.some(i => i.includes('KB gz >')) ? 'fail'
-      : 'warn';
+    const status: TargetStatus = issues.length === 0 ? 'pass' : 'warn';
 
     perTarget[target.slug] = status;
-    const icon = status === 'pass' ? '✅' : status === 'warn' ? '🟡' : '❌';
+    const icon = status === 'pass' ? '✅' : '🟡';
     const note = issues.length > 0 ? issues.join('; ') : '';
-    rows.push(`| ${target.slug} | ${sizeKB} KB | ${budgetKB} KB | ${fileCount} | ${icon} ${note} |`);
-
-    if (failFast && status === 'fail') break;
+    rows.push(`| ${target.slug} | ${sizeKB} KB | ${fileCount} | ${icon} ${note} |`);
   }
 
   const allStatuses = Object.values(perTarget);
+  const passCount = allStatuses.filter(s => s === 'pass').length;
   const status: TargetStatus = allStatuses.some(s => s === 'fail') ? 'fail'
     : allStatuses.some(s => s === 'warn' || s === 'error') ? 'warn'
     : 'pass';
 
   const sectionMd = [
     '## Bundle Size\n',
-    '| Target | Size (gz) | Budget | Files | Status |',
-    '|---|---|---|---|---|',
+    '| Target | Size (gz) | Files | Status |',
+    '|---|---|---|---|',
     ...rows,
     '',
-    `Default budget=${(budgetFor('') / 1024).toFixed(0)} KB, overrides from mcp-host-server's budget ` +
-      'contract. Max files=30 (exempt for apps with a budget override).',
+    'No per-app size budget (owner decision 2026-11-15): this check reports gzipped size and checks manifest drift only.',
   ].join('\n');
 
   return {
     name: 'size',
     status,
     perTarget,
-    details: `${allStatuses.filter(s => s === 'pass').length}/${targets.length} within budget`,
+    details: `${passCount}/${targets.length} targets pass`,
     sectionMd,
   };
 }

@@ -605,6 +605,25 @@ export const MIGRATIONS = [
     uploaded_at INTEGER NOT NULL,
     PRIMARY KEY (slug, version)
   )`,
+  // Owner-uploaded card media (server/services/listing-media.ts). Bytes live in
+  // listing_media_chunks (<= 1 MiB per row); the listing_media row is written last.
+  `CREATE TABLE IF NOT EXISTS listing_media (
+    slug        TEXT NOT NULL,
+    file        TEXT NOT NULL,
+    field       TEXT NOT NULL,
+    bytes       INTEGER NOT NULL,
+    has_audio   INTEGER NOT NULL,
+    chunks      INTEGER NOT NULL,
+    uploaded_at INTEGER NOT NULL,
+    PRIMARY KEY (slug, file)
+  )`,
+  `CREATE TABLE IF NOT EXISTS listing_media_chunks (
+    slug    TEXT NOT NULL,
+    file    TEXT NOT NULL,
+    idx     INTEGER NOT NULL,
+    content BLOB NOT NULL,
+    PRIMARY KEY (slug, file, idx)
+  )`,
   // Service bookings (server/services/service-bookings.ts): a paid checkout session
   // claims one open slot; UNIQUE(page_slug, slot_start_ms) makes a slot claimable once.
   `CREATE TABLE IF NOT EXISTS service_bookings (

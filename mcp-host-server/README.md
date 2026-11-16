@@ -18,6 +18,7 @@ Per the [host contract](../docs/host-contract.md), each app lives in its own rep
 | `register_static_project` | none | yes (registry + commit + push) | First deploy of a new app. |
 | `register_external_project` | none | yes (registry + commit + push) | Register an app hosted on its own domain: `{ slug, url (https://), name, tagline, category, status, year, callerRepoPath, … }`. The card links straight to `url`; nothing is published. |
 | `update_project_listing` | none | yes (registry + commit + push) | Change your own `/projects` card: `{ slug, callerRepoPath, patch }`. Only project-owned fields; `public`, slug and hosting are rejected. |
+| `set_listing_media` | none | yes (registry commit + push; bytes uploaded to bilko.run) | Upload your card's `video` (MP4/WebM, up to 8 MB), `shareImage` (PNG exactly 1200x630, up to 5 MB) or `icon` (square PNG 128-1024 px, up to 512 KB) from local files: `{ slug, callerRepoPath, media: { video?, shareImage?, icon? } }`; `null` removes a field. Works for static-path and external-url slugs; only the bound repo may call it. Bytes are hosted by bilko.run at `/projects/<slug>/_media/<sha256>.<ext>`, never committed; the card updates after the ~1 minute redeploy. |
 | `unregister_project` | none | yes | Retire an app (optionally also delete `public/projects/<slug>/`). |
 | `publish_static_project` | none | yes (copies bytes + commit + push) | After every `vite build` in your app repo. |
 | `status` | none | no | Verify a publish landed; see uncommitted state. |

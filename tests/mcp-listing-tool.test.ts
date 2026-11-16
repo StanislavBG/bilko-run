@@ -193,7 +193,7 @@ describe('assertPublishOwner', () => {
       { slug: 'ext', name: 'Ext', tagline: 'T', category: 'Game', status: 'live', year: 2026,
         host: { kind: 'external-url', url: 'https://ext.example.app', localPath: '/tmp/listing-tool-ext-repo' } },
     ]);
-    expect(() => assertPublishOwner(reg, 'ext', '/tmp/listing-tool-ext-repo')).toThrow(/external-url entry; there is no bundle/);
+    expect(() => assertPublishOwner(reg, 'ext', '/tmp/listing-tool-ext-repo')).toThrow(/external-url entry; there is no bundle to publish\. Edit its card with update_project_listing; upload card media with set_listing_media\./);
   });
 });
 

@@ -15,6 +15,7 @@
  *   - register_external_project  → adds an external-url entry (app hosted on another domain)
  *   - unregister_project         → removes an entry by slug
  *   - update_project_listing      → owner-only edit of a project's /projects card content
+ *   - set_listing_media          → owner-only upload of card media (video, shareImage, icon), hosted by bilko.run
  *   - get_project                → returns one registry entry by slug
  *   - publish_static_project     → copies built dist/ into host's public/projects/<slug>/
  *   - status                     → host git status (uncommitted files, last 5 commits)
@@ -59,6 +60,7 @@ import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout } from './publish-checkout.js';
 import { readLatestRegistryRaw } from './registry-source.js';
 import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
+import { setListingMedia } from './listing-media-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 import { readHostContract } from './host-contract.js';
 export { readHostContract };
@@ -308,7 +310,7 @@ server.registerTool('unregister_project', {
 // 4b) update_project_listing ────────────────────────────────────────────
 server.registerTool('update_project_listing', {
     title: 'Update a project listing',
-    description: 'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints,offering,pricing,callToAction,avoidClaims,icon,shareImage,video}). icon and shareImage must be PNG files inside your project\'s own published bundle (a path like /projects/<slug>/icon.png): icon is square and is composited onto the generated share card; shareImage is exactly 1200x630 and replaces the generated card. video is an .mp4 or .webm file inside your project\'s own bundle (/projects/<slug>/...) that plays muted and looping on the active /projects card, with the share image as its poster; X/LinkedIn link previews keep the PNG. offering/pricing/callToAction/avoidClaims tell promoters (e.g. Burrow) what kind of project this is, what the reader should do, and claims never to make. Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. The patch is a JSON merge patch: send only what changes. Fields you leave out keep their value, and listing merges key by key, so {listing:{audience:"..."}} keeps avoidClaims and every other listing key. null deletes: {displayName:null} removes a field, {listing:{avoidClaims:null}} removes one listing key, {listing:null} removes the whole listing. Arrays (tags, talkingPoints, avoidClaims) are replaced whole. The result names any field the patch removed. Commits and pushes; bilko.run redeploys in ~1 minute.',
+    description: 'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints,offering,pricing,callToAction,avoidClaims,icon,shareImage,video}). icon, shareImage and video each take either a path inside your project\'s own published bundle (like /projects/<slug>/icon.png) or a hosted path returned by set_listing_media (/projects/<slug>/_media/<sha256>.<ext>); this tool never uploads files, so to upload card media from a local file (any host kind, external-url included) use set_listing_media. icon is a square PNG composited onto the generated share card; shareImage is a PNG exactly 1200x630 that replaces the generated card. video is an .mp4 or .webm file that plays muted and looping on the active /projects card, with the share image as its poster; X/LinkedIn link previews keep the PNG. offering/pricing/callToAction/avoidClaims tell promoters (e.g. Burrow) what kind of project this is, what the reader should do, and claims never to make. Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. The patch is a JSON merge patch: send only what changes. Fields you leave out keep their value, and listing merges key by key, so {listing:{audience:"..."}} keeps avoidClaims and every other listing key. null deletes: {displayName:null} removes a field, {listing:{avoidClaims:null}} removes one listing key, {listing:null} removes the whole listing. Arrays (tags, talkingPoints, avoidClaims) are replaced whole. The result names any field the patch removed. Commits and pushes; bilko.run redeploys in ~1 minute.',
     inputSchema: {
         slug: SlugSchema,
         callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
@@ -335,6 +337,29 @@ server.registerTool('update_project_listing', {
             ...(removed.length > 0 ? [`removed: ${removed.join(', ')}`] : []),
             pushedLine(outcome),
         ].join('\n'));
+    }
+    catch (e) {
+        return err(e.message);
+    }
+});
+// 4b2) set_listing_media ───────────────────────────────────────────────
+const MediaFileSchema = z.string().min(1).nullable().optional();
+server.registerTool('set_listing_media', {
+    title: 'Set listing card media',
+    description: 'Upload YOUR project\'s /projects card media from local files: video, shareImage and icon. Works for static-path and external-url slugs alike; this is the one way to give an external-url card media. Only the repo bound to the slug (host.localPath) may call it. Each value is an absolute path to a local file, or null to remove that field from the listing; fields you leave out are kept. File limits: icon is a square PNG 128-1024 px, up to 512 KB; shareImage is a PNG exactly 1200x630, up to 5 MB; video is an MP4 or WebM, up to 8 MB. The bytes are hosted by bilko.run (served at /projects/<slug>/_media/<sha256>.<ext>), not committed to any repo; only the hosted path is written into the registry, in one commit pushed to origin. The card updates after bilko.run redeploys in ~1 minute.',
+    inputSchema: {
+        slug: SlugSchema,
+        callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
+        media: z.object({
+            video: MediaFileSchema.describe('Absolute path to an .mp4 or .webm file (up to 8 MB), or null to remove the card video.'),
+            shareImage: MediaFileSchema.describe('Absolute path to a 1200x630 PNG (up to 5 MB), or null to remove the share image.'),
+            icon: MediaFileSchema.describe('Absolute path to a square PNG 128-1024 px (up to 512 KB), or null to remove the icon.'),
+        }).describe('At least one of video, shareImage, icon. A file path sets the field; null removes it; omitted fields are kept.'),
+    },
+}, async ({ slug, callerRepoPath, media }) => {
+    try {
+        const result = await setListingMedia({ slug, callerRepoPath, media }, { hostRoot: HOST_ROOT, baseUrl: baseUrl() });
+        return result.ok ? ok(result.text) : err(result.text);
     }
     catch (e) {
         return err(e.message);
@@ -373,7 +398,7 @@ function declaredShareAssets(projects, slug, sourceRepoPath) {
 // 5) publish_static_project ─────────────────────────────────────────────
 server.registerTool('publish_static_project', {
     title: 'Publish a static-path app build',
-    description: 'Only the repo bound to the slug may publish it (sourceRepoPath must match host.localPath; unregistered slugs are refused). Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs six publish gates (manifest, budget, golden, a11y, audit, share-assets) before copying; the budget gate has no size budget: it reports the measured gzipped size and fails only when one file is over GitHub\'s 100 MiB per-file limit. Any non-bypassed gate failure blocks the publish. On success the result lists each gate\'s details under the gates line (budget: gate-measured KB gz, manifest-reported KB and the largest file). Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
+    description: 'Only the repo bound to the slug may publish it (sourceRepoPath must match host.localPath; unregistered slugs are refused). Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs six publish gates (manifest, budget, golden, a11y, audit, share-assets) before copying; the budget gate has no size budget: it reports the measured gzipped size and fails only when one file is over GitHub\'s 100 MiB per-file limit. Any non-bypassed gate failure blocks the publish. On success the result lists each gate\'s details under the gates line (budget: gate-measured KB gz, manifest-reported KB and the largest file). Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree. Card media (video, shareImage, icon) can also be uploaded without a publish via set_listing_media, which bilko.run hosts outside the bundle.',
     inputSchema: {
         slug: SlugSchema,
         distPath: z.string().describe('Absolute path to the built dist/ directory in the sibling repo. Example: "/home/bilko/Projects/Outdoor-Hours/dist".'),

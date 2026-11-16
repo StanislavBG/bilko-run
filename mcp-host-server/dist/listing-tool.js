@@ -33,7 +33,7 @@ export function assertPublishOwner(projects, slug, sourceRepoPath) {
         throw new Error(`slug "${slug}" is not registered. Call register_static_project first.`);
     assertCallerOwnsSlug(entry, sourceRepoPath);
     if (entry.host.kind !== 'static-path') {
-        throw new Error(`slug "${slug}" is an ${entry.host.kind} entry; there is no bundle to publish. Edit its card with update_project_listing.`);
+        throw new Error(`slug "${slug}" is an ${entry.host.kind} entry; there is no bundle to publish. Edit its card with update_project_listing; upload card media with set_listing_media.`);
     }
 }
 function collapseHome(p) {

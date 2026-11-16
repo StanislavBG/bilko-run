@@ -18,8 +18,9 @@
  *
  * GameRoom sockets (server/rooms/socket.ts) are closed here, at the start of
  * the drain, with 1012 so their clients reconnect to the new instance. The
- * optional `preClose` hook runs first (e.g. suspendRoomTables saves and
- * suspends every live table), bounded by the same drain cap.
+ * optional `preClose` hook runs first (suspendRoomTables freezes, saves and
+ * suspends every live table, so no move reaches a client after its final
+ * save), bounded by the same drain cap.
  *
  * SIGINT (local Ctrl-C) keeps the short grace, and a second signal exits now.
  */

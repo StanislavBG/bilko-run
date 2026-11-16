@@ -106,6 +106,8 @@ export class GameRoom<S> {
    */
   private readonly seatTimers = new Map<number, { handle: unknown; deadline: number; token: number; startSeq: number }>();
   private nextToken = 0;
+  /** Set by freeze(): the room never changes again. */
+  private frozen = false;
 
   constructor(id: string, module: RoomGameModule<S>, opts: GameRoomOptions, hooks: GameRoomHooks) {
     this.id = id;
@@ -154,6 +156,7 @@ export class GameRoom<S> {
   // ── Hand lifecycle ───────────────────────────────────────────────────────
 
   startHand(dealer = 0): void {
+    if (this.frozen) return;
     this.clearTimers();
     this.hand++;
     this.seq++;
@@ -170,6 +173,7 @@ export class GameRoom<S> {
   }
 
   act(seat: number, seq: number, action: unknown): void {
+    if (this.frozen) return; // dropped without a reply: the client resends after the table resumes
     if (this.state === null) return this.sendError(seat, 'no_hand');
     // A seat released to AI is the house's now: a stale socket must not steer it.
     if (this.ai.has(seat)) return this.sendError(seat, 'not_your_turn');
@@ -189,6 +193,16 @@ export class GameRoom<S> {
   }
 
   // ── Persistence ──────────────────────────────────────────────────────────
+
+  /**
+   * Stops the room for good (deploy drain, before its final save): every timer is
+   * cleared, and act(), startHand() and autoplay do nothing from now on, so snapshot()
+   * stays exactly the state the seats last saw. Due seats keep their startSeq for snapshot().
+   */
+  freeze(): void {
+    this.frozen = true;
+    for (const t of this.seatTimers.values()) this.timers.clear(t.handle);
+  }
 
   /** The live hand as JSON-safe data for server-side storage; null outside a hand (or if the state is not JSON). */
   snapshot(): RoomSnapshot | null {
@@ -375,7 +389,7 @@ export class GameRoom<S> {
   }
 
   private autoplay(seat: number, token: number): void {
-    if (this.state === null || !this.toActNow.includes(seat) || this.seatTimers.get(seat)?.token !== token) return;
+    if (this.frozen || this.state === null || !this.toActNow.includes(seat) || this.seatTimers.get(seat)?.token !== token) return;
     this.seatTimers.delete(seat);
     let action: unknown;
     try {

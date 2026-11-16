@@ -680,4 +680,26 @@ describe('GameRoom snapshot / restore', () => {
     expect(dst.sent.slice(n).filter((s) => s.msg.type === 'error')).toEqual([]);
     expect(dst.spy.state!.by).toEqual([{ seat: 2, how: 'ai' }, { seat: 1, how: 'human' }]);
   });
+
+  it('freeze() stops the room for good: no AI or autoplay timer fires, act() and startHand() do nothing', () => {
+    const { clock, spy, sent, results, room } = setup();
+    room.seatHuman('alice');
+    room.fillWithAi();
+    room.startHand(1); // AI seat 1 deals and acts first, after AI_MS
+    const before = room.snapshot()!;
+    const state = spy.state;
+    expect(before.due).toEqual([{ seat: 1, startSeq: before.seq }]);
+    const n = sent.length;
+
+    room.freeze();
+    expect(clock.pending()).toBe(0);
+    clock.advance(AI_MS + TURN_MS * 3);
+    room.act(0, before.seq, { discard: state!.hands[0][0] }); // dropped without a reply (no not_your_turn)
+    room.startHand(0);
+
+    expect(sent.length).toBe(n);
+    expect(results).toEqual([]);
+    expect(spy.state).toBe(state);
+    expect(room.snapshot()).toEqual(before); // due seats keep their startSeq for the final save
+  });
 });

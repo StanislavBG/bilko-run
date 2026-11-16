@@ -12,7 +12,8 @@
 // Each live table is also written to the room store (server/services/room-store.ts)
 // on every GameRoom change, under a lease owned by this process (renewed every
 // HEARTBEAT_MS); closing a table deletes its row, and on shutdown
-// suspendRoomTables saves and suspends every table so the next instance can resume it.
+// suspendRoomTables freezes, saves and suspends every table so the next instance can
+// resume it exactly as its players last saw it (no ticket is issued once the drain starts).
 // Resume is lazy: the first ticket of a seated human claims the saved table
 // (claimTable, lease TABLE_LEASE_STALE_MS) and rebuilds it, hand and escrows
 // included; while another instance holds a fresh lease the answer is 503 table_moving.
@@ -110,6 +111,8 @@ interface TableRoom {
   ticketUntil: Map<number, number>;
   /** Settlement of the last hand, while it runs. */
   settling: Promise<void> | null;
+  /** A hand start (escrows being taken), while it runs. */
+  starting: Promise<void> | null;
   nextTimer: ReturnType<typeof setTimeout> | null;
   nextHandMs: number;
   /** Store writes for this table, chained so they never overlap or reorder. */
@@ -126,6 +129,8 @@ export function roomOwnerId(): string { return OWNER; }
 
 /** Set once the shutdown hook has suspended the tables: no more writes from this process. */
 let persistenceStopped = false;
+/** Set when the shutdown hook starts: every table is frozen, and no seat or ticket is given out. */
+let draining = false;
 
 // A local libSQL file allows one open write transaction per process, and the
 // ledger and the room store each serialize only their own writes. Every write
@@ -192,14 +197,35 @@ function ensureHeartbeat(): void {
   heartbeatTimer.unref?.();
 }
 
+/** Stops a table for the drain: no fill or next-hand timer, and its GameRoom takes no action and runs no timer. */
+function freezeTable(t: TableRoom): void {
+  if (t.fillTimer) { clearTimeout(t.fillTimer); t.fillTimer = null; }
+  if (t.nextTimer) { clearTimeout(t.nextTimer); t.nextTimer = null; }
+  t.room.freeze();
+}
+
 /**
- * Shutdown hook (createShutdown preClose): waits for each table's pending save,
- * writes a final snapshot, then suspends every table this process owns (owner NULL)
- * so the next instance can claim it at once. Never throws.
+ * Shutdown hook (createShutdown preClose). In order: freezes every table (actions
+ * dropped, no AI move, autoplay or deal; tickets answer 503 table_moving), lets
+ * work in flight come to rest (a resume builds no table, a hand start stops before
+ * dealing, a settlement pays and deals nothing next), writes each table's final
+ * snapshot, then suspends every table this process owns (owner NULL) so the next
+ * instance can claim it at once. The sockets close (1012) after it returns, so no
+ * move can reach a client after the final save. Never throws.
  */
 export async function suspendRoomTables(): Promise<void> {
-  if (persistenceStopped) return;
+  if (draining) return;
+  draining = true;
+  if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
+  for (const t of rooms.values()) freezeTable(t);
+  const inFlight: Array<Promise<unknown>> = [...restoring.values()];
+  for (const t of rooms.values()) {
+    if (t.starting) inFlight.push(t.starting);
+    if (t.settling) inFlight.push(t.settling);
+  }
+  await Promise.allSettled(inFlight);
   const tables = [...rooms.values()];
+  for (const t of tables) freezeTable(t);
   await Promise.all(tables.map(async (t) => {
     await t.saveChain;
     t.saveQueued = false; // force a fresh write of the final state
@@ -239,10 +265,22 @@ function closeTable(t: TableRoom): void {
  * cannot cover it is replaced by AI and told so), fills empty seats with AI,
  * and deals from t.dealer (set by the last settled hand's nextDealer; a voided
  * hand is dealt again by the same dealer). A table left with no humans is closed.
+ * The run is kept in t.starting so the deploy drain can wait for it.
  */
-export async function startTableHand(roomId: string): Promise<void> {
+export function startTableHand(roomId: string): Promise<void> {
   const t = rooms.get(roomId);
-  if (!t) return;
+  const run = dealTableHand(roomId);
+  if (t) {
+    t.starting = run;
+    const done = () => { if (t.starting === run) t.starting = null; };
+    run.then(done, done);
+  }
+  return run;
+}
+
+async function dealTableHand(roomId: string): Promise<void> {
+  const t = rooms.get(roomId);
+  if (!t || draining) return;
   if (t.fillTimer) { clearTimeout(t.fillTimer); t.fillTimer = null; }
   if (t.nextTimer) { clearTimeout(t.nextTimer); t.nextTimer = null; }
   // A human with no live socket since the last hand ended (and no unexpired ticket) has gone away.
@@ -258,7 +296,9 @@ export async function startTableHand(roomId: string): Promise<void> {
   t.room.fillWithAi();
   const amount = t.tier.stake * t.module.maxLossPoints;
   const ref = escrowRef(t, hand);
+  const held = new Map<number, string>();
   for (const [seat, email] of [...t.seats]) {
+    if (draining) break;
     let ok = false;
     try {
       ok = (await exclusive(() => escrowPlay(t.app, email, amount, ref))).ok;
@@ -266,10 +306,17 @@ export async function startTableHand(roomId: string): Promise<void> {
       ok = false;
     }
     if (rooms.get(roomId) !== t) return; // closed meanwhile
-    if (!ok) {
+    if (ok) held.set(seat, email);
+    else {
       sendToSeat(t.id, seat, { type: 'error', code: 'insufficient_taels', seq: 0 } as unknown as RoomMessage);
       unseat(t, seat);
     }
+  }
+  if (draining) {
+    // Frozen for a deploy before the deal: the final save keeps this hand's escrows, and the
+    // next instance voids the hand (releasing them) and deals the next one.
+    t.escrowed = held;
+    return;
   }
   if (t.seats.size === 0) { closeTable(t); return; }
   t.escrowed = new Map(t.seats);
@@ -353,6 +400,7 @@ async function settleHand(t: TableRoom, r: HandResult): Promise<void> {
 
 function scheduleNextHand(t: TableRoom): void {
   if (t.seats.size === 0) { closeTable(t); return; }
+  if (draining) return; // the next instance deals it once the table resumes
   if (t.nextTimer) clearTimeout(t.nextTimer);
   t.nextTimer = setTimeout(() => { t.nextTimer = null; kickoff(t.id); }, t.nextHandMs);
   t.nextTimer.unref?.();
@@ -410,6 +458,7 @@ export async function sweepOrphanedEscrows(): Promise<number> {
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 function runSweep(): void {
+  if (draining) return;
   sweepOrphanedEscrows().catch((err) => {
     console.error(`[rooms] escrow sweep failed: ${(err as Error)?.message ?? err}`);
   });
@@ -453,7 +502,7 @@ function createTable(app: string, tier: PlayTier, module: RoomGameModule<any>, o
   );
   const t: TableRoom = {
     id, app, tier, module, room, seats: new Map(), state: 'waiting', createdAt: Date.now(), hand: 0, dealer: 0, fillTimer: null, results,
-    escrowed: new Map(), leaving: new Set(), connected: new Set(), heard: new Set(), ticketUntil: new Map(), settling: null, nextTimer: null, nextHandMs: o.nextHandMs,
+    escrowed: new Map(), leaving: new Set(), connected: new Set(), heard: new Set(), ticketUntil: new Map(), settling: null, starting: null, nextTimer: null, nextHandMs: o.nextHandMs,
     saveChain: Promise.resolve(), saveQueued: false,
   };
   rooms.set(id, t);
@@ -496,7 +545,7 @@ function resumeTable(id: string, modules: Record<string, RoomGameModule<any>>, o
 }
 
 async function doResume(id: string, modules: Record<string, RoomGameModule<any>>, o: Timing): Promise<TableRoom | 'moving' | null> {
-  if (persistenceStopped) return 'moving'; // shutting down: the next instance resumes it
+  if (draining) return 'moving'; // shutting down: the next instance resumes it
   if (!(await storeWrite(() => claimTable(id, OWNER, Date.now(), TABLE_LEASE_STALE_MS)))) {
     return (await loadTable(id)) ? 'moving' : null;
   }
@@ -504,6 +553,8 @@ async function doResume(id: string, modules: Record<string, RoomGameModule<any>>
   if (!row) return null;
   const live = rooms.get(id);
   if (live) return live;
+  // The drain began while the store answered: build nothing; the drain suspends the claimed row.
+  if (draining) return 'moving';
   const escrowed = new Map<number, string>();
   for (const [k, v] of Object.entries((row.escrowed ?? {}) as Record<string, unknown>)) {
     if (/^\d+$/.test(k) && typeof v === 'string') escrowed.set(Number(k), v);
@@ -546,7 +597,7 @@ async function doResume(id: string, modules: Record<string, RoomGameModule<any>>
     if (rooms.get(id) !== t) return null;
     if (seats.size === 0) { closeTable(t); return null; }
     if (t.state === 'playing') scheduleNextHand(t);
-    else {
+    else if (!draining) {
       t.fillTimer = setTimeout(() => { t.fillTimer = null; kickoff(t.id); }, o.aiFillMs);
       t.fillTimer.unref?.();
     }
@@ -598,6 +649,7 @@ export function resetRooms(): void {
   if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
   if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
   persistenceStopped = false;
+  draining = false;
 }
 
 export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions = {}): void {
@@ -636,7 +688,13 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
     const tier = findTier(appId, tierId);
     if (!tier) return reply.code(404).send({ error: 'unknown_tier' });
 
+    // A draining instance (deploy) seats nobody and issues no ticket: its tables are frozen and
+    // saved for the next instance, which the retry reaches.
+    const moving = () => reply.code(503).header('retry-after', '5').send({ error: 'table_moving' });
+    if (draining) return moving();
+
     const issue = (t: TableRoom, seat: number) => {
+      if (draining) return moving(); // the drain began while this request waited
       const { ticket, expiresAt } = issueRoomTicket(email, t.id);
       t.ticketUntil.set(seat, expiresAt);
       return { ticket, expiresAt, path: `${ROOM_SOCKET_PREFIX}${t.id}?ticket=${ticket}`, roomId: t.id, tier: t.tier.id, seat };
@@ -667,7 +725,7 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
       if (resumed === 'moving') {
         mine = seatedAt();
         if (mine) return issue(mine.t, mine.seat);
-        return reply.code(503).header('retry-after', '5').send({ error: 'table_moving' });
+        return moving();
       }
     }
     mine = seatedAt();
@@ -683,6 +741,7 @@ export function registerRoomRoutes(app: FastifyInstance, opts: RoomRouteOptions 
       for (const [seat, e] of t.seats) if (e === email) return issue(t, seat);
     }
 
+    if (draining) return moving();
     let table: TableRoom | undefined;
     for (const t of rooms.values()) {
       if (t.app !== appId || t.tier.id !== tier.id || t.state !== 'waiting' || t.seats.size >= t.module.seats) continue;

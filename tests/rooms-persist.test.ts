@@ -6,7 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { toyGame } from './fixtures/rooms-toy-game.js';
-import { initDb, dbRun } from '../server/db.js';
+import { initDb, dbRun, dbAll } from '../server/db.js';
 import { creditPlay } from '../server/services/play-currency.js';
 import { loadTable } from '../server/services/room-store.js';
 import { handleRoomUpgrade, closeAllGameRooms } from '../server/rooms/socket.js';
@@ -30,9 +30,9 @@ let app: FastifyInstance;
 let port: number;
 const sockets: WebSocket[] = [];
 
-async function startServer(turnMs: number): Promise<void> {
+async function startServer(turnMs: number, aiFillMs = 20): Promise<void> {
   app = Fastify();
-  rooms.registerRoomRoutes(app, { modules: { [APP]: toyGame }, aiFillMs: 20, aiDelayMs: 0, turnMs, nextHandMs: 60_000 });
+  rooms.registerRoomRoutes(app, { modules: { [APP]: toyGame }, aiFillMs, aiDelayMs: 0, turnMs, nextHandMs: 60_000 });
   await app.listen({ port: 0, host: '127.0.0.1' });
   app.server.on('upgrade', (req, socket, head) => { if (!handleRoomUpgrade(req, socket as any, head)) socket.destroy(); });
   port = (app.server.address() as AddressInfo).port;
@@ -71,6 +71,11 @@ async function storedMatchesLive(roomId: string): Promise<boolean> {
 }
 
 const myTurn = (c: Client) => c.msgs.filter((m) => m.type === 'state' && m.toAct.includes(c.seat)).at(-1);
+
+/** Resolves once the server has handled every frame this socket sent before it (the pong comes back in order). */
+function roundTrip(ws: WebSocket): Promise<void> {
+  return new Promise((r) => { ws.once('pong', () => r()); ws.ping(); });
+}
 
 beforeAll(async () => {
   await initDb();
@@ -147,5 +152,53 @@ describe('room table persistence', () => {
       expect(row).toMatchObject({ status: 'suspended', owner: null });
       expect(JSON.stringify(row!.snapshot)).toBe(finals[i]);
     }
+  });
+
+  it('the drain freezes a table before its final save: moves sent meanwhile are dropped, and it resumes as the player last saw it', async () => {
+    await startServer(60_000);
+    const c = await join(ALICE);
+    await waitFor(() => !!myTurn(c));
+    await waitFor(() => storedMatchesLive(c.roomId));
+    const turn = myTurn(c);
+    const final = JSON.stringify(rooms.tableGameRoom(c.roomId)!.snapshot());
+    const seen = c.msgs.length;
+
+    const drain = rooms.suspendRoomTables();
+    c.ws.send(JSON.stringify({ type: 'action', seq: turn.seq, action: { discard: turn.view.mine[0] } }));
+    await drain;
+    // After the final save, before the 1012 close: this move used to be applied and broadcast, then lost.
+    c.ws.send(JSON.stringify({ type: 'action', seq: turn.seq, action: { discard: turn.view.mine[1] } }));
+    await roundTrip(c.ws);
+
+    expect(c.msgs.slice(seen)).toEqual([]);
+    expect(JSON.stringify(rooms.tableGameRoom(c.roomId)!.snapshot())).toBe(final);
+    const row = await loadTable(c.roomId);
+    expect(row).toMatchObject({ status: 'suspended', owner: null });
+    expect(JSON.stringify(row!.snapshot)).toBe(final);
+
+    // The next instance: the player's resync is the same seq and view they last saw.
+    for (const ws of sockets.splice(0)) ws.terminate();
+    rooms.resetRooms();
+    closeAllGameRooms();
+    const d = await join(ALICE);
+    expect(d.roomId).toBe(c.roomId);
+    await waitFor(() => !!myTurn(d));
+    expect(myTurn(d)).toMatchObject({ seq: turn.seq, view: turn.view });
+  });
+
+  it('no timer runs once the drain starts: a table waiting for its AI fill deals nothing and escrows nothing', async () => {
+    await startServer(60_000, 300);
+    const res = await app.inject({
+      method: 'POST', url: '/api/rooms/ticket', payload: { app: APP, tier: 'tea' },
+      headers: { authorization: `Bearer user:${ALICE}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const { roomId } = res.json();
+
+    await rooms.suspendRoomTables();
+    await new Promise((r) => setTimeout(r, 450)); // past the 300 ms fill
+    expect(rooms.roomSnapshot(roomId)).toMatchObject({ hand: 0, state: 'waiting' });
+    expect(await dbAll('SELECT ref FROM play_escrows')).toEqual([]);
+    expect(await loadTable(roomId)).toMatchObject({ status: 'suspended', hand: 0, snapshot: null });
   });
 });

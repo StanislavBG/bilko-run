@@ -747,7 +747,7 @@ Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by 
 | 404 | `{ error: 'unknown_tier' }` | `tier` is not one of the app's tiers. |
 | 402 | `{ error: 'insufficient_taels', balance, required }` | Balance is below `stake × maxLossPoints`. Not checked on a rejoin. |
 | 503 | `{ error: 'server_full' }` | 200 tables already open in this process. |
-| 503 | `{ error: 'table_moving' }`, `Retry-After: 5` | The caller is seated at a saved table that another instance still holds (a deploy in progress). Retry after the header's seconds; it lasts up to about 90 s. |
+| 503 | `{ error: 'table_moving' }`, `Retry-After: 5` | A deploy is in progress: the caller is seated at a saved table that another instance still holds, or the instance that answered is draining (then every caller gets it, seated or not, and nobody is seated). Retry after the header's seconds; it lasts up to about 90 s. Once a draining instance has closed its sockets it stops taking requests, and a request that still reaches it gets a plain 503 without `Retry-After`; retry that the same way. |
 
 **`GET /api/rooms/tiers` errors:** 400 `{ error: 'app must be 1-32 chars of [a-z0-9-]' }`, 404 `{ error: 'unknown_app' }`, 409 `{ error: 'rooms_closed' }` (the app is registered, but the owner closed its tables with `ROOMS_CLOSED`).
 
@@ -789,7 +789,7 @@ The handshake is refused with:
 |---|---|---|
 | `1000` | `room_closed` | The table closed (no human left). |
 | `1009` | — | Frame over 16 KiB (refused before buffering). |
-| `1012` | `server_restart` | Deploy drain (SIGTERM). The table is saved; fetch a new ticket to resume it. |
+| `1012` | `server_restart` | Deploy drain (SIGTERM). The table was frozen and saved before this close; fetch a new ticket to resume it. |
 | `1012` | `room_gone` | The table vanished between the handshake and the join. |
 | `4000` | `superseded` | The same seat opened a newer socket. |
 | `4001` | `no_seat` | The ticket holder has no seat at this table. |
@@ -809,6 +809,13 @@ A seat only ever receives `module.view(state, seat)`. The raw state, the seed an
 - A second socket for the same seat replaces the first (`4000 superseded`).
 - A normal close (`1000`) during a hand marks the seat as leaving: it plays out (autoplayed) and is unseated after settlement. A `1000` close before the first hand keeps the seat. Any other close keeps the seat.
 - A restart (deploy or spin-down, `1012`) no longer voids the hand. Every table is saved on each move. Reconnect with a fresh `POST /api/rooms/ticket`: the first seated player's ticket resumes the table, hand and escrows included. During a deploy the ticket can answer `503 { error: 'table_moving' }` with `Retry-After` for up to about 90 s, while the old instance still holds the table; retry after the header's seconds and the table resumes. A saved table nobody returns to within 10 minutes is voided and its escrows released.
+- **Deploy drain order** (`suspendRoomTables` in `server/routes/rooms.ts`, run by `server/shutdown.ts` before anything closes). On SIGTERM the old instance:
+  1. Freezes every table. Actions are dropped without a reply (send the action again after the table resumes). No AI move, autoplay, AI fill or new deal runs. Every ticket request gets `503 table_moving`.
+  2. Lets work already in flight finish. A hand that is settling pays and sends `settled`. A hand being dealt stops before the deal: the next instance voids it, releases its escrows and deals the next hand.
+  3. Saves each table's final state, then suspends it for the next instance.
+  4. Closes every socket with `1012`.
+
+  Nothing changes between the final save and the `1012` close, so a resumed table is exactly what its players last saw: the same `seq` and the same view.
 
 ### AI seat fill and autoplay
 

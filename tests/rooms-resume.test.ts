@@ -24,6 +24,7 @@ vi.mock('../server/clerk.js', () => ({
 
 const APP = 'threewinds';
 const ALICE = 'alice@example.com';
+const BOB = 'bob@example.com';
 const GRANT = 10_000;
 
 let rooms: typeof import('../server/routes/rooms.js');
@@ -211,6 +212,26 @@ describe('resuming saved tables', () => {
     const again = await ticket(ALICE);
     expect(again.statusCode).toBe(200);
     expect(again.json()).toMatchObject({ roomId: a.roomId, seat: a.seat });
+  });
+
+  it('once the drain starts every ticket answers 503 table_moving, seated or not, and nobody is seated', async () => {
+    await startServer();
+    await creditPlay(APP, BOB, GRANT, 'grant', 'test-grant-b');
+    const a = await join(ALICE);
+    await waitFor(() => !!myTurn(a));
+
+    const drain = rooms.suspendRoomTables();
+    const during = await ticket(ALICE);
+    await drain;
+    const seated = await ticket(ALICE); // still in this process's rooms, but its sockets are about to close
+    const stranger = await ticket(BOB, 'jade');
+    for (const res of [during, seated, stranger]) {
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toEqual({ error: 'table_moving' });
+      expect(res.headers['retry-after']).toBe('5');
+    }
+    expect(await findTableIdForEmail(APP, BOB)).toBeNull();
+    expect(await escrowsFor(`room:${a.roomId}:hand:1`)).toEqual([{ status: 'held', email: ALICE }]);
   });
 
   it('voids a table nobody returns to within 10 minutes and releases its escrows', async () => {

@@ -324,6 +324,7 @@ export function ProjectsPage() {
                     video={card.video}
                     allowMotion={allowMotion}
                     hasAudio={card.videoHasAudio}
+                    audioMetaUrl={card.videoMetaUrl}
                     muted={playback.muted}
                     paused={playback.paused}
                     onMutedChange={setMuted}

@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from 'react';
  * card's share image, otherwise the SCREENSHOT placeholder. In video mode a
  * Pause/Play button (and, when the clip has sound, Mute/Unmute) sits over the
  * video; under reduced motion or Save-Data a Play button over the poster mounts
- * the video only when pressed.
+ * the video only when pressed. Hosted videos (not in the build) learn whether
+ * they have sound from their <url>.json metadata, fetched once the video mounts.
  */
 
 export type CardShotMode = 'video' | 'image' | 'placeholder';
@@ -52,6 +53,59 @@ export function useAllowCardMotion(): boolean {
   return allow;
 }
 
+/** Resolved `audio` flags per metadata URL, plus in-flight requests (shared by every card). */
+const audioMetaResolved = new Map<string, boolean>();
+const audioMetaInFlight = new Map<string, Promise<boolean>>();
+
+/** Test hook: forget every cached metadata result. */
+export function resetAudioMetaCache(): void {
+  audioMetaResolved.clear();
+  audioMetaInFlight.clear();
+}
+
+/** True when the card should ask its hosted video's metadata whether it has sound. */
+export function shouldFetchAudioMeta({ mode, audioMetaUrl, hasAudio }: {
+  mode: CardShotMode;
+  audioMetaUrl?: string;
+  hasAudio?: boolean;
+}): boolean {
+  return mode === 'video' && !!audioMetaUrl && hasAudio !== true;
+}
+
+/**
+ * Fetches `url` once (cached per URL) and resolves true only when the JSON has audio: true.
+ * Errors and non-OK answers resolve false (cached); an abort resolves false without caching.
+ */
+export function loadAudioMeta(url: string, signal?: AbortSignal): Promise<boolean> {
+  const known = audioMetaResolved.get(url);
+  if (known !== undefined) return Promise.resolve(known);
+  const pending = audioMetaInFlight.get(url);
+  if (pending) return pending;
+  const p = (async () => {
+    try {
+      const res = await fetch(url, { signal });
+      if (!res.ok) return false;
+      const body = (await res.json()) as { audio?: unknown } | null;
+      return body?.audio === true;
+    } catch {
+      if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+      return false;
+    }
+  })().then(
+    audio => {
+      audioMetaResolved.set(url, audio);
+      audioMetaInFlight.delete(url);
+      return audio;
+    },
+    () => {
+      audioMetaInFlight.delete(url);
+      return false;
+    },
+  );
+  audioMetaInFlight.set(url, p);
+  return p;
+}
+
 const ICON = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true } as const;
 
 function PlayIcon() {
@@ -81,13 +135,15 @@ function SoundIcon() {
 }
 
 export function ProjectCardShot({
-  name, thumbnail, video, allowMotion, hasAudio, muted, paused, onMutedChange, onPausedChange,
+  name, thumbnail, video, allowMotion, hasAudio, audioMetaUrl, muted, paused, onMutedChange, onPausedChange,
 }: {
   name: string;
   thumbnail?: string;
   video?: string;
   allowMotion: boolean;
   hasAudio?: boolean;
+  /** Hosted video metadata URL (<video url>.json); its `audio` flag shows Unmute when hasAudio is not set. */
+  audioMetaUrl?: string;
   muted: boolean;
   paused: boolean;
   onMutedChange: (next: boolean) => void;
@@ -101,6 +157,22 @@ export function ProjectCardShot({
   const [elMuted, setElMuted] = useState(muted);
   const playable = failed ? undefined : video;
   const mode = cardShotMode({ video: playable, allowMotion, thumbnail, playRequested });
+
+  const [audioFromMeta, setAudioFromMeta] = useState(
+    () => (audioMetaUrl ? audioMetaResolved.get(audioMetaUrl) === true : false),
+  );
+  const showMute = hasAudio === true || audioFromMeta;
+
+  useEffect(() => {
+    if (!audioMetaUrl || !shouldFetchAudioMeta({ mode, audioMetaUrl, hasAudio })) {
+      setAudioFromMeta(audioMetaUrl ? audioMetaResolved.get(audioMetaUrl) === true : false);
+      return;
+    }
+    const ctl = new AbortController();
+    let live = true;
+    loadAudioMeta(audioMetaUrl, ctl.signal).then(audio => { if (live) setAudioFromMeta(audio); });
+    return () => { live = false; ctl.abort(); };
+  }, [mode, audioMetaUrl, hasAudio]);
 
   const onMutedRef = useRef(onMutedChange);
   onMutedRef.current = onMutedChange;
@@ -184,7 +256,7 @@ export function ProjectCardShot({
             <button type="button" aria-label={elPaused ? 'Play video' : 'Pause video'} onClick={togglePaused}>
               {elPaused ? <PlayIcon /> : <PauseIcon />}
             </button>
-            {hasAudio && (
+            {showMute && (
               <button type="button" aria-label={elMuted ? 'Unmute video' : 'Mute video'} onClick={toggleMuted}>
                 {elMuted ? <MutedIcon /> : <SoundIcon />}
               </button>

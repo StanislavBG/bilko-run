@@ -20,6 +20,7 @@
 import { PROJECTS, projectHref, isReactRoute, type Project } from './projectsRegistry.js';
 import { cardImageUrl, assetUrl, assetHasAudio } from './assetVersions.js';
 import { PACKAGES, type Package } from './packages.js';
+import { isHostedMediaPath, hostedMediaMetaUrl } from '../../shared/listing-media.js';
 import commitOrder from './commit-order.json' with { type: 'json' };
 import commitCounts from './commit-counts.json' with { type: 'json' };
 
@@ -70,10 +71,15 @@ export interface HubCard {
   avoidClaims?: readonly string[];
   /** Screenshot path from the registry entry; the Projects Ring hero shows it when present. */
   thumbnail?: string;
-  /** Muted looping card clip from the registry `listing.video`, content-versioned (?v=<sha1 of its bytes>). */
+  /**
+   * Muted looping card clip from the registry `listing.video`: bundle files are content-versioned
+   * (?v=<sha1 of its bytes>); hosted /projects/<slug>/_media/<sha256>.<ext> URLs are used as is.
+   */
   video?: string;
   /** True when `video`'s file has an audio track (build-time sniff), so the card offers Unmute. Undefined without a video. */
   videoHasAudio?: boolean;
+  /** For a hosted `video` only: its <url>.json metadata ({ bytes, contentType, audio }), read by the card for Unmute. */
+  videoMetaUrl?: string;
 }
 
 function commitMs(slug: string): number {
@@ -92,8 +98,10 @@ export function lastWorkedLabel(card: HubCard): string {
 
 const pkgBySlug = new Map<string, Package>(PACKAGES.map(p => [p.slug, p]));
 
-function projectCard(p: Project): HubCard {
+export function projectCard(p: Project): HubCard {
   const pkg = pkgBySlug.get(p.slug);
+  const listingVideo = p.listing?.video;
+  const hostedVideo = listingVideo ? isHostedMediaPath(listingVideo) : false;
   return {
     slug: p.slug,
     name: p.displayName ?? p.name,
@@ -120,8 +128,9 @@ function projectCard(p: Project): HubCard {
     callToAction: p.listing?.callToAction,
     avoidClaims: p.listing?.avoidClaims,
     thumbnail: cardImageUrl(p.slug),
-    video: p.listing?.video ? assetUrl(p.listing.video) : undefined,
-    videoHasAudio: p.listing?.video ? assetHasAudio(p.listing.video) : undefined,
+    video: listingVideo ? (hostedVideo ? listingVideo : assetUrl(listingVideo)) : undefined,
+    videoHasAudio: listingVideo ? assetHasAudio(listingVideo) : undefined,
+    videoMetaUrl: listingVideo && hostedVideo ? hostedMediaMetaUrl(listingVideo) : undefined,
   };
 }
 

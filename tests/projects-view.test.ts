@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { PUBLIC_CARDS, HUB_CARDS } from '../src/data/projectsView';
+import { PUBLIC_CARDS, HUB_CARDS, projectCard } from '../src/data/projectsView';
+import { isHostedMediaPath } from '../shared/listing-media';
 import { PROJECTS } from '../src/data/projectsRegistry';
 import { projectMetadataRows } from '../src/data/projectMetadata';
 import commitCounts from '../src/data/commit-counts.json' with { type: 'json' };
@@ -158,5 +159,27 @@ describe('projectMetadataRows', () => {
     const base = PROJECTS[0];
     const rows = projectMetadataRows({ ...base, listing: { ...base.listing, offering: undefined } });
     expect(rows.find(r => r.key === 'listing.offering')?.missing).toBe(true);
+  });
+});
+
+describe('projectsView hosted card video', () => {
+  const HOSTED = `/projects/demo/_media/${'b'.repeat(64)}.mp4`;
+  const base = PROJECTS[0];
+
+  it('uses a hosted listing.video as is and points videoMetaUrl at its .json', () => {
+    const card = projectCard({ ...base, listing: { ...(base.listing ?? {}), video: HOSTED } } as typeof base);
+    expect(card.video).toBe(HOSTED);
+    expect(card.videoMetaUrl).toBe(`${HOSTED}.json`);
+  });
+
+  it('leaves bundle videos unchanged with no videoMetaUrl', () => {
+    const bundle = '/projects/demo/tile.mp4';
+    const card = projectCard({ ...base, listing: { ...(base.listing ?? {}), video: bundle } } as typeof base);
+    expect(card.video).toBe(assetUrl(bundle));
+    expect(card.videoMetaUrl).toBeUndefined();
+    for (const c of HUB_CARDS) {
+      const v = c.type === 'project' ? PROJECTS.find(p => p.slug === c.slug)?.listing?.video : undefined;
+      if (!v || !isHostedMediaPath(v)) expect(c.videoMetaUrl, c.slug).toBeUndefined();
+    }
   });
 });

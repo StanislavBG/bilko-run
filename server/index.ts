@@ -56,6 +56,8 @@ import { loadOgProjects, type OgProject } from './og-meta.js';
 import { loadBlogPosts } from './blog-posts.js';
 import { projectNotFound } from './project-not-found.js';
 import { registerProjectsHubRoutes } from './projects-hub.js';
+import { registerExternalProjectRedirects } from './external-project-redirects.js';
+import { PROJECTS } from '../src/data/projectsRegistry.js';
 import { registerBilkoProfileRoutes } from './bilko-profile-routes.js';
 import { normalizeStaticMtimes, registerEncodingVary, registerStaticCorsTrim, registerVersionedMediaCache, setStaticCacheHeaders } from './static-cache.js';
 import { createShutdown, drainWindowMs } from './shutdown.js';
@@ -317,6 +319,8 @@ if (isProd) {
 
     // /projects served directly; /projects/ 301s to it (see projects-hub.ts)
     registerProjectsHubRoutes(app, indexHtml);
+    // external-url slugs 302 to host.url (see external-project-redirects.ts)
+    registerExternalProjectRedirects(app, PROJECTS);
     registerBilkoProfileRoutes(app, indexHtml);
 
     // SPA fallback — the OG onSend hook (registerOgRoutes) injects route-specific tags

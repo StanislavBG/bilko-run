@@ -1,5 +1,6 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
-import { extname, resolve, sep } from 'node:path';
+import { extname, join, resolve, sep } from 'node:path';
+import { isHostedMediaPath } from '../contract/listing-media.js';
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const SHARE_IMAGE = { width: 1200, height: 630, maxBytes: 5 * 1024 * 1024 };
 const ICON = { min: 128, max: 1024, maxBytes: 512 * 1024 };
@@ -46,13 +47,11 @@ function resolveAsset(ctxSlug, bundleDir, assetPath) {
     const file = resolve(root, rel);
     return file !== root && file.startsWith(root + sep) ? file : undefined;
 }
-/** Returns a problem description, or undefined when the asset is valid. */
-function checkAsset(ctxSlug, bundleDir, field, assetPath) {
-    const file = resolveAsset(ctxSlug, bundleDir, assetPath);
-    if (!file)
-        return 'path escapes the bundle directory';
-    if (!existsSync(file) || !statSync(file).isFile())
-        return 'file not found in the staged bundle';
+/**
+ * Per-file card media checks (format, dimensions, size) for an existing regular file.
+ * Returns a problem description, or undefined when the file is valid for the field.
+ */
+export function checkCardMediaFile(field, file) {
     if (field === 'video')
         return checkVideo(file);
     const buf = readFileSync(file);
@@ -77,10 +76,20 @@ function checkAsset(ctxSlug, bundleDir, field, assetPath) {
     }
     return undefined;
 }
+/** Returns a problem description, or undefined when the asset is valid. */
+function checkAsset(ctxSlug, bundleDir, field, assetPath) {
+    const file = resolveAsset(ctxSlug, bundleDir, assetPath);
+    if (!file)
+        return 'path escapes the bundle directory';
+    if (!existsSync(file) || !statSync(file).isFile())
+        return 'file not found in the staged bundle';
+    return checkCardMediaFile(field, file);
+}
 function declaredAssets(ctx) {
     return ['icon', 'shareImage', 'video'].flatMap((field) => {
         const p = ctx.listing?.[field];
-        return p ? [[field, p]] : [];
+        // Hosted card media lives in the bilko.run database, not the bundle.
+        return p && !isHostedMediaPath(p) ? [[field, p]] : [];
     });
 }
 /**
@@ -99,6 +108,13 @@ export function validShareAssetFiles(ctx) {
     return files;
 }
 export const shareAssetsGate = async (ctx) => {
+    if (existsSync(join(ctx.bundleDir, '_media'))) {
+        return {
+            name: 'share-assets',
+            status: 'fail',
+            details: 'bundle has a top-level _media/ entry: _media/ is reserved for hosted card media',
+        };
+    }
     const declared = declaredAssets(ctx);
     if (declared.length === 0) {
         return { name: 'share-assets', status: 'pass', details: 'no share assets declared' };

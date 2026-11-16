@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseHostedMediaPath } from './listing-media.js';
 export const SlugSchema = z
     .string()
     .regex(/^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/, 'slug must be 2-40 chars of [a-z0-9-], no leading or trailing hyphen');
@@ -128,6 +129,17 @@ export const RegistrySchema = z.array(RegistryProjectSchema).superRefine((entrie
                     message: `slug "${entry.slug}" field "listing.${key}" must start with "/projects/${entry.slug}/", got "${value}"`,
                     path: [index, 'listing', key],
                 });
+            }
+            if (value !== undefined && value.includes('/_media/')) {
+                const hosted = parseHostedMediaPath(value);
+                const extFits = hosted !== undefined && (key === 'video' ? hosted.ext !== 'png' : hosted.ext === 'png');
+                if (!extFits) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `slug "${entry.slug}" field "listing.${key}" has an invalid hosted media path "${value}"`,
+                        path: [index, 'listing', key],
+                    });
+                }
             }
         }
         if (entry.host.kind === 'static-path') {

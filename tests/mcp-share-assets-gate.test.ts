@@ -3,7 +3,7 @@ import { Resvg } from '@resvg/resvg-js';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { shareAssetsGate } from '../mcp-host-server/src/gates/share-assets.js';
+import { shareAssetsGate, checkCardMediaFile, validShareAssetFiles } from '../mcp-host-server/src/gates/share-assets.js';
 import { budgetGate } from '../mcp-host-server/src/gates/budget.js';
 import { randomBytes } from 'node:crypto';
 import type { GateContext } from '../mcp-host-server/src/gates/index.js';
@@ -193,5 +193,65 @@ describe('budgetGate share-asset exclusion', () => {
     const r = await budget(undefined);
     expect(r.status).toBe('pass');
     expect(r.details).not.toContain('excluding');
+  });
+});
+
+describe('shareAssetsGate hosted card media', () => {
+  const SHA = 'f'.repeat(64);
+
+  it('skips a hosted listing.video that is not in the bundle', async () => {
+    const r = await run({ video: `/projects/demo/_media/${SHA}.mp4` });
+    expect(r.status).toBe('pass');
+  });
+
+  it('still checks bundle assets next to a hosted one', async () => {
+    put('img/icon.png', png(256, 256));
+    const ctx = { slug: 'demo', bundleDir: dir, bypass: new Set<string>(), listing: {
+      icon: '/projects/demo/img/icon.png', shareImage: `/projects/demo/_media/${SHA}.png`,
+    } };
+    expect((await shareAssetsGate(ctx)).status).toBe('pass');
+    expect([...validShareAssetFiles(ctx)]).toEqual([join(dir, 'img/icon.png')]);
+    const bad = await run({ icon: '/projects/demo/img/missing.png', video: `/projects/demo/_media/${SHA}.webm` });
+    expect(bad.status).toBe('fail');
+    expect(bad.details).not.toContain('_media');
+  });
+
+  it('fails when the bundle ships a top-level _media folder, even with nothing declared', async () => {
+    mkdirSync(join(dir, '_media'));
+    const r = await run(undefined);
+    expect(r.status).toBe('fail');
+    expect(r.details).toContain('_media/ is reserved for hosted card media');
+  });
+
+  it('fails when the bundle ships a top-level _media file', async () => {
+    put('_media', 'x');
+    expect((await run({})).details).toContain('_media/ is reserved for hosted card media');
+  });
+
+  it('allows a nested _media folder', async () => {
+    mkdirSync(join(dir, 'img', '_media'));
+    expect((await run(undefined)).status).toBe('pass');
+  });
+});
+
+describe('checkCardMediaFile', () => {
+  it('accepts valid files', () => {
+    put('img/icon.png', png(256, 256));
+    put('img/share.png', png(1200, 630));
+    put('img/clip.webm', Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(16)]));
+    expect(checkCardMediaFile('icon', join(dir, 'img/icon.png'))).toBeUndefined();
+    expect(checkCardMediaFile('shareImage', join(dir, 'img/share.png'))).toBeUndefined();
+    expect(checkCardMediaFile('video', join(dir, 'img/clip.webm'))).toBeUndefined();
+  });
+
+  it('returns today\'s messages', () => {
+    put('img/icon.png', png(256, 200));
+    put('img/share.png', png(1200, 600));
+    put('img/text.png', 'not a png at all, just text padding.....');
+    put('img/clip.mp4', 'not an mp4 file at all');
+    expect(checkCardMediaFile('icon', join(dir, 'img/icon.png'))).toBe('is 256x200, must be square');
+    expect(checkCardMediaFile('shareImage', join(dir, 'img/share.png'))).toBe('is 1200x600, must be exactly 1200x630');
+    expect(checkCardMediaFile('icon', join(dir, 'img/text.png'))).toBe('not a PNG');
+    expect(checkCardMediaFile('video', join(dir, 'img/clip.mp4'))).toBe('not an MP4');
   });
 });

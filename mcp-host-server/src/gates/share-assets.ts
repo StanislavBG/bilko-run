@@ -1,5 +1,6 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
-import { extname, resolve, sep } from 'node:path';
+import { extname, join, resolve, sep } from 'node:path';
+import { isHostedMediaPath } from '../contract/listing-media.js';
 import type { Gate, GateContext, GateResult } from './index.js';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -50,11 +51,11 @@ function resolveAsset(ctxSlug: string, bundleDir: string, assetPath: string): st
   return file !== root && file.startsWith(root + sep) ? file : undefined;
 }
 
-/** Returns a problem description, or undefined when the asset is valid. */
-function checkAsset(ctxSlug: string, bundleDir: string, field: AssetField, assetPath: string): string | undefined {
-  const file = resolveAsset(ctxSlug, bundleDir, assetPath);
-  if (!file) return 'path escapes the bundle directory';
-  if (!existsSync(file) || !statSync(file).isFile()) return 'file not found in the staged bundle';
+/**
+ * Per-file card media checks (format, dimensions, size) for an existing regular file.
+ * Returns a problem description, or undefined when the file is valid for the field.
+ */
+export function checkCardMediaFile(field: AssetField, file: string): string | undefined {
   if (field === 'video') return checkVideo(file);
 
   const buf = readFileSync(file);
@@ -75,10 +76,19 @@ function checkAsset(ctxSlug: string, bundleDir: string, field: AssetField, asset
   return undefined;
 }
 
+/** Returns a problem description, or undefined when the asset is valid. */
+function checkAsset(ctxSlug: string, bundleDir: string, field: AssetField, assetPath: string): string | undefined {
+  const file = resolveAsset(ctxSlug, bundleDir, assetPath);
+  if (!file) return 'path escapes the bundle directory';
+  if (!existsSync(file) || !statSync(file).isFile()) return 'file not found in the staged bundle';
+  return checkCardMediaFile(field, file);
+}
+
 function declaredAssets(ctx: GateContext): (readonly [AssetField, string])[] {
   return (['icon', 'shareImage', 'video'] as const).flatMap((field) => {
     const p = ctx.listing?.[field];
-    return p ? [[field, p] as const] : [];
+    // Hosted card media lives in the bilko.run database, not the bundle.
+    return p && !isHostedMediaPath(p) ? [[field, p] as const] : [];
   });
 }
 
@@ -97,6 +107,13 @@ export function validShareAssetFiles(ctx: GateContext): Set<string> {
 }
 
 export const shareAssetsGate: Gate = async (ctx): Promise<GateResult> => {
+  if (existsSync(join(ctx.bundleDir, '_media'))) {
+    return {
+      name: 'share-assets',
+      status: 'fail',
+      details: 'bundle has a top-level _media/ entry: _media/ is reserved for hosted card media',
+    };
+  }
   const declared = declaredAssets(ctx);
   if (declared.length === 0) {
     return { name: 'share-assets', status: 'pass', details: 'no share assets declared' };

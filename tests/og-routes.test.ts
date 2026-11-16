@@ -233,3 +233,74 @@ describe('OG meta injection', () => {
     });
   });
 });
+
+describe('OG image routes: hosted card media', () => {
+  const hostedApp = Fastify();
+  const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+  const shareBytes = svgPng(1200, 630, '#0f0f0f');
+  const iconBytes = svgPng(256, 256, '#ff0000');
+  const wrongBytes = svgPng(600, 315);
+  const shareFile = `${sha(shareBytes)}.png`;
+  const iconFile = `${sha(iconBytes)}.png`;
+  const wrongFile = `${sha(wrongBytes)}.png`;
+  const missingFile = `${'a'.repeat(64)}.png`;
+  const store: Record<string, Buffer> = {
+    [`h-share/${shareFile}`]: shareBytes,
+    [`h-icon/${iconFile}`]: iconBytes,
+    [`h-wrong/${wrongFile}`]: wrongBytes,
+  };
+  const calls: string[] = [];
+  const hp = (slug: string, file: string) => `/projects/${slug}/_media/${file}`;
+  const hostedProjects = [
+    { slug: 'h-share', name: 'H', tagline: 't', category: 'c', shareImage: hp('h-share', shareFile) },
+    { slug: 'h-icon', name: 'H', tagline: 't', category: 'c', icon: hp('h-icon', iconFile) },
+    { slug: 'h-plain', name: 'H', tagline: 't', category: 'c' },
+    { slug: 'h-missing', name: 'H', tagline: 't', category: 'c', shareImage: hp('h-missing', missingFile) },
+    { slug: 'h-wrong', name: 'H', tagline: 't', category: 'c', shareImage: hp('h-wrong', wrongFile) },
+    { slug: 'h-icon-missing', name: 'H', tagline: 't', category: 'c', icon: hp('h-icon-missing', missingFile) },
+  ];
+
+  beforeAll(async () => {
+    registerOgRoutes(hostedApp, {
+      projects: hostedProjects,
+      blogPosts: [],
+      getHostedMedia: async (slug, file) => {
+        calls.push(`${slug}/${file}`);
+        return store[`${slug}/${file}`] ?? null;
+      },
+    });
+    await hostedApp.ready();
+  });
+  afterAll(() => hostedApp.close());
+
+  it('serves a hosted 1200x630 shareImage from the media store', async () => {
+    const res = await hostedApp.inject({ method: 'GET', url: '/og/h-share.png?v=abc12345' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('image/png');
+    expect(Buffer.compare(res.rawPayload, shareBytes)).toBe(0);
+    expect(res.headers['cache-control']).toBe('public, max-age=86400');
+    expect(calls).toContain(`h-share/${shareFile}`);
+  });
+
+  it('composites a hosted square icon into the generated card', async () => {
+    const withIcon = await hostedApp.inject({ method: 'GET', url: '/og/h-icon.png?v=abc12345' });
+    const plain = await hostedApp.inject({ method: 'GET', url: '/og/h-plain.png?v=abc12345' });
+    expect(withIcon.statusCode).toBe(200);
+    expect(withIcon.headers['cache-control']).toBe('public, max-age=86400');
+    expect(calls).toContain(`h-icon/${iconFile}`);
+    expect(Buffer.compare(withIcon.rawPayload, plain.rawPayload)).not.toBe(0);
+    expect(Buffer.compare(withIcon.rawPayload, iconBytes)).not.toBe(0);
+  });
+
+  it.each(['h-missing', 'h-wrong', 'h-icon-missing'])(
+    'serves the generated card with a short cache when hosted media for %s is missing or unusable',
+    async slug => {
+      const res = await hostedApp.inject({ method: 'GET', url: `/og/${slug}.png?v=abc12345` });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('image/png');
+      expect(res.headers['cache-control']).toBe('public, max-age=60');
+      expect(Buffer.compare(res.rawPayload, shareBytes)).not.toBe(0);
+      expect(Buffer.compare(res.rawPayload, wrongBytes)).not.toBe(0);
+    },
+  );
+});

@@ -5,6 +5,8 @@ import { buildOfferJsonLd, hasProductJsonLd, injectJsonLd, offersForPath } from 
 import { availableOffers } from './services/offer-availability.js';
 import { renderOgCard } from './og-image.js';
 import { readProjectPng } from './og-assets.js';
+import { checkCardMediaBytes, parseHostedMediaPath } from '../shared/listing-media.js';
+import { getListingMedia } from './services/listing-media.js';
 
 const SHARE_MAX_BYTES = 5 * 1024 * 1024;
 const ICON_MAX_BYTES = 512 * 1024;
@@ -23,11 +25,56 @@ export function ifNoneMatch(header: string | string[] | undefined, etag: string)
   });
 }
 
-function sendPng(req: FastifyRequest<OgRoute>, reply: FastifyReply, bytes: Buffer) {
+/** Short cache for a generated card standing in for declared hosted media that is not usable yet. */
+const HOSTED_FALLBACK_CACHE = 'public, max-age=60';
+
+type HostedLoader = (slug: string, file: string) => Promise<Buffer | null>;
+
+const defaultHostedLoader: HostedLoader = async (slug, file) => (await getListingMedia(slug, file))?.content ?? null;
+
+/**
+ * Bytes of a hosted card PNG when they pass the card media checks for `field`, else null
+ * (wrong slug, missing, unreadable, or wrong format/dimensions).
+ */
+async function loadHostedPng(
+  req: FastifyRequest<OgRoute>,
+  load: HostedLoader,
+  slug: string,
+  path: string,
+  field: 'icon' | 'shareImage',
+): Promise<Buffer | null> {
+  const ref = parseHostedMediaPath(path)!;
+  if (ref.slug !== slug) {
+    req.log.warn(`og: hosted ${field} for ${slug} points at another project (${ref.slug})`);
+    return null;
+  }
+  let bytes: Buffer | null;
+  try {
+    bytes = await load(slug, `${ref.sha256}.${ref.ext}`);
+  } catch (err) {
+    req.log.warn({ err }, `og: hosted ${field} for ${slug} failed to load`);
+    return null;
+  }
+  if (!bytes) {
+    req.log.warn(`og: hosted ${field} for ${slug} not in the media store yet`);
+    return null;
+  }
+  const problem = checkCardMediaBytes(field, ref.ext, bytes);
+  if (problem) {
+    req.log.warn(`og: hosted ${field} for ${slug} unusable (${problem})`);
+    return null;
+  }
+  return bytes;
+}
+
+function sendPng(req: FastifyRequest<OgRoute>, reply: FastifyReply, bytes: Buffer, cacheControl?: string) {
   const etag = `"${createHash('sha1').update(bytes).digest('hex').slice(0, 16)}"`;
   const v = req.query?.v;
   reply.header('etag', etag);
-  reply.header('cache-control', typeof v === 'string' && v.length > 0 ? 'public, max-age=86400' : 'public, max-age=300');
+  reply.header(
+    'cache-control',
+    cacheControl ?? (typeof v === 'string' && v.length > 0 ? 'public, max-age=86400' : 'public, max-age=300'),
+  );
   if (ifNoneMatch(req.headers['if-none-match'], etag)) return reply.code(304).send();
   return reply.type('image/png').send(bytes);
 }
@@ -39,13 +86,19 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
     const slug = m[1];
 
     let png: Buffer;
+    let cacheControl: string | undefined;
     if (slug === 'default') {
       const site = resolveOg('/', ctx)!;
       png = renderOgCard({ title: 'bilko.run', tagline: site.description, urlLabel: 'bilko.run' });
     } else {
       const p = ctx.projects.find(x => x.slug === slug);
       if (!p) return reply.status(404).type('text/plain').send('Not found');
-      if (p.shareImage && ctx.staticRoot) {
+      const loadHosted = ctx.getHostedMedia ?? defaultHostedLoader;
+      if (p.shareImage && parseHostedMediaPath(p.shareImage)) {
+        const bytes = await loadHostedPng(req, loadHosted, slug, p.shareImage, 'shareImage');
+        if (bytes) return sendPng(req, reply, bytes);
+        cacheControl = HOSTED_FALLBACK_CACHE;
+      } else if (p.shareImage && ctx.staticRoot) {
         const asset = readProjectPng(ctx.staticRoot, slug, p.shareImage, SHARE_MAX_BYTES);
         if (asset && asset.width === 1200 && asset.height === 630) {
           return sendPng(req, reply, asset.bytes);
@@ -55,7 +108,11 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
         );
       }
       let iconPng: Buffer | undefined;
-      if (p.icon && ctx.staticRoot) {
+      if (p.icon && parseHostedMediaPath(p.icon)) {
+        const bytes = await loadHostedPng(req, loadHosted, slug, p.icon, 'icon');
+        if (bytes) iconPng = bytes;
+        else cacheControl = HOSTED_FALLBACK_CACHE;
+      } else if (p.icon && ctx.staticRoot) {
         const icon = readProjectPng(ctx.staticRoot, slug, p.icon, ICON_MAX_BYTES);
         if (icon && icon.width === icon.height && icon.width >= 128 && icon.width <= 1024) iconPng = icon.bytes;
       }
@@ -67,7 +124,7 @@ export function registerOgRoutes(app: FastifyInstance, ctx: OgContext): void {
         urlLabel: `bilko.run/projects/${slug}`,
       });
     }
-    return sendPng(req, reply, png);
+    return sendPng(req, reply, png, cacheControl);
   });
 
   // Registered right after the security-headers hook: by now HTML payloads

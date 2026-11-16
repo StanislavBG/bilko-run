@@ -146,4 +146,38 @@ describe('asset-versions', () => {
     expect(av.files['/projects/other/silent.mp4']).toBe(sha8(silent));
     expect(av.files['/projects/missing/clip.mp4']).toBeUndefined();
   });
+  it('hashes a hosted icon/shareImage path string, so a new sha256 changes the card version', () => {
+    const hosted = (c: string) => `/projects/fx/_media/${c.repeat(64)}.png`;
+    const textOnly = { slug: 'fx', name: 'Fx', tagline: 't', category: 'c' };
+    const base = cardVersion(toCardProject(textOnly), staticRoot);
+    for (const key of ['shareImage', 'icon'] as const) {
+      const a = toCardProject({ ...textOnly, listing: { [key]: hosted('a') } });
+      const b = toCardProject({ ...textOnly, listing: { [key]: hosted('b') } });
+      expect(cardVersion(a, staticRoot)).not.toBe(base);
+      expect(cardVersion(a, staticRoot)).not.toBe(cardVersion(b, staticRoot));
+      expect(cardVersion(a, staticRoot)).toBe(cardVersion(a, staticRoot));
+      const expected = createHash('sha1')
+        .update(JSON.stringify([CARD_RENDER_REV, 'Fx', 't', 'c']))
+        .update(hosted('a'))
+        .digest('hex')
+        .slice(0, 8);
+      expect(cardVersion(a, staticRoot)).toBe(expected);
+      const av = buildAssetVersions([{ ...textOnly, listing: { [key]: hosted('a'), video: '/projects/fx/_media/' + 'c'.repeat(64) + '.mp4' } }], staticRoot);
+      expect(av.cards.fx).toBe(expected);
+      expect(av.files).toEqual({});
+      expect(av.audio).toEqual([]);
+    }
+  });
+
+  it('keeps bundle-path card versions unchanged: copy fields then file bytes', () => {
+    writeFileSync(join(staticRoot, 'projects', 'fx', 'og.png'), Buffer.from('share-v1'));
+    const p = toCardProject(raw);
+    const expected = createHash('sha1')
+      .update(JSON.stringify([CARD_RENDER_REV, 'Fixture X', 'A fixture', 'Test']))
+      .update(Buffer.from('icon-v1'))
+      .update(Buffer.from('share-v1'))
+      .digest('hex')
+      .slice(0, 8);
+    expect(cardVersion(p, staticRoot)).toBe(expected);
+  });
 });

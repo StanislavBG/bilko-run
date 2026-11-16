@@ -25,6 +25,8 @@ export interface OgContext {
   dynamic?: readonly OgDynamicResolver[];
   /** Root of the served static bundle (dist); enables listing.shareImage lookups. */
   staticRoot?: string;
+  /** Loads hosted card media (/projects/<slug>/_media/<file>); defaults to the listing-media store. */
+  getHostedMedia?: (slug: string, file: string) => Promise<Buffer | null>;
 }
 
 const SITE = 'https://bilko.run';

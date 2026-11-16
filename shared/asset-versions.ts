@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { extname, resolve, sep } from 'path';
+import { isHostedMediaPath } from './listing-media.js';
 import { hasAudioTrack } from './video-audio.js';
 
 /** Card-relevant fields of one registry entry (src/data/standalone-projects.json). */
@@ -56,12 +57,20 @@ function readAsset(staticRoot: string, slug: string, assetPath: string): Buffer 
 /** Bump when server/og-image.ts output changes, so og:image ?v= and the /projects thumbnail URL change. */
 export const CARD_RENDER_REV = 2;
 
-/** 8-hex content version for a project's card: copy plus icon/shareImage bytes when readable. */
+/**
+ * 8-hex content version for a project's card: copy plus icon/shareImage bytes when readable.
+ * A hosted /projects/<slug>/_media/<sha256>.<ext> path is not in the build; its path string
+ * already carries the content hash, so the path itself is hashed instead of bytes.
+ */
 export function cardVersion(p: CardProject, staticRoot?: string): string {
   const h = createHash('sha1').update(JSON.stringify([CARD_RENDER_REV, p.displayName ?? p.name, p.tagline, p.category]));
-  if (staticRoot) {
-    for (const asset of [p.icon, p.shareImage]) {
-      if (!asset) continue;
+  for (const asset of [p.icon, p.shareImage]) {
+    if (!asset) continue;
+    if (isHostedMediaPath(asset)) {
+      h.update(asset);
+      continue;
+    }
+    if (staticRoot) {
       const bytes = readAsset(staticRoot, p.slug, asset);
       if (bytes) h.update(bytes);
     }
@@ -90,6 +99,8 @@ export function buildAssetVersions(rawRegistry: readonly Record<string, unknown>
     for (const key of LISTING_ASSET_KEYS) {
       const path = listing?.[key];
       if (typeof path !== 'string' || !path) continue;
+      // Hosted media bytes live in the database, not the build; the path already carries its sha256.
+      if (isHostedMediaPath(path)) continue;
       if (key === 'video') {
         // One read serves both the version hash and the audio sniff.
         const bytes = readAsset(staticRoot, p.slug, path);

@@ -7,13 +7,40 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ifNoneMatch } from '../og-routes.js';
 import {
-  getListingMedia, getListingMediaMeta,
-  type ListingMedia, type ListingMediaMeta,
+  getListingMedia, getListingMediaMeta, storeListingMedia,
+  type ListingMedia, type ListingMediaMeta, type StoreListingMediaResult,
 } from '../services/listing-media.js';
+import { isListingMediaDeclared } from '../services/listing-media-declared.js';
+import type { CardMediaField } from '../../shared/listing-media.js';
 
 export interface ListingMediaRouteDeps {
   getMedia?: (slug: string, file: string) => Promise<ListingMedia | null>;
   getMeta?: (slug: string, file: string) => Promise<ListingMediaMeta | null>;
+  isDeclared?: (slug: string, file: string) => Promise<CardMediaField | undefined>;
+  store?: (slug: string, file: string, field: CardMediaField, buf: Buffer) => Promise<StoreListingMediaResult>;
+}
+
+export const LISTING_MEDIA_MAX_UPLOAD_BYTES = 8388608;
+const UPLOAD_FILE_RE = /^[0-9a-f]{64}\.(png|mp4|webm)$/;
+const UPLOAD_LIMIT = 20;
+const UPLOAD_WINDOW_MS = 10 * 60_000;
+
+const rateCounts = new Map<string, { count: number; windowStart: number }>();
+
+function rateOk(key: string, limit: number): boolean {
+  const now = Date.now();
+  const entry = rateCounts.get(key);
+  if (!entry || now - entry.windowStart > UPLOAD_WINDOW_MS) {
+    rateCounts.set(key, { count: 1, windowStart: now });
+    if (rateCounts.size > 5000) {
+      for (const [k, v] of rateCounts) {
+        if (now - v.windowStart > UPLOAD_WINDOW_MS) rateCounts.delete(k);
+      }
+    }
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= limit;
 }
 
 const MEDIA_FILE_RE = /^([0-9a-f]{64})\.(png|mp4|webm)(\.json)?$/;
@@ -103,4 +130,42 @@ export function registerListingMediaRoutes(app: FastifyInstance, deps: ListingMe
   };
 
   app.route<MediaRoute>({ method: ['GET', 'HEAD'], url: '/projects/:slug/_media/:file', handler });
+
+  const isDeclared = deps.isDeclared ?? ((slug: string, file: string) => isListingMediaDeclared(slug, file));
+  const store = deps.store ?? storeListingMedia;
+
+  // Content-addressed media fill. No auth on purpose, like the paid-release fill
+  // in web-products.ts: anyone may PUT, but bytes are stored only when the
+  // registry (deployed, or on GitHub main) already sets this exact
+  // /projects/<slug>/_media/<file> path on the slug's listing, and the file name
+  // is the sha256 of the bytes. Only someone who can push the registry (the
+  // owner's MCP) decides what gets stored, so no deploy secret is needed. The
+  // binary parser is scoped to this plugin so the global parsers are untouched.
+  app.register(async (scope) => {
+    scope.addContentTypeParser(
+      ['application/octet-stream', 'image/png', 'video/mp4', 'video/webm'],
+      { parseAs: 'buffer', bodyLimit: LISTING_MEDIA_MAX_UPLOAD_BYTES },
+      (_req, body, done) => done(null, body),
+    );
+    scope.put<MediaRoute>('/api/listing-media/:slug/:file', async (req, reply) => {
+      const { slug, file } = req.params;
+      if (!UPLOAD_FILE_RE.test(file)) return reply.code(404).send({ error: 'not declared' });
+      if (!rateOk(`lm-upload:${req.ip}`, UPLOAD_LIMIT)) {
+        return reply.code(429).send({ error: 'Too many uploads. Try again in 10 minutes.' });
+      }
+      const field = await isDeclared(slug, file);
+      if (!field) return reply.code(404).send({ error: 'not declared' });
+      const body = req.body;
+      if (!Buffer.isBuffer(body)) return reply.code(422).send({ error: 'body must be the raw file bytes' });
+
+      const result = await store(slug, file, field, body);
+      if (typeof result === 'object') return reply.code(422).send({ error: result.error });
+      const meta = await getMeta(slug, file);
+      const url = `/projects/${slug}/_media/${file}`;
+      const bytes = meta?.bytes ?? body.length;
+      const audio = meta?.hasAudio ?? false;
+      if (result === 'exists') return reply.code(200).send({ stored: true, existed: true, url, bytes, audio });
+      return reply.code(201).send({ stored: true, url, bytes, audio });
+    });
+  });
 }

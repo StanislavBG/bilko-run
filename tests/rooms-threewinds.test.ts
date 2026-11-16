@@ -26,7 +26,9 @@ vi.mock('../server/clerk.js', () => ({
 }));
 
 const APP = 'threewinds';
-const TURN_MS = 10_000;
+// The host's default turn time (DEFAULT_TURN_MS). It must differ from the engine's
+// CLAIM_WINDOW_MS, or the R4.6 deadline test cannot tell a claim deadline from a turn one.
+const TURN_MS = 20_000;
 const AI_MS = 50;
 const MAX_LOSS = 400;
 const tw = ROOM_MODULES.threewinds as RoomGameModule<RoomState>;
@@ -271,6 +273,7 @@ describe('Three Winds engine in GameRoom', () => {
   }, 120_000);
 
   it('a human who never acts is auto-passed or wins in claim windows, discards or wins on its turn, with R4.6 deadlines', () => {
+    expect(CLAIM_WINDOW_MS, 'claim and turn deadlines must differ for this test to tell them apart').not.toBe(TURN_MS);
     const { clock, spy, results, room, onSend } = makeRoom({ seed: hexSeeds(mulberry32(0x71e0)) });
     const HUMAN = 0;
     expect(room.seatHuman('idle')).toBe(HUMAN);
@@ -305,7 +308,8 @@ describe('Three Winds engine in GameRoom', () => {
       room.startHand(dealer);
       let steps = 0;
       while (results.length < hand) {
-        if (++steps > 5000) throw new Error(`hand ${hand} (seed ${spy.seeds.at(-1)}) did not finish`);
+        // Each human timeout is TURN_MS / AI_MS steps (400); the longest of these hands takes about 5200.
+        if (++steps > 20_000) throw new Error(`hand ${hand} (seed ${spy.seeds.at(-1)}) did not finish`);
         clock.advance(AI_MS);
       }
       expect(results[hand - 1].voided).toBeFalsy();

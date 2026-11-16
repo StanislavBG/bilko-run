@@ -77,10 +77,10 @@ describe('room routes', () => {
     expect(tw).toBe(threeWindsRoomModule);
   });
 
-  it('the threewinds binding gives a 4 s deadline only in a claim window (R4.6)', () => {
+  it('the threewinds binding gives a 10 s deadline only in a claim window (R4.6)', () => {
     const tw = rooms.ROOM_MODULES.threewinds;
     expect(typeof tw.deadlineMs).toBe('function');
-    expect(tw.deadlineMs!({ phase: 'claim' } as any, 0)).toBe(4000);
+    expect(tw.deadlineMs!({ phase: 'claim' } as any, 0)).toBe(10_000);
     for (const phase of ['draw', 'act', 'over']) expect(tw.deadlineMs!({ phase } as any, 0)).toBeUndefined();
   });
 

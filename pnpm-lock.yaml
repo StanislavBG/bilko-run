@@ -50,8 +50,8 @@ importers:
         specifier: ^2.6.2
         version: 2.6.2
       '@threewinds/engine':
-        specifier: npm:@bilkobibitkov/threewinds-engine@0.1.1
-        version: '@bilkobibitkov/threewinds-engine@0.1.1'
+        specifier: npm:@bilkobibitkov/threewinds-engine@0.1.2
+        version: '@bilkobibitkov/threewinds-engine@0.1.2'
       d3-geo:
         specifier: ^3.1.1
         version: 3.1.1
@@ -332,8 +332,8 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  '@bilkobibitkov/threewinds-engine@0.1.1':
-    resolution: {integrity: sha512-yii7KtbYYW9xG+yEGzoMGoH6VYyNnxZfYgUDlWV1hpQbrae7tsiFo7VzvnxRWCCaP8mOnHfDx7OsYwSwud1e6w==}
+  '@bilkobibitkov/threewinds-engine@0.1.2':
+    resolution: {integrity: sha512-iZaAPhMM3j3k4KpdU5RpaDaHXYLjoF0YXFRcItBhN4H7kMHZgBt7Mxfr0jURjlVi0hJni6xeq0qVBix2v09gEw==}
 
   '@changesets/apply-release-plan@7.1.1':
     resolution: {integrity: sha512-9qPCm/rLx/xoOFXIHGB229+4GOL76S4MC+7tyOuTsR6+1jYlfFDQORdvwR5hDA6y4FL2BPt3qpbcQIS+dW85LA==}
@@ -4152,7 +4152,7 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@bilkobibitkov/threewinds-engine@0.1.1': {}
+  '@bilkobibitkov/threewinds-engine@0.1.2': {}
 
   '@changesets/apply-release-plan@7.1.1':
     dependencies:

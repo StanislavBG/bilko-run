@@ -152,13 +152,15 @@ Sibling sessions never ask Bilko to change card copy. They edit it themselves. B
 | `listing.pricing` | one of `free`, `freemium`, `paid`, `none` |
 | `listing.callToAction` | 1–120 chars |
 | `listing.avoidClaims` | up to 5, each 1–200 chars |
-| `listing.icon` | path starting with `/projects/<own-slug>/`, ending in `.png`; the `share-assets` gate also needs a square PNG, 128–1024 px, ≤512 KB |
-| `listing.shareImage` | path starting with `/projects/<own-slug>/`, ending in `.png`; the `share-assets` gate also needs exactly 1200x630, ≤5 MB |
-| `listing.video` | path starting with `/projects/<own-slug>/`, ending in `.mp4` or `.webm`; the `share-assets` gate also needs an MP4 (`ftyp`) or WebM (EBML) signature that matches the extension, ≤8 MB |
+| `listing.icon` | a bundle path starting with `/projects/<own-slug>/` and ending in `.png`, or a hosted path `/projects/<own-slug>/_media/<sha256>.png` from `set_listing_media`; the file must be a square PNG, 128–1024 px, ≤512 KB (checked by the `share-assets` gate or by `set_listing_media`) |
+| `listing.shareImage` | a bundle path starting with `/projects/<own-slug>/` and ending in `.png`, or a hosted path `/projects/<own-slug>/_media/<sha256>.png` from `set_listing_media`; the file must be a PNG, exactly 1200x630, ≤5 MB (checked by the `share-assets` gate or by `set_listing_media`) |
+| `listing.video` | a bundle path starting with `/projects/<own-slug>/` and ending in `.mp4` or `.webm`, or a hosted path `/projects/<own-slug>/_media/<sha256>.mp4` or `.webm` from `set_listing_media`; the file must carry an MP4 (`ftyp`) or WebM (EBML) signature that matches the extension, ≤8 MB (checked by the `share-assets` gate or by `set_listing_media`) |
+
+A path with `/_media/` in it must be a valid hosted path: the right slug, a 64-hex sha256, and an extension that fits the field (`.png` for `icon` and `shareImage`, `.mp4` or `.webm` for `video`). Anything else is rejected.
 
 Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `tags`, and every `listing` text field) may mention the retired ContentGrade product (`/content-?grade/i`). The write fails with the slug and field name.
 
-**Two edit paths.** Both take the same patch and run the same ownership and schema checks.
+**Two edit paths.** Both take the same patch and run the same ownership and schema checks. `update_project_listing` sets any project-owned field on `static-path` and `external-url` entries alike; `bilko.listing.json` works only for `static-path` entries, since it rides on a publish. Neither one uploads files: to upload card media (video, share image, icon) from a local file, use `set_listing_media` (see "Card media upload (set_listing_media)" below).
 
 1. `update_project_listing { slug, callerRepoPath, patch }` — edits the card now. Commits and pushes. Use `get_project { slug }` first to see the current entry. The result names any field the patch removed (`removed: listing.avoidClaims`).
 2. `bilko.listing.json` at the sibling repo root (max 16 KB) — `publish_static_project` reads it from `sourceRepoPath` and syncs it into the registry in the same commit as the bytes. The result line reports `listing: synced from bilko.listing.json` (plus `(removed: …)` when the file deleted a field), `listing: unchanged` or `listing: no bilko.listing.json`. Invalid JSON or a rejected field fails the publish.
@@ -211,6 +213,8 @@ Each project owns the marketing fields in its own `listing`. Fill them in; promo
 
 The ownership check compares a self-asserted `callerRepoPath` / `sourceRepoPath` with `host.localPath`. It guards against one project's session editing another project's slug by mistake. It does not authenticate the caller: a hostile local session can pass any path it likes. A leading `~` in `callerRepoPath` is expanded to the home directory before the absolute-path check.
 
+**Media upload endpoint.** `PUT https://bilko.run/api/listing-media/<slug>/<sha256>.<ext>` has no auth, on purpose. Anyone may call it, but it stores only bytes that the registry already declares: the registry on GitHub `main` (or the deployed copy) must set that exact `/projects/<slug>/_media/<sha256>.<ext>` path on one of that slug's `icon`, `shareImage` or `video`. The file name must be the sha256 of the bytes, and the bytes must pass the card media checks for that field. Anything else gets `404 not declared` or `422`. So only someone who can push the registry decides what gets stored, and no deploy secret is needed. Uploads are rate limited to 20 per IP per 10 minutes, and the body is capped at 8 MB.
+
 The real boundary is where the write tools run. They exist only in the local stdio `bilko-host` MCP on the owner's machine, and they push with the owner's GitHub access to `StanislavBG/bilko-run`. The public `https://bilko.run/mcp` is read-only.
 
 **Going public.** `register_static_project` / `register_external_project` never set `public`; a new app is admin-only. Listing it on `/projects` and the home page is the Bilko owner's call, made in a Bilko session. Sibling sessions cannot change `public`.
@@ -247,7 +251,7 @@ If a declared file is missing, oversize or the wrong size at serve time, the hos
 
 Caching: every `/og/<slug>.png` response has an ETag. A versioned URL (with `?v=`) is cached for a day (`max-age=86400`), since a new image gets a new URL. An unversioned URL, such as an old link that was shared before, is cached for 5 minutes (`max-age=300`); after that the browser revalidates with the ETag and gets a `304` when the image has not changed.
 
-Recipe for a sibling:
+Recipe for a sibling. Any host kind: call `set_listing_media { slug, callerRepoPath, media: { shareImage: "/abs/path/og.png" } }` (and `icon` the same way); see "Card media upload (set_listing_media)". For a `static-path` entry you can instead ship the file in the bundle:
 
 1. Add the PNG to the build output. For example, put `public/og.png` in the repo; it lands at `/projects/<slug>/og.png`.
 2. Set the path in `bilko.listing.json` (`{ "listing": { "shareImage": "/projects/<slug>/og.png" } }`), or call `update_project_listing` with the same patch. Use `icon` the same way for a square icon.
@@ -260,6 +264,57 @@ There is no size budget, so share assets never crowd out the app. The `budget` g
 
 Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
 
+### Card media upload (set_listing_media)
+
+`set_listing_media` uploads your card's video, share image and icon from local files. It works for `static-path` and `external-url` entries alike. It is the only way to give an `external-url` card media, since that entry has no bundle. A `static-path` entry can use it too, without a publish.
+
+Inputs:
+
+```
+bilko-host__set_listing_media {
+  slug,
+  callerRepoPath,   # your repo root; must match the slug's host.localPath
+  media: {
+    video?:      "/abs/path/tile.mp4" | null,
+    shareImage?: "/abs/path/og.png"   | null,
+    icon?:       "/abs/path/icon.png" | null
+  }
+}
+```
+
+- Give at least one of `video`, `shareImage`, `icon`.
+- A value is an absolute path to a local file. A leading `~` is expanded to the home directory.
+- `null` removes that field from the listing.
+- A field you leave out keeps its current value.
+- Only the repo bound to the slug may call it (the same ownership rule as `update_project_listing`).
+
+Limits (the same checks as the `share-assets` gate, in `shared/listing-media.ts` `CARD_MEDIA_LIMITS`):
+
+| Field | File |
+|---|---|
+| `video` | `.mp4` (`ftyp` signature) or `.webm` (EBML signature), ≤8 MB |
+| `shareImage` | `.png`, exactly 1200x630, ≤5 MB |
+| `icon` | `.png`, square, 128–1024 px, ≤512 KB |
+
+Flow:
+
+1. **Local checks.** Each file is checked on your machine: extension, signature, size and dimensions. Any problem fails the call before anything is written. The error names the field and the file.
+2. **Registry commit.** Each file's sha256 gives its hosted path, `/projects/<slug>/_media/<sha256>.<ext>`. The tool writes those paths (and removes any `null` field) in one registry commit, `listing: media <slug>`, through the isolated publish checkout, and pushes it to `origin`.
+3. **Bytes upload.** The tool PUTs each file to `https://bilko.run/api/listing-media/<slug>/<sha256>.<ext>`. bilko.run stores the bytes in the host database, not in git and not in any repo. If the server does not see the new registry yet (`404`), or the network fails, the tool retries a few times. If an upload still fails, the result says so: run the same call again with the same files to finish.
+4. **Redeploy.** bilko.run redeploys in about a minute. The card shows the new media after that.
+
+Replacing a file is the same call with the new file. A new file has a new sha256, so it gets a new path and a new URL. Sending the same file again changes nothing in the registry and reports `already stored`.
+
+Serving and caching:
+
+- The bytes are served at `https://bilko.run/projects/<slug>/_media/<sha256>.<ext>`.
+- The name is the hash of the bytes, so the file never changes at that URL. Every response is cached for a year (`Cache-Control: public, max-age=31536000, immutable`), with an ETag. A new file always gets a new URL, so visitors never see a stale one.
+- Byte ranges are supported, so Safari plays MP4s.
+- A hosted `shareImage` or `icon` feeds `/og/<slug>.png` the same way a bundle file does. Until the bytes are stored, the generated card stands in, cached for 60 seconds.
+- Unmute: the server detects an audio track from the uploaded bytes when it stores them. It serves that flag at `<file>.json` (`{ "bytes", "contentType", "audio" }`), and the card shows Unmute only when `audio` is true.
+
+`_media/` is reserved. A bundle must not have a top-level `_media/` folder: the `share-assets` gate fails the publish if it does.
+
 ### Card video
 
 `listing.video` is optional. It adds a short clip to your card on https://bilko.run/projects. The PNG stays in charge everywhere else.
@@ -267,24 +322,31 @@ Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites
 - The active `/projects` card plays `listing.video` looping and inline. The card's share image (`/og/<slug>.png?v=<hash>`) is the poster.
 - Clips may carry sound. The video starts muted, because browsers block autoplay with sound.
 - A Pause/Play button is always shown over the video.
-- An Unmute button appears only when the file has an audio track. The host detects the track at build time from the file's bytes.
+- An Unmute button appears only when the file has an audio track. The host detects the track from the file's bytes: at build time for a bundle file, and at upload time for a file sent with `set_listing_media`.
 - The visitor's pause and mute choices carry to the next card on the page.
 - Only the active card loads the video. Other cards load nothing for it.
 - Under `prefers-reduced-motion: reduce` or Save-Data, the poster shows a Play button. No video bytes load until it is pressed. If the video fails to load or autoplay is blocked, the poster stays.
 - X/LinkedIn link previews keep the PNG. The video never appears in `og:*` or `twitter:*` tags.
-- The video URL carries `?v=<content hash>` of the file's bytes. A versioned `/projects/<slug>/….mp4` or `….webm` URL is cached for a year (`max-age=31536000, immutable`). A new file gets a new URL.
+- A hosted video's URL (`/projects/<slug>/_media/<sha256>.<ext>`) already names its content. A bundle video's URL carries `?v=<content hash>` of the file's bytes. Either way the URL is cached for a year (`max-age=31536000, immutable`), and a new file gets a new URL.
 
-Recipe for a sibling:
+Recipe for a sibling (any host kind):
 
 1. Export H.264 MP4 (or VP9 WebM) at 1200x630, about 60 s or less. Keep the soundtrack: AAC in MP4 (for example `ffmpeg … -c:a aac -b:a 128k -movflags +faststart`) or Opus in WebM. Do not pass `-an`. The 8 MB cap covers video plus audio.
-2. Put it in the build output. For example, `public/tile.mp4` lands at `/projects/<slug>/tile.mp4`.
-3. Set the path in `bilko.listing.json` (`{ "listing": { "video": "/projects/<slug>/tile.mp4" } }`), or call `update_project_listing` with the same patch.
-4. Keep `shareImage` set. It is the poster and the link preview.
-5. Run `publish_static_project`.
+2. Call `set_listing_media { slug, callerRepoPath, media: { video: "/abs/path/tile.mp4" } }`. Add `shareImage` in the same call if the card has none yet.
+3. Keep `shareImage` set. It is the poster and the link preview.
+4. Wait about a minute for the redeploy, then check the card on https://bilko.run/projects.
+
+To remove the video, call `set_listing_media` with `{ "video": null }`.
+
+Alternative for a `static-path` entry (the file ships in your bundle):
+
+1. Put the file in the build output. For example, `public/tile.mp4` lands at `/projects/<slug>/tile.mp4`. Do not put it under `_media/`; that folder is reserved.
+2. Set the path in `bilko.listing.json` (`{ "listing": { "video": "/projects/<slug>/tile.mp4" } }`), or call `update_project_listing` with the same patch.
+3. Run `publish_static_project`.
 
 The `share-assets` gate blocks the publish when a declared `video` is missing from the bundle, lacks the MP4 (`ftyp`) or WebM (EBML) signature for its extension, or is over 8 MB.
 
-Implemented in `mcp-host-server/src/contract/registry.ts` (`ProjectVideoPathSchema`), `mcp-host-server/src/gates/share-assets.ts` (signature and 8 MB cap), `src/components/ProjectCardShot.tsx` (the card player), `shared/asset-versions.ts` (`LISTING_ASSET_KEYS` includes `video`, so the file gets a build-time hash; the `AssetVersions.audio` list names each video with an audio track) read through `assetUrl` and `assetHasAudio` in `src/data/assetVersions.ts`, `shared/video-audio.ts` (`hasAudioTrack`, the build-time audio sniff), and `server/static-cache.ts` (`versionedMediaCacheControl`, the year-long cache).
+Implemented in `mcp-host-server/src/contract/registry.ts` (`ProjectVideoPathSchema`, plus the hosted-path check), `mcp-host-server/src/contract/listing-media.ts` (`hostedMediaPath`), `mcp-host-server/src/listing-media-tool.ts` (`set_listing_media`: local checks, registry commit, upload), `mcp-host-server/src/server.ts` (the tool registration), `shared/listing-media.ts` (`CARD_MEDIA_LIMITS`, `checkCardMediaBytes`, the hosted path regex), `server/routes/listing-media.ts` (the `/projects/<slug>/_media/…` serve route and the `PUT /api/listing-media/…` upload), `server/services/listing-media.ts` (database storage and the audio flag), `server/services/listing-media-declared.ts` (the registry-declared check), `mcp-host-server/src/gates/share-assets.ts` (signature and 8 MB cap), `src/components/ProjectCardShot.tsx` (the card player), `shared/asset-versions.ts` (`LISTING_ASSET_KEYS` includes `video`, so the file gets a build-time hash; the `AssetVersions.audio` list names each video with an audio track) read through `assetUrl` and `assetHasAudio` in `src/data/assetVersions.ts`, `shared/video-audio.ts` (`hasAudioTrack`, the build-time audio sniff), and `server/static-cache.ts` (`versionedMediaCacheControl`, the year-long cache).
 
 ## Public project catalog
 
@@ -390,7 +452,15 @@ A sibling repo (e.g. `~/Projects/Outdoor-Hours`) should NOT edit this repo by ha
 6. bilko-host__status                                     # verify
 ```
 
-`register_static_project` (and `register_external_project`, which adds a required `https://` `url`) binds the slug to `callerRepoPath` (your repo root) and also takes optional `tags` and `displayName` (a hub-only display name, 1-60 chars). It has no `public` parameter: new apps are admin-only until the Bilko owner lists them. Later card edits go through `update_project_listing` or `bilko.listing.json`; see "Project listing — who owns what".
+Card edits at any time, for any host kind:
+
+```
+bilko-host__get_project { slug }                                   # see the current entry
+bilko-host__update_project_listing { slug, callerRepoPath, patch } # any listing field (merge patch)
+bilko-host__set_listing_media { slug, callerRepoPath, media: { video?, shareImage?, icon? } }  # upload, replace or remove (null) card media
+```
+
+`register_static_project` (and `register_external_project`, which adds a required `https://` `url`) binds the slug to `callerRepoPath` (your repo root) and also takes optional `tags` and `displayName` (a hub-only display name, 1-60 chars). It has no `public` parameter: new apps are admin-only until the Bilko owner lists them. Later card edits go through `update_project_listing` or `bilko.listing.json`; see "Project listing — who owns what". Card media from local files goes through `set_listing_media`; see "Card media upload (set_listing_media)".
 
 The MCP commits + pushes to `origin` automatically, from a dedicated clean
 checkout kept in sync with `origin/main` (never your own working tree); Render

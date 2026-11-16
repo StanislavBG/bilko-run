@@ -17,11 +17,12 @@ export const APP_BUDGETS_GZ_BYTES: Readonly<Record<string, number>> = Object.fre
   'escape-velocity': 30_400 * 1024,
   // Phaser game + ~117 downscaled WebP sprites (post-incident: sprites were 116 MB PNG).
   'game-academy': 5_000_000,
-  // Three Winds (3PMahjong): ~3.9 MB gz of self-hosted Source Serif 4 + Noto Serif TC woff2
-  // subsets, fetched by unicode-range. Interim cap, replacing publish_overrides rows 58-62:
-  // the 2026-11-15 build measured 4,456,087 bytes, ~2.7 MB of it byte-identical font copies
-  // under three weight names. Lower to 2_000_000 once each subset ships once (~1.75 MB gz).
-  threewinds: 5_000_000,
+  // Three Winds (3PMahjong): 16 self-hosted woff2 font subsets (Noto Serif TC slices,
+  // Source Serif 4, Inter Tight, JetBrains Mono), ~1.3 MB gz, two thirds of the bundle.
+  // Measured 2026-11-15 (live manifest): 1,938,261 bytes over 80 files once each font
+  // shipped once (297d4fd; was 4,785,769 over 136), 1,984,717 over 97 after the sound pass
+  // (becfc94). 2,500,000 leaves ~26% to grow; re-adding the ~2.7 MB of font copies fails.
+  threewinds: 2_500_000,
 });
 
 export function budgetFor(slug: string): number {

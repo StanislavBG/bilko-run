@@ -168,7 +168,7 @@ Mirrors the static-path publish gate from `host-contract.md`. Each must pass bef
 2. **Test** — `pnpm test` clean.
 3. **Typecheck** — `pnpm typecheck` clean.
 4. **Changelog** — `CHANGELOG.md` has an entry for the new version.
-5. **Size** — `pnpm pack --dry-run` shows tarball size below per-kind cap (caps in [Size budgets](#size-budgets)).
+5. **Size** — `pnpm pack --dry-run` lists only files the package needs (see [Package size](#package-size)).
 
 ## Releasing by hand
 
@@ -225,17 +225,11 @@ Before tagging, always run `pnpm pack --dry-run` and grep the output for every p
 | Dist directory | `dist/` — never commit this; build in CI |
 | Styles directory | `styles/` — commit as-is; raw CSS tokens ship as source |
 
-## Size budgets
+## Package size
 
-No script enforces these; the maintainer checks `pnpm pack --dry-run` (or `npm pack`) by hand. The packed size must stay under:
+No numeric size cap applies (owner decision 2026-11-15: no limits without a concrete reason). The maintainer checks `pnpm pack --dry-run` (or `npm pack`) by hand: it must list only files the package needs.
 
-| Kind | Packed size cap |
-|---|---|
-| Library (e.g. sudoku-engine) | 30 KB |
-| CLI (e.g. agent-trace) | 50 KB |
-| host-kit (the one named exception, it ships React components) | 200 KB |
-
-If you exceed the cap: audit `files`, strip test fixtures from the tarball, and confirm `dist/` doesn't include source maps in production.
+If the tarball has stray files: audit `files`, strip test fixtures, and confirm `dist/` has no unintended source maps.
 
 ## Cross-references
 

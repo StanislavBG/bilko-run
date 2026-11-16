@@ -256,7 +256,7 @@ Recipe for a sibling:
 
 The `share-assets` publish gate blocks the publish when a declared `icon` or `shareImage` is missing from the bundle, is not a PNG, or has the wrong size. The path must start with `/projects/<your-slug>/`.
 
-Share assets do not count against your gzip budget. The `budget` gate leaves a declared `icon`/`shareImage` out of its sum when it passes these checks, so a full-quality hero up to 5 MB fits even a near-budget app. A declared `listing.video` that passes its checks is also left out of the gzip sum. The same file left undeclared, or declared but invalid, counts like any other file.
+There is no size budget, so share assets never crowd out the app. The `budget` gate reports a declared `icon`/`shareImage`/`listing.video` separately when it passes these checks: it is left out of the measured gzip sum, and the details say `excluding N share asset(s)`. The same file left undeclared, or declared but invalid, is summed like any other file. Its own cap is set here, by the `share-assets` gate.
 
 Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
 
@@ -504,13 +504,11 @@ at `bilko.run/projects/<slug>/<subpath>/` for free, with no new host
 capability required. Two things about the contract apply across the **whole
 bundle**, not per-document:
 
-- **`budget` gate is bundle-wide.** The gzip budget — and the 200 KB default
-  limit it's checked against — covers *every* file under `dist/`, summed
-  (except a valid declared `listing.icon`/`listing.shareImage`, see below).
-  Adding a second or third document eats into the same budget as the root
-  page, not a fresh allowance each. Request a higher per-app budget in
-  `mcp-host-server/src/contract/app-budgets.ts` if a multi-document bundle
-  needs it.
+- **`budget` gate is bundle-wide.** It measures and reports the gzipped
+  size of *every* file under `dist/`, summed (except a valid declared
+  `listing.icon`/`listing.shareImage`/`listing.video`, see below). There is
+  no size budget, so extra documents never need more allowance. The gate
+  fails only when one file is over GitHub's 100 MiB per-file limit.
 - **`golden` gate only covers the root document.** `manifest.golden.path`
   is a single URL the synthetic monitor and `golden` gate check — point it
   at the root (`/projects/<slug>/`) unless you deliberately want the
@@ -524,7 +522,7 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 | Gate | What it checks | Bypassable |
 |---|---|---|
 | `manifest` | `manifest.json` exists at the bundle root, parses, validates against the Zod schema, and its `slug` matches the registered slug | **No — never bypassable** |
-| `budget` | Real gzipped size of every file under `distPath`, measured fresh by the gate (`mcp-host-server/src/contract/app-budgets.ts`), not the manifest's self-reported number — must be ≤ the app's budget (default 200 KB gz). A declared `listing.icon`/`listing.shareImage`/`listing.video` that passes the `share-assets` checks is left out of the sum; it has its own cap there. An invalid one still counts | `budget` |
+| `budget` | Measures the real gzipped size of every file under `distPath` (fresh, not the manifest's self-reported number) and reports it. There is no size budget (owner decision 2026-11-15). It fails only when one file is over 100 MiB: the publish pushes the bundle to GitHub, which rejects larger files (`mcp-host-server/src/gates/budget.ts`). A declared `listing.icon`/`listing.shareImage`/`listing.video` that passes the `share-assets` checks is left out of the sum; it has its own cap there | `budget` |
 | `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` (template: see below) | `golden` |
 | `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
 | `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath` (`npm audit --omit=dev --audit-level=high --json` instead when the repo has a `package-lock.json` and no `pnpm-lock.yaml`); the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
@@ -532,7 +530,7 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 
 The `manifest` gate short-circuits the pipeline — if it fails, the other five are skipped (their results would be meaningless without a valid manifest).
 
-A successful publish returns the `gates: manifest=pass, budget=pass, …` summary line, then one indented `<gate>: <details>` line per gate. The `budget` line gives the gate's own measurement next to the manifest's self-reported size, e.g. `budget: measured 181.3 KB gz (manifest reported 183.0 KB) / 195 KB budget` (KB = bytes / 1024). Record the measured figure to see how close a build is to its cap before a publish fails. A blocked publish returns every gate's details as JSON instead.
+A successful publish returns the `gates: manifest=pass, budget=pass, …` summary line, then one indented `<gate>: <details>` line per gate. The `budget` line gives the gate's own measurement next to the manifest's self-reported size, e.g. `budget: measured 181.3 KB gz over 24 files, excluding 1 share asset(s) (manifest reported 183.0 KB); largest file assets/index.js 0.4 MiB; no size budget, only GitHub's 100 MiB per-file limit` (KB = bytes / 1024, MiB = bytes / 1048576). The figure is for your records; it never blocks a publish. A file over 100 MiB fails the gate with `<path> is <N> MiB; GitHub rejects files over 100 MiB, so this bundle cannot be pushed`. A blocked publish returns every gate's details as JSON instead.
 
 Every file under `distPath` ships, and the publish never force-adds a file the host `.gitignore` would leave out. If any bundle file matches the host `.gitignore` (for example a `.env`), the publish fails at stage `commit` with `N file(s) under public/projects/<slug>, … match the host .gitignore and would not be committed, so they would 404 in production:` (the path list also names `src/data/standalone-projects.json` when the listing changes) followed by the files (the first 20, then a count of the rest); remove those files from the build and publish again. `node_modules/` path parts under `public/projects/<slug>/` are kept (the host `.gitignore` re-includes `public/projects/**/node_modules/`), so Expo/Metro package assets such as `assets/__node_modules/.pnpm/<pkg>/node_modules/…` ship as-is.
 
@@ -560,9 +558,13 @@ bilko-host__publish_static_project {
 
 `manifest` is rejected as a bypass name — that gate cannot be skipped. An unknown gate name, or a reason under 15 characters, is also rejected before any gate runs. Every accepted bypass is logged to the `publish_overrides` table (slug, gate, reason, admin_email, timestamp).
 
-### App budget table
+### Bundle size
 
-Default budget per app: **200 KB gzipped**, from `DEFAULT_BUDGET_GZ_BYTES` in `mcp-host-server/src/contract/app-budgets.ts`. Per-app overrides live in that same file's `APP_BUDGETS_GZ_BYTES` map — add an entry there (with a one-line comment explaining why) to raise a slug's limit; there's no DB/SQL path for this anymore.
+There is no per-app size budget and no file-count limit (owner decision 2026-11-15: no limits without a concrete host-side reason). The `budget` gate only reports the bundle's size.
+
+One limit stays: no single file may be over 100 MiB (`GITHUB_FILE_LIMIT_BYTES` in `mcp-host-server/src/gates/budget.ts`). The publish pushes the bundle to GitHub, and GitHub rejects any file larger than that.
+
+Card media keep their own caps, checked by the `share-assets` gate: `icon` ≤512 KB, `shareImage` ≤5 MB, `video` ≤8 MB. They exist because the host page loads these files on every project card.
 
 ## Game services
 

@@ -28,7 +28,7 @@ Everything above the first heading is imported from the entry map. This file kee
 
 ## Testing
 
-203 files (2 skipped), 2547 tests (2532 pass, 15 skipped; counted via `pnpm vitest run` on 2026-11-15; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+207 files (2 skipped), 2577 tests (2562 pass, 15 skipped; counted via `pnpm vitest run` on 2026-11-15; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

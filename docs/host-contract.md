@@ -924,7 +924,7 @@ Unlike the relay, a **missing `Origin` header is allowed in production**, becaus
 
 A per-app play currency, separate from Bilko Credits. Today there is one: Three Winds **taels** (app id `threewinds`). The catalog (tiers, packs, cosmetic items, signup grant) is `PLAY_APPS` in `shared/play-currency-catalog.ts`. Code: `server/routes/play-currency.ts`, `server/services/play-currency.ts`, `server/services/apple-iap.ts`, and the play-pack branch of the Stripe webhook in `server/routes/stripe.ts`. Pack prices: ~/Projects/Bilko/docs/commerce.md#play-currency-three-winds-taels.
 
-**Taels can never be transferred, gifted or cashed out.** No route moves taels between users or pays them out. They come only from the signup grant, purchases and winning hands, and go only to losing hands and cosmetic items.
+**Taels can never be transferred, gifted or cashed out.** No route moves taels between users or pays them out. They come only from the signup grant, purchases, free test packs (only while `PLAY_CURRENCY_FREE_PACKS` lists the app) and winning hands, and go only to losing hands and cosmetic items.
 
 ### Endpoints
 
@@ -932,8 +932,8 @@ All take `app` (a key of `PLAY_APPS`) and answer `private, no-store`.
 
 | Endpoint | Auth | Success | Errors |
 |---|---|---|---|
-| `GET /api/play-currency/balance?app=<app>` | Clerk Bearer | 200 `{ balance, held, salesOpen }`. `held` is escrowed in live hands. The first call per user credits the signup grant (5000 taels) once. | 401 · 400 `unknown_app` |
-| `POST /api/play-currency/checkout` | Clerk Bearer | Body `{ app, packId, currency }`, `currency` `usd` or `myr`. 200 `{ url }`: a Stripe Checkout session (`mode: payment`, metadata `play_app`, `play_pack`, `play_email`, `play_currency`; success → `/projects/<app>/?purchase=success`, cancel → `?purchase=cancel`). | 401 · 429 `rate_limited` (10/min/user) · 400 `unknown_app` / `unknown_pack` / `unknown_currency` · 409 `sales_closed` · 503 Stripe unconfigured or error |
+| `GET /api/play-currency/balance?app=<app>` | Clerk Bearer | 200 `{ balance, held, salesOpen, freePacks }`. `held` is escrowed in live hands. `freePacks` is `true` while `PLAY_CURRENCY_FREE_PACKS` lists the app: packs cost nothing, so show $0.00. The first call per user credits the signup grant (5000 taels) once. | 401 · 400 `unknown_app` |
+| `POST /api/play-currency/checkout` | Clerk Bearer | Body `{ app, packId, currency }`, `currency` `usd` or `myr`. 200 `{ url }`: a Stripe Checkout session (`mode: payment`, metadata `play_app`, `play_pack`, `play_email`, `play_currency`; success → `/projects/<app>/?purchase=success`, cancel → `?purchase=cancel`). While `PLAY_CURRENCY_FREE_PACKS` lists the app it answers 200 `{ credited: true, packId, taels, balance }` instead: the pack's taels are credited at once (ledger kind `free_test_pack`), with no payment and no Stripe session, even when sales are open. Every call credits again. | 401 · 429 `rate_limited` (10/min/user) · 400 `unknown_app` / `unknown_pack` / `unknown_currency` · 409 `sales_closed` (never in free mode) · 503 Stripe unconfigured or error |
 | `POST /api/play-currency/apple/transactions` | Clerk Bearer | Body `{ app, signedTransaction }` (StoreKit 2 JWS, ≤ 64 KiB). 200 `{ credited, balance }`. One transaction id credits one account once; a retry returns `credited: false`. | 401 · 429 `rate_limited` (30/min/user) · 400 `unknown_app` / `invalid_transaction` / `transaction_revoked` / `unknown_product` · 409 `already_claimed` (another account owns the transaction) · 503 `apple_iap_unavailable` |
 | `POST /api/play-currency/apple/notifications` | None; the signed payload is the credential | App Store Server Notifications v2. Body `{ signedPayload }`, ≤ 64 KiB. 200 `{ ok: true }`. `REFUND` and `REVOKE` take the purchase's taels back (up to the current balance; the shortfall is recorded). Other types are acknowledged and ignored. | 400 `invalid_notification` · 503 `apple_iap_unavailable` |
 | `GET /api/play-currency/entitlements?app=<app>` | Clerk Bearer | 200 `{ items }`: the caller's cosmetic items. | 401 · 400 `unknown_app` |
@@ -951,7 +951,8 @@ All take `app` (a key of `PLAY_APPS`) and answer `private, no-store`.
 | `APPLE_IAP_BUNDLE_ID` | The iOS app's bundle id. Required for any Apple route. |
 | `APPLE_IAP_ENVIRONMENT` | `Production` or `Sandbox`. Any other value turns Apple off. |
 | `APPLE_IAP_APP_APPLE_ID` | The app's numeric Apple id. Required when the environment is `Production`. |
-| `PLAY_CURRENCY_SALES_OPEN` | Comma-separated app ids whose web checkout is open (for example `threewinds`). Unset means `409 sales_closed` for every app. It gates only `POST /api/play-currency/checkout`; a session paid while sales were open is still credited. |
+| `PLAY_CURRENCY_SALES_OPEN` | Comma-separated app ids whose web checkout is open (for example `threewinds`). Unset means `409 sales_closed` for every app not in free mode. It gates only `POST /api/play-currency/checkout`; a session paid while sales were open is still credited. |
+| `PLAY_CURRENCY_FREE_PACKS` | Temporary live-test switch: comma-separated app ids (for example `threewinds`) whose packs are free. Checkout credits the pack's taels at once (ledger kind `free_test_pack`, ref `free_test:<uuid>`, still 10/min/user) and never creates a Stripe session, even when `PLAY_CURRENCY_SALES_OPEN` lists the app too; balance reports `freePacks: true`. Unset it to end the test. Taels already credited stay, and their ledger kind finds them. Pack prices are unchanged. |
 
 Without a valid `APPLE_IAP_*` set, both Apple routes return `503 apple_iap_unavailable`.
 

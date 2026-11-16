@@ -123,6 +123,7 @@ describe('play-currency Stripe packs', () => {
     delete process.env.STRIPE_WEBHOOK_SECRET;
     delete process.env.PUBLIC_URL;
     delete process.env.PLAY_CURRENCY_SALES_OPEN;
+    delete process.env.PLAY_CURRENCY_FREE_PACKS;
     vi.mocked(requireAuth).mockResolvedValue(USER);
     create.mockResolvedValue({ url: 'https://checkout.stripe.test/s' });
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -207,11 +208,11 @@ describe('play-currency Stripe packs', () => {
       const app = await build();
       const r1 = await app.inject({ method: 'GET', url: '/api/play-currency/balance?app=threewinds' });
       expect(r1.statusCode).toBe(200);
-      expect(r1.json()).toEqual({ balance: 5000, held: 0, salesOpen: false });
+      expect(r1.json()).toEqual({ balance: 5000, held: 0, salesOpen: false, freePacks: false });
       await resetPlayCurrencyRouteState(); // drop the in-process cache: the ledger ref alone must stop a second grant
       process.env.PLAY_CURRENCY_SALES_OPEN = 'threewinds';
       const r2 = await app.inject({ method: 'GET', url: '/api/play-currency/balance?app=threewinds' });
-      expect(r2.json()).toEqual({ balance: 5000, held: 0, salesOpen: true });
+      expect(r2.json()).toEqual({ balance: 5000, held: 0, salesOpen: true, freePacks: false });
       await app.close();
       const grants = creditPlay.mock.calls.filter(c => c[3] === 'signup_grant');
       expect(grants.every(c => c[4] === 'signup_grant' && c[2] === 5000)).toBe(true);

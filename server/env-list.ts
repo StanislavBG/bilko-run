@@ -1,6 +1,6 @@
 /**
  * Owner switches that list app ids in a comma-separated env var
- * (PLAY_CURRENCY_SALES_OPEN, ROOMS_CLOSED). Reads process.env on every call so
+ * (PLAY_CURRENCY_SALES_OPEN, PLAY_CURRENCY_FREE_PACKS, ROOMS_CLOSED). Reads process.env on every call so
  * a changed value takes effect without a restart in tests; entries are
  * trimmed and empty ones ignored.
  */

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../clerk.js';
 import { getStripe } from '../services/stripe.js';
@@ -10,7 +11,8 @@ import { PLAY_APPS, findPack, findPackByAppleProduct, type PlayPack } from '../.
 /**
  * Play-currency (Three Winds taels) balance and Stripe pack checkout.
  * Credits the play ledger only, never Bilko Credits. The webhook branch in
- * routes/stripe.ts does the crediting once the session is paid.
+ * routes/stripe.ts does the crediting once the session is paid, except in the
+ * temporary free-packs test mode, where checkout credits the pack itself.
  */
 
 export type PlayCheckoutCurrency = 'usd' | 'myr';
@@ -26,6 +28,16 @@ export function packPriceMinor(pack: PlayPack, currency: string): number | undef
 /** True when `app` is listed in the comma-separated PLAY_CURRENCY_SALES_OPEN env var. */
 export function playSalesOpen(app: string): boolean {
   return envListIncludes('PLAY_CURRENCY_SALES_OPEN', app);
+}
+
+/**
+ * Temporary live-test switch: true when `app` is listed in the comma-separated
+ * PLAY_CURRENCY_FREE_PACKS env var. While it is, checkout credits the pack's taels
+ * at once with no payment and no Stripe call, under ledger kind 'free_test_pack'.
+ * Remove the switch when the app's test ends.
+ */
+export function playFreePacks(app: string): boolean {
+  return envListIncludes('PLAY_CURRENCY_FREE_PACKS', app);
 }
 
 function knownApp(app: unknown): app is string {
@@ -128,7 +140,7 @@ export function registerPlayCurrencyRoutes(app: FastifyInstance): void {
     }
     const { balance, held } = await getPlayBalance(appId, email);
     reply.header('Cache-Control', 'private, no-store');
-    return { balance, held, salesOpen: playSalesOpen(appId) };
+    return { balance, held, salesOpen: playSalesOpen(appId), freePacks: playFreePacks(appId) };
   });
 
   app.post('/api/play-currency/checkout', async (req, reply) => {
@@ -144,6 +156,13 @@ export function registerPlayCurrencyRoutes(app: FastifyInstance): void {
     const currency = body.currency;
     if (typeof currency !== 'string' || !(CURRENCIES as readonly string[]).includes(currency)) {
       return reply.code(400).send({ error: 'unknown_currency' });
+    }
+    if (playFreePacks(appId)) {
+      // Live-test mode: no payment and no Stripe session, even when sales are open.
+      // A fresh ref per call, so every call credits once; the kind marks test taels.
+      const { credited, balance } = await creditPlay(appId, email, pack.taels, 'free_test_pack', `free_test:${randomUUID()}`);
+      reply.header('Cache-Control', 'private, no-store');
+      return { credited, packId: pack.id, taels: pack.taels, balance };
     }
     if (!playSalesOpen(appId)) return reply.code(409).send({ error: 'sales_closed' });
 

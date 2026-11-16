@@ -6,7 +6,6 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { BLOG_REWRITES, type BlogRewrite } from './blog-rewrites/index.js';
 import { BILKO_CONTACT_EMAIL } from '../shared/bilko-profile.js';
-import { DEFAULT_BUDGET_GZ_BYTES, APP_BUDGETS_GZ_BYTES } from '../mcp-host-server/src/contract/app-budgets.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -212,36 +211,6 @@ export async function initDb(): Promise<void> {
     seedStatements.push({
       sql: 'INSERT OR IGNORE INTO referrer_rules (host_pattern, bucket, source_name) VALUES (?, ?, ?)',
       args: [pattern, bucket, source],
-    });
-  }
-
-  // app_budgets with default 200 KB gz budget for every static-path sibling
-  const STATIC_SLUGS = [
-    'game-academy', 'outdoor-hours', 'local-score', 'stepproof', 'stack-audit',
-    'git-viewer', 'launch-grader', 'ad-scorer', 'headline-grader', 'thread-grader',
-    'email-forge', 'audience-decoder', 'page-roast', 'social-signals-trader',
-  ];
-  for (const slug of STATIC_SLUGS) {
-    seedStatements.push({
-      sql: 'INSERT OR IGNORE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)',
-      args: [slug, DEFAULT_BUDGET_GZ_BYTES, nowSec],
-    });
-  }
-
-  // Apps with a per-slug override in the budget contract (mcp-host-server/src/contract/app-budgets.ts),
-  // e.g. academy's cl100k_base BPE table or escape-velocity's Godot wasm export. These use a
-  // raise-if-lower upsert, not INSERT OR IGNORE: an existing row that is BELOW the real bundle
-  // size makes the publish gate unpassable forever, which is exactly what happened to
-  // session-manager (budget 195 KB vs an already-live 1,072,016-byte bundle — the live bundle
-  // predates the budget row, so the gate could only ever block updates to a bundle it had
-  // already shipped). Raise-only: a budget that has been deliberately tightened below these
-  // defaults is left alone only if it is already above them.
-  for (const [slug, limit] of Object.entries(APP_BUDGETS_GZ_BYTES)) {
-    seedStatements.push({
-      sql: 'INSERT INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?) '
-         + 'ON CONFLICT(slug) DO UPDATE SET max_size_gz_bytes = ?, updated_at = ? '
-         + 'WHERE app_budgets.max_size_gz_bytes < ?',
-      args: [slug, limit, nowSec, limit, nowSec, limit],
     });
   }
 

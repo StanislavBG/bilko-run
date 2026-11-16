@@ -324,11 +324,8 @@ export const MIGRATIONS = [
     notified_at      INTEGER,
     resolved_at      INTEGER
   )`,
-  `CREATE TABLE IF NOT EXISTS app_budgets (
-    slug              TEXT PRIMARY KEY,
-    max_size_gz_bytes INTEGER NOT NULL,
-    updated_at        INTEGER NOT NULL
-  )`,
+  // Retired 2026-11-15: per-app bundle budgets were removed (owner decision); nothing read this table. No-op once gone.
+  `DROP TABLE IF EXISTS app_budgets`,
   `CREATE TABLE IF NOT EXISTS publish_overrides (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     slug         TEXT NOT NULL,

@@ -18,7 +18,7 @@ async function snapshot() {
   const tables = (await c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")).rows
     .map(r => String(r.name));
   const data: Record<string, unknown[]> = {};
-  for (const t of ['referrer_rules', 'app_budgets', 'app_spend_ceilings', 'secret_metadata', 'blog_posts', 'roast_history', 'data_migrations']) {
+  for (const t of ['referrer_rules', 'app_spend_ceilings', 'secret_metadata', 'blog_posts', 'roast_history', 'data_migrations']) {
     if (!tables.includes(t)) continue;
     const rows = (await c.execute(`SELECT * FROM ${t} ORDER BY 1, 2`)).rows.map(r => ({ ...r }));
     // timestamps seeded with "now" legitimately differ between boots
@@ -62,4 +62,23 @@ describe('initDb boot cost', () => {
     expect(snaps[0].data.referrer_rules.length).toBeGreaterThan(0);
     expect(snaps[0].data.secret_metadata.length).toBe(10);
   });
+});
+
+describe('initDb drops the retired app_budgets table', () => {
+  it('removes a seeded app_budgets table and a second boot still succeeds', async () => {
+    const c = getClient();
+    await c.execute('CREATE TABLE IF NOT EXISTS app_budgets (slug TEXT PRIMARY KEY, max_size_gz_bytes INTEGER NOT NULL, updated_at INTEGER NOT NULL)');
+    await c.execute({ sql: 'INSERT OR REPLACE INTO app_budgets (slug, max_size_gz_bytes, updated_at) VALUES (?, ?, ?)', args: ['seeded-app', 200_000, 1] });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await initDb();
+      const gone = await c.execute({ sql: "SELECT name FROM sqlite_master WHERE type='table' AND name = ?", args: ['app_budgets'] });
+      expect(gone.rows.length).toBe(0);
+      await expect(initDb()).resolves.not.toThrow();
+      const still = await c.execute({ sql: "SELECT name FROM sqlite_master WHERE type='table' AND name = ?", args: ['app_budgets'] });
+      expect(still.rows.length).toBe(0);
+    } finally {
+      log.mockRestore();
+    }
+  }, 60_000);
 });

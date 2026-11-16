@@ -36,14 +36,8 @@ export async function mcpAll(sql, args = []) {
 }
 export async function ensureGateTables() {
     const db = getHostDb();
-    await db.execute({
-        sql: `CREATE TABLE IF NOT EXISTS app_budgets (
-      slug              TEXT PRIMARY KEY,
-      max_size_gz_bytes INTEGER NOT NULL,
-      updated_at        INTEGER NOT NULL
-    )`,
-        args: [],
-    });
+    // Retired 2026-11-15: per-app bundle budgets were removed (owner decision); nothing reads app_budgets.
+    await db.execute({ sql: 'DROP TABLE IF EXISTS app_budgets', args: [] });
     await db.execute({
         sql: `CREATE TABLE IF NOT EXISTS publish_overrides (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,

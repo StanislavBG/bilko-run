@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "slug": "game-academy",
   "version": "0.1.0-alpha.1",
-  "builtAt": "2026-11-15T23:45:57.831Z",
-  "gitSha": "09012e6",
-  "gitBranch": "main",
+  "builtAt": "2026-11-16T01:12:41.302Z",
+  "gitSha": "244fec6",
+  "gitBranch": "sm-job/959-skyline-publish-live",
   "hostKit": {
     "version": "0.0.0"
   },
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 2987255,
+    "sizeBytesGz": 2987898,
     "fileCount": 72
   }
 }

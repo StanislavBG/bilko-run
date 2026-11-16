@@ -191,7 +191,7 @@ upgrade-insecure-requests;   (only when enforced)
 - `style-src-attr 'unsafe-inline'` covers React `style={{}}` attributes, which a nonce cannot cover; `<style>` elements stay nonce-gated.
 - Blog videos (`/blog-videos/<slug>/`) skip this policy and get `BLOG_VIDEO_CSP`: always enforced, `default-src 'none'`, inline script and style, `connect-src 'none'`, `frame-ancestors 'self'`, `sandbox allow-scripts`.
 
-A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook injects `nonce="..."` onto every `<script>` and `<style>` tag in HTML payloads (strings and streams, which it buffers), plus a `<meta name="csp-nonce">` for host-kit runtime CSS. HTML sent as an attachment (the Field Manual offline edition) passes through untouched.
+A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook injects `nonce="..."` onto every `<script>` and `<style>` tag in HTML payloads (strings and streams, which it buffers), plus a `<meta name="csp-nonce">` for host-kit runtime CSS. It also stamps every script preload `<link>` (`rel="preload" as="script"` and `rel="modulepreload"`) that has no nonce. With `'strict-dynamic'`, a script preload the parser starts needs the nonce even when it is same-origin. Expo writes five per page, and each one filed a report on every Three Winds view (2026-11-15). Link text inside inline `<script>` bodies is left alone. HTML sent as an attachment (the Field Manual offline edition) passes through untouched.
 
 `'wasm-unsafe-eval'` in `script-src` allows WebAssembly compilation (not JS `eval`) for Godot/WebAssembly apps like escape-velocity and LocalScore's WebGPU pipeline.
 
@@ -201,7 +201,7 @@ A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send
 
 ### Violation reporting
 
-Browsers POST violations to `/api/security/csp-report`. Reports are persisted in the `csp_violations` table (columns: `blocked_uri`, `violated_dir`, `document_uri`, `source_file`, `line_number`, `user_agent`, `created_at`). The endpoint is rate-limited to 10 req/min/IP, and deduplicated to one row per distinct (directive, blocked URI, document) per hour. Inspect violations with the admin SQL view or directly:
+Browsers POST violations to `/api/security/csp-report`. Reports are persisted in the `csp_violations` table (columns: `blocked_uri`, `violated_dir`, `document_uri`, `source_file`, `line_number`, `user_agent`, `created_at`). The endpoint keeps one row per distinct (directive, blocked URI, document) per hour and at most 10 new rows per IP per minute. A repeat of a report already on file does not count toward that limit. Every report gets `204`, including a dropped one: no browser acts on the status, and a `429` logged `Failed to load resource` in the visitor's console. Inspect violations with the admin SQL view or directly:
 
 ```sql
 SELECT blocked_uri, violated_dir, document_uri, COUNT(*) as n

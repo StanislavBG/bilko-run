@@ -102,12 +102,52 @@ function buildCsp(nonce: string, staticProject: boolean, enforced: boolean): str
   return directives.join('; ');
 }
 
-// In-memory rate limiter for the CSP report endpoint (10 req/min/IP).
+// `<link>` tags whose fetch CSP checks against script-src. With 'strict-dynamic'
+// a browser ignores 'self' and the host allowlist for a script fetch the parser
+// started, so a script preload without the nonce is a violation even when it is
+// same-origin. Expo writes five `<link rel="preload" as="script">` per page, and
+// on 2026-11-15 each one filed a report on every Three Winds page view. Module
+// preloads get the nonce too. The spec marks them not parser-inserted, so
+// Chromium reports none today, but the nonce costs nothing and does not depend
+// on each browser getting that detail right.
+//
+// Whole inline <script> elements are matched first and returned untouched, so
+// `<link ...>` text inside JavaScript is never rewritten.
+const SCRIPT_ELEMENT_OR_LINK_TAG = /<script\b[\s\S]*?<\/script\s*>|<link\b(?:"[^"]*"|'[^']*'|[^"'>])*>/gi;
+const TAG_ATTRIBUTE = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+
+function linkAttributes(tag: string): Map<string, string> {
+  const attrs = new Map<string, string>();
+  for (const m of tag.slice('<link'.length, -1).matchAll(TAG_ATTRIBUTE)) {
+    const name = m[1].toLowerCase();
+    // The first occurrence wins, as in the HTML parser.
+    if (!attrs.has(name)) attrs.set(name, m[2] ?? m[3] ?? m[4] ?? '');
+  }
+  return attrs;
+}
+
+function isScriptPreload(attrs: Map<string, string>): boolean {
+  const rel = (attrs.get('rel') ?? '').toLowerCase().split(/\s+/);
+  if (rel.includes('modulepreload')) return true;
+  return rel.includes('preload') && (attrs.get('as') ?? '').trim().toLowerCase() === 'script';
+}
+
+export function nonceScriptPreloads(html: string, nonce: string): string {
+  return html.replace(SCRIPT_ELEMENT_OR_LINK_TAG, (tag) => {
+    if (!/^<link/i.test(tag)) return tag;
+    const attrs = linkAttributes(tag);
+    if (attrs.has('nonce') || !isScriptPreload(attrs)) return tag;
+    return `${tag.slice(0, '<link'.length)} nonce="${nonce}"${tag.slice('<link'.length)}`;
+  });
+}
+
+// In-memory rate limiter for the CSP report endpoint: at most 10 new rows per
+// minute per IP.
 //
 // Browsers fire one report per distinct violation per page load and we cannot
 // turn that off from the server — the only real lever is not violating the
 // policy. This limiter plus the fingerprint dedupe below exist so that if the
-// policy regresses again, the blast radius is a rejected POST rather than
+// policy regresses again, the blast radius is a dropped report rather than
 // thousands of DB writes. 10/min is ample: a correct policy reports ~0, and a
 // first-time-broken one only needs a handful of samples to be diagnosable.
 const _cspReportCounts = new Map<string, { count: number; windowStart: number }>();
@@ -120,10 +160,14 @@ const CSP_DEDUPE_WINDOW_MS = 60 * 60_000;
 const CSP_DEDUPE_MAX_KEYS = 500;
 const _cspSeen = new Map<string, number>();
 
-function shouldPersistViolation(fingerprint: string): boolean {
+// A repeat of a fact already on file is dropped before the rate check, so it
+// spends none of the IP's budget. Otherwise a page that reports the same few
+// violations on every view would crowd out a new violation from that visitor.
+function shouldPersistViolation(fingerprint: string, ip: string): boolean {
   const now = Date.now();
   const last = _cspSeen.get(fingerprint);
   if (last !== undefined && now - last < CSP_DEDUPE_WINDOW_MS) return false;
+  if (!checkCspRate(ip)) return false;
   if (_cspSeen.size >= CSP_DEDUPE_MAX_KEYS) {
     for (const [k, t] of _cspSeen) {
       if (now - t >= CSP_DEDUPE_WINDOW_MS) _cspSeen.delete(k);
@@ -175,7 +219,8 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
     reply.header(cspHeader, buildCsp(nonce, isStaticProjectPath(req.url), enforced));
   });
 
-  // Inject the per-request nonce onto every <script> and <style> tag in HTML responses.
+  // Inject the per-request nonce onto every <script> and <style> tag in HTML
+  // responses, and onto every script preload <link> (see nonceScriptPreloads).
   // Also injects a <meta name="csp-nonce"> for host-kit runtime CSS (e.g. emotion).
   //
   // Streams are buffered rather than skipped. @fastify/static serves the SPA
@@ -216,15 +261,21 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
     // hand this body to a second visitor whose CSP header carries a different
     // one. @fastify/static's own Cache-Control for HTML is set before this.
     reply.header('cache-control', 'private, no-store');
-    return html
-      .replace(/<script(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`)
-      .replace(/<style(?![^>]*\bnonce=)/gi, `<style nonce="${nonce}"`)
-      .replace(/(<head[^>]*>)/i, `$1<meta name="csp-nonce" content="${nonce}">`);
+    return nonceScriptPreloads(
+      html
+        .replace(/<script(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`)
+        .replace(/<style(?![^>]*\bnonce=)/gi, `<style nonce="${nonce}"`)
+        .replace(/(<head[^>]*>)/i, `$1<meta name="csp-nonce" content="${nonce}">`),
+      nonce,
+    );
   });
 
+  // Every report gets a 204, including one this endpoint drops. No browser
+  // acts on the status, but a 4xx or 5xx on a report logs "Failed to load
+  // resource" in the visitor's console. The old 429 past the rate limit put five
+  // of those on each Three Winds page from the third view in a minute
+  // (2026-11-15).
   app.post('/api/security/csp-report', async (req, reply) => {
-    const ip = req.ip ?? 'unknown';
-    if (!checkCspRate(ip)) return reply.code(429).send();
     const body = req.body as any;
     const r = body?.['csp-report'] ?? body ?? {};
     const fingerprint = [
@@ -232,18 +283,24 @@ export function registerSecurityHeaders(app: FastifyInstance): void {
       String(r['blocked-uri'] ?? ''),
       String(r['document-uri'] ?? ''),
     ].join('|');
-    if (!shouldPersistViolation(fingerprint)) return reply.code(204).send();
-    await dbRun(
-      `INSERT INTO csp_violations (blocked_uri, violated_dir, document_uri, source_file, line_number, user_agent, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      String(r['blocked-uri'] ?? '').slice(0, 500),
-      String(r['violated-directive'] ?? '').slice(0, 200),
-      String(r['document-uri'] ?? '').slice(0, 500),
-      String(r['source-file'] ?? '').slice(0, 500),
-      Number.isFinite(Number(r['line-number'])) ? Number(r['line-number']) : null,
-      String(req.headers['user-agent'] ?? '').slice(0, 500),
-      Math.floor(Date.now() / 1000),
-    );
+    if (!shouldPersistViolation(fingerprint, req.ip ?? 'unknown')) return reply.code(204).send();
+    try {
+      await dbRun(
+        `INSERT INTO csp_violations (blocked_uri, violated_dir, document_uri, source_file, line_number, user_agent, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        String(r['blocked-uri'] ?? '').slice(0, 500),
+        String(r['violated-directive'] ?? '').slice(0, 200),
+        String(r['document-uri'] ?? '').slice(0, 500),
+        String(r['source-file'] ?? '').slice(0, 500),
+        Number.isFinite(Number(r['line-number'])) ? Number(r['line-number']) : null,
+        String(req.headers['user-agent'] ?? '').slice(0, 500),
+        Math.floor(Date.now() / 1000),
+      );
+    } catch (err) {
+      // Not on file, so let the next copy of this report try again.
+      _cspSeen.delete(fingerprint);
+      console.error(`[error] ${req.method} ${req.url}:`, err);
+    }
     return reply.code(204).send();
   });
 }

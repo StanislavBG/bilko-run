@@ -769,7 +769,7 @@
   {
     "slug": "human-for-hire",
     "name": "Human For Hire",
-    "tagline": "Book a free hour with Bilko, then Consultation, Architecture or Design at $100 / hour.",
+    "tagline": "Talk through your AI project with Bilko. The first hour is free.",
     "category": "Service",
     "status": "live",
     "year": 2026,
@@ -784,17 +784,19 @@
     ],
     "public": true,
     "listing": {
-      "detail": "Founders and small teams get a free hour with Bilko to talk through an AI project. After that, Consultation, Architecture and Design are $100 / hour, with a short written plan and an hour estimate first.",
+      "detail": "Founders and small teams book a free hour with Bilko to talk through an AI project: a new idea, an existing repo, or something that's broken. It's a video call, no card needed. Afterwards Bilko sends a short plan with an honest hours estimate, and nothing starts until you say yes.",
       "audience": "Founders and small teams planning or building with AI agents",
       "talkingPoints": [
-        "The first hour is free, with no card needed.",
-        "Consultation, Architecture and Design are $100 / hour after that.",
-        "After the free hour Bilko sends a short plan with an honest estimate of the hours."
+        "Stuck on an AI project? Book a free hour and talk it through with Bilko.",
+        "Bring a new idea, an existing repo or something that's broken. The first hour is free, no card needed.",
+        "After the call Bilko sends a short plan with an honest hours estimate. Nothing starts until you say yes."
       ],
       "offering": "service",
       "pricing": "freemium",
-      "callToAction": "Free first hour, then $100/h. Book at bilko.run/book.",
+      "callToAction": "Wanna chat? Sign up for a free consultation at bilko.run/book. The first hour is free.",
       "avoidClaims": [
+        "Do not state an hourly rate or any price.",
+        "Do not say the paid work after the first hour is free.",
         "Do not promise results, delivery dates or a fixed project price."
       ]
     }

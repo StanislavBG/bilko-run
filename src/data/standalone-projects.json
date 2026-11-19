@@ -775,7 +775,8 @@
     "year": 2026,
     "host": {
       "kind": "external-url",
-      "url": "https://bilko.run/book"
+      "url": "https://bilko.run/book",
+      "localPath": "~/Self"
     },
     "tags": [
       "consulting",

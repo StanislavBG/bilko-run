@@ -12,7 +12,8 @@
  * commit count, and commits the resulting JSON. The page just imports the JSON.
  *
  * Slugs come from two sources:
- *   - standalone-projects.json entries that carry a `localPath`
+ *   - standalone-projects.json entries that carry a `localPath`, except slugs
+ *     in NO_COMMIT_SIGNAL (bound only for card edits), which are skipped
  *   - the EXTRA map below for packages / special subdir-scoped cards
  *
  * Complexity: O(n) git invocations, n = number of mapped slugs (~25). Trivial.
@@ -48,6 +49,13 @@ const EXTRA: Record<string, Source> = {
   'session-manager': { path: '~/Projects/session-manager' },
 };
 
+// Slugs whose host.localPath is bound only so that repo can edit the card
+// (update_project_listing), not because the repo is the card's code. The
+// repo's history would rank the card on unrelated work, so they get no row.
+// human-for-hire -> ~/Self: Self owns the offer and the booking mailer;
+// the /book page itself is Bilko's code.
+const NO_COMMIT_SIGNAL = new Set<string>(['human-for-hire']);
+
 function lastCommitISO(src: Source): string | null {
   const repo = expandTilde(src.path);
   if (!existsSync(join(repo, '.git'))) return null;
@@ -82,7 +90,7 @@ const standalone = JSON.parse(
 
 const sources = new Map<string, Source>();
 for (const p of standalone) {
-  if (p.host?.localPath) sources.set(p.slug, { path: p.host.localPath });
+  if (p.host?.localPath && !NO_COMMIT_SIGNAL.has(p.slug)) sources.set(p.slug, { path: p.host.localPath });
 }
 // 2. Layer the extras (packages + bilko-host). These win on slug collisions.
 for (const [slug, src] of Object.entries(EXTRA)) sources.set(slug, src);

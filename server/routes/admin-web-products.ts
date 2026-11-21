@@ -15,7 +15,16 @@ const DAY_MS = 86400000;
 const FE_AUTOMATED = `(COALESCE(fe.is_bot, 0) = 1
   OR (fe.visitor_id IS NOT NULL AND EXISTS (SELECT 1 FROM page_views pv WHERE pv.visitor_id = fe.visitor_id AND pv.is_bot = 1))
   OR (fe.session_id IS NOT NULL AND EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = fe.session_id AND pv.is_bot = 1)))`;
-const SPLIT_COLS = `COUNT(*) AS n, COALESCE(SUM(CASE WHEN ${FE_AUTOMATED} THEN 1 ELSE 0 END), 0) AS automated`;
+/**
+ * funnel_events.is_bot defaulted to 0 on every checkout_start until commit 7adc431b went live (~6:38 PM PST
+ * 2026-11-20). Unflagged rows created before this UTC time (the created_at format) were never classified, so they
+ * count as unlabeled, not human. Always passed as a bound parameter.
+ */
+export const CHECKOUT_LABELS_SINCE = '2026-11-21 02:39:00';
+/** Takes one bound arg, CHECKOUT_LABELS_SINCE, which comes before every WHERE arg. */
+const SPLIT_COLS = `COUNT(*) AS n, COALESCE(SUM(CASE WHEN ${FE_AUTOMATED} THEN 1 ELSE 0 END), 0) AS automated,
+  COALESCE(SUM(CASE WHEN NOT ${FE_AUTOMATED} AND fe.created_at < ? THEN 1 ELSE 0 END), 0) AS unlabeled`;
+type SplitRow = { n: number; automated: number; unlabeled: number };
 
 // Same owner-signal columns /api/admin/traffic uses on page_hits.
 const HITS_MINE_COLS: MineColumns = { isAdmin: 'is_admin', isInternal: 'is_internal', hashId: 'visitor_id', cookieId: 'client_vid' };
@@ -71,10 +80,10 @@ export function registerAdminWebProductRoutes(
         dbGet<{ views: number; visitors: number }>(
           `SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM page_views
            WHERE date >= ? AND ${page.sql} AND COALESCE(is_bot, 0) = 0${selfSql}`, sinceDate, ...page.args),
-        dbGet<{ n: number; automated: number }>(
+        dbGet<SplitRow>(
           `SELECT ${SPLIT_COLS} FROM funnel_events fe
            WHERE fe.event = 'checkout_start' AND fe.tool = ? AND date(fe.created_at) >= ?${feSelfSql}`,
-          p.slug, sinceDate),
+          CHECKOUT_LABELS_SINCE, p.slug, sinceDate),
         dbGet<{ n: number; revenue: number }>(
           `SELECT COUNT(*) AS n, COALESCE(SUM(amount_total), 0) AS revenue FROM web_product_orders WHERE slug = ? AND created_at >= ?${NOT_TEST}`,
           p.slug, sinceMs),
@@ -127,8 +136,9 @@ export function registerAdminWebProductRoutes(
         views: views?.views ?? 0,
         uniqueVisitors: views?.visitors ?? 0,
         checkoutStarts: checkouts?.n ?? 0,
-        checkoutStartsHuman: (checkouts?.n ?? 0) - (checkouts?.automated ?? 0),
+        checkoutStartsHuman: (checkouts?.n ?? 0) - (checkouts?.automated ?? 0) - (checkouts?.unlabeled ?? 0),
         checkoutStartsAutomated: checkouts?.automated ?? 0,
+        checkoutStartsUnlabeled: checkouts?.unlabeled ?? 0,
         checkoutsExpired: outcome('checkout_expired'),
         checkoutsRecovered: outcome('checkout_recovered'),
         orders: orders?.n ?? 0,
@@ -153,10 +163,14 @@ export function registerAdminWebProductRoutes(
     }
 
     // Every checkout_start in the window, any tool (the /buy agent offers included).
-    const all = await dbGet<{ n: number; automated: number }>(
+    const all = await dbGet<SplitRow>(
       `SELECT ${SPLIT_COLS} FROM funnel_events fe
-       WHERE fe.event = 'checkout_start' AND date(fe.created_at) >= ?${feSelfSql}`, sinceDate);
-    const checkoutStartsAll = { human: (all?.n ?? 0) - (all?.automated ?? 0), automated: all?.automated ?? 0 };
+       WHERE fe.event = 'checkout_start' AND date(fe.created_at) >= ?${feSelfSql}`, CHECKOUT_LABELS_SINCE, sinceDate);
+    const checkoutStartsAll = {
+      human: (all?.n ?? 0) - (all?.automated ?? 0) - (all?.unlabeled ?? 0),
+      automated: all?.automated ?? 0,
+      unlabeled: all?.unlabeled ?? 0,
+    };
 
     // /coffee is a 302 to the Stripe Payment Link, recorded in page_hits with a visitor class.
     const mine = excludeSelf ? mineExclusionSql(await loadOwnerIds(), HITS_MINE_COLS) : { sql: '', args: [] as string[] };

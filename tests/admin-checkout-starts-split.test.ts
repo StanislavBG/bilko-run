@@ -27,7 +27,12 @@ const DAY = 86400000;
 const dayStr = (ago: number) => new Date(Date.now() - ago * DAY).toISOString().slice(0, 10);
 const ts = (ago: number) => `${dayStr(ago)} 12:00:00`;
 
+// Pin the clock (Date only) after CHECKOUT_LABELS_SINCE so the relative-date rows below are all labeled.
+const NOW = Date.parse('2026-11-25T12:00:00Z');
+
 beforeAll(async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
   await initDb();
   await app.ready();
 });
@@ -89,7 +94,7 @@ describe('GET /api/admin/web-products checkout-start split', () => {
 
   it('splits every checkout_start in the window and the /coffee redirects', async () => {
     const body = (await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7' })).json();
-    expect(body.checkoutStartsAll).toEqual({ human: 3, automated: 4 });
+    expect(body.checkoutStartsAll).toEqual({ human: 3, automated: 4, unlabeled: 0 });
     expect(body.coffeeRedirects).toEqual({ human: 2, automated: 3 });
   });
 
@@ -99,7 +104,57 @@ describe('GET /api/admin/web-products checkout-start split', () => {
     expect(p.checkoutStarts).toBe(6);
     expect(p.checkoutStartsHuman).toBe(3);
     expect(p.checkoutStartsAutomated).toBe(3);
-    expect(body.checkoutStartsAll).toEqual({ human: 4, automated: 4 });
+    expect(body.checkoutStartsAll).toEqual({ human: 4, automated: 4, unlabeled: 0 });
     expect(body.coffeeRedirects).toEqual({ human: 3, automated: 3 });
+  });
+
+  describe('rows before CHECKOUT_LABELS_SINCE (2026-11-21 02:39:00 UTC)', () => {
+    const feAt = (createdAt: string, visitor: string | null, bot = 0) =>
+      dbRun('INSERT INTO funnel_events (event, tool, created_at, visitor_id, is_bot) VALUES (?, ?, ?, ?, ?)',
+        'checkout_start', 'split-skills', createdAt, visitor, bot);
+
+    it('counts an unflagged row before the cutoff as unlabeled, not human', async () => {
+      await feAt('2026-11-21 02:38:59', 'early-v');
+      const body = (await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7' })).json();
+      const p = body.products[0];
+      expect(p.checkoutStarts).toBe(6);
+      expect(p.checkoutStartsHuman).toBe(2);
+      expect(p.checkoutStartsAutomated).toBe(3);
+      expect(p.checkoutStartsUnlabeled).toBe(1);
+      expect(body.checkoutStartsAll).toEqual({ human: 3, automated: 4, unlabeled: 1 });
+    });
+
+    it('counts a pre-cutoff row whose visitor has a bot page view as automated', async () => {
+      await feAt('2026-11-20 12:00:00', 'bot-v');
+      const p = (await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7' })).json().products[0];
+      expect(p.checkoutStartsAutomated).toBe(4);
+      expect(p.checkoutStartsUnlabeled).toBe(0);
+      expect(p.checkoutStartsHuman).toBe(2);
+    });
+
+    it('counts an unflagged row after the cutoff as human', async () => {
+      await feAt('2026-11-21 02:39:00', 'late-v');
+      const p = (await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7' })).json().products[0];
+      expect(p.checkoutStartsHuman).toBe(3);
+      expect(p.checkoutStartsUnlabeled).toBe(0);
+    });
+
+    it('human + automated + unlabeled sums to checkoutStarts, per product and overall', async () => {
+      await feAt('2026-11-20 12:00:00', 'early-v');
+      await feAt('2026-11-20 13:00:00', null);
+      await feAt('2026-11-20 14:00:00', 'bot-v');
+      await feAt('2026-11-20 15:00:00', 'z', 1);
+      await feAt('2026-11-22 12:00:00', 'late-v');
+      const body = (await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7' })).json();
+      const p = body.products[0];
+      expect(p.checkoutStarts).toBe(10);
+      expect(p.checkoutStartsUnlabeled).toBe(2);
+      expect(p.checkoutStartsAutomated).toBe(5);
+      expect(p.checkoutStartsHuman).toBe(3);
+      expect(p.checkoutStartsHuman + p.checkoutStartsAutomated + p.checkoutStartsUnlabeled).toBe(p.checkoutStarts);
+      const all = body.checkoutStartsAll;
+      expect(all).toEqual({ human: 4, automated: 6, unlabeled: 2 });
+      expect(all.human + all.automated + all.unlabeled).toBe(12);
+    });
   });
 });

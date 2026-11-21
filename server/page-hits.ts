@@ -215,11 +215,53 @@ function isBurst(vid: string, ts: number): boolean {
   return kept.length >= BURST_HITS;
 }
 
+// Click bursts: one session clicking two different targets (href, label) on the
+// same page path within CLICK_BURST_WINDOW_MS is a script (no person clicks two
+// CTAs at once). It reuses the probe mark on the visitor_id. Never blocks a click.
+export const CLICK_BURST_WINDOW_MS = 300;
+const CLICK_BURST_MAX_KEYS = 5000;
+const CLICK_BURST_PER_SESSION = 8;
+interface RecentClick { ts: number; path: string; href: string | null; label: string | null }
+let recentClicks = new Map<string, RecentClick[]>(); // session id -> recent clicks
+
+/**
+ * Records a click for `sessionId`; when it is a different target than another
+ * click on the same path at most CLICK_BURST_WINDOW_MS earlier, marks `visitorId`
+ * (stableVisitorId) as a script, 24h either side. Returns true when it marked.
+ */
+export function recordClickForBurst(
+  sessionId: string,
+  visitorId: string,
+  click: RecentClick,
+): boolean {
+  const since = click.ts - CLICK_BURST_WINDOW_MS;
+  let list = recentClicks.get(sessionId);
+  if (!list) {
+    if (recentClicks.size >= CLICK_BURST_MAX_KEYS) {
+      for (const [s, l] of recentClicks) {
+        if (l.every((c) => c.ts < since)) recentClicks.delete(s);
+      }
+      if (recentClicks.size >= CLICK_BURST_MAX_KEYS) {
+        const oldest = recentClicks.keys().next().value;
+        if (oldest !== undefined) recentClicks.delete(oldest);
+      }
+    }
+    list = [];
+  }
+  const kept = list.filter((c) => c.ts >= since);
+  const burst = kept.some((c) => c.path === click.path && (c.href !== click.href || c.label !== click.label));
+  kept.push(click);
+  recentClicks.set(sessionId, kept.slice(-CLICK_BURST_PER_SESSION));
+  if (burst) markProbeVisitor(visitorId, click.ts);
+  return burst;
+}
+
 /** Test hook: forget every probe-visitor mark and the burst tracking. */
 export function resetProbeVisitorCache(): void {
   probeVisitors = new Map<string, number>();
   pendingProbeBackfill = new Map<string, number>();
   burstHits = new Map<string, number[]>();
+  recentClicks = new Map<string, RecentClick[]>();
 }
 
 function probeBackfillStmt(vid: string, firstProbeTs: number): InStatement {

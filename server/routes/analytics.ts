@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBotRequest } from '../services/analytics.js';
-import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, markAutomationVisitor, isAutomationVisitor } from '../page-hits.js';
+import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, markAutomationVisitor, isAutomationVisitor, recordClickForBurst } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
 import { internalFlag } from '../internal-traffic.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
@@ -304,6 +304,9 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const ua = String(req.headers['user-agent'] ?? '').slice(0, 300);
       const nowMs = Date.now();
       const date = new Date(nowMs).toISOString().slice(0, 10);
+      const stableVid = stableVisitorId(ip ?? '', String(req.headers['user-agent'] ?? ''));
+      // Two different targets on one path within 300 ms from one session: a script.
+      if (clickSid) recordClickForBurst(clickSid, stableVid, { ts: nowMs, path, href, label });
       // body.webdriver is the beacon's navigator.webdriver (boolean true only); a
       // visitor already recorded in automation_visitors is a bot on every click too.
       const bot = isBotRequest(req.headers) || body?.webdriver === true || await isAutomationVisitor(clientVid);
@@ -319,7 +322,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         nowMs, date, path, slugFromPath(path), tag, elId, label, href,
         visitorHash(date, ip ?? '', ua), bot ? 1 : 0,
-        ip, stableVisitorId(ip ?? '', String(req.headers['user-agent'] ?? '')), userEmail, isAdmin,
+        ip, stableVid, userEmail, isAdmin,
         clickSid, clientVid, trackName, internalFlag(req),
       );
     } catch { /* never fail */ }

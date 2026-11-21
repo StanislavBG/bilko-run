@@ -175,11 +175,13 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     if (!url) return unavailable();
 
     try {
+      // Label only, same rule as POST /api/web-products/:slug/checkout.
+      const isBot = classifyVisitor(String(req.headers['user-agent'] ?? '')) === 'human' ? 0 : 1;
       await dbRun(
-        'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin, is_internal) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin, is_internal, is_bot) VALUES (?, ?, ?, ?, ?, ?, ?)',
         'checkout_start', hashIp(req.ip), offer.id,
         JSON.stringify({ via: 'agent-buy', offer: offer.id, checkout_session_id: session.id }), ownerIp ? 1 : 0,
-        internalFlag(req),
+        internalFlag(req), isBot,
       );
     } catch (err: any) {
       console.error('[agent-buy] funnel insert failed:', err?.message);

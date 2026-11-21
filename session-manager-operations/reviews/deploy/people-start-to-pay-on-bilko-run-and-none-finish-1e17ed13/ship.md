@@ -27,8 +27,12 @@ Remote: `origin` = https://github.com/StanislavBG/bilko-run.git (never content-g
 
 ## Push
 
-PENDING
+- 6:36 PM PST 2026-11-20: `git push origin HEAD:main` → `4bd58cff..841f464b`. Pushed SHA: 841f464b32bb303803ebd56e82eb807e50879b42 (fast-forward). PASS
 
 ## Deploy check
 
-PENDING
+- Poll of https://bilko.run/api/health (curl --max-time 15, 30 s apart, max 20 tries): try 6 at 6:39 PM PST showed uptime 37 s, 154 s after the push (tries 1-5 showed the old ~113,900 s process). PASS
+- https://bilko.run/ 200, https://bilko.run/api/health 200. PASS
+- This record's final update is pushed as a follow-up commit (docs only, no redeploy needed).
+
+SHIP: PASS

@@ -15,6 +15,8 @@ interface WebProductEntry {
   views: number;
   uniqueVisitors: number;
   checkoutStarts: number;
+  checkoutStartsHuman: number;
+  checkoutStartsAutomated: number;
   checkoutsExpired: number;
   checkoutsRecovered: number;
   orders: number;
@@ -34,10 +36,21 @@ interface WebProductDaily {
   downloads: number;
 }
 
+interface HumanAutomated {
+  human: number;
+  automated: number;
+}
+
 interface WebProductsResponse {
   days: number;
   products: WebProductEntry[];
   daily: WebProductDaily[];
+  checkoutStartsAll: HumanAutomated;
+  coffeeRedirects: HumanAutomated;
+}
+
+function splitLabel(s: HumanAutomated): string {
+  return `human ${s.human} · automated ${s.automated}`;
 }
 
 const PT_FORMAT = new Intl.DateTimeFormat('en-US', {
@@ -63,9 +76,12 @@ function dollars(cents: number): string {
 }
 
 function ProductCard({ p }: { p: WebProductEntry }) {
-  const steps: Array<{ label: string; value: number; conv: string | null }> = [
+  const steps: Array<{ label: string; value: number; conv: string | null; split?: string }> = [
     { label: 'Views', value: p.views, conv: null },
-    { label: 'Checkout starts', value: p.checkoutStarts, conv: pct(p.checkoutStarts, p.views) },
+    {
+      label: 'Checkout starts', value: p.checkoutStarts, conv: pct(p.checkoutStarts, p.views),
+      split: splitLabel({ human: p.checkoutStartsHuman, automated: p.checkoutStartsAutomated }),
+    },
     { label: 'Orders', value: p.orders, conv: pct(p.orders, p.checkoutStarts) },
     { label: 'Downloads', value: p.downloads, conv: pct(p.downloads, p.orders) },
   ];
@@ -99,6 +115,7 @@ function ProductCard({ p }: { p: WebProductEntry }) {
             <div className="flex-1 bg-warm-50 rounded-lg p-3 text-center">
               <div className="text-xl font-extrabold text-warm-900">{s.value}</div>
               <div className="text-xs font-semibold text-warm-500">{s.label}</div>
+              {s.split && <div className="text-[11px] text-warm-400">{s.split}</div>}
             </div>
           </div>
         ))}
@@ -128,6 +145,12 @@ export function WebProductsTab({ days, excludeSelf }: TabProps) {
     <div className="space-y-6">
       <p className="text-xs text-warm-500">
         Stripe test-mode orders are never counted. {excludeSelf ? 'Owner views and checkout starts are excluded.' : 'Owner traffic is included.'}
+      </p>
+      <p className="text-sm text-warm-700">
+        All checkout starts: <span className="font-bold text-warm-900">{data.checkoutStartsAll.human + data.checkoutStartsAll.automated}</span>{' '}
+        ({splitLabel(data.checkoutStartsAll)}) · /coffee redirects:{' '}
+        <span className="font-bold text-warm-900">{data.coffeeRedirects.human + data.coffeeRedirects.automated}</span>{' '}
+        ({splitLabel(data.coffeeRedirects)})
       </p>
       {data.products.map(p => <ProductCard key={p.slug} p={p} />)}
 

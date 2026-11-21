@@ -4,8 +4,23 @@ import { requireAdmin } from '../clerk.js';
 import { WEB_PRODUCTS, productKind, productPageSlug, type WebProduct } from '../../shared/web-products.js';
 import { HOST_PAGE_PATHS, HOST_PAGE_SLUG } from '../page-hits.js';
 import { listBookings } from '../services/service-bookings.js';
+import { loadOwnerIds, mineExclusionSql, type MineColumns } from '../traffic-filters.js';
 
 const DAY_MS = 86400000;
+
+/**
+ * 1 when a funnel_events row (alias fe) was made by automation: flagged at write time, or its visitor or session
+ * has a bot-flagged page view. Labels only; no count drops these rows.
+ */
+const FE_AUTOMATED = `(COALESCE(fe.is_bot, 0) = 1
+  OR (fe.visitor_id IS NOT NULL AND EXISTS (SELECT 1 FROM page_views pv WHERE pv.visitor_id = fe.visitor_id AND pv.is_bot = 1))
+  OR (fe.session_id IS NOT NULL AND EXISTS (SELECT 1 FROM page_views pv WHERE pv.session_id = fe.session_id AND pv.is_bot = 1)))`;
+const SPLIT_COLS = `COUNT(*) AS n, COALESCE(SUM(CASE WHEN ${FE_AUTOMATED} THEN 1 ELSE 0 END), 0) AS automated`;
+
+// Same owner-signal columns /api/admin/traffic uses on page_hits.
+const HITS_MINE_COLS: MineColumns = { isAdmin: 'is_admin', isInternal: 'is_internal', hashId: 'visitor_id', cookieId: 'client_vid' };
+// Legacy NULL-class rows derive from is_bot, as in the traffic report.
+const HIT_CLASS_SQL = "COALESCE(visitor_class, CASE WHEN is_bot = 1 THEN 'script' ELSE 'human' END)";
 
 function likePrefix(slug: string): string {
   const escaped = `/projects/${slug}/`.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -43,6 +58,7 @@ export function registerAdminWebProductRoutes(
     // orders and downloads are never counted: they are owner tests by construction.
     const excludeSelf = String((req.query as { exclude_self?: unknown })?.exclude_self ?? '1') !== '0';
     const selfSql = excludeSelf ? ' AND COALESCE(is_admin, 0) = 0' : '';
+    const feSelfSql = excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : '';
     const NOT_TEST = " AND checkout_session_id NOT LIKE 'cs\\_test\\_%' ESCAPE '\\'";
 
     const entries = [];
@@ -55,8 +71,9 @@ export function registerAdminWebProductRoutes(
         dbGet<{ views: number; visitors: number }>(
           `SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM page_views
            WHERE date >= ? AND ${page.sql} AND COALESCE(is_bot, 0) = 0${selfSql}`, sinceDate, ...page.args),
-        dbGet<{ n: number }>(
-          `SELECT COUNT(*) AS n FROM funnel_events WHERE event = 'checkout_start' AND tool = ? AND date(created_at) >= ?${selfSql}`,
+        dbGet<{ n: number; automated: number }>(
+          `SELECT ${SPLIT_COLS} FROM funnel_events fe
+           WHERE fe.event = 'checkout_start' AND fe.tool = ? AND date(fe.created_at) >= ?${feSelfSql}`,
           p.slug, sinceDate),
         dbGet<{ n: number; revenue: number }>(
           `SELECT COUNT(*) AS n, COALESCE(SUM(amount_total), 0) AS revenue FROM web_product_orders WHERE slug = ? AND created_at >= ?${NOT_TEST}`,
@@ -110,6 +127,8 @@ export function registerAdminWebProductRoutes(
         views: views?.views ?? 0,
         uniqueVisitors: views?.visitors ?? 0,
         checkoutStarts: checkouts?.n ?? 0,
+        checkoutStartsHuman: (checkouts?.n ?? 0) - (checkouts?.automated ?? 0),
+        checkoutStartsAutomated: checkouts?.automated ?? 0,
         checkoutsExpired: outcome('checkout_expired'),
         checkoutsRecovered: outcome('checkout_recovered'),
         orders: orders?.n ?? 0,
@@ -133,6 +152,19 @@ export function registerAdminWebProductRoutes(
       daily.push(...[...rows.values()].sort((a, b) => a.date.localeCompare(b.date)));
     }
 
-    return { days, excludeSelf, products: entries, daily };
+    // Every checkout_start in the window, any tool (the /buy agent offers included).
+    const all = await dbGet<{ n: number; automated: number }>(
+      `SELECT ${SPLIT_COLS} FROM funnel_events fe
+       WHERE fe.event = 'checkout_start' AND date(fe.created_at) >= ?${feSelfSql}`, sinceDate);
+    const checkoutStartsAll = { human: (all?.n ?? 0) - (all?.automated ?? 0), automated: all?.automated ?? 0 };
+
+    // /coffee is a 302 to the Stripe Payment Link, recorded in page_hits with a visitor class.
+    const mine = excludeSelf ? mineExclusionSql(await loadOwnerIds(), HITS_MINE_COLS) : { sql: '', args: [] as string[] };
+    const coffee = await dbGet<{ n: number; human: number }>(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN ${HIT_CLASS_SQL} = 'human' THEN 1 ELSE 0 END), 0) AS human
+       FROM page_hits WHERE ts_ms >= ? AND path = ?${mine.sql}`, sinceMs, '/coffee', ...mine.args);
+    const coffeeRedirects = { human: coffee?.human ?? 0, automated: (coffee?.n ?? 0) - (coffee?.human ?? 0) };
+
+    return { days, excludeSelf, products: entries, daily, checkoutStartsAll, coffeeRedirects };
   });
 }

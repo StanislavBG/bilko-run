@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { dbGet, dbAll, dbRun, getClient } from '../db.js';
 import { requireAdmin, verifyClerkToken, ADMIN_EMAILS } from '../clerk.js';
 import { classifyReferrer, parseUa, isBotRequest } from '../services/analytics.js';
-import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, markAutomationVisitor, isAutomationVisitor, recordClickForBurst } from '../page-hits.js';
+import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, markAutomationVisitor, isAutomationVisitor, recordClickForBurst, automationBackfillStmts } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
 import { internalFlag } from '../internal-traffic.js';
 import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
@@ -26,10 +26,6 @@ const _eventCounts = new Map<string, { count: number; windowStart: number }>();
 const EVENT_RATE_LIMIT_VISITOR = 120; // per minute per visitor
 const EVENT_RATE_LIMIT_IP = 600;      // per minute per IP (allows shared networks)
 const EVENT_RATE_WINDOW_MS = 60_000;
-
-// How far back a visitor's first webdriver pageview re-flags its page_hits,
-// click_events and page_views. Every UPDATE carries this lower bound on its time column.
-const AUTOMATION_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 function bumpAndCheck(key: string, limit: number): boolean {
   const now = Date.now();
@@ -202,24 +198,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       // detection. Rows already marked as bots keep their more specific class.
       const flagVid = webdriver ? readSessionIds(req.headers.cookie).visitorId : null;
       if (flagVid && await markAutomationVisitor(flagVid, nowMs)) {
-        const sinceMs = nowMs - AUTOMATION_LOOKBACK_MS;
-        // click_events has no ts_ms index; the UTC day bound lets idx_click_events_date
-        // narrow the scan. date is the UTC day of ts_ms, so it drops no row ts_ms keeps.
-        const sinceDate = new Date(sinceMs).toISOString().slice(0, 10);
-        stmts.push(
-          {
-            sql: 'UPDATE page_hits SET is_bot = ?, visitor_class = ? WHERE ts_ms >= ? AND client_vid = ? AND is_bot IS NOT ?',
-            args: [1, 'script', sinceMs, flagVid, 1],
-          },
-          {
-            sql: 'UPDATE click_events SET is_bot = ? WHERE date >= ? AND ts_ms >= ? AND client_vid = ? AND is_bot IS NOT ?',
-            args: [1, sinceDate, sinceMs, flagVid, 1],
-          },
-          {
-            sql: 'UPDATE page_views SET is_bot = ? WHERE visitor_id = ? AND created_at_ms >= ? AND is_bot IS NOT ?',
-            args: [1, flagVid, sinceMs, 1],
-          },
-        );
+        stmts.push(...automationBackfillStmts(flagVid, nowMs));
       }
       await getClient().batch(stmts, 'write');
     } catch { /* never fail */ }
@@ -306,10 +285,17 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       const date = new Date(nowMs).toISOString().slice(0, 10);
       const stableVid = stableVisitorId(ip ?? '', String(req.headers['user-agent'] ?? ''));
       // Two different targets on one path within 300 ms from one session: a script.
-      if (clickSid) recordClickForBurst(clickSid, stableVid, { ts: nowMs, path, href, label });
+      const burst = clickSid ? recordClickForBurst(clickSid, stableVid, { ts: nowMs, path, href, label }) : false;
+      // A burst also records the request's own bilko_vid cookie (never a body field,
+      // so a client can flag only itself) as an automation visitor, like a webdriver
+      // pageview: its page_views and click_events count as bots too. Labels only.
+      const burstVid = burst ? readSessionIds(req.headers.cookie).visitorId : null;
+      const backfill = burstVid && await markAutomationVisitor(burstVid, nowMs)
+        ? automationBackfillStmts(burstVid, nowMs)
+        : [];
       // body.webdriver is the beacon's navigator.webdriver (boolean true only); a
       // visitor already recorded in automation_visitors is a bot on every click too.
-      const bot = isBotRequest(req.headers) || body?.webdriver === true || await isAutomationVisitor(clientVid);
+      const bot = burst || isBotRequest(req.headers) || body?.webdriver === true || await isAutomationVisitor(clientVid);
       // Same identity rules as page_hits: Clerk session cookie, skipped for bots.
       let userEmail: string | null = null;
       const token = bot ? null : sessionCookie(req.headers.cookie);
@@ -325,6 +311,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         ip, stableVid, userEmail, isAdmin,
         clickSid, clientVid, trackName, internalFlag(req),
       );
+      if (backfill.length) await getClient().batch(backfill, 'write');
     } catch { /* never fail */ }
     reply.status(204);
     return reply.send();

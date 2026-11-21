@@ -313,6 +313,38 @@ export async function markAutomationVisitor(vid: string, nowMs: number): Promise
   return res.rowsAffected > 0;
 }
 
+// How far back a visitor's first automation detection (webdriver pageview or click
+// burst) re-flags its page_hits, click_events and page_views. Every UPDATE carries
+// this lower bound on its time column.
+export const AUTOMATION_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The backfill run once, on first detection of automation visitor `vid` (the
+ * request's own bilko_vid cookie): its last AUTOMATION_LOOKBACK_MS of page_hits,
+ * click_events and page_views become bots. Rows already marked as bots keep their
+ * more specific class.
+ */
+export function automationBackfillStmts(vid: string, nowMs: number): { sql: string; args: (string | number)[] }[] {
+  const sinceMs = nowMs - AUTOMATION_LOOKBACK_MS;
+  // click_events has no ts_ms index; the UTC day bound lets idx_click_events_date
+  // narrow the scan. date is the UTC day of ts_ms, so it drops no row ts_ms keeps.
+  const sinceDate = new Date(sinceMs).toISOString().slice(0, 10);
+  return [
+    {
+      sql: 'UPDATE page_hits SET is_bot = ?, visitor_class = ? WHERE ts_ms >= ? AND client_vid = ? AND is_bot IS NOT ?',
+      args: [1, 'script', sinceMs, vid, 1],
+    },
+    {
+      sql: 'UPDATE click_events SET is_bot = ? WHERE date >= ? AND ts_ms >= ? AND client_vid = ? AND is_bot IS NOT ?',
+      args: [1, sinceDate, sinceMs, vid, 1],
+    },
+    {
+      sql: 'UPDATE page_views SET is_bot = ? WHERE visitor_id = ? AND created_at_ms >= ? AND is_bot IS NOT ?',
+      args: [1, vid, sinceMs, 1],
+    },
+  ];
+}
+
 /** Test hook: drop the in-memory copy so the next use reloads it from the table. */
 export function resetAutomationVisitorCache(): void {
   automationVids = new Set<string>();

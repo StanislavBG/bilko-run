@@ -25,8 +25,13 @@ Remote: `origin` = https://github.com/StanislavBG/bilko-run.git (never content-g
 
 ## Push
 
-- Pending.
+- 6:56 PM PST 2026-11-20: `git push origin HEAD:main` → `b4e0b3f6..280164d3`. Pushed SHA: 280164d3 (fast-forward). PASS
 
 ## Deploy check
 
-- Pending.
+- Poll of https://bilko.run/api/health (curl --max-time 15, 30 s apart, max 20 tries): try 6 at 6:58 PM PST showed uptime 42 s, 154 s after the push (tries 1-5 showed the earlier ~263-383 s process). PASS
+- https://bilko.run/ 200. PASS
+- One read-only GET of /api/admin/web-products?days=7 (admin bearer): `checkoutStartsAll` = human 0, automated 0, unlabeled 24 — `unlabeled` is a number, so the new field is live. All 24 starts in the window predate the label cutoff (2026-11-21 02:39 UTC = 6:39 PM PST 2026-11-20). PASS
+- This record's final update is pushed as a follow-up commit (docs only, no redeploy needed).
+
+SHIP: PASS

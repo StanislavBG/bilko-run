@@ -1,4 +1,4 @@
-<!-- md-network-map owner: the owner last-review: 2026-11-06 -->
+<!-- md-network-map owner: the owner last-review: 2026-11-22 -->
 # Bilko map
 
 Read this first. Every link is written as `~/Projects/Bilko/<path>`; open it from that folder.
@@ -19,13 +19,13 @@ Use the `bilko-host` MCP; do not hand-edit this repo.
 - `~/Projects/Bilko/packages/host-kit/README.md`: client SDK (auth, header, telemetry, publish CLI).
 - `~/Projects/Bilko/mcp-host-server/README.md`: the MCP tools that register, publish and inspect apps.
 - `~/Projects/Bilko/docs/observability.md`: errors and metrics for your app.
-- `~/Projects/Bilko/docs/project-feedback-api.md`: how to send feedback to the host.
+- `~/Projects/Bilko/docs/project-feedback-api.md`: the API for reading the visitor feedback left on your project.
 
 ## 2. Change the host platform (auth, credits, API, registry, deploy)
 
 - `~/Projects/Bilko/CLAUDE.md`: in-repo rules, test commands.
 - `~/Projects/Bilko/docs/host-internals.md`: server and client internals, sanctioned app-specific code.
-- `~/Projects/Bilko/docs/commerce.md`: credits, wallet, offers, agent storefront, paid downloads.
+- `~/Projects/Bilko/docs/commerce.md`: credits, wallet, offers, agent storefront, bookable services, subscriptions. Paid downloads are in `~/Projects/Bilko/docs/host-contract.md` ("Selling a downloadable web product").
 - `~/Projects/Bilko/docs/deployment.md`: Render, env vars, Node version, confirming a deploy.
 - `~/Projects/Bilko/docs/repo-writers.md`: who writes to the repo; keeping local `main` equal to `origin/main`.
 - `~/Projects/Bilko/docs/secrets-rotation.md`: secrets and how to rotate them.
@@ -40,7 +40,7 @@ Use the `bilko-host` MCP; do not hand-edit this repo.
 
 ## Rules everyone shares
 
-- Push to `origin` `main` of `StanislavBG/bilko-run` only. Never push Bilko to the `content-grade` remote.
+- Push only to `origin` `main` of `StanislavBG/bilko-run`.
 - This repo is public. The owner's real name and personal email never go in tracked files: `~/Projects/Bilko/docs/identity-boundary.md`.
 - New apps are `static-path` in their own repo. Fix the sibling that owns the source, never the published copy in `public/projects/<slug>/`.
 - Each app is independent: no cross-dependencies between apps.

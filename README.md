@@ -39,8 +39,6 @@ Use the `bilko-host` MCP (a tool Claude sessions can call) from the app's own re
 
 How to confirm a deploy landed is in [docs/deployment.md](docs/deployment.md). Secrets live in the Render dashboard, never in the repo.
 
-**Never push to the `content-grade` remote.** It is a different project.
-
 ## Where things live
 
 | Folder | What it is | Kind |

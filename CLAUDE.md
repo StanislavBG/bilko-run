@@ -6,7 +6,7 @@ Everything above the first heading is imported from the entry map. This file kee
 
 ## Git
 
-- The shared rules (push to `origin` `main` only, never `content-grade`; no real name or personal email in tracked files) come from the imported map above. This file adds only the details below.
+- The shared rules (push only to `origin` `main` of `StanislavBG/bilko-run`; no real name or personal email in tracked files) come from the imported map above. This file adds only the details below.
 - Local `main` must match `origin/main` (`git status -sb` in `~/Projects/Bilko`). If not, run `bash scripts/sync-local-main.sh`. Writers: [`docs/repo-writers.md`](docs/repo-writers.md).
 - Commit messages and the commit author count as tracked content too. Write "the owner". `session-manager-operations/prompt-sessions/` is gitignored for this; `pnpm hooks:install` installs the identity guard. See [`docs/identity-boundary.md`](docs/identity-boundary.md).
 
@@ -28,7 +28,7 @@ Everything above the first heading is imported from the entry map. This file kee
 
 ## Testing
 
-223 files (2 skipped), 2878 tests (2863 pass, 15 skipped; counted via `pnpm vitest run` on 2026-11-22; recount whenever this drifts). CI runs on every push via `.github/workflows/ci.yml`.
+CI runs on every push via `.github/workflows/ci.yml`.
 
 Commands:
 - `pnpm test` — vitest run

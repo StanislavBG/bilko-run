@@ -16,6 +16,7 @@
  *   - unregister_project         → removes an entry by slug
  *   - update_project_listing      → owner-only edit of a project's /projects card content
  *   - set_listing_media          → owner-only upload of card media (video, shareImage, icon), hosted by bilko.run
+ *   - set_app_backend            → owner-only set/clear of host.backend (origin /projects/<slug>/api/* forwards to)
  *   - get_project                → returns one registry entry by slug
  *   - publish_static_project     → copies built dist/ into host's public/projects/<slug>/
  *   - status                     → host git status (uncommitted files, last 5 commits)
@@ -63,6 +64,7 @@ import { withPublishCheckout, type PublishOutcome, type LocalMainSync } from './
 import { readLatestRegistryRaw } from './registry-source.js';
 import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
 import { setListingMedia } from './listing-media-tool.js';
+import { setAppBackend } from './app-backend-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 import { readHostContract } from './host-contract.js';
 
@@ -405,6 +407,29 @@ server.registerTool(
   async ({ slug, callerRepoPath, media }) => {
     try {
       const result = await setListingMedia({ slug, callerRepoPath, media }, { hostRoot: HOST_ROOT, baseUrl: baseUrl() });
+      return result.ok ? ok(result.text) : err(result.text);
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  },
+);
+
+// 4b3) set_app_backend ─────────────────────────────────────────────────
+server.registerTool(
+  'set_app_backend',
+  {
+    title: 'Set the app backend origin',
+    description:
+      'Sets or clears the origin bilko.run forwards /projects/<slug>/api/* to (host.backend in the registry). Static-path slugs only. origin is a bare https origin with no path, query, hash or credentials, e.g. "https://api.example.com"; null clears it. Only the repo bound to the slug (callerRepoPath must match host.localPath) may call it, because the forwarder passes users\' Authorization headers to that origin. Commits and pushes the registry through the isolated publish checkout; takes effect after bilko.run redeploys in about a minute. An APP_BACKENDS entry on Render, if any, overrides it for that slug.',
+    inputSchema: {
+      slug: SlugSchema,
+      callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
+      origin: z.string().min(1).nullable().describe('Bare https origin to forward /projects/<slug>/api/* to, e.g. "https://api.example.com"; null clears the backend.'),
+    },
+  },
+  async ({ slug, callerRepoPath, origin }) => {
+    try {
+      const result = await setAppBackend({ slug, callerRepoPath, origin }, { hostRoot: HOST_ROOT, baseUrl: baseUrl() });
       return result.ok ? ok(result.text) : err(result.text);
     } catch (e: unknown) {
       return err((e as Error).message);

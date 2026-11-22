@@ -222,6 +222,25 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 **Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, never probes a secret file, loads fewer than 20 pages a minute, and runs on a device never signed in as admin or marked, still counts as a visitor unless it sends the [internal traffic marker](host-contract.md#internal-traffic-marker). If it never runs the beacon and never keeps the `bilko_vid` cookie, it is counted in `visitors.human` but lands in `visitors.unverified`, not `visitors.confirmed` (below).
 
+### Visitor classes
+
+`classifyVisitor` (`server/services/analytics.ts`) tags every page hit with one of six classes, checked in this order:
+
+| Class | Who |
+|---|---|
+| `api_client` | MCP calls and requests carrying a known bot id |
+| `ai_user_agent` | An AI assistant fetching on behalf of a user (ChatGPT-User, Claude-User, Perplexity-User, ...) |
+| `ai_crawler` | AI training/indexing crawlers (GPTBot, ClaudeBot, CCBot, ...) |
+| `search_crawler` | Search engines and link unfurlers (Googlebot, Bingbot, Slackbot, ...) |
+| `script` | Empty user agent, curl/wget/HTTP libraries, headless browsers, generic bot/spider/crawler |
+| `human` | Everything else (undeclared bots with browser UAs land here) |
+
+They show up in the admin traffic panel (`/admin`, backed by `GET /api/admin/traffic`) and in `traffic_report` (`byClass`, `topPagesByClass`). Hits to `/mcp`, `/llms.txt`, `/api/offers` and `/buy/*` are recorded as page hits so agent interest is measurable.
+
+### UTM revenue funnel
+
+`GET /api/admin/funnel?utm_source=<src>&since=YYYY-MM-DD` (`requireAdmin`, so read-only `bka_` keys work; `since` defaults to 7 days ago) returns `{since, utm_source, visits, sign_ins, checkout_start, paid, booked, free_hours_booked}` as integers. A visitor counts when one of their sessions since `since` landed with that `utm_source` (case-insensitive) or later viewed a page tagged with it. Sessions keep their landing source, so an in-site link such as the Session Manager pages' free-hour links (`/book?utm_source=session-manager&utm_medium=header|product-page|manual`) is attributed through its page view. `visits` counts sessions; `sign_ins`, `checkout_start` and `paid` count visitors; `booked` counts paid service bookings; `free_hours_booked` counts free-hour bookings, never part of `booked`. The free-hour route writes a `free_hour_booked` funnel event with the cookie ids and the booking id (never the cancel token). Web-product `checkout_start` rows carry the `bilko_vid`/`bilko_sid` cookies and the Stripe checkout session id, which is how orders and bookings join back to the visit (or by the visitor's signed-in email). Admin and bot traffic are excluded unless `exclude_self=0` / `include_bots=1`. Burrow consumes it; the `bilko-host` MCP exposes it as `funnel_report`.
+
 ### Confirmed vs unverified visitors
 
 `visitors.human` counts a salted IP+user-agent hash per server page hit. It needs no JavaScript, so a crawler with a browser user agent counts the same as a person. To tell them apart, `GET /api/admin/traffic` returns `totals.confirmedVisitors` (`server/routes/admin-observability.ts`). A human visitor is **confirmed** when at least one of its human page hits in the window has:

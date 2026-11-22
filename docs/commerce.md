@@ -5,24 +5,14 @@ The one platform-side owner of money on bilko.run: the credit model, the Bilko C
 ## Credit model
 
 - **Free tools** (LocalScore, OutdoorHours) deduct nothing.
-- **Paid tools** spend **legacy tokens first** (PageRoast token bundles, AudienceDecoder one-time tier), then **wallet credit at $1 a call** (1 credit = 1 cent of balance). The gate is `creditGate` in `server/routes/tools/_shared.ts`; free-tier endpoints use `freeTierGate`.
+- **Paid tools** spend **legacy tokens first** (PageRoast token bundles, AudienceDecoder one-time tier), then **wallet credit**. **1 credit = $1 = 100 cents of wallet balance**: a call costing `cost` credits needs `cost * 100` cents (`creditGate` in `server/routes/tools/_shared.ts` checks `getWalletCents(email) < opts.cost * 100`); free-tier endpoints use `freeTierGate`.
 - **Wallet top-ups:** $3, $5 or $10 (`WALLET_TOPUP_CENTS` in `shared/bilko-menu.ts`), plus a PPP bonus (below).
 - **Credit-bought product:** one item, the Agent Factory Kit ($3).
 - Auth for token-spending endpoints is `requireAuth` (Clerk); a `bkk_` key is accepted only on the routes listed under "Agent keys".
 
 ## Offers
 
-Every paid offer lives in one file, `shared/agent-offers.ts` (`AGENT_OFFERS`): `id`, name, summary, `whatYouGet`, `amountCents`, `billing` (`one_time` | `month` | `year`), `pageUrl`, `buyUrl`, a `source` pointing at the existing catalog (`web_product` slug in `shared/web-products.ts`, `price_catalog` type in `shared/product-catalog.ts`, or `wallet_topup`), and `agentKey` (true when the purchase yields a `bkk_` key). `amountCents` is not in `PRICE_CATALOG` for web products, so it must match the price on the app's page and in Stripe.
-
-| Offer id | Price | Billing | Yields `bkk_` key |
-|---|---|---|---|
-| `bilko-hour` | $100 | one time (hours chosen at checkout) | no |
-| `launch-kit` | $9 | one time | no |
-| `agent-factory-kit` | $3 | one time (also buyable with $3 of credits) | no |
-| `git-viewer` | $5 | per year | no |
-| `pageroast-credits-7` | $5 | one time | yes |
-| `pageroast-credit-1` | $1 | one time | yes |
-| `credits-3`, `credits-5`, `credits-10` | $3, $5, $10 | one time (wallet top-ups) | yes |
+Every paid offer lives in one file, `shared/agent-offers.ts` (the `AGENT_OFFERS` array, the source for current offers and prices; also `GET /api/offers`): `id`, name, summary, `whatYouGet`, `amountCents`, `billing` (`one_time` | `month` | `year`), `pageUrl`, `buyUrl`, a `source` pointing at the existing catalog (`web_product` slug in `shared/web-products.ts`, `price_catalog` type in `shared/product-catalog.ts`, or `wallet_topup`), and `agentKey` (true when the purchase yields a `bkk_` key). `amountCents` is not in `PRICE_CATALOG` for web products, so it must match the price on the app's page and in Stripe.
 
 **To add an offer:** add an entry to `AGENT_OFFERS` (and the underlying web product or price-catalog entry if new). That one edit flows to `/llms.txt`, `GET /api/offers`, the `list_offers` MCP tool, the `offers` on each project in `/api/projects` and `list_projects`/`get_project`, the JSON-LD on the offer's page, and `/buy/<id>`.
 
@@ -52,7 +42,7 @@ bilko.run treats AI agents as a customer segment: they can discover what is for 
 
 ## Bilko Credits wallet and credit-bought product
 
-Bilko Credits are a prepaid wallet (1 credit = 1 cent of balance, shown as dollars). Credits pay for bilko.run tools (for example `roast_page`, 1 credit) and for one product, the Bilko Agent Factory Kit. Human time is not bought with credits; the Bilko hour and the free hour are below.
+Bilko Credits are a prepaid wallet, shown as dollars (the unit is in "Credit model" above). Credits pay for bilko.run tools (for example `roast_page`, 1 credit) and for one product, the Bilko Agent Factory Kit. Human time is not bought with credits; the Bilko hour and the free hour are below.
 
 - **Top-ups:** $3, $5 or $10 (`WALLET_TOPUP_CENTS` in `shared/bilko-menu.ts`). Humans use `POST /api/wallet/topup`; agents open `/buy/credits-3|5|10`. The Stripe webhook credits the wallet only when the session is paid and the subtotal equals an allowed amount. Code: `server/routes/wallet.ts`, `server/services/wallet.ts`.
 - **PPP bonus:** a country-based bonus paid as extra credits on a top-up, never a lower charge. The country comes from the payment card (falling back to the billing address). High-income countries get 0%, upper-middle-income 50%, lower-middle and low income 100%, per the World Bank classification; unlisted or unknown countries get 0%. The bonus is a second, separate wallet credit (`ppp_bonus:<CC>`) keyed to the Checkout session, so a replayed webhook cannot pay it twice. Edit the table in `shared/ppp-bonus.ts`.
@@ -65,21 +55,12 @@ Bilko Credits are a prepaid wallet (1 credit = 1 cent of balance, shown as dolla
 
 ## Play currency (Three Winds taels)
 
-Taels are a **separate play currency**, not Bilko Credits. They never touch the Bilko Credits wallet, cannot buy tools or credit products, and can never be transferred, gifted or cashed out. They live in their own play ledger, per app. The client contract (routes, errors, Apple IAP, env vars) is "Play currency" in [`docs/host-contract.md`](host-contract.md#play-currency); the catalog is `PLAY_APPS` in `shared/play-currency-catalog.ts`.
+Taels are a **separate play currency**, not Bilko Credits. They never touch the Bilko Credits wallet, cannot buy tools or credit products, and can never be transferred, gifted or cashed out. They live in their own play ledger, per app. The client contract (routes, errors, Apple IAP, env vars) is "Play currency" in [`docs/host-contract.md`](host-contract.md#play-currency); the catalog module is `shared/play-currency-catalog.ts` (`PLAY_APPS`), the source for every pack's id, name, taels, USD and MYR prices, Apple product id, and the signup grant.
 
-| Pack id | Name | Taels | USD | MYR | Apple product id |
-|---|---|---|---|---|---|
-| `pouch` | A pouch | 5,000 | $0.99 | RM 4.90 | `threewinds.taels.pouch` |
-| `purse` | A purse | 26,000 | $4.99 | RM 22.90 | `threewinds.taels.purse` |
-| `box` | A brocade box | 55,000 | $9.99 | RM 44.90 | `threewinds.taels.box` |
-| `chest` | A treasure chest | 115,000 | $19.99 | RM 89.90 | `threewinds.taels.chest` |
-| `cabinet` | A silver cabinet | 300,000 | $49.99 | RM 229.90 | `threewinds.taels.cabinet` |
-| `vault` | The vault | 650,000 | $99.99 | RM 449.90 | `threewinds.taels.vault` |
-
-- **Signup grant:** 5,000 taels, once per user, on the first balance read.
-- **Web checkout** is `POST /api/play-currency/checkout`, priced inline (`price_data`) in USD or MYR. It stays closed (`409 sales_closed`) until the comma-separated `PLAY_CURRENCY_SALES_OPEN` env var lists the app (`threewinds`). It is unset today.
-- **Free test packs (temporary):** while the comma-separated `PLAY_CURRENCY_FREE_PACKS` env var lists the app, the same checkout credits the pack's taels at once, with no payment and no Stripe session, even when sales are open. It answers `200 { credited: true, packId, taels, balance }`, writes ledger kind `free_test_pack` (ref `free_test:<uuid>`), and `GET /api/play-currency/balance` reports `freePacks: true`, so the Store shows $0.00. The prices above stay as they are. The owner asked for this on 2026-11-16 for the Three Winds live prototype test; remove the switch, and later this code, when the product is finished. Switching it on and off: ~/Projects/Bilko/docs/deployment.md#realtime-relay-constraints.
-- **Webhook branch:** the play-pack branch of `checkout.session.completed` in `server/routes/stripe.ts`, picked by `metadata.play_pack`. It runs before the wallet top-up branch and never falls through to it. It credits the play ledger (`purchase_stripe`, ref `stripe:<sessionId>`) only when the session is paid, the pack is known, the currency is `usd` or `myr` and the subtotal equals that pack's price. A session paid while sales were open is credited even if sales have since closed.
+- **Signup grant:** granted once per user, on the first balance read (amount in the catalog).
+- **Web checkout** is `POST /api/play-currency/checkout`, priced inline (`price_data`) in USD or MYR. It stays closed (`409 sales_closed`) until the comma-separated `PLAY_CURRENCY_SALES_OPEN` env var lists the app (`threewinds`).
+- **Free test packs (temporary):** while the comma-separated `PLAY_CURRENCY_FREE_PACKS` env var lists the app, the same checkout credits the pack's taels at once, with no payment and no Stripe session, even when sales are open. It answers `200 { credited: true, packId, taels, balance }`, writes ledger kind `free_test_pack` (ref `free_test:<uuid>`), and `GET /api/play-currency/balance` reports `freePacks: true`, so the Store shows $0.00. Catalog prices are unchanged. The switch exists for the Three Winds prototype test; remove it, and then this code, when the product is finished. Switching it on and off: ~/Projects/Bilko/docs/deployment.md#realtime-relay-constraints.
+- **Webhook branch:** the play-pack branch of `checkout.session.completed` in `server/routes/stripe.ts`, picked by `metadata.play_pack`. It is the first branch checked and never falls through to the others. It credits the play ledger (`purchase_stripe`, ref `stripe:<sessionId>`) only when the session is paid, the pack is known, the currency is `usd` or `myr` and the subtotal equals that pack's price. A session paid while sales were open is credited even if sales have since closed.
 - **Apple:** the iOS app sells the same packs through StoreKit 2 and posts each transaction to `POST /api/play-currency/apple/transactions`. Refunds and revocations come in on `POST /api/play-currency/apple/notifications`.
 - **Spending:** stakes at authoritative game rooms (escrow and settlement) and cosmetic items. Nothing else.
 
@@ -105,24 +86,9 @@ A tool that needs a key returns an `isError` result with the top-up link when th
 - Keys are accepted on `/mcp` and on the wallet and menu routes (`GET /api/wallet`, `POST /api/menu/:itemId/order`, `GET /api/menu/orders`). They can read the owner's balance, order the Agent Factory Kit from it and call `roast_page` (1 credit, through the same `creditGate` path as the web app). A key never grants admin, never passes `requireAuth`, and cannot mint or revoke keys, so a leaked key can spend only that account's credits.
 - Max 10 active keys per account. Implemented in `server/services/agent-api-keys.ts`, `server/routes/agent-keys.ts`.
 
-## Visitor classes
+## Visitor classes and the UTM funnel
 
-`classifyVisitor` (`server/services/analytics.ts`) tags every page hit with one of six classes, checked in this order:
-
-| Class | Who |
-|---|---|
-| `api_client` | MCP calls and requests carrying a known bot id |
-| `ai_user_agent` | An AI assistant fetching on behalf of a user (ChatGPT-User, Claude-User, Perplexity-User, ...) |
-| `ai_crawler` | AI training/indexing crawlers (GPTBot, ClaudeBot, CCBot, ...) |
-| `search_crawler` | Search engines and link unfurlers (Googlebot, Bingbot, Slackbot, ...) |
-| `script` | Empty user agent, curl/wget/HTTP libraries, headless browsers, generic bot/spider/crawler |
-| `human` | Everything else (undeclared bots with browser UAs land here) |
-
-They show up in the admin traffic panel (`/admin`, backed by `GET /api/admin/traffic`) and in the `bilko-host` MCP `traffic_report` tool (`byClass`, `topPagesByClass`). Hits to `/mcp`, `/llms.txt`, `/api/offers` and `/buy/*` are recorded as page hits so agent interest is measurable.
-
-## UTM revenue funnel
-
-`GET /api/admin/funnel?utm_source=<src>&since=YYYY-MM-DD` (`requireAdmin`, so read-only `bka_` keys work; `since` defaults to 7 days ago) returns `{since, utm_source, visits, sign_ins, checkout_start, paid, booked, free_hours_booked}` as integers. A visitor counts when one of their sessions since `since` landed with that `utm_source` (case-insensitive) or later viewed a page tagged with it. Sessions keep their landing source, so an in-site link such as the Session Manager pages' free-hour links (`/book?utm_source=session-manager&utm_medium=header|product-page|manual`) is attributed through its page view. `visits` counts sessions; `sign_ins`, `checkout_start` and `paid` count visitors; `booked` counts paid service bookings; `free_hours_booked` counts free-hour bookings, never part of `booked`. The free-hour route writes a `free_hour_booked` funnel event with the cookie ids and the booking id (never the cancel token). Web-product `checkout_start` rows carry the `bilko_vid`/`bilko_sid` cookies and the Stripe checkout session id, which is how orders and bookings join back to the visit (or by the visitor's signed-in email). Admin and bot traffic are excluded unless `exclude_self=0` / `include_bots=1`. Burrow consumes it; the `bilko-host` MCP exposes it as `funnel_report`.
+How page hits are classed (`classifyVisitor`) and how `GET /api/admin/funnel` counts visits, checkouts and bookings: [`observability.md`](observability.md#visitor-classes) ("Visitor classes" and "UTM revenue funnel").
 
 ## Bookable services
 
@@ -171,27 +137,31 @@ Every booking `.ics` (the booking and reschedule responses, `booking.ics`, the m
 | `HFH_MEETING_LINK` | meeting URL put in the confirmation email and `.ics`; unset → "Bilko will email the meeting link" |
 ## Stripe subscription lifecycle
 
-- **ContentGrade is retired** (2026-10-09): no license keys, no Pro sales, `/upgrade` redirects home. The legacy subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions; then delete it.
+- **ContentGrade is retired:** no license keys, no Pro sales, `/upgrade` redirects home. The legacy subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions; then delete it.
 - **Git Viewer** is $5 a year (`STRIPE_PRICE_GITVIEWER`). `priceToPlanTier` maps the current price and the retired $5/month price (kept in `legacyPriceIds`) to `git_viewer`, which sets `gitViewer` but never `isPro`.
 - **Service subscriptions:** a `kind: 'service'` web product with `billing: 'month'` uses Stripe `mode: subscription` (see "Bookable services").
-- **Webhook:** `server/routes/stripe.ts`. `checkout.session.completed` dispatches on `metadata.web_product` first, then the wallet top-up and generic branches; `checkout.session.expired` must be subscribed on the live endpoint.
+- **Webhook:** `POST /api/stripe/webhook` in `server/routes/stripe.ts` (signature-checked with `STRIPE_WEBHOOK_SECRET`; a handler error returns 500 so Stripe retries). Handled event types (the live endpoint must be subscribed to each):
+  - `checkout.session.completed` takes the first matching branch and never falls through: (1) play pack (`metadata.play_pack`, credits the play ledger), (2) wallet top-up (`metadata.wallet_topup`, credits the wallet plus any PPP bonus), (3) web product (`metadata.web_product`, records the order, mails paid-hour notices), (4) subscription (`mode: subscription`, saves the subscription and its plan tier), then (5) any other one-time payment, attributed by price id through the `STRIPE_PRICE_*` env vars (an unmatched price is recorded as `unattributed` and grants nothing; PageRoast token bundles credit tokens).
+  - `checkout.session.expired`: records `checkout_expired` in the funnel for web products, skipping owner and test sessions.
+  - `charge.refunded` (full refunds only) and `charge.dispute.created`: claw back a Stripe play-pack purchase's taels once; other payments are untouched.
+  - `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`: update the subscription's period and status (`canceled`, `past_due`).
 
 ## Stripe live vs test
 
 The decision and the rules are kept in [`docs/host-contract.md`](host-contract.md) → "Stripe live vs test" (a sibling cites that heading). In short: live mode holds real buyers only; the owner's signed-in browser checks out in test mode; agents and deploy smokes use `?dryRun=1` or `HEAD`; `/buy/<id>` from a browser opens a live session, so never click it in captures.
 
-Facts worth keeping from the 2026-10-20 expired-session review:
-- Every Launch Kit checkout that expired before 2026-10-20 was the owner or an owner agent; no real buyer abandonment was seen. The coffee Payment Link (`/coffee`) sessions carry no `checkout_start` row, email or IP, so they cannot be attributed to a visitor by the funnel.
-- Prevention shipped 2026-10-20: owner checkouts go to test mode, `?dryRun=1` for smokes, `getStripe()` refuses an `sk_live_` key outside production, recovery is on.
-- Catalog cleanup (owner-confirmed 2026-10-20/21): Stepproof Suite and Pro, Preflight Enterprise and Team, ContentGrade Pro, [Subscription] Query Flow and [ARCHIVE] Background Labs were archived in live Stripe. Kept: Git Viewer, Launch Kit, coffee, Session Manager, AudienceDecoder, PageRoast, BG Labs tiers. The Stripe catalog itself is owned by the Self repo.
+Rules that hold:
+- Owner checkouts run in test mode, smokes use `?dryRun=1`, `getStripe()` refuses an `sk_live_` key outside production, and Checkout recovery is on.
+- The coffee Payment Link (`/coffee`) sessions carry no `checkout_start` row, email or IP, so the funnel cannot attribute them to a visitor.
+- The Stripe catalog (which products and prices exist in live Stripe) is owned by the `~/Self` repo; verify it there, not here.
 
 ## Agent payment rails: decision
 
-Researched 2026-10-20 (third-party claims were not re-verified since). Lifetime Stripe revenue was about $21 then, so no new rail is worth multi-day work until real agent traffic is stuck at the existing one.
+No new payment rail is worth multi-day work until real agent traffic is stuck at the existing one. The third-party facts below are unverified research; re-check them before acting.
 
 - **Shipped and kept:** prepaid credits plus a `bkk_` key (above). One human purchase, then hands-free calls. Prepaid bundles pay Stripe's fixed 30¢ fee once instead of per call.
 - **`/buy` 302 over Payment Links:** `/buy` can mint a `bkk_` key and attach the purchase to the buyer's email; a plain Payment Link cannot. Both still need a human on Stripe's page.
 - **Not now, with triggers:** Stripe Agentic Commerce / Shared Payment Tokens and ChatGPT Instant Checkout (4-8 days; trigger: OpenAI opens merchant onboarding beyond approved partners and allows digital goods); HTTP 402 pay-per-call, card-only (MPP; 3-5 days; trigger: at least 10 agent hits a month that stop at checkout, or card machine payments reach general availability; crypto settlement is out of scope); Stripe Directory listing (0.25 day; trigger: a machine-payments endpoint exists).
-- **Next step if revisited:** make option 4 observable: count `/buy` hits, purchases and `bkk_` calls by visitor class (see "Visitor classes").
+- **Next step if revisited:** make agent buying observable: count `/buy` hits, purchases and `bkk_` calls by visitor class (see "Visitor classes" in [`observability.md`](observability.md#visitor-classes)).
 
 Web-product downloads, their endpoints and the new-product playbook stay in `docs/host-contract.md` → "Selling a downloadable web product".

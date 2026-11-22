@@ -1,9 +1,9 @@
 # Project feedback API (host side)
 
-What `server/routes/project-feedback.ts` actually implements, for sibling repos that
-consume it. The cross-project contract is authored in the sibling
-(`~/Projects/social-signals-trader/docs/feedback-api-contract.md`); this file records the
-host's side of it so a sibling session doesn't have to read the route source.
+The host's contract for project feedback: what `server/routes/project-feedback.ts`
+implements, for sibling repos that consume it, so a sibling session doesn't have to read
+the route source. Where a sibling's own notes disagree with this file, this file and the
+route win.
 
 Storage: table `project_feedback`, plus `project_feedback_images` for screenshots 2–5
 (Turso; local SQLite in dev). Screenshot 1 stays in `project_feedback.image_data`.
@@ -72,8 +72,7 @@ base64 and run to 2 MB each, so a page of them is three orders of magnitude larg
 than the same page without. On a replay pull the caller already has every blob on
 disk and only wants the changed flags. `images=none` keeps every `mime` and `bytes`,
 nulls every `dataUrl`, and never reads a screenshot out of the database. A submission
-can now carry 5 screenshots, so a full page can be up to 5× larger than before; keep
-`limit` small on pulls that include images.
+carries up to 5 screenshots, so keep `limit` small on pulls that include images.
 
 Each item carries `id`, `receivedAt`, `target`, `route`, `type`, `title`,
 `description`, `image`, `images`, `client`, `snapshotGeneratedAt`, plus:
@@ -86,8 +85,8 @@ Each item carries `id`, `receivedAt`, `target`, `route`, `type`, `title`,
 "status": { "value": "open" | "in_progress" | "resolved" | "wontfix", "note": "..." | null, "at": "<ISO>" | null }
 ```
 
-`image` is the first screenshot, kept for readers that predate `images`, so with
-images included its `dataUrl` is sent twice (once in `images[0]`).
+`image` is the first screenshot, for readers that read only `image`, so with images
+included its `dataUrl` is sent twice (once in `images[0]`).
 
 `moderation` is `null` when the item has never been moderated or was un-archived /
 restored. `status.value` is `open` until someone sets it.
@@ -147,6 +146,5 @@ separate bucket from submissions.
 pattern, sourced from the `onSend` meter in `server/egress.ts` and the
 `api_egress_daily` table. Read `bytesPerRequest`, not just `bytes`: a route can top
 the list on volume (cheap and expected) or on payload size (usually a bug — an
-unpaginated list, or blobs inlined into JSON). This endpoint exists because the
-feedback GET is the one route on the host that can legitimately return hundreds of
-megabytes, and until now nothing on the host measured response size at all.
+unpaginated list, or blobs inlined into JSON). The feedback GET is the one route on
+the host that can legitimately return hundreds of megabytes, so watch it here.

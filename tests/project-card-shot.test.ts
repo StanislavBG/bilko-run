@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   ProjectCardShot, cardShotMode, loadAudioMeta, resetAudioMetaCache, shouldFetchAudioMeta,
-  playWithSound, createCardSound, SOUND_GESTURE_EVENTS,
+  playWithSound, createCardSound, SOUND_GESTURE_EVENTS, DEFAULT_CARD_PLAYBACK,
 } from '../src/components/ProjectCardShot.js';
 
 const VIDEO = '/projects/demo/tile.mp4?v=1a2b3c4d';
@@ -27,6 +27,16 @@ function render(props: Props): string {
 }
 
 describe('ProjectCardShot', () => {
+  it('starts with sound on by default', () => {
+    expect(DEFAULT_CARD_PLAYBACK).toEqual({ muted: false, paused: false });
+    const html = render({
+      name: 'Demo', thumbnail: THUMB, video: VIDEO, allowMotion: true, hasAudio: true,
+      muted: DEFAULT_CARD_PLAYBACK.muted,
+    });
+    expect(html).toContain('aria-label="Mute video"');
+    expect(html).not.toContain('Unmute video');
+  });
+
   it('renders a video with poster and src when motion is allowed', () => {
     const html = render({ name: 'Demo', thumbnail: THUMB, video: VIDEO, allowMotion: true });
     expect(html).toContain('<video');

@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Hero media for the active /projects card (.pr-shot): a muted, looping,
- * inline video when the card has one and motion is allowed, otherwise the
+ * Hero media for the active /projects card (.pr-shot): a looping, inline video
+ * when the card has one and motion is allowed, otherwise the
  * card's share image, otherwise the SCREENSHOT placeholder. In video mode a
  * Pause/Play button (and, when the clip has sound, Mute/Unmute) sits over the
  * video; under reduced motion or Save-Data a Play button over the poster mounts
  * the video only when pressed. Hosted videos (not in the build) learn whether
  * they have sound from their <url>.json metadata, fetched once the video mounts.
+ * The clip starts with sound when the browser allows it; otherwise it plays
+ * muted until the visitor's first click, tap or key press on the page, without
+ * changing the visitor's mute choice.
  */
 
 export type CardShotMode = 'video' | 'image' | 'placeholder';
@@ -108,6 +111,9 @@ export function loadAudioMeta(url: string, signal?: AbortSignal): Promise<boolea
 
 /** The visitor's choice for the active card's video. */
 export type CardPlayback = { muted: boolean; paused: boolean };
+
+/** Sound on and playing until the visitor chooses otherwise. */
+export const DEFAULT_CARD_PLAYBACK: CardPlayback = { muted: false, paused: false };
 
 /** The part of a media element the sound helpers touch (an HTMLVideoElement fits). */
 export type SoundMedia = { muted: boolean; play(): Promise<void> | undefined; pause(): void };
@@ -306,57 +312,51 @@ export function ProjectCardShot({
     return () => { live = false; ctl.abort(); };
   }, [mode, audioMetaUrl, hasAudio]);
 
-  const onMutedRef = useRef(onMutedChange);
-  onMutedRef.current = onMutedChange;
-
   useEffect(() => { setFailed(false); setPlayRequested(false); }, [video]);
 
-  /** play(); if the browser refuses sound, mute, retry once and report muted. */
-  const playEl = (el: HTMLVideoElement) => {
-    const p = el.play();
-    if (!p || typeof p.catch !== 'function') return;
-    p.catch(() => {
-      if (el.muted) return; // muted autoplay blocked: poster stays
-      el.muted = true;
-      onMutedRef.current(true);
-      const retry = el.play();
-      if (retry && typeof retry.catch === 'function') retry.catch(() => { /* still blocked */ });
-    });
+  const ctlRef = useRef<HTMLDivElement>(null);
+  const soundRef = useRef<CardSound | null>(null);
+  /** Created on first use from effects and click handlers only (document is absent on the server). */
+  const getSound = (): CardSound => {
+    if (!soundRef.current) {
+      soundRef.current = createCardSound({
+        gestureTarget: document,
+        // The controls' own clicks must not re-apply sound before their handler runs.
+        ignore: t => t instanceof Node && !!ctlRef.current?.contains(t),
+      });
+    }
+    return soundRef.current;
   };
+
+  // Declared before the play/pause effect so its cleanup runs first.
+  useEffect(() => () => {
+    soundRef.current?.dispose();
+    soundRef.current = null;
+  }, [mode, video]);
 
   useEffect(() => {
     const el = ref.current;
     if (mode !== 'video' || !el) return;
-    // React does not reliably set the muted property; apply it on the element.
-    el.muted = muted;
+    getSound().apply(el, { muted, paused });
     setElMuted(el.muted);
-    if (paused) {
-      el.pause();
-      setElPaused(true);
-    } else {
-      playEl(el);
-    }
-    // playEl reads callbacks through a ref.
+    if (paused) setElPaused(true);
+    // getSound reads only refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, video, muted, paused]);
 
   const togglePaused = () => {
     const el = ref.current;
     if (!el) return;
-    if (el.paused) {
-      playEl(el);
-      onPausedChange(false);
-    } else {
-      el.pause();
-      onPausedChange(true);
-    }
+    const next = !el.paused;
+    getSound().apply(el, { muted, paused: next });
+    onPausedChange(next);
   };
 
   const toggleMuted = () => {
     const el = ref.current;
     if (!el) return;
     const next = !el.muted;
-    el.muted = next;
+    getSound().apply(el, { muted: next, paused });
     onMutedChange(next);
   };
 
@@ -384,7 +384,7 @@ export function ProjectCardShot({
             onPause={() => setElPaused(true)}
             onVolumeChange={e => setElMuted(e.currentTarget.muted)}
           />
-          <div className="pr-shot-ctl">
+          <div className="pr-shot-ctl" ref={ctlRef}>
             <button type="button" aria-label={elPaused ? 'Play video' : 'Pause video'} onClick={togglePaused}>
               {elPaused ? <PlayIcon /> : <PauseIcon />}
             </button>

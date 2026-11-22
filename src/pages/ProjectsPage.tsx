@@ -8,7 +8,7 @@ import { HUB_CARDS, PUBLIC_CARDS, type HubCard } from '../data/projectsView.js';
 import { RING_DOTS, heroBox, pad3, ringOffset, ringStats, spineGeom, tickStyle } from '../data/projectsRing.js';
 import { track, trackFlow } from '../lib/telemetry.js';
 import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
-import { ProjectCardShot, useAllowCardMotion } from '../components/ProjectCardShot.js';
+import { DEFAULT_CARD_PLAYBACK, ProjectCardShot, useAllowCardMotion, type CardPlayback } from '../components/ProjectCardShot.js';
 
 /**
  * Combined Projects + Packages hub, rendered as the "Projects Ring": a fixed
@@ -139,8 +139,8 @@ export function ProjectsPage() {
     return i < 0 ? 0 : i;
   });
   const [storyOpen, setStoryOpen] = useState(false);
-  // The visitor's pause/mute choices carry across cards on this page.
-  const [playback, setPlayback] = useState({ muted: true, paused: false });
+  // Sound is on by default; the visitor's pause/mute choices carry across cards on this page.
+  const [playback, setPlayback] = useState<CardPlayback>(DEFAULT_CARD_PLAYBACK);
   const setMuted = useCallback((muted: boolean) => setPlayback(p => ({ ...p, muted })), []);
   const setPaused = useCallback((paused: boolean) => setPlayback(p => ({ ...p, paused })), []);
   const [stage, setStage] = useState({ w: 1280, h: 560 });

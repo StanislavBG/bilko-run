@@ -20,7 +20,7 @@ Run manually:
 cd /home/bilko/Projects/Bilko && pnpm synthetic
 ```
 
-It runs by hand only: `crontab -l` and `systemctl --user list-timers` show no installed schedule for it (checked 2026-11-06). Run `pnpm synthetic` when you want a fresh result.
+It runs by hand only: `crontab -l` and `systemctl --user list-timers` show no installed schedule for it. Run `pnpm synthetic` when you want a fresh result.
 
 Tune sensitivity via `STREAK_TO_ALERT` in `scripts/synthetic-monitor.ts`
 (default: 3 consecutive failures).
@@ -75,7 +75,7 @@ Exit codes: `0` = PASS, `1` = FAIL, `2` = internal error.
 
 ### Reports
 
-Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md` (gitignored; reports are not committed). `scripts/sanity-qa-cron.sh` opens a GitHub issue tagged `qa-failure` on FAIL, but only when someone runs it.
+Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md` (gitignored; reports are not committed).
 
 ### Cron script (not scheduled)
 
@@ -84,8 +84,6 @@ Written to `test-results/sanity-qa-YYYY-MM-DD-HH-MM.md` (gitignored; reports are
 ```bash
 cd ~/Projects/Bilko && bash scripts/sanity-qa-cron.sh
 ```
-
-The report stays local in `test-results/` (gitignored, never pushed).
 
 ### Prompt files (AI-subagent mode)
 
@@ -96,10 +94,10 @@ The report stays local in `test-results/` (gitignored, never pushed).
 Three layers protect the platform from runaway Gemini spend:
 
 1. **Per-user daily Gemini call cap** (100 calls/day default, 1000 for admin). Returns 429 + friendly message when breached.
-2. **Per-app daily ceiling** (stored in `app_spend_ceilings` table, default 2000). Returns 503 + inserts a `cost_alerts` row when the app's total daily calls exceed the ceiling.
+2. **Per-app daily ceiling** (the `app_spend_ceilings` table). Returns 503 + inserts a `cost_alerts` row when the app's total daily calls exceed the ceiling. The seed in `server/db.ts` (`PAID_TOOL_SLUGS` and `CEILINGS`) gives each seeded paid tool 2000 calls a day and Academy 200. An app with no row has no ceiling (`getCeiling` in `server/routes/tools/_shared.ts` returns `null`).
 3. **Daily cost-of-revenue monitor** (`pnpm cost-monitor`): alerts if Gemini COGS exceeds 25% of Stripe revenue, or if absolute spend exceeds $50/day.
 
-All paid AI tool gateway routes call `enforceCallLimits(ctx)` from `server/routes/tools/_shared.ts` before every Gemini invocation. Free tools (Outdoor-Hours, LocalScore) use the existing IP-only rate limiter and are exempt.
+All paid AI tool gateway routes call `enforceCallLimits(ctx)` from `server/routes/tools/_shared.ts` before every Gemini invocation. The free tools (Outdoor-Hours, LocalScore) have no host routes, so none of these layers apply to them.
 
 Open alerts are visible at `/admin/cost`. Ceilings can be tuned per-app via the admin UI or directly in the `app_spend_ceilings` table.
 
@@ -109,24 +107,18 @@ The cost monitor runs by hand only (`pnpm cost-monitor`); no crontab entry or sy
 
 Render bills origin egress, so the host caches everything it serves out of `dist/`. Apps get this for free — there is nothing to configure in a sibling repo — but the policy determines how fast a publish becomes visible, so know it before you publish.
 
-| File | `Cache-Control` | Effect |
-|---|---|---|
-| `*.html` (including `/projects/<slug>/index.html`) | `public, max-age=0, must-revalidate` | Revalidated on every view; a publish is visible immediately |
-| `assets/*-<hash>.<ext>` (Vite content-hashed) | `public, max-age=31536000, immutable` | Never re-fetched; the filename changes when the bytes do |
-| Images, fonts, audio, video | `public, max-age=86400` | One day |
-| Everything else — `app.jsx`, `styles.css`, generated `data-*.js` | `public, max-age=600` | Up to 10 minutes stale after a publish |
-| SPA fallback HTML (`setNotFoundHandler`) | `private, no-store` | Carries a per-request CSP nonce, so it can never be shared |
+The policy is `staticCacheControl` in `server/static-cache.ts`, applied by `setStaticCacheHeaders` (the `@fastify/static` `setHeaders` callback in `server/index.ts`). It sorts files into HTML (revalidated on every view, so a publish shows at once), Vite content-hashed `assets/*-<hash>.<ext>` (immutable for a year), media (`MEDIA_EXT`, one day) and everything else (10 minutes). The SPA fallback HTML from `setNotFoundHandler` in `server/index.ts` is `private, no-store`, because it carries a per-request CSP nonce. Read the code for the exact values.
 
 Two consequences worth designing around:
 
-- **Unhashed assets can be up to 10 minutes stale.** If your app publishes on a cron and needs fresher data than that, serve the data from an API route (see `server/routes/project-data.ts`, `public, max-age=60`) rather than from a static file — that is what SocialSignalsTrader's snapshot endpoint does.
+- **Unhashed assets can be stale for up to the everything-else lifetime (10 minutes).** If your app publishes on a cron and needs fresher data than that, serve the data from an API route (see `server/routes/project-data.ts`, `public, max-age=60`) rather than from a static file — that is what SocialSignalsTrader's snapshot endpoint does.
 - **Content-hash your bundles if you want immutable caching.** Emit them into an `assets/` directory with a Vite-style `-<hash>` suffix and they are cached for a year. A plain `app.js` gets the 10-minute tier.
 
-`server/static-cache.ts` also strips `Vary: Origin` and the `Access-Control-*` headers from same-origin requests for publicly cacheable assets. `@fastify/cors` runs with an allow-list, which makes it stamp `Vary: Origin` on everything, and most CDNs refuse to cache a response that varies on anything but `Accept-Encoding`. Cross-origin requests (which carry an `Origin` header) still get full CORS headers.
+`registerStaticCorsTrim` in `server/static-cache.ts` strips `Vary: Origin` and the `Access-Control-*` headers from same-origin requests for publicly cacheable assets. `@fastify/cors` runs with an allow-list, which makes it stamp `Vary: Origin` on everything, and most CDNs refuse to cache a response that varies on anything but `Accept-Encoding`. Cross-origin requests (which carry an `Origin` header) still get full CORS headers.
 
 **Note on the edge:** bilko.run's DNS is at Porkbun, pointing straight at Render. The `server: cloudflare` / `cf-cache-status: DYNAMIC` headers you'll see come from Render's own edge, not a Cloudflare zone we control — so `DYNAMIC` on a correctly-cached asset is not a bug in this repo. The caching above is browser-side and revalidation-side: repeat views serve from disk cache, and anything that does revalidate returns a 0-byte 304 instead of the full asset.
 
-Implementation lives in `server/static-cache.ts`. It also rewrites every file's mtime at boot to a value derived from that file's content hash, because `@fastify/send` derives its ETag from `size + mtime` and a deploy's git checkout stamps every file with a fresh mtime. Without that normalization, every deploy would invalidate every visitor's cached copy of every unchanged file — and with published projects republishing on a 30-minute cron, that is ~48 full cache resets a day. Do not "fix" a stale asset by touching mtimes; change the bytes.
+`normalizeStaticMtimes` in `server/static-cache.ts` rewrites every file's mtime at boot to a value derived from that file's content hash, because `@fastify/send` derives its ETag from `size + mtime` and a deploy's git checkout stamps every file with a fresh mtime. Without that normalization, every deploy would invalidate every visitor's cached copy of every unchanged file — and with published projects republishing on a 30-minute cron, that is ~48 full cache resets a day. Do not "fix" a stale asset by touching mtimes; change the bytes.
 
 ## Observability dashboard
 
@@ -152,52 +144,16 @@ When something feels wrong on bilko.run, this is the first place to look.
 
 ## Security headers
 
-bilko.run sends a strict CSP plus the OWASP-recommended security header set on every response (blog videos get `BLOG_VIDEO_CSP` instead of the nonce policy). All headers are applied at the Fastify hook level (`server/security-headers.ts`) so they cover both host SPA routes and `/projects/*` static-path siblings.
+bilko.run sends a strict CSP plus the OWASP-recommended security header set on every response. `registerSecurityHeaders` in `server/security-headers.ts` applies them in Fastify hooks, so they cover both host SPA routes and `/projects/*` static-path siblings. The code is the spec; read it rather than a copy:
 
-### Headers sent on every response
-
-| Header | Value |
-|---|---|
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` |
-| `X-Content-Type-Options` | `nosniff` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | accelerometer, camera, gyroscope, magnetometer, USB off (`()`); geolocation, microphone, payment `(self)` |
-| `Cross-Origin-Opener-Policy` | `same-origin` |
-| `Content-Security-Policy[-Report-Only]` | Per-request nonce; see spec below |
-
-### CSP spec
-
-Built per request by `buildCsp` in `server/security-headers.ts`:
-
-```
-default-src 'self';
-script-src  'self' 'nonce-{NONCE}' 'wasm-unsafe-eval' https://js.clerk.com https://js.stripe.com https://clerk.bilko.run 'strict-dynamic';
-style-src   'self' 'nonce-{NONCE}' https://fonts.googleapis.com;
-style-src-attr 'unsafe-inline';
-img-src     'self' data: [blob: on /projects/ only] https://*.clerk.com https://*.stripe.com https://avatars.githubusercontent.com;
-font-src    'self' data: https://fonts.gstatic.com;
-connect-src 'self' https://*.clerk.com https://clerk.bilko.run https://api.stripe.com;
-frame-src   'self' https://*.clerk.com https://js.stripe.com https://hooks.stripe.com;
-object-src  'none';
-base-uri    'self';
-form-action 'self' https://*.stripe.com;
-frame-ancestors 'none' | 'self';
-report-uri  /api/security/csp-report;
-upgrade-insecure-requests;   (only when enforced)
-```
-
-- `frame-ancestors` is `'self'` for `/projects/*` (Game Academy frames engine games as same-origin iframes) and `'none'` everywhere else.
-- `upgrade-insecure-requests` is emitted only when the policy is enforced; browsers ignore it in report-only and log a console error.
-- `style-src-attr 'unsafe-inline'` covers React `style={{}}` attributes, which a nonce cannot cover; `<style>` elements stay nonce-gated.
-- Blog videos (`/blog-videos/<slug>/`) skip this policy and get `BLOG_VIDEO_CSP`: always enforced, `default-src 'none'`, inline script and style, `connect-src 'none'`, `frame-ancestors 'self'`, `sandbox allow-scripts`.
-
-A fresh nonce is generated per request via `crypto.randomBytes(16)`. The on-send hook injects `nonce="..."` onto every `<script>` and `<style>` tag in HTML payloads (strings and streams, which it buffers), plus a `<meta name="csp-nonce">` for host-kit runtime CSS. It also stamps every script preload `<link>` (`rel="preload" as="script"` and `rel="modulepreload"`) that has no nonce. With `'strict-dynamic'`, a script preload the parser starts needs the nonce even when it is same-origin. Expo writes five per page, and each one filed a report on every Three Winds view (2026-11-15). Link text inside inline `<script>` bodies is left alone. HTML sent as an attachment (the Field Manual offline edition) passes through untouched.
-
-`'wasm-unsafe-eval'` in `script-src` allows WebAssembly compilation (not JS `eval`) for Godot/WebAssembly apps like escape-velocity and LocalScore's WebGPU pipeline.
+- **Headers:** the `onRequest` hook in `registerSecurityHeaders` sets HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` (the `PERMISSIONS` list), `Cross-Origin-Opener-Policy` and the CSP header.
+- **CSP:** `buildCsp` builds the policy per request with a fresh nonce. Its comments explain each origin and directive. `isStaticProjectPath` decides the `/projects/*` differences (`frame-ancestors 'self'` so Game Academy can frame engine games, and `blob:` images); everywhere else is `frame-ancestors 'none'`.
+- **Blog videos:** `/blog-videos/<slug>/` (`isBlogVideoPath`) gets `BLOG_VIDEO_CSP` instead: always enforced and sandboxed, with no network.
+- **Nonce injection:** the on-send hook adds the nonce to every `<script>` and `<style>` tag in HTML payloads (strings and streams, which it buffers) and adds a `<meta name="csp-nonce">` for host-kit runtime CSS. `nonceScriptPreloads` stamps script preload `<link>` tags that lack a nonce, because `'strict-dynamic'` requires it even for same-origin preloads. HTML sent as an attachment (the Field Manual offline edition) passes through untouched.
 
 ### Mode toggle
 
-`BILKO_CSP_ENFORCE=1` enforces `Content-Security-Policy` on the host's own pages only. Static-path apps (`/projects/<slug>/`) stay `Content-Security-Policy-Report-Only` even then (decision on record 2026-10-26): they are sibling-owned code with engine-specific needs (Godot needs `'unsafe-eval'`, engines draw from `blob:` images). Before enforcing on `/projects/`, that has to become a per-project policy declared in the registry. Default (unset) is report-only everywhere.
+`BILKO_CSP_ENFORCE=1` enforces `Content-Security-Policy` on the host's own pages only. Static-path apps (`/projects/<slug>/`) stay `Content-Security-Policy-Report-Only` even then (`cspIsEnforced`): they are sibling-owned code with engine-specific needs (Godot needs `'unsafe-eval'`, engines draw from `blob:` images). Before enforcing on `/projects/`, that has to become a per-project policy declared in the registry. Default (unset) is report-only everywhere.
 
 ### Violation reporting
 
@@ -223,7 +179,7 @@ Shared helpers in `server/routes/tools/_shared.ts`: the rate limiter, IP hashing
 
 ### Host code helpers
 
-- `server/db.ts` has the Turso client, `dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`, migrations and seed data; table definitions are in `server/db-schema.ts`.
+- `server/db.ts` has the Turso client (local SQLite in dev), `dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`, migrations and seed data; table definitions are in `server/db-schema.ts`.
 - `server/gemini.ts` is the Gemini client (key in a header, not the URL); `server/utils.ts` has `parseJsonResponse`, the shared Gemini output parser.
 - `server/bearer.ts` has `bearerMatches`, the timing-safe compare for shared-secret bearer routes.
 - `server/blog-posts.ts` loads the `content/blog/*.md` seed posts.
@@ -234,7 +190,7 @@ Leaving `react-route` turns in-process auth and credit calls (`requireAuth`, `de
 
 ## React-route apps
 
-`react-route` apps live in this bundle at `/products/<slug>`; today only Session Manager does. The app contract for every other kind is [`docs/host-contract.md`](host-contract.md).
+`react-route` apps live in this bundle at `/products/<slug>`; Session Manager is the only one. The app contract for every other kind is [`docs/host-contract.md`](host-contract.md).
 
 ### What the host provides to `react-route` apps
 
@@ -242,9 +198,7 @@ Leaving `react-route` turns in-process auth and credit calls (`requireAuth`, `de
 - **Credits: token wallet.** Spend via `deductToken(email)` and check via `getTokenBalance(email)` from `server/services/tokens.ts`. Free users get a starter grant via `grantFreeTokens(email)`.
 - **Payments: Stripe.** Subscription state via `getActiveSubscriptionLive(email)`; one-time purchases via `hasPurchased(email, productKey)`. Both from `server/services/stripe.ts`.
 - **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
-- **Page-view and click analytics.** Automatic: the host injects a beacon into every HTML page (pageviews on load and SPA navigation, clicks, session ids via the `bilko_vid`/`bilko_sid` cookies). No hook to call. See ~/Projects/Bilko/docs/observability.md.
-- **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
-- **Database.** Turso/libSQL via `dbGet/dbAll/dbRun/dbTransaction` from `server/db.ts`. Falls back to local SQLite in dev. All SQL parameterized.
+- **Analytics, Gemini and the database.** See "Host code helpers" above. The beacon sets the `bilko_vid`/`bilko_sid` session cookies (~/Projects/Bilko/docs/observability.md); `askGemini(prompt, opts)` is in `server/gemini.ts` and `parseJsonResponse` is re-exported as `parseResult` in `_shared.ts`; all SQL is parameterized.
 
 ### What a `react-route` app must implement
 
@@ -339,18 +293,21 @@ A sweeper (every 60 s) releases held escrows older than 60 s whose table is not 
 
 Host code is framework by default — it should not know about one specific app. These exceptions are allowed because the app can't work without a host-side gateway:
 
-- AI-tool gateway routes — `server/routes/tools/` (includes the PageRoast `roast_page` MCP tool, `server/routes/tools/page-roast.ts`, registered on the `/mcp` catalog server)
+- AI-tool gateway routes — `server/routes/tools/` (includes the PageRoast `roast_page` MCP tool, `server/routes/tools/page-roast.ts`, registered on the `/mcp` catalog server), the `PAID_TOOL_SLUGS` ceiling seed in `server/db.ts`, and the `audience: 'audience-decoder'` entry of `APP_TO_PRODUCT` in `src/App.tsx`
+- PageRoast `roast_page` on the agent surface — its name in the tool list in `server/routes/agent-storefront.ts` and its agent-key check on `/mcp` in `server/routes/project-catalog.ts`
+- Stepproof package card — the `stepproof` entry in `src/data/packages.ts`
+- Observability Command preview — the per-app sample rows (`COUNTRIES` through `HITS`) in `src/pages/admin/command/PreviewPage.tsx`
 - Session Manager — `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
 - Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
-- Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer, home hero and Session Manager header
+- Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer (`src/components/Layout.tsx`) and the Session Manager landing header (`src/pages/session-manager-landing/Header.tsx`, link text and href in `copy.ts`)
 - Game config — `shared/game-config.ts`
 - Realtime input relay and lobby directory (Game Academy online play, game-agnostic) — `server/realtime/relay.ts`, `server/realtime/lobbies.ts`, `server/routes/realtime.ts`; contract in `docs/host-contract.md` → "Realtime relay"
 - Bilko Launch Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price id + release sha256 only; the paid zip lives in the private ~/Projects/Bilko-Launch-Kit repo and the web_product_releases table)
 - Bilko Agent Factory Kit web product — its WEB_PRODUCTS entry in shared/web-products.ts (price env var + release/preview sha256 only; the zip is built in the private ~/Projects/Bilko-Launch-Kit repo and stored in the web_product_releases table)
 - Human For Hire page, free hour and Bilko hour — the `bilko-hour` entry in `shared/web-products.ts`, the `'human-for-hire'` slot entry in `shared/service-slots.ts`, `shared/bilko-profile.ts` (the public contact email), `shared/booking-page.ts`, `shared/free-hour-topics.ts`, `src/pages/BookingPage.tsx`, `src/pages/BookingSteps.tsx`, `src/lib/bookingView.ts`, `src/styles/booking-page.css`, `server/bilko-profile-routes.ts` (serves `/book`, the Hire page, and 301s `/bilko`, `/hire`, `/human-for-hire` and `/projects/human-for-hire/*` to it), `server/routes/free-hour.ts` (including its `free_hour_booked` funnel event), the `free_hours_booked` count in `server/routes/admin-funnel.ts`, `server/routes/admin-bookings.ts`, the `'human-for-hire'` entry of `NO_COMMIT_SIGNAL` in `scripts/refresh-commit-order.ts` (its `host.localPath` `~/Self` is bound only so Self can edit the card), `HOST_PAGE_SLUG` and `HOST_PAGE_PATHS` in `server/page-hits.ts` (they file the page's traffic and count its views in `server/routes/admin-web-products.ts`), and the free-hour functions in `server/services/service-bookings.ts` (the generic booking code in `server/routes/service-bookings.ts`, `server/services/service-bookings.ts` and `server/services/mailer.ts` is framework)
-- Git Viewer hosted portfolios — `server/routes/tools/git-viewer.ts` (`/api/git-viewer/u/:login`, `/api/git-viewer/claim`, in-process generation + daily refresh), `server/routes/admin-git-viewer.ts` (`GET /api/admin/git-viewer/profiles`: portfolio totals without the showcase logins, `git_viewer` subscription counts and the newest 500 rows, never an email; the bilko-host `git_viewer_report` tool reads it), the `git_viewer_profiles` table (its `created_at` and `built_by` columns are set only by a row's first insert; `built_by` holds just the class, `owner`, `automation`, `visitor` or `showcase`, and both are NULL on rows built before 2026-11-07), `verifyClerkGitHubUser` in `server/clerk.ts`, and the `git_viewer` subscription tier ($5/yr; `STRIPE_PRICE_GITVIEWER`; `priceToPlanTier` → `git_viewer` for the current price and the retired $5/mo one kept in `legacyPriceIds`, which sets `gitViewer` but never `isPro`). Generation uses the `@bilkobibitkov/git-viewer` library, loaded lazily
+- Git Viewer hosted portfolios — `server/routes/tools/git-viewer.ts` (`/api/git-viewer/u/:login`, `/api/git-viewer/claim`, in-process generation + daily refresh), `server/routes/admin-git-viewer.ts` (`GET /api/admin/git-viewer/profiles`: portfolio totals without the showcase logins, `git_viewer` subscription counts and the newest 500 rows, never an email; the bilko-host `git_viewer_report` tool reads it), the `git_viewer_profiles` table (its `created_at` and `built_by` columns are set only by a row's first insert; `built_by` holds just the class, `owner`, `automation`, `visitor` or `showcase`, and both are NULL on older rows), `verifyClerkGitHubUser` in `server/clerk.ts`, and the `git_viewer` subscription tier ($5/yr; `STRIPE_PRICE_GITVIEWER`; `priceToPlanTier` → `git_viewer` for the current price and the retired $5/mo one kept in `legacyPriceIds`, which sets `gitViewer` but never `isPro`). Generation uses the `@bilkobibitkov/git-viewer` library, loaded lazily
 - Bilko credits menu — `shared/bilko-menu.ts` and the menu order code built on it (`server/services/menu-orders.ts`, `server/routes/menu-orders.ts`); see [`docs/commerce.md`](commerce.md)
-- ContentGrade was retired on 2026-10-09. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
+- ContentGrade is retired. There are no license keys and no Pro sales. `/upgrade` redirects home. The subscription lifecycle (webhook `saveSubscription`, billing portal, `priceToPlanTier`) stays only until Stripe shows zero active ContentGrade subscriptions.
 - Three Winds (3PMahjong) play currency and rooms: `shared/play-currency-catalog.ts` (tiers, tael packs, tile sets), `server/rooms/modules.ts` (registers the engine's `threeWindsRoomModule` as is; its rule hooks, including the R4.6 claim-window deadline, live in the engine) and the `@threewinds/engine` dependency (`npm:@bilkobibitkov/threewinds-engine`). The ledger, room runtime and routes are framework.
 
 Any new app-specific host code must be added to this list in the same commit, or live in the sibling repo instead.

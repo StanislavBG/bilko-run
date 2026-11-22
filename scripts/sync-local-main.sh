@@ -29,8 +29,8 @@
 # BILKO_SYNC_REPO_ROOT set to the checkout. The seed releases the lock before calling too.
 # --dry-run, alone or with --no-push in either order, reports what would happen and changes nothing.
 #
-# Contract that callers outside this repo rely on. Tell Burrow (/send-feedback) before changing any
-# of it (docs/repo-writers.md, "Callers of `scripts/sync-local-main.sh` outside this repo"):
+# Contract that callers outside this repo rely on (see docs/repo-writers.md). Tell Burrow
+# (/send-feedback) before changing any of it:
 #   - Flags: --no-push and --dry-run, in any order. Any other non-empty argument exits 1 with the
 #     usage line, before the lock or any git command.
 #   - Exit: 0 in sync or synced | 1 error, local main untouched | 3 needs a human: a replay

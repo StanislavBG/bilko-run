@@ -1,26 +1,22 @@
 # Bilko npm publishing contract
 
-Companion to [`host-contract.md`](./host-contract.md). That document covers the **static-path sibling app** contract (apps deployed to `bilko.run/projects/<slug>/`). This document covers the **npm package** contract (libraries + CLIs published to `npmjs.com` for public benefit).
+Companion to [`host-contract.md`](./host-contract.md). That document covers the **static-path sibling app** contract (apps deployed to `bilko.run/projects/<slug>/`). This document covers the **npm package** contract (libraries and CLIs published to `npmjs.com`).
 
-The two contracts are independent: a sibling app may also publish parts of itself to npm; a published npm package need not be a sibling app.
+The two contracts are independent: a sibling app may also publish parts of itself to npm; a published npm package need not be a sibling app. A package that is both (for example the PageRoast CLI and its `/projects/page-roast/` page) follows both contracts.
 
 ## What the host provides for npm packages
 
-Nothing — npm packages are standalone. They don't inherit bilko.run auth, credits, Clerk, or Stripe. The only shared infrastructure is:
+Nothing at runtime. npm packages are standalone: they don't inherit bilko.run auth, credits, Clerk, or Stripe. The shared parts are:
 
-- **A by-hand release procedure** — see [Releasing by hand](#releasing-by-hand). There is no org-level npm token (`StanislavBG` is a user account, not an org).
-- **release.yml template** — a starting point for repos that later get their own npm token secret.
-- **Versioning discipline** — described below; consistent across all packages.
+- **A by-hand release procedure.** See [Releasing](#releasing). No repo has an npm automation token, so no CI workflow can publish.
+- **A README template**, [`templates/README.npm.tmpl.md`](./templates/README.npm.tmpl.md).
+- **Versioning discipline**, described below.
 
-If an npm package *also* happens to be a sibling app (e.g. PageRoast CLI + `/projects/page-roast/` page), it follows *both* contracts independently.
+## What this applies to
 
-## What is this
-
-A short rulebook every Bilko npm package follows. Apply it to:
-
-- Reusable libraries (`host-kit`, `@bilkobibitkov/sudoku-engine`).
-- CLIs users `npx` (`@bilkobibitkov/agent-trace`, `@bilkobibitkov/page-roast`).
-- Monorepo subpackages (anything under `Preflight/packages/*`).
+- Reusable libraries: `host-kit` (in this repo, `packages/host-kit/`).
+- CLIs users `npx`: `@bilkobibitkov/page-roast`.
+- Monorepo subpackages: anything under `Preflight/packages/*`, for example `@bilkobibitkov/preflight-license` (`Preflight/packages/license`).
 
 ## When code earns its own npm package
 
@@ -30,29 +26,27 @@ Pick the lowest applicable threshold:
 2. **It's a CLI users would install** (`npx @bilkobibitkov/<name>`).
 3. **It's a peer SDK to a host service** (telemetry, game services, manifest emit).
 
-If none apply, leave the code in its host repo. Don't extract for vanity.
+If none apply, leave the code in its host repo.
 
 ## Three kinds of publishable package
 
 | Kind | Example | Build shape | Notes |
 |---|---|---|---|
-| Library | `host-kit`, `sudoku-engine` | Dual ESM+CJS via `tsup`; `exports` map with `types`/`import`/`require` triple. | Browsers and Node both consume. |
-| CLI | `@bilkobibitkov/agent-trace`, `@bilkobibitkov/page-roast` | ESM-only is fine; `bin` field; `#!/usr/bin/env node` shim in `bin/<name>.js`. | `npx @bilkobibitkov/<name> --help` must work. |
-| Monorepo subpackage | `Preflight/packages/agent-comply`, `Preflight/packages/license` | Live in a `pnpm-workspace.yaml` workspace; tag format `<pkg>-v<ver>`. | Inter-package deps use the workspace's published version, not `workspace:*`, when shipped. |
+| Library | `host-kit` | Dual ESM+CJS via `tsup`; `exports` map with `types`/`import`/`require` triple. | Browsers and Node both consume. |
+| CLI | `@bilkobibitkov/page-roast` | ESM-only is fine; `bin` field; `#!/usr/bin/env node` shim in `bin/<name>.js`. | `npx @bilkobibitkov/<name> --help` must work. |
+| Monorepo subpackage | `@bilkobibitkov/preflight-license` | Lives in a `pnpm-workspace.yaml` workspace. | Inter-package deps use the published version, not `workspace:*`, in the shipped tarball. |
 
 ## Required file tree
 
 ```
-<repo-root>/
+<package-root>/
 ├── LICENSE                       ← MIT, the file. Not just metadata.
-├── README.md                     ← uses docs/templates/README.npm.tmpl.md
-├── CHANGELOG.md                  ← Changesets-managed or hand-kept; never with version gaps
+├── README.md                     ← from docs/templates/README.npm.tmpl.md
+├── CHANGELOG.md                  ← Changesets-written or hand-kept; never with version gaps
 ├── package.json
 ├── tsconfig.json
 ├── tsup.config.ts                ← libraries; CLIs may use plain `tsc`
-├── vitest.config.ts              ← or whatever test runner; tests are required
-├── .github/workflows/release.yml ← from docs/templates/release.yml.tmpl
-├── .changeset/                   ← if Changesets-managed
+├── vitest.config.ts              ← or another test runner; tests are required
 ├── src/
 │   └── index.ts
 ├── bin/                          ← if CLI
@@ -60,11 +54,13 @@ If none apply, leave the code in its host repo. Don't extract for vanity.
 └── tests/
 ```
 
+Changesets config (`.changeset/`) lives at the repo root when the repo uses it. This repo does: host-kit's versions and CHANGELOG come from `.changeset/`.
+
 ## Required `package.json` fields
 
 ```jsonc
 {
-  "name": "@bilkobibitkov/<name>",       // or unscoped if pre-existing on npm
+  "name": "@bilkobibitkov/<name>",       // or unscoped if pre-existing on npm (host-kit)
   "version": "<semver>",                  // start at 0.1.0 for new packages
   "description": "<≤120 char one-liner>",
   "type": "module",
@@ -88,14 +84,14 @@ If none apply, leave the code in its host repo. Don't extract for vanity.
     "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run build && pnpm run test"
+    "prepublishOnly": "pnpm run build"
   },
 
   "engines": { "node": ">=18.0.0" },
 
   "publishConfig": {
     "access": "public",
-    "provenance": true
+    "provenance": false                   // by-hand publishes cannot attest provenance
   },
 
   "repository": {
@@ -115,125 +111,89 @@ If none apply, leave the code in its host repo. Don't extract for vanity.
 
 `peerDependencies` for anything the consumer must provide (React, etc.). Never duplicate as `dependencies`.
 
+`--provenance` only works from a supported CI runner, so `publishConfig.provenance` is `false` (as in `packages/host-kit/package.json`).
+
 ## Required scripts
 
-Every publishable package implements at minimum:
-
-- `build` — produces `dist/`.
-- `test` — exits non-zero on failure.
-- `typecheck` — `tsc --noEmit`.
-- `prepublishOnly` — runs build + test before any publish.
+- `build`: produces `dist/`.
+- `test`: exits non-zero on failure.
+- `typecheck`: `tsc --noEmit`.
+- `prepublishOnly`: `pnpm run build`. It rebuilds `dist/` before a publish; tests run in the release gate, not here.
 
 ## Required metadata files
 
 | File | Required | Notes |
 |---|---|---|
-| `LICENSE` | Yes (literal file at root) | MIT. Listing it in `files` without the file on disk ships a broken tarball. |
-| `README.md` | Yes | Use the template at `docs/templates/README.npm.tmpl.md`. |
+| `LICENSE` | Yes (literal file in the package root) | MIT. Listing it in `files` without the file on disk ships a broken tarball. |
+| `README.md` | Yes | From [`templates/README.npm.tmpl.md`](./templates/README.npm.tmpl.md). |
 | `CHANGELOG.md` | Yes | One entry per published version. No skipped versions. |
 
-## Required CI
+## Versioning
 
-`.github/workflows/release.yml` triggered on `v*.*.*` tag push (or `<pkg>-v*.*.*` for monorepo subpackages). Pinned actions by SHA. Steps: checkout → setup-node 20 with `registry-url: https://registry.npmjs.org` → setup-pnpm → install (frozen lockfile) → build → test → `npm publish --access public --provenance`.
+- **Changesets repos (this repo for host-kit, Preflight):** add a changeset per change with `pnpm changeset`; at release time `pnpm changeset version` bumps `package.json` and writes the CHANGELOG entry.
+- **Other single-package repos:** `pnpm version <semver>` plus a hand-written CHANGELOG entry.
+- **Never skip a version.** A CHANGELOG hole signals abandonment to consumers.
 
-Token: a per-repo `NPM_AUTOMATION_TOKEN` repo secret, only in repos that actually have the workflow working. This repo has none (`gh secret list` shows only `IDENTITY_DENYLIST`), so its tag workflow `.github/workflows/host-kit-release.yml` cannot publish; host-kit is released by hand.
+## BYOK (AI tool CLIs)
 
-`--provenance` only works from a supported CI runner, so a by-hand publish cannot use it. `packages/host-kit/package.json` sets `publishConfig.provenance` to `false` for that reason. Provenance also requires the source URL on GitHub: a published-but-private package cannot use `--provenance`. Every Bilko npm publish lives at `github.com/StanislavBG/<repo>` (public).
+An AI-tool CLI brings the user's own API key. The lookup order and the env-var table live only in the "BYOK env vars" section of [`templates/README.npm.tmpl.md`](./templates/README.npm.tmpl.md); copy it into the package README and list every name the CLI checks, in order.
 
-## Required versioning discipline
+Never log raw keys. host-kit telemetry redacts `/(email|password|token|key|ssn|card|cvv|apikey)/i`; any new package's logs follow the same rule.
 
-- **Single-package repo**: `pnpm version <semver>` + manual CHANGELOG entry. Tag `v<ver>`. Push tag → CI publishes.
-- **Monorepo (Preflight, …)**: Changesets. `pnpm changeset` per change → `pnpm changeset version` bumps + writes CHANGELOG → `pnpm changeset publish` (CI does this).
-- **Never skip a version.** A bumped CHANGELOG hole signals abandonment to consumers.
+## Releasing
 
-## Required BYOK pattern (AI tool CLIs)
+Every Bilko npm package is published by hand from the maintainer's npm login. The full procedure, including picking the semver bump, is the builder skill (`session-manager-dev:builder`, run as `/builder`). In short:
 
-User's API key lookup order:
+1. **Isolated worktree.** `git worktree add` at the release commit (a fresh `origin/main`), never the live working directory. Install with the frozen lockfile.
+2. **Build and test there.** `pnpm build`, `pnpm test`, `pnpm typecheck`. Bump the version (`pnpm changeset version` or `pnpm version`) and confirm the CHANGELOG has the entry.
+3. **Pack.** `npm pack` in the package directory.
+4. **Scan the tarball.** `tar -tzf <file>.tgz`: `LICENSE`, `README.md`, `CHANGELOG.md` and every `files` path present; no secrets, `.env` files, test fixtures or stray source maps.
+5. **Publish that tarball.** `npm publish <file>.tgz --access public`, not the directory, so what was scanned is what ships.
+6. **Verify on npm** with a cache-busted URL, for example `https://registry.npmjs.org/host-kit?nocache=<timestamp>`, and check that `dist-tags.latest` is the new version.
+7. **Tag and push the tag.** host-kit's tag is `host-kit-v<ver>` (the pattern `.github/workflows/host-kit-release.yml` watches). That workflow needs an `NPM_AUTOMATION_TOKEN` secret this repo does not have, so its publish step fails; the by-hand publish above is the release.
 
-1. `BILKO_<TOOL>_API_KEY` (most specific)
-2. `<PROVIDER>_API_KEY` (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
-3. `<PROVIDER_ALT>_API_KEY` (`GOOGLE_API_KEY`)
-4. CLI flag `--<provider>-key=<key>`
-5. Interactive prompt (last resort)
+### Release checklist
 
-README has a "BYOK env vars" table listing every name the CLI checks, in order.
+```
+[ ] isolated worktree at the release commit, frozen-lockfile install
+[ ] pnpm build / pnpm test / pnpm typecheck   — all exit 0
+[ ] CHANGELOG.md has an entry for <ver>        — no version gaps
+[ ] npm pack; tarball scanned                  — LICENSE present, only needed files
+[ ] npm publish <file>.tgz --access public
+[ ] cache-busted registry URL shows <ver> as dist-tags.latest
+[ ] tag pushed                                  — host-kit-v<ver> for host-kit
+```
 
-Never log raw keys. Bilko's host-kit telemetry already redacts `/(email|password|token|key|ssn|card|cvv|apikey)/i` — same rule for any new package's logs.
+## `files` field integrity
 
-## Publish gate (5 stages)
+Every path listed in `"files"` must exist on disk at publish time. A missing file ships silently: npm doesn't error, consumers just don't get it. The common case is listing `"LICENSE"` without the file on disk. The tarball scan in step 4 catches it.
 
-Mirrors the static-path publish gate from `host-contract.md`. Each must pass before tag push:
+## Package size
 
-1. **Build** — `pnpm build` clean.
-2. **Test** — `pnpm test` clean.
-3. **Typecheck** — `pnpm typecheck` clean.
-4. **Changelog** — `CHANGELOG.md` has an entry for the new version.
-5. **Size** — `pnpm pack --dry-run` lists only files the package needs (see [Package size](#package-size)).
-
-## Releasing by hand
-
-host-kit (and any package without a working token secret) is released by the maintainer, never from the live working directory:
-
-1. Create an isolated worktree on a fresh `origin/main` (`git worktree add`), install with the frozen lockfile.
-2. Run the publish gate there: build, test, typecheck, CHANGELOG entry, version bump.
-3. `npm pack` in the package directory. Inspect the tarball: `LICENSE` present, size under the cap, no secrets or source maps.
-4. Publish the scanned tarball itself (`npm publish <file>.tgz --access public`), not the directory, so what was inspected is what ships.
-5. Verify with a cache-busted registry URL, for example `https://registry.npmjs.org/host-kit?nocache=<timestamp>`, and check that `dist-tags.latest` is the new version.
-6. Tag `v<ver>` and push the tag.
-
-If a repo later gets its own `NPM_AUTOMATION_TOKEN` repo secret, an automation-class token bypasses 2FA for CI; if it leaks, revoke it at npm immediately and rotate the secret.
+There is no size cap. The tarball must list only files the package needs; if it has stray files, audit `files`, strip test fixtures, and confirm `dist/` has no unintended source maps.
 
 ## Monorepo subpackage extras
 
 For packages under `Preflight/packages/*`:
 
-- The **root** `package.json` is `private: true` — it never publishes.
-- Each subpackage's `repository.directory` field must point to `packages/<name>` so npm provenance resolves the correct path in the GitHub tree.
-- Inter-package deps that cross the monorepo boundary (e.g. `agent-gate` depends on `@bilkobibitkov/preflight-license`) must reference the **published version**, not `workspace:*`, in the shipped tarball. Changesets handles this during `changeset version`.
-- `pnpm -r build` builds all subpackages; `pnpm -r test` tests all. CI runs both before publish.
-
-## Publish checklist
-
-Run this before every tag push or by-hand publish:
-
-```
-[ ] pnpm build                         — exits 0, dist/ updated
-[ ] pnpm test                          — all green
-[ ] pnpm typecheck                     — no type errors
-[ ] pnpm pack --dry-run                — LICENSE in file list, size under cap
-[ ] CHANGELOG.md has entry for <ver>   — no version gaps
-[ ] package.json version matches tag   — no off-by-one
-[ ] .github/workflows/release.yml      — workflow file present and pinned
-```
-
-For Changesets-managed repos, `pnpm changeset version` handles the version bump and CHANGELOG update. The checklist applies after that command.
-
-## `files` field integrity
-
-Every path listed in `"files"` must exist on disk at publish time. A missing file ships silently (npm won't error; consumers just don't get it). The most common footgun is listing `"LICENSE"` without the file on disk.
-
-Before tagging, always run `pnpm pack --dry-run` and grep the output for every path you declared in `files`.
+- The **root** `package.json` is `private: true`; it never publishes.
+- Each subpackage's `repository.directory` points to `packages/<name>`.
+- Inter-package deps reference the **published version**, not `workspace:*`, in the shipped tarball. `changeset version` handles this.
+- `pnpm -r build` and `pnpm -r test` build and test every subpackage before a release.
 
 ## Naming conventions
 
 | Concern | Convention |
 |---|---|
-| Scoped package name | `@bilkobibitkov/<name>` |
+| Scoped package name | `@bilkobibitkov/<name>` (host-kit keeps its unscoped name) |
 | Binary name | `<name>` (matches the `bin` key and the npm package short name) |
 | Tag format (single-package repo) | `v<semver>` (e.g. `v1.2.3`) |
-| Tag format (monorepo subpackage) | `<pkg>-v<semver>` (e.g. `agent-trace-v0.4.4`) |
-| Dist directory | `dist/` — never commit this; build in CI |
-| Styles directory | `styles/` — commit as-is; raw CSS tokens ship as source |
-
-## Package size
-
-No numeric size cap applies (owner decision 2026-11-15: no limits without a concrete reason). The maintainer checks `pnpm pack --dry-run` (or `npm pack`) by hand: it must list only files the package needs.
-
-If the tarball has stray files: audit `files`, strip test fixtures, and confirm `dist/` has no unintended source maps.
+| Tag format (package inside a multi-package repo) | `<pkg>-v<semver>` (e.g. `host-kit-v0.11.0`) |
+| Dist directory | `dist/`: never committed; built in the release worktree |
+| Styles directory | `styles/`: committed as-is; raw CSS tokens ship as source |
 
 ## Cross-references
 
-- [`host-contract.md`](./host-contract.md) — sibling app contract (separate concern).
-- [`templates/release.yml.tmpl`](./templates/release.yml.tmpl) — copy into each new package's `.github/workflows/release.yml`.
-- [`templates/README.npm.tmpl.md`](./templates/README.npm.tmpl.md) — copy into each new package's `README.md` and substitute `{{...}}` placeholders.
-- Reference packages: `packages/host-kit/package.json` in this repo (library), `~/Projects/Preflight/packages/agent-trace/package.json` (CLI).
+- [`host-contract.md`](./host-contract.md): sibling app contract (separate concern).
+- [`templates/README.npm.tmpl.md`](./templates/README.npm.tmpl.md): copy into each new package's `README.md` and substitute the `{{...}}` placeholders.
+- Reference package: `packages/host-kit/package.json` in this repo.

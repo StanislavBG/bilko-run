@@ -33,11 +33,12 @@ This package brings your own API key. Looks up keys in this order:
 | Var | Notes |
 |---|---|
 | `BILKO_<TOOL>_API_KEY` | Most specific. Set if you use multiple Bilko BYOK tools and want to scope a key per tool. |
-| `<PROVIDER>_API_KEY` | E.g. `GEMINI_API_KEY`, `OPENAI_API_KEY`. The standard for that provider. |
+| `<PROVIDER>_API_KEY` | E.g. `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`. The standard for that provider. |
 | `<PROVIDER_ALT>_API_KEY` | Alternate provider name, e.g. `GOOGLE_API_KEY` for Gemini. |
 | `--<provider>-key=<key>` | CLI flag, checked after the env vars. |
+| Interactive prompt | Last resort, only when none of the above is set and the CLI runs interactively. |
 
-If none are set and you run interactively, the CLI prompts (last resort).
+The CLI never logs your key.
 
 ## Changelog
 

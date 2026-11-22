@@ -10,6 +10,38 @@ export const SlugSchema = z
 
 export type Slug = z.infer<typeof SlugSchema>;
 
+// Mirrors originProblem in server/app-backends/config.ts (neither side may import the other),
+// except that http is refused outright, loopback included: the registry is deployed config.
+export function appBackendOriginProblem(raw: string): { origin: string } | { reason: string } {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { reason: 'backend is not a valid URL' };
+  }
+  if (url.protocol !== 'https:') return { reason: 'backend must use https' };
+  if (url.username || url.password) return { reason: 'backend must not contain credentials' };
+  if (url.pathname !== '/') return { reason: 'backend must not have a path' };
+  if (url.search) return { reason: 'backend must not have a query' };
+  if (url.hash) return { reason: 'backend must not have a hash' };
+  return { origin: url.origin };
+}
+
+export const AppBackendOriginSchema = z
+  .string()
+  .max(200)
+  .superRefine((value, ctx) => {
+    const result = appBackendOriginProblem(value);
+    if ('reason' in result) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.reason });
+    } else if (result.origin !== value) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'backend must be the bare origin, e.g. https://api.example.com',
+      });
+    }
+  });
+
 export const ProjectStatusSchema = z.enum(['live', 'cooking', 'postponed', 'archived']);
 
 export type ProjectStatus = z.infer<typeof ProjectStatusSchema>;
@@ -20,6 +52,7 @@ const StaticPathHostSchema = z
     path: z.string(),
     sourceRepo: z.string().optional(),
     localPath: z.string().optional(),
+    backend: AppBackendOriginSchema.optional(),
   })
   .strict();
 

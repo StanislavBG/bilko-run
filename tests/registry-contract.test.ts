@@ -6,6 +6,8 @@ import {
   RegistrySchema,
   RegistryProjectSchema,
   ProjectStatusSchema,
+  AppBackendOriginSchema,
+  appBackendOriginProblem,
 } from '../mcp-host-server/src/contract/registry.js';
 
 const ROOT = resolve(__dirname, '..');
@@ -299,5 +301,60 @@ describe('RegistrySchema rejection cases', () => {
   it('rejects an entry with an unknown top-level key', () => {
     const result = RegistrySchema.safeParse([{ ...BASE_ENTRY, unknownKey: 'nope' }]);
     expect(result.success).toBe(false);
+  });
+});
+
+describe('static-path host.backend', () => {
+  const withBackend = (backend: string) => ({
+    ...BASE_ENTRY,
+    host: { ...BASE_ENTRY.host, backend },
+  });
+
+  it('accepts a bare https origin', () => {
+    const result = RegistryProjectSchema.safeParse(withBackend('https://demo-api.example.com'));
+    if (!result.success) throw new Error(JSON.stringify(result.error.issues, null, 2));
+    expect(RegistrySchema.safeParse([withBackend('https://demo-api.example.com')]).success).toBe(true);
+  });
+
+  it('returns the origin from appBackendOriginProblem', () => {
+    expect(appBackendOriginProblem('https://demo-api.example.com')).toEqual({
+      origin: 'https://demo-api.example.com',
+    });
+    expect(appBackendOriginProblem('not a url')).toHaveProperty('reason');
+  });
+
+  it.each([
+    ['http://demo-api.example.com', 'http'],
+    ['http://localhost:3000', 'http loopback'],
+    ['https://u:p@demo-api.example.com', 'credentials'],
+    ['https://demo-api.example.com/api', 'path'],
+    ['https://demo-api.example.com?x=1', 'query'],
+    ['https://demo-api.example.com#frag', 'hash'],
+    ['https://demo-api.example.com/', 'trailing slash'],
+    ['https://Demo-API.example.com', 'uppercase host'],
+    ['https://demo-api.example.com:443', 'explicit default port'],
+    ['ftp://demo-api.example.com', 'other protocol'],
+    ['not a url', 'unparseable'],
+  ])('refuses %s (%s)', (backend) => {
+    expect(AppBackendOriginSchema.safeParse(backend).success).toBe(false);
+    expect(RegistrySchema.safeParse([withBackend(backend)]).success).toBe(false);
+  });
+
+  it('asks for the bare origin form when the value is not normalized', () => {
+    const result = AppBackendOriginSchema.safeParse('https://demo-api.example.com/');
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0].message).toMatch(/bare origin/);
+  });
+
+  it('refuses backend on an external-url host', () => {
+    const entry = {
+      ...BASE_ENTRY,
+      host: {
+        kind: 'external-url' as const,
+        url: 'https://foo.example.com',
+        backend: 'https://demo-api.example.com',
+      },
+    };
+    expect(RegistrySchema.safeParse([entry]).success).toBe(false);
   });
 });

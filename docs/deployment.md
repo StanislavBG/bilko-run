@@ -33,6 +33,8 @@ To move to a new major, run `pnpm typecheck`, `pnpm test`, `pnpm --filter host-k
 
 Env vars live in the Render dashboard (service → Environment). They are not committed to the repo. Rotation steps are in [secrets-rotation.md](secrets-rotation.md).
 
+`APP_BACKENDS` turns on forwarding of `/projects/<slug>/api/*` (HTTP and WebSocket) to apps' own backends. The contract apps build against is the "App backends (forwarding)" section of [host-contract.md](host-contract.md). The value is a comma list of `<slug>=<https origin>`, for example `APP_BACKENDS=threewinds=https://<service>.onrender.com`. Unset means nothing is forwarded. The origin must be `https://` with no path, query or credentials (`http://` only for localhost). A malformed entry is skipped and logged at boot as `[app-backends] APP_BACKENDS entry <n> ignored: <reason>`; for a duplicate slug the first entry wins. Each forwarded slug logs one boot line, `[app-backends] forwarding /projects/<slug>/api/ -> <origin>/api/`. The value is read only at boot, so a change needs a redeploy. A backend that takes over 30 s to answer (for example a sleeping Free-tier Render service) gets 502 `{ "error": "backend_unavailable" }`.
+
 ## Checking a deploy
 
 Compare the server uptime with the time you pushed. A fresh deploy resets uptime to seconds or minutes:

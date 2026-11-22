@@ -58,7 +58,7 @@ These are the OS services. Apps use them; they should not reimplement.
 
 ### To `static-path` and `external-url` apps additionally
 
-- **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page.
+- **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs a server, run your own; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below).
 - **CSP stays report-only under `/projects/`.** `BILKO_CSP_ENFORCE=1` enforces the policy on host pages only. Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Before enforcement reaches `/projects/`, it needs a per-project policy declared in the registry (decision 2026-10-26, `server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
 - **Large assets are precompressed at build time.** Files ≥1 KB of compressible types (js, css, json, wasm, pck, data, …, never HTML) get `.br`/`.gz` siblings, served with a Content-Length. Don't publish your own `.br`/`.gz` next to a source file; the build replaces them.
 - **Same-origin framing only.** Responses under `/projects/` carry CSP `frame-ancestors 'self'`, so one static-path app may embed another in an iframe (e.g. Game Academy hosting an engine game slug) and talk to it over `postMessage`. Cross-origin framing is refused; every other host page is `frame-ancestors 'none'`.
@@ -109,6 +109,47 @@ A registry entry — a `static-path`/`external-url` entry in `src/data/standalon
 ### `external-url` apps
 
 - Just the URL (`https://` only). Register it with the MCP's `register_external_project` (see below). There is no bundle, so `publish_static_project` refuses external-url slugs.
+
+## App backends (forwarding)
+
+An app that needs a server runs its own, anywhere it likes. bilko.run forwards one path prefix to it. The app owns its backend, its data, its auth checks and its uptime. bilko.run only forwards. The code is `server/app-backends/` (`config.ts`, `http.ts`, `socket.ts`).
+
+### What is forwarded
+
+- `/projects/<slug>/api/<rest>?<query>` goes to `<origin>/api/<rest>?<query>`. This covers HTTP of any method and WebSocket upgrades.
+- The owner turns it on with the env var `APP_BACKENDS` on Render (format in ~/Projects/Bilko/docs/deployment.md#env-vars). Unset means nothing is forwarded.
+- Only that prefix is forwarded. Every other `/projects/<slug>/` path is still the static bundle.
+- A path that leaves `/api/` on the backend after URL parsing (for example `..` or `%2e%2e`) gets 400 `{ "error": "bad_path" }` (a socket upgrade gets a bare 400).
+
+### Headers
+
+| Direction | Passed | Never passed |
+|---|---|---|
+| Browser to backend | `authorization`, `content-type`, `accept`, `origin`, `user-agent`, every `if-*` header. The host adds `x-forwarded-for` (the incoming list plus the peer address), `x-forwarded-proto` and `x-forwarded-host` (the host the browser used). | `Cookie`, `Host`, and everything else |
+| Backend to browser | `content-type`, `cache-control`, `etag`, `last-modified`, `expires`, `location`, `retry-after`, `content-disposition`, `content-language`, `www-authenticate` (the list in `server/app-backends/http.ts`) | `Set-Cookie`, `content-length`, `content-encoding`, hop-by-hop headers, everything else |
+
+If the backend sends no `cache-control`, the host adds `cache-control: no-store`. Redirects are not followed; a `3xx` and its `location` go back to the browser as they are.
+
+### HTTP limits and errors
+
+- Request bodies are capped at 64 KiB. A bigger body gets 413.
+- The backend has 30 s to answer. A backend that is down, refuses the connection, or takes longer gets 502 `{ "error": "backend_unavailable" }`.
+- `OPTIONS` requests are answered by the host's CORS layer and do not reach the backend.
+- Forwarded HTTP bytes are counted in the host's egress meter under the key `app-backend:<slug>`.
+
+### WebSocket
+
+- The browser's upgrade completes only after the backend's socket is open.
+- A backend that refuses the handshake: the browser gets the same HTTP status. A backend that is down or does not finish the handshake within 30 s: the browser gets 502 `{ "error": "backend_unavailable" }`.
+- Text and binary frames, ping and pong, the subprotocol the backend picks, and close codes with their reasons pass both ways. That includes 1000, 1012 and the app range 4000-4999. A close with no code (1005) is passed on as a close with no code. An abnormal drop (1006) drops the other side too, so it also sees 1006.
+- Frames from the browser are capped at 64 KiB. A bigger frame closes that socket with 1009.
+- A bilko.run deploy closes forwarded sockets: 1012 to the browser and 1001 to the backend. Clients should reconnect on 1012.
+
+### What the app must do
+
+- **Check auth itself.** The browser sends the Clerk session token as `Authorization: Bearer <token>` (see "Calling authenticated host APIs" above). The backend verifies it against bilko.run's Clerk instance. The host passes the header on and checks nothing.
+- **Accept `Origin: https://bilko.run` on socket upgrades.** The backend sees its own host name in `Host`, not bilko.run, so a same-origin check against `Host` refuses every forwarded socket.
+- **Give the browser paths under `/projects/<slug>/api/`**, never root-relative `/api/` ones. `/api/` on bilko.run is the host's own API.
 
 ## Registry rules
 

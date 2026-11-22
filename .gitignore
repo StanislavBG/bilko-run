@@ -38,21 +38,13 @@ playwright-report/
 .claude/*
 !.claude/skills/
 .claude/skills/*/drafts/
-# Session Manager runtime state: Epic session records and chat transcripts. They
-# quote whatever agents wrote, including the owner's identity, and this repo is
-# public (docs/identity-boundary.md). The files stay on disk; Session Manager
-# reads and writes them locally.
-session-manager-operations/prompt-sessions/
-# Session Manager scheduler, UI and log state: machine-local, rewritten while
-# jobs run, never source. Untracked from the main checkout, never from a
-# worktree (merging that deletion would delete the live files here).
-# session-manager-operations/reviews/ stays tracked: validators and Ship PRDs
-# commit and gate on it.
-session-manager-operations/scheduler/
-session-manager-operations/ui-prefs/
-session-manager-operations/logs/
-session-manager-operations/feedback/
-session-manager-operations/memory-clusters/
+# Session Manager's per-project working folder (records, pages, brief, scheduler
+# and chat state): machine-local, never source. It holds chat transcripts that
+# quote whatever agents wrote, and this repo is public (docs/identity-boundary.md).
+# Untrack from the main checkout only, never from a worktree: landing that
+# deletion deletes the live files. A validate or ship PRD may still force-add the
+# one record file its PRD names.
+session-manager-operations/
 
 # Playwright MCP console logs and screenshots (local only).
 .playwright-mcp/

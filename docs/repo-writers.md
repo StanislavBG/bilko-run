@@ -24,7 +24,7 @@ Goal: `git status -sb` prints `## main...origin/main`, with no ahead or behind c
 | `~/Projects/social-signals-trader/scripts/publish-to-bilko.sh` | `public/projects/social-signals-trader/` | throwaway worktree, push `<sha>:main`; never touches local `main` |
 | `~/Projects/Weather/scripts/publish_web.sh` | `public/projects/outdoor-hours/`, `public/outdoor-hours/` | live checkout: fast-forward, pathspec commit, `git push origin main` |
 | `~/Projects/session-manager/web/remote-app/scripts/vendor-to-bilko.mjs` | `public/projects/session-manager/` | no commit; files stay dirty until someone commits them |
-| Session Manager Project Home | `session-manager-operations/project-pages/` | no commit; files stay dirty until someone commits them |
+| Session Manager Project Home | `session-manager-operations/project-pages/` (git-ignored) | no commit; writes into the git-ignored folder |
 
 `.git/blog-seed.lock` serializes every writer that moves local `main` from outside a session, and the sync takes it itself. Outside callers (`~/Projects/burrow/app/shared/bilko_sync.py`) rely on the contract in the header of `scripts/sync-local-main.sh`; tell Burrow with `/send-feedback` before changing it.
 

@@ -60,7 +60,7 @@ How to confirm a deploy landed is in [docs/deployment.md](docs/deployment.md). S
 | `server/routes/tools/` | One gateway file per AI tool (the tool's page lives in its own repo) | One specific app |
 | `server/routes/academy.ts` | Gateway for Bilko Academy | One specific app |
 | `server/sm-relay/`, `src/pages/session-manager-landing/` | Session Manager relay and landing page | One specific app |
-| `session-manager-operations/` | Session Manager's job and scheduler records | One specific app |
+| `session-manager-operations/` | Session Manager's per-project working folder; git-ignored, kept on disk | One specific app |
 
 ## Add a blog post
 

@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   ProjectCardShot, cardShotMode, loadAudioMeta, resetAudioMetaCache, shouldFetchAudioMeta,
+  playWithSound, createCardSound, SOUND_GESTURE_EVENTS,
 } from '../src/components/ProjectCardShot.js';
 
 const VIDEO = '/projects/demo/tile.mp4?v=1a2b3c4d';
@@ -157,5 +158,241 @@ describe('ProjectCardShot hosted video audio (audioMetaUrl)', () => {
     expect(render({ name: 'Demo', video: HOSTED, allowMotion: true, hasAudio: true, audioMetaUrl: META })).toContain('Unmute video');
     expect(render({ name: 'Demo', thumbnail: THUMB, allowMotion: true, audioMetaUrl: META })).not.toContain('<button');
     expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
+type FakeMedia = {
+  muted: boolean;
+  calls: boolean[];
+  pauses: number;
+  results: Array<() => Promise<void> | undefined>;
+  play(): Promise<void> | undefined;
+  pause(): void;
+};
+
+function fakeMedia(results: Array<() => Promise<void> | undefined>, muted = false): FakeMedia {
+  return {
+    muted,
+    calls: [],
+    pauses: 0,
+    results,
+    play() { this.calls.push(this.muted); const next = this.results.shift(); return next ? next() : undefined; },
+    pause() { this.pauses++; },
+  };
+}
+
+const ok = () => Promise.resolve();
+const refuse = () => Promise.reject(new DOMException('x', 'NotAllowedError'));
+const abort = () => Promise.reject(new DOMException('x', 'AbortError'));
+const settle = () => new Promise(r => setTimeout(r, 0));
+
+describe('playWithSound', () => {
+  it('resolves playing when play() resolves or returns undefined', async () => {
+    const el = fakeMedia([ok]);
+    expect(await playWithSound(el, false)).toBe('playing');
+    expect(el.calls).toEqual([false]);
+    const bare = fakeMedia([() => undefined], true);
+    expect(await playWithSound(bare, false)).toBe('playing');
+    expect(bare.calls).toEqual([false]);
+  });
+
+  it('calls play() synchronously with the wanted muted state', () => {
+    const el = fakeMedia([ok]);
+    void playWithSound(el, true);
+    expect(el.calls).toEqual([true]);
+  });
+
+  it('retries muted after NotAllowedError and resolves held', async () => {
+    const el = fakeMedia([refuse, ok]);
+    expect(await playWithSound(el, false)).toBe('held');
+    expect(el.calls).toEqual([false, true]);
+    expect(el.muted).toBe(true);
+  });
+
+  it('resolves blocked when the muted retry is refused too', async () => {
+    const el = fakeMedia([refuse, refuse]);
+    expect(await playWithSound(el, false)).toBe('blocked');
+    expect(el.calls).toEqual([false, true]);
+  });
+
+  it('resolves blocked on NotAllowedError while already muted, without a retry', async () => {
+    const el = fakeMedia([refuse]);
+    expect(await playWithSound(el, true)).toBe('blocked');
+    expect(el.calls).toEqual([true]);
+  });
+
+  it('resolves interrupted on AbortError, muted unchanged, one call', async () => {
+    const el = fakeMedia([abort]);
+    expect(await playWithSound(el, false)).toBe('interrupted');
+    expect(el.calls).toEqual([false]);
+    expect(el.muted).toBe(false);
+    const ns = fakeMedia([() => Promise.reject(new DOMException('x', 'NotSupportedError'))]);
+    expect(await playWithSound(ns, false)).toBe('interrupted');
+  });
+
+  it('never rejects, even on a non-error rejection', async () => {
+    const el = fakeMedia([() => Promise.reject(null)]);
+    expect(await playWithSound(el, false)).toBe('interrupted');
+  });
+});
+
+describe('createCardSound', () => {
+  const SOUND = { muted: false, paused: false };
+
+  function setup(extra: { ignore?: (t: EventTarget | null) => boolean; isActive?: () => boolean } = {}) {
+    const target = new EventTarget();
+    const changes: boolean[] = [];
+    const sound = createCardSound({ gestureTarget: target, isActive: () => true, onHeldChange: h => changes.push(h), ...extra });
+    return { target, changes, sound };
+  }
+
+  it('exports the gesture event list', () => {
+    expect([...SOUND_GESTURE_EVENTS]).toEqual(['pointerup', 'keydown', 'touchend', 'click']);
+  });
+
+  it('stays not held when sound plays', async () => {
+    const { sound, changes } = setup();
+    const el = fakeMedia([ok]);
+    sound.apply(el, SOUND);
+    await settle();
+    expect(sound.held()).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it('holds on held, retries with sound on a click, then releases the listeners', async () => {
+    const { sound, target, changes } = setup();
+    const el = fakeMedia([refuse, ok, ok]);
+    sound.apply(el, SOUND);
+    await settle();
+    expect(sound.held()).toBe(true);
+    expect(changes).toEqual([true]);
+    target.dispatchEvent(new Event('click'));
+    expect(el.calls).toEqual([false, true, false]);
+    await settle();
+    expect(sound.held()).toBe(false);
+    expect(changes).toEqual([true, false]);
+    target.dispatchEvent(new Event('click'));
+    target.dispatchEvent(new Event('keydown'));
+    expect(el.calls).toHaveLength(3);
+  });
+
+  it('holds on blocked when sound was wanted, not when muted was wanted', async () => {
+    const a = setup();
+    a.sound.apply(fakeMedia([refuse, refuse]), SOUND);
+    await settle();
+    expect(a.sound.held()).toBe(true);
+    const b = setup();
+    b.sound.apply(fakeMedia([refuse]), { muted: true, paused: false });
+    await settle();
+    expect(b.sound.held()).toBe(false);
+  });
+
+  it('every gesture event name triggers the retry', async () => {
+    for (const name of SOUND_GESTURE_EVENTS) {
+      const { sound, target } = setup();
+      const el = fakeMedia([refuse, ok, ok]);
+      sound.apply(el, SOUND);
+      await settle();
+      target.dispatchEvent(new Event(name));
+      expect(el.calls).toEqual([false, true, false]);
+      sound.dispose();
+    }
+  });
+
+  it('does not retry on events that are not gestures', async () => {
+    const { sound, target } = setup();
+    const el = fakeMedia([refuse, ok]);
+    sound.apply(el, SOUND);
+    await settle();
+    target.dispatchEvent(new Event('pointerdown'));
+    expect(el.calls).toHaveLength(2);
+  });
+
+  it('ignore and isActive false suppress the retry', async () => {
+    const ig = setup({ ignore: () => true });
+    const el1 = fakeMedia([refuse, ok]);
+    ig.sound.apply(el1, SOUND);
+    await settle();
+    ig.target.dispatchEvent(new Event('click'));
+    expect(el1.calls).toHaveLength(2);
+    expect(ig.sound.held()).toBe(true);
+
+    const ia = setup({ isActive: () => false });
+    const el2 = fakeMedia([refuse, ok]);
+    ia.sound.apply(el2, SOUND);
+    await settle();
+    ia.target.dispatchEvent(new Event('keydown'));
+    expect(el2.calls).toHaveLength(2);
+    expect(ia.sound.held()).toBe(true);
+  });
+
+  it('ignores a stale outcome from an older apply()', async () => {
+    const { sound, changes } = setup();
+    let rejectOld!: (e: unknown) => void;
+    const old = fakeMedia([() => new Promise<void>((_, rej) => { rejectOld = rej; }), ok]);
+    sound.apply(old, SOUND);
+    const fresh = fakeMedia([ok]);
+    sound.apply(fresh, SOUND);
+    await settle();
+    rejectOld(new DOMException('x', 'NotAllowedError'));
+    await settle();
+    expect(sound.held()).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it('interrupted leaves held unchanged', async () => {
+    const { sound } = setup();
+    const el = fakeMedia([refuse, ok, abort]);
+    sound.apply(el, SOUND);
+    await settle();
+    expect(sound.held()).toBe(true);
+    sound.apply(el, SOUND);
+    await settle();
+    expect(sound.held()).toBe(true);
+  });
+
+  it('dispose() removes the listeners and is safe twice', async () => {
+    const { sound, target } = setup();
+    const el = fakeMedia([refuse, ok, ok]);
+    sound.apply(el, SOUND);
+    await settle();
+    sound.dispose();
+    sound.dispose();
+    target.dispatchEvent(new Event('click'));
+    expect(el.calls).toHaveLength(2);
+  });
+
+  it('a paused choice sets muted, calls pause() and clears held', async () => {
+    const { sound, changes, target } = setup();
+    const el = fakeMedia([refuse, ok]);
+    sound.apply(el, SOUND);
+    await settle();
+    expect(sound.held()).toBe(true);
+    sound.apply(el, { muted: false, paused: true });
+    expect(el.pauses).toBe(1);
+    expect(el.muted).toBe(false);
+    expect(sound.held()).toBe(false);
+    expect(changes).toEqual([true, false]);
+    target.dispatchEvent(new Event('click'));
+    expect(el.calls).toHaveLength(2);
+  });
+
+  it('default isActive uses navigator.userActivation when present', async () => {
+    vi.stubGlobal('navigator', { userActivation: { isActive: false } });
+    try {
+      const target = new EventTarget();
+      const sound = createCardSound({ gestureTarget: target });
+      const el = fakeMedia([refuse, ok, ok]);
+      sound.apply(el, SOUND);
+      await settle();
+      target.dispatchEvent(new Event('click'));
+      expect(el.calls).toHaveLength(2);
+      (globalThis.navigator as unknown as { userActivation: { isActive: boolean } }).userActivation.isActive = true;
+      target.dispatchEvent(new Event('click'));
+      expect(el.calls).toHaveLength(3);
+      sound.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

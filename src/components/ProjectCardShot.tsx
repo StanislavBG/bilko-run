@@ -106,6 +106,138 @@ export function loadAudioMeta(url: string, signal?: AbortSignal): Promise<boolea
   return p;
 }
 
+/** The visitor's choice for the active card's video. */
+export type CardPlayback = { muted: boolean; paused: boolean };
+
+/** The part of a media element the sound helpers touch (an HTMLVideoElement fits). */
+export type SoundMedia = { muted: boolean; play(): Promise<void> | undefined; pause(): void };
+
+/** Compile-time proof that an HTMLVideoElement is a SoundMedia. */
+export type VideoIsSoundMedia<T extends SoundMedia = HTMLVideoElement> = T;
+
+/**
+ * playing: played as asked. held: sound refused, playing muted instead.
+ * blocked: refused even muted. interrupted: play() failed for another reason.
+ */
+export type PlayOutcome = 'playing' | 'held' | 'blocked' | 'interrupted';
+
+function rejectionName(err: unknown): unknown {
+  return (err as { name?: unknown } | null)?.name;
+}
+
+/**
+ * Sets el.muted = wantMuted and calls play() synchronously (so a gesture handler
+ * plays inside its gesture). When the browser refuses sound, mutes and retries
+ * once. Never rejects.
+ */
+export function playWithSound(el: SoundMedia, wantMuted: boolean): Promise<PlayOutcome> {
+  el.muted = wantMuted;
+  let first: Promise<void> | undefined;
+  try {
+    first = el.play();
+  } catch (err) {
+    first = Promise.reject(err);
+  }
+  if (!first || typeof first.then !== 'function') return Promise.resolve('playing');
+  return first.then(
+    (): PlayOutcome => 'playing',
+    async (err): Promise<PlayOutcome> => {
+      if (rejectionName(err) !== 'NotAllowedError') return 'interrupted';
+      if (el.muted) return 'blocked';
+      el.muted = true;
+      try {
+        await el.play();
+        return 'held';
+      } catch {
+        return 'blocked';
+      }
+    },
+  );
+}
+
+/** Gestures that carry user activation; pointerdown is left out on purpose (see createCardSound). */
+export const SOUND_GESTURE_EVENTS = ['pointerup', 'keydown', 'touchend', 'click'] as const;
+
+export type CardSound = {
+  apply(el: SoundMedia, choice: CardPlayback): void;
+  held(): boolean;
+  dispose(): void;
+};
+
+function defaultIsActive(): boolean {
+  const ua = (globalThis.navigator as { userActivation?: { isActive: boolean } } | undefined)?.userActivation;
+  return ua ? ua.isActive : true;
+}
+
+/**
+ * Remembers the visitor's latest choice and, while the browser holds the sound
+ * back, re-applies it at the first activating gesture on gestureTarget.
+ * pointerdown is not listened to: touch pointerdown carries no activation (and
+ * unmuting there pauses the clip), and a mouse press on a card switch would
+ * start the old card's sound for the length of the press.
+ */
+export function createCardSound(opts: {
+  gestureTarget: EventTarget;
+  ignore?: (target: EventTarget | null) => boolean;
+  isActive?: () => boolean;
+  onHeldChange?: (held: boolean) => void;
+}): CardSound {
+  const isActive = opts.isActive ?? defaultIsActive;
+  let lastEl: SoundMedia | null = null;
+  let lastChoice: CardPlayback | null = null;
+  let gen = 0;
+  let held = false;
+  let armed = false;
+
+  const onGesture = (event: Event) => {
+    if (opts.ignore?.(event.target)) return;
+    if (!isActive()) return;
+    if (lastEl && lastChoice) apply(lastEl, lastChoice);
+  };
+
+  const arm = (on: boolean) => {
+    if (on === armed) return;
+    armed = on;
+    for (const name of SOUND_GESTURE_EVENTS) {
+      if (on) opts.gestureTarget.addEventListener(name, onGesture, { capture: true, passive: true });
+      else opts.gestureTarget.removeEventListener(name, onGesture, { capture: true });
+    }
+  };
+
+  const setHeld = (next: boolean) => {
+    if (next === held) return;
+    held = next;
+    arm(next);
+    opts.onHeldChange?.(next);
+  };
+
+  function apply(el: SoundMedia, choice: CardPlayback): void {
+    lastEl = el;
+    lastChoice = choice;
+    const mine = ++gen;
+    if (choice.paused) {
+      el.muted = choice.muted;
+      el.pause();
+      setHeld(false);
+      return;
+    }
+    void playWithSound(el, choice.muted).then(outcome => {
+      if (mine !== gen) return;
+      if (outcome === 'playing') setHeld(false);
+      else if ((outcome === 'held' || outcome === 'blocked') && !choice.muted) setHeld(true);
+    });
+  }
+
+  return {
+    apply,
+    held: () => held,
+    dispose: () => {
+      gen++;
+      arm(false);
+    },
+  };
+}
+
 const ICON = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true } as const;
 
 function PlayIcon() {

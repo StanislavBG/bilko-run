@@ -19,6 +19,7 @@ Everything above the first heading is imported from the entry map. This file kee
 - `requireAuth` on token-spending endpoints; rate limiting on free-tier endpoints. Paid-tier entitlement comes only from the verified Clerk token.
 - Each tool is independent: no cross-dependencies in backend or frontend. Paid tools share the credit model; free tools (LocalScore, OutdoorHours) deduct nothing.
 - New apps default to `static-path` in their own repo; `react-route` only when the app must live in this bundle.
+- Every hosting operation an app needs must be doable by agents through the `bilko-host` MCP or the API; a dashboard-only step is a bug to fix.
 - Static-path fixes go in the sibling repo that owns the source, not in `public/projects/<slug>/` (the publisher overwrites it). Registry changes go through the `bilko-host` MCP.
 - The registry is schema-validated (`mcp-host-server/src/contract/registry.ts`). Rebuild and commit `mcp-host-server/dist/` with any `src/` change (`tests/mcp-dist-sync.test.ts` enforces this).
 - App-specific host code must be added to the list in [`docs/host-internals.md`](docs/host-internals.md#sanctioned-app-specific-host-code) in the same commit, or live in the sibling repo.

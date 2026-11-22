@@ -110,9 +110,22 @@ An app that needs a server runs its own, anywhere it likes. bilko.run forwards o
 ### What is forwarded
 
 - `/projects/<slug>/api/<rest>?<query>` goes to `<origin>/api/<rest>?<query>`. This covers HTTP of any method and WebSocket upgrades.
-- The owner turns it on with the env var `APP_BACKENDS` on Render (format in ~/Projects/Bilko/docs/deployment.md#env-vars). Unset means nothing is forwarded.
+- The origin comes from the slug's `host.backend` in the registry, set with `set_app_backend` (see "Turning it on" below). `APP_BACKENDS` on Render is an optional override: a valid entry there wins for its slug (format in ~/Projects/Bilko/docs/deployment.md#env-vars). A slug with neither is not forwarded.
 - Only that prefix is forwarded. Every other `/projects/<slug>/` path is still the static bundle.
 - A path that leaves `/api/` on the backend after URL parsing (for example `..` or `%2e%2e`) gets 400 `{ "error": "bad_path" }` (a socket upgrade gets a bare 400).
+
+### Turning it on
+
+The app's own session turns forwarding on, changes it or clears it with the `bilko-host` MCP:
+
+```
+bilko-host__set_app_backend { slug, callerRepoPath, origin }   # origin: "https://api.example.com", or null to clear
+```
+
+- `static-path` slugs only. Only the repo bound to the slug (`callerRepoPath` equal to `host.localPath`) may call it, because the forwarder passes users' `Authorization` headers to that origin.
+- `origin` is a bare `https://` origin: no path, query, hash or credentials, at most 200 chars. `null` removes `host.backend`, which stops forwarding for that slug unless `APP_BACKENDS` names it.
+- The tool commits and pushes the registry. The change is live after bilko.run redeploys, in about a minute, because the forwarding map is built at boot.
+- Confirm with `GET https://bilko.run/api/health`: `appBackends` maps each forwarded slug to its source, `"registry"` or `"env"` (origins are never shown). After a set, `appBackends.<slug>` is `"registry"`; after a clear, the slug is gone. If it shows `"env"`, an `APP_BACKENDS` entry on Render overrides the registry for that slug, and the tool's result says so.
 
 ### Headers
 
@@ -152,6 +165,7 @@ The registry (`src/data/standalone-projects.json`) is validated by `mcp-host-ser
 - **Status:** one of `live`, `cooking`, `postponed`, `archived`.
 - **Slugs are unique** across the registry.
 - A `static-path` entry's `host.path` must equal `/projects/<slug>/` exactly.
+- A `static-path` entry may carry `host.backend`, the bare `https://` origin that `/projects/<slug>/api/*` forwards to (set with `set_app_backend`; see "App backends (forwarding)"). Other host kinds have no `host.backend`.
 - An `external-url` entry's `host.url` must start with `https://`.
 
 ## Project listing — who owns what
@@ -165,7 +179,7 @@ A project's `/projects` card is split between the sibling that owns the app and 
 
 Sibling sessions never ask Bilko to change card copy. They edit it themselves. Bilko-owned fields are rejected in any listing patch.
 
-**Ownership rule.** `host.localPath` binds a slug to exactly one repo. `register_static_project` / `register_external_project` record the caller's `callerRepoPath` there, and refuses a repo that is already bound to another slug. `publish_static_project` (via `sourceRepoPath`), `unregister_project` and `update_project_listing` (via `callerRepoPath`) refuse any other caller.
+**Ownership rule.** `host.localPath` binds a slug to exactly one repo. `register_static_project` / `register_external_project` record the caller's `callerRepoPath` there, and refuses a repo that is already bound to another slug. `publish_static_project` (via `sourceRepoPath`), `unregister_project`, `update_project_listing`, `set_listing_media` and `set_app_backend` (via `callerRepoPath`) refuse any other caller.
 
 **Content standards** are enforced by `mcp-host-server/src/contract/registry.ts` on every write. Field lengths, list counts and the allowed `status`, `offering` and `pricing` values are the Zod schemas there (`RegistryProjectSchema`, `ListingSchema`, `ListingOfferingSchema`, `ListingPricingSchema`); a rejected write names the field. `thumbnail` is an `https://` URL or a `/path`. `listing.icon`, `listing.shareImage` and `listing.video` are a bundle path starting with `/projects/<own-slug>/`, or a hosted path `/projects/<own-slug>/_media/<sha256>.<ext>` from `set_listing_media`; the file rules are in "Card media upload (set_listing_media)".
 
@@ -400,6 +414,12 @@ Card edits at any time, for any host kind:
 bilko-host__get_project { slug }                                   # see the current entry
 bilko-host__update_project_listing { slug, callerRepoPath, patch } # any listing field (merge patch)
 bilko-host__set_listing_media { slug, callerRepoPath, media: { video?, shareImage?, icon? } }  # upload, replace or remove (null) card media
+```
+
+App backend, at any time, for a `static-path` entry:
+
+```
+bilko-host__set_app_backend { slug, callerRepoPath, origin }       # forward /projects/<slug>/api/* to origin; null clears
 ```
 
 `register_static_project` (and `register_external_project`, which adds a required `https://` `url`) binds the slug to `callerRepoPath` (your repo root) and also takes optional `tags` and `displayName` (a hub-only display name, 1-60 chars). It has no `public` parameter: new apps are admin-only until the Bilko owner lists them. Later card edits go through `update_project_listing` or `bilko.listing.json`; see "Project listing — who owns what". Card media from local files goes through `set_listing_media`; see "Card media upload (set_listing_media)".

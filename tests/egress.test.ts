@@ -303,6 +303,33 @@ describe('static egress meter', () => {
     const top = await topStaticAssets(1, 50, 'demo-app');
     expect(top[0].path).toBe('/projects/demo-app/many/heavy.bin');
   });
+
+  it('records a forwarded app-backend request once under app-backend:<slug>, never as static or an asset', async () => {
+    const backendApp = Fastify({ logger: false });
+    registerEgressMeter(backendApp, { flush: false });
+    const body = JSON.stringify({ ok: true, from: 'backend' });
+    backendApp.all('/projects/demo-app/api/*', { config: { appBackend: 'demo-app' } }, async (_req, reply) =>
+      reply.type('application/json').send(body),
+    );
+    await backendApp.ready();
+
+    const res = await backendApp.inject({ method: 'GET', url: '/projects/demo-app/api/state?x=1' });
+    expect(res.statusCode).toBe(200);
+    await flushEgress();
+    await backendApp.close();
+
+    const rows = await dbAll<{ route: string; requests: number; bytes: number }>(
+      'SELECT route, requests, bytes FROM api_egress_daily WHERE date = ?', today,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].route).toBe('app-backend:demo-app');
+    expect(Number(rows[0].requests)).toBe(1);
+    expect(Number(rows[0].bytes)).toBe(Buffer.byteLength(body));
+    expect(rows.some((r) => r.route === 'static:demo-app')).toBe(false);
+
+    const assets = await dbAll<{ path: string }>('SELECT path FROM static_asset_daily');
+    expect(assets).toHaveLength(0);
+  });
 });
 
 describe('earliestEgressDate', () => {

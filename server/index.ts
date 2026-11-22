@@ -45,6 +45,9 @@ import { registerSigninCaptureRoutes } from './routes/signin-capture.js';
 import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
 import { registerForumRoutes, getForumSeedHealth } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
+import { parseAppBackends } from './app-backends/config.js';
+import { registerAppBackendRoutes } from './app-backends/http.js';
+import { createAppBackendUpgrade } from './app-backends/socket.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
 import { registerRoomRoutes, suspendRoomTables } from './routes/rooms.js';
 import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
@@ -251,6 +254,16 @@ registerSigninCaptureRoutes(app);
 registerProjectCatalogRoutes(app);
 registerForumRoutes(app);
 
+// Generic forwarding of /projects/<slug>/api/* (HTTP + WebSocket) to each app's own server,
+// set by env APP_BACKENDS. Unset means nothing is forwarded.
+const appBackends = parseAppBackends(process.env.APP_BACKENDS);
+for (const b of appBackends) {
+  console.log(`[app-backends] forwarding ${b.prefix} -> ${b.origin}/api/`);
+}
+registerAppBackendRoutes(app, appBackends);
+const appBackendSockets = createAppBackendUpgrade(appBackends);
+app.addHook('preClose', async () => { appBackendSockets.closeAll(); });
+
 // Boot-time secret age check
 try {
   const secretRows = await dbAll<{ name: string; last_rotated_at: number | null }>(
@@ -412,12 +425,14 @@ registerProjectEventsRoutes(app);
 try {
   await app.listen({ port: PORT, host: '0.0.0.0' });
   // WebSocket upgrades, same-origin. Each handler claims only its own path and
-  // returns false otherwise: Session Manager web-remote relay, then the
+  // returns false otherwise: the app-backend forwarder (/projects/<slug>/api/,
+  // from APP_BACKENDS), then the Session Manager web-remote relay, then the
   // realtime input relay (/api/realtime/rooms/:roomId), then the GameRoom
   // socket (/api/rooms/socket/:roomId).
   app.server.on('upgrade', (req, socket, head) => {
     try {
-      const handled = smRelayHandleUpgrade(req, socket as any, head)
+      const handled = appBackendSockets.handleUpgrade(req, socket as any, head)
+        || smRelayHandleUpgrade(req, socket as any, head)
         || realtimeHandleUpgrade(req, socket as any, head)
         || handleRoomUpgrade(req, socket as any, head);
       if (!handled) socket.destroy();

@@ -323,6 +323,16 @@ export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolea
       const path = req.url.split('?')[0];
       const date = dayKey(Date.now());
 
+      // Forwarded app-backend requests (server/app-backends/http.ts) are metered per app,
+      // not as static files. Bounded: one key per configured APP_BACKENDS slug.
+      const appBackend = (req as { routeOptions?: { config?: { appBackend?: unknown } } }).routeOptions?.config?.appBackend;
+      if (typeof appBackend === 'string') {
+        const counted = (req as unknown as { __egressBytes?: () => number }).__egressBytes?.();
+        const bytes = req.method === 'HEAD' ? 0 : (contentLengthOf(reply) || counted || 0);
+        recordEgress(date, req.method, `app-backend:${appBackend}`, bytes);
+        return;
+      }
+
       if (path.startsWith('/api/')) {
         const route = (req as { routeOptions?: { url?: string } }).routeOptions?.url;
         const counted = (req as unknown as { __egressBytes?: () => number }).__egressBytes?.();

@@ -14,7 +14,7 @@ export const goldenGate: Gate = async (ctx) => {
   if (!existsSync(spec)) {
     return {
       name: 'golden', status: 'fail',
-      details: `tests/golden.spec.ts missing in ${ctx.sourceRepo}. Copy template from @bilkobibitkov/host-kit/dist/testing/golden.template.ts.txt.`,
+      details: `tests/golden.spec.ts missing in ${ctx.sourceRepo}. Copy the template from https://github.com/StanislavBG/bilko-run/blob/main/packages/host-kit/src/testing/golden.template.ts.`,
     };
   }
   try {

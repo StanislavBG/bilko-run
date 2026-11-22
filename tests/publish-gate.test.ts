@@ -257,6 +257,18 @@ describe('goldenGate', () => {
     expect(result.details).toContain('golden.spec.ts missing');
   });
 
+  it('fail: missing golden.spec.ts names a template location that exists', async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    const ctx = makeCtx({ sourceRepo: '/tmp/fake-repo' });
+    const result = await goldenGate(ctx);
+    expect(result.status).toBe('fail');
+    expect(result.details).toBe(
+      'tests/golden.spec.ts missing in /tmp/fake-repo. Copy the template from '
+      + 'https://github.com/StanislavBG/bilko-run/blob/main/packages/host-kit/src/testing/golden.template.ts.',
+    );
+    expect(result.details).not.toContain('golden.template.ts.txt');
+  });
+
   it('pass: playwright test succeeds', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(execSync).mockReturnValue(Buffer.from('1 passed'));

@@ -359,6 +359,19 @@ export const MIGRATIONS = [
     moderation_reason     TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_project_feedback_slug_created ON project_feedback (slug, created_at)`,
+  // Screenshots 2..5 of one project_feedback row, idx 1..4 in submission order.
+  // Screenshot 1 stays in project_feedback.image_mime/image_data, so readers of
+  // the single `image` keep working and rows filed before this table need no
+  // backfill. `bytes` is the data URL's length, stored so a metadata-only read
+  // (GET ?images=none) never touches `data`.
+  `CREATE TABLE IF NOT EXISTS project_feedback_images (
+    feedback_id TEXT NOT NULL,
+    idx         INTEGER NOT NULL,
+    mime        TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    bytes       INTEGER NOT NULL,
+    PRIMARY KEY (feedback_id, idx)
+  )`,
   // Per-route API response bytes, bucketed by day. Keyed on the route PATTERN
   // (`/api/projects/:slug/feedback`), not the resolved URL, so cardinality is
   // bounded by the number of routes. See server/egress.ts.

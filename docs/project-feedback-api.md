@@ -5,7 +5,8 @@ consume it. The cross-project contract is authored in the sibling
 (`~/Projects/social-signals-trader/docs/feedback-api-contract.md`); this file records the
 host's side of it so a sibling session doesn't have to read the route source.
 
-Storage: table `project_feedback` (Turso; local SQLite in dev).
+Storage: table `project_feedback`, plus `project_feedback_images` for screenshots 2–5
+(Turso; local SQLite in dev). Screenshot 1 stays in `project_feedback.image_data`.
 
 ## Owner credentials
 
@@ -24,7 +25,7 @@ could open the route, it returns `503`.
 ## `POST /api/projects/:slug/feedback` — public
 
 Unauthenticated by design (any visitor to a public page may file feedback), so the
-server-side hygiene is load-bearing: 4 MB body cap, 10 submissions/min/IP, strict
+server-side hygiene is load-bearing: 10 MiB body cap, 10 submissions/min/IP, strict
 field validation. Text is stored raw and never rendered by this server — anything
 that displays it must escape it.
 
@@ -39,18 +40,26 @@ Body:
 | `title` | yes | ≤ 120 chars |
 | `description` | yes | ≤ 4 000 chars |
 | `route` | no | ≤ 200 chars |
-| `image.dataUrl` | no | base64 `data:image/(png\|jpeg\|webp\|gif)`, ≤ 2 MB |
+| `images` | no | 1–5 `{ dataUrl, mime? }`, in order. Each `dataUrl` is base64 `data:image/(png\|jpeg\|webp\|gif)`, ≤ 2,000,000 chars; all together ≤ 8,000,000 chars |
+| `image.dataUrl` | no | legacy single screenshot, same rules; read only when `images` is absent, `null` or empty |
 | `client` | no | arbitrary object, JSON-stringified and truncated to 4 000 chars |
 | `snapshotGeneratedAt` | no | string |
 | `parentId` | no | **opaque threading pointer, ≤ 200 chars** |
+
+Screenshot refusals store nothing: more than 5 entries, a non-array `images`, or an
+entry without a valid data URL → `400` (the error names the entry, e.g. `images[1]`);
+one image over 2,000,000 chars or a total over 8,000,000 → `413`. The stored `mime` is
+the type the data URL declares; a client's `mime` is not used.
 
 The route validates field-by-field and does **not** persist unknown keys — anything
 not listed above is dropped. `parentId` is the one deliberate exception to
 interpretation: it is stored verbatim, echoed back unchanged, never resolved or
 validated against an existing row. A dangling value is the reading client's problem.
 
-→ `201 {"id", "parentId", "receivedAt", "receipt"}`. `receipt` is a one-time secret for
-the status lookup below. Only its sha256 is stored, so it can't be fetched again.
+→ `201 {"id", "parentId", "receivedAt", "receipt", "imageCount"}`. `imageCount` is the
+number of screenshots stored (0 when none were sent); a client can treat a missing
+`imageCount` as a host that dropped its images. `receipt` is a one-time secret for the
+status lookup below. Only its sha256 is stored, so it can't be fetched again.
 
 ## `GET /api/projects/:slug/feedback` — owner bearer
 
@@ -61,17 +70,24 @@ image payloads).
 **Use `images=none` on moderation-replay pulls.** Screenshots are stored inline as
 base64 and run to 2 MB each, so a page of them is three orders of magnitude larger
 than the same page without. On a replay pull the caller already has every blob on
-disk and only wants the changed flags. `images=none` keeps `image.mime` and
-`image.bytes` and nulls `image.dataUrl`.
+disk and only wants the changed flags. `images=none` keeps every `mime` and `bytes`,
+nulls every `dataUrl`, and never reads a screenshot out of the database. A submission
+can now carry 5 screenshots, so a full page can be up to 5× larger than before; keep
+`limit` small on pulls that include images.
 
 Each item carries `id`, `receivedAt`, `target`, `route`, `type`, `title`,
-`description`, `image`, `client`, `snapshotGeneratedAt`, plus:
+`description`, `image`, `images`, `client`, `snapshotGeneratedAt`, plus:
 
 ```jsonc
+"image": { "dataUrl": "data:image/png;base64,…" | null, "mime": "image/png", "bytes": 123456 } | null,
+"images": [ /* every screenshot in submission order, same shape; [] when none */ ],
 "parentId": "fb_abc123" | null,
 "moderation": { "action": "archived" | "deleted", "at": "<ISO>", "reason": "..." } | null,
 "status": { "value": "open" | "in_progress" | "resolved" | "wontfix", "note": "..." | null, "at": "<ISO>" | null }
 ```
+
+`image` is the first screenshot, kept for readers that predate `images`, so with
+images included its `dataUrl` is sent twice (once in `images[0]`).
 
 `moderation` is `null` when the item has never been moderated or was un-archived /
 restored. `status.value` is `open` until someone sets it.

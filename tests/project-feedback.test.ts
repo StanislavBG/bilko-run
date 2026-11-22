@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import Fastify from 'fastify';
-import { initDb, dbRun, dbGet } from '../server/db.js';
+import { initDb, dbRun, dbGet, getClient } from '../server/db.js';
 import { registerProjectFeedbackRoutes } from '../server/routes/project-feedback.js';
 import { registerProjectDataRoutes } from '../server/routes/project-data.js';
 import { registerProjectEventsRoutes } from '../server/routes/project-events.js';
@@ -21,6 +21,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await dbRun('DELETE FROM project_feedback');
+  await dbRun('DELETE FROM project_feedback_images');
 });
 
 const SLUG = 'social-signals-trader';
@@ -367,6 +368,7 @@ describe('images=none', () => {
       receivedAt: expect.any(String),
       title: 'With image',
       image: { dataUrl: null, mime: 'image/png', bytes: dataUrl.length },
+      images: [{ dataUrl: null, mime: 'image/png', bytes: dataUrl.length }],
     });
     expect(byId(noImg.json().id)).toEqual({
       ...base,
@@ -374,7 +376,147 @@ describe('images=none', () => {
       receivedAt: expect.any(String),
       title: 'No image',
       image: null,
+      images: [],
     });
+  });
+});
+
+describe('multiple images', () => {
+  const png = `data:image/png;base64,${'P'.repeat(3_000)}`;
+  const jpeg = `data:image/jpeg;base64,${'J'.repeat(4_000)}`;
+  const webp = `data:image/webp;base64,${'W'.repeat(5_000)}`;
+
+  async function stored() {
+    const rows = (await dbGet<{ n: number }>('SELECT COUNT(*) AS n FROM project_feedback'))!.n;
+    const images = (await dbGet<{ n: number }>('SELECT COUNT(*) AS n FROM project_feedback_images'))!.n;
+    return { rows, images };
+  }
+
+  it('stores 3 images, answers imageCount 3, and GET returns them in order', async () => {
+    const res = await submit({
+      // A client `mime` that disagrees with the data URL is not what gets stored.
+      images: [{ dataUrl: png, mime: 'image/png' }, { dataUrl: jpeg, mime: 'image/gif' }, { dataUrl: webp }],
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ imageCount: 3, parentId: null });
+
+    const item = pullItems(await pull())[0];
+    expect(item.images).toEqual([
+      { dataUrl: png, mime: 'image/png', bytes: png.length },
+      { dataUrl: jpeg, mime: 'image/jpeg', bytes: jpeg.length },
+      { dataUrl: webp, mime: 'image/webp', bytes: webp.length },
+    ]);
+    // Existing readers of the single `image` see the first one.
+    expect(item.image).toEqual({ dataUrl: png, mime: 'image/png', bytes: png.length });
+  });
+
+  it('fits 5 images at the per-image cap through the body limit', async () => {
+    const big = (c: string) => `data:image/png;base64,${c.repeat(1_599_000)}`;
+    const images = ['a', 'b', 'c', 'd', 'e'].map((c) => ({ dataUrl: big(c) }));
+    const res = await submit({ images });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().imageCount).toBe(5);
+    const bytes = pullItems(await pull('?images=none'))[0].images.map((i) => i.bytes);
+    expect(bytes).toEqual(images.map((i) => i.dataUrl.length));
+  });
+
+  it('refuses 6 images, a bad data URL, an oversize image or an oversize total, storing nothing', async () => {
+    const six = await submit({ images: Array.from({ length: 6 }, () => ({ dataUrl: png })) });
+    expect(six.statusCode).toBe(400);
+
+    const bad = await submit({ images: [{ dataUrl: png }, { dataUrl: 'data:text/html;base64,PGI+' }] });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error).toContain('images[1]');
+
+    for (const images of ['nope', { dataUrl: png }, [png], [{}], [null]]) {
+      expect((await submit({ images })).statusCode).toBe(400);
+    }
+
+    const oneTooBig = `data:image/png;base64,${'A'.repeat(2_000_001 - 'data:image/png;base64,'.length)}`;
+    expect(oneTooBig.length).toBe(2_000_001);
+    const single = await submit({ images: [{ dataUrl: png }, { dataUrl: oneTooBig }] });
+    expect(single.statusCode).toBe(413);
+    expect(single.json().error).toContain('images[1] too large');
+
+    // Each under the per-image cap, 8,500,110 together: the handler's own 413,
+    // not the body limit's.
+    const total = await submit({
+      images: Array.from({ length: 5 }, () => ({ dataUrl: `data:image/png;base64,${'T'.repeat(1_700_000)}` })),
+    });
+    expect(total.statusCode).toBe(413);
+    expect(total.json().error).toContain('in total');
+
+    expect(await stored()).toEqual({ rows: 0, images: 0 });
+  });
+
+  it('still takes the legacy single image as imageCount 1', async () => {
+    const res = await submit({ image: { dataUrl: jpeg, mime: 'image/jpeg' } });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().imageCount).toBe(1);
+    const item = pullItems(await pull())[0];
+    expect(item.image).toEqual({ dataUrl: jpeg, mime: 'image/jpeg', bytes: jpeg.length });
+    expect(item.images).toEqual([item.image]);
+    expect(await stored()).toEqual({ rows: 1, images: 0 });
+  });
+
+  it('prefers images over a legacy image, and falls back to it when images is empty', async () => {
+    const both = await submit({ title: 'Both', images: [{ dataUrl: webp }], image: { dataUrl: jpeg } });
+    expect(both.json().imageCount).toBe(1);
+    const empty = await submit({ title: 'Empty list', images: [], image: { dataUrl: jpeg } });
+    expect(empty.json().imageCount).toBe(1);
+    const items = pullItems(await pull());
+    expect(items.find((i) => i.title === 'Both')!.images.map((i) => i.mime)).toEqual(['image/webp']);
+    expect(items.find((i) => i.title === 'Empty list')!.images.map((i) => i.mime)).toEqual(['image/jpeg']);
+  });
+
+  it('answers imageCount 0 with no images', async () => {
+    expect((await submit({})).json().imageCount).toBe(0);
+    expect((await submit({ images: [] })).json().imageCount).toBe(0);
+    expect((await submit({ image: { dataUrl: '' } })).json().imageCount).toBe(0);
+    expect(await stored()).toEqual({ rows: 3, images: 0 });
+  });
+
+  it('images=none returns every image\'s metadata and never reads an image out of the database', async () => {
+    await submit({ images: [{ dataUrl: png }, { dataUrl: jpeg }, { dataUrl: webp }] });
+    await submit({ title: 'Plain' });
+
+    const client = getClient();
+    const spy = vi.spyOn(client, 'execute');
+    let lean;
+    let calls: unknown[] = [];
+    try {
+      lean = await pull('?images=none');
+      calls = spy.mock.results.map((r) => r.value);
+    } finally {
+      spy.mockRestore();
+    }
+    const results = await Promise.all(calls);
+    expect(results.length).toBeGreaterThan(0);
+    for (const result of results) {
+      for (const row of (result as { rows: Record<string, unknown>[] }).rows) {
+        for (const v of Object.values(row)) {
+          expect(typeof v === 'string' && v.startsWith('data:image')).toBe(false);
+        }
+      }
+    }
+
+    const item = pullItems(lean).find((i) => i.title === 'Test title')!;
+    expect(item.images).toEqual([
+      { dataUrl: null, mime: 'image/png', bytes: png.length },
+      { dataUrl: null, mime: 'image/jpeg', bytes: jpeg.length },
+      { dataUrl: null, mime: 'image/webp', bytes: webp.length },
+    ]);
+    expect(item.image).toEqual(item.images[0]);
+    expect(pullItems(lean).find((i) => i.title === 'Plain')!.images).toEqual([]);
+  });
+
+  it('keeps each item\'s images apart', async () => {
+    const a = (await submit({ title: 'A', images: [{ dataUrl: png }, { dataUrl: jpeg }] })).json().id as string;
+    const b = (await submit({ title: 'B', images: [{ dataUrl: webp }, { dataUrl: png }, { dataUrl: jpeg }] })).json().id as string;
+    const items = pullItems(await pull());
+    const mimes = (id: string) => items.find((i) => i.id === id)!.images.map((i) => i.mime);
+    expect(mimes(a)).toEqual(['image/png', 'image/jpeg']);
+    expect(mimes(b)).toEqual(['image/webp', 'image/png', 'image/jpeg']);
   });
 });
 
@@ -475,9 +617,11 @@ describe('per-project feedback tokens', () => {
 });
 
 interface Item {
+  id: string;
   title: string;
   parentId: string | null;
   image: { dataUrl: string | null; mime: string | null; bytes: number } | null;
+  images: Array<{ dataUrl: string | null; mime: string | null; bytes: number }>;
   moderation: { action: string; reason: string | null } | null;
   status: { value: string; note: string | null; at: string | null };
 }

@@ -29,7 +29,7 @@ import { bearerMatches } from '../bearer.js';
 // (32 random bytes, base64url) and stores only its sha256, so a submitter
 // with no account can later ask "what happened to my report?":
 //
-//   POST .../feedback          → 201 { id, parentId, receivedAt, receipt }
+//   POST .../feedback          → 201 { id, parentId, receivedAt, receipt, imageCount }
 //   POST .../:id/status        { status, note? } → { id, status, note, statusAt }
 //   POST .../status-lookup     { items: [{ id, receipt }] } (1..100)
 //                              → { items: [{ id, status, note, statusAt }] }
@@ -47,8 +47,17 @@ import { bearerMatches } from '../bearer.js';
 // strict field validation. Submitted text is stored RAW and never rendered by
 // this server; any future UI that displays it must escape it.
 //
+// Screenshots: `images` carries 1..5 base64 data URLs; the legacy single
+// `image` is still read when `images` is absent. `imageCount` in the 201 says
+// how many were stored, so a client can tell the host kept them. Screenshot 1
+// lives in project_feedback.image_data (so readers of `image` keep working),
+// screenshots 2..5 in project_feedback_images. GET items carry both `image`
+// (the first) and `images` (all, in order).
+//
 // The contract this implements is authored in the sibling repo:
 //   ~/Projects/social-signals-trader/docs/feedback-api-contract.md
+// The multi-image fields are a host-side addition, documented in
+// docs/project-feedback-api.md.
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const KINDS = new Set(['component', 'position', 'trade', 'page']);
@@ -75,8 +84,15 @@ const MAX_DESCRIPTION = 4_000;
 const MAX_LABEL = 200;
 const MAX_ID = 200;
 const MAX_ROUTE = 200;
-const MAX_IMAGE_BYTES = 2_000_000; // matches the client's post-downscale cap
-const BODY_LIMIT = 4 * 1024 * 1024;
+const MAX_IMAGES = 5;
+const MAX_IMAGE_BYTES = 2_000_000; // per image; matches the client's post-downscale cap
+const MAX_IMAGES_TOTAL = 8_000_000; // all of one submission's images together
+const IMAGE_DATA_URL_RE = /^data:image\/(png|jpeg|webp|gif);base64,/;
+// Fits MAX_IMAGES at the per-image cap plus the text fields, so an over-total
+// submission still reaches the handler and gets its own 413.
+const BODY_LIMIT = 10 * 1024 * 1024;
+// GET reads screenshots 2..5 for this many feedback ids per query.
+const IMAGE_ID_CHUNK = 500;
 
 // Per-IP token bucket, in-process. Deliberately not in the DB: this is abuse
 // damping, not accounting, and a Render restart resetting it is harmless.
@@ -129,6 +145,58 @@ function checkBearer(req: { headers: Record<string, unknown> }, slug: string): {
   if (!accepted.some(Boolean)) return { code: 503, error: 'feedback read disabled (no token configured)' };
   if (!bearerMatches(req.headers['authorization'], accepted)) return { code: 401, error: 'unauthorized' };
   return null;
+}
+
+interface SubmittedImage {
+  mime: string;
+  dataUrl: string;
+}
+
+interface Refusal {
+  code: number;
+  error: string;
+}
+
+// The submission's screenshots in order, or the refusal to send. A non-empty
+// `images` wins. An absent, null or empty one falls back to the legacy
+// `image`, where a missing or empty dataUrl still means "no screenshot".
+// Everything is checked here, before anything is stored.
+function parseImages(body: Record<string, unknown>): SubmittedImage[] | Refusal {
+  const list = body.images;
+  let entries: Array<{ name: string; value: unknown }>;
+  if (list != null && !(Array.isArray(list) && list.length === 0)) {
+    if (!Array.isArray(list)) {
+      return { code: 400, error: `images must be an array of 1..${MAX_IMAGES} { dataUrl, mime? }` };
+    }
+    if (list.length > MAX_IMAGES) {
+      return { code: 400, error: `images holds ${list.length} entries (max ${MAX_IMAGES})` };
+    }
+    entries = list.map((value, i) => ({ name: `images[${i}]`, value }));
+  } else {
+    const image = body.image as Record<string, unknown> | null | undefined;
+    const given = !!image && typeof image === 'object' && typeof image.dataUrl === 'string' && image.dataUrl !== '';
+    entries = given ? [{ name: 'image', value: image }] : [];
+  }
+
+  const images: SubmittedImage[] = [];
+  let total = 0;
+  for (const { name, value } of entries) {
+    const dataUrl = value && typeof value === 'object' ? (value as Record<string, unknown>).dataUrl : undefined;
+    if (typeof dataUrl !== 'string' || !IMAGE_DATA_URL_RE.test(dataUrl)) {
+      return { code: 400, error: `${name}.dataUrl must be a base64 image data URL` };
+    }
+    if (dataUrl.length > MAX_IMAGE_BYTES) {
+      return { code: 413, error: `${name} too large (${dataUrl.length} > ${MAX_IMAGE_BYTES})` };
+    }
+    total += dataUrl.length;
+    // The type the data URL itself declares, which was just validated, rather
+    // than the client's free-text `mime`.
+    images.push({ mime: dataUrl.slice(5, dataUrl.indexOf(';')), dataUrl });
+  }
+  if (total > MAX_IMAGES_TOTAL) {
+    return { code: 413, error: `images too large in total (${total} > ${MAX_IMAGES_TOTAL})` };
+  }
+  return images;
 }
 
 interface FeedbackRow {
@@ -187,25 +255,11 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     const description = str(body.description, MAX_DESCRIPTION);
     if (!description) return reply.code(400).send({ error: `description is required (max ${MAX_DESCRIPTION} chars)` });
 
-    let imageMime: string | null = null;
-    let imageData: string | null = null;
-    const image = body.image as Record<string, unknown> | null | undefined;
-    if (image && typeof image === 'object') {
-      const dataUrl = typeof image.dataUrl === 'string' ? image.dataUrl : '';
-      if (dataUrl) {
-        if (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(dataUrl)) {
-          return reply.code(400).send({ error: 'image.dataUrl must be a base64 image data URL' });
-        }
-        if (dataUrl.length > MAX_IMAGE_BYTES) {
-          return reply.code(413).send({ error: `image too large (${dataUrl.length} > ${MAX_IMAGE_BYTES})` });
-        }
-        imageMime = typeof image.mime === 'string' ? image.mime : dataUrl.slice(5, dataUrl.indexOf(';'));
-        imageData = dataUrl;
-      }
-    }
+    const images = parseImages(body);
+    if (!Array.isArray(images)) return reply.code(images.code).send({ error: images.error });
+    const [first, ...extras] = images;
 
     const id = `fb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-    const now = Math.floor(Date.now() / 1000);
 
     // Threading pointer. Deliberately opaque: this server assigns it no
     // meaning, does not check that it resolves, and echoes it back unchanged
@@ -217,22 +271,49 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     // stored; the plaintext exists once, in this response.
     const receipt = randomBytes(32).toString('base64url');
 
-    await dbRun(
-      `INSERT INTO project_feedback
-        (id, slug, target_kind, target_id, target_label, route, type, title, description,
-         image_mime, image_data, client_json, snapshot_generated_at, created_at, parent_id,
-         receipt_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id, slug, kind, targetId,
-      str(target.label, MAX_LABEL), str(body.route, MAX_ROUTE),
-      type, title, description,
-      imageMime, imageData,
-      body.client ? JSON.stringify(body.client).slice(0, 4_000) : null,
-      typeof body.snapshotGeneratedAt === 'string' ? body.snapshotGeneratedAt : null,
-      now, parentId, sha256Hex(receipt),
-    );
+    // Screenshots 2..5 first, one statement each, then the feedback row: a
+    // reader never sees the row without all of its screenshots, and no
+    // statement is bigger than the one-image insert this route always made.
+    // If a write fails, the screenshots already written are removed again.
+    let now: number;
+    try {
+      for (const [i, img] of extras.entries()) {
+        await dbRun(
+          'INSERT INTO project_feedback_images (feedback_id, idx, mime, data, bytes) VALUES (?, ?, ?, ?, ?)',
+          id, i + 1, img.mime, img.dataUrl, img.dataUrl.length,
+        );
+      }
+      // Stamped after the screenshots are stored, so created_at is the moment
+      // the row becomes visible and the `since` cursor cannot step past it.
+      now = Math.floor(Date.now() / 1000);
+      await dbRun(
+        `INSERT INTO project_feedback
+          (id, slug, target_kind, target_id, target_label, route, type, title, description,
+           image_mime, image_data, client_json, snapshot_generated_at, created_at, parent_id,
+           receipt_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, slug, kind, targetId,
+        str(target.label, MAX_LABEL), str(body.route, MAX_ROUTE),
+        type, title, description,
+        first?.mime ?? null, first?.dataUrl ?? null,
+        body.client ? JSON.stringify(body.client).slice(0, 4_000) : null,
+        typeof body.snapshotGeneratedAt === 'string' ? body.snapshotGeneratedAt : null,
+        now, parentId, sha256Hex(receipt),
+      );
+    } catch (err) {
+      if (extras.length) {
+        await dbRun('DELETE FROM project_feedback_images WHERE feedback_id = ?', id).catch(() => undefined);
+      }
+      throw err;
+    }
 
-    return reply.code(201).send({ id, parentId, receivedAt: new Date(now * 1000).toISOString(), receipt });
+    return reply.code(201).send({
+      id,
+      parentId,
+      receivedAt: new Date(now * 1000).toISOString(),
+      receipt,
+      imageCount: images.length,
+    });
   });
 
   // ── authed read ──────────────────────────────────────────────────────────
@@ -265,7 +346,8 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     // without them. That is pure waste on a moderation-replay pull, where the
     // caller already has every blob on disk and only wants the changed flags.
     // `images=none` returns the metadata (mime, bytes) and drops the payload,
-    // and never reads image_data out of the database: size comes from SQL.
+    // and never reads image_data or project_feedback_images.data out of the
+    // database: size comes from SQL.
     const withImages = q.images !== 'none';
     const imageCols = withImages
       ? 'image_data, length(image_data) AS image_len'
@@ -290,33 +372,54 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
           slug, sinceSec, modSince, modSince, limit,
         );
 
-    const items = rows.map((r) => ({
-      id: r.id,
-      receivedAt: new Date(r.created_at * 1000).toISOString(),
-      target: { kind: r.target_kind, id: r.target_id, label: r.target_label },
-      route: r.route,
-      type: r.type,
-      title: r.title,
-      description: r.description,
-      image: r.image_len
-        ? {
-            dataUrl: withImages ? r.image_data : null,
-            mime: r.image_mime,
-            bytes: r.image_len,
-          }
-        : null,
-      client: r.client_json ? JSON.parse(r.client_json) : null,
-      snapshotGeneratedAt: r.snapshot_generated_at,
-      parentId: r.parent_id,
-      moderation: r.moderation_action
-        ? {
-            action: r.moderation_action,
-            at: r.moderation_at ? new Date(r.moderation_at * 1000).toISOString() : null,
-            reason: r.moderation_reason,
-          }
-        : null,
-      status: { value: r.status || 'open', note: r.status_note, at: isoOrNull(r.status_at) },
-    }));
+    // Screenshots 2..5, in idx order. Only rows with a first screenshot can
+    // have more, so rows without one are never looked up.
+    type ImageOut = { dataUrl: string | null; mime: string | null; bytes: number };
+    const extrasById = new Map<string, ImageOut[]>();
+    const withFirst = rows.filter((r) => r.image_len).map((r) => r.id);
+    for (let i = 0; i < withFirst.length; i += IMAGE_ID_CHUNK) {
+      const chunk = withFirst.slice(i, i + IMAGE_ID_CHUNK);
+      const extraRows = await dbAll<{ feedback_id: string; mime: string; data: string | null; bytes: number }>(
+        `SELECT feedback_id, mime, ${withImages ? 'data' : 'NULL AS data'}, bytes
+           FROM project_feedback_images
+          WHERE feedback_id IN (${chunk.map(() => '?').join(', ')})
+          ORDER BY feedback_id, idx`,
+        ...chunk,
+      );
+      for (const e of extraRows) {
+        const list = extrasById.get(e.feedback_id) ?? [];
+        list.push({ dataUrl: withImages ? e.data : null, mime: e.mime, bytes: e.bytes });
+        extrasById.set(e.feedback_id, list);
+      }
+    }
+
+    const items = rows.map((r) => {
+      const image: ImageOut | null = r.image_len
+        ? { dataUrl: withImages ? r.image_data : null, mime: r.image_mime, bytes: r.image_len }
+        : null;
+      return {
+        id: r.id,
+        receivedAt: new Date(r.created_at * 1000).toISOString(),
+        target: { kind: r.target_kind, id: r.target_id, label: r.target_label },
+        route: r.route,
+        type: r.type,
+        title: r.title,
+        description: r.description,
+        image,
+        images: image ? [image, ...(extrasById.get(r.id) ?? [])] : [],
+        client: r.client_json ? JSON.parse(r.client_json) : null,
+        snapshotGeneratedAt: r.snapshot_generated_at,
+        parentId: r.parent_id,
+        moderation: r.moderation_action
+          ? {
+              action: r.moderation_action,
+              at: r.moderation_at ? new Date(r.moderation_at * 1000).toISOString() : null,
+              reason: r.moderation_reason,
+            }
+          : null,
+        status: { value: r.status || 'open', note: r.status_note, at: isoOrNull(r.status_at) },
+      };
+    });
 
     // Never let the cursor regress: a page made entirely of re-admitted
     // moderated rows has a max created_at below the cursor we were handed.

@@ -72,7 +72,7 @@ The WebSocket relay (`server/realtime/relay.ts`) and its lobby directory (`serve
 
 ## Never do
 
-- Never push Bilko to the `content-grade` remote: see [Rules everyone shares](map.md#rules-everyone-shares).
+- Push only to `origin` `main` of `StanislavBG/bilko-run`: see [Rules everyone shares](map.md#rules-everyone-shares).
 - Never add secrets to the repo; set them in the Render dashboard.
 
 ## Deploy drain and large static downloads

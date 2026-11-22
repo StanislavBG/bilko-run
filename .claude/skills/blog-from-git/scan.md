@@ -11,8 +11,7 @@ Two rules that are easy to get wrong and have been:
    `feedback_blog_scans_whole_portfolio`.)
 
 **Owners:** everything lives under the GitHub account **`StanislavBG`** (~73 repos). The host repo
-is `StanislavBG/bilko-run`. (`Content-Grade` is a separate, diverged project — see CLAUDE.md;
-include it in the scan only if explicitly asked.)
+is `StanislavBG/bilko-run`; its only remote is `origin`.
 
 > ⚠️ **Not everything is on GitHub yet.** A repo that is local-only with no remote is invisible to a
 > pure GitHub scan, and a build log is often *about* exactly such a repo (the trading stack —

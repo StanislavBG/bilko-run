@@ -321,7 +321,7 @@ seed_mechanics:
   new_slugs_reach_production: true     # on next deploy boot (verified 2026-07-24)
   edits_to_deployed_posts: admin blog API only (server/routes/blog.ts) — editing the post file is ignored
   published_at: explicit ISO string, never new Date()
-  push_remote: origin                  # StanislavBG/bilko-run main — NEVER content-grade
+  push_remote: origin                  # StanislavBG/bilko-run main, the only push target
 
 autonomy:                               # OWNER'S CONTROL SURFACE — Bilko is an autonomous agent,
                                          # not a human-supervised pipeline; this block is how the
@@ -331,7 +331,7 @@ autonomy:                               # OWNER'S CONTROL SURFACE — Bilko is a
                                          # an explicit human OK before phase 6/7 ever run).
   max_posts_per_run: 1                  # cap on posts a single run may seed, even in catch-up mode;
                                          # remaining queued posts are left for subsequent runs
-  push_remote: origin                   # StanislavBG/bilko-run main — NEVER content-grade
+  push_remote: origin                   # StanislavBG/bilko-run main, the only push target
   push_branch: main
   allowed_commit_paths:                 # the ONLY paths an autonomous seed commit may stage —
                                          # explicit pathspecs only, never `git add -A`/`.`/`-a`

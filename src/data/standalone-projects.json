@@ -811,7 +811,8 @@
     "host": {
       "kind": "static-path",
       "path": "/projects/threewinds/",
-      "localPath": "~/Projects/3PMahjong"
+      "localPath": "~/Projects/3PMahjong",
+      "backend": "https://threewinds-server-aidb.onrender.com"
     },
     "tags": [
       "Free",

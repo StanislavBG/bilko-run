@@ -26,19 +26,11 @@
 # existing live-gap PUBLISH_DUE decision gets to invoke anything, and fails
 # CLOSED (scan-only, no publish) if the gate is unavailable.
 #
-# TRIGGER — this script runs from exactly ONE scheduler on this machine
-# (the systemd timers are disabled since 2026-10-12; see docs/repo-writers.md): the systemd user
-# timer `blog-cadence-watchdog.timer` (OnCalendar=daily, Persistent=true,
-# fires ~00:00-00:15 PT) — Persistent=true replays a run missed while the
-# machine was off/asleep. Its service appends to
-# .claude/skills/blog-from-git/drafts/.watchdog.log. A previously-installed
-# crontab entry was removed 2026-10-03 at the owner's request; do not re-add
-# a crontab trigger for this script — one trigger only.
-# This timer is LOCAL to this machine only and only fires while it is
-# powered on. The /tmp/bilko.blog-cadence-watchdog.lock flock below still
-# serializes any concurrent runs (e.g. a manual rerun overlapping the timer),
-# and the same-day .watchdog-state check makes a second run on one day
-# idempotent.
+# TRIGGER — this script runs once a day from its daily trigger; keep it to
+# one trigger only. A trigger on this machine fires only while it is powered
+# on. The /tmp/bilko.blog-cadence-watchdog.lock flock below still serializes
+# any concurrent runs (e.g. a manual rerun overlapping the trigger), and the
+# same-day .watchdog-state check makes a second run on one day idempotent.
 #
 # AUTONOMOUS FLOW — Bilko is an autonomous agent, not a human-supervised
 # publishing workflow. There is exactly ONE implementation of drafting and
@@ -193,9 +185,9 @@ fi
 
 # scan_every_days declares that scanning is daily and independent of whether a
 # post is due — this script's own scan cadence is hard-wired to whatever
-# triggers it (the daily systemd timer, disabled since 2026-10-12; see docs/repo-writers.md), not to a
-# value read here. Parse it anyway and FATAL if it ever drifts from 1, so a
-# future edit to this key does not silently stop meaning what it says.
+# triggers it (its daily trigger), not to a value read here. Parse it anyway
+# and FATAL if it ever drifts from 1, so a future edit to this key does not
+# silently stop meaning what it says.
 SCAN_EVERY_DAYS="$(grep -m1 'scan_every_days:' "$CONFIG_FILE" | grep -oP 'scan_every_days:\s*\K\d+')"
 if [[ -z "$SCAN_EVERY_DAYS" ]]; then
   echo "[blog-cadence-watchdog] FATAL: could not parse scan_every_days from $CONFIG_FILE" >&2
@@ -203,7 +195,7 @@ if [[ -z "$SCAN_EVERY_DAYS" ]]; then
   exit 1
 fi
 if [[ "$SCAN_EVERY_DAYS" != "1" ]]; then
-  echo "[blog-cadence-watchdog] FATAL: scan_every_days=$SCAN_EVERY_DAYS in $CONFIG_FILE, but this script's daily scan is driven by the daily systemd/cron triggers (docs/repo-writers.md), not by this value — a value other than 1 would silently misrepresent the real cadence" >&2
+  echo "[blog-cadence-watchdog] FATAL: scan_every_days=$SCAN_EVERY_DAYS in $CONFIG_FILE, but this script's daily scan is driven by its daily trigger, not by this value — a value other than 1 would silently misrepresent the real cadence" >&2
   write_heartbeat "error: scan_every_days is not 1, but the scan trigger is hard-wired to daily"
   exit 1
 fi

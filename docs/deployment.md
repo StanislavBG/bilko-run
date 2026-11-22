@@ -13,7 +13,7 @@ These come from `package.json`. Confirm the exact commands in the Render dashboa
 
 ## Node version
 
-`engines.node` in `package.json` sets the Node version. The ceiling matters: Render resolves a range to the newest release inside it on every build, so patch releases arrive on their own and a new major never does. That puts production on the newest Node 24, which must be at or above 24.22.1, the patched release named in Render's eMudhra advisory of October 2026. CI reads the same field (`node-version-file: package.json`), so it tests the same range.
+`engines.node` in `package.json` sets the Node version. The ceiling matters: Render resolves a range to the newest release inside it on every build, so patch releases arrive on their own and a new major never does. That puts production on the newest Node 24 release. CI reads the same field (`node-version-file: package.json`), so it tests the same range.
 
 The floor stays at 22 because this machine runs Node 22. Outside the range pnpm prints an `Unsupported engine` warning on stdout, which breaks scripts that parse pnpm output, such as the blog watchdog, and fails `pnpm test` in every scheduler gate here. Raise the floor only after upgrading local Node.
 
@@ -22,7 +22,7 @@ Render uses the first of these it finds: a `NODE_VERSION` env var, `.node-versio
 To see what production runs, use the admin key (`~/.config/bilko-host/admin-key`):
 
 ```bash
-curl -s -H "Authorization: Bearer $BILKO_ADMIN_KEY" https://bilko.run/api/admin/runtime
+curl -s -H "Authorization: Bearer $(cat ~/.config/bilko-host/admin-key)" https://bilko.run/api/admin/runtime
 ```
 
 `node` is the running release. `nodeVersionEnv` should be `null`: Render never sets that variable itself, so any value means it is set on the service and is overriding `engines`. After removing it, choose **Save, rebuild, and deploy**, because Render picks the Node version at build time.
@@ -31,24 +31,17 @@ To move to a new major, run `pnpm typecheck`, `pnpm test`, `pnpm --filter host-k
 
 ## Env vars
 
-Env vars live in the Render dashboard (service → Environment). They are not committed to the repo. Rotation steps are in [secrets-rotation.md](secrets-rotation.md).
+Env vars live in the Render dashboard (service → Environment). They are not committed to the repo. A change reaches the running server only after a restart, so save it with a deploy. Rotation steps are in [secrets-rotation.md](secrets-rotation.md).
 
-`APP_BACKENDS` turns on forwarding of `/projects/<slug>/api/*` (HTTP and WebSocket) to apps' own backends. The contract apps build against is the "App backends (forwarding)" section of [host-contract.md](host-contract.md). The value is a comma list of `<slug>=<https origin>`, for example `APP_BACKENDS=threewinds=https://<service>.onrender.com`. Unset means nothing is forwarded. The origin must be `https://` with no path, query or credentials (`http://` only for localhost). A malformed entry is skipped and logged at boot as `[app-backends] APP_BACKENDS entry <n> ignored: <reason>`; for a duplicate slug the first entry wins. Each forwarded slug logs one boot line, `[app-backends] forwarding /projects/<slug>/api/ -> <origin>/api/`. The value is read only at boot, so a change needs a redeploy. A backend that takes over 30 s to answer (for example a sleeping Free-tier Render service) gets 502 `{ "error": "backend_unavailable" }`.
+[`.env.example`](../.env.example) is the one list of env var names the code reads, each with a one-line meaning. Copy it to `.env` for local dev. Where the behavior behind a var is documented:
 
-Host switches and keys that app-facing behavior depends on (the contract side is in [host-contract.md](host-contract.md)):
+- Stripe keys and the live/test split: [commerce.md](commerce.md) ("Stripe live vs test").
+- `PLAY_CURRENCY_SALES_OPEN` and `PLAY_CURRENCY_FREE_PACKS`: [commerce.md](commerce.md) ("Play currency"); switching them is under [Realtime relay constraints](#realtime-relay-constraints).
+- `ROOMS_CLOSED`: [host-contract.md](host-contract.md) ("Authoritative game rooms") and [Realtime relay constraints](#realtime-relay-constraints).
+- `BILKO_CSP_ENFORCE`: [host-internals.md](host-internals.md).
+- `BILKO_GAME_HMAC_KEY`: [host-contract.md](host-contract.md) ("Game services").
 
-| Var | Meaning |
-|---|---|
-| `BILKO_CSP_ENFORCE` | `1` enforces the CSP on host pages; `/projects/` stays report-only ([host-internals.md](host-internals.md)). |
-| `BILKO_GAME_HMAC_KEY` | When set, game score POSTs must carry a valid `sig` over `${slug}:${score}:${mode}:${ts}`. Rotation: [secrets-rotation.md](secrets-rotation.md). |
-| `STRIPE_TEST_SECRET_KEY` | Test-mode Stripe client for the signed-in owner's web-product checkouts. Unset means owner checkouts get 409 (never a live fallback). |
-| `STRIPE_CHECKOUT_PROMO_CONSENT` | `1` sets `consent_collection.promotions='auto'` on web-product checkout sessions. |
-| `STRIPE_ALLOW_LIVE_IN_DEV` | `getStripe()` refuses an `sk_live_` key unless `NODE_ENV=production`; `1` overrides that. Locally, use an `sk_test_` key. |
-| `APPLE_IAP_BUNDLE_ID` | The iOS app's bundle id. Required for any Apple route. |
-| `APPLE_IAP_ENVIRONMENT` | `Production` or `Sandbox`. Any other value turns Apple off. |
-| `APPLE_IAP_APP_APPLE_ID` | The app's numeric Apple id. Required when the environment is `Production`. |
-| `PLAY_CURRENCY_SALES_OPEN` | Comma-separated app ids whose web checkout is open (for example `threewinds`). Unset means `409 sales_closed` for every app not in free mode. It gates only `POST /api/play-currency/checkout`; a session paid while sales were open is still credited. |
-| `PLAY_CURRENCY_FREE_PACKS` | Temporary live-test switch: comma-separated app ids (for example `threewinds`) whose packs are free. Checkout credits the pack's taels at once (ledger kind `free_test_pack`, ref `free_test:<uuid>`, still 10/min/user) and never creates a Stripe session, even when `PLAY_CURRENCY_SALES_OPEN` lists the app too; balance reports `freePacks: true`. Unset it to end the test. Taels already credited stay, and their ledger kind finds them. Pack prices are unchanged. |
+`APP_BACKENDS` turns on forwarding of `/projects/<slug>/api/*` to apps' own backends; what is forwarded and the errors apps see are in [host-contract.md](host-contract.md) ("App backends (forwarding)"). The value is a comma list of `<slug>=<https origin>`, for example `APP_BACKENDS=threewinds=https://<service>.onrender.com`. Unset means nothing is forwarded. The origin must be `https://` with no path, query or credentials (`http://` only for localhost). A malformed entry is skipped and logged at boot as `[app-backends] APP_BACKENDS entry <n> ignored: <reason>`; for a duplicate slug the first entry wins. Each forwarded slug logs one boot line, `[app-backends] forwarding /projects/<slug>/api/ -> <origin>/api/`. The value is read only at boot, so a change needs a redeploy.
 
 ## Checking a deploy
 
@@ -71,15 +64,15 @@ curl -s "https://bilko.run/projects/<slug>/" | grep -oE "<title>[^<]+</title>"
 The WebSocket relay (`server/realtime/relay.ts`) and its lobby directory (`server/realtime/lobbies.ts`) keep rooms in one process's memory.
 
 - **One instance only.** Scaling Render horizontally would split a room across instances. That needs room-to-instance routing (or a shared pub/sub) first.
-- A deploy drops every room (`1012`). Clients reconnect with a fresh ticket and resync from their own state. The server keeps no input log. The lobby directory is emptied too, and hosts re-announce on their next heartbeat (10 s or less).
-- **Render tier, as of 2026-10-18:** the owner believes bilko.run is on Render's **Free** tier, with a fixed instance count of one. This hasn't been checked in the dashboard, and the region is unknown. Free spins down after 15 minutes without inbound traffic, so the first ticket after an idle spell waits for a cold start (tens of seconds), and a spin-down drops every live room. Before online play goes beyond casual testing, move to a paid tier that doesn't sleep (Starter or above) and record the plan and region here.
+- A deploy drops every room (`1012`). Clients reconnect with a fresh ticket and resync from their own state. The server keeps no input log. The lobby directory is emptied too. Hosts re-announce on their next heartbeat PUT (the Game Academy client sends one every 10 s; a listing expires 30 s after its last PUT, `LOBBY_TTL_MS` in `server/realtime/lobbies.ts`).
+- **Render tier.** The service runs one instance; its plan and region are shown in the Render dashboard (service → Settings → Instance Type). On the Free plan the service spins down after 15 minutes without inbound traffic, so the first ticket after an idle spell waits for a cold start (tens of seconds), and a spin-down drops every live room. Online play beyond casual testing needs a plan that does not sleep (Starter or above).
 - **Authoritative game rooms** (`server/rooms/socket.ts`, `server/routes/rooms.ts`) run in one process too, but their tables are saved to the room store on every move. A deploy or a spin-down closes the sockets with `1012`; when a seated player asks for a new ticket, the table resumes with its hand and escrows. They do not need a paid Render tier: a paid tier that does not sleep only removes the cold-start wait after an idle spell.
 - **Three Winds tables are open by default.** `ROOMS_CLOSED` is the emergency switch: set `ROOMS_CLOSED=threewinds` on Render and both room endpoints answer `409 rooms_closed`. Leave it unset otherwise. Keep `PLAY_CURRENCY_SALES_OPEN` unset (web tael sales closed) until the owner decides to sell taels.
-- **Three Winds free test packs (temporary).** For the live prototype test the owner wants every tael pack free: set `PLAY_CURRENCY_FREE_PACKS=threewinds` on Render (service → Environment) and save it with a deploy, since the running server only sees env changes after a restart. Checkout then credits each pack at once with no payment and no Stripe session, and `GET /api/play-currency/balance?app=threewinds` reports `freePacks: true`. To end the test, delete the variable the same way. Checkout goes back to `409 sales_closed` (or Stripe, if sales are open). Taels already handed out stay in balances; ledger kind `free_test_pack` finds them if the owner decides to take them back.
+- **Three Winds free test packs (temporary).** To make every tael pack free, set `PLAY_CURRENCY_FREE_PACKS=threewinds` on Render (service → Environment) and save it with a deploy. `GET /api/play-currency/balance?app=threewinds` then reports `freePacks: true`. To end the test, delete the variable the same way. What the switch does to checkout and the ledger is in [commerce.md](commerce.md) ("Play currency").
 
 ## Never do
 
-- Never push Bilko to the `content-grade` remote: see the push rule in [CLAUDE.md](../CLAUDE.md#rules).
+- Never push Bilko to the `content-grade` remote: see [Rules everyone shares](map.md#rules-everyone-shares).
 - Never add secrets to the repo; set them in the Render dashboard.
 
 ## Deploy drain and large static downloads

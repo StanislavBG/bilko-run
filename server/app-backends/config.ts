@@ -1,10 +1,11 @@
 /**
  * Pure helpers shared by the app-backend HTTP and WebSocket forwarders.
  *
- * Env APP_BACKENDS is a comma list of `<slug>=<https origin>`. The host forwards
- * /projects/<slug>/api/* to that origin's /api/*. Apps run their own backends; bilko.run only
- * forwards, so nothing here knows about any particular app. No env reads, no logging except
- * through the warn callback.
+ * The host forwards /projects/<slug>/api/* to an origin's /api/*. Backends come from the deployed
+ * registry (static-path host.backend, https only) and from env APP_BACKENDS (a comma list of
+ * `<slug>=<https origin>`, loopback http allowed), where a valid env entry wins for its slug.
+ * Apps run their own backends; bilko.run only forwards, so nothing here knows about any
+ * particular app. No fs or env reads, no logging except through the warn callback.
  */
 import type { IncomingHttpHeaders } from 'node:http';
 
@@ -20,7 +21,13 @@ export const APP_BACKEND_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/;
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
-function originProblem(rawOrigin: string): { origin: string } | { reason: string } {
+// Same cap as AppBackendOriginSchema's max(200) in mcp-host-server/src/contract/registry.ts.
+const REGISTRY_BACKEND_MAX_LEN = 200;
+
+function originProblem(
+  rawOrigin: string,
+  opts: { allowLoopbackHttp: boolean },
+): { origin: string } | { reason: string } {
   let url: URL;
   try {
     url = new URL(rawOrigin);
@@ -28,7 +35,7 @@ function originProblem(rawOrigin: string): { origin: string } | { reason: string
     return { reason: 'origin is not a valid URL' };
   }
   if (url.protocol !== 'https:') {
-    if (url.protocol !== 'http:') return { reason: 'origin must use https' };
+    if (url.protocol !== 'http:' || !opts.allowLoopbackHttp) return { reason: 'origin must use https' };
     if (!LOOPBACK_HOSTS.has(url.hostname)) return { reason: 'origin must use https (http only for loopback)' };
   }
   if (url.username || url.password) return { reason: 'origin must not contain credentials' };
@@ -64,7 +71,7 @@ export function parseAppBackends(
       skip('slug must be 2-40 chars of [a-z0-9-], no leading or trailing hyphen');
       continue;
     }
-    const checked = originProblem(rawOrigin);
+    const checked = originProblem(rawOrigin, { allowLoopbackHttp: true });
     if ('reason' in checked) {
       skip(checked.reason, slug);
       continue;
@@ -75,6 +82,69 @@ export function parseAppBackends(
     }
     seen.add(slug);
     out.push({ slug, origin: checked.origin, prefix: `/projects/${slug}/api/` });
+  }
+  return out;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Backends declared in the deployed registry: static-path entries with a string host.backend
+ * that is a bare https origin. Loopback http is refused here because any sibling session can
+ * write its own slug's entry. Warnings name the slug and the reason, never the origin.
+ */
+export function appBackendsFromRegistry(
+  entries: unknown,
+  warn: (msg: string) => void = (m) => console.warn(m),
+): AppBackend[] {
+  if (!Array.isArray(entries)) {
+    warn('[app-backends] registry is not an array; no registry backends');
+    return [];
+  }
+  const out: AppBackend[] = [];
+  const seen = new Set<string>();
+  entries.forEach((entry, i) => {
+    if (!isRecord(entry) || !isRecord(entry.host) || !('backend' in entry.host)) return;
+    if (entry.host.backend === undefined) return;
+    const host = entry.host;
+    const rawSlug = entry.slug;
+    const slugOk = typeof rawSlug === 'string' && APP_BACKEND_SLUG_RE.test(rawSlug);
+    const label = slugOk ? rawSlug : `#${i + 1}`;
+    const skip = (reason: string): void => {
+      warn(`[app-backends] registry entry ${label} backend ignored: ${reason}`);
+    };
+    if (!slugOk) return skip('slug must be 2-40 chars of [a-z0-9-], no leading or trailing hyphen');
+    if (host.kind !== 'static-path') return skip('host.kind must be static-path');
+    if (typeof host.backend !== 'string') return skip('backend must be a string');
+    if (host.backend.length > REGISTRY_BACKEND_MAX_LEN) return skip(`backend longer than ${REGISTRY_BACKEND_MAX_LEN} chars`);
+    const checked = originProblem(host.backend, { allowLoopbackHttp: false });
+    if ('reason' in checked) return skip(checked.reason);
+    if (seen.has(rawSlug)) return skip('duplicate slug (first entry wins)');
+    seen.add(rawSlug);
+    out.push({ slug: rawSlug, origin: checked.origin, prefix: `/projects/${rawSlug}/api/` });
+  });
+  return out;
+}
+
+export type ResolvedAppBackend = AppBackend & { source: 'registry' | 'env' };
+
+/**
+ * The active forwarding map: each valid APP_BACKENDS entry wins for its slug, registry
+ * backends fill the other slugs. An invalid env entry is dropped by parseAppBackends, so that
+ * slug keeps its registry backend.
+ */
+export function resolveAppBackends(
+  registryEntries: unknown,
+  envRaw: string | undefined,
+  warn: (msg: string) => void = (m) => console.warn(m),
+): ResolvedAppBackend[] {
+  const fromEnv = parseAppBackends(envRaw, warn);
+  const envSlugs = new Set(fromEnv.map((b) => b.slug));
+  const out: ResolvedAppBackend[] = fromEnv.map((b) => ({ ...b, source: 'env' as const }));
+  for (const b of appBackendsFromRegistry(registryEntries, warn)) {
+    if (!envSlugs.has(b.slug)) out.push({ ...b, source: 'registry' });
   }
   return out;
 }

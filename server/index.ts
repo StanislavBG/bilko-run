@@ -45,7 +45,8 @@ import { registerSigninCaptureRoutes } from './routes/signin-capture.js';
 import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
 import { registerForumRoutes, getForumSeedHealth } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
-import { parseAppBackends } from './app-backends/config.js';
+import { resolveAppBackends } from './app-backends/config.js';
+import { loadDeployedRegistry } from './app-backends/registry.js';
 import { registerAppBackendRoutes } from './app-backends/http.js';
 import { createAppBackendUpgrade } from './app-backends/socket.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
@@ -255,11 +256,16 @@ registerProjectCatalogRoutes(app);
 registerForumRoutes(app);
 
 // Generic forwarding of /projects/<slug>/api/* (HTTP + WebSocket) to each app's own server,
-// set by env APP_BACKENDS. Unset means nothing is forwarded.
-const appBackends = parseAppBackends(process.env.APP_BACKENDS);
+// built at boot from the deployed registry's static-path host.backend fields; a valid env
+// APP_BACKENDS entry overrides the registry for its slug. Neither set means nothing is forwarded.
+const appBackends = resolveAppBackends(loadDeployedRegistry(), process.env.APP_BACKENDS);
 for (const b of appBackends) {
-  console.log(`[app-backends] forwarding ${b.prefix} -> ${b.origin}/api/`);
+  console.log(`[app-backends] forwarding ${b.prefix} -> ${b.origin}/api/ (${b.source === 'env' ? 'env APP_BACKENDS' : 'registry'})`);
 }
+// Slug -> source only; origins stay out of the public health response.
+const appBackendSources: Record<string, 'registry' | 'env'> = Object.fromEntries(
+  appBackends.map((b) => [b.slug, b.source]),
+);
 registerAppBackendRoutes(app, appBackends);
 const appBackendSockets = createAppBackendUpgrade(appBackends);
 app.addHook('preClose', async () => { appBackendSockets.closeAll(); });
@@ -288,6 +294,7 @@ app.get('/api/health', async () => ({
   // Hosted Git Viewer builds: token presence (never the value) + GitHub budget.
   gitViewer: getGitViewerHealth(),
   forum: getForumSeedHealth(),
+  appBackends: appBackendSources,
 }));
 
 // In production, serve the Vite build

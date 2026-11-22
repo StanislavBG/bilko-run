@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SlugSchema } from '../mcp-host-server/src/contract/registry.js';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { AppBackendOriginSchema, SlugSchema } from '../mcp-host-server/src/contract/registry.js';
+import { loadDeployedRegistry } from '../server/app-backends/registry.js';
 import {
   APP_BACKEND_SLUG_RE,
+  appBackendsFromRegistry,
+  resolveAppBackends,
   buildUpstreamUrl,
   forwardRequestHeaders,
   matchAppBackend,
@@ -217,5 +223,152 @@ describe('forwardRequestHeaders', () => {
     const out = forwardRequestHeaders({ 'if-match': ['"a"', '"b"'] as unknown as string }, '::1');
     expect(out['if-match']).toBe('"a"');
     expect(out['x-forwarded-for']).toBe('::1');
+  });
+});
+
+const sp = (slug: string, backend?: unknown) => ({
+  slug,
+  host: backend === undefined ? { kind: 'static-path', path: `/projects/${slug}/` } : { kind: 'static-path', path: `/projects/${slug}/`, backend },
+});
+
+describe('appBackendsFromRegistry', () => {
+  it('keeps static-path entries with an https backend and ignores entries without one', () => {
+    const warn = vi.fn();
+    expect(appBackendsFromRegistry([sp('demo-app', 'https://demo.example.com'), sp('plain-app'), { slug: 'x-y' }], warn)).toEqual([
+      { slug: 'demo-app', origin: 'https://demo.example.com', prefix: '/projects/demo-app/api/' },
+    ]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['external-url entry', { slug: 'ext-app', host: { kind: 'external-url', url: 'https://ext.example.com', backend: 'https://secret-ext.example.com' } }, 'ext-app'],
+    ['http origin', sp('ext-app', 'http://secret-plain.example.com'), 'ext-app'],
+    ['http localhost', sp('ext-app', 'http://localhost:3000'), 'ext-app'],
+    ['http 127.0.0.1', sp('ext-app', 'http://127.0.0.1:4100'), 'ext-app'],
+    ['http [::1]', sp('ext-app', 'http://[::1]:5000'), 'ext-app'],
+    ['credentials', sp('ext-app', 'https://user:s3cretpw@secret-cred.example.com'), 'ext-app'],
+    ['path', sp('ext-app', 'https://secret-path.example.com/base'), 'ext-app'],
+    ['non-string backend', sp('ext-app', 42), 'ext-app'],
+    ['too long', sp('ext-app', `https://${'a'.repeat(200)}.example.com`), 'ext-app'],
+    ['bad slug', sp('Bad_Slug', 'https://secret-slug.example.com'), '#1'],
+  ])('skips %s with one warning that never echoes the origin', (_label, entry, label) => {
+    const warn = vi.fn();
+    expect(appBackendsFromRegistry([entry], warn)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = String(warn.mock.calls[0][0]);
+    expect(msg.startsWith(`[app-backends] registry entry ${label} backend ignored: `)).toBe(true);
+    const backend = (entry.host as { backend?: unknown }).backend;
+    if (typeof backend === 'string') {
+      expect(msg).not.toContain(backend);
+      expect(msg).not.toContain(new URL(backend).hostname);
+    }
+    expect(msg).not.toContain('s3cretpw');
+    expect(msg).not.toContain('secret');
+  });
+
+  it('returns [] with one warning for a non-array', () => {
+    for (const input of [undefined, null, {}, 'x', 3]) {
+      const warn = vi.fn();
+      expect(appBackendsFromRegistry(input, warn)).toEqual([]);
+      expect(warn).toHaveBeenCalledTimes(1);
+    }
+  });
+});
+
+describe('resolveAppBackends', () => {
+  const registry = [sp('demo-app', 'https://reg-demo.example.com'), sp('other-app', 'https://reg-other.example.com')];
+
+  it('registry only', () => {
+    expect(resolveAppBackends(registry, undefined, vi.fn())).toEqual([
+      { slug: 'demo-app', origin: 'https://reg-demo.example.com', prefix: '/projects/demo-app/api/', source: 'registry' },
+      { slug: 'other-app', origin: 'https://reg-other.example.com', prefix: '/projects/other-app/api/', source: 'registry' },
+    ]);
+  });
+
+  it('env only, loopback http still allowed there', () => {
+    expect(resolveAppBackends([], 'demo-app=http://127.0.0.1:4100', vi.fn())).toEqual([
+      { slug: 'demo-app', origin: 'http://127.0.0.1:4100', prefix: '/projects/demo-app/api/', source: 'env' },
+    ]);
+  });
+
+  it('a valid env entry overrides the registry for its slug', () => {
+    expect(resolveAppBackends(registry, 'demo-app=https://env-demo.example.com', vi.fn())).toEqual([
+      { slug: 'demo-app', origin: 'https://env-demo.example.com', prefix: '/projects/demo-app/api/', source: 'env' },
+      { slug: 'other-app', origin: 'https://reg-other.example.com', prefix: '/projects/other-app/api/', source: 'registry' },
+    ]);
+  });
+
+  it('an invalid env entry leaves the registry backend in force', () => {
+    const warn = vi.fn();
+    expect(resolveAppBackends([registry[0]], 'demo-app=http://env-demo.example.com', warn)).toEqual([
+      { slug: 'demo-app', origin: 'https://reg-demo.example.com', prefix: '/projects/demo-app/api/', source: 'registry' },
+    ]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('neither set gives []', () => {
+    const warn = vi.fn();
+    expect(resolveAppBackends([], undefined, warn)).toEqual([]);
+    expect(resolveAppBackends([sp('plain-app')], '', warn)).toEqual([]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('AppBackendOriginSchema parity with appBackendsFromRegistry', () => {
+  const origins = [
+    'https://api.example.com',
+    'https://api.example.com/',
+    'https://API.example.com',
+    'https://api.example.com:8443',
+    'https://api.example.com:443',
+    'http://api.example.com',
+    'http://localhost:3000',
+    'http://127.0.0.1:4100',
+    'https://localhost:3000',
+    'https://user:pw@api.example.com',
+    'https://user@api.example.com',
+    'https://api.example.com/base',
+    'https://api.example.com/?x=1',
+    'https://api.example.com/#h',
+    'ftp://api.example.com',
+    'wss://api.example.com',
+    'not a url',
+    '',
+    `https://${'a'.repeat(190)}.com`,
+    `https://${'a'.repeat(200)}.com`,
+  ];
+  it.each(origins)('agrees on %j', (origin) => {
+    const kept = appBackendsFromRegistry([sp('demo-app', origin)], () => {});
+    const keptUnchanged = kept.length === 1 && kept[0].origin === origin;
+    expect(AppBackendOriginSchema.safeParse(origin).success).toBe(keptUnchanged);
+  });
+});
+
+describe('loadDeployedRegistry', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'app-backends-registry-'));
+
+  it('reads a valid file', () => {
+    const file = join(dir, 'ok.json');
+    writeFileSync(file, JSON.stringify([sp('demo-app', 'https://demo.example.com')]));
+    const warn = vi.fn();
+    expect(loadDeployedRegistry(file, warn)).toEqual([sp('demo-app', 'https://demo.example.com')]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing file', 'missing.json', null],
+    ['bad JSON', 'bad.json', '{not json'],
+    ['non-array', 'obj.json', '{"a":1}'],
+  ])('returns [] with one warning for %s', (_label, name, body) => {
+    const file = join(dir, name);
+    if (body !== null) writeFileSync(file, body);
+    const warn = vi.fn();
+    expect(loadDeployedRegistry(file, warn)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('finds the repo registry by default', () => {
+    expect(Array.isArray(loadDeployedRegistry(undefined, () => {}))).toBe(true);
+    expect(loadDeployedRegistry(undefined, () => {}).length).toBeGreaterThan(0);
   });
 });

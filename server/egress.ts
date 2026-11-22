@@ -324,7 +324,7 @@ export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolea
       const date = dayKey(Date.now());
 
       // Forwarded app-backend requests (server/app-backends/http.ts) are metered per app,
-      // not as static files. Bounded: one key per configured APP_BACKENDS slug.
+      // not as static files. Bounded: one key per forwarded slug (registry or APP_BACKENDS).
       const appBackend = (req as { routeOptions?: { config?: { appBackend?: unknown } } }).routeOptions?.config?.appBackend;
       if (typeof appBackend === 'string') {
         const counted = (req as unknown as { __egressBytes?: () => number }).__egressBytes?.();

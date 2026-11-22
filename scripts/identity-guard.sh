@@ -152,7 +152,7 @@ case $mode in
       fi
       ident=$(git log --format="$MARK%H%n%an <%ae>%n%cn <%ce>" "${range[@]}" </dev/null | match text | cut -f1 | sort -u | wc -l)
       if [[ $ident -gt 0 ]]; then
-        echo "identity-guard: warning: $ident pushed commit(s) on $local_ref carry a deny-listed author/committer identity (see docs/identity-boundary.md, \"History\")." >&2
+        echo "identity-guard: warning: $ident pushed commit(s) on $local_ref carry a deny-listed author/committer identity (see docs/identity-boundary.md, \"Older revisions\")." >&2
       fi
     done
     if [[ $blocked -eq 1 ]]; then

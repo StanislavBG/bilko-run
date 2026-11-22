@@ -2,8 +2,8 @@
 
 This repository is public. Bilko is the only identity that may appear in it. The owner's
 real name and personal email must never appear in a tracked file, a commit message or a
-commit's author or committer. Write "the owner" instead. This is standing policy
-D-2026-10-20-02 in the owner's private portfolio ledger.
+commit's author or committer. Write "the owner" instead. This is the owner's identity
+policy.
 
 Do not quote the forbidden strings in this file or anywhere else in the repo. That
 includes the guard, its tests and its error messages. A test that must prove a string
@@ -14,14 +14,11 @@ numbers.
 ## What is not tracked
 
 `session-manager-operations/prompt-sessions/` is gitignored. It holds Session Manager's
-Epic records, chat transcripts and `exchanges.jsonl`. Agents had quoted the owner's
-email in 48 of those files and the surname in 2. The directory was untracked on
-2026-10-22 with `git rm --cached` in the main checkout, so the files are still on disk
-and Session Manager still reads and writes them there.
-
-A branch commit that deletes those paths would not have worked. Session Manager lands an
-Epic by running `git merge` in the main checkout, and that merge would delete the clean
-copies and abort on the dirty ones.
+Epic records, chat transcripts and `exchanges.jsonl`, which can quote the owner's
+identity. The files stay on disk in the main checkout, where Session Manager reads and
+writes them. Do not commit a deletion of those paths: Session Manager lands an Epic with
+`git merge` in the main checkout, and that merge would delete the clean copies and abort
+on the dirty ones.
 
 ## The guard
 
@@ -53,8 +50,7 @@ To audit the tree, run `pnpm identity:scan`. It checks binary files as well as t
 exits 1 on any hit. Its pass line gives the number of deny-list entries it checked.
 
 CI runs the same scan on every push to `main` and every pull request. It reads the
-strings from the `IDENTITY_DENYLIST` repo secret (one string per line), set on
-2026-10-30. A pass line with an entry count in the Identity scan step shows the run used
+strings from the `IDENTITY_DENYLIST` repo secret (one string per line). A pass line with an entry count in the Identity scan step shows the run used
 real values.
 
 Without the secret, a push to `main` fails. A pull request only warns and skips, because
@@ -75,24 +71,23 @@ gh secret set IDENTITY_DENYLIST --repo StanislavBG/bilko-run < ~/.config/bilko/i
 
 ## Commit identity
 
-This repo's local git config sets the commit identity to `Bilko <bilko@bilko.run>`, the
-same persona address the site uses. All worktrees share that config.
+This repo's local git config sets the commit identity to `Bilko <bilko@bilko.run>`. All
+worktrees share that config. That address is a commit persona only: it has no mailbox,
+and it is not the contact address the site publishes (`BILKO_CONTACT_EMAIL` in
+`shared/bilko-profile.ts`).
 
-## History
+## Older revisions
 
-The 2026-10-22 commit removed the strings from the current tree only. Older revisions on
-`origin` still contain them:
+The current tree is clean, but older revisions on `origin` still contain the forbidden
+strings:
 
-- the 48 files under `session-manager-operations/prompt-sessions/`
-- the author and committer email of roughly 2,260 commits made before the persona
-  identity
-- the first name, in the 9 files scrubbed on 2026-10-30
+- files under `session-manager-operations/prompt-sessions/`, from before it was gitignored
+- the author and committer email of commits made before the persona identity
+- the first name, in files that have since been scrubbed
 
-Only a history rewrite removes them, using `git filter-repo` plus a force-push of `main`.
-A rewrite changes every SHA. The owner decides whether to do it.
+The `pre-push` hook only warns about those identities, so pushing a branch that includes
+them still works. Only a history rewrite removes them, using `git filter-repo` plus a
+force-push of `main`. A rewrite changes every SHA, and the owner decides whether to do it.
 
 A rewrite does not reach npm. Published tarballs do not change, so `host-kit` 0.9.0 and
 older, and the legacy `@bilkobibitkov/host-kit`, keep the first name.
-
-**Decision:** pending, asked 2026-10-22. When the owner decides, record the decision and
-the date here.

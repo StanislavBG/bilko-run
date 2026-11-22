@@ -213,7 +213,8 @@ if [[ -z "$AUTONOMOUS_PUBLISH" || -z "$MAX_POSTS_PER_RUN" ]]; then
 fi
 
 # --- autonomous mode pushes; refuse to even attempt it against the wrong remote ---
-# CLAUDE.md hard rule: never push Bilko to the content-grade remote. Assert the
+# Bilko pushes only to origin main of StanislavBG/bilko-run (docs/map.md,
+# "Rules everyone shares"). Assert the
 # configured push remote actually resolves to this repo before any claude -p
 # session gets a chance to seed or push anything.
 if [[ "$AUTONOMOUS_PUBLISH" == "true" ]]; then

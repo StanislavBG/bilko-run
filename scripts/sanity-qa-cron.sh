@@ -69,8 +69,8 @@ if [[ "$DECISION" == "FAIL" || "$DECISION" == "ERROR" ]]; then
   fi
 fi
 
-# Commit and push the report to origin only. content-grade is a separate,
-# unrelated project (histories diverged) — never push there.
+# Commit and push the report to origin main only: Bilko pushes only to origin
+# main of StanislavBG/bilko-run (docs/map.md, "Rules everyone shares").
 # test-results/ is gitignored (playwright traces etc.) and reports stay on
 # local disk only. Commit without -a so we never sweep up the unrelated
 # working-tree changes (outdoor-hours data).

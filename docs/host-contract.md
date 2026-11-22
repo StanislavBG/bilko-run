@@ -4,6 +4,32 @@ bilko.run is a **host platform**, not a single product. It hosts many independen
 
 This document defines the contract: what the host provides, what an app must implement, and how to add a new app. Host-internal implementation detail (monitoring, QA gates, cost controls, caching, observability, security headers) lives in ~/Projects/Bilko/docs/host-internals.md — read that only if you're changing the host itself, not when you're publishing an app.
 
+## Contents
+
+- [The three host kinds](#the-three-host-kinds)
+- [What the host provides](#what-the-host-provides)
+- [What an app must implement](#what-an-app-must-implement)
+- [App backends (forwarding)](#app-backends-forwarding)
+- [Registry rules](#registry-rules)
+- [Project listing — who owns what](#project-listing--who-owns-what)
+- [Social share cards](#social-share-cards)
+- [Public project catalog](#public-project-catalog)
+- [Project data snapshot](#project-data-snapshot)
+- [Agent-facing surfaces](#agent-facing-surfaces)
+- [URL canonicalization](#url-canonicalization)
+- [Adding a new app — checklist](#adding-a-new-app--checklist)
+- [Adding from a sibling-repo Claude session (MCP)](#adding-from-a-sibling-repo-claude-session-mcp)
+- [Removing an app](#removing-an-app)
+- [Telemetry contract](#telemetry-contract)
+- [Internal traffic marker](#internal-traffic-marker)
+- [Manifest contract](#manifest-contract)
+- [Publish gate](#publish-gate)
+- [Game services](#game-services)
+- [Realtime relay](#realtime-relay)
+- [Authoritative game rooms](#authoritative-game-rooms)
+- [Play currency](#play-currency)
+- [Selling a downloadable web product](#selling-a-downloadable-web-product)
+
 ## The three host kinds
 
 Every app declares one host kind in `src/data/projectsRegistry.ts` (react-route) or `src/data/standalone-projects.json` (static-path / external-url):
@@ -18,7 +44,7 @@ Default to `static-path` for new apps — including ones that need a signed-in u
 
 ### Gateway pattern for the AI-tool siblings
 
-StackAudit, LaunchGrader, AdScorer, HeadlineGrader, ThreadGrader, EmailForge, AudienceDecoder and PageRoast ship their React page from the sibling repo, but their Gemini-backed scoring endpoint stays in the host at `server/routes/tools/<slug>.ts`. The sibling calls it same-origin with a Clerk JWT, so there is no CORS and no cross-origin auth. The split is deliberate, not a migration leftover. PageRoast owns 6 endpoints plus the `PAGEROAST_TOKENS` one-time-purchase tier; AudienceDecoder owns its own one-time-purchase tier. Academy and the free tools (OutdoorHours, LocalScore) are not in this pattern; the free tools have no host-side route and deduct no credits.
+Each AI tool with a file in `server/routes/tools/` ships its React page from the sibling repo, but its Gemini-backed scoring endpoint stays in the host at `server/routes/tools/<slug>.ts`. The sibling calls it same-origin with a Clerk JWT, so there is no CORS and no cross-origin auth. The split is deliberate. PageRoast owns 6 endpoints plus the `PAGEROAST_TOKENS` one-time-purchase tier; AudienceDecoder owns its own one-time-purchase tier. Academy and the free tools (OutdoorHours, LocalScore) are not in this pattern; the free tools have no host-side route and deduct no credits.
 
 Shared helpers in `server/routes/tools/_shared.ts`: the rate limiter, IP hashing, usage tracking, `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check and deduct), `askGeminiJson` (Gemini call plus JSON parse), `toolErrorReply` (uniform error reply) and `handleGenerateEndpoint` (inverse-mode generator). `index.ts` there registers every tool. To extract a tool to a sibling repo, lift its file and the page; no other server change is needed.
 
@@ -28,7 +54,7 @@ Shared helpers in `server/routes/tools/_shared.ts`: the rate limiter, IP hashing
 - `server/gemini.ts` is the Gemini client (key in a header, not the URL); `server/utils.ts` has `parseJsonResponse`, the shared Gemini output parser.
 - `server/bearer.ts` has `bearerMatches`, the timing-safe compare for shared-secret bearer routes.
 - `server/blog-posts.ts` loads the `content/blog/*.md` seed posts.
-- `src/hooks/usePageView` tracks page views with the Clerk email. Clerk state comes straight from `@clerk/clerk-react`; there is no host-side `useAuth` wrapper.
+- Page views and clicks come from the beacon the host injects into every HTML page (`server/click-beacon.ts`); there is no client hook to call. Clerk state comes straight from `@clerk/clerk-react`; there is no host-side `useAuth` wrapper.
 - The portfolio (`/`, `/projects`, `⌘K`) reads `src/data/projectsRegistry.ts`. Static-path and external apps load as a full page (Fastify serves the bundle); React routes use SPA navigation.
 - Stack: React 18, Vite 6, Tailwind v4, Fastify 5, Turso/libSQL (local SQLite in dev), Clerk, Stripe, Gemini.
 
@@ -51,15 +77,15 @@ These are the OS services. Apps use them; they should not reimplement.
 - **Payments: Stripe.** Subscription state via `getActiveSubscriptionLive(email)`; one-time purchases via `hasPurchased(email, productKey)`. Both from `server/services/stripe.ts`.
 - **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
 - **Page-view and click analytics.** Automatic: the host injects a beacon into every HTML page (pageviews on load and SPA navigation, clicks, session ids via the `bilko_vid`/`bilko_sid` cookies). No hook to call. See ~/Projects/Bilko/docs/observability.md.
-- **Shared UI for siblings** lives in `host-kit` (`packages/host-kit/`), not in this bundle; the old in-repo `tool-page` kit and `useToolApi` hook are gone.
-- **Which host-kit to install.** Use the unscoped npm package `host-kit`, **`>=0.11.0`**: `"host-kit": "^0.11.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. 0.11.0 is the first release that tags every telemetry record with `env` (`prod`, `dev`, `test`); with an older host-kit, records from local and test runs count as prod. 0.8.0 was the first npm release with the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`) and Bearer-authenticated games hooks; `trackFlow` needs 0.10.0 or later. `host-kit@0.7.2` and the legacy scoped `@bilkobibitkov/host-kit` (last release 0.7.2, no longer published) do not have it. In 0.7.2 the games hooks send cookies only, so every call gets a 401.
+- **Shared UI for siblings** lives in `host-kit` (`packages/host-kit/`), not in this bundle.
+- **Which host-kit to install.** The unscoped npm package `host-kit`, current release 0.11.0: `"host-kit": "^0.11.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. It carries the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`), Bearer-authenticated games hooks, `trackFlow`, and the `env` tag on every telemetry record. The scoped `@bilkobibitkov/host-kit` is not published; do not use it.
 - **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
 - **Database.** Turso/libSQL via `dbGet/dbAll/dbRun/dbTransaction` from `server/db.ts`. Falls back to local SQLite in dev. All SQL parameterized.
 
 ### To `static-path` and `external-url` apps additionally
 
 - **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs a server, run your own; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below).
-- **CSP stays report-only under `/projects/`.** `BILKO_CSP_ENFORCE=1` enforces the policy on host pages only. Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Before enforcement reaches `/projects/`, it needs a per-project policy declared in the registry (decision 2026-10-26, `server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
+- **CSP stays report-only under `/projects/`.** `BILKO_CSP_ENFORCE=1` enforces the policy on host pages only. Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Enforcing it under `/projects/` needs a per-project policy declared in the registry first (`server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
 - **Large assets are precompressed at build time.** Files ≥1 KB of compressible types (js, css, json, wasm, pck, data, …, never HTML) get `.br`/`.gz` siblings, served with a Content-Length. Don't publish your own `.br`/`.gz` next to a source file; the build replaces them.
 - **Same-origin framing only.** Responses under `/projects/` carry CSP `frame-ancestors 'self'`, so one static-path app may embed another in an iframe (e.g. Game Academy hosting an engine game slug) and talk to it over `postMessage`. Cross-origin framing is refused; every other host page is `frame-ancestors 'none'`.
 
@@ -68,7 +94,7 @@ These are the OS services. Apps use them; they should not reimplement.
 A `static-path` app is same-origin with `/api`, so it *can* call authenticated host endpoints (`/api/games/*`, the AI-tool gateways, `/api/academy/*`). There is **one supported way to authenticate: send a Clerk session JWT in `Authorization: Bearer <token>`.** `requireAuth` / `requireAdmin` in `server/clerk.ts` read only that header.
 
 - **Cookies are not accepted.** Clerk's first-party `__session` cookie on bilko.run is **not** read by the host, and `credentials: 'include'` by itself always gets a 401. This is deliberate. That cookie is a 60-second token that only clerk-js refreshes. A static page that doesn't run clerk-js would get intermittent 401s about a minute after page load. Accepting it would also make every mutating `/api` route cookie-authenticated, which means CSRF exposure.
-- **How to get the token:** load clerk-js from the host's Clerk Frontend API (`https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js`, with the bilko.run publishable key as `data-clerk-publishable-key`). Call `await Clerk.load()`, then `await Clerk.session?.getToken()` before **each** request. Don't cache the token, because clerk-js already caches and refreshes it. The host CSP already allows `clerk.bilko.run` in `script-src`. Copy the CSP nonce from `<meta name="csp-nonce">` onto the script tag. **Use host-kit instead of rolling your own:** `authFetch(url, init)` (`getAuthToken()`, `useAuth()`, `openSignIn()`) from `host-kit` (`>=0.10.0`) does all of this. The `useSaveState` / `useUnlocks` / `useLeaderboard` hooks already use it.
+- **How to get the token:** load clerk-js from the host's Clerk Frontend API (`https://clerk.bilko.run/npm/@clerk/clerk-js@5/dist/clerk.browser.js`, with the bilko.run publishable key as `data-clerk-publishable-key`). Call `await Clerk.load()`, then `await Clerk.session?.getToken()` before **each** request. Don't cache the token, because clerk-js already caches and refreshes it. The host CSP already allows `clerk.bilko.run` in `script-src`. Copy the CSP nonce from `<meta name="csp-nonce">` onto the script tag. **Use host-kit instead of rolling your own:** `authFetch(url, init)` (`getAuthToken()`, `useAuth()`, `openSignIn()`) from `host-kit` does all of this. The `useSaveState` / `useUnlocks` / `useLeaderboard` hooks already use it.
 - **Gate the load cheaply:** a `__client_uat` cookie value > 0 means the user has signed in on bilko.run. If it is absent or `0`, treat the user as signed out without downloading clerk-js.
 - **Identity on the server** is always the email from the verified token. Never trust a user id or email in the request body.
 
@@ -80,14 +106,9 @@ A registry entry — a `static-path`/`external-url` entry in `src/data/standalon
 
 ```json
 {
-  "slug": "my-app",
-  "name": "MyApp",
-  "tagline": "One sentence: what is this and who is it for.",
-  "category": "AI Tool · Content",
-  "status": "live",
-  "year": 2026,
-  "host": { "kind": "static-path", "path": "/projects/my-app/" },
-  "tags": ["Browser", "Free"]
+  "slug": "my-app", "name": "MyApp", "tagline": "One sentence: what is this and who is it for.",
+  "category": "AI Tool · Content", "status": "live", "year": 2026,
+  "host": { "kind": "static-path", "path": "/projects/my-app/" }, "tags": ["Browser", "Free"]
 }
 ```
 
@@ -174,28 +195,7 @@ Sibling sessions never ask Bilko to change card copy. They edit it themselves. B
 
 **Ownership rule.** `host.localPath` binds a slug to exactly one repo. `register_static_project` / `register_external_project` record the caller's `callerRepoPath` there, and refuses a repo that is already bound to another slug. `publish_static_project` (via `sourceRepoPath`), `unregister_project` and `update_project_listing` (via `callerRepoPath`) refuse any other caller.
 
-**Content standards** (enforced by `mcp-host-server/src/contract/registry.ts` on every write):
-
-| Field | Limit |
-|---|---|
-| `name` | 1–40 chars |
-| `displayName` | 1–60 chars |
-| `tagline` | 1–160 chars |
-| `category` | 1–40 chars |
-| `tags` | up to 6, each 1–24 chars |
-| `thumbnail` | `https://` URL or a `/path` |
-| `listing.detail` | 1–400 chars |
-| `listing.metric`, `listing.metricLabel` | 1–24 chars each |
-| `listing.lang` | 1–40 chars |
-| `listing.audience` | up to 200 chars |
-| `listing.talkingPoints` | up to 5, each 1–200 chars |
-| `listing.offering` | one of `saas`, `free-tool`, `showcase`, `open-source`, `game`, `content`, `experiment`, `service` |
-| `listing.pricing` | one of `free`, `freemium`, `paid`, `none` |
-| `listing.callToAction` | 1–120 chars |
-| `listing.avoidClaims` | up to 5, each 1–200 chars |
-| `listing.icon` | a bundle path starting with `/projects/<own-slug>/` and ending in `.png`, or a hosted path `/projects/<own-slug>/_media/<sha256>.png` from `set_listing_media`; the file must be a square PNG, 128–1024 px, ≤512 KB (checked by the `share-assets` gate or by `set_listing_media`) |
-| `listing.shareImage` | a bundle path starting with `/projects/<own-slug>/` and ending in `.png`, or a hosted path `/projects/<own-slug>/_media/<sha256>.png` from `set_listing_media`; the file must be a PNG, exactly 1200x630, ≤5 MB (checked by the `share-assets` gate or by `set_listing_media`) |
-| `listing.video` | a bundle path starting with `/projects/<own-slug>/` and ending in `.mp4` or `.webm`, or a hosted path `/projects/<own-slug>/_media/<sha256>.mp4` or `.webm` from `set_listing_media`; the file must carry an MP4 (`ftyp`) or WebM (EBML) signature that matches the extension, ≤8 MB (checked by the `share-assets` gate or by `set_listing_media`) |
+**Content standards** are enforced by `mcp-host-server/src/contract/registry.ts` on every write. Field lengths, list counts and the allowed `status`, `offering` and `pricing` values are the Zod schemas there (`RegistryProjectSchema`, `ListingSchema`, `ListingOfferingSchema`, `ListingPricingSchema`); a rejected write names the field. `thumbnail` is an `https://` URL or a `/path`. `listing.icon`, `listing.shareImage` and `listing.video` are a bundle path starting with `/projects/<own-slug>/`, or a hosted path `/projects/<own-slug>/_media/<sha256>.<ext>` from `set_listing_media`; the file rules are in "Card media upload (set_listing_media)".
 
 A path with `/_media/` in it must be a valid hosted path: the right slug, a 64-hex sha256, and an extension that fits the field (`.png` for `icon` and `shareImage`, `.mp4` or `.webm` for `video`). Anything else is rejected.
 
@@ -233,18 +233,9 @@ Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `
 
 Each project owns the marketing fields in its own `listing`. Fill them in; promoters such as Burrow read them to decide what to market and how.
 
-`offering` says what kind of thing the project is:
+`offering` says what kind of thing the project is; its values are `ListingOfferingSchema` in `mcp-host-server/src/contract/registry.ts`. `showcase` is a portfolio or presentation layer nobody signs up for; `service` is booked hours of work, where the time is the offering, not software; `experiment` makes no promise that the project stays.
 
-- `saas` — others can sign up and use it with their own data.
-- `free-tool` — a free utility anyone can use, no account tied to their data.
-- `showcase` — a personal portfolio or presentation layer, not a product others sign up for.
-- `open-source` — the code is the offering; people install or fork it.
-- `game` — something to play.
-- `content` — articles, courses or other material to read or watch.
-- `experiment` — early or exploratory; no promise it stays.
-- `service` — booked hours of work, such as consultation or design. The time is the offering, not software.
-
-`pricing` is `free`, `freemium`, `paid` or `none` (nothing to buy, e.g. a showcase).
+`pricing` is one of `ListingPricingSchema`; `none` means nothing to buy, e.g. a showcase.
 
 `callToAction` is the one action a promoter should ask people to take.
 
@@ -275,33 +266,17 @@ bilko.run generates each project's X/Twitter/OpenGraph share card from the regis
 
 The same `https://bilko.run/og/<slug>.png` is two things: the X/LinkedIn link preview, and the hero image of your project's card on https://bilko.run/projects. The card loads it as `/og/<slug>.png?v=<hash>`, with the same hash as your project page's `og:image`. The hash is computed when the site is built, from the card copy plus the `icon` and `shareImage` bytes. A publish rebuilds the site, so a new `shareImage` gets a new URL and returning visitors see it on their next visit after the deploy. On the card it is shown uncropped at 1200x630 on a dark background. So your `listing.shareImage` is your hero, not an afterthought social card. A project without one shows the plain generated text card in both places.
 
-Design it as a hero:
+Design it as a hero: show the product itself (real UI or the key visual), keep the name and the one-line promise legible at small sizes, and keep important content inside the central ~1000x500 safe area.
 
-- Show the product itself: real UI or the key visual.
-- Keep the name and the one-line promise legible at small sizes. No tiny text.
-- Keep important content inside the central ~1000x500 safe area.
-- The file rule is unchanged: 1200x630 PNG, ≤5 MB.
-
-`https://bilko.run/og/<slug>.png` resolves in this order:
-
-1. A valid `listing.shareImage` (1200x630 PNG, ≤5 MB) is served as-is.
-2. Otherwise a generated card that draws `listing.icon` (square PNG, 128–1024 px, ≤512 KB).
-3. Otherwise the plain generated card.
-
-If a declared file is missing, oversize or the wrong size at serve time, the host logs it and falls back to the next step.
+`https://bilko.run/og/<slug>.png` serves a valid `listing.shareImage` as-is; otherwise a generated card that draws a valid `listing.icon`; otherwise the plain generated card. If a declared file is missing, oversize or the wrong size at serve time, the host logs it and falls back to the next one.
 
 Caching: every `/og/<slug>.png` response has an ETag. A versioned URL (with `?v=`) is cached for a day (`max-age=86400`), since a new image gets a new URL. An unversioned URL, such as an old link that was shared before, is cached for 5 minutes (`max-age=300`); after that the browser revalidates with the ETag and gets a `304` when the image has not changed.
 
-Recipe for a sibling. Any host kind: call `set_listing_media { slug, callerRepoPath, media: { shareImage: "/abs/path/og.png" } }` (and `icon` the same way); see "Card media upload (set_listing_media)". For a `static-path` entry you can instead ship the file in the bundle:
-
-1. Add the PNG to the build output. For example, put `public/og.png` in the repo; it lands at `/projects/<slug>/og.png`.
-2. Set the path in `bilko.listing.json` (`{ "listing": { "shareImage": "/projects/<slug>/og.png" } }`), or call `update_project_listing` with the same patch. Use `icon` the same way for a square icon.
-3. Run `publish_static_project`.
-4. Open `https://bilko.run/og/<slug>.png` and check the card.
+Recipe for a sibling. Any host kind: call `set_listing_media { slug, callerRepoPath, media: { shareImage: "/abs/path/og.png" } }` (and `icon` the same way); see "Card media upload (set_listing_media)". A `static-path` entry can instead ship the file in the bundle: put it in the build output (`public/og.png` lands at `/projects/<slug>/og.png`), set `{ "listing": { "shareImage": "/projects/<slug>/og.png" } }` in `bilko.listing.json` or through `update_project_listing`, run `publish_static_project`, then open `https://bilko.run/og/<slug>.png` and check the card.
 
 The `share-assets` publish gate blocks the publish when a declared `icon` or `shareImage` is missing from the bundle, is not a PNG, or has the wrong size. The path must start with `/projects/<your-slug>/`.
 
-There is no size budget, so share assets never crowd out the app. The `budget` gate reports a declared `icon`/`shareImage`/`listing.video` separately when it passes these checks: it is left out of the measured gzip sum, and the details say `excluding N share asset(s)`. The same file left undeclared, or declared but invalid, is summed like any other file. Its own cap is set here, by the `share-assets` gate.
+The `budget` gate leaves a declared `icon`/`shareImage`/`listing.video` that passes these checks out of its measured gzip sum, and its details say `excluding N share asset(s)`. The same file left undeclared, or declared but invalid, is summed like any other file.
 
 Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
 
@@ -323,11 +298,7 @@ bilko-host__set_listing_media {
 }
 ```
 
-- Give at least one of `video`, `shareImage`, `icon`.
-- A value is an absolute path to a local file. A leading `~` is expanded to the home directory.
-- `null` removes that field from the listing.
-- A field you leave out keeps its current value.
-- Only the repo bound to the slug may call it (the same ownership rule as `update_project_listing`).
+Give at least one of `video`, `shareImage`, `icon`. A value is an absolute path to a local file (a leading `~` is expanded); `null` removes that field; a field you leave out keeps its current value. Only the repo bound to the slug may call it (the same ownership rule as `update_project_listing`).
 
 Limits (the same checks as the `share-assets` gate, in `shared/listing-media.ts` `CARD_MEDIA_LIMITS`):
 
@@ -361,11 +332,8 @@ Serving and caching:
 `listing.video` is optional. It adds a short clip to your card on https://bilko.run/projects. The PNG stays in charge everywhere else.
 
 - The active `/projects` card plays `listing.video` looping and inline. The card's share image (`/og/<slug>.png?v=<hash>`) is the poster.
-- Clips may carry sound. The video starts muted, because browsers block autoplay with sound.
-- A Pause/Play button is always shown over the video.
-- An Unmute button appears only when the file has an audio track. The host detects the track from the file's bytes: at build time for a bundle file, and at upload time for a file sent with `set_listing_media`.
-- The visitor's pause and mute choices carry to the next card on the page.
-- Only the active card loads the video. Other cards load nothing for it.
+- Clips may carry sound. The video starts muted, because browsers block autoplay with sound. A Pause/Play button is always shown over the video. An Unmute button appears only when the file has an audio track. The host detects the track from the file's bytes: at build time for a bundle file, and at upload time for a file sent with `set_listing_media`.
+- The visitor's pause and mute choices carry to the next card on the page. Only the active card loads the video.
 - Under `prefers-reduced-motion: reduce` or Save-Data, the poster shows a Play button. No video bytes load until it is pressed. If the video fails to load or autoplay is blocked, the poster stays.
 - X/LinkedIn link previews keep the PNG. The video never appears in `og:*` or `twitter:*` tags.
 - A hosted video's URL (`/projects/<slug>/_media/<sha256>.<ext>`) already names its content. A bundle video's URL carries `?v=<content hash>` of the file's bytes. Either way the URL is cached for a year (`max-age=31536000, immutable`), and a new file gets a new URL.
@@ -375,19 +343,13 @@ Recipe for a sibling (any host kind):
 1. Export H.264 MP4 (or VP9 WebM) at 1200x630, about 60 s or less. Keep the soundtrack: AAC in MP4 (for example `ffmpeg … -c:a aac -b:a 128k -movflags +faststart`) or Opus in WebM. Do not pass `-an`. The 8 MB cap covers video plus audio.
 2. Call `set_listing_media { slug, callerRepoPath, media: { video: "/abs/path/tile.mp4" } }`. Add `shareImage` in the same call if the card has none yet.
 3. Keep `shareImage` set. It is the poster and the link preview.
-4. Wait about a minute for the redeploy, then check the card on https://bilko.run/projects.
+4. Wait about a minute for the redeploy, then check the card on https://bilko.run/projects. To remove the video, call `set_listing_media` with `{ "video": null }`.
 
-To remove the video, call `set_listing_media` with `{ "video": null }`.
-
-Alternative for a `static-path` entry (the file ships in your bundle):
-
-1. Put the file in the build output. For example, `public/tile.mp4` lands at `/projects/<slug>/tile.mp4`. Do not put it under `_media/`; that folder is reserved.
-2. Set the path in `bilko.listing.json` (`{ "listing": { "video": "/projects/<slug>/tile.mp4" } }`), or call `update_project_listing` with the same patch.
-3. Run `publish_static_project`.
+A `static-path` entry can instead ship the file in its bundle (`public/tile.mp4` lands at `/projects/<slug>/tile.mp4`; never under `_media/`), set `{ "listing": { "video": "/projects/<slug>/tile.mp4" } }` in `bilko.listing.json` or through `update_project_listing`, and run `publish_static_project`.
 
 The `share-assets` gate blocks the publish when a declared `video` is missing from the bundle, lacks the MP4 (`ftyp`) or WebM (EBML) signature for its extension, or is over 8 MB.
 
-Implemented in `mcp-host-server/src/contract/registry.ts` (`ProjectVideoPathSchema`, plus the hosted-path check), `mcp-host-server/src/contract/listing-media.ts` (`hostedMediaPath`), `mcp-host-server/src/listing-media-tool.ts` (`set_listing_media`: local checks, registry commit, upload), `mcp-host-server/src/server.ts` (the tool registration), `shared/listing-media.ts` (`CARD_MEDIA_LIMITS`, `checkCardMediaBytes`, the hosted path regex), `server/routes/listing-media.ts` (the `/projects/<slug>/_media/…` serve route and the `PUT /api/listing-media/…` upload), `server/services/listing-media.ts` (database storage and the audio flag), `server/services/listing-media-declared.ts` (the registry-declared check), `mcp-host-server/src/gates/share-assets.ts` (signature and 8 MB cap), `src/components/ProjectCardShot.tsx` (the card player), `shared/asset-versions.ts` (`LISTING_ASSET_KEYS` includes `video`, so the file gets a build-time hash; the `AssetVersions.audio` list names each video with an audio track) read through `assetUrl` and `assetHasAudio` in `src/data/assetVersions.ts`, `shared/video-audio.ts` (`hasAudioTrack`, the build-time audio sniff), and `server/static-cache.ts` (`versionedMediaCacheControl`, the year-long cache).
+Code: the tool is in `mcp-host-server/src/` (`listing-media-tool.ts`, `contract/`, `gates/share-assets.ts`), the shared checks in `shared/listing-media.ts`, the serve and upload routes in `server/routes/listing-media.ts` with storage in `server/services/`, and the card player in `src/components/ProjectCardShot.tsx`.
 
 ## Public project catalog
 
@@ -406,14 +368,14 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
       "name": "Git Viewer",                    // displayName ?? name, as on the card
       "tagline": "Turn your GitHub into a public portfolio",
       "category": "Data · Portfolio",
-      "status": "live",                        // live | cooking | postponed | archived
+      "status": "live",                        // ProjectStatusSchema in registry.ts
       "url": "https://bilko.run/projects/git-viewer/", // absolute; the card's own link
       "tags": ["Browser", "Freemium"],
       "detail": "…",                           // drawer story; falls back to tagline
       "audience": "…",                         // who it is for; may be ""
       "talking_points": ["…"],                 // plain facts a promoter may state; may be []
-      "offering": "showcase",                  // saas | free-tool | showcase | open-source | game | content | experiment | service; "" when unset
-      "pricing": "none",                       // free | freemium | paid | none; "" when unset
+      "offering": "showcase",                  // ListingOfferingSchema in registry.ts; "" when unset
+      "pricing": "none",                       // ListingPricingSchema in registry.ts; "" when unset
       "call_to_action": "…",                   // the one action to ask for; "" when unset
       "avoid_claims": ["…"],                   // claims promoters must never make; [] when unset
       "share_image_url": "https://bilko.run/og/git-viewer.png" // absolute; the card X unfurls (see "Social share cards")
@@ -440,7 +402,6 @@ bilko.run serves agents a plain-text storefront at `/llms.txt`, the public catal
 
 The wallet, MCP tools, offers, agent keys, visitor classes and the UTM funnel are platform-side money facts, not sibling requirements: see ~/Projects/Bilko/docs/commerce.md.
 
-
 ### robots.txt
 
 `public/robots.txt` keeps `/api/` private but explicitly allows `/mcp`, `/llms.txt`, `/api/offers` and `/api/projects` (longest match wins). It disallows `/buy/` because a browser GET creates a live Checkout session; agents acting for a user hand the link to the user, whose browser opens checkout.
@@ -449,24 +410,16 @@ The wallet, MCP tools, offers, agent keys, visitor classes and the UTM funnel ar
 
 - `/products/<slug>` is the canonical path for every `react-route` app.
 - `/projects/<slug>` redirects (301-style SPA `Navigate replace`) to `/products/<slug>`.
-- `/app/<old-slug>` redirects to `/products/<canonical-slug>` per the `APP_TO_PRODUCT` map in `src/App.tsx`. (Pre-refactor compatibility.)
+- `/app/<old-slug>` redirects to `/products/<canonical-slug>` per the `APP_TO_PRODUCT` map in `src/App.tsx`.
 - `/projects/<slug>/` (trailing slash, `static-path`) does **not** redirect — it's a different host kind serving different bytes.
 
 Page-specific host content (sub-paths of a `react-route` product, what must not move under `/products/<slug>/`) lives in ~/Projects/Bilko/docs/site.md.
 
 ### One publisher per `/projects/<slug>/` prefix
 
-`publish_static_project` stages the new build, then atomically swaps it in for
-`public/projects/<slug>/` (copy → rename-swap). That swap still means two
-publishers targeting one slug overwrite each other on their next publish —
-including when one writes only sub-directories (`/home/`, `/feature/`,
-`/architecture/`) that the other's bundle doesn't contain.
+`publish_static_project` stages the new build, then atomically swaps it in for `public/projects/<slug>/` (copy → rename-swap). Two publishers targeting one slug still overwrite each other on their next publish, including when one writes only sub-directories (`/home/`, `/feature/`, `/architecture/`) that the other's bundle doesn't contain.
 
-**Rule: a slug's static prefix has exactly one publisher.** A project with a
-second static surface (project-home lenses, docs, a demo) either folds those
-files into the same bundle before publishing, or registers them under a distinct
-slug. For `session-manager`, the owning publisher is the **web-remote phone app**;
-project-home lenses must not target that prefix.
+**Rule: a slug's static prefix has exactly one publisher.** A project with a second static surface (project-home lenses, docs, a demo) either folds those files into the same bundle before publishing, or registers them under a distinct slug. For `session-manager`, the owning publisher is the **web-remote phone app**; project-home lenses must not target that prefix.
 
 ## Adding a new app — checklist
 
@@ -503,11 +456,7 @@ bilko-host__set_listing_media { slug, callerRepoPath, media: { video?, shareImag
 
 `register_static_project` (and `register_external_project`, which adds a required `https://` `url`) binds the slug to `callerRepoPath` (your repo root) and also takes optional `tags` and `displayName` (a hub-only display name, 1-60 chars). It has no `public` parameter: new apps are admin-only until the Bilko owner lists them. Later card edits go through `update_project_listing` or `bilko.listing.json`; see "Project listing — who owns what". Card media from local files goes through `set_listing_media`; see "Card media upload (set_listing_media)".
 
-The MCP commits + pushes to `origin` automatically, from a dedicated clean
-checkout kept in sync with `origin/main` (never your own working tree); Render
-redeploys within ~minute. If the push fails (conflicting concurrent publish,
-network error), the tool call returns an error instead of silently dropping
-your publish — retry it.
+The MCP commits and pushes to `origin` automatically, from a dedicated clean checkout kept in sync with `origin/main` (never your own working tree); Render redeploys in about a minute. If the push fails (conflicting concurrent publish, network error), the tool call returns an error instead of silently dropping your publish: retry it.
 
 ## Removing an app
 
@@ -521,8 +470,8 @@ your publish — retry it.
 The full adoption process, SDK reference, endpoints, rate limits and retention are in ~/Projects/Bilko/docs/observability.md. What a sibling must do:
 
 - **Nothing for pageviews and clicks.** The host injects a beacon into every HTML page; tag important buttons with `data-track="<area>-<action>"`.
-- **Call `initTelemetry({ app, version })` from `host-kit` once at boot** (`>=0.10.0` for `trackFlow`). Then use `trackFlow(flow, step, props)` (kebab-case), `log.*` and `logError`.
-- **Every record carries `env`** (`>=0.11.0`), resolved once at init: `prod` on bilko.run and www.bilko.run, otherwise `test` when `navigator.webdriver` is true (Playwright, Selenium), otherwise `dev` (localhost and any other host). `initTelemetry({ app, version, env })` overrides it; a value other than `prod`, `dev` or `test` is ignored. The host stores `env` per record and counts a record without one as prod, so rows from older host-kit (no `env`) count as prod, local and test runs included.
+- **Call `initTelemetry({ app, version })` from `host-kit` once at boot.** Then use `trackFlow(flow, step, props)` (kebab-case), `log.*` and `logError`.
+- **Every record carries `env`**, resolved once at init: `prod` on bilko.run and www.bilko.run, otherwise `test` when `navigator.webdriver` is true (Playwright, Selenium), otherwise `dev` (localhost and any other host). `initTelemetry({ app, version, env })` overrides it; a value other than `prod`, `dev` or `test` is ignored. The host stores `env` per record and counts a record without one as prod.
 - **Never put emails, tokens or free text in props**, fields or context.
 - Verify in `/admin/observability` (Sessions and Flows).
 
@@ -542,7 +491,7 @@ The owner's automation (Playwright, a Chrome attached over CDP, link checkers, c
 
 ## Manifest contract
 
-Every `static-path` sibling MUST emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool's `manifest` gate validates this file and refuses to publish if it's absent or invalid — this is the one gate that cannot be bypassed. The host stores the latest manifest per app in the `app_manifests` Turso table, visible at `/admin` → Manifests tab.
+Every `static-path` sibling must emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool's `manifest` gate validates this file and refuses to publish if it's absent or invalid — this is the one gate that cannot be bypassed. The host stores the latest manifest per app in the `app_manifests` Turso table, visible at `/admin` → Manifests tab.
 
 ### Schema
 
@@ -559,32 +508,22 @@ Defined once, in `mcp-host-server/src/manifest-schema.ts` (Zod), which the `mani
 | `hostKit.version` | `string` | Version of `host-kit` (or legacy `@bilkobibitkov/host-kit`) in use. `"0.0.0"` if not used |
 | `golden.path` | `string` | URL path the synthetic monitor GETs. Must start with `/` |
 | `golden.expect` | `string` | Optional CSS selector or text the monitor checks for |
-| `health.path` | `string` (optional) | Stored only (`app_manifests.health_path`); nothing polls it today |
+| `health.path` | `string` (optional) | Stored only (`app_manifests.health_path`); nothing polls it |
 | `bundle.sizeBytesGz` | `integer` | Total gzip size of all dist files in bytes |
 | `bundle.fileCount` | `integer` | Total number of files in the bundle |
 
-**Limit**: The raw JSON must be under 16 KB. Larger files are rejected with an actionable error.
+**Limit**: the raw JSON must be at most 16,000 characters; a longer file fails the gate with `manifest.json too large`.
 
 ### Worked example (Stack-Audit)
 
 ```json
 {
-  "schemaVersion": 1,
-  "slug": "stack-audit",
-  "version": "1.0.0",
-  "builtAt": "2026-05-08T14:30:00.000Z",
-  "gitSha": "abc1234",
-  "gitBranch": "main",
-  "hostKit": { "version": "0.3.0" },
-  "golden": {
-    "path": "/projects/stack-audit/",
-    "expect": "StackAudit"
-  },
+  "schemaVersion": 1, "slug": "stack-audit", "version": "1.0.0",
+  "builtAt": "2026-05-08T14:30:00.000Z", "gitSha": "abc1234", "gitBranch": "main",
+  "hostKit": { "version": "0.11.0" },
+  "golden": { "path": "/projects/stack-audit/", "expect": "StackAudit" },
   "health": {},
-  "bundle": {
-    "sizeBytesGz": 245760,
-    "fileCount": 38
-  }
+  "bundle": { "sizeBytesGz": 245760, "fileCount": 38 }
 }
 ```
 
@@ -600,31 +539,14 @@ It reads `package.json` and git, walks `dist/`, computes gzip sizes, and writes 
 
 ### Drift indicator
 
-`/admin` → Manifests tab shows a per-app drift badge computed from `hostKit.version`:
-- **green** — matches the highest version seen across all manifests (`current`)
-- **yellow** — exactly 1 minor version behind (`minor_behind`)
-- **red** — ≥2 minors behind or different major (`major_behind`)
+`/admin` → Manifests tab shows a per-app drift badge computed from `hostKit.version`: **green** matches the highest version seen across all manifests (`current`), **yellow** is exactly 1 minor version behind (`minor_behind`), **red** is ≥2 minors behind or a different major (`major_behind`).
 
 ### Multi-document bundles
 
-A `static-path` app is one registry slug pointing at one `dist/` tree
-(`public/projects/<slug>/`), served verbatim by Fastify static — nothing
-requires that tree to contain only a single page. A sibling can ship any
-number of additional HTML documents alongside its root page, each reachable
-at `bilko.run/projects/<slug>/<subpath>/` for free, with no new host
-capability required. Two things about the contract apply across the **whole
-bundle**, not per-document:
+A `static-path` app is one registry slug pointing at one `dist/` tree (`public/projects/<slug>/`), served verbatim by Fastify static. A sibling can ship any number of additional HTML documents alongside its root page, each reachable at `bilko.run/projects/<slug>/<subpath>/`, with no new host capability. Two parts of the contract apply to the **whole bundle**, not per document:
 
-- **`budget` gate is bundle-wide.** It measures and reports the gzipped
-  size of *every* file under `dist/`, summed (except a valid declared
-  `listing.icon`/`listing.shareImage`/`listing.video`, see below). There is
-  no size budget, so extra documents never need more allowance. The gate
-  fails only when one file is over GitHub's 100 MiB per-file limit.
-- **`golden` gate only covers the root document.** `manifest.golden.path`
-  is a single URL the synthetic monitor and `golden` gate check — point it
-  at the root (`/projects/<slug>/`) unless you deliberately want the
-  golden check to watch a different document instead. There is no
-  per-document golden check.
+- **`budget` gate is bundle-wide.** It measures every file under `dist/`, summed (see "Bundle size").
+- **`golden` gate only covers the root document.** `manifest.golden.path` is a single URL the synthetic monitor and `golden` gate check. Point it at the root (`/projects/<slug>/`) unless you deliberately want the golden check to watch a different document. There is no per-document golden check.
 
 ## Publish gate
 
@@ -633,7 +555,7 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 | Gate | What it checks | Bypassable |
 |---|---|---|
 | `manifest` | `manifest.json` exists at the bundle root, parses, validates against the Zod schema, and its `slug` matches the registered slug | **No — never bypassable** |
-| `budget` | Measures the real gzipped size of every file under `distPath` (fresh, not the manifest's self-reported number) and reports it. There is no size budget (owner decision 2026-11-15). It fails only when one file is over 100 MiB: the publish pushes the bundle to GitHub, which rejects larger files (`mcp-host-server/src/gates/budget.ts`). A declared `listing.icon`/`listing.shareImage`/`listing.video` that passes the `share-assets` checks is left out of the sum; it has its own cap there | `budget` |
+| `budget` | Measures the real gzipped size of every file under `distPath` (fresh, not the manifest's self-reported number) and reports it; see "Bundle size" for the one way it fails. A declared `listing.icon`/`listing.shareImage`/`listing.video` that passes the `share-assets` checks is left out of the sum | `budget` |
 | `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` (template: see below) | `golden` |
 | `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
 | `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath` (`npm audit --omit=dev --audit-level=high --json` instead when the repo has a `package-lock.json` and no `pnpm-lock.yaml`); the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
@@ -641,13 +563,13 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 
 The `manifest` gate short-circuits the pipeline — if it fails, the other five are skipped (their results would be meaningless without a valid manifest).
 
-A successful publish returns the `gates: manifest=pass, budget=pass, …` summary line, then one indented `<gate>: <details>` line per gate. The `budget` line gives the gate's own measurement next to the manifest's self-reported size, e.g. `budget: measured 181.3 KB gz over 24 files, excluding 1 share asset(s) (manifest reported 183.0 KB); largest file assets/index.js 0.4 MiB; no size budget, only GitHub's 100 MiB per-file limit` (KB = bytes / 1024, MiB = bytes / 1048576). The figure is for your records; it never blocks a publish. A file over 100 MiB fails the gate with `<path> is <N> MiB; GitHub rejects files over 100 MiB, so this bundle cannot be pushed`. A blocked publish returns every gate's details as JSON instead.
+A successful publish returns the `gates: manifest=pass, budget=pass, …` summary line, then one indented `<gate>: <details>` line per gate. The `budget` line gives the gate's own measurement next to the manifest's self-reported size, e.g. `budget: measured 181.3 KB gz over 24 files, excluding 1 share asset(s) (manifest reported 183.0 KB); largest file assets/index.js 0.4 MiB; no size budget, only GitHub's 100 MiB per-file limit` (KB = bytes / 1024, MiB = bytes / 1048576). A blocked publish returns every gate's details as JSON instead.
 
 Every file under `distPath` ships, and the publish never force-adds a file the host `.gitignore` would leave out. If any bundle file matches the host `.gitignore` (for example a `.env`), the publish fails at stage `commit` with `N file(s) under public/projects/<slug>, … match the host .gitignore and would not be committed, so they would 404 in production:` (the path list also names `src/data/standalone-projects.json` when the listing changes) followed by the files (the first 20, then a count of the rest); remove those files from the build and publish again. `node_modules/` path parts under `public/projects/<slug>/` are kept (the host `.gitignore` re-includes `public/projects/**/node_modules/`), so Expo/Metro package assets such as `assets/__node_modules/.pnpm/<pkg>/node_modules/…` ship as-is.
 
 ### Golden spec template
 
-The template is `packages/host-kit/src/testing/golden.template.ts` in ~/Projects/Bilko; the built package exposes it as the `host-kit/testing` export. **Known gap:** the failure message in `mcp-host-server/src/gates/golden.ts` (~line 17) tells you to copy `@bilkobibitkov/host-kit/dist/testing/golden.template.ts.txt`, a file host-kit does not emit. Copy the `.ts` source above instead.
+Copy the golden spec template named in the gate's error message to `tests/golden.spec.ts` in your repo.
 
 ### `sourceRepoPath` requirement
 
@@ -658,28 +580,19 @@ The template is `packages/host-kit/src/testing/golden.template.ts` in ~/Projects
 Pass `bypass` (comma-separated gate names) and `bypassReason` (at least 15 characters) to `publish_static_project`. Multiple gates can be bypassed in a single call — e.g. `bypass: "golden,audit"` with one shared `bypassReason` — each is logged as its own row:
 
 ```
-bilko-host__publish_static_project {
-  slug: "stack-audit",
-  distPath: "/home/bilko/Projects/Stack-Audit/dist",
-  sourceRepoPath: "/home/bilko/Projects/Stack-Audit",
-  bypass: "a11y",
-  bypassReason: "Known contrast issue tracked in issue #42, fix ships next build"
-}
+bilko-host__publish_static_project { slug: "stack-audit", distPath: "/home/bilko/Projects/Stack-Audit/dist", sourceRepoPath: "/home/bilko/Projects/Stack-Audit",
+  bypass: "a11y", bypassReason: "Known contrast issue tracked in issue #42, fix ships next build" }
 ```
 
 `manifest` is rejected as a bypass name — that gate cannot be skipped. An unknown gate name, or a reason under 15 characters, is also rejected before any gate runs. Every accepted bypass is logged to the `publish_overrides` table (slug, gate, reason, admin_email, timestamp).
 
 ### Bundle size
 
-There is no per-app size budget and no file-count limit (owner decision 2026-11-15: no limits without a concrete host-side reason). The `budget` gate only reports the bundle's size.
-
-One limit stays: no single file may be over 100 MiB (`GITHUB_FILE_LIMIT_BYTES` in `mcp-host-server/src/gates/budget.ts`). The publish pushes the bundle to GitHub, and GitHub rejects any file larger than that.
-
-Card media keep their own caps, checked by the `share-assets` gate: `icon` ≤512 KB, `shareImage` ≤5 MB, `video` ≤8 MB. They exist because the host page loads these files on every project card.
+There is no per-app size budget and no file-count limit. The only size gate is a file over 100 MiB (`GITHUB_FILE_LIMIT_BYTES` in `mcp-host-server/src/gates/budget.ts`): the publish pushes the bundle to GitHub, which rejects larger files, so the `budget` gate fails with `<path> is <N> MiB; GitHub rejects files over 100 MiB, so this bundle cannot be pushed`. Otherwise it only reports the bundle's size. Card media files have their own rules, checked by the `share-assets` gate (see "Card media upload (set_listing_media)").
 
 ## Game services
 
-For games hosted on bilko.run (the slugs registered in `shared/game-config.ts`: `boat-shooter`, `sudoku`, `mindswiffer`, `etch`, `bilko`), the host provides three platform services accessed via the `host-kit` React hooks `useLeaderboard`, `useSaveState`, and `useUnlocks`.
+For games hosted on bilko.run (the slugs in `GAME_CONFIGS` in `shared/game-config.ts`), the host provides three platform services accessed via the `host-kit` React hooks `useLeaderboard`, `useSaveState`, and `useUnlocks`.
 
 ### Endpoints
 
@@ -687,45 +600,20 @@ All endpoints live under `/api/games/:slug/`. Endpoints marked *Required* need a
 
 Leaderboard and achievement endpoints require `slug` to be registered in `shared/game-config.ts`. **Save-state endpoints accept any slug** — they're a per-user, per-slug blob store (≤ 32 KB) with no `GAME_CONFIGS` entry needed. Non-game apps rely on this, e.g. Academy stores course progress at `/api/games/academy/save`. `tests/game-services.test.ts` guards that behavior.
 
-#### Leaderboard
-
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST /api/games/:slug/scores` | Required | Submit `{ score, mode?, payload?, sig?, ts? }`. Rate-limited 60/hour/user. Validates `score ≤ maxPlausibleScore`. |
-| `GET /api/games/:slug/scores` | Open | Query `range=today\|week\|all`, `mode`, `limit` (max 500). Returns `{ scores: ScoreRow[] }`. `display_name` is the email prefix. |
-
-#### Save state (one row per user per game)
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET /api/games/:slug/save` | Required | Returns `{ blob, version, updated_at }`. |
+| `POST /api/games/:slug/scores` | Required | Leaderboard. Submit `{ score, mode?, payload?, sig?, ts? }`. Rate-limited 60/hour/user. Validates `score ≤ maxPlausibleScore`. |
+| `GET /api/games/:slug/scores` | Open | Leaderboard. Query `range=today\|week\|all`, `mode`, `limit` (max 500). Returns `{ scores: ScoreRow[] }`. `display_name` is the email prefix. |
+| `GET /api/games/:slug/save` | Required | Save state (one row per user per slug). Returns `{ blob, version, updated_at }`. |
 | `PUT /api/games/:slug/save` | Required | Body `{ blob, expectedVersion? }`. CAS: if `expectedVersion` ≠ current, returns 409 with `currentVersion`. Blob ≤ 32 KB. |
 | `DELETE /api/games/:slug/save` | Required | Clears the save for the authenticated user. |
-
-#### Achievements
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST /api/games/:slug/unlock` | Required | Body `{ key }`. Idempotent. Returns `{ ok, alreadyUnlocked, unlocked_at }`. |
-| `GET /api/games/:slug/unlocks` | Required | Returns `{ unlocks: Array<{key, unlocked_at}> }` for authenticated user. |
-| `GET /api/games/:slug/achievements` | Open | Returns full `{ achievements }` catalog (declared in `GAME_CONFIGS`). |
+| `POST /api/games/:slug/unlock` | Required | Achievements. Body `{ key }`. Idempotent. Returns `{ ok, alreadyUnlocked, unlocked_at }`. |
+| `GET /api/games/:slug/unlocks` | Required | Returns `{ unlocks: Array<{key, unlocked_at}> }` for the authenticated user. |
+| `GET /api/games/:slug/achievements` | Open | Returns the full `{ achievements }` catalog (declared in `GAME_CONFIGS`). |
 
 ### Registry shape (`shared/game-config.ts`)
 
-```ts
-export interface GameConfig {
-  slug: string;
-  scoreOrder: 'asc' | 'desc';   // 'desc' = higher better; 'asc' = lower time
-  maxPlausibleScore: number;     // score above this is rejected as cheat
-  achievements: Array<{
-    key: string;                 // stable id — changing breaks existing unlocks
-    name: string;
-    description: string;
-    icon: string;
-    secret?: boolean;            // hides name/desc until unlocked
-  }>;
-}
-```
+Each game is a `GameConfig` in `GAME_CONFIGS`: its `slug`, `scoreOrder` (`desc` = higher is better), `maxPlausibleScore` (scores above it are rejected) and its `achievements` catalog. The interface is in `shared/game-config.ts`.
 
 Adding a new achievement key is a code change to `shared/game-config.ts`. Keys are stable — never rename a key after it has been unlocked by real users.
 
@@ -805,31 +693,7 @@ Code: `server/rooms/runtime.ts` (the game-agnostic room), `server/rooms/socket.t
 
 ### Game module interface
 
-A game plugs in as a `RoomGameModule`, exactly as `server/rooms/runtime.ts` exports it:
-
-```ts
-export interface RoomGameModule<S> {
-  id: string;
-  seats: number;
-  /** Most points one seat can lose in one hand (the wallet escrows this). */
-  maxLossPoints: number;
-  newHand(seed: string, dealer: number): S;
-  /** What one seat may see. Must not include other seats' concealed data. */
-  view(state: S, seat: number): unknown;
-  toAct(state: S): number[];
-  apply(state: S, seat: number, action: unknown): { ok: true; state: S } | { ok: false; error: string };
-  aiAction(state: S, seat: number): unknown;
-  isOver(state: S): boolean;
-  /** Per-seat points; must be integers summing to 0. */
-  settle(state: S): number[];
-  /** Optional. Seat that deals the next hand; default: the deal passes one seat. */
-  nextDealer?(state: S): number;
-  /** Optional. Action for a timed-out human seat; default aiAction. */
-  timeoutAction?(state: S, seat: number): unknown;
-  /** Optional. Ms a human seat has to act now; null or undefined means 20 s. Must not depend on concealed data. */
-  deadlineMs?(state: S, seat: number): number | null | undefined;
-}
-```
+A game plugs in as a `RoomGameModule<S>`, exported by `server/rooms/runtime.ts` (read the interface there): `id`, `seats`, `maxLossPoints` (the most one seat can lose in one hand; the wallet escrows it), `newHand`, `view`, `toAct`, `apply`, `aiAction`, `isOver`, `settle`, and the optional `nextDealer`, `timeoutAction` and `deadlineMs`.
 
 - `newHand` gets a fresh 16-byte hex seed per hand. The seed and the raw state never leave the room.
 - `toAct` returns the seats that may act now. More than one seat may act at once (for example a claim window).
@@ -868,13 +732,7 @@ Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by 
 
 URL: `wss://bilko.run` + the `path` from the ticket response. The socket is same-origin, so the page CSP's `connect-src 'self'` covers it.
 
-The handshake is refused with:
-
-| Status | When |
-|---|---|
-| 404 | Malformed room id (`[A-Za-z0-9_-]{1,64}`), or no live table with that id in this process. |
-| 403 | An `Origin` that is not allowed (see "Origin and native apps"). |
-| 401 | Missing, unknown, expired, reused or wrong-room ticket. A ticket is deleted the first time it is presented, whatever the outcome. |
+The handshake is refused with 404 (malformed room id, `[A-Za-z0-9_-]{1,64}`, or no live table with that id in this process), 403 (an `Origin` that is not allowed; see "Origin and native apps") or 401 (missing, unknown, expired, reused or wrong-room ticket). A ticket is deleted the first time it is presented, whatever the outcome.
 
 **Client → server.** Text JSON frames only, ≤ 2048 bytes, at most 20 per second per socket (token bucket, 20 burst):
 
@@ -921,7 +779,7 @@ A seat only ever receives `module.view(state, seat)`. The raw state, the seed an
 - To reconnect, call `POST /api/rooms/ticket` again with the same `app`. It returns a ticket for the same table and seat. On connect the server sends the current `state`.
 - A second socket for the same seat replaces the first (`4000 superseded`).
 - A normal close (`1000`) during a hand marks the seat as leaving: it plays out (autoplayed) and is unseated after settlement. A `1000` close before the first hand keeps the seat. Any other close keeps the seat.
-- A restart (deploy or spin-down, `1012`) no longer voids the hand. Every table is saved on each move. Reconnect with a fresh `POST /api/rooms/ticket`: the first seated player's ticket resumes the table, hand and escrows included. During a deploy the ticket can answer `503 { error: 'table_moving' }` with `Retry-After` for up to about 90 s, while the old instance still holds the table; retry after the header's seconds and the table resumes. A saved table nobody returns to within 10 minutes is voided and its escrows released.
+- A restart (deploy or spin-down, `1012`) does not void the hand. Every table is saved on each move. Reconnect with a fresh `POST /api/rooms/ticket`: the first seated player's ticket resumes the table, hand and escrows included. During a deploy the ticket can answer `503 { error: 'table_moving' }` with `Retry-After` for up to about 90 s, while the old instance still holds the table; retry after the header's seconds and the table resumes. A saved table nobody returns to within 10 minutes is voided and its escrows released.
 - **Deploy drain order** (`suspendRoomTables` in `server/routes/rooms.ts`, run by `server/shutdown.ts` before anything closes). On SIGTERM the old instance:
   1. Freezes every table. Actions are dropped without a reply (send the action again after the table resumes). No AI move, autoplay, AI fill or new deal runs. Every ticket request gets `503 table_moving`.
   2. Lets work already in flight finish. A hand that is settling pays and sends `settled`. A hand being dealt stops before the deal: the next instance voids it, releases its escrows and deals the next hand.
@@ -947,23 +805,15 @@ Unlike the relay, a **missing `Origin` header is allowed in production**, becaus
 ### Three Winds
 
 - **Tables open.** The app id is `threewinds`. `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` from `@threewinds/engine` (`npm:@bilkobibitkov/threewinds-engine`), with no host overrides: its `nextDealer`, `timeoutAction` and `deadlineMs` (the R4.6 claim window) come from the engine, so a rule change is an engine release plus a pin bump here. Both room endpoints are open; they answer `409 rooms_closed` only while `ROOMS_CLOSED` includes `threewinds`.
-- **Tiers** (`shared/play-currency-catalog.ts`), 3 seats each:
-
-| Tier id | Name | Stake (taels per point) |
-|---|---|---|
-| `tea` | Tea Pavilion | 5 |
-| `jade` | Jade Room | 25 |
-| `peony` | Peony Lounge | 100 |
-| `imperial` | Imperial Suite | 500 |
-
+- **Tiers:** 3 seats each; ids, names and stakes (taels per point) are the `threewinds` tiers in `PLAY_APPS` (`shared/play-currency-catalog.ts`).
 - **Escrow.** At each hand start every human seat's maximum loss, `stake × maxLossPoints`, is escrowed (ref `room:<roomId>:hand:<n>`). A player who cannot cover it is replaced by AI. At hand end each human settles against their escrow; points × stake move through the play ledger.
 - **A disconnected player stays escrowed until the hand settles.** Leaving mid-hand does not release the escrow; the seat is autoplayed and settles like any other.
-- A voided hand or a failed settlement releases every escrow and changes no balance. A sweeper (every 60 s) releases held escrows older than 60 s whose table no longer exists in this process.
+- A voided hand or a failed settlement releases every escrow and changes no balance. A sweeper (every 60 s) releases held escrows older than 60 s whose table is not in this process.
 - Rooms live in one process's memory. Staked tables need a Render tier that does not sleep: ~/Projects/Bilko/docs/deployment.md#realtime-relay-constraints.
 
 ## Play currency
 
-A per-app play currency, separate from Bilko Credits. Today there is one: Three Winds **taels** (app id `threewinds`). The catalog (tiers, packs, cosmetic items, signup grant) is `PLAY_APPS` in `shared/play-currency-catalog.ts`. Code: `server/routes/play-currency.ts`, `server/services/play-currency.ts`, `server/services/apple-iap.ts`, and the play-pack branch of the Stripe webhook in `server/routes/stripe.ts`. Pack prices: ~/Projects/Bilko/docs/commerce.md#play-currency-three-winds-taels.
+A per-app play currency, separate from Bilko Credits. There is one: Three Winds **taels** (app id `threewinds`). The catalog (tiers, packs, cosmetic items, signup grant) is `PLAY_APPS` in `shared/play-currency-catalog.ts`. Code: `server/routes/play-currency.ts`, `server/services/play-currency.ts`, `server/services/apple-iap.ts`, and the play-pack branch of the Stripe webhook in `server/routes/stripe.ts`. Pack prices: ~/Projects/Bilko/docs/commerce.md#play-currency-three-winds-taels.
 
 **Taels can never be transferred, gifted or cashed out.** No route moves taels between users or pays them out. They come only from the signup grant, purchases, free test packs (only while `PLAY_CURRENCY_FREE_PACKS` lists the app) and winning hands, and go only to losing hands and cosmetic items.
 

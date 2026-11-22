@@ -2,7 +2,7 @@
 
 Every project on bilko.run reports into one shared pipeline, so one visitor's trip across the host and any number of sibling apps reads as a single **session**. This doc is the process to adopt it. The admin view is `/admin/observability`.
 
-Code of record: `server/session-identity.ts`, `server/click-beacon.ts`, `packages/host-kit/src/telemetry.ts`, `server/routes/telemetry.ts`, `server/routes/admin-sessions.ts`, `server/traffic-filters.ts`, `mcp-host-server/src/report-tools.ts`.
+Code of record: `server/session-identity.ts`, `server/click-beacon.ts`, `packages/host-kit/src/telemetry.ts`, `server/routes/telemetry.ts`, `server/routes/admin-sessions.ts`, `server/traffic-filters.ts`, `mcp-host-server/src/server.ts`, `mcp-host-server/src/report-tools.ts`, `mcp-host-server/src/errors-report.ts`, `mcp-host-server/src/git-viewer-report.ts`.
 
 ## 1. What you get for free
 
@@ -90,7 +90,7 @@ Keep it small: five flows with clean start/success pairs beat thirty loose event
 3. In module **02 Sessions · journeys**, find your session (filter by app or path). The journey shows pageviews, clicks (with your `data-track` names), events, logs and errors in order.
 4. In module **03 App health**, click your app's tile to open the detail sheet and check the `<flow>` funnel step counts.
 
-No rows? Check that the request hit bilko.run (not localhost), that `flow` and `step` are kebab-case, and that the `/api/telemetry/*` calls in DevTools return 200 (a 429 means a quota; the SDK retries nothing, so slow down).
+No rows? Check that the request hit bilko.run (not localhost), that `flow` and `step` are kebab-case, and that the `/api/telemetry/*` calls in DevTools return 200. A 429 is a limit (section 10); the browser SDK retries nothing, so slow down.
 
 ## 8. Rollout
 
@@ -104,7 +104,7 @@ If the host-kit source changed, refresh each app as the [host-kit README](../pac
 
 ## 9. Tagging taxonomy
 
-These conventions are already sent to sibling repos. Do not drift from them.
+Every app follows these conventions.
 
 - **Pages.** Every route is auto-captured. Screens that do not change the URL emit `track('screen_view', { screen: '<kebab>' })`.
 - **Buttons.** Every primary button/link gets `data-track="<area>-<action>"` (kebab, unique per app). Monetization buttons use the prefix `buy-` / `tip-` / `subscribe-`; download buttons use `download-`.
@@ -120,9 +120,7 @@ navigator.sendBeacon('/api/telemetry/event', new Blob([JSON.stringify({
 })], { type: 'application/json' }));
 ```
 
-The server stamps `session_id` / `visitor_id` from the cookies.
-
-> **Code differs from the sent snippet.** The taxonomy as sent passes `JSON.stringify(...)` directly to `sendBeacon`. That goes out as `text/plain`, and `/api/telemetry/event` only reads a parsed JSON body (`server/routes/telemetry.ts` `batchOf`), so the batch would be ignored (`ingested: 0`). Wrap the string in a `Blob` with type `application/json`, as above. The body shape (`batch[]` with `app`, `name`, `ts`, `props`) is otherwise exactly as sent.
+The server stamps `session_id` / `visitor_id` from the cookies. Keep the `Blob` with type `application/json`: a bare string goes out as `text/plain`, which `/api/telemetry/event` does not parse (`server/routes/telemetry.ts` `batchOf`), so the batch is ignored (`ingested: 0`).
 
 ## 10. Public telemetry beacons (endpoints, limits, retention)
 
@@ -147,15 +145,17 @@ Unauthenticated POST endpoints on bilko.run that any app (a browser bundle, a CL
 There is no API key, no OAuth, no account. A first run must succeed, so every abuse control is identity-free. Responses:
 
 - **Malformed request:** `400`, currently only `install` with no `install_id`.
-- **Quota exceeded** (per-IP, per-install, per-app ceiling): `429 { error: "quota_exceeded", retryAfterSec }` with a `Retry-After` header. A `200` would tell a desktop client the batch was delivered, so it would drop the batch from its queue and lose a boot backlog or crash burst. Clients back off and retry on `429` and do not treat it as "stop reporting". The quota check is all-or-nothing per request and consumes no budget when it refuses, so a retried batch never double-inserts.
+- **Per-IP limit exceeded** (the per-route limits in the table above): `429 { error: "rate_limited" }` with no `Retry-After` header and no `retryAfterSec`. The window is one minute, so back off and retry.
+- **Quota exceeded** (the per-install limits and the per-app daily ceiling below): `429 { error: "quota_exceeded", retryAfterSec }` with a `Retry-After` header (`sendThrottled`). The quota check is all-or-nothing per request and consumes no budget when it refuses, so a retried batch never double-inserts.
+- Both are `429`, never a `200`: a `200` would tell a desktop client the batch was delivered, so it would drop the batch from its queue and lose a boot backlog or crash burst. Clients back off and retry on `429` and do not treat it as "stop reporting".
 - **Records that can never be valid** (an `app` that is not slug-shaped, a `/log` record with an invalid level): dropped silently inside a `200 { ok: true }`, never charged.
 - Nothing answers `403` for throttling.
 
 ### Abuse controls
 
-- **Per-install (`visitor_id`) limits:** 200/hour and 2000/day per install UUID. Records with no `visitor_id` are exempt (per-IP and the app ceiling still cover them).
+- **Per-install (`visitor_id`) limits:** 200/hour and 2000/day per install UUID on `event`, `log` and `error`; `install` charges 1 per POST against the same 2000/day, keyed on `install_id`. Records with no `visitor_id` are exempt (per-IP and the app ceiling still cover them).
 - **Shape rejection before any INSERT:** `app` must match `/^[a-z0-9][a-z0-9._-]{0,59}$/i`. There is no hardcoded app allowlist.
-- **Per-app daily ceiling:** 250 000 records/day per `app`.
+- **Per-app daily ceiling:** 250 000 records/day per `app`, across all four routes.
 - **Beacon tag:** clients may send `X-SM-Beacon: <client>/<version>`. It is not a secret and not authentication. It only gives recognised client traffic its own per-IP bucket. Untagged traffic is never dropped for being untagged.
 
 ### Retention
@@ -187,7 +187,7 @@ An install POST may carry `seeds`: the client's first-run setup steps and how ea
 
 ## 11. Reading your numbers through the bilko-host MCP
 
-From your own repo, read your app's numbers with the `bilko-host` MCP report tools. They need the admin key (`mcp-host-server/README.md`). They count **real visitors by default**, so the owner and automation are left out unless you opt in.
+From your own repo, read your app's numbers with the `bilko-host` MCP report tools. They need the admin key (`mcp-host-server/README.md`). The visitor reports (`flows_report`, `sessions_report`, `traffic_report`, `funnel_report`) count **real visitors by default**, so the owner and automation are left out unless you opt in.
 
 | Tool | Admin API | Default | Opt-out |
 |---|---|---|---|
@@ -195,6 +195,17 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 | `sessions_report` | `GET /api/admin/sessions` (`/:id` for timelines) | `mine=exclude&bots=exclude` | `includeMine` / `includeBots`, as `flows_report`; no `env` filter |
 | `traffic_report` | `GET /api/admin/traffic` | `mine=exclude&bots=include` | `excludeSelf: false` sends `mine=include`; `includeBots: false` sends `bots=exclude` |
 | `funnel_report` | `GET /api/admin/funnel` | owner and bot sessions excluded (the host's defaults) | none |
+| `errors_report` | `GET /api/admin/observability/errors` | `days=1&env=prod`; errors grouped by app + signature, with counts, first/last seen, versions and a sample | `days`, `app`, `limit`; `env: 'dev'`, `'test'` or `'all'` sends that `env` |
+| `error_detail` | `GET /api/admin/observability/errors/:id` | one `app_errors` row by `id` | none |
+| `usage_report` | `GET /api/admin/egress` | `days=7`; per-project static egress (bytes, requests, bytes per request) plus `/api/*` route patterns, measured at the origin, not Render billing | `days` |
+| `git_viewer_report` | `GET /api/admin/git-viewer/profiles` | hosted Git Viewer portfolios and `git_viewer` subscriptions, with totals; the showcase logins are left out of the totals | none |
+
+**Telemetry env (`env=prod`)**, `flows_report` and `errors_report`. Both send `env`, `prod` by default, so local dev and automated test runs stay out of your numbers:
+
+- `prod` counts rows tagged `prod` and rows with no `env` (host-kit before 0.11.0 and other clients). `dev` and `test` rows are left out.
+- host-kit 0.11.0+ tags a run `dev` on localhost and any other non-bilko.run host, and `test` there when the browser reports `navigator.webdriver` (section 4). Automation on bilko.run itself stays `prod`; the bot filters handle it.
+- `env: 'dev'` or `env: 'test'` counts only that env; `env: 'all'` turns the filter off.
+- It covers telemetry events, errors and flow steps. Page views and clicks carry no `env`: only the bilko.run beacon writes them.
 
 **The owner (`mine=exclude`)** means:
 
@@ -221,6 +232,8 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 **Secret-file probes are bots.** A page hit on a probe path (`server/non-page-paths.ts` `isProbePath`: a dotfile segment such as `/.env` or `/.git/HEAD` except `/.well-known`, a scanner extension such as `.php`, `.bak` or `.sql`, or a config filename such as `config.json`) is recorded as class `script`, whatever its user agent (`server/page-hits.ts`). Its IP+user-agent visitor is marked too: every hit from that visitor from 24 hours before to 24 hours after its first probe becomes a bot hit, including hits already written.
 
 **Not caught:** automation that shows a normal browser user agent without `navigator.webdriver`, never probes a secret file, loads fewer than 20 pages a minute, and runs on a device never signed in as admin or marked, still counts as a visitor unless it sends the [internal traffic marker](host-contract.md#internal-traffic-marker). If it never runs the beacon and never keeps the `bilko_vid` cookie, it is counted in `visitors.human` but lands in `visitors.unverified`, not `visitors.confirmed` (below).
+
+`flows_report`, `sessions_report` and `traffic_report` return the host's `filters` echo (`{ mine, bots }`, plus `env` from `flows_report` and `mineHits` from `traffic_report`), so you can see what was applied.
 
 ### Visitor classes
 
@@ -250,9 +263,9 @@ They show up in the admin traffic panel (`/admin`, backed by `GET /api/admin/tra
 
 Those lookups reach back 30 days before the window start, so a returning visitor confirmed last week stays confirmed. The count is capped at `totals.visitors`.
 
-`traffic_report` maps this to `visitors.confirmed` and `visitors.unverified` (`human - confirmed`, never below 0). Unverified visitors are no-JS clients, crawlers with a browser user agent, and people whose ad blocker stops the beacon. Both fields are `null` from a host older than `confirmedVisitors`, never a misleading 0.
+`traffic_report` maps this to `visitors.confirmed` and `visitors.unverified` (`human - confirmed`, never below 0). Unverified visitors are no-JS clients, crawlers with a browser user agent, and people whose ad blocker stops the beacon.
 
-The dashboard's UNIQUE VISITORS tile (`src/pages/admin/command/useCommandData.ts` `deriveKpis`) shows the confirmed count, with the sub-line `of N fetched`, where N is `totals.visitors`. Against an older host it falls back to the plain visitor count with a countries sub-line.
+The dashboard's UNIQUE VISITORS tile (`src/pages/admin/command/useCommandData.ts` `deriveKpis`) shows the confirmed count, with the sub-line `of N fetched`, where N is `totals.visitors`.
 
 ### Why visitors can exceed sessions
 
@@ -266,13 +279,5 @@ Sessions are created only by the pageview beacon (`POST /api/analytics/pageview`
 
 Paths that are not pages answer `404` with the site shell instead of a `200` SPA page (`server/index.ts` `setNotFoundHandler`, `server/non-page-paths.ts` `isNonPagePath`). That covers dotfile segments (except `/.well-known`), probe extensions and filenames, and any last segment with a file extension the static server did not serve (`/assets/missing.js`). So a scanner probe or a missing file is never counted as a working page. The 404s tile counts only non-bot hits with status 404, and probe hits are bots, so the tile counts real missing pages and files that people asked for.
 
-**Telemetry env (`env=prod`)**, `flows_report` only. It always sends `env`, `prod` by default, so local dev and automated test runs stay out of your numbers:
-
-- `prod` counts rows tagged `prod` and rows with no `env` (host-kit before 0.11.0 and other clients). `dev` and `test` rows are left out.
-- host-kit 0.11.0+ tags a run `dev` on localhost and any other non-bilko.run host, and `test` there when the browser reports `navigator.webdriver` (section 4). Automation on bilko.run itself stays `prod`; the bot filters handle it.
-- `env: 'dev'` or `env: 'test'` counts only that env; `env: 'all'` turns the filter off.
-- It covers telemetry events, errors and flow steps. Page views and clicks carry no `env`: only the bilko.run beacon writes them.
-
-Every report but `funnel_report` returns the host's `filters` echo (`{ mine, bots }`, plus `env` from `flows_report` and `mineHits` from `traffic_report`), so you can see what was applied. `filters: null` means a host older than these filters, which applied neither. A `flows_report` echo without `env` means a host older than the env filter, which counted every env.
 
 `sessions_report` never returns an email. Its fields are allowlisted, event `props` lose every email-named key at any depth, and an email address inside any string becomes `[email]`.

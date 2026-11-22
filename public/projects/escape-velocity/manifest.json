@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "slug": "escape-velocity",
   "version": "1.0.0",
-  "builtAt": "2026-11-19T18:50:27.209Z",
-  "gitSha": "4d5d102",
-  "gitBranch": "sm-job/817-publish-winters-maw-fix",
+  "builtAt": "2026-11-22T01:29:32.224Z",
+  "gitSha": "6116483",
+  "gitBranch": "sm-job/825-publish-pluto-access-fix",
   "hostKit": {
     "version": "0.0.0"
   },
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 30646492,
+    "sizeBytesGz": 30648122,
     "fileCount": 11
   }
 }

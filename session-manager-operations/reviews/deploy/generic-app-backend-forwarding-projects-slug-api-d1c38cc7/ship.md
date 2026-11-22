@@ -32,8 +32,16 @@ Remote: `origin` = https://github.com/StanislavBG/bilko-run.git (never content-g
 
 ## Push
 
-- pending
+- 8:54 AM PST 2026-11-22: `git push origin HEAD:main` → `511c8368..aba71688`. Pushed SHA: aba71688 (fast-forward, includes this record's first commit). PASS
 
 ## Deploy check
 
-- pending
+- Poll of https://bilko.run/api/health (curl --max-time 15, 30 s apart, max 20 tries): try 6 at 8:56:48 AM PST showed uptime 35 s, 155 s after the push (tries 1-5 showed the old 51037-51158 s process). PASS
+- Live check at 8:56 AM PST 2026-11-22 (curl --max-time 15):
+  - https://bilko.run/projects/threewinds/ → 200 text/html; charset=utf-8
+  - https://bilko.run/projects/threewinds/api/health → 404 text/html (the app's own 404 page)
+  - https://bilko.run/api/health → 200 application/json; charset=utf-8
+- Case held: APP_BACKENDS unset. Every answer matches the 8:34 AM PST baseline. PASS
+- This record's final update is pushed as a follow-up commit (docs only, no redeploy needed).
+
+SHIP: PASS

@@ -211,6 +211,129 @@ ORDER BY n DESC
 LIMIT 50;
 ```
 
+## Host stack and code helpers
+
+Stack: React 18, Vite 6, Tailwind v4, Fastify 5, Turso/libSQL (local SQLite in dev), Clerk, Stripe, Gemini.
+
+### Gateway pattern for the AI-tool siblings
+
+Each AI tool with a file in `server/routes/tools/` ships its React page from the sibling repo, but its Gemini-backed scoring endpoint stays in the host at `server/routes/tools/<slug>.ts`. The sibling calls it same-origin with a Clerk JWT, so there is no CORS and no cross-origin auth. The split is deliberate. PageRoast owns 6 endpoints plus the `PAGEROAST_TOKENS` one-time-purchase tier; AudienceDecoder owns its own one-time-purchase tier. Academy and the free tools (OutdoorHours, LocalScore) are not in this pattern; the free tools have no host-side route and deduct no credits.
+
+Shared helpers in `server/routes/tools/_shared.ts`: the rate limiter, IP hashing, usage tracking, `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check and deduct), `askGeminiJson` (Gemini call plus JSON parse), `toolErrorReply` (uniform error reply) and `handleGenerateEndpoint` (inverse-mode generator). `index.ts` there registers every tool. To extract a tool to a sibling repo, lift its file and the page; no other server change is needed.
+
+### Host code helpers
+
+- `server/db.ts` has the Turso client, `dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`, migrations and seed data; table definitions are in `server/db-schema.ts`.
+- `server/gemini.ts` is the Gemini client (key in a header, not the URL); `server/utils.ts` has `parseJsonResponse`, the shared Gemini output parser.
+- `server/bearer.ts` has `bearerMatches`, the timing-safe compare for shared-secret bearer routes.
+- `server/blog-posts.ts` loads the `content/blog/*.md` seed posts.
+- Page views and clicks come from the beacon the host injects into every HTML page (`server/click-beacon.ts`); there is no client hook to call. Clerk state comes straight from `@clerk/clerk-react`; there is no host-side `useAuth` wrapper.
+- The portfolio (`/`, `/projects`, `⌘K`) reads `src/data/projectsRegistry.ts`. Static-path and external apps load as a full page (Fastify serves the bundle); React routes use SPA navigation.
+
+Leaving `react-route` turns in-process auth and credit calls (`requireAuth`, `deductToken`) into HTTP round-trips to `/api`, authenticated with a Bearer token.
+
+## React-route apps
+
+`react-route` apps live in this bundle at `/products/<slug>`; today only Session Manager does. The app contract for every other kind is [`docs/host-contract.md`](host-contract.md).
+
+### What the host provides to `react-route` apps
+
+- **Auth: Clerk.** Available via `useUser()` and `useAuth()` from `@clerk/clerk-react`. Server-side: `requireAuth(req, reply)` from `server/clerk.ts` returns the Clerk email or 401s.
+- **Credits: token wallet.** Spend via `deductToken(email)` and check via `getTokenBalance(email)` from `server/services/tokens.ts`. Free users get a starter grant via `grantFreeTokens(email)`.
+- **Payments: Stripe.** Subscription state via `getActiveSubscriptionLive(email)`; one-time purchases via `hasPurchased(email, productKey)`. Both from `server/services/stripe.ts`.
+- **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
+- **Page-view and click analytics.** Automatic: the host injects a beacon into every HTML page (pageviews on load and SPA navigation, clicks, session ids via the `bilko_vid`/`bilko_sid` cookies). No hook to call. See ~/Projects/Bilko/docs/observability.md.
+- **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
+- **Database.** Turso/libSQL via `dbGet/dbAll/dbRun/dbTransaction` from `server/db.ts`. Falls back to local SQLite in dev. All SQL parameterized.
+
+### What a `react-route` app must implement
+
+- A `<MyAppPage />` React component in `src/pages/MyAppPage.tsx`.
+- A registry mapping in `src/data/projectsRegistry.ts` (see the react-route path map there) and a route in `src/App.tsx`.
+- Backend routes in `server/routes/tools/<my-app>.ts` exporting `registerMyAppRoutes(app)`, registered in `server/routes/tools/index.ts`.
+- For paid features, deduct credits via `deductToken(email)` after a successful response; for free-tier, gate via `checkRateLimit()` and increment via `incrementUsage()`.
+
+### Adding and removing a `react-route` app
+
+- Adding: build the page, route entry and per-tool server file above, and register it by hand in `src/data/projectsRegistry.ts`; the `bilko-host` MCP covers only `static-path` and `external-url`. Then run the host's test suite (below), commit and push to `origin`.
+- Removing: delete the page (`src/pages/<slug>Page.tsx`) and per-tool server file (`server/routes/tools/<slug>.ts`), and remove the call from `server/routes/tools/index.ts`.
+- Add a redirect in `src/App.tsx` for any removed slug still linked from outside.
+
+### URL canonicalization
+
+- `/products/<slug>` is the canonical path for every `react-route` app.
+- `/projects/<slug>` redirects (301-style SPA `Navigate replace`) to `/products/<slug>`.
+- `/app/<old-slug>` redirects to `/products/<canonical-slug>` per the `APP_TO_PRODUCT` map in `src/App.tsx`.
+
+## Host test suite
+
+Before pushing a host change (including a hand-registered `react-route` app), run `pnpm test && pnpm exec tsc --noEmit && pnpm exec vite build`; all must pass. The full command list is in [`CLAUDE.md`](../CLAUDE.md#testing).
+
+## Admin and webhook internals
+
+- **Manifests.** The host stores the latest manifest per app in the `app_manifests` Turso table, shown at `/admin` → Manifests tab.
+- **Drift indicator.** The Manifests tab shows a per-app drift badge computed from `hostKit.version`: **green** matches the highest version seen across all manifests (`current`), **yellow** is exactly 1 minor version behind (`minor_behind`), **red** is ≥2 minors behind or a different major (`major_behind`).
+- **Publish gate bypasses** are logged to the `publish_overrides` table (slug, gate, reason, admin_email, timestamp).
+
+Web-product admin endpoint:
+
+| Endpoint | Auth | Success | Errors |
+|---|---|---|---|
+| `GET /api/admin/web-products?days=30&exclude_self=1` | `requireAdmin` (`days` clamped 1–365; `exclude_self` defaults to 1) | 200 `{ days, excludeSelf, products[], daily[] }` — per product: views, unique visitors, checkout starts, expired + recovered checkouts, orders, revenue (cents), downloads, unique download sessions, last order/download, `releaseStored`; `daily` is per-slug per-day counts | 401/403 per `requireAdmin` |
+
+The Stripe webhook (`checkout.session.completed`) dispatches on `metadata.web_product` before any generic branch: it records the order only if paid, the line-item price equals the product's resolved price id, and an email is present; it also writes a one-time purchase row (`productKey` = `wp_<slug>`). `/stripe/success` redirects web-product sessions to the product's thanks page. `checkout.session.expired` (non-test, non-owner-IP) writes a `checkout_expired` funnel row; a completed session with `recovered_from` writes `checkout_recovered`. The live endpoint must subscribe to `checkout.session.expired`.
+
+## Web-product host steps
+
+The sibling's half of a new downloadable web product (zip, upload, landing and thanks pages) is the playbook in [`docs/host-contract.md`](host-contract.md) → "Selling a downloadable web product". The host's half:
+
+1. **Stripe:** create a live Product + one-time Price. Set product/session metadata `web_product=<slug>` (the checkout route sets it on the session; the webhook relies on it).
+2. **Declare it:** add a `WEB_PRODUCTS` entry in `shared/web-products.ts` — `slug`, `name`, `productKey` (`wp_` + slug with `-` → `_`), `priceEnvVar` (`STRIPE_PRICE_WP_*`), `defaultPriceId`, `displayPrice`, `downloadLimit`, and `release: { version, filename, bytes, sha256 }` from the sibling's zip. `validateWebProducts` checks the shape, including the optional `includes` and `preview` fields. Commit and push to `origin/main`; Render deploys. The env var, when set, overrides `defaultPriceId`.
+3. **Prices:** `tests/web-product-pages.test.ts` fails when a published landing or thanks page shows a dollar amount that is not a catalog price, when the landing page lacks its own `displayPrice`, or when a sellable product's landing or thanks page is missing. To change a price, edit `shared/web-products.ts`; the test stays red until the sibling republishes the page.
+4. **Monitor** in `/admin` → Products (views, checkout starts, orders, revenue, downloads, release stored).
+
+## Contract code map
+
+Where the parts of [`docs/host-contract.md`](host-contract.md) are implemented:
+
+- Social share cards: `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring). Caching: every `/og/<slug>.png` response has an ETag. A versioned URL (with `?v=`) is cached for a day (`max-age=86400`), since a new image gets a new URL. An unversioned URL, such as an old link that was shared before, is cached for 5 minutes (`max-age=300`); after that the browser revalidates with the ETag and gets a `304` when the image has not changed.
+- Card media: the tool is in `mcp-host-server/src/` (`listing-media-tool.ts`, `contract/`, `gates/share-assets.ts`), the shared checks in `shared/listing-media.ts`, the serve and upload routes in `server/routes/listing-media.ts` with storage in `server/services/`, and the card player in `src/components/ProjectCardShot.tsx`.
+- Public project catalog: `server/routes/project-catalog.ts`; tests in `tests/project-catalog.test.ts`.
+- Realtime relay code: `server/realtime/relay.ts` (socket), `server/realtime/lobbies.ts` (directory) and `server/routes/realtime.ts` (ticket + directory routes). Tests: `tests/realtime-relay.test.ts`, `tests/realtime-lobbies.test.ts`.
+- Authoritative game rooms: `server/rooms/runtime.ts` (the game-agnostic room), `server/rooms/socket.ts` (WebSocket transport and tickets) and `server/routes/rooms.ts` (matchmaking, escrow and settlement). Tests: `tests/rooms-runtime.test.ts`, `tests/rooms-socket.test.ts`, `tests/rooms-routes.test.ts`, `tests/rooms-settlement.test.ts`.
+- Play currency code: `server/routes/play-currency.ts`, `server/services/play-currency.ts`, `server/services/apple-iap.ts`, and the play-pack branch of the Stripe webhook in `server/routes/stripe.ts`.
+- Sign-in capture ("sign in for updates"): ~/Projects/Bilko/docs/site.md.
+
+### robots.txt
+
+`public/robots.txt` keeps `/api/` private but explicitly allows `/mcp`, `/llms.txt`, `/api/offers` and `/api/projects` (longest match wins). It disallows `/buy/` because a browser GET creates a live Checkout session; agents acting for a user hand the link to the user, whose browser opens checkout.
+
+### Game services config
+
+Each game is a `GameConfig` in `GAME_CONFIGS`: its `slug`, `scoreOrder` (`desc` = higher is better), `maxPlausibleScore` (scores above it are rejected) and its `achievements` catalog. The interface is in `shared/game-config.ts`.
+
+Adding a game or a new achievement key is a code change to `shared/game-config.ts`. Achievement keys are stable (see "Game services" in [`docs/host-contract.md`](host-contract.md)).
+
+Optional score signing: set `BILKO_GAME_HMAC_KEY` ([`docs/deployment.md`](deployment.md#env-vars)).
+
+### Room and play-currency wiring
+
+Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). An app with no module or no `PLAY_APPS` entry gets `unknown_app`. A registered app's tables are open. It gets `rooms_closed` only while the owner lists its id in the `ROOMS_CLOSED` emergency switch (~/Projects/Bilko/docs/deployment.md).
+
+Three Winds: `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` from `@threewinds/engine` (`npm:@bilkobibitkov/threewinds-engine`), with no host overrides: its `nextDealer`, `timeoutAction` and `deadlineMs` (the R4.6 claim window) come from the engine, so a rule change is an engine release plus a pin bump of that dependency.
+
+`hand_over`, `settled` and the `insufficient_taels` error come from `server/routes/rooms.ts`; the `RoomMessage` type in `server/rooms/runtime.ts` covers only `state`, `error` and `hand_over`.
+
+- **Deploy drain order** (`suspendRoomTables` in `server/routes/rooms.ts`, run by `server/shutdown.ts` before anything closes). On SIGTERM the old instance:
+  1. Freezes every table. Actions are dropped without a reply (send the action again after the table resumes). No AI move, autoplay, AI fill or new deal runs. Every ticket request gets `503 table_moving`.
+  2. Lets work already in flight finish. A hand that is settling pays and sends `settled`. A hand being dealt stops before the deal: the next instance voids it, releases its escrows and deals the next hand.
+  3. Saves each table's final state, then suspends it for the next instance.
+  4. Closes every socket with `1012`.
+
+  Nothing changes between the final save and the `1012` close, so a resumed table is exactly what its players last saw: the same `seq` and the same view.
+
+A sweeper (every 60 s) releases held escrows older than 60 s whose table is not in this process.
+
 ## Sanctioned app-specific host code
 
 

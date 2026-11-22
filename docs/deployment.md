@@ -35,6 +35,21 @@ Env vars live in the Render dashboard (service → Environment). They are not co
 
 `APP_BACKENDS` turns on forwarding of `/projects/<slug>/api/*` (HTTP and WebSocket) to apps' own backends. The contract apps build against is the "App backends (forwarding)" section of [host-contract.md](host-contract.md). The value is a comma list of `<slug>=<https origin>`, for example `APP_BACKENDS=threewinds=https://<service>.onrender.com`. Unset means nothing is forwarded. The origin must be `https://` with no path, query or credentials (`http://` only for localhost). A malformed entry is skipped and logged at boot as `[app-backends] APP_BACKENDS entry <n> ignored: <reason>`; for a duplicate slug the first entry wins. Each forwarded slug logs one boot line, `[app-backends] forwarding /projects/<slug>/api/ -> <origin>/api/`. The value is read only at boot, so a change needs a redeploy. A backend that takes over 30 s to answer (for example a sleeping Free-tier Render service) gets 502 `{ "error": "backend_unavailable" }`.
 
+Host switches and keys that app-facing behavior depends on (the contract side is in [host-contract.md](host-contract.md)):
+
+| Var | Meaning |
+|---|---|
+| `BILKO_CSP_ENFORCE` | `1` enforces the CSP on host pages; `/projects/` stays report-only ([host-internals.md](host-internals.md)). |
+| `BILKO_GAME_HMAC_KEY` | When set, game score POSTs must carry a valid `sig` over `${slug}:${score}:${mode}:${ts}`. Rotation: [secrets-rotation.md](secrets-rotation.md). |
+| `STRIPE_TEST_SECRET_KEY` | Test-mode Stripe client for the signed-in owner's web-product checkouts. Unset means owner checkouts get 409 (never a live fallback). |
+| `STRIPE_CHECKOUT_PROMO_CONSENT` | `1` sets `consent_collection.promotions='auto'` on web-product checkout sessions. |
+| `STRIPE_ALLOW_LIVE_IN_DEV` | `getStripe()` refuses an `sk_live_` key unless `NODE_ENV=production`; `1` overrides that. Locally, use an `sk_test_` key. |
+| `APPLE_IAP_BUNDLE_ID` | The iOS app's bundle id. Required for any Apple route. |
+| `APPLE_IAP_ENVIRONMENT` | `Production` or `Sandbox`. Any other value turns Apple off. |
+| `APPLE_IAP_APP_APPLE_ID` | The app's numeric Apple id. Required when the environment is `Production`. |
+| `PLAY_CURRENCY_SALES_OPEN` | Comma-separated app ids whose web checkout is open (for example `threewinds`). Unset means `409 sales_closed` for every app not in free mode. It gates only `POST /api/play-currency/checkout`; a session paid while sales were open is still credited. |
+| `PLAY_CURRENCY_FREE_PACKS` | Temporary live-test switch: comma-separated app ids (for example `threewinds`) whose packs are free. Checkout credits the pack's taels at once (ledger kind `free_test_pack`, ref `free_test:<uuid>`, still 10/min/user) and never creates a Stripe session, even when `PLAY_CURRENCY_SALES_OPEN` lists the app too; balance reports `freePacks: true`. Unset it to end the test. Taels already credited stay, and their ledger kind finds them. Pack prices are unchanged. |
+
 ## Checking a deploy
 
 Compare the server uptime with the time you pushed. A fresh deploy resets uptime to seconds or minutes:

@@ -40,25 +40,11 @@ Every app declares one host kind in `src/data/projectsRegistry.ts` (react-route)
 | `static-path` | App is built in its own repo (often its own Claude session) and just needs a URL on bilko.run | `/projects/<slug>/` | Loose — host serves prebuilt static assets, no shared runtime |
 | `external-url` | App lives on another domain or subdomain | `https://<host>/...` | None — host only links to it |
 
-Default to `static-path` for new apps — including ones that need a signed-in user (see "Calling authenticated host APIs from a `static-path` app" below). `react-route` is rare: today only Session Manager (`/products/session-manager`) uses it. The AI tools are `static-path` siblings whose Gemini endpoints stay in the host as gateway routes under `server/routes/tools/`.
+Default to `static-path` for new apps — including ones that need a signed-in user (see "Calling authenticated host APIs from a `static-path` app" below). `react-route` is rare: today only Session Manager (`/products/session-manager`) uses it; its host side is in ~/Projects/Bilko/docs/host-internals.md#react-route-apps.
 
-### Gateway pattern for the AI-tool siblings
+An `external-url` app loses shared Clerk auth and the injected analytics beacon, because the host never serves its pages.
 
-Each AI tool with a file in `server/routes/tools/` ships its React page from the sibling repo, but its Gemini-backed scoring endpoint stays in the host at `server/routes/tools/<slug>.ts`. The sibling calls it same-origin with a Clerk JWT, so there is no CORS and no cross-origin auth. The split is deliberate. PageRoast owns 6 endpoints plus the `PAGEROAST_TOKENS` one-time-purchase tier; AudienceDecoder owns its own one-time-purchase tier. Academy and the free tools (OutdoorHours, LocalScore) are not in this pattern; the free tools have no host-side route and deduct no credits.
-
-Shared helpers in `server/routes/tools/_shared.ts`: the rate limiter, IP hashing, usage tracking, `freeTierGate` (free-tier rate limit), `creditGate` (paid credit check and deduct), `askGeminiJson` (Gemini call plus JSON parse), `toolErrorReply` (uniform error reply) and `handleGenerateEndpoint` (inverse-mode generator). `index.ts` there registers every tool. To extract a tool to a sibling repo, lift its file and the page; no other server change is needed.
-
-### Host code helpers
-
-- `server/db.ts` has the Turso client, `dbGet`, `dbAll`, `dbRun`, `dbTransaction`, `txGet`, `txRun`, migrations and seed data; table definitions are in `server/db-schema.ts`.
-- `server/gemini.ts` is the Gemini client (key in a header, not the URL); `server/utils.ts` has `parseJsonResponse`, the shared Gemini output parser.
-- `server/bearer.ts` has `bearerMatches`, the timing-safe compare for shared-secret bearer routes.
-- `server/blog-posts.ts` loads the `content/blog/*.md` seed posts.
-- Page views and clicks come from the beacon the host injects into every HTML page (`server/click-beacon.ts`); there is no client hook to call. Clerk state comes straight from `@clerk/clerk-react`; there is no host-side `useAuth` wrapper.
-- The portfolio (`/`, `/projects`, `⌘K`) reads `src/data/projectsRegistry.ts`. Static-path and external apps load as a full page (Fastify serves the bundle); React routes use SPA navigation.
-- Stack: React 18, Vite 6, Tailwind v4, Fastify 5, Turso/libSQL (local SQLite in dev), Clerk, Stripe, Gemini.
-
-An `external-url` app loses shared Clerk auth and the injected analytics beacon, because the host never serves its pages. Leaving `react-route` turns in-process auth and credit calls (`requireAuth`, `deductToken`) into HTTP round-trips to `/api`, authenticated with a Bearer token.
+The AI-tool gateway pattern, host code helpers and stack: ~/Projects/Bilko/docs/host-internals.md#host-stack-and-code-helpers.
 
 ## What the host provides
 
@@ -70,22 +56,13 @@ These are the OS services. Apps use them; they should not reimplement.
 - **Portfolio listing.** Anything in the registry shows up on `/`, `/projects`, and ⌘K automatically. No manual wiring.
 - **Domain.** `bilko.run/<your-path>`.
 
-### To `react-route` apps additionally
-
-- **Auth: Clerk.** Available via `useUser()` and `useAuth()` from `@clerk/clerk-react`. Server-side: `requireAuth(req, reply)` from `server/clerk.ts` returns the Clerk email or 401s.
-- **Credits: token wallet.** Spend via `deductToken(email)` and check via `getTokenBalance(email)` from `server/services/tokens.ts`. Free users get a starter grant via `grantFreeTokens(email)`.
-- **Payments: Stripe.** Subscription state via `getActiveSubscriptionLive(email)`; one-time purchases via `hasPurchased(email, productKey)`. Both from `server/services/stripe.ts`.
-- **Rate limiting.** `checkRateLimit(ipHash, endpoint, email?, productKey?)` from `server/routes/tools/_shared.ts` — handles free-tier daily caps, paid-tier caps, pro-skip.
-- **Page-view and click analytics.** Automatic: the host injects a beacon into every HTML page (pageviews on load and SPA navigation, clicks, session ids via the `bilko_vid`/`bilko_sid` cookies). No hook to call. See ~/Projects/Bilko/docs/observability.md.
-- **Shared UI for siblings** lives in `host-kit` (`packages/host-kit/`), not in this bundle.
-- **Which host-kit to install.** The unscoped npm package `host-kit`, current release 0.11.0: `"host-kit": "^0.11.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. It carries the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`), Bearer-authenticated games hooks, `trackFlow`, and the `env` tag on every telemetry record. The scoped `@bilkobibitkov/host-kit` is not published; do not use it.
-- **Gemini.** `askGemini(prompt, opts)` from `server/gemini.ts`. Use `parseJsonResponse` (re-exported as `parseResult` in `_shared.ts`) for JSON outputs.
-- **Database.** Turso/libSQL via `dbGet/dbAll/dbRun/dbTransaction` from `server/db.ts`. Falls back to local SQLite in dev. All SQL parameterized.
+React-route apps also get in-process Clerk, credits, Stripe, rate limiting, Gemini and the database: ~/Projects/Bilko/docs/host-internals.md#react-route-apps.
 
 ### To `static-path` and `external-url` apps additionally
 
+- **Shared UI and SDK: `host-kit`** (`packages/host-kit/`), the unscoped npm package, current release 0.11.0: `"host-kit": "^0.11.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. It carries the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`), Bearer-authenticated games hooks, `trackFlow`, and the `env` tag on every telemetry record. The scoped `@bilkobibitkov/host-kit` is not published; do not use it.
 - **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs a server, run your own; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below).
-- **CSP stays report-only under `/projects/`.** `BILKO_CSP_ENFORCE=1` enforces the policy on host pages only. Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Enforcing it under `/projects/` needs a per-project policy declared in the registry first (`server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
+- **CSP stays report-only under `/projects/`.** The host enforces its policy on host pages only (switch: ~/Projects/Bilko/docs/deployment.md#env-vars). Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Enforcing it under `/projects/` needs a per-project policy declared in the registry first (`server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
 - **Large assets are precompressed at build time.** Files ≥1 KB of compressible types (js, css, json, wasm, pck, data, …, never HTML) get `.br`/`.gz` siblings, served with a Content-Length. Don't publish your own `.br`/`.gz` next to a source file; the build replaces them.
 - **Same-origin framing only.** Responses under `/projects/` carry CSP `frame-ancestors 'self'`, so one static-path app may embed another in an iframe (e.g. Game Academy hosting an engine game slug) and talk to it over `postMessage`. Cross-origin framing is refused; every other host page is `frame-ancestors 'none'`.
 
@@ -112,12 +89,7 @@ A registry entry — a `static-path`/`external-url` entry in `src/data/standalon
 }
 ```
 
-### `react-route` apps additionally
-
-- A `<MyAppPage />` React component in `src/pages/MyAppPage.tsx`.
-- A registry mapping in `src/data/projectsRegistry.ts` (see the react-route path map there) and a route in `src/App.tsx`.
-- Backend routes in `server/routes/tools/<my-app>.ts` exporting `registerMyAppRoutes(app)`, registered in `server/routes/tools/index.ts`.
-- For paid features, deduct credits via `deductToken(email)` after a successful response; for free-tier, gate via `checkRateLimit()` and increment via `incrementUsage()`.
+A `react-route` app's page, route and server file: ~/Projects/Bilko/docs/host-internals.md#react-route-apps.
 
 ### `static-path` apps additionally
 
@@ -270,15 +242,7 @@ Design it as a hero: show the product itself (real UI or the key visual), keep t
 
 `https://bilko.run/og/<slug>.png` serves a valid `listing.shareImage` as-is; otherwise a generated card that draws a valid `listing.icon`; otherwise the plain generated card. If a declared file is missing, oversize or the wrong size at serve time, the host logs it and falls back to the next one.
 
-Caching: every `/og/<slug>.png` response has an ETag. A versioned URL (with `?v=`) is cached for a day (`max-age=86400`), since a new image gets a new URL. An unversioned URL, such as an old link that was shared before, is cached for 5 minutes (`max-age=300`); after that the browser revalidates with the ETag and gets a `304` when the image has not changed.
-
 Recipe for a sibling. Any host kind: call `set_listing_media { slug, callerRepoPath, media: { shareImage: "/abs/path/og.png" } }` (and `icon` the same way); see "Card media upload (set_listing_media)". A `static-path` entry can instead ship the file in the bundle: put it in the build output (`public/og.png` lands at `/projects/<slug>/og.png`), set `{ "listing": { "shareImage": "/projects/<slug>/og.png" } }` in `bilko.listing.json` or through `update_project_listing`, run `publish_static_project`, then open `https://bilko.run/og/<slug>.png` and check the card.
-
-The `share-assets` publish gate blocks the publish when a declared `icon` or `shareImage` is missing from the bundle, is not a PNG, or has the wrong size. The path must start with `/projects/<your-slug>/`.
-
-The `budget` gate leaves a declared `icon`/`shareImage`/`listing.video` that passes these checks out of its measured gzip sum, and its details say `excluding N share asset(s)`. The same file left undeclared, or declared but invalid, is summed like any other file.
-
-Implemented in `server/og-meta.ts` (resolves meta from the registry and rewrites the head), `server/og-image.ts` (renders the PNG card), and `server/og-routes.ts` (the `/og/<slug>.png` route and HTML injection wiring).
 
 ### Card media upload (set_listing_media)
 
@@ -347,10 +311,6 @@ Recipe for a sibling (any host kind):
 
 A `static-path` entry can instead ship the file in its bundle (`public/tile.mp4` lands at `/projects/<slug>/tile.mp4`; never under `_media/`), set `{ "listing": { "video": "/projects/<slug>/tile.mp4" } }` in `bilko.listing.json` or through `update_project_listing`, and run `publish_static_project`.
 
-The `share-assets` gate blocks the publish when a declared `video` is missing from the bundle, lacks the MP4 (`ftyp`) or WebM (EBML) signature for its extension, or is over 8 MB.
-
-Code: the tool is in `mcp-host-server/src/` (`listing-media-tool.ts`, `contract/`, `gates/share-assets.ts`), the shared checks in `shared/listing-media.ts`, the serve and upload routes in `server/routes/listing-media.ts` with storage in `server/services/`, and the card player in `src/components/ProjectCardShot.tsx`.
-
 ## Public project catalog
 
 Machine-readable list of exactly the cards an anonymous visitor sees on `/projects` (registry entries with `public: true`), plus how to talk about each one. Use it instead of scraping `/projects` (a client-rendered SPA) or mirroring the registry by hand. No auth.
@@ -390,8 +350,6 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
 - **Freshness:** the data is baked in at build time. It changes when a registry change reaches `main` and deploys.
 - **Versioning:** adding a field does not bump the version. Renaming, removing, or retyping a field, or changing what `url` points at, bumps `schema_version`. Consumers should ignore fields they don't know.
 
-Implemented in `server/routes/project-catalog.ts`; tests in `tests/project-catalog.test.ts`.
-
 ## Project data snapshot
 
 A project can publish live data for its page: `GET /api/projects/<slug>/snapshot` (public) returns the latest snapshot JSON, or 404 when none exists yet, with an `x-snapshot-updated-at` header. `POST /api/projects/<slug>/snapshot` (authenticated) replaces it. Snapshots are capped at 6 MB. Code: `server/routes/project-data.ts`.
@@ -400,17 +358,11 @@ A project can publish live data for its page: `GET /api/projects/<slug>/snapshot
 
 bilko.run serves agents a plain-text storefront at `/llms.txt`, the public catalog at `/api/projects` and `/api/offers`, and a stateless MCP server at `POST /mcp`. A public static-path project whose bundle ships its own `llms.txt` (at the bundle root, served as `/projects/<slug>/llms.txt`) is linked from the storefront under "Project guides".
 
-The wallet, MCP tools, offers, agent keys, visitor classes and the UTM funnel are platform-side money facts, not sibling requirements: see ~/Projects/Bilko/docs/commerce.md.
-
-### robots.txt
-
-`public/robots.txt` keeps `/api/` private but explicitly allows `/mcp`, `/llms.txt`, `/api/offers` and `/api/projects` (longest match wins). It disallows `/buy/` because a browser GET creates a live Checkout session; agents acting for a user hand the link to the user, whose browser opens checkout.
+The wallet, MCP tools, offers, agent keys, visitor classes and the UTM funnel are platform-side money facts, not sibling requirements: see ~/Projects/Bilko/docs/commerce.md. The host's `robots.txt` rules: ~/Projects/Bilko/docs/host-internals.md#robotstxt.
 
 ## URL canonicalization
 
-- `/products/<slug>` is the canonical path for every `react-route` app.
-- `/projects/<slug>` redirects (301-style SPA `Navigate replace`) to `/products/<slug>`.
-- `/app/<old-slug>` redirects to `/products/<canonical-slug>` per the `APP_TO_PRODUCT` map in `src/App.tsx`.
+- `/products/<slug>` is the canonical path for every `react-route` app; its redirects are in ~/Projects/Bilko/docs/host-internals.md#react-route-apps.
 - `/projects/<slug>/` (trailing slash, `static-path`) does **not** redirect — it's a different host kind serving different bytes.
 
 Page-specific host content (sub-paths of a `react-route` product, what must not move under `/products/<slug>/`) lives in ~/Projects/Bilko/docs/site.md.
@@ -423,14 +375,10 @@ Page-specific host content (sub-paths of a `react-route` product, what must not 
 
 ## Adding a new app — checklist
 
-1. Decide the host kind. Default `static-path`; a signed-in app still uses `static-path` (see above). `react-route` only if it truly cannot live outside this bundle.
-2. Build it.
-   - `react-route`: page + route entry + per-tool server file.
-   - `static-path`: standalone repo, `vite build`.
-3. Register and publish via the `bilko-host` MCP (~/Projects/Bilko/mcp-host-server/README.md) — see below. `react-route` apps still register by hand in `src/data/projectsRegistry.ts`.
-4. Run `pnpm test && pnpm exec tsc --noEmit && pnpm exec vite build` — all must pass.
-5. Commit and push to `origin`. Render auto-deploys.
-6. Verify the project shows up on `/`, `/projects`, and in ⌘K.
+1. Decide the host kind. Default `static-path`; a signed-in app still uses `static-path` (see above). `react-route` only if it truly cannot live outside this bundle; its host-side steps are in ~/Projects/Bilko/docs/host-internals.md#react-route-apps.
+2. Build it in its own repo (`vite build` to `dist/`).
+3. Register and publish via the `bilko-host` MCP (~/Projects/Bilko/mcp-host-server/README.md) — see below. The MCP commits and pushes; Render auto-deploys.
+4. Verify the project shows up on `/`, `/projects`, and in ⌘K.
 
 ## Adding from a sibling-repo Claude session (MCP)
 
@@ -460,10 +408,7 @@ The MCP commits and pushes to `origin` automatically, from a dedicated clean che
 
 ## Removing an app
 
-1. Delete its entry from the registry. Sibling sessions: `bilko-host__unregister_project { slug, callerRepoPath, deleteAssets: true }` (`callerRepoPath` is required and must be the repo bound to the slug) does both the registry edit and the asset removal.
-2. For `react-route`: also delete the page (`src/pages/<slug>Page.tsx`) and per-tool server file (`server/routes/tools/<slug>.ts`) and remove the call from `server/routes/tools/index.ts`.
-3. For `static-path`: `rm -rf public/projects/<slug>/` (or pass `deleteAssets: true` to the MCP).
-4. Add a redirect in `src/App.tsx` if the slug is still being linked from outside.
+Call `bilko-host__unregister_project { slug, callerRepoPath, deleteAssets: true }` (`callerRepoPath` is required and must be the repo bound to the slug). It removes the registry entry and `public/projects/<slug>/`. Removing a `react-route` app, or adding a redirect for a slug still linked from outside, is host work: ~/Projects/Bilko/docs/host-internals.md#react-route-apps.
 
 ## Telemetry contract
 
@@ -491,7 +436,7 @@ The owner's automation (Playwright, a Chrome attached over CDP, link checkers, c
 
 ## Manifest contract
 
-Every `static-path` sibling must emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool's `manifest` gate validates this file and refuses to publish if it's absent or invalid — this is the one gate that cannot be bypassed. The host stores the latest manifest per app in the `app_manifests` Turso table, visible at `/admin` → Manifests tab.
+Every `static-path` sibling must emit `dist/manifest.json` as part of its build. The `publish_static_project` MCP tool's `manifest` gate validates this file and refuses to publish if it's absent or invalid — this is the one gate that cannot be bypassed. The host stores the latest manifest per app; its admin view is in ~/Projects/Bilko/docs/host-internals.md#admin-and-webhook-internals.
 
 ### Schema
 
@@ -537,10 +482,6 @@ Use the `host-kit` CLI (`packages/host-kit/bin/cli.js`, bin `bilko-host-kit`) an
 
 It reads `package.json` and git, walks `dist/`, computes gzip sizes, and writes `dist/manifest.json` (override the path with `--out`). `golden.path` is set to `/projects/<slug>/`. It needs no extra dependencies.
 
-### Drift indicator
-
-`/admin` → Manifests tab shows a per-app drift badge computed from `hostKit.version`: **green** matches the highest version seen across all manifests (`current`), **yellow** is exactly 1 minor version behind (`minor_behind`), **red** is ≥2 minors behind or a different major (`major_behind`).
-
 ### Multi-document bundles
 
 A `static-path` app is one registry slug pointing at one `dist/` tree (`public/projects/<slug>/`), served verbatim by Fastify static. A sibling can ship any number of additional HTML documents alongside its root page, each reachable at `bilko.run/projects/<slug>/<subpath>/`, with no new host capability. Two parts of the contract apply to the **whole bundle**, not per document:
@@ -584,7 +525,7 @@ bilko-host__publish_static_project { slug: "stack-audit", distPath: "/home/bilko
   bypass: "a11y", bypassReason: "Known contrast issue tracked in issue #42, fix ships next build" }
 ```
 
-`manifest` is rejected as a bypass name — that gate cannot be skipped. An unknown gate name, or a reason under 15 characters, is also rejected before any gate runs. Every accepted bypass is logged to the `publish_overrides` table (slug, gate, reason, admin_email, timestamp).
+`manifest` is rejected as a bypass name — that gate cannot be skipped. An unknown gate name, or a reason under 15 characters, is also rejected before any gate runs. Every accepted bypass is logged with its gate and reason.
 
 ### Bundle size
 
@@ -611,21 +552,17 @@ Leaderboard and achievement endpoints require `slug` to be registered in `shared
 | `GET /api/games/:slug/unlocks` | Required | Returns `{ unlocks: Array<{key, unlocked_at}> }` for the authenticated user. |
 | `GET /api/games/:slug/achievements` | Open | Returns the full `{ achievements }` catalog (declared in `GAME_CONFIGS`). |
 
-### Registry shape (`shared/game-config.ts`)
-
-Each game is a `GameConfig` in `GAME_CONFIGS`: its `slug`, `scoreOrder` (`desc` = higher is better), `maxPlausibleScore` (scores above it are rejected) and its `achievements` catalog. The interface is in `shared/game-config.ts`.
-
-Adding a new achievement key is a code change to `shared/game-config.ts`. Keys are stable — never rename a key after it has been unlocked by real users.
+A game's leaderboard order, plausible-score cap and achievements catalog are declared by the host; adding a game or an achievement key is host work: ~/Projects/Bilko/docs/host-internals.md#game-services-config. Keys are stable — never rename a key after it has been unlocked by real users.
 
 Access all three from `host-kit`'s `useLeaderboard(slug, opts)`, `useSaveState<T>(slug)`, and `useUnlocks(slug)` hooks.
 
 ### Anti-cheat
 
-Score submission is rate-limited to 60/hour per (user × game) and scores above `maxPlausibleScore` are rejected with 400. Optional HMAC: set `BILKO_GAME_HMAC_KEY`; the client signs `${slug}:${score}:${mode}:${ts}` and the server validates the `sig` field on POST.
+Score submission is rate-limited to 60/hour per (user × game) and scores above `maxPlausibleScore` are rejected with 400. Optional HMAC, when the host has a game HMAC key set (~/Projects/Bilko/docs/deployment.md#env-vars): the client signs `${slug}:${score}:${mode}:${ts}` and the server validates the `sig` field on POST.
 
 ## Realtime relay
 
-A game-agnostic binary WebSocket relay for online team games, built for Game Academy's deterministic lockstep/rollback arenas (up to 5v5). The host never runs or parses a game. It authenticates the socket, assigns seats, and fans out small input frames. A public lobby directory lists open rooms, so players join from a list instead of trading room codes. Code: `server/realtime/relay.ts` (socket), `server/realtime/lobbies.ts` (directory) and `server/routes/realtime.ts` (ticket + directory routes). Tests: `tests/realtime-relay.test.ts`, `tests/realtime-lobbies.test.ts`.
+A game-agnostic binary WebSocket relay for online team games, built for Game Academy's deterministic lockstep/rollback arenas (up to 5v5). The host never runs or parses a game. It authenticates the socket, assigns seats, and fans out small input frames. A public lobby directory lists open rooms, so players join from a list instead of trading room codes.
 
 ### Endpoints
 
@@ -681,15 +618,11 @@ A host lists its room so others can find it and join with one click. There is no
 
 Rooms and the lobby directory live in one process's memory, so the relay needs a single Render instance and a deploy drops every room (`1012`; reconnect with a fresh ticket). Tier and instance details: ~/Projects/Bilko/docs/deployment.md.
 
-Sign-in capture ("sign in for updates") lives in ~/Projects/Bilko/docs/site.md.
-
 ## Authoritative game rooms
 
 A server-run table for turn-based games with hidden information and stakes, such as mahjong. The host deals from a secret seed, holds the full game state, checks every move through the game's module, plays AI seats, and sends each seat only what that seat may see. Three Winds (3PMahjong) is the first user.
 
 **Relay or rooms?** Use the [Realtime relay](#realtime-relay) when every client runs the same deterministic simulation and the host only forwards inputs (lockstep or rollback arenas). Use authoritative rooms when a client must not see the whole state (concealed hands, a shuffled wall), when the server must decide what is legal, or when play-currency stakes are settled. The relay never sees game state; rooms never trust the client with it.
-
-Code: `server/rooms/runtime.ts` (the game-agnostic room), `server/rooms/socket.ts` (WebSocket transport and tickets) and `server/routes/rooms.ts` (matchmaking, escrow and settlement). Tests: `tests/rooms-runtime.test.ts`, `tests/rooms-socket.test.ts`, `tests/rooms-routes.test.ts`, `tests/rooms-settlement.test.ts`.
 
 ### Game module interface
 
@@ -702,7 +635,7 @@ A game plugs in as a `RoomGameModule<S>`, exported by `server/rooms/runtime.ts` 
 - If any module method throws, the hand is voided: no balance changes and every escrow is released.
 - The optional hooks follow the same rule. If `nextDealer`, `timeoutAction` or `deadlineMs` throws or returns an invalid value, the hand is voided. Invalid means: `nextDealer` not an integer seat, a `timeoutAction` that `apply` rejects, or a `deadlineMs` that is not a positive integer, `null` or `undefined`.
 
-Modules are registered in `ROOM_MODULES` in `server/rooms/modules.ts`, keyed by app id. An app also needs an entry in `PLAY_APPS` (`shared/play-currency-catalog.ts`). An app with no module or no `PLAY_APPS` entry gets `unknown_app`. A registered app's tables are open. It gets `rooms_closed` only while the owner lists its id in the `ROOMS_CLOSED` emergency switch (~/Projects/Bilko/docs/deployment.md).
+A module is registered by the host (~/Projects/Bilko/docs/host-internals.md#room-and-play-currency-wiring). An unregistered app gets `unknown_app`. A registered app's tables are open; it gets `rooms_closed` only while the owner's `ROOMS_CLOSED` emergency switch lists it (~/Projects/Bilko/docs/deployment.md#realtime-relay-constraints).
 
 ### Endpoints
 
@@ -752,8 +685,6 @@ The handshake is refused with 404 (malformed room id, `[A-Za-z0-9_-]{1,64}`, or 
 | `{ type: 'hand_over', hand, view, points }` | The hand ended. `view` is this seat's final view. `points` are the module's per-seat points (not yet × stake). |
 | `{ type: 'settled', hand, deltas }` | The ledger settled the hand. `deltas` are per-seat tael changes (points × stake). Sent only to seats that were escrowed. Not sent when the hand was voided or settlement failed (escrows released, no balance changed). |
 
-`hand_over`, `settled` and the `insufficient_taels` error come from `server/routes/rooms.ts`; the `RoomMessage` type in `server/rooms/runtime.ts` covers only `state`, `error` and `hand_over`.
-
 **Close codes**
 
 | Code | Reason | Meaning |
@@ -780,13 +711,7 @@ A seat only ever receives `module.view(state, seat)`. The raw state, the seed an
 - A second socket for the same seat replaces the first (`4000 superseded`).
 - A normal close (`1000`) during a hand marks the seat as leaving: it plays out (autoplayed) and is unseated after settlement. A `1000` close before the first hand keeps the seat. Any other close keeps the seat.
 - A restart (deploy or spin-down, `1012`) does not void the hand. Every table is saved on each move. Reconnect with a fresh `POST /api/rooms/ticket`: the first seated player's ticket resumes the table, hand and escrows included. During a deploy the ticket can answer `503 { error: 'table_moving' }` with `Retry-After` for up to about 90 s, while the old instance still holds the table; retry after the header's seconds and the table resumes. A saved table nobody returns to within 10 minutes is voided and its escrows released.
-- **Deploy drain order** (`suspendRoomTables` in `server/routes/rooms.ts`, run by `server/shutdown.ts` before anything closes). On SIGTERM the old instance:
-  1. Freezes every table. Actions are dropped without a reply (send the action again after the table resumes). No AI move, autoplay, AI fill or new deal runs. Every ticket request gets `503 table_moving`.
-  2. Lets work already in flight finish. A hand that is settling pays and sends `settled`. A hand being dealt stops before the deal: the next instance voids it, releases its escrows and deals the next hand.
-  3. Saves each table's final state, then suspends it for the next instance.
-  4. Closes every socket with `1012`.
-
-  Nothing changes between the final save and the `1012` close, so a resumed table is exactly what its players last saw: the same `seq` and the same view.
+- **Deploy drain.** On SIGTERM the old instance freezes every table (actions are dropped without a reply, so send them again after the table resumes; ticket requests get `503 table_moving`), saves its final state and closes every socket with `1012`. A resumed table is exactly what its players last saw: the same `seq` and the same view. Drain order: ~/Projects/Bilko/docs/host-internals.md#room-and-play-currency-wiring.
 
 ### AI seat fill and autoplay
 
@@ -804,16 +729,16 @@ Unlike the relay, a **missing `Origin` header is allowed in production**, becaus
 
 ### Three Winds
 
-- **Tables open.** The app id is `threewinds`. `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` from `@threewinds/engine` (`npm:@bilkobibitkov/threewinds-engine`), with no host overrides: its `nextDealer`, `timeoutAction` and `deadlineMs` (the R4.6 claim window) come from the engine, so a rule change is an engine release plus a pin bump here. Both room endpoints are open; they answer `409 rooms_closed` only while `ROOMS_CLOSED` includes `threewinds`.
+- **Tables open.** The app id is `threewinds`. The module is the engine's own `threeWindsRoomModule`, with no host overrides, so a rule change is an engine release plus a host pin bump (~/Projects/Bilko/docs/host-internals.md#room-and-play-currency-wiring). Both room endpoints are open; they answer `409 rooms_closed` only while `ROOMS_CLOSED` includes `threewinds`.
 - **Tiers:** 3 seats each; ids, names and stakes (taels per point) are the `threewinds` tiers in `PLAY_APPS` (`shared/play-currency-catalog.ts`).
 - **Escrow.** At each hand start every human seat's maximum loss, `stake × maxLossPoints`, is escrowed (ref `room:<roomId>:hand:<n>`). A player who cannot cover it is replaced by AI. At hand end each human settles against their escrow; points × stake move through the play ledger.
 - **A disconnected player stays escrowed until the hand settles.** Leaving mid-hand does not release the escrow; the seat is autoplayed and settles like any other.
-- A voided hand or a failed settlement releases every escrow and changes no balance. A sweeper (every 60 s) releases held escrows older than 60 s whose table is not in this process.
+- A voided hand or a failed settlement releases every escrow and changes no balance.
 - Rooms live in one process's memory. Staked tables need a Render tier that does not sleep: ~/Projects/Bilko/docs/deployment.md#realtime-relay-constraints.
 
 ## Play currency
 
-A per-app play currency, separate from Bilko Credits. There is one: Three Winds **taels** (app id `threewinds`). The catalog (tiers, packs, cosmetic items, signup grant) is `PLAY_APPS` in `shared/play-currency-catalog.ts`. Code: `server/routes/play-currency.ts`, `server/services/play-currency.ts`, `server/services/apple-iap.ts`, and the play-pack branch of the Stripe webhook in `server/routes/stripe.ts`. Pack prices: ~/Projects/Bilko/docs/commerce.md#play-currency-three-winds-taels.
+A per-app play currency, separate from Bilko Credits. There is one: Three Winds **taels** (app id `threewinds`). The catalog (tiers, packs, cosmetic items, signup grant) is `PLAY_APPS` in `shared/play-currency-catalog.ts`. Pack prices: ~/Projects/Bilko/docs/commerce.md#play-currency-three-winds-taels.
 
 **Taels can never be transferred, gifted or cashed out.** No route moves taels between users or pays them out. They come only from the signup grant, purchases, free test packs (only while `PLAY_CURRENCY_FREE_PACKS` lists the app) and winning hands, and go only to losing hands and cosmetic items.
 
@@ -833,19 +758,9 @@ All take `app` (a key of `PLAY_APPS`) and answer `private, no-store`.
 ### Apple in-app purchase
 
 - Product ids are `threewinds.taels.<packId>` (for example `threewinds.taels.pouch`). A transaction whose product is not in the catalog gets `unknown_product`.
-- Set the App Store Server Notifications v2 URL to `https://bilko.run/api/play-currency/apple/notifications`.
+- The App Store Server Notifications v2 URL is `https://bilko.run/api/play-currency/apple/notifications`.
 
-### Env vars
-
-| Var | Meaning |
-|---|---|
-| `APPLE_IAP_BUNDLE_ID` | The iOS app's bundle id. Required for any Apple route. |
-| `APPLE_IAP_ENVIRONMENT` | `Production` or `Sandbox`. Any other value turns Apple off. |
-| `APPLE_IAP_APP_APPLE_ID` | The app's numeric Apple id. Required when the environment is `Production`. |
-| `PLAY_CURRENCY_SALES_OPEN` | Comma-separated app ids whose web checkout is open (for example `threewinds`). Unset means `409 sales_closed` for every app not in free mode. It gates only `POST /api/play-currency/checkout`; a session paid while sales were open is still credited. |
-| `PLAY_CURRENCY_FREE_PACKS` | Temporary live-test switch: comma-separated app ids (for example `threewinds`) whose packs are free. Checkout credits the pack's taels at once (ledger kind `free_test_pack`, ref `free_test:<uuid>`, still 10/min/user) and never creates a Stripe session, even when `PLAY_CURRENCY_SALES_OPEN` lists the app too; balance reports `freePacks: true`. Unset it to end the test. Taels already credited stay, and their ledger kind finds them. Pack prices are unchanged. |
-
-Without a valid `APPLE_IAP_*` set, both Apple routes return `503 apple_iap_unavailable`.
+Without the Apple env vars set, both Apple routes return `503 apple_iap_unavailable`. `PLAY_CURRENCY_SALES_OPEN`, `PLAY_CURRENCY_FREE_PACKS` and the Apple vars: ~/Projects/Bilko/docs/deployment.md#env-vars.
 
 ## Selling a downloadable web product
 
@@ -858,14 +773,13 @@ All responses are JSON unless noted. Rate limits are per IP per minute.
 | Endpoint | Auth | Success | Errors |
 |---|---|---|---|
 | `GET /api/web-products/:slug` | none | 200 `{ slug, name, displayPrice, version, available }` (`available` = release bytes stored + price id + Stripe configured; `Cache-Control: no-store`) | 404 unknown slug |
-| `POST /api/web-products/:slug/checkout` | none | 200 `{ url }` — Stripe Checkout (`mode: payment`, `metadata.web_product=<slug>`, success → `/projects/<slug>/thanks/?session_id=…`, cancel → `/projects/<slug>/?checkout=cancel`); logs a `checkout_start` funnel event (`is_admin=1` when the IP has admin page hits). Recovery is on (`after_expiration.recovery`); `consent_collection.promotions='auto'` only when `STRIPE_CHECKOUT_PROMO_CONSENT=1`. A signed-in owner (Clerk header or `__session` cookie) gets a **test-mode** session (`STRIPE_TEST_SECRET_KEY`, inline price from `displayPrice`, `metadata.test=true`) and no funnel row. `?dryRun=1` → 200 `{ ok, dryRun, url: null }`, no session — use it for deploy smokes | 404 unknown slug · 429 (10/min) · 409 owner but test mode unconfigured (never falls back to live) · 503 Stripe or price unconfigured · 502 Stripe error |
+| `POST /api/web-products/:slug/checkout` | none | 200 `{ url }` — Stripe Checkout (`mode: payment`, `metadata.web_product=<slug>`, success → `/projects/<slug>/thanks/?session_id=…`, cancel → `/projects/<slug>/?checkout=cancel`); logs a `checkout_start` funnel event (`is_admin=1` when the IP has admin page hits). Recovery is on (`after_expiration.recovery`); promotion consent is collected only when the host switch is on (~/Projects/Bilko/docs/deployment.md#env-vars). A signed-in owner (Clerk header or `__session` cookie) gets a **test-mode** session (inline price from `displayPrice`, `metadata.test=true`) and no funnel row. `?dryRun=1` → 200 `{ ok, dryRun, url: null }`, no session — use it for deploy smokes | 404 unknown slug · 429 (10/min) · 409 owner but test mode unconfigured (never falls back to live) · 503 Stripe or price unconfigured · 502 Stripe error |
 | `GET /api/web-products/:slug/order?session_id=cs_…` | possession of the Checkout session id; verified against Stripe (session metadata slug, complete + paid, line item price matches) and recorded | 200 `{ paid: true, slug, name, version, filename, bytes, downloadsUsed, downloadsLimit, email }` (email masked) | 400 bad session id · 402 `{ paid: false }` not paid · 404 unknown slug / session not for this product · 429 (30/min) · 502 Stripe unreachable |
 | `GET /api/web-products/:slug/download?session_id=cs_…` | same as `/order` | 200 `application/zip` attachment, `private, no-store`; records a download (`via: session`) | same as `/order`, plus 429 when the per-purchase `downloadLimit` is used up · 404 release not stored |
 | `PUT /api/web-products/:slug/releases/:version` | **none, by design** — body (`application/zip` or `application/octet-stream`, ≤ 5 MB) must match the committed `sha256` + `bytes` exactly, and is stored only once | 201 `{ stored: true, sha256, bytes }` | 404 unknown slug / invalid version / version not declared · 422 bytes don't match · 409 already stored · 429 (5/min) |
 | `GET /api/web-products/:slug/account-download` | Clerk Bearer token; entitled by a recorded order for the token's email or a `wp_<slug>` purchase/comp-grant row | 200 `application/zip` (records `via: account`) | 401 not signed in · 402 `{ paid: false }` · 404 unknown slug / release not stored · 429 (30/min) |
-| `GET /api/admin/web-products?days=30&exclude_self=1` | `requireAdmin` (`days` clamped 1–365; `exclude_self` defaults to 1) | 200 `{ days, excludeSelf, products[], daily[] }` — per product: views, unique visitors, checkout starts, expired + recovered checkouts, orders, revenue (cents), downloads, unique download sessions, last order/download, `releaseStored`; `daily` is per-slug per-day counts | 401/403 per `requireAdmin` |
 
-The Stripe webhook (`checkout.session.completed`) dispatches on `metadata.web_product` before any generic branch: it records the order only if paid, the line-item price equals the product's resolved price id, and an email is present; it also writes a one-time purchase row (`productKey` = `wp_<slug>`). `/stripe/success` redirects web-product sessions to the product's thanks page. `checkout.session.expired` (non-test, non-owner-IP) writes a `checkout_expired` funnel row; a completed session with `recovered_from` writes `checkout_recovered`. The live endpoint must subscribe to `checkout.session.expired`.
+The admin endpoint and the Stripe webhook's web-product handling: ~/Projects/Bilko/docs/host-internals.md#admin-and-webhook-internals.
 
 ### Stripe live vs test
 
@@ -873,27 +787,23 @@ Live mode holds real buyers only. Owner/agent testing never creates live session
 - **Owner in a browser:** sign in on bilko.run; checkout routes to test mode. Pay with `4242 4242 4242 4242`. Test orders (`cs_test_…`) deliver the zip but are never counted in `/admin`.
 - **Agents/deploy smokes:** `POST /api/web-products/<slug>/checkout?dryRun=1`. Never `POST` without it against prod.
 - **`/buy/<id>` links:** a browser GET opens a **live** session, including the owner's. `/buy` has no owner test mode; an owner-IP session is only flagged (`owner_ip`, `is_admin`). Agents and deploy smokes check these links with `HEAD` or `GET /buy/<id>?dryRun=1`, never a plain GET from a browser or browser automation. Scripts, AI fetchers and headless browsers get the info page, but a client that sends a browser user agent still opens a live session.
-- **Local dev:** `getStripe()` refuses an `sk_live_` key unless `NODE_ENV=production` (override: `STRIPE_ALLOW_LIVE_IN_DEV=1`). Use an `sk_test_` key.
 - **Full live-path check** (real webhook, real price): a 100%-off promo code on a live session is still the one sanctioned way; expect it in Stripe as a $0 completed session.
 
 ### Playbook (new product)
 
-1. **Stripe:** create a live Product + one-time Price. Set product/session metadata `web_product=<slug>` (the checkout route sets it on the session; the webhook relies on it).
-2. **Build the zip** in a **private** sibling repo — never in this repo. Record the filename, byte size (≤ 5 MB) and sha256.
-3. **Declare it:** add a `WEB_PRODUCTS` entry in `shared/web-products.ts` — `slug`, `name`, `productKey` (`wp_` + slug with `-` → `_`), `priceEnvVar` (`STRIPE_PRICE_WP_*`), `defaultPriceId`, `displayPrice`, `downloadLimit`, and `release: { version, filename, bytes, sha256 }`. `validateWebProducts` checks the shape. Commit and push to `origin/main`; Render deploys. The env var, when set, overrides `defaultPriceId`.
-4. **Upload the bytes once:** `curl -X PUT --data-binary @<file>.zip -H 'Content-Type: application/zip' https://bilko.run/api/web-products/<slug>/releases/<version>`. No secret is needed — the server stores only bytes matching the committed sha256, once (409 afterwards). Confirm `GET /api/web-products/<slug>` returns `available: true`.
-5. **Landing page** in the sibling repo, published to `/projects/<slug>/` (static-path, see above): the buy button `POST`s `/api/web-products/<slug>/checkout` and redirects to the returned `url`; read `GET /api/web-products/<slug>` to show price/availability.
-   Every dollar amount on the published landing and thanks pages must be a catalog price, and the landing page must show its own `displayPrice` (markup or attributes; `<sup>$</sup>9` counts as `$9`). `tests/web-product-pages.test.ts` enforces this, and also fails when a sellable product's landing or thanks page is missing. To change a price, edit `shared/web-products.ts`, then republish the page right away. The test stays red until you do.
-6. **Thanks page** at `/projects/<slug>/thanks/`: read `session_id` from the query, call `GET …/order?session_id=` to show status and then `GET …/download?session_id=` for the file. If the link is lost or the session id is missing, offer sign-in (Clerk) and call `GET …/account-download` with the Bearer token.
-7. **Monitor** in `/admin` → Products (views, checkout starts, orders, revenue, downloads, release stored).
+The host-side steps (Stripe product and price, the `WEB_PRODUCTS` entry, the price env var, the admin view) are in ~/Projects/Bilko/docs/host-internals.md#web-product-host-steps. The sibling's steps:
+
+1. **Build the zip** in a **private** sibling repo — never in the host repo. Record the filename, byte size (≤ 5 MB) and sha256, and hand them to the host for the `WEB_PRODUCTS` entry.
+2. **Upload the bytes once**, after that entry is deployed: `curl -X PUT --data-binary @<file>.zip -H 'Content-Type: application/zip' https://bilko.run/api/web-products/<slug>/releases/<version>`. No secret is needed — the server stores only bytes matching the committed sha256, once (409 afterwards). Confirm `GET /api/web-products/<slug>` returns `available: true`.
+3. **Landing page** in the sibling repo, published to `/projects/<slug>/` (static-path, see above): the buy button `POST`s `/api/web-products/<slug>/checkout` and redirects to the returned `url`; read `GET /api/web-products/<slug>` to show price/availability.
+   Every dollar amount on the published landing and thanks pages must be a catalog price, and the landing page must show its own `displayPrice` (markup or attributes; `<sup>$</sup>9` counts as `$9`). The host's tests fail when they differ, or when a sellable product's landing or thanks page is missing, so after a price change republish the page right away.
+4. **Thanks page** at `/projects/<slug>/thanks/`: read `session_id` from the query, call `GET …/order?session_id=` to show status and then `GET …/download?session_id=` for the file. If the link is lost or the session id is missing, offer sign-in (Clerk) and call `GET …/account-download` with the Bearer token.
 
 ### Bundled and preview products
 
-Two optional `WebProduct` fields on download products (validated by `validateWebProducts`):
+Two optional `WebProduct` fields on download products (declared by the host in `shared/web-products.ts`):
 
 - `includes: string[]` — slugs of other download products delivered with this purchase. Example: the Agent Factory Setup service (`hfh-factory-setup`) has `includes: ['agent-factory-kit']`, so its buyers get the Kit. `GET /api/web-products/:slug/order` then returns an `included` array of `{ slug, name, downloadUrl }` (only entries whose release exists), each `downloadUrl` being `/api/web-products/<included-slug>/download?session_id=…`.
 - `preview: { version, filename, bytes, sha256 } | null` — a free preview zip, pinned by sha256 like `release`. Signed-in visitors (Clerk Bearer, no purchase) fetch it with `GET /api/web-products/:slug/preview` (401 not signed in, 404 not stored). Upload it with `PUT /api/web-products/:slug/releases/:version?kind=preview`; it is stored under the reserved slug `<slug>--preview`. `GET /api/web-products/:slug` reports `previewAvailable`.
 
 Bookable services (`kind: 'service'`, booking endpoints, founding coupons, free hour) are documented in ~/Projects/Bilko/docs/commerce.md.
-
-See ~/Projects/Bilko/docs/host-internals.md for monitoring, QA, cost, caching, observability, and security-header detail.

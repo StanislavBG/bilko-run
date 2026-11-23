@@ -263,3 +263,225 @@ export async function deleteBox(boxId: string): Promise<boolean> {
   const { changes } = await dbRun('DELETE FROM sm_relay_boxes WHERE box_id = ?', boxId);
   return changes > 0;
 }
+
+// ── Envelopes ────────────────────────────────────────────────────────────────
+// An envelope is opaque ciphertext. Its bytes are only split into chunk rows and joined back:
+// never decoded, parsed, hashed or logged.
+
+const HOST_ID_ATTEMPTS = 5;
+
+export interface StoreEnvelopeInput {
+  boxId: string;
+  clientReportId: string;
+  origin: string;
+  body: Buffer;
+  now?: number;
+}
+
+export type StoreEnvelopeResult =
+  | { kind: 'created'; envelopeId: string; hostId: string }
+  | { kind: 'duplicate'; hostId: string }
+  | { kind: 'full' };
+
+export interface EnvelopeListRow {
+  envelopeId: string;
+  hostId: string;
+  clientReportId: string;
+  receivedAt: number;
+  origin: string;
+  bytes: number;
+}
+
+interface EnvelopeDbRow {
+  envelope_id: string;
+  host_id: string;
+  client_report_id: string;
+  received_at: number;
+  origin: string;
+  bytes: number;
+}
+
+function constraintMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isHostIdCollision(err: unknown): boolean {
+  return /UNIQUE constraint failed: sm_relay_envelopes\.box_id, sm_relay_envelopes\.host_id/.test(
+    constraintMessage(err),
+  );
+}
+
+function isClientReportCollision(err: unknown): boolean {
+  return /UNIQUE constraint failed: sm_relay_envelopes\.box_id, sm_relay_envelopes\.client_report_id/.test(
+    constraintMessage(err),
+  );
+}
+
+/** libsql returns BLOBs as ArrayBuffer (remote) or Uint8Array (local). */
+function blobToBuffer(raw: unknown): Buffer {
+  if (raw instanceof ArrayBuffer) return Buffer.from(new Uint8Array(raw));
+  const u = raw as Uint8Array;
+  return Buffer.from(u.buffer, u.byteOffset, u.byteLength);
+}
+
+async function findByClientReport(boxId: string, clientReportId: string): Promise<string | null> {
+  const row = await dbGet<{ host_id: string }>(
+    'SELECT host_id FROM sm_relay_envelopes WHERE box_id = ? AND client_report_id = ?',
+    boxId, clientReportId,
+  );
+  return row ? row.host_id : null;
+}
+
+async function boxHasRoom(boxId: string, bytes: number): Promise<boolean> {
+  const row = await dbGet<{ n: number; total: number | null }>(
+    'SELECT COUNT(*) AS n, SUM(bytes) AS total FROM sm_relay_envelopes WHERE box_id = ?',
+    boxId,
+  );
+  const n = Number(row?.n ?? 0);
+  const total = Number(row?.total ?? 0);
+  return n < MAX_BOX_ENVELOPES && total + bytes <= MAX_BOX_BYTES;
+}
+
+async function deleteChunks(envelopeId: string): Promise<void> {
+  await dbRun('DELETE FROM sm_relay_envelope_chunks WHERE envelope_id = ?', envelopeId);
+}
+
+/**
+ * Idempotent per (boxId, clientReportId). Order: duplicate check, quota check, chunk rows,
+ * envelope row (which re-checks the quota in the same statement), then last_received_at.
+ */
+export async function storeEnvelope(input: StoreEnvelopeInput): Promise<StoreEnvelopeResult> {
+  const { boxId, clientReportId, origin, body } = input;
+  const now = input.now ?? Date.now();
+  const bytes = body.length;
+
+  const existing = await findByClientReport(boxId, clientReportId);
+  if (existing !== null) return { kind: 'duplicate', hostId: existing };
+  if (!(await boxHasRoom(boxId, bytes))) return { kind: 'full' };
+
+  const envelopeId = crypto.randomUUID();
+  const chunks = Math.ceil(bytes / ENVELOPE_CHUNK_BYTES);
+  try {
+    for (let idx = 0; idx < chunks; idx++) {
+      const part = body.subarray(idx * ENVELOPE_CHUNK_BYTES, (idx + 1) * ENVELOPE_CHUNK_BYTES);
+      await dbRun(
+        'INSERT INTO sm_relay_envelope_chunks (envelope_id, idx, content) VALUES (?, ?, ?)',
+        envelopeId, idx, part,
+      );
+    }
+
+    for (let attempt = 0; attempt < HOST_ID_ATTEMPTS; attempt++) {
+      const hostId = newHostId();
+      try {
+        const { changes } = await dbRun(
+          `INSERT INTO sm_relay_envelopes
+             (envelope_id, box_id, host_id, client_report_id, origin, bytes, chunks, received_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE (SELECT COUNT(*) FROM sm_relay_envelopes WHERE box_id = ?) < ?
+             AND (SELECT COALESCE(SUM(bytes), 0) FROM sm_relay_envelopes WHERE box_id = ?) + ? <= ?`,
+          envelopeId, boxId, hostId, clientReportId, origin, bytes, chunks, now,
+          boxId, MAX_BOX_ENVELOPES, boxId, bytes, MAX_BOX_BYTES,
+        );
+        if (changes === 0) {
+          await deleteChunks(envelopeId);
+          return { kind: 'full' };
+        }
+        await dbRun('UPDATE sm_relay_boxes SET last_received_at = ? WHERE box_id = ?', now, boxId);
+        return { kind: 'created', envelopeId, hostId };
+      } catch (err) {
+        if (isClientReportCollision(err)) {
+          await deleteChunks(envelopeId);
+          const winner = await findByClientReport(boxId, clientReportId);
+          if (winner === null) throw err;
+          return { kind: 'duplicate', hostId: winner };
+        }
+        if (!isHostIdCollision(err)) throw err;
+      }
+    }
+    throw new Error(`sm-relay: no free host id after ${HOST_ID_ATTEMPTS} attempts`);
+  } catch (err) {
+    await deleteChunks(envelopeId);
+    throw err;
+  }
+}
+
+/** At most `limit` envelopes of the box, oldest first. */
+export async function listEnvelopes(boxId: string, limit: number): Promise<EnvelopeListRow[]> {
+  const rows = await dbAll<EnvelopeDbRow>(
+    `SELECT envelope_id, host_id, client_report_id, received_at, origin, bytes
+     FROM sm_relay_envelopes WHERE box_id = ?
+     ORDER BY received_at, envelope_id LIMIT ?`,
+    boxId, Math.max(0, Math.floor(limit)),
+  );
+  return rows.map((r) => ({
+    envelopeId: r.envelope_id,
+    hostId: r.host_id,
+    clientReportId: r.client_report_id,
+    receivedAt: Number(r.received_at),
+    origin: r.origin,
+    bytes: Number(r.bytes),
+  }));
+}
+
+/** The exact stored bytes, or null when the envelope is not in this box. */
+export async function readEnvelope(boxId: string, envelopeId: string): Promise<Buffer | null> {
+  const row = await dbGet<{ bytes: number }>(
+    'SELECT bytes FROM sm_relay_envelopes WHERE box_id = ? AND envelope_id = ?',
+    boxId, envelopeId,
+  );
+  if (!row) return null;
+  const parts = await dbAll<{ idx: number; content: unknown }>(
+    'SELECT idx, content FROM sm_relay_envelope_chunks WHERE envelope_id = ? ORDER BY idx',
+    envelopeId,
+  );
+  const content = Buffer.concat(
+    parts
+      .filter((p) => p.content != null)
+      .sort((a, b) => Number(a.idx) - Number(b.idx))
+      .map((p) => blobToBuffer(p.content)),
+  );
+  if (content.length !== Number(row.bytes)) return null;
+  return content;
+}
+
+/** True once: removes the envelope row and its chunks. */
+export async function deleteEnvelope(boxId: string, envelopeId: string): Promise<boolean> {
+  const { changes } = await dbRun(
+    'DELETE FROM sm_relay_envelopes WHERE box_id = ? AND envelope_id = ?',
+    boxId, envelopeId,
+  );
+  if (changes === 0) return false;
+  await deleteChunks(envelopeId);
+  return true;
+}
+
+/** Removes every box of the device with its envelopes and chunks; returns the box count. */
+export async function deleteBoxesForDevice(deviceId: string): Promise<number> {
+  await dbRun(
+    `DELETE FROM sm_relay_envelope_chunks
+     WHERE envelope_id IN (
+       SELECT e.envelope_id FROM sm_relay_envelopes e
+       JOIN sm_relay_boxes b ON b.box_id = e.box_id
+       WHERE b.device_id = ?
+     )`,
+    deviceId,
+  );
+  await dbRun(
+    'DELETE FROM sm_relay_envelopes WHERE box_id IN (SELECT box_id FROM sm_relay_boxes WHERE device_id = ?)',
+    deviceId,
+  );
+  const { changes } = await dbRun('DELETE FROM sm_relay_boxes WHERE device_id = ?', deviceId);
+  return changes;
+}
+
+/** Removes envelopes (and their chunks) received before now - ttlMs; returns the count. */
+export async function purgeExpiredEnvelopes(now: number, ttlMs: number = ENVELOPE_TTL_MS): Promise<number> {
+  const cutoff = now - ttlMs;
+  await dbRun(
+    `DELETE FROM sm_relay_envelope_chunks
+     WHERE envelope_id IN (SELECT envelope_id FROM sm_relay_envelopes WHERE received_at < ?)`,
+    cutoff,
+  );
+  const { changes } = await dbRun('DELETE FROM sm_relay_envelopes WHERE received_at < ?', cutoff);
+  return changes;
+}

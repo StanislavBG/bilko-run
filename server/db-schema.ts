@@ -571,6 +571,44 @@ export const MIGRATIONS = [
     device_pub_key TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_sm_relay_devices_user ON sm_relay_devices(user_id)`,
+  // Sealed drop boxes (server/sm-relay/boxes.ts): one paired device's opaque P-256 public key; the host never holds a private key.
+  `CREATE TABLE IF NOT EXISTS sm_relay_boxes (
+    box_id           TEXT PRIMARY KEY,
+    user_id          TEXT NOT NULL,
+    device_id        TEXT NOT NULL,
+    label            TEXT NOT NULL,
+    public_key       TEXT NOT NULL,
+    allowed_origins  TEXT NOT NULL,
+    state            TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'paused')),
+    created_at       INTEGER NOT NULL,
+    last_received_at INTEGER
+  )`,
+  // Index for listing an account's boxes and enforcing the per-account cap.
+  `CREATE INDEX IF NOT EXISTS idx_sm_relay_boxes_user ON sm_relay_boxes(user_id)`,
+  // Index for listing one device's boxes.
+  `CREATE INDEX IF NOT EXISTS idx_sm_relay_boxes_device ON sm_relay_boxes(device_id)`,
+  // Sealed envelopes waiting in a box; host_id and client_report_id are each unique per box.
+  `CREATE TABLE IF NOT EXISTS sm_relay_envelopes (
+    envelope_id      TEXT PRIMARY KEY,
+    box_id           TEXT NOT NULL,
+    host_id          TEXT NOT NULL,
+    client_report_id TEXT NOT NULL,
+    origin           TEXT NOT NULL,
+    bytes            INTEGER NOT NULL,
+    chunks           INTEGER NOT NULL,
+    received_at      INTEGER NOT NULL,
+    UNIQUE(box_id, host_id),
+    UNIQUE(box_id, client_report_id)
+  )`,
+  // Index for a box's envelopes in arrival order (drain and TTL sweep).
+  `CREATE INDEX IF NOT EXISTS idx_sm_relay_envelopes_box_received ON sm_relay_envelopes(box_id, received_at)`,
+  // Ciphertext bytes of an envelope, split into <= 1 MiB chunk rows.
+  `CREATE TABLE IF NOT EXISTS sm_relay_envelope_chunks (
+    envelope_id TEXT NOT NULL,
+    idx         INTEGER NOT NULL,
+    content     BLOB NOT NULL,
+    PRIMARY KEY (envelope_id, idx)
+  )`,
   // Retired: Session Manager relay desktop-client tokens (desktop-to-desktop pairing,
   // removed in Session Manager). Dropping the table, and its index with it, destroys
   // every issued client token. No-ops once gone.

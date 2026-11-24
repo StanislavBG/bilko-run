@@ -1,0 +1,198 @@
+<h1>House rules — instructions, settings and permissions</h1>
+<p class="lede">Tell every agent how you like things done, and decide what they may do without asking — without switching off the safety rails.</p>
+
+<p>Claude Code reads a small set of files before it does anything else. Session Manager gives you
+an editor for each one. This chapter covers your machine-wide System Prompt, a project's own house
+rules and how agents share them, and the Settings and Permissions every Session obeys.</p>
+
+<h2>The System Prompt: your machine-wide house rules</h2>
+
+<p>On Home, the sidebar's <strong>CLAUDE.md</strong> row, under Claude Code, opens your System
+Prompt. It edits one real file: <code>~/.claude/CLAUDE.md</code>. Every Session that Claude Code
+starts, in every project on this machine, reads this file first. Saving here changes what every
+agent knows before it reads your request.</p>
+
+<p>This page has no scope switcher, because the file has no scope to switch. If the file uses
+<code>@path/to/file.md</code>-style imports to pull in other files, a left-hand rail lists each
+one so you can edit it too. They are part of the same instructions.</p>
+
+<aside class="manual-analogy"><strong>Think of it like this:</strong> the System Prompt is the
+handbook every new hire at your agency reads on day one, no matter which project they're
+assigned to. Change the handbook, and every future hire reads the new version.</aside>
+
+<h2>A project's own house rules: CLAUDE.md</h2>
+
+<p>A single project can add its own rules on top of the machine-wide ones. Claude Code looks for
+a file named <code>CLAUDE.md</code> in the project's own folder, and a second file named
+<code>CLAUDE.local.md</code> for rules that apply only on this machine. Both are read fresh
+whenever a Session starts in that project.</p>
+
+<p>To edit them, switch to that project's tab and open <strong>Claude config</strong> from the
+sidebar. It gathers the project's own Claude Code files in one place: Memory, CLAUDE.md, Settings,
+MCP, and Skills each get a tab. On the CLAUDE.md tab, choose Project to edit <code>CLAUDE.md</code>,
+or Local to edit <code>CLAUDE.local.md</code>.</p>
+
+<p><code>CLAUDE.md</code> is shared with everyone who works on the project;
+<code>CLAUDE.local.md</code> stays on your machine.</p>
+
+<aside class="manual-note"><strong>Good to know:</strong> your machine-wide file and a project's
+file share the name <code>CLAUDE.md</code>. The one you open from Home reaches every project. The
+one in Claude config reaches only its own project.</aside>
+
+<h2>One map for every agent, and a tool to keep it tidy</h2>
+
+<p>A Session can run Codex or Gemini instead of Claude Code. Each tool looks for its own
+instructions file. If a project copies its rules into each one, the copies drift apart, and no
+agent can tell which one is true.</p>
+
+<h3>AGENTS.md: the shared entry map</h3>
+
+<p>The fix is one shared file, <code>AGENTS.md</code>, that holds the project's instructions:
+short rules, plus links to longer docs. Codex reads <code>AGENTS.md</code> on its own. Gemini
+normally reads only <code>GEMINI.md</code>, so Session Manager tells it to read
+<code>AGENTS.md</code> too.</p>
+
+<p>Claude Code reads <code>CLAUDE.md</code>, and once a project has one, it skips
+<code>AGENTS.md</code> unless <code>CLAUDE.md</code> pulls it in. So the project's
+<code>CLAUDE.md</code> is a one-line stub: <code>@AGENTS.md</code>. That line imports the shared
+map. Anything below it is for Claude Code alone and never repeats the map. Any folder with its
+own notes uses the same pair.</p>
+
+<h3>Tools › Review MD network</h3>
+
+<p>Docs pile up and go stale. On a project's Project Home, the Tools tab has <strong>Review MD
+network</strong>. It scans the project's markdown files, the plain-text docs agents read, and
+draws how they link. Its idea is "write once, reference many": each fact lives in one doc, and
+other docs link to it.</p>
+
+<p>The review sorts every doc into one of five kinds:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Kind</th><th>What it holds</th></tr></thead>
+  <tbody>
+    <tr><td>Map</td><td>The top <code>AGENTS.md</code> or <code>CLAUDE.md</code>: one-line rules
+    and links. Every Session loads it.</td></tr>
+    <tr><td>Folder notes</td><td>A folder's own facts, never a copy of a top rule.</td></tr>
+    <tr><td>Topic docs</td><td>The one doc with a topic's full text.</td></tr>
+    <tr><td>Agent files</td><td>Personas, skills, plugins and commands, loaded by name.</td></tr>
+    <tr><td>History</td><td>Dated reports and logs. Never edited, never the current answer.</td></tr>
+  </tbody>
+</table>
+
+<p>The <strong>FIX LIST</strong> card ranks what to repair. Copied text comes first, and each row
+names the doc that should keep it. Broken links come next, then orphans: docs the map never
+reaches. Each row has an Open button.</p>
+
+<p>To go deeper, pick a Scope and a Mode, Full review or Drift check, and press <strong>Run
+review</strong>. That starts a Session with the architect. It reports first and changes no files
+until you approve.</p>
+
+<h2>Settings: three scopes, one winner</h2>
+
+<p>The <strong>Settings</strong> page, also under Claude Code, edits the preferences Claude Code
+keeps in a file called <code>settings.json</code> — environment variables, the default model, and
+other choices. There isn't just one copy of this file. There are three, one per scope:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Scope</th><th>File</th><th>Applies to</th></tr></thead>
+  <tbody>
+    <tr><td>User</td><td><code>~/.claude/settings.json</code></td>
+    <td>Every project on this machine.</td></tr>
+    <tr><td>Project</td><td><code>&lt;project&gt;/.claude/settings.json</code></td>
+    <td>This project only. Meant to be shared with your team.</td></tr>
+    <tr><td>Local</td><td><code>&lt;project&gt;/.claude/settings.local.json</code></td>
+    <td>This project, this machine only. Never shared.</td></tr>
+  </tbody>
+</table>
+
+<p>The Settings page on Home edits your User file. A project's Claude config page has a Settings
+tab where you pick Project or Local. It's the same editor either way.</p>
+
+<p>When the same setting is written in more than one file, Local wins over Project, and Project
+wins over User. Settings opens on its General tab, which shows the value that will actually take
+effect for each setting, so you can check it before you change anything. Its Raw tab shows the
+whole file as plain text, for when you'd rather edit it by hand.</p>
+
+<aside class="manual-note"><strong>Good to know:</strong> Permissions, which we cover next, isn't
+a separate file at all. It's a section inside these same <code>settings.json</code> files, so it's
+a tab inside Settings rather than a page of its own. Hooks work the same way, with their own tab
+right next to it.</aside>
+
+<h2>Permissions: fewer interruptions, same safety rails</h2>
+
+<p>By default, Claude Code stops and asks before doing anything risky — deleting a file, running
+an unfamiliar command, reaching outside your project folder. That's the safety rail, and the
+Permissions tab was never meant to remove it. What it does is let you tell Claude Code, once,
+which specific things are safe to do without asking again.</p>
+
+<p>Permissions has three rule lists and one overall mode:</p>
+
+<table class="manual-table">
+  <thead><tr><th>Rule list</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Allow</td><td>Skips the prompt for anything matching the rule.</td></tr>
+    <tr><td>Deny</td><td>Blocks anything matching the rule, no prompt, no override.</td></tr>
+    <tr><td>Ask</td><td>Forces a prompt for anything matching the rule, even if it would
+    otherwise be allowed.</td></tr>
+  </tbody>
+</table>
+
+<p>Above the lists sits one bigger switch: the default mode, the agent's posture before any rule
+is checked. Options include the normal ask-when-unsure mode, a mode that accepts routine edits, a
+read-only planning mode, and a mode that skips permission checks entirely. Most people leave it on
+the normal, safest setting.</p>
+
+<p>The Permissions tab shows the rules of one file at a time: the scope you're editing. Before you
+add a rule, glance at the other scopes too. A new rule can duplicate — or contradict — one that's
+already there.</p>
+
+<aside class="manual-warning"><strong>Watch out:</strong> an Allow rule written at Project scope
+ships to everyone who works on that project the moment they pull your changes. A command you
+trust is not one your whole team should skip asking about. Keep personal rules at User or Local
+scope, and save Project scope for rules the team has agreed on.</aside>
+
+<h3>Tool risk: a brake for work that runs while you're away</h3>
+
+<p>Permissions decide what an agent may do while you're watching. Work the Scheduler runs in the
+background has no one to ask, so Settings has one more row, <strong>Tool risk</strong>. There you
+give a tool, or a command such as <code>npm publish</code>, one of six marks:
+<code>read</code>, <code>write</code>, <code>confirm</code>, <code>irreversible</code>,
+<code>money</code>, or <code>public</code>.</p>
+
+<p>The last three are the brakes. A background job may not use a tool marked
+<code>irreversible</code>, <code>money</code>, or <code>public</code> unless its work order names
+that tool as cleared. A tool marked <code>confirm</code> pauses the job and asks you in
+Needs you on Home. <strong>Approve</strong> lets it make that one call and carry on;
+<strong>Deny</strong> keeps it paused. An unmarked tool is allowed. On Home, Tool risk edits the marks for your whole
+machine; in a project's Claude config, it edits that project's marks, which win. A project can
+also switch on <strong>Also guard interactive sessions in this project</strong> to apply the
+same marks while you're chatting.</p>
+
+<h2>The rule of thumb: Settings is for everyone, Agents and Missions are for one job</h2>
+
+<p>Claude Code reads every file in this chapter fresh before each Session starts, and none of
+them know which Session is about to run. A change in Settings or Permissions reaches every current
+and future Session in its scope, not just the one you have in mind.</p>
+
+<p>So if you want one Session to behave differently, Settings is the wrong lever. Pick a
+different Agent for it, or give it a Mission that carries the instructions you want. Save Settings
+and Permissions for what should be true no matter which Session runs.</p>
+
+<div class="manual-takeaways">
+  <h2>What you learned</h2>
+  <ul>
+    <li>The CLAUDE.md row on Home edits <code>~/.claude/CLAUDE.md</code> for every Session; a
+    project's Claude config edits its own <code>CLAUDE.md</code> and <code>CLAUDE.local.md</code>.</li>
+    <li>Settings has three scopes — User, Project, Local — and Local beats Project beats User.
+    Home edits User; a project's Claude config edits the other two.</li>
+    <li>A project's <code>AGENTS.md</code> is one map for Claude Code, Codex and Gemini;
+    <code>CLAUDE.md</code> is a one-line <code>@AGENTS.md</code> stub. Review MD network ranks
+    what to fix.</li>
+    <li>Permissions, a tab inside Settings, holds Allow, Deny, and Ask rules that stop needless prompts without turning
+    off the safety rail.</li>
+    <li>A Settings or Permissions change reaches every Session in its scope; per-Session behavior
+    belongs on that Session's Agent or Mission instead.</li>
+  </ul>
+</div>
+
+<p class="manual-next">Next up: <a href="#new-abilities">Giving your agents new abilities</a></p>

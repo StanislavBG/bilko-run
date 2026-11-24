@@ -58,6 +58,7 @@ import { handleUpgrade as realtimeHandleUpgrade } from './realtime/relay.js';
 import { handleRoomUpgrade } from './rooms/socket.js';
 import { registerSecurityHeaders, REQUEST_BODY_ENCODINGS } from './security-headers.js';
 import { registerOgRoutes } from './og-routes.js';
+import { registerRegistryInject } from './registry-inject.js';
 import { registerListingMediaRoutes } from './routes/listing-media.js';
 import { gitViewerOg, getGitViewerHealth } from './routes/tools/git-viewer.js';
 import { loadOgProjects, type OgProject } from './og-meta.js';
@@ -159,6 +160,8 @@ const distPath = distCandidates.find(p => existsSync(p)) ?? distCandidates[0];
     .map(p => ({ slug: p.slug, title: p.title, excerpt: p.excerpt }));
   registerOgRoutes(app, { projects, blogPosts, dynamic: [gitViewerOg], staticRoot: distPath });
 }
+// The live registry snapshot as a JSON element in every SPA shell (src/data/projectsRegistry.ts).
+registerRegistryInject(app);
 
 // Owner-uploaded card media (/projects/<slug>/_media/<sha256>.<ext>) from the DB.
 // Registered before @fastify/static so this specific route wins over the static

@@ -43,11 +43,32 @@ export interface Project {
 }
 
 /* ── Standalone projects (static-path or external) ────────────────── */
-// Sourced from a JSON sidecar so the bilko-host MCP server can edit it
-// safely from sibling-repo Claude sessions without touching TS source.
-// See mcp-host-server/ for the register/publish/unregister tools.
+// Read from the Bilko-DB snapshot the server injects into the SPA shell, so a
+// registry edit shows without a rebuild. The bundled JSON sidecar (edited by the
+// bilko-host MCP) is the fallback when the page carries no snapshot.
 import standaloneJson from './standalone-projects.json' with { type: 'json' };
-const STANDALONE_PROJECTS: readonly RegistryProject[] = standaloneJson as readonly RegistryProject[];
+const BUNDLED_PROJECTS: readonly RegistryProject[] = standaloneJson as readonly RegistryProject[];
+
+/** Id of the JSON element the server puts in every SPA shell (server/registry-inject.ts). */
+export const REGISTRY_ELEMENT_ID = 'bilko-registry';
+
+/**
+ * The live Bilko-DB registry the server injected into this page, or null when the page has no
+ * such element (dev server, tests, prerender) or it does not hold a JSON array.
+ */
+export function readInjectedRegistry(doc: Document | undefined = globalThis.document): RegistryProject[] | null {
+  const text = doc?.getElementById(REGISTRY_ELEMENT_ID)?.textContent;
+  if (!text) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? (parsed as RegistryProject[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+// The injected snapshot wins; the bundled file is only a fallback while it still exists.
+const STANDALONE_PROJECTS: readonly RegistryProject[] = readInjectedRegistry() ?? BUNDLED_PROJECTS;
 
 /**
  * Slugs whose card opens an in-repo React page instead of the JSON entry's

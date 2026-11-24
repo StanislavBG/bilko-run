@@ -114,51 +114,25 @@ describe('isListingMediaDeclared', () => {
   const path = `/projects/demo/_media/${file}`;
   const entry = (listing: Record<string, unknown>) => [{ slug: 'other', listing: { icon: path } }, { slug: 'demo', listing }];
 
-  function mockFetch(status: number, body: unknown) {
-    return vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-      new Response(JSON.stringify(body), { status }),
-    );
-  }
-
-  it('finds a path declared on GitHub main only, with the fixed URL and headers', async () => {
-    const fetch = mockFetch(200, entry({ shareImage: path }));
-    expect(await isListingMediaDeclared('demo', file, { fetch, deployed: entry({}) })).toBe('shareImage');
-    expect(fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = fetch.mock.calls[0];
-    expect(String(url)).toBe('https://api.github.com/repos/StanislavBG/bilko-run/contents/src/data/standalone-projects.json?ref=main');
-    const headers = new Headers(init?.headers);
-    expect(headers.get('accept')).toBe('application/vnd.github.raw+json');
-    expect(headers.get('user-agent')).toBe('bilko-run');
-    expect(init?.signal).toBeDefined();
-
-    // Cached: a second lookup inside 30 s does not refetch.
-    expect(await isListingMediaDeclared('demo', file, { fetch, deployed: entry({}) })).toBe('shareImage');
-    expect(fetch).toHaveBeenCalledTimes(1);
+  it('finds a path declared in the registry, never calling fetch', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    try {
+      expect(await isListingMediaDeclared('demo', file, { registry: entry({ video: path }) })).toBe('video');
+      expect(await isListingMediaDeclared('demo', file, { registry: entry({ icon: path }) })).toBe('icon');
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
   });
 
-  it('finds a path in the deployed registry without calling GitHub', async () => {
-    const fetch = mockFetch(200, []);
-    expect(await isListingMediaDeclared('demo', file, { fetch, deployed: entry({ video: path }) })).toBe('video');
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('answers undefined when neither registry declares it', async () => {
-    const fetch = mockFetch(200, entry({ shareImage: `/projects/demo/_media/${'b'.repeat(64)}.png` }));
-    expect(await isListingMediaDeclared('demo', file, { fetch, deployed: entry({}) })).toBeUndefined();
+  it('answers undefined when the registry does not declare it', async () => {
+    expect(await isListingMediaDeclared('demo', file, { registry: entry({ shareImage: `/projects/demo/_media/${'b'.repeat(64)}.png` }) })).toBeUndefined();
     // Declared on another slug's entry does not count.
-    expect(await isListingMediaDeclared('other', file, { fetch, deployed: [] })).toBeUndefined();
-  });
-
-  it('treats a GitHub 500 as not declared there and still honours the deployed registry', async () => {
-    const fetch = mockFetch(500, { message: 'boom' });
-    expect(await isListingMediaDeclared('demo', file, { fetch, deployed: entry({}) })).toBeUndefined();
-    expect(await isListingMediaDeclared('demo', file, { fetch, deployed: entry({ icon: path }) })).toBe('icon');
+    expect(await isListingMediaDeclared('other', file, { registry: [{ slug: 'demo', listing: { icon: `/projects/other/_media/${file}` } }] })).toBeUndefined();
   });
 
   it('rejects bad slugs and file names without any lookup', async () => {
-    const fetch = mockFetch(200, entry({ icon: path }));
-    expect(await isListingMediaDeclared('../demo', file, { fetch, deployed: [] })).toBeUndefined();
-    expect(await isListingMediaDeclared('demo', 'x.png', { fetch, deployed: [] })).toBeUndefined();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(await isListingMediaDeclared('../demo', file, { registry: entry({ icon: path }) })).toBeUndefined();
+    expect(await isListingMediaDeclared('demo', 'x.png', { registry: entry({ icon: path }) })).toBeUndefined();
   });
 });

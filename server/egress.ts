@@ -3,6 +3,7 @@ import { readdirSync } from 'fs';
 import { join } from 'path';
 import type { InStatement } from '@libsql/client';
 import { getClient, dbAll } from './db.js';
+import { appBackendSlugOf } from './app-backends/http.js';
 
 // Per-route egress accounting.
 //
@@ -323,9 +324,11 @@ export function registerEgressMeter(app: FastifyInstance, opts: { flush?: boolea
       const path = req.url.split('?')[0];
       const date = dayKey(Date.now());
 
-      // Forwarded app-backend requests (server/app-backends/http.ts) are metered per app,
+      // Forwarded app-backend requests (server/app-backends/http.ts, tagged per request) are metered per app,
       // not as static files. Bounded: one key per forwarded slug (registry or APP_BACKENDS).
-      const appBackend = (req as { routeOptions?: { config?: { appBackend?: unknown } } }).routeOptions?.config?.appBackend;
+      const appBackend =
+        appBackendSlugOf(req) ??
+        (req as { routeOptions?: { config?: { appBackend?: unknown } } }).routeOptions?.config?.appBackend;
       if (typeof appBackend === 'string') {
         const counted = (req as unknown as { __egressBytes?: () => number }).__egressBytes?.();
         const bytes = req.method === 'HEAD' ? 0 : (contentLengthOf(reply) || counted || 0);

@@ -2,13 +2,15 @@
  * WebSocket forwarder for app backends: claims upgrades under /projects/<slug>/api/ and pipes
  * them to <origin>/api/<rest>. The client's upgrade completes only once the upstream is open,
  * so a refused or dead upstream is answered with a plain HTTP status. Frames, ping/pong and
- * close codes pass through unchanged. App-agnostic; no module-level state.
+ * close codes pass through unchanged. App-agnostic; no module-level state. The backend list is
+ * a fixed array or a getter over the live map.
  */
 import { STATUS_CODES, type IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { Socket } from 'node:net';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
-import { buildUpstreamUrl, forwardRequestHeaders, matchAppBackend, type AppBackend } from './config.js';
+import { buildUpstreamUrl, forwardRequestHeaders, matchAppBackend } from './config.js';
+import { currentBackends, type AppBackendSource } from './http.js';
 
 export const APP_SOCKET_MAX_PAYLOAD = 64 * 1024;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 30_000;
@@ -62,7 +64,7 @@ function offeredProtocols(req: IncomingMessage): string[] {
 }
 
 export function createAppBackendUpgrade(
-  backends: readonly AppBackend[],
+  backends: AppBackendSource,
   opts: { handshakeTimeoutMs?: number } = {},
 ): AppBackendUpgrade {
   const handshakeTimeout = opts.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
@@ -117,8 +119,11 @@ export function createAppBackendUpgrade(
   }
 
   function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
-    if (backends.length === 0) return false;
-    const match = matchAppBackend(backends, req.url ?? '');
+    // Looked up per upgrade, so a live map (./live.ts) applies to the next connection; open
+    // pairs keep the upstream they were opened with.
+    const list = currentBackends(backends);
+    if (list.length === 0) return false;
+    const match = matchAppBackend(list, req.url ?? '');
     if (!match) return false;
     const { backend, rest } = match;
 

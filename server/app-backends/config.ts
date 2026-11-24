@@ -1,8 +1,8 @@
 /**
  * Pure helpers shared by the app-backend HTTP and WebSocket forwarders.
  *
- * The host forwards /projects/<slug>/api/* to an origin's /api/*. Backends come from the deployed
- * registry (static-path host.backend, https only) and from env APP_BACKENDS (a comma list of
+ * The host forwards /projects/<slug>/api/* to an origin's /api/*. Backends come from the registry
+ * snapshot (static-path host.backend, https only; see ./live.ts) and from env APP_BACKENDS (a comma list of
  * `<slug>=<https origin>`, loopback http allowed), where a valid env entry wins for its slug.
  * Apps run their own backends; bilko.run only forwards, so nothing here knows about any
  * particular app. No fs or env reads, no logging except through the warn callback.
@@ -91,7 +91,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Backends declared in the deployed registry: static-path entries with a string host.backend
+ * Backends declared in the registry: static-path entries with a string host.backend
  * that is a bare https origin. Loopback http is refused here because any sibling session can
  * write its own slug's entry. Warnings name the slug and the reason, never the origin.
  */
@@ -140,10 +140,17 @@ export function resolveAppBackends(
   envRaw: string | undefined,
   warn: (msg: string) => void = (m) => console.warn(m),
 ): ResolvedAppBackend[] {
-  const fromEnv = parseAppBackends(envRaw, warn);
+  return mergeAppBackends(parseAppBackends(envRaw, warn), appBackendsFromRegistry(registryEntries, warn));
+}
+
+/** Env entries first (they win for their slug), then registry backends for every other slug. */
+export function mergeAppBackends(
+  fromEnv: readonly AppBackend[],
+  fromRegistry: readonly AppBackend[],
+): ResolvedAppBackend[] {
   const envSlugs = new Set(fromEnv.map((b) => b.slug));
   const out: ResolvedAppBackend[] = fromEnv.map((b) => ({ ...b, source: 'env' as const }));
-  for (const b of appBackendsFromRegistry(registryEntries, warn)) {
+  for (const b of fromRegistry) {
     if (!envSlugs.has(b.slug)) out.push({ ...b, source: 'registry' });
   }
   return out;

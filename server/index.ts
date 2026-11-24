@@ -49,8 +49,7 @@ import { registerSigninCaptureRoutes } from './routes/signin-capture.js';
 import { registerProjectCatalogRoutes } from './routes/project-catalog.js';
 import { registerForumRoutes, getForumSeedHealth } from './routes/forum.js';
 import { handleUpgrade as smRelayHandleUpgrade } from './sm-relay/router.js';
-import { resolveAppBackends } from './app-backends/config.js';
-import { loadDeployedRegistry } from './app-backends/registry.js';
+import { createLiveAppBackends } from './app-backends/live.js';
 import { registerAppBackendRoutes } from './app-backends/http.js';
 import { createAppBackendUpgrade } from './app-backends/socket.js';
 import { registerRealtimeRoutes } from './routes/realtime.js';
@@ -273,20 +272,17 @@ registerSigninCaptureRoutes(app);
 registerProjectCatalogRoutes(app);
 registerForumRoutes(app);
 
-// Generic forwarding of /projects/<slug>/api/* (HTTP + WebSocket) to each app's own server,
-// built at boot from the deployed registry's static-path host.backend fields; a valid env
-// APP_BACKENDS entry overrides the registry for its slug. Neither set means nothing is forwarded.
-const appBackends = resolveAppBackends(loadDeployedRegistry(), process.env.APP_BACKENDS);
-for (const b of appBackends) {
-  console.log(`[app-backends] forwarding ${b.prefix} -> ${b.origin}/api/ (${b.source === 'env' ? 'env APP_BACKENDS' : 'registry'})`);
-}
-// Slug -> source only; origins stay out of the public health response.
-const appBackendSources: Record<string, 'registry' | 'env'> = Object.fromEntries(
-  appBackends.map((b) => [b.slug, b.source]),
-);
-registerAppBackendRoutes(app, appBackends);
-const appBackendSockets = createAppBackendUpgrade(appBackends);
-app.addHook('preClose', async () => { appBackendSockets.closeAll(); });
+// Generic forwarding of /projects/<slug>/api/* (HTTP + WebSocket) to each app's own server.
+// The map is built from the registry snapshot's static-path host.backend fields and rebuilt on
+// every registry change, so set_app_backend applies without a deploy; a valid env APP_BACKENDS
+// entry overrides the registry for its slug. Neither set means nothing is forwarded.
+const appBackends = createLiveAppBackends({ envRaw: process.env.APP_BACKENDS });
+registerAppBackendRoutes(app, appBackends.current);
+const appBackendSockets = createAppBackendUpgrade(appBackends.current);
+app.addHook('preClose', async () => {
+  appBackends.stop();
+  appBackendSockets.closeAll();
+});
 
 // Boot-time secret age check
 try {
@@ -312,7 +308,8 @@ app.get('/api/health', async () => ({
   // Hosted Git Viewer builds: token presence (never the value) + GitHub budget.
   gitViewer: getGitViewerHealth(),
   forum: getForumSeedHealth(),
-  appBackends: appBackendSources,
+  // Slug -> source of the current map; origins stay out of the public health response.
+  appBackends: appBackends.sources(),
 }));
 
 // In production, serve the Vite build
@@ -451,7 +448,7 @@ try {
   await app.listen({ port: PORT, host: '0.0.0.0' });
   // WebSocket upgrades, same-origin. Each handler claims only its own path and
   // returns false otherwise: the app-backend forwarder (/projects/<slug>/api/,
-  // from APP_BACKENDS), then the Session Manager web-remote relay, then the
+  // from the live registry map), then the Session Manager web-remote relay, then the
   // realtime input relay (/api/realtime/rooms/:roomId), then the GameRoom
   // socket (/api/rooms/socket/:roomId).
   app.server.on('upgrade', (req, socket, head) => {

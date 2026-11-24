@@ -1,10 +1,10 @@
-// The visitor-analytics report tools: traffic_report, funnel_report, flows_report and sessions_report. Siblings read
+// The visitor-analytics report tools: traffic_report, funnel_report, flows_report, sessions_report and checkout_starts_report. Siblings read
 // their funnels through these, so each one counts real visitors by default (the owner and automation left out), names
 // exactly what it excludes, and has a raw opt-out. The exclusions themselves live in the host: server/traffic-filters.ts,
 // server/routes/admin-sessions.ts, server/routes/admin-observability.ts and server/routes/admin-funnel.ts.
 // flows_report also counts prod telemetry only (env=prod) unless asked; that filter is server/routes/telemetry.ts.
 import { z } from 'zod';
-import { baseUrl, trafficReport, funnelReport, flowsReport, sessionsReport, sessionDetail, SESSION_ID_RE } from './errors-report.js';
+import { baseUrl, trafficReport, funnelReport, flowsReport, sessionsReport, sessionDetail, checkoutStartsReport, SESSION_ID_RE } from './errors-report.js';
 import { ok, err } from './tool-result.js';
 export const ADMIN_KEY = 'with the admin key (BILKO_ADMIN_KEY or ~/.config/bilko-host/admin-key)';
 const APP_SLUG = /^[a-z0-9][a-z0-9._-]{0,59}$/i;
@@ -159,6 +159,39 @@ export function registerReportTools(server) {
                 return ok(JSON.stringify({ source: baseUrl(), ...detail }, null, 2));
             }
             return ok(JSON.stringify(await sessionsReport({ days, app, limit, includeMine, includeBots, timeline }), null, 2));
+        }
+        catch (e) {
+            return err(e.message);
+        }
+    });
+    // 14) checkout_starts_report ───────────────────────────────────────────
+    server.registerTool('checkout_starts_report', {
+        title: 'Checkout starts, one row each',
+        description: `Read-only. Calls the bilko.run admin API (GET /api/admin/checkout-starts, and GET /api/admin/sessions/:id for timelines) ${ADMIN_KEY}. ` +
+            'Lists every checkout_start funnel row in the window, newest first: web-product checkouts, agent-buy /buy links and client-reported starts. ' +
+            'Each row: id, createdAt (UTC), ts, tool, source, checkoutSessionId, stripeMode, path, label, labelReasons, counted, mine, mineReasons, visitorId, sessionId, session (startedAt, landingPath, referrerHost, sourceBucket, utm*, country, device), sessionNote, visitorClasses, metadata. ' +
+            'Nothing is filtered: owner-flagged (is_admin) rows are listed with counted: false and their mine marks, and automated rows with label: automated and their labelReasons (ua, visitor_bot_view, session_bot_view). ' +
+            "label is the host's human/automated/unlabeled split; unlabeled means the start predates labels (window.labelsSince). " +
+            'counted is false only for owner-flagged rows, which the host counts leave out. Counted rows grouped by label equal totals.counted, which equals the human/automated/unlabeled numbers the host reports as checkout starts (GET /api/admin/web-products checkoutStartsAll); totals.all includes the owner-flagged rows. ' +
+            "mine marks a start as likely the owner's (mineReasons: owner_ip, internal_marker, owner_device, admin_session) and never changes its label or count. " +
+            'A start with no session says why in sessionNote. ' +
+            "timeline: true adds each start's session timeline (at most 50 distinct sessions, each fetched once, 5 at a time); a start without a session id, with a legacy non-UUID id, beyond the cap or whose session the host no longer has gets timeline: [] and a timeline_note. " +
+            'Never returns an email: fields are allowlisted, metadata loses every key that names an email or is an email address, at any depth, and an email address inside any string becomes [email]. ' +
+            SOURCE,
+        inputSchema: {
+            days: z.number().int().min(1).max(90).default(7).describe('Window in days (1-90). Default 7.'),
+            limit: z
+                .number()
+                .int()
+                .min(1)
+                .max(1000)
+                .optional()
+                .describe('Max starts listed, newest first (1-1000; host default applies when omitted). truncated says whether rows were cut.'),
+            timeline: z.boolean().default(false).describe("Add each start's session timeline (at most 50 distinct sessions). Default false."),
+        },
+    }, async ({ days, limit, timeline }) => {
+        try {
+            return ok(JSON.stringify(await checkoutStartsReport({ days, limit, timeline }), null, 2));
         }
         catch (e) {
             return err(e.message);

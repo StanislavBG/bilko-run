@@ -428,3 +428,100 @@ export async function sessionsReport(opts: {
   const report = { source: baseUrl(), filters: filtersEcho(b), count: sessions.length, sessions };
   return scrubEmails(report) as Record<string, unknown>;
 }
+
+const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+// The nine session keys GET /api/admin/checkout-starts sends per start.
+const CHECKOUT_SESSION_FIELDS = [
+  'startedAt', 'landingPath', 'referrerHost', 'sourceBucket', 'utmSource', 'utmMedium', 'utmCampaign', 'country', 'device',
+] as const;
+
+function pickCheckoutSession(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object') return null;
+  const s = v as Record<string, unknown>;
+  return Object.fromEntries(CHECKOUT_SESSION_FIELDS.map((k) => [k, s[k] ?? null]));
+}
+
+/** One checkout start reduced to the host's documented fields; unknown keys are dropped. */
+function pickCheckoutStart(r: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: num(r.id),
+    createdAt: str(r.createdAt),
+    ts: numOrNull(r.ts),
+    tool: str(r.tool),
+    source: str(r.source),
+    checkoutSessionId: str(r.checkoutSessionId),
+    stripeMode: str(r.stripeMode),
+    path: str(r.path),
+    label: str(r.label),
+    labelReasons: strs(r.labelReasons),
+    counted: r.counted === true,
+    mine: r.mine === true,
+    mineReasons: strs(r.mineReasons),
+    visitorId: str(r.visitorId),
+    sessionId: str(r.sessionId),
+    session: pickCheckoutSession(r.session),
+    sessionNote: str(r.sessionNote),
+    visitorClasses: strs(r.visitorClasses),
+    metadata: r.metadata ?? null,
+  };
+}
+
+const labelSplit = (v: unknown) => {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  return { human: num(o.human), automated: num(o.automated), unlabeled: num(o.unlabeled) };
+};
+
+/**
+ * GET /api/admin/checkout-starts as allowlisted rows with no email. Every start in the window is returned: owner-flagged
+ * and automated rows are marked by the host (counted, mine, label), never filtered here. With `timeline`, each start's
+ * session timeline is attached (at most 50 distinct sessions, each fetched once, 5 at a time).
+ */
+export async function checkoutStartsReport(opts: {
+  days?: number;
+  limit?: number;
+  timeline?: boolean;
+}): Promise<Record<string, unknown>> {
+  const p = new URLSearchParams();
+  p.set('days', String(opts.days ?? 7));
+  if (opts.limit !== undefined) p.set('limit', String(opts.limit));
+  const body = await adminGet(`/api/admin/checkout-starts?${p.toString()}`);
+  if (!body) {
+    throw new Error(
+      'bilko.run returned 404 for /api/admin/checkout-starts (the host predates checkout_starts_report; deploy the host first)',
+    );
+  }
+  const b = (typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const window = { days: num(b.days), since: str(b.since), labelsSince: str(b.labelsSince) };
+  const t = b.totals && typeof b.totals === 'object' ? (b.totals as Record<string, unknown>) : null;
+  const totals = t && {
+    counted: labelSplit(t.counted),
+    all: labelSplit(t.all),
+    starts: num(t.starts),
+    ownerFlagged: num(t.ownerFlagged),
+  };
+  let starts: Record<string, unknown>[] = rows(b.starts).map(pickCheckoutStart);
+  if (opts.timeline) {
+    // Distinct UUID session ids in list order; a session shared by several starts is fetched once.
+    const ids = new Set<string>();
+    for (const s of starts) if (typeof s.sessionId === 'string' && SESSION_ID_RE.test(s.sessionId)) ids.add(s.sessionId);
+    const fetched = [...ids].slice(0, TIMELINE_SESSION_CAP);
+    const details = await mapLimit(fetched, TIMELINE_CONCURRENCY, readSession);
+    const byId = new Map(fetched.map((id, i) => [id, details[i]]));
+    starts = starts.map((s) => {
+      const id = s.sessionId;
+      if (typeof id !== 'string' || !id) return { ...s, timeline: [], timeline_note: 'no session id recorded on this start' };
+      if (!SESSION_ID_RE.test(id)) {
+        return { ...s, timeline: [], timeline_note: 'timeline unavailable: legacy session id is not a UUID' };
+      }
+      if (!byId.has(id)) {
+        return { ...s, timeline: [], timeline_note: `timeline unavailable: more than ${TIMELINE_SESSION_CAP} sessions listed` };
+      }
+      const d = byId.get(id);
+      return d ? { ...s, timeline: d.timeline } : { ...s, timeline: [], timeline_note: 'timeline unavailable: host returned 404' };
+    });
+  }
+  const report = { source: baseUrl(), window, totals, listed: num(b.listed), truncated: b.truncated === true, starts };
+  return scrubEmails(report) as Record<string, unknown>;
+}

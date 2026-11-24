@@ -625,7 +625,7 @@ Every static-path publish runs six gates in order, against `distPath` (and `sour
 |---|---|---|
 | `manifest` | `manifest.json` exists at the bundle root, parses, validates against the Zod schema, and its `slug` matches the registered slug | **No — never bypassable** |
 | `budget` | Measures the real gzipped size of every file under `distPath` (fresh, not the manifest's self-reported number) and reports it; see "Bundle size" for the one way it fails. A declared `listing.icon`/`listing.shareImage`/`listing.video` that passes the `share-assets` checks is left out of the sum | `budget` |
-| `golden` | `tests/golden.spec.ts` exists in `sourceRepoPath` and passes under `pnpm exec playwright test` (template: see below) | `golden` |
+| `golden` | The nearest `tests/golden.spec.ts`, looking first in the folder that holds `distPath` and then in each parent folder up to `sourceRepoPath` (never above it), passes under Playwright run from the folder where the spec was found: that folder's `node_modules/.bin/playwright` if present, otherwise `pnpm exec playwright` (template: see below) | `golden` |
 | `a11y` | axe-core scan of `manifest.golden.path`, served from a local static server over the staged bundle, finds zero `serious`/`critical` violations | `a11y` |
 | `audit` | `pnpm audit --prod --audit-level=high --json` run in `sourceRepoPath` (`npm audit --omit=dev --audit-level=high --json` instead when the repo has a `package-lock.json` and no `pnpm-lock.yaml`); the gate reads vulnerability counts from the JSON output regardless of the process's exit code, and fails if `high + critical > 0` | `audit` |
 | `share-assets` | Each declared `listing.icon`/`listing.shareImage` is in the bundle, is a PNG, and has the right size and byte cap (see "Custom share image"). A declared `listing.video` is in the bundle, has an MP4 (`ftyp`) or WebM (EBML) signature matching its extension, and is ≤8 MB (see "Card video") | **No** |
@@ -638,11 +638,11 @@ Every file under `distPath` ships, and the publish never force-adds a file the h
 
 ### Golden spec template
 
-Copy the golden spec template named in the gate's error message to `tests/golden.spec.ts` in your repo.
+Copy the golden spec template named in the gate's error message to `tests/golden.spec.ts` in the folder that holds your app's `dist/`, or in any parent folder up to the repo root. An app in a subfolder (for example `web/remote-app/dist`) can keep its spec at `web/remote-app/tests/golden.spec.ts`; a spec at the repo root also works. The gate uses the nearest spec and runs Playwright from that folder. When none is found, the error lists every folder it checked.
 
 ### `sourceRepoPath` requirement
 
-`sourceRepoPath` is the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`) and is needed by the `golden` and `audit` gates to locate `tests/golden.spec.ts` and run `pnpm audit`. Pass it on every publish call — without it, both gates fail outright (and both are in the default, non-bypassed set), so in practice a publish cannot clear the gate without it unless you explicitly bypass `golden` and `audit`.
+`sourceRepoPath` is the sibling repo root (e.g. `"/home/bilko/Projects/Stack-Audit"`) and is needed by the `golden` and `audit` gates: it is the top folder the `golden` gate searches for `tests/golden.spec.ts`, and where `audit` runs `pnpm audit`. Pass it on every publish call — without it, both gates fail outright (and both are in the default, non-bypassed set), so in practice a publish cannot clear the gate without it unless you explicitly bypass `golden` and `audit`.
 
 ### Bypassing a gate
 

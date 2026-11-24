@@ -263,7 +263,7 @@ describe('goldenGate', () => {
     const result = await goldenGate(ctx);
     expect(result.status).toBe('fail');
     expect(result.details).toBe(
-      'tests/golden.spec.ts missing in /tmp/fake-repo. Copy the template from '
+      'tests/golden.spec.ts missing; checked: /tmp/fake-repo. Copy the template from '
       + 'https://github.com/StanislavBG/bilko-run/blob/main/packages/host-kit/src/testing/golden.template.ts.',
     );
     expect(result.details).not.toContain('golden.template.ts.txt');
@@ -275,7 +275,7 @@ describe('goldenGate', () => {
     const ctx = makeCtx({ sourceRepo: '/tmp/fake-repo' });
     const result = await goldenGate(ctx);
     expect(result.status).toBe('pass');
-    expect(result.details).toBe('golden.spec.ts green');
+    expect(result.details).toBe('/tmp/fake-repo/tests/golden.spec.ts green');
   });
 
   it('fail: playwright test exits non-zero', async () => {

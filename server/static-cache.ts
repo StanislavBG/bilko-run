@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { readdirSync, readFileSync, statSync, utimesSync } from 'fs';
-import { extname, join, sep } from 'path';
+import { extname, join, posix, sep } from 'path';
 
 /**
  * Static-asset caching policy for the dist tree.
@@ -248,6 +248,69 @@ export function registerStaticCorsTrim(app: {
 
     // Keep every other Vary dimension — notably Accept-Encoding, which
     // @fastify/compress adds and which Cloudflare does honour.
+    const kept = String(reply.getHeader('vary') ?? '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(v => v.length > 0 && v.toLowerCase() !== 'origin');
+    if (kept.length > 0) reply.header('vary', kept.join(', '));
+    else reply.removeHeader('vary');
+
+    return payload;
+  });
+}
+
+/**
+ * Static path prefixes that third-party sites load cross-origin.
+ *
+ * Session Manager's embeddable feedback widget lives inside its own static
+ * bundle. Other sites load its script with SRI and its self-hosted fonts, both
+ * CORS requests, so every response under the prefix must carry
+ * `Access-Control-Allow-Origin: *` whatever the request Origin. A fixed `*`
+ * (no credentials, no `Vary: Origin`) also lets one cached copy serve every
+ * site. Sanctioned app-specific host code: see docs/host-internals.md.
+ */
+export const CROSS_ORIGIN_ASSET_PREFIXES: readonly string[] = ['/projects/session-manager/widget/'];
+
+/** Percent-decoded, dot-normalized path of a request URL, or null if malformed. */
+function normalizedRequestPath(url: string): string | null {
+  const raw = url.split('?')[0].split('#')[0];
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  if (decoded.includes('\0')) return null;
+  return posix.normalize(decoded);
+}
+
+/** True when a request URL falls under one of CROSS_ORIGIN_ASSET_PREFIXES. */
+export function isCrossOriginAssetPath(url: string): boolean {
+  const path = normalizedRequestPath(url);
+  if (path === null) return false;
+  return CROSS_ORIGIN_ASSET_PREFIXES.some(prefix => path.startsWith(prefix));
+}
+
+/**
+ * Open CROSS_ORIGIN_ASSET_PREFIXES to every origin.
+ *
+ * Registered after `@fastify/cors` and `registerStaticCorsTrim`, so its onSend
+ * hook runs last of the three and overrides both: whatever they set or
+ * stripped, a GET or HEAD under a prefix leaves with
+ * `Access-Control-Allow-Origin: *`, no `Access-Control-Allow-Credentials`
+ * (browsers reject `*` with credentials) and no `Origin` in `Vary`, on 200,
+ * 304 and 404 alike.
+ */
+export function registerCrossOriginAssetCors(app: {
+  addHook(name: 'onSend', fn: (req: any, reply: any, payload: any) => Promise<any>): unknown;
+}): void {
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return payload;
+    if (!isCrossOriginAssetPath(String(req.url ?? ''))) return payload;
+
+    reply.header('access-control-allow-origin', '*');
+    reply.removeHeader('access-control-allow-credentials');
+
     const kept = String(reply.getHeader('vary') ?? '')
       .split(',')
       .map(v => v.trim())

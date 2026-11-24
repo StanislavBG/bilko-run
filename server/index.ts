@@ -66,7 +66,7 @@ import { registerProjectsHubRoutes } from './projects-hub.js';
 import { registerExternalProjectRedirects } from './external-project-redirects.js';
 import { PROJECTS } from '../src/data/projectsRegistry.js';
 import { registerBilkoProfileRoutes } from './bilko-profile-routes.js';
-import { normalizeStaticMtimes, registerEncodingVary, registerStaticCorsTrim, registerVersionedMediaCache, setStaticCacheHeaders } from './static-cache.js';
+import { normalizeStaticMtimes, registerCrossOriginAssetCors, registerEncodingVary, registerStaticCorsTrim, registerVersionedMediaCache, setStaticCacheHeaders } from './static-cache.js';
 import { createShutdown, drainWindowMs } from './shutdown.js';
 import { registerEgressMeter, setStaticKnownSlugs } from './egress.js';
 import { registerPageHitRecorder } from './page-hits.js';
@@ -163,6 +163,9 @@ registerListingMediaRoutes(app);
 // Versioned card videos (?v=<sha1>) go immutable first, so the trim sees `public`.
 registerVersionedMediaCache(app);
 registerStaticCorsTrim(app);
+// Session Manager's embeddable widget (CROSS_ORIGIN_ASSET_PREFIXES) is loaded
+// cross-origin by third-party sites: after cors and the trim, force ACAO: *.
+registerCrossOriginAssetCors(app);
 
 // Origin-side response compression. Render bills origin egress, and
 // Cloudflare's edge compression only shrinks what the origin already paid to

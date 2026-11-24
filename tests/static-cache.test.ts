@@ -14,6 +14,8 @@ import {
   registerStaticCorsTrim,
   registerVersionedMediaCache,
   versionedMediaCacheControl,
+  registerCrossOriginAssetCors,
+  CROSS_ORIGIN_ASSET_PREFIXES,
 } from '../server/static-cache.js';
 
 function makeTree(): string {
@@ -330,5 +332,159 @@ describe('versioned card video responses', () => {
     const res = await app.inject({ method: 'GET', url: '/projects/demo/tile.mp4' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('public, max-age=86400');
+  });
+});
+
+describe('cross-origin widget assets', () => {
+  const PROD_ORIGINS = [
+    'https://bilko.run',
+    'https://www.bilko.run',
+    'https://clerk.bilko.run',
+    'https://accounts.bilko.run',
+  ];
+  let app: Awaited<ReturnType<typeof Fastify>>;
+
+  beforeAll(async () => {
+    const root = makeTree();
+    const sm = join(root, 'projects', 'session-manager');
+    mkdirSync(join(sm, 'widget', 'v1'), { recursive: true });
+    mkdirSync(join(sm, 'widgetx'), { recursive: true });
+    mkdirSync(join(sm, 'assets'), { recursive: true });
+    mkdirSync(join(root, 'projects', 'threewinds'), { recursive: true });
+    writeFileSync(join(sm, 'index.html'), '<html><body>sm</body></html>');
+    writeFileSync(join(sm, 'assets', 'app.js'), 'console.log("sm")');
+    writeFileSync(join(sm, 'widget', 'v1', 'feedback.js'), 'console.log("widget")');
+    writeFileSync(join(sm, 'widget', 'v1', 'inter.woff2'), Buffer.from([0x77, 0x4f, 0x46, 0x32]));
+    writeFileSync(join(sm, 'widgetx', 'a.js'), 'console.log("x")');
+    writeFileSync(join(root, 'projects', 'threewinds', 'x.js'), 'console.log("tw")');
+    normalizeStaticMtimes(root);
+
+    // Same order as server/index.ts: cors → versioned media → trim → widget CORS → static.
+    app = Fastify({ logger: false });
+    await app.register(cors, { origin: PROD_ORIGINS, credentials: true });
+    registerVersionedMediaCache(app);
+    registerStaticCorsTrim(app);
+    registerCrossOriginAssetCors(app);
+    await app.register(staticPlugin, {
+      root,
+      prefix: '/',
+      cacheControl: false,
+      setHeaders: (res, path) => setStaticCacheHeaders(res, path),
+      redirect: true,
+    });
+    await app.ready();
+  });
+
+  it('exports the Session Manager widget prefix only', () => {
+    expect(CROSS_ORIGIN_ASSET_PREFIXES).toEqual(['/projects/session-manager/widget/']);
+  });
+
+  const ORIGINS: Array<string | undefined> = [undefined, 'https://example.com', 'https://bilko.run'];
+  const WIDGET_FILES = [
+    '/projects/session-manager/widget/v1/feedback.js',
+    '/projects/session-manager/widget/v1/inter.woff2',
+  ];
+
+  function expectOpen(res: { headers: Record<string, unknown> }) {
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+    expect(String(res.headers.vary ?? '')).not.toMatch(/origin/i);
+  }
+
+  for (const origin of ORIGINS) {
+    const headers = origin ? { origin } : {};
+    const label = origin ?? 'no Origin';
+
+    for (const url of WIDGET_FILES) {
+      it(`serves ${url} with ACAO * on 200 and 304 (${label})`, async () => {
+        const first = await app.inject({ method: 'GET', url, headers });
+        expect(first.statusCode).toBe(200);
+        expectOpen(first);
+
+        const head = await app.inject({ method: 'HEAD', url, headers });
+        expect(head.statusCode).toBe(200);
+        expectOpen(head);
+
+        const etag = first.headers.etag as string;
+        expect(etag).toBeTruthy();
+        const second = await app.inject({
+          method: 'GET',
+          url,
+          headers: { ...headers, 'if-none-match': etag },
+        });
+        expect(second.statusCode).toBe(304);
+        expectOpen(second);
+      });
+    }
+
+    it(`serves a missing widget file with ACAO * on 404 (${label})`, async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/projects/session-manager/widget/v1/missing.js',
+        headers,
+      });
+      expect(res.statusCode).toBe(404);
+      expectOpen(res);
+    });
+
+    it(`matches a percent-encoded widget path (${label})`, async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/projects/session-manager/%77idget/v1/feedback.js',
+        headers,
+      });
+      expectOpen(res);
+    });
+
+    for (const url of [
+      '/projects/session-manager/',
+      '/projects/session-manager/index.html',
+      '/projects/session-manager/assets/app.js',
+      '/projects/session-manager/widget',
+      '/projects/session-manager/widgetx/a.js',
+      '/projects/threewinds/x.js',
+      '/projects/session-manager/widget/../index.html',
+      '/projects/session-manager/widget/%2e%2e/index.html',
+    ]) {
+      it(`leaves ${url} unchanged (${label})`, async () => {
+        const res = await app.inject({ method: 'GET', url, headers });
+        expect(res.headers['access-control-allow-origin']).not.toBe('*');
+        if (origin === 'https://bilko.run') {
+          expect(res.headers['access-control-allow-origin']).toBe('https://bilko.run');
+          expect(String(res.headers.vary ?? '')).toMatch(/origin/i);
+        } else {
+          expect(res.headers['access-control-allow-origin']).toBeUndefined();
+        }
+      });
+    }
+  }
+
+  it('keeps other Vary values while dropping Origin', async () => {
+    const app2 = Fastify({ logger: false });
+    await app2.register(cors, { origin: PROD_ORIGINS, credentials: true });
+    registerStaticCorsTrim(app2);
+    registerCrossOriginAssetCors(app2);
+    app2.get('/projects/session-manager/widget/v1/x.js', async (_req, reply) => {
+      reply.header('cache-control', 'public, max-age=600');
+      reply.header('vary', 'Origin, Accept-Encoding');
+      return reply.type('text/javascript').send('1');
+    });
+    await app2.ready();
+    const res = await app2.inject({
+      method: 'GET',
+      url: '/projects/session-manager/widget/v1/x.js',
+      headers: { origin: 'https://example.com' },
+    });
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.headers.vary).toBe('Accept-Encoding');
+  });
+
+  it('does not open non-GET/HEAD methods', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/projects/session-manager/widget/v1/feedback.js',
+      headers: { origin: 'https://example.com' },
+    });
+    expect(res.headers['access-control-allow-origin']).not.toBe('*');
   });
 });

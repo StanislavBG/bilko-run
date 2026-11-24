@@ -9,6 +9,7 @@ This document defines the contract: what the host provides, what an app must imp
 - [The three host kinds](#the-three-host-kinds)
 - [What the host provides](#what-the-host-provides)
 - [What an app must implement](#what-an-app-must-implement)
+- [Where an app keeps its state](#where-an-app-keeps-its-state)
 - [App backends (forwarding)](#app-backends-forwarding)
 - [Registry rules](#registry-rules)
 - [Project listing — who owns what](#project-listing--who-owns-what)
@@ -102,6 +103,22 @@ A `react-route` app's page, route and server file: ~/Projects/Bilko/docs/host-in
 ### `external-url` apps
 
 - Just the URL (`https://` only). Register it with the MCP's `register_external_project` (see below). There is no bundle, so `publish_static_project` refuses external-url slugs.
+
+## Where an app keeps its state
+
+Pick the option that fits; each line links to the section that defines it.
+
+- **The browser** (`localStorage`, `sessionStorage`, IndexedDB, cookies): see the shared-origin rule below.
+- **Per-user save state**: `/api/games/:slug/save` through host-kit's `useSaveState`, at most 32 KB per user per slug, any slug, versioned. See [Game services](#game-services).
+- **Leaderboards and unlocks**: registered games only. See [Game services](#game-services).
+- **Project data snapshot** and the **append-only event stream** (`POST /api/projects/:slug/events`, read at `/projects/:slug/data-events.ndjson`): both written only by the owner's publisher token. See [Project data snapshot](#project-data-snapshot).
+- **Your own backend**: for anything larger, relational or shared between users. The app owns its data. See [App backends (forwarding)](#app-backends-forwarding).
+- **Authoritative game rooms**: table state is saved on every move and survives a deploy. See [Authoritative game rooms](#authoritative-game-rooms).
+- **Realtime relay and lobby directory**: memory only, lost on a deploy or spin-down. See [Realtime relay](#realtime-relay).
+
+**Browser storage is shared.** Every static-path app is served from the one `https://bilko.run` origin, so `localStorage`, `sessionStorage`, IndexedDB and cookies are shared with every other app and with the host's own pages (the host itself keeps `bilko_vid` there: ~/Projects/Bilko/docs/observability.md). Prefix every key with your slug, assume other apps can read it, and keep tokens and secrets out of it.
+
+**The host has one database.** bilko.run has one database, the host's (Turso in production). Game saves, scores, unlocks, rooms and play currency are shared tables in it, keyed by slug. An app reaches them only through the host endpoints above; it cannot query or extend them. Nothing an app writes to the server's disk or memory survives a deploy.
 
 ## App backends (forwarding)
 

@@ -234,6 +234,7 @@ export function collectHttpsLinks(markdown: string): string[] {
 export async function checkLiveLinks(
   urls: string[],
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = 15_000,
 ): Promise<LiveLinkFailure[]> {
   const uniqueUrls = [...new Set(urls)];
   const failures: LiveLinkFailure[] = [];
@@ -244,7 +245,7 @@ export async function checkLiveLinks(
 
   for (const url of uniqueUrls) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetchImpl(url, {
         method: 'GET',

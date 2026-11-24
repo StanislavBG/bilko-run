@@ -281,14 +281,16 @@ describe('checkLiveLinks', () => {
       new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
       });
-    vi.useFakeTimers();
-    try {
-      const pending = checkLiveLinks(['https://example.com/slow'], fake as unknown as typeof fetch);
-      await vi.advanceTimersByTimeAsync(15_000);
-      expect(await pending).toEqual([{ url: 'https://example.com/slow', status: 'error' }]);
-    } finally {
-      vi.useRealTimers();
-    }
+    // Real timers and a short real timeout: vitest shares one fake-timer
+    // instance across files in the single fork, so a file that leaves
+    // fake timers installed would make vi.useFakeTimers() here a no-op.
+    vi.useRealTimers();
+    const failures = await checkLiveLinks(
+      ['https://example.com/slow'],
+      fake as unknown as typeof fetch,
+      50,
+    );
+    expect(failures).toEqual([{ url: 'https://example.com/slow', status: 'error' }]);
   });
 
   it('fetches a duplicate URL only once', async () => {

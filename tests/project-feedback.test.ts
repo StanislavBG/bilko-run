@@ -357,6 +357,7 @@ describe('images=none', () => {
       description: 'Test description',
       target: { kind: 'component', id: 'equity-curve', label: null },
       client: null,
+      context: null,
       snapshotGeneratedAt: null,
       parentId: null,
       moderation: null,
@@ -628,3 +629,109 @@ interface Item {
 function pullItems(res: { json: () => unknown }): Item[] {
   return (res.json() as { items: Item[] }).items;
 }
+
+describe('context field', () => {
+  it('stores a plain object and returns it deep-equal on GET', async () => {
+    const context = {
+      app: 'session-manager',
+      version: '0.140.0',
+      nested: { list: [1, 'two', { three: true }], nil: null, unicode: 'héllo ✓' },
+    };
+    const res = await submit({ context, title: 'With context' });
+    expect(res.statusCode).toBe(201);
+    const item = pullItems(await pull()).find((i) => i.id === res.json().id);
+    expect(item.context).toEqual(context);
+  });
+
+  it('returns null when no context was sent', async () => {
+    const res = await submit({});
+    expect(pullItems(await pull())[0].context).toBeNull();
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('rejects a context that is not a plain JSON object, storing nothing', async () => {
+    for (const context of [[1, 2], 'text', 42, true]) {
+      const res = await submit({ context });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('context must be a JSON object');
+    }
+    const nullRes = await submit({ context: null });
+    expect(nullRes.statusCode).toBe(400);
+    expect(pullItems(await pull())).toHaveLength(0);
+  });
+
+  it('accepts exactly 262144 UTF-8 bytes and refuses one more with 413', async () => {
+    const MAX = 262_144;
+    // '{"k":""}' is 8 bytes; 'é' is 2 UTF-8 bytes, so pad with multi-byte chars.
+    const overhead = Buffer.byteLength('{"k":""}', 'utf8');
+    // n UTF-8 bytes, mostly 2-byte chars plus a 1-byte tail to hit n exactly.
+    const filler = (n: number) => 'é'.repeat(Math.floor(n / 2)) + 'a'.repeat(n % 2);
+    const atCap = { k: filler(MAX - overhead) };
+    expect(Buffer.byteLength(JSON.stringify(atCap), 'utf8')).toBe(MAX);
+    const ok = await submit({ context: atCap });
+    expect(ok.statusCode).toBe(201);
+    expect(pullItems(await pull()).find((i) => i.id === ok.json().id).context).toEqual(atCap);
+
+    const over = { k: filler(MAX - overhead + 1) };
+    expect(Buffer.byteLength(JSON.stringify(over), 'utf8')).toBe(MAX + 1);
+    // The string is shorter than MAX in chars, so only a byte count catches it.
+    expect(JSON.stringify(over).length).toBeLessThan(MAX);
+    const big = await submit({ context: over });
+    expect(big.statusCode).toBe(413);
+    expect(big.json().error).toBe('context too large (max 262144 bytes)');
+  });
+
+  it('is never returned by the public status lookup', async () => {
+    const a = (await submit({ context: { secret: 'ctx-marker-xyz' } })).json() as { id: string; receipt: string };
+    const res = await lookup({ items: [a] });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().items).toHaveLength(1);
+    expect(res.payload).not.toContain('ctx-marker-xyz');
+    expect(res.json().items[0]).not.toHaveProperty('context');
+  });
+});
+
+describe('description cap', () => {
+  it('takes a 5000-char description and refuses 5001', async () => {
+    expect((await submit({ description: 'x'.repeat(5000) })).statusCode).toBe(201);
+    const res = await submit({ description: 'x'.repeat(5001) });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('5000');
+  });
+});
+
+describe('client field', () => {
+  it('stores a client under 4000 chars and returns it', async () => {
+    const client = { ua: 'test', w: 1280 };
+    await submit({ client });
+    expect(pullItems(await pull())[0].client).toEqual(client);
+  });
+
+  it('stores a client over 4000 chars as NULL, not a truncated prefix', async () => {
+    const res = await submit({ client: { ua: 'x'.repeat(5000) } });
+    expect(res.statusCode).toBe(201);
+    const row = await dbGet<{ client_json: string | null }>(
+      'SELECT client_json FROM project_feedback WHERE id = ?', res.json().id,
+    );
+    expect(row?.client_json).toBeNull();
+    expect(pullItems(await pull())[0].client).toBeNull();
+  });
+
+  it('an unparsable stored client_json or context_json no longer breaks the GET', async () => {
+    const bad = (await submit({ title: 'Broken' })).json().id as string;
+    const good = (await submit({ title: 'Fine', client: { ok: 1 }, context: { ok: 2 } })).json().id as string;
+    await dbRun(
+      'UPDATE project_feedback SET client_json = ?, context_json = ? WHERE id = ?',
+      '{"ua":"truncated', '{"half":', bad,
+    );
+    const res = await pull();
+    expect(res.statusCode).toBe(200);
+    const items = pullItems(res);
+    const b = items.find((i) => i.id === bad);
+    expect(b.client).toBeNull();
+    expect(b.context).toBeNull();
+    const g = items.find((i) => i.id === good);
+    expect(g.client).toEqual({ ok: 1 });
+    expect(g.context).toEqual({ ok: 2 });
+  });
+});

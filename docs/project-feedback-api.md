@@ -38,11 +38,12 @@ Body:
 | `target.label` | no | ≤ 200 chars |
 | `type` | yes | one of `bug`, `feature`, `feedback` |
 | `title` | yes | ≤ 120 chars |
-| `description` | yes | ≤ 4 000 chars |
+| `description` | yes | ≤ 5 000 chars |
 | `route` | no | ≤ 200 chars |
 | `images` | no | 1–5 `{ dataUrl, mime? }`, in order. Each `dataUrl` is base64 `data:image/(png\|jpeg\|webp\|gif)`, ≤ 2,000,000 chars; all together ≤ 8,000,000 chars |
 | `image.dataUrl` | no | legacy single screenshot, same rules; read only when `images` is absent, `null` or empty |
-| `client` | no | arbitrary object, JSON-stringified and truncated to 4 000 chars |
+| `client` | no | arbitrary object; stored only when its JSON is ≤ 4 000 chars, otherwise dropped (stored as `null`), never truncated |
+| `context` | no | **opaque plain JSON object** (not an array, string, number or `null`), its JSON ≤ 262 144 UTF-8 bytes; stored and returned verbatim on the authed GET |
 | `snapshotGeneratedAt` | no | string |
 | `parentId` | no | **opaque threading pointer, ≤ 200 chars** |
 
@@ -51,10 +52,16 @@ entry without a valid data URL → `400` (the error names the entry, e.g. `image
 one image over 2,000,000 chars or a total over 8,000,000 → `413`. The stored `mime` is
 the type the data URL declares; a client's `mime` is not used.
 
+A `context` that is present but not a plain object → `400 'context must be a JSON
+object'`; one whose `JSON.stringify` exceeds 262 144 UTF-8 bytes → `413 'context too
+large (max 262144 bytes)'`. Neither stores anything.
+
 The route validates field-by-field and does **not** persist unknown keys — anything
-not listed above is dropped. `parentId` is the one deliberate exception to
-interpretation: it is stored verbatim, echoed back unchanged, never resolved or
-validated against an existing row. A dangling value is the reading client's problem.
+not listed above is dropped. `parentId` and `context` are the deliberate exceptions to
+interpretation: they are stored verbatim and echoed back unchanged. `parentId` is never
+resolved or validated against an existing row; a dangling value is the reading client's
+problem. `context`'s contents are never parsed or validated beyond the shape and size
+checks above.
 
 → `201 {"id", "parentId", "receivedAt", "receipt", "imageCount"}`. `imageCount` is the
 number of screenshots stored (0 when none were sent); a client can treat a missing
@@ -75,7 +82,7 @@ nulls every `dataUrl`, and never reads a screenshot out of the database. A submi
 carries up to 5 screenshots, so keep `limit` small on pulls that include images.
 
 Each item carries `id`, `receivedAt`, `target`, `route`, `type`, `title`,
-`description`, `image`, `images`, `client`, `snapshotGeneratedAt`, plus:
+`description`, `image`, `images`, `client`, `context`, `snapshotGeneratedAt`, plus:
 
 ```jsonc
 "image": { "dataUrl": "data:image/png;base64,…" | null, "mime": "image/png", "bytes": 123456 } | null,
@@ -84,6 +91,10 @@ Each item carries `id`, `receivedAt`, `target`, `route`, `type`, `title`,
 "moderation": { "action": "archived" | "deleted", "at": "<ISO>", "reason": "..." } | null,
 "status": { "value": "open" | "in_progress" | "resolved" | "wontfix", "note": "..." | null, "at": "<ISO>" | null }
 ```
+
+`context` is deep-equal to the object that was posted, or `null` when none was sent.
+`client` and `context` read as `null` when the stored value does not parse as JSON,
+so one bad row never fails the pull.
 
 `image` is the first screenshot, for readers that read only `image`, so with images
 included its `dataUrl` is sent twice (once in `images[0]`).
@@ -137,7 +148,7 @@ resolved. A change re-surfaces the row through the `moderatedSince` cursor.
 
 The receipt is the credential. Anything that doesn't match (unknown id, another slug,
 wrong receipt, a row filed before receipts existed) is left out without a trace, and
-no title, description or client field is ever returned. 10 lookups/min/IP, in a
+no title, description, client or context field is ever returned. 10 lookups/min/IP, in a
 separate bucket from submissions.
 
 ## Measuring what this costs

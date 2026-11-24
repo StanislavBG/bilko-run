@@ -944,6 +944,8 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
     ['status_note', 'TEXT'],
     ['status_at', 'INTEGER'],
     ['receipt_hash', 'TEXT'],
+    // The submitter's opaque `context` object, JSON, returned verbatim on the authed GET.
+    ['context_json', 'TEXT'],
   ],
   // Stripe play-pack purchases keep the PaymentIntent id so a refund or dispute event finds its credit.
   play_purchases: [

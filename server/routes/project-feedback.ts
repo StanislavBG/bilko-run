@@ -36,7 +36,7 @@ import { bearerMatches } from '../bearer.js';
 //
 // The lookup returns ONLY rows whose receipt hash matches for that slug, and
 // silently omits everything else — it never reveals whether an id exists and
-// never returns title/description/client fields. Rows filed before receipts
+// never returns title/description/client/context fields. Rows filed before receipts
 // existed have no hash and are simply never returned. GET items carry
 // `status: { value, note, at }`, and a status change re-surfaces a row through
 // the same `moderatedSince` cursor as moderation does.
@@ -80,7 +80,13 @@ const MAX_STATUS_NOTE = 500;
 const MAX_LOOKUP_ITEMS = 100;
 
 const MAX_TITLE = 120;
-const MAX_DESCRIPTION = 4_000;
+const MAX_DESCRIPTION = 5_000;
+// `client` is stored only when its JSON fits; a longer one is dropped (NULL),
+// never cut, because a cut prefix is not JSON.
+const MAX_CLIENT_JSON = 4_000;
+// `context` is the caller's own opaque object (Session Manager's app
+// feedback). Stored and returned verbatim; capped in UTF-8 bytes of its JSON.
+const MAX_CONTEXT_BYTES = 262_144;
 const MAX_LABEL = 200;
 const MAX_ID = 200;
 const MAX_ROUTE = 200;
@@ -118,6 +124,18 @@ function sha256Hex(s: string): string {
 
 function isoOrNull(sec: number | null): string | null {
   return sec ? new Date(sec * 1000).toISOString() : null;
+}
+
+// A stored JSON column read back for the GET. A value that does not parse
+// (e.g. a row written before the client cap stopped truncating) reads as null
+// instead of failing the whole inbox read.
+function parseStoredJson(s: string | null): unknown {
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
 }
 
 function str(v: unknown, max: number): string | null {
@@ -213,6 +231,7 @@ interface FeedbackRow {
   image_data: string | null;
   image_len: number | null;
   client_json: string | null;
+  context_json: string | null;
   snapshot_generated_at: string | null;
   created_at: number;
   parent_id: string | null;
@@ -255,6 +274,20 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
     const description = str(body.description, MAX_DESCRIPTION);
     if (!description) return reply.code(400).send({ error: `description is required (max ${MAX_DESCRIPTION} chars)` });
 
+    let contextJson: string | null = null;
+    if (body.context !== undefined) {
+      const c = body.context;
+      if (!c || typeof c !== 'object' || Array.isArray(c)) {
+        return reply.code(400).send({ error: 'context must be a JSON object' });
+      }
+      contextJson = JSON.stringify(c);
+      if (Buffer.byteLength(contextJson, 'utf8') > MAX_CONTEXT_BYTES) {
+        return reply.code(413).send({ error: `context too large (max ${MAX_CONTEXT_BYTES} bytes)` });
+      }
+    }
+
+    const clientJson = body.client ? JSON.stringify(body.client) : null;
+
     const images = parseImages(body);
     if (!Array.isArray(images)) return reply.code(images.code).send({ error: images.error });
     const [first, ...extras] = images;
@@ -289,14 +322,15 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
       await dbRun(
         `INSERT INTO project_feedback
           (id, slug, target_kind, target_id, target_label, route, type, title, description,
-           image_mime, image_data, client_json, snapshot_generated_at, created_at, parent_id,
-           receipt_hash)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           image_mime, image_data, client_json, context_json, snapshot_generated_at, created_at,
+           parent_id, receipt_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, slug, kind, targetId,
         str(target.label, MAX_LABEL), str(body.route, MAX_ROUTE),
         type, title, description,
         first?.mime ?? null, first?.dataUrl ?? null,
-        body.client ? JSON.stringify(body.client).slice(0, 4_000) : null,
+        clientJson && clientJson.length <= MAX_CLIENT_JSON ? clientJson : null,
+        contextJson,
         typeof body.snapshotGeneratedAt === 'string' ? body.snapshotGeneratedAt : null,
         now, parentId, sha256Hex(receipt),
       );
@@ -353,7 +387,7 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
       ? 'image_data, length(image_data) AS image_len'
       : 'NULL AS image_data, length(image_data) AS image_len';
     const cols = `id, target_kind, target_id, target_label, route, type, title, description,
-            image_mime, ${imageCols}, client_json, snapshot_generated_at, created_at, parent_id,
+            image_mime, ${imageCols}, client_json, context_json, snapshot_generated_at, created_at, parent_id,
             moderation_action, moderation_at, moderation_reason, status, status_note, status_at`;
 
     const rows = modSince === null
@@ -407,7 +441,8 @@ export function registerProjectFeedbackRoutes(app: FastifyInstance): void {
         description: r.description,
         image,
         images: image ? [image, ...(extrasById.get(r.id) ?? [])] : [],
-        client: r.client_json ? JSON.parse(r.client_json) : null,
+        client: parseStoredJson(r.client_json),
+        context: parseStoredJson(r.context_json),
         snapshotGeneratedAt: r.snapshot_generated_at,
         parentId: r.parent_id,
         moderation: r.moderation_action

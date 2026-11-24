@@ -1,12 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { PROJECTS, type Project } from '../../src/data/projectsRegistry.js';
+import { toProjects, type Project } from '../../src/data/projectsRegistry.js';
+import { getRegistrySnapshot, onRegistryChange } from '../registry-runtime.js';
 import { dbAll } from '../db.js';
 
 /**
- * /sitemap.xml: built per request (memoized) from the registry, the published
- * blog posts and robots.txt so it cannot drift from what the site serves.
+ * /sitemap.xml: built per request (memoized) from the registry snapshot, the published
+ * blog posts and robots.txt so it cannot drift from what the site serves. A registry
+ * change drops the memo, so an edit shows on the next request without a deploy.
  */
 
 const SITE = 'https://bilko.run';
@@ -127,6 +129,12 @@ function readRobots(distPath: string): string {
 
 export function registerSitemapRoutes(app: FastifyInstance, opts: { distPath: string }): void {
   let memo: { expiresAt: number; body: string } | null = null;
+  // Bumped on every registry change so a build that started before the change is not memoized.
+  let generation = 0;
+  onRegistryChange(() => {
+    generation += 1;
+    memo = null;
+  });
 
   async function build(): Promise<string> {
     let posts: { slug: string; publishedAt: string }[] = [];
@@ -139,7 +147,7 @@ export function registerSitemapRoutes(app: FastifyInstance, opts: { distPath: st
       console.warn('[sitemap] could not read blog posts; serving without them:', err);
     }
     return buildSitemapXml({
-      projects: PROJECTS,
+      projects: toProjects(getRegistrySnapshot()),
       posts,
       isPublished: slug => SLUG_RE.test(slug) && existsSync(resolve(opts.distPath, 'projects', slug, 'index.html')),
       robotsTxt: readRobots(opts.distPath),
@@ -151,8 +159,9 @@ export function registerSitemapRoutes(app: FastifyInstance, opts: { distPath: st
       .header('Content-Type', 'application/xml; charset=utf-8')
       .header('Cache-Control', CACHE_CONTROL);
     if (memo && memo.expiresAt > Date.now()) return memo.body;
+    const started = generation;
     const body = await build();
-    memo = { expiresAt: Date.now() + MEMO_TTL_MS, body };
+    if (started === generation) memo = { expiresAt: Date.now() + MEMO_TTL_MS, body };
     return body;
   });
 }

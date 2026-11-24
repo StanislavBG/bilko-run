@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { cardVersion, toCardProject, type CardProject } from '../shared/asset-versions.js';
+import { getRegistrySnapshot, onRegistryChange } from './registry-runtime.js';
 import { BOOKING_PAGE_DESCRIPTION, BOOKING_PAGE_TITLE } from '../shared/booking-page.js';
 
 export interface OgMeta {
@@ -62,7 +63,7 @@ const PROJECT_PATH_RE = /^\/projects\/([^/]+)\/(?:index\.html)?$/;
 const PRODUCT_PATH_RE = /^\/products\/session-manager(\/manual)?\/?$/;
 const BLOG_PATH_RE = /^\/blog\/([^/]+)$/;
 
-export function loadOgProjects(file?: string): OgProject[] {
+function readRegistryFile(file?: string): Array<Record<string, unknown>> {
   const rel = 'src/data/standalone-projects.json';
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = file
@@ -70,8 +71,31 @@ export function loadOgProjects(file?: string): OgProject[] {
     : [resolve(process.cwd(), rel), resolve(here, '..', '..', rel), resolve(here, '..', rel)];
   const found = candidates.find(p => existsSync(p));
   if (!found) throw new Error(`og-meta: registry not found; tried ${candidates.join(', ')}`);
-  const raw = JSON.parse(readFileSync(found, 'utf-8')) as Array<Record<string, unknown>>;
-  return raw.map(toCardProject);
+  return JSON.parse(readFileSync(found, 'utf-8')) as Array<Record<string, unknown>>;
+}
+
+/** The live card list loadOgProjects() hands out; rewritten in place on every registry change. */
+let liveProjects: OgProject[] | null = null;
+
+/**
+ * Card fields of every registry entry. With `file`, reads that registry file (tests). Without
+ * it, reads getRegistrySnapshot() and returns one shared array that an onRegistryChange
+ * listener rewrites in place, so an OgContext built from it at boot shows registry edits
+ * without a deploy. Before initRegistry has loaded anything (scripts, tests) the snapshot is
+ * empty and the bundled registry file is read instead.
+ */
+export function loadOgProjects(file?: string): OgProject[] {
+  if (file) return readRegistryFile(file).map(toCardProject);
+  if (liveProjects) return liveProjects;
+  const snapshot = getRegistrySnapshot();
+  const live: OgProject[] = snapshot.length > 0
+    ? snapshot.map(p => toCardProject(p as unknown as Record<string, unknown>))
+    : readRegistryFile().map(toCardProject);
+  liveProjects = live;
+  onRegistryChange(next => {
+    live.splice(0, live.length, ...next.map(p => toCardProject(p as unknown as Record<string, unknown>)));
+  });
+  return live;
 }
 
 const versionCache = new Map<string, string>();

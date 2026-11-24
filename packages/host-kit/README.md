@@ -32,10 +32,23 @@ Clerk-backed sign-in state for the host's `/api`. Import from `host-kit`.
 - `authFetch(input: string, init?: RequestInit): Promise<Response | null>` — fetch with the Bearer token; null when there is no session.
 - `hasSignedInCookie(): boolean` — cheap synchronous hint that a session probably exists.
 
+## Bilko-DB
+
+Each signed-in user's documents (JSON or text) and images for one app, on the host's `/api/db/:app` API. Every call goes through `authFetch`. Import from `host-kit`.
+
+- `bilkoDb(app: string): BilkoDbClient`:
+  - `list(prefix?)` → `BilkoDocMeta[]` (`{ key, type: 'json' | 'text', bytes, version, updatedAt }`).
+  - `get<T>(key)` → `{ value: T, version, type } | null` (null when missing; the version comes from the ETag).
+  - `put(key, value, opts?)` → `BilkoDocMeta`. Objects go as `application/json`; `put(key, string, { text: true })` goes as `text/plain`. `opts.ifVersion` sends `If-Match`, `opts.createOnly` sends `If-None-Match: *`.
+  - `remove(key, opts?)` → `true`, or `false` when missing; `opts.ifVersion` sends `If-Match`.
+  - `images.upload(blob)` → `BilkoImage` (`{ id, url, type, bytes, createdAt }`, `url` absolute and public by link); `images.list()`, `images.remove(id)`, `images.url(id)`.
+- `useDoc<T>(app, key)` — `{ value, version, loading, error, save(value): Promise<boolean>, remove(): Promise<boolean> }`. `save` sends `If-Match` with the version it last read (create-only when the doc did not exist), so a write from elsewhere comes back as `error.code === 'version_mismatch'` instead of overwriting it. String values are saved as text.
+- `BilkoDbError` — thrown on failure: `status`, `code` (the API's `error`, e.g. `version_mismatch`, `too_large`, `quota_exceeded`, `rate_limited`; `signed_out` when there is no session) and `version` when the API reports the stored one.
+
 ## Games hooks
 
 - `useLeaderboard(game: string, opts?: LeaderboardOpts)` — returns `{ scores: ScoreRow[], loading, error, submit(score, mode?, payload?): Promise<boolean>, refresh(): Promise<void> }`; `LeaderboardOpts = { range?: 'today' | 'week' | 'all'; mode?: string; limit?: number }`.
-- `useSaveState<T>(game: string): SaveStateResult<T>` — `{ blob: T | null, version, updated_at, loading, save(blob): Promise<boolean>, clear(): Promise<void> }`.
+- `useSaveState<T>(game: string): SaveStateResult<T>` — the legacy single-slot store (one save slot per game; new apps use [Bilko-DB](#bilko-db)): `{ blob: T | null, version, updated_at, loading, save(blob): Promise<boolean>, clear(): Promise<void> }`.
 - `useUnlocks(game: string)` — `{ unlocks: UnlockRow[], achievements: AchievementDef[], unlock(key): Promise<boolean>, lastCrossUnlock: CrossUnlock | null }`.
 - Types: `ScoreRow`, `LeaderboardOpts`, `AchievementDef`, `UnlockRow`, `SaveStateResult`, `CrossUnlock`.
 

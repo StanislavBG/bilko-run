@@ -41,12 +41,12 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${BILKO_SYNC_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
-DRY=0; NO_PUSH=0
+DRY=0
 for arg in "$@"; do
   case "$arg" in
     "") ;;
     --dry-run) DRY=1 ;;
-    --no-push) NO_PUSH=1 ;;  # accepted for callers; changes nothing
+    --no-push) ;;  # accepted for callers; changes nothing
     *) echo "usage: bash scripts/sync-local-main.sh [--dry-run] [--no-push]" >&2; exit 1 ;;
   esac
 done

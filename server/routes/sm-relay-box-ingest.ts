@@ -58,7 +58,7 @@ function originOf(req: FastifyRequest): string | null {
  * Route-level onRequest: runs before any body is read, so every reply (including parser
  * errors such as the body-limit 413) already carries the CORS headers set here.
  */
-async function guardEnvelopeRoute(req: FastifyRequest<BoxParams>, reply: FastifyReply): Promise<void> {
+async function guardEnvelopeRoute(req: FastifyRequest<BoxParams>, reply: FastifyReply): Promise<FastifyReply | void> {
   const box = await getBox(req.params.boxId);
   const origin = originOf(req);
   const allowed = box !== null && origin !== null && box.allowedOrigins.includes(origin);
@@ -69,29 +69,29 @@ async function guardEnvelopeRoute(req: FastifyRequest<BoxParams>, reply: Fastify
 
   if (req.method === 'POST') {
     const wait = hit(ipHits, getClientIp(req), IP_MAX, IP_WINDOW_MS);
-    if (wait > 0) return void reply.code(429).header('retry-after', String(wait)).send({ error: 'rate_limited' });
+    if (wait > 0) return reply.code(429).header('retry-after', String(wait)).send({ error: 'rate_limited' });
   }
 
-  if (!box) return void reply.code(404).send({ error: 'box_not_found' });
-  if (!allowed) return void reply.code(403).send({ error: 'origin_not_allowed' });
-  if (box.state === 'paused') return void reply.code(410).send({ error: 'box_paused' });
+  if (!box) return reply.code(404).send({ error: 'box_not_found' });
+  if (!allowed) return reply.code(403).send({ error: 'origin_not_allowed' });
+  if (box.state === 'paused') return reply.code(410).send({ error: 'box_paused' });
   req.smRelayBox = box;
 
   if (req.method !== 'POST') return;
   const wait = hit(boxHits, box.boxId, BOX_MAX, BOX_WINDOW_MS);
-  if (wait > 0) return void reply.code(429).header('retry-after', String(wait)).send({ error: 'rate_limited' });
+  if (wait > 0) return reply.code(429).header('retry-after', String(wait)).send({ error: 'rate_limited' });
 
   const len = Number(req.headers['content-length']);
   if (Number.isFinite(len) && len > MAX_ENVELOPE_BYTES) {
-    return void reply.code(413).send({ error: 'too_large' });
+    return reply.code(413).send({ error: 'too_large' });
   }
-  if (req.headers['x-sm-envelope'] !== '1') return void reply.code(400).send({ error: 'bad_envelope' });
+  if (req.headers['x-sm-envelope'] !== '1') return reply.code(400).send({ error: 'bad_envelope' });
   const reportId = req.headers['x-sm-report-id'];
   if (typeof reportId !== 'string' || !UUID_RE.test(reportId)) {
-    return void reply.code(400).send({ error: 'invalid_report_id' });
+    return reply.code(400).send({ error: 'invalid_report_id' });
   }
   const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
-  if (type !== 'application/octet-stream') return void reply.code(400).send({ error: 'bad_envelope' });
+  if (type !== 'application/octet-stream') return reply.code(400).send({ error: 'bad_envelope' });
 }
 
 export function registerSmRelayBoxIngestRoutes(app: FastifyInstance): void {

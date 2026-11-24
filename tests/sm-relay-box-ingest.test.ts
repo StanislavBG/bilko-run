@@ -287,3 +287,75 @@ describe('POST envelopes', () => {
     expectCors(res);
   });
 });
+
+// Regression: in production async onSend hooks (security headers, compress, ...) delay the socket
+// write, so an async onRequest guard that replies without returning the reply let Fastify run the
+// handler too. A bare app with only sync writes hides that, so this one yields in onSend.
+describe('early rejections with a slow global onSend hook', () => {
+  let slowApp: FastifyInstance;
+
+  beforeAll(async () => {
+    slowApp = Fastify();
+    slowApp.addHook('onSend', async (_req, _reply, payload) => {
+      await new Promise((r) => setTimeout(r, 5));
+      return payload;
+    });
+    await slowApp.register(cors, { origin: true, credentials: true });
+    registerSmRelayBoxIngestRoutes(slowApp);
+    await slowApp.ready();
+  });
+
+  function slowPost(headers: Record<string, string>, ip: string) {
+    return slowApp.inject({
+      method: 'POST',
+      url: `/api/sm-relay/boxes/${boxId}/envelopes`,
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-sm-report-id': crypto.randomUUID(),
+        'x-forwarded-for': `203.0.113.9, ${ip}`,
+        origin: ORIGIN,
+        ...headers,
+      },
+      payload: envelope(),
+    });
+  }
+
+  async function stored(): Promise<number> {
+    return (await dbAll('SELECT 1 FROM sm_relay_envelopes WHERE box_id = ?', boxId)).length;
+  }
+
+  it('OPTIONS on an unknown box 404s without preflight headers', async () => {
+    const res = await slowApp.inject({
+      method: 'OPTIONS',
+      url: '/api/sm-relay/boxes/ZZZZZZZZ/envelopes',
+      headers: { origin: ORIGIN, 'access-control-request-method': 'POST' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: 'box_not_found' });
+    expect(res.headers['access-control-allow-methods']).toBeUndefined();
+  });
+
+  it('OPTIONS from a disallowed origin 403s without preflight headers', async () => {
+    const res = await slowApp.inject({
+      method: 'OPTIONS',
+      url: `/api/sm-relay/boxes/${boxId}/envelopes`,
+      headers: { origin: OTHER, 'access-control-request-method': 'POST' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.headers['access-control-allow-methods']).toBeUndefined();
+  });
+
+  it('POST without X-Sm-Envelope 400s and stores nothing', async () => {
+    const res = await slowPost({}, freshIp());
+    expect(res.statusCode).toBe(400);
+    expect(await stored()).toBe(0);
+  });
+
+  it('POST past the per-IP limit 429s and stores nothing extra', async () => {
+    const ip = '198.51.100.99';
+    for (let i = 0; i < 10; i++) expect((await slowPost({ 'x-sm-envelope': '1' }, ip)).statusCode).toBe(201);
+    const res = await slowPost({ 'x-sm-envelope': '1' }, ip);
+    expect(res.statusCode).toBe(429);
+    expect(await stored()).toBe(10);
+  });
+});

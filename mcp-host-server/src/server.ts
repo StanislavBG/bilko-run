@@ -17,6 +17,7 @@
  *   - update_project_listing      → owner-only edit of a project's /projects card content
  *   - set_listing_media          → owner-only upload of card media (video, shareImage, icon), hosted by bilko.run
  *   - set_app_backend            → owner-only set/clear of host.backend (origin /projects/<slug>/api/* forwards to)
+ *   - app_team                   → owner-only list/set/remove of an app's Bilko-DB team via /api/db/<slug>/team
  *   - get_project                → returns one registry entry by slug
  *   - publish_static_project     → copies built dist/ into host's public/projects/<slug>/
  *   - status                     → host git status (uncommitted files, last 5 commits)
@@ -65,6 +66,7 @@ import { readLatestRegistryRaw } from './registry-source.js';
 import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
 import { setListingMedia } from './listing-media-tool.js';
 import { setAppBackend } from './app-backend-tool.js';
+import { appTeam } from './app-team-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 import { readHostContract } from './host-contract.js';
 
@@ -430,6 +432,31 @@ server.registerTool(
   async ({ slug, callerRepoPath, origin }) => {
     try {
       const result = await setAppBackend({ slug, callerRepoPath, origin }, { hostRoot: HOST_ROOT, baseUrl: baseUrl() });
+      return result.ok ? ok(result.text) : err(result.text);
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  },
+);
+
+// 4b4) app_team ────────────────────────────────────────────────────────
+server.registerTool(
+  'app_team',
+  {
+    title: 'Manage an app team',
+    description:
+      'Lists, adds/updates or removes members of an app\'s Bilko-DB team. action "list" calls GET /api/db/<slug>/team; "set" calls PUT /api/db/<slug>/team/members/<email> with JSON { role: "owner" | "member" }; "remove" calls DELETE /api/db/<slug>/team/members/<email>. Only the repo bound to the slug (callerRepoPath must match host.localPath) may call it. Authenticates with the registry-scope admin key from BILKO_REGISTRY_KEY, else the file at BILKO_REGISTRY_KEY_FILE, else ~/.config/bilko-host/registry-key (the owner mints it); BILKO_HOST_URL overrides https://bilko.run. Failures report the HTTP status and the API error code (not_member, last_owner, team_full, bad_email, bad_role, not_found).',
+    inputSchema: {
+      slug: SlugSchema,
+      callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath).'),
+      action: z.enum(['list', 'set', 'remove']).describe('"list" the team, "set" a member\'s role (adds them if new), or "remove" a member.'),
+      email: z.string().min(3).optional().describe('Member email; required for "set" and "remove".'),
+      role: z.enum(['owner', 'member']).optional().describe('Member role; required for "set".'),
+    },
+  },
+  async ({ slug, callerRepoPath, action, email, role }) => {
+    try {
+      const result = await appTeam({ slug, callerRepoPath, action, email, role }, { hostRoot: HOST_ROOT });
       return result.ok ? ok(result.text) : err(result.text);
     } catch (e: unknown) {
       return err((e as Error).message);

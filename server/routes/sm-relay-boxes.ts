@@ -2,18 +2,22 @@
 // boxes of its own device; a signed-in account (Clerk session) lists, edits and deletes every
 // box of the account from a web console. Only a device token can create a box, and creation
 // is owner-first: SM_RELAY_BOXES_ALLOWED_EMAILS opens it to more accounts.
-// Envelope routes live elsewhere.
+// The owning device drains its boxes here (list, download, acknowledge); public ingest lives
+// in sm-relay-box-ingest.ts.
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { ADMIN_EMAILS, requireAuth } from '../clerk.js';
 import { verifyDeviceToken } from '../sm-relay/tokens.js';
 import {
   createBox,
   deleteBox,
+  deleteEnvelope,
   getBox,
   listBoxes,
+  listEnvelopes,
   parseAllowedOrigins,
   parseBoxLabel,
   parseBoxPublicKey,
+  readEnvelope,
   updateBox,
   type BoxListRow,
   type BoxPatch,
@@ -107,6 +111,27 @@ async function ownedBox(caller: BoxCaller, boxId: string, reply: FastifyReply): 
   return box;
 }
 
+const MAX_DRAIN_LIMIT = 20;
+
+/** limit=1..20 (default 20); null for anything else. */
+function parseDrainLimit(raw: unknown): number | null {
+  if (raw === undefined) return MAX_DRAIN_LIMIT;
+  if (typeof raw !== 'string' || !/^[0-9]+$/.test(raw)) return null;
+  const n = Number(raw);
+  return n >= 1 && n <= MAX_DRAIN_LIMIT ? n : null;
+}
+
+/** Drain routes take only the device that owns the box; replies and returns null otherwise. */
+async function drainableBox(req: FastifyRequest, reply: FastifyReply, boxId: string): Promise<BoxRecord | null> {
+  const caller = await resolveBoxCaller(req, reply);
+  if (!caller) return null;
+  if (caller.kind !== 'device') {
+    reply.status(403).send({ error: 'device_token_required' });
+    return null;
+  }
+  return ownedBox(caller, boxId, reply);
+}
+
 interface CreateBody { label?: unknown; publicKey?: unknown; allowedOrigins?: unknown }
 interface PatchBody { label?: unknown; allowedOrigins?: unknown; state?: unknown }
 
@@ -176,4 +201,48 @@ export function registerSmRelayBoxRoutes(app: FastifyInstance): void {
     await deleteBox(box.boxId);
     return reply.send({ ok: true });
   });
+
+  app.get<{ Params: { boxId: string }; Querystring: { limit?: string } }>(
+    '/api/sm-relay/boxes/:boxId/envelopes',
+    async (req, reply) => {
+      const box = await drainableBox(req, reply, req.params.boxId);
+      if (!box) return;
+      const limit = parseDrainLimit((req.query as { limit?: unknown }).limit);
+      if (limit === null) return reply.status(400).send({ error: 'invalid_limit' });
+      const rows = await listEnvelopes(box.boxId, limit);
+      return reply.send({
+        envelopes: rows.map((r) => ({
+          envelopeId: r.envelopeId,
+          hostId: r.hostId,
+          clientReportId: r.clientReportId,
+          receivedAt: iso(r.receivedAt),
+          origin: r.origin,
+          bytes: r.bytes,
+        })),
+      });
+    },
+  );
+
+  app.get<{ Params: { boxId: string; envelopeId: string } }>(
+    '/api/sm-relay/boxes/:boxId/envelopes/:envelopeId',
+    { compress: false },
+    async (req, reply) => {
+      const box = await drainableBox(req, reply, req.params.boxId);
+      if (!box) return;
+      const body = await readEnvelope(box.boxId, req.params.envelopeId);
+      if (!body) return reply.status(404).send({ error: 'envelope_not_found' });
+      return reply.type('application/octet-stream').header('cache-control', 'no-store').send(body);
+    },
+  );
+
+  app.delete<{ Params: { boxId: string; envelopeId: string } }>(
+    '/api/sm-relay/boxes/:boxId/envelopes/:envelopeId',
+    async (req, reply) => {
+      const box = await drainableBox(req, reply, req.params.boxId);
+      if (!box) return;
+      const deleted = await deleteEnvelope(box.boxId, req.params.envelopeId);
+      if (!deleted) return reply.status(404).send({ error: 'envelope_not_found' });
+      return reply.send({ ok: true });
+    },
+  );
 }

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "slug": "session-manager",
   "version": "0.1.0",
-  "builtAt": "2026-11-15T21:13:38.085Z",
+  "builtAt": "2026-11-24T16:24:47.102Z",
   "gitSha": "66eee675",
   "gitBranch": "HEAD",
   "hostKit": {
@@ -14,7 +14,52 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 1188089,
-    "fileCount": 67
+    "sizeBytesGz": 1419032,
+    "fileCount": 77
+  },
+  "widget": {
+    "path": "/projects/session-manager/widget/v1/",
+    "files": [
+      {
+        "path": "widget/v1/demo/index.html",
+        "sizeBytes": 1290
+      },
+      {
+        "path": "widget/v1/feedback.js",
+        "sizeBytes": 161206
+      },
+      {
+        "path": "widget/v1/fonts/inter-tight-latin-400-normal.woff2",
+        "sizeBytes": 22016
+      },
+      {
+        "path": "widget/v1/fonts/inter-tight-latin-500-normal.woff2",
+        "sizeBytes": 22616
+      },
+      {
+        "path": "widget/v1/fonts/inter-tight-latin-600-normal.woff2",
+        "sizeBytes": 22660
+      },
+      {
+        "path": "widget/v1/fonts/inter-tight-latin-700-normal.woff2",
+        "sizeBytes": 22748
+      },
+      {
+        "path": "widget/v1/fonts/jetbrains-mono-latin-400-normal.woff2",
+        "sizeBytes": 21168
+      },
+      {
+        "path": "widget/v1/fonts/jetbrains-mono-latin-500-normal.woff2",
+        "sizeBytes": 21832
+      },
+      {
+        "path": "widget/v1/fonts/jetbrains-mono-latin-700-normal.woff2",
+        "sizeBytes": 21908
+      },
+      {
+        "path": "widget/v1/fonts/source-serif-4-latin-600-normal.woff2",
+        "sizeBytes": 21532
+      }
+    ]
   }
 }

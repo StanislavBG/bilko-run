@@ -302,6 +302,16 @@ export function notifyDeviceRevoked(deviceId: string): void {
   if (conn && conn.ws.readyState === WebSocket.OPEN) conn.ws.close(4001, 'token_revoked');
 }
 
+/**
+ * Nudge the box's owning desktop that a sealed envelope landed. Carries no body bytes; the
+ * desktop pulls the envelope over the owner routes. Does nothing when the device is offline.
+ */
+export function notifyDeviceBoxEnvelope(deviceId: string, boxId: string): void {
+  const conn = deviceConns.get(deviceId);
+  if (!conn) return;
+  safeSend(conn.ws, { type: 'box:envelope', id: crypto.randomUUID(), boxId, ts: Date.now() });
+}
+
 let wss: WebSocketServer | null = null;
 function getWss(): WebSocketServer {
   if (!wss) wss = new WebSocketServer({ noServer: true });

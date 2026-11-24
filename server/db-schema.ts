@@ -611,8 +611,22 @@ export const MIGRATIONS = [
   )`,
   // Retired: Session Manager relay desktop-client tokens (desktop-to-desktop pairing,
   // removed in Session Manager). Dropping the table, and its index with it, destroys
-  // every issued client token. No-ops once gone.
+  // every issued client token. No-ops once gone. Current client tokens live in
+  // sm_relay_paired_clients, so no token from this table can ever verify again.
   `DROP TABLE IF EXISTS sm_relay_clients`,
+  // Session Manager relay paired clients (see server/sm-relay/tokens.ts): a headless
+  // service or app that drives the owner's devices as a 'browser' without a Clerk
+  // session. Same storage model as sm_relay_devices: token hash only, no expiry,
+  // revocation deletes the row. Times are epoch milliseconds.
+  `CREATE TABLE IF NOT EXISTS sm_relay_paired_clients (
+    client_id   TEXT PRIMARY KEY,
+    token_hash  TEXT NOT NULL UNIQUE,
+    user_id     TEXT NOT NULL,
+    email       TEXT NOT NULL,
+    client_name TEXT NOT NULL,
+    issued_at   INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_sm_relay_paired_clients_user ON sm_relay_paired_clients(user_id)`,
   // One row per one-shot data migration that has run (see
   // applyDataMigrationOnce). Schema changes stay in this array and the
   // additive ALTER list; this is for fixes to seeded rows that an admin may

@@ -290,6 +290,26 @@ Three Winds: `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` fr
 
 A sweeper (every 60 s) releases held escrows older than 60 s whose table is not in this process.
 
+## Session Manager relay paired clients
+
+A paired client is a headless service or app that drives its owner's Session Manager desktops over the relay the way the phone does, without a Clerk session. The relay knows nothing about what the client is: its socket is an ordinary `role:'browser'` conn of the owner's account (same `fromConn` stamping, `toConn` unicast and per-account browser-conn cap), and what it may do is decided by the desktop over E2E. Code: `server/routes/sm-relay.ts` (routes), `server/sm-relay/tokens.ts` (store, table `sm_relay_paired_clients`), `server/sm-relay/owner-auth.ts` (owner auth), `server/sm-relay/router.ts` (closing a revoked client's sockets).
+
+- Pairing: an owner mints a single-use 8-character client code (5 minutes), the client redeems it for a client token. Client codes and device codes (`POST /api/sm-relay/otp`) are not interchangeable; a code redeemed at the wrong route is `400 invalid_code` and stays valid.
+- Client tokens are 32 random bytes, stored only as a SHA-256 hash, never logged, and never expire: a pairing lasts until it is revoked. Revoking deletes the row, drops the client's unused WS tickets and closes its live sockets with `4001 token_revoked`; the owner's devices then get `event:client:disconnected` with `reason: "token_revoked"`.
+- "Owner" auth takes `Authorization: Bearer <token>`: a token with exactly two dots is a Clerk session, anything else is checked as a device token. A client token is never an owner token, so a client cannot mint codes, list or revoke clients, or manage drop boxes.
+- An email outside `SM_RELAY_ALLOWED_EMAILS`: `403 not_allowed`, for owners and clients alike.
+
+| Route | Auth | Request | Response |
+| --- | --- | --- | --- |
+| `POST /api/sm-relay/client-otp` | owner (Clerk session or device token) | — | `200 { code }` for the owner's account; `401`; `429 rate_limited` (shares the account's 10 codes an hour with device codes) |
+| `POST /api/sm-relay/client-pair` | — (10 an hour per IP, shared with `POST /api/sm-relay/pair`) | `{ code, clientName? }` (`clientName` up to 64 characters) | `200 { clientToken, clientId }`; `400 missing_fields` / `invalid_code_format` / `invalid_client_name` / `invalid_code` / `code_expired`; `429 rate_limited` |
+| `POST /api/sm-relay/client-ticket` | client token (10 a minute per token) | — | `200 { ticket }`, a one-time `role:'browser'` WS ticket (30 s) for the client's account; `401 missing_token` / `invalid_token`; `429 rate_limited` |
+| `GET /api/sm-relay/client/devices` | client token (10 a minute per token) | — | `200 { devices: [{ deviceId, email, issuedAt, expiresAt: null, isOnline, devicePubKey }] }`, the account's devices only |
+| `GET /api/sm-relay/clients` | owner (Clerk session or device token) | — | `200 { clients: [{ clientId, email, clientName, issuedAt, expiresAt: null }] }` |
+| `DELETE /api/sm-relay/clients/:clientId` | owner (Clerk session or device token) | — | `200 { ok: true }`; `404 client_not_found` (unknown or another account's client) |
+
+The panic `DELETE /api/sm-relay/devices` (Clerk session) also revokes every client of the account and answers `{ ok: true, revokedCount, revokedClientCount }`.
+
 ## Session Manager relay drop boxes
 
 A drop box lets a website widget send a sealed report to its owner's paired Session Manager desktop. The widget encrypts the report to the box's P-256 public key (an `SMF1` envelope); the host stores the opaque bytes and never decrypts, parses, hashes or logs them. Code: `server/routes/sm-relay-boxes.ts` (owner routes), `server/routes/sm-relay-box-ingest.ts` (public routes), `server/sm-relay/boxes.ts` (store), with the device purge paths in `server/routes/sm-relay.ts`.

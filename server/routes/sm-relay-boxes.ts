@@ -5,8 +5,8 @@
 // The owning device drains its boxes here (list, download, acknowledge); public ingest lives
 // in sm-relay-box-ingest.ts.
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { ADMIN_EMAILS, requireAuth } from '../clerk.js';
-import { verifyDeviceToken } from '../sm-relay/tokens.js';
+import { ADMIN_EMAILS } from '../clerk.js';
+import { resolveRelayOwner, type RelayOwner } from '../sm-relay/owner-auth.js';
 import {
   createBox,
   deleteBox,
@@ -23,45 +23,10 @@ import {
   type BoxPatch,
   type BoxRecord,
 } from '../sm-relay/boxes.js';
-import { emailAllowed } from './sm-relay.js';
 
-export type BoxCaller =
-  | { kind: 'device'; userId: string; deviceId: string; email: string }
-  | { kind: 'clerk'; userId: string };
-
-/** A Clerk session JWT has exactly two dots; a device token (base64url) has none. */
-function isClerkShaped(token: string): boolean {
-  return token.split('.').length === 3;
-}
-
-/** Resolves the caller from the bearer, or replies (401/403) and returns null. */
-export async function resolveBoxCaller(req: FastifyRequest, reply: FastifyReply): Promise<BoxCaller | null> {
-  const authHeader = req.headers.authorization ?? '';
-  if (!authHeader.startsWith('Bearer ') || authHeader.length <= 7) {
-    reply.status(401).send({ error: 'missing_token' });
-    return null;
-  }
-  const raw = authHeader.slice(7);
-  if (isClerkShaped(raw)) {
-    const email = await requireAuth(req, reply);
-    if (!email) return null; // requireAuth already sent 401
-    if (!emailAllowed(email)) {
-      reply.status(403).send({ error: 'not_allowed' });
-      return null;
-    }
-    return { kind: 'clerk', userId: email };
-  }
-  const device = await verifyDeviceToken(raw);
-  if (!device) {
-    reply.status(401).send({ error: 'invalid_token' });
-    return null;
-  }
-  if (!emailAllowed(device.email)) {
-    reply.status(403).send({ error: 'not_allowed' });
-    return null;
-  }
-  return { kind: 'device', userId: device.userId, deviceId: device.deviceId, email: device.email };
-}
+/** A drop-box caller is a relay owner: a Clerk session or a paired desktop's device token. */
+export type BoxCaller = RelayOwner;
+export const resolveBoxCaller = resolveRelayOwner;
 
 /** Owner-first creation gate, read on every call. */
 function boxesEnabledFor(email: string): boolean {

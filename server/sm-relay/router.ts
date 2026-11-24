@@ -50,7 +50,13 @@ interface BaseConn {
   missedPings: number;
   rateLimit: LeakyBucket;
 }
-interface BrowserConn extends BaseConn { id: string; }
+interface BrowserConn extends BaseConn {
+  id: string;
+  /** Relay-internal: the client token behind this conn, so revoking it can close it. Never sent. */
+  clientId?: string;
+  /** Set by notifyClientRevoked so the close announces token_revoked. */
+  revoked?: boolean;
+}
 interface DeviceConn extends BaseConn { deviceId: string; }
 
 const MAX_MSG_BYTES = 256 * 1024;
@@ -190,14 +196,14 @@ function stopHeartbeat(): void {
   if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
 }
 
-function registerBrowser(ws: WebSocket, t: { userId: string; email: string }): void {
+function registerBrowser(ws: WebSocket, t: { userId: string; email: string; clientId?: string }): void {
   let existing = 0;
   for (const c of browserConns.values()) if (c.userId === t.userId) existing++;
   if (existing >= MAX_BROWSER_CONNS_PER_USER) { ws.close(1008, 'too_many_connections'); return; }
 
   const id = crypto.randomUUID();
   const conn: BrowserConn = {
-    ws, id, userId: t.userId, email: t.email, connectedAt: Date.now(),
+    ws, id, userId: t.userId, email: t.email, clientId: t.clientId, connectedAt: Date.now(),
     isAlive: true, missedPings: 0, rateLimit: makeBucket(BROWSER_RATE_CAPACITY, BROWSER_RATE_DRAIN_MS),
   };
   browserConns.set(id, conn);
@@ -215,11 +221,12 @@ function registerBrowser(ws: WebSocket, t: { userId: string; email: string }): v
   ws.on('close', () => {
     browserConns.delete(id);
     // Let the user's agents tear down this one browser's E2E session and streams.
+    const reason = conn.revoked ? 'token_revoked' : 'closed';
     for (const device of deviceConns.values()) {
       if (device.userId === t.userId) {
         safeSend(device.ws, {
           type: 'event:client:disconnected', id: crypto.randomUUID(),
-          fromConn: id, reason: 'closed', ts: Date.now(),
+          fromConn: id, reason, ts: Date.now(),
         });
       }
     }
@@ -288,6 +295,16 @@ export function closeAllRelayConnections(): void {
     for (const [id, conn] of conns) {
       if (conn.ws.readyState === WebSocket.OPEN) conn.ws.close(1012, 'server_restart');
       conns.delete(id);
+    }
+  }
+}
+
+/** Close every live browser connection opened with a now-revoked client token. */
+export function notifyClientRevoked(clientId: string): void {
+  for (const conn of browserConns.values()) {
+    if (conn.clientId === clientId && conn.ws.readyState === WebSocket.OPEN) {
+      conn.revoked = true;
+      conn.ws.close(4001, 'token_revoked');
     }
   }
 }

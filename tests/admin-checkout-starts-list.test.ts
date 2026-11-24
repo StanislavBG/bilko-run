@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
+import { createHash } from 'node:crypto';
 import { initDb, dbRun } from '../server/db.js';
 
 vi.mock('../server/clerk.js', async (importOriginal) => {
@@ -38,13 +39,13 @@ beforeAll(async () => {
 
 type Seed = {
   tool?: string; created?: string; visitor?: string | null; session?: string | null; bot?: number; admin?: number;
-  internal?: number; path?: string | null; metadata?: string | null; event?: string;
+  internal?: number; path?: string | null; metadata?: string | null; event?: string; ipHash?: string;
 };
 const fe = (o: Seed) =>
   dbRun(`INSERT INTO funnel_events (event, tool, created_at, visitor_id, session_id, is_bot, is_admin, is_internal, path, metadata, email, ip_hash)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     o.event ?? 'checkout_start', o.tool ?? 'list-skills', o.created ?? ts(0), o.visitor ?? null, o.session ?? null,
-    o.bot ?? 0, o.admin ?? 0, o.internal ?? 0, o.path ?? null, o.metadata ?? null, 'buyer@t.dev', 'iphash-secret');
+    o.bot ?? 0, o.admin ?? 0, o.internal ?? 0, o.path ?? null, o.metadata ?? null, 'buyer@t.dev', o.ipHash ?? 'iphash-secret');
 
 beforeEach(async () => {
   vi.mocked(requireAdmin).mockResolvedValue('admin@t.dev');
@@ -135,7 +136,7 @@ describe('GET /api/admin/checkout-starts', () => {
     const body = (await list()).json();
     for (const r of body.starts) {
       expect(Object.keys(r).sort()).toEqual([
-        'checkoutSessionId', 'counted', 'createdAt', 'id', 'label', 'labelReasons', 'metadata', 'mine', 'mineReasons', 'path',
+        'checkoutSessionId', 'counted', 'createdAt', 'hit', 'id', 'label', 'labelReasons', 'metadata', 'mine', 'mineReasons', 'path',
         'session', 'sessionId', 'sessionNote', 'source', 'stripeMode', 'tool', 'ts', 'visitorClasses', 'visitorId',
       ]);
     }
@@ -164,7 +165,7 @@ describe('GET /api/admin/checkout-starts', () => {
     const agent = by(null, 'agent-offer');
     expect(agent).toMatchObject({
       source: 'agent-buy', checkoutSessionId: 'cs_live_agent', stripeMode: 'live', visitorId: null, sessionId: null,
-      session: null, sessionNote: 'no session id recorded on this start', visitorClasses: [], label: 'human',
+      session: null, sessionNote: 'no session id recorded on this start', visitorClasses: [], label: 'human', hit: null,
     });
 
     const client = by(null, 'some-app');
@@ -182,6 +183,7 @@ describe('GET /api/admin/checkout-starts', () => {
         utmSource: 'hn', utmMedium: 'post', utmCampaign: 'launch', country: 'US', device: 'desktop',
       },
     });
+    expect(human.hit).toBeNull();
     expect(human.metadata).toEqual({ path: '/projects/list-skills/', checkout_session_id: 'cs_live_abc' });
     // Newest first.
     expect(rows[0].visitorId).toBe('human-v');
@@ -208,4 +210,91 @@ describe('GET /api/admin/checkout-starts', () => {
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: 'Forbidden' });
   });
+});
+
+const BUYER_IP = '203.0.113.7';
+const OTHER_IP = '198.51.100.9';
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+const hit = (o: { ts: number; ip: string; path?: string; cls?: string | null; bot?: number; ref?: string; country?: string }) =>
+  dbRun(`INSERT INTO page_hits (ts_ms, date, path, status, referrer_host, country, device, browser, os, is_bot, visitor_class, ip, ua, referrer, user_email)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    o.ts, dayStr(1), o.path ?? '/buy/git-viewer', 303, o.ref ?? 'news.example', o.country ?? 'DE', 'mobile', 'Safari', 'iOS',
+    o.bot ?? 0, o.cls ?? null, o.ip, 'Mozilla/5.0 SecretUA/1.0', 'https://news.example/secret-ref', 'hitter@t.dev');
+
+describe('GET /api/admin/checkout-starts agent-buy hit', () => {
+  // Fixed from NOW, not dayStr: describe bodies run before the fake clock is set.
+  const T = Date.parse('2026-11-24T10:00:00Z');
+  const seed = async () => {
+    await fe({ tool: 'git-viewer', created: `${dayStr(1)} 10:00:00`, ipHash: sha(BUYER_IP),
+      metadata: JSON.stringify({ via: 'agent-buy', offer: 'git-viewer', checkout_session_id: 'cs_live_gv' }) });
+    // The buyer's own /buy request, 800 ms into the start's second.
+    await hit({ ts: T + 800, ip: BUYER_IP });
+    // Same path, nearer in time, different IP: never matches.
+    await hit({ ts: T + 500, ip: OTHER_IP, cls: 'automated', country: 'US', ref: 'other.example' });
+    // Same IP, older but inside the window: farther than the real one.
+    await hit({ ts: T - 20000, ip: BUYER_IP, cls: 'automated', country: 'FR' });
+    // Same IP, outside the window.
+    await hit({ ts: T - 60000, ip: BUYER_IP, cls: 'automated', country: 'GB' });
+    // Same IP and time, other path.
+    await hit({ ts: T + 700, ip: BUYER_IP, path: '/buy/other', cls: 'automated', country: 'JP' });
+  };
+
+  it('matches the /buy hit by IP hash and nearest time', async () => {
+    await seed();
+    const body = (await list('?days=30&limit=1000')).json();
+    const row = body.starts.find((r: any) => r.tool === 'git-viewer');
+    expect(row.source).toBe('agent-buy');
+    expect(row.hit).toEqual({
+      ts: T + 800, path: '/buy/git-viewer', status: 303, referrerHost: 'news.example', country: 'DE', device: 'mobile',
+      browser: 'Safari', os: 'iOS', visitorClass: 'human',
+    });
+    expect(row.visitorClasses).toEqual(['human']);
+    expect(row).toMatchObject({ label: 'human', labelReasons: [], counted: true, mine: false, sessionNote: 'no session id recorded on this start' });
+  });
+
+  it('uses visitor_class, else script for is_bot rows', async () => {
+    await fe({ tool: 'git-viewer', created: `${dayStr(1)} 10:00:00`, ipHash: sha(BUYER_IP),
+      metadata: JSON.stringify({ via: 'agent-buy', offer: 'git-viewer' }) });
+    await hit({ ts: T + 100, ip: BUYER_IP, bot: 1 });
+    let row = (await list('?days=30')).json().starts.find((r: any) => r.tool === 'git-viewer');
+    expect(row.hit.visitorClass).toBe('script');
+    expect(row.visitorClasses).toEqual(['script']);
+    await dbRun('UPDATE page_hits SET visitor_class = ? WHERE ip = ?', 'automated', BUYER_IP);
+    row = (await list('?days=30')).json().starts.find((r: any) => r.tool === 'git-viewer');
+    expect(row.hit.visitorClass).toBe('automated');
+  });
+
+  it('leaves hit null for unmatched agent-buy and other sources', async () => {
+    await seed();
+    const rows = (await list('?days=30&limit=1000')).json().starts as any[];
+    const unmatched = rows.find((r) => r.tool === 'agent-offer');
+    expect(unmatched.source).toBe('agent-buy');
+    expect(unmatched.hit).toBeNull();
+    expect(unmatched.visitorClasses).toEqual([]);
+    const web = rows.find((r) => r.visitorId === 'human-v');
+    expect(web.source).toBe('web-product');
+    expect(web.hit).toBeNull();
+    for (const r of rows) if (r.source !== 'agent-buy') expect(r.hit).toBeNull();
+  });
+
+  it('never returns the IP, user agent, referrer, email or ip_hash', async () => {
+    await seed();
+    const text = JSON.stringify((await list('?days=30&limit=1000')).json());
+    for (const s of [BUYER_IP, OTHER_IP, sha(BUYER_IP), 'SecretUA', 'secret-ref', 'hitter@t.dev', 'iphash-secret', 'buyer@t.dev']) {
+      expect(text).not.toContain(s);
+    }
+  });
+
+  for (const days of [7, 30]) {
+    it(`still agrees with checkoutStartsAll for days=${days} with hits seeded`, async () => {
+      await seed();
+      const body = (await list(`?days=${days}&limit=1000`)).json();
+      const grouped = { human: 0, automated: 0, unlabeled: 0 } as Record<string, number>;
+      for (const r of body.starts) if (r.counted) grouped[r.label] += 1;
+      const counted = await split(days);
+      expect(grouped).toEqual(counted);
+      expect(body.totals.counted).toEqual(counted);
+      expect(body.totals.all).toEqual(await split(days, false));
+    });
+  }
 });

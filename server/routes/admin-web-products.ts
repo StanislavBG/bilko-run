@@ -4,6 +4,7 @@ import { requireAdmin } from '../clerk.js';
 import { WEB_PRODUCTS, productKind, productPageSlug, type WebProduct } from '../../shared/web-products.js';
 import { HOST_PAGE_PATHS, HOST_PAGE_SLUG } from '../page-hits.js';
 import { listBookings } from '../services/service-bookings.js';
+import { hashIp } from './tools/_shared.js';
 import { loadOwnerIds, mineExclusionSql, type MineColumns } from '../traffic-filters.js';
 
 const DAY_MS = 86400000;
@@ -58,12 +59,65 @@ const FE_SESSION_BOT_VIEW = `(fe.session_id IS NOT NULL AND EXISTS (SELECT 1 FRO
 
 type StartRow = {
   id: number; created_at: string | null; tool: string | null; session_id: string | null; visitor_id: string | null;
-  path: string | null; metadata: string | null; is_admin: number; is_internal: number; is_bot: number;
+  path: string | null; metadata: string | null; ip_hash: string | null; is_admin: number; is_internal: number; is_bot: number;
   automated: number; visitor_bot_view: number; session_bot_view: number;
   started_at: number | null; landing_path: string | null; referrer_host: string | null; source_bucket: string | null;
   utm_source: string | null; utm_medium: string | null; utm_campaign: string | null; country: string | null;
   device: string | null; has_session: number;
 };
+
+type BuyHit = {
+  ts: number; path: string; status: number; referrerHost: string | null; country: string | null; device: string | null;
+  browser: string | null; os: string | null; visitorClass: string;
+};
+type BuyHitRow = {
+  ts_ms: number; path: string; status: number; referrer_host: string | null; country: string | null; device: string | null;
+  browser: string | null; os: string | null; visitor_class: string | null; is_bot: number; ip: string | null;
+};
+const BUY_HIT_BEFORE_MS = 30000;
+const BUY_HIT_AFTER_MS = 5000;
+
+// Agent-buy starts carry no session; match each to the page_hits row of its /buy/<offer> request by IP hash and
+// time (created_at is whole seconds, so ts is the start of its second). The raw IP is compared here and never returned.
+async function agentBuyHits(rows: StartRow[]): Promise<Map<number, BuyHit>> {
+  const wanted: { id: number; ts: number; ipHash: string; path: string }[] = [];
+  for (const r of rows) {
+    const metadata = parseMetadata(r.metadata);
+    const meta = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata as Record<string, unknown> : {};
+    if (meta.via !== 'agent-buy') continue;
+    const ts = parseTs(r.created_at);
+    if (ts === null || !r.ip_hash) continue;
+    const offer = typeof meta.offer === 'string' && meta.offer ? meta.offer : r.tool;
+    if (!offer) continue;
+    wanted.push({ id: r.id, ts, ipHash: r.ip_hash, path: `/buy/${offer}` });
+  }
+  const out = new Map<number, BuyHit>();
+  if (wanted.length === 0) return out;
+  const paths = [...new Set(wanted.map((w) => w.path))];
+  const minTs = Math.min(...wanted.map((w) => w.ts)) - BUY_HIT_BEFORE_MS;
+  const maxTs = Math.max(...wanted.map((w) => w.ts)) + BUY_HIT_AFTER_MS;
+  const hits = await dbAll<BuyHitRow>(
+    `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, visitor_class, COALESCE(is_bot, 0) AS is_bot, ip
+     FROM page_hits WHERE path IN (${paths.map(() => '?').join(', ')}) AND ts_ms BETWEEN ? AND ? AND ip IS NOT NULL`,
+    ...paths, minTs, maxTs);
+  const hashed = hits.map((h) => ({ h, ipHash: hashIp(h.ip as string) }));
+  for (const w of wanted) {
+    let best: BuyHitRow | null = null;
+    for (const { h, ipHash } of hashed) {
+      const t = Number(h.ts_ms);
+      if (h.path !== w.path || ipHash !== w.ipHash || t < w.ts - BUY_HIT_BEFORE_MS || t > w.ts + BUY_HIT_AFTER_MS) continue;
+      if (!best || Math.abs(t - w.ts) < Math.abs(Number(best.ts_ms) - w.ts)) best = h;
+    }
+    if (best) {
+      out.set(w.id, {
+        ts: Number(best.ts_ms), path: best.path, status: Number(best.status), referrerHost: best.referrer_host,
+        country: best.country, device: best.device, browser: best.browser, os: best.os,
+        visitorClass: best.visitor_class ?? (Number(best.is_bot) === 1 ? 'script' : 'human'),
+      });
+    }
+  }
+  return out;
+}
 
 function parseTs(createdAt: string | null): number | null {
   if (!createdAt) return null;
@@ -266,7 +320,7 @@ export function registerAdminWebProductRoutes(
         `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN COALESCE(fe.is_admin, 0) = 1 THEN 1 ELSE 0 END), 0) AS owner
          FROM funnel_events fe WHERE fe.event = 'checkout_start' AND date(fe.created_at) >= ?`, sinceDate),
       dbAll<StartRow>(
-        `SELECT fe.id, fe.created_at, fe.tool, fe.session_id, fe.visitor_id, fe.path, fe.metadata,
+        `SELECT fe.id, fe.created_at, fe.tool, fe.session_id, fe.visitor_id, fe.path, fe.metadata, fe.ip_hash,
            COALESCE(fe.is_admin, 0) AS is_admin, COALESCE(fe.is_internal, 0) AS is_internal, COALESCE(fe.is_bot, 0) AS is_bot,
            CASE WHEN ${FE_AUTOMATED} THEN 1 ELSE 0 END AS automated,
            CASE WHEN ${FE_VISITOR_BOT_VIEW} THEN 1 ELSE 0 END AS visitor_bot_view,
@@ -282,6 +336,7 @@ export function registerAdminWebProductRoutes(
     const sessionIds = [...new Set(rows.map((r) => r.session_id).filter((s): s is string => !!s))];
     const [adminSids, classes] = await Promise.all([adminSessions(sessionIds), sessionVisitorClasses(sessionIds)]);
     const ownerCookies = new Set(ownerIds.cookieIds);
+    const buyHits = await agentBuyHits(rows);
 
     const starts = rows.map((r) => {
       const createdAt = r.created_at ?? '';
@@ -305,6 +360,7 @@ export function registerAdminWebProductRoutes(
       const source = meta.via === 'agent-buy' ? 'agent-buy' : checkoutSessionId !== null ? 'web-product' : 'client-event';
       const stripeMode = checkoutSessionId?.startsWith('cs_test_') ? 'test' : checkoutSessionId?.startsWith('cs_live_') ? 'live' : null;
       const hasSession = Number(r.has_session) === 1;
+      const hit = source === 'agent-buy' ? buyHits.get(r.id) ?? null : null;
 
       return {
         id: r.id,
@@ -329,7 +385,8 @@ export function registerAdminWebProductRoutes(
           }
           : null,
         sessionNote: hasSession ? null : r.session_id ? 'no sessions row for this session id' : 'no session id recorded on this start',
-        visitorClasses: r.session_id ? classes.get(r.session_id) ?? [] : [],
+        visitorClasses: hit ? [hit.visitorClass] : r.session_id ? classes.get(r.session_id) ?? [] : [],
+        hit,
         metadata,
       };
     });

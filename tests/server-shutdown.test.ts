@@ -67,7 +67,15 @@ describe('deploy drain (server/shutdown.ts)', () => {
     const { port } = app.server.address() as AddressInfo;
 
     const exits: number[] = [];
-    const shutdown = createShutdown(app, { drainMs: 5_000, exit: code => exits.push(code), log: () => {} });
+    let onExit!: (code: number) => void;
+    const exited = new Promise<number>(resolve => { onExit = resolve; });
+    const shutdown = createShutdown(app, {
+      // Backstop only: a close that hangs exits 1 and fails the assertion
+      // below. Kept well above normal drain time so suite load cannot trip it.
+      drainMs: 10_000,
+      exit: code => { exits.push(code); onExit(code); },
+      log: () => {},
+    });
 
     const received = await new Promise<number>((resolve, reject) => {
       http.get({ port, host: '127.0.0.1', path: '/big.bin' }, res => {
@@ -84,9 +92,11 @@ describe('deploy drain (server/shutdown.ts)', () => {
     });
 
     expect(received).toBe(CHUNKS * 64 * 1024);
-    await new Promise(r => setTimeout(r, 1_500));
+    // Wait for the drain itself (app.close resolving), not a fixed sleep: under
+    // the single-fork full suite the close can take longer than any fixed delay.
+    await exited;
     expect(exits).toEqual([0]);
-  });
+  }, 20_000);
 
   it('exits at once on a second signal', () => {
     const exits: number[] = [];

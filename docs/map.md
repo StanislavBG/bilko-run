@@ -15,7 +15,7 @@ Pick the entry that matches your job. Each is a different need.
 
 Use the `bilko-host` MCP; do not hand-edit this repo.
 
-- `~/Projects/Bilko/docs/host-contract.md`: the spec. Host kinds, registry rules, listing, publish gate, telemetry, manifest.
+- `~/Projects/Bilko/docs/host-contract.md`: the spec. Host kinds, Bilko-DB (every app's database for JSON, text and images), registry rules, listing, publish gate, telemetry, manifest.
 - `~/Projects/Bilko/packages/host-kit/README.md`: client SDK (auth, header, telemetry, publish CLI).
 - `~/Projects/Bilko/mcp-host-server/README.md`: the MCP tools that register, publish and inspect apps.
 - `~/Projects/Bilko/docs/observability.md`: errors and metrics for your app.

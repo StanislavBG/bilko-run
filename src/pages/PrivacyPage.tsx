@@ -7,7 +7,7 @@ export function PrivacyPage() {
   return (
     <section className="max-w-3xl mx-auto px-6 py-16 md:py-24">
       <h1 className="text-3xl font-extrabold text-warm-900 mb-2">Privacy Policy</h1>
-      <p className="text-sm text-warm-400 mb-10">Last updated: November 2, 2026</p>
+      <p className="text-sm text-warm-400 mb-10">Last updated: November 23, 2026</p>
 
       <div className="prose-warm space-y-8 text-warm-700 text-sm leading-relaxed">
         <div>
@@ -22,6 +22,7 @@ export function PrivacyPage() {
             <li><strong>Account data:</strong> Email address and name provided via Clerk (our authentication provider) when you sign in with Google or email.</li>
             <li><strong>Sign-in updates:</strong> If you sign in from a "sign in for updates" prompt (Session Manager, its Field Manual, Human For Hire), we record which page you came from and whether you ticked "Send me occasional updates" (off unless you tick it), with the time you ticked it. Email <strong>{BILKO_CONTACT_EMAIL}</strong> to turn it off.</li>
             <li><strong>Bookings:</strong> If you book time with Bilko, we store your email, the time you picked, and what you wrote about your project, and use them to confirm the booking and prepare for the call.</li>
+            <li><strong>App data (Bilko-DB):</strong> Apps on bilko.run may store documents and images tied to your account in Bilko-DB, bilko.run's database for apps. An image is visible to anyone who has its link. Location data is removed from JPEG and PNG photos when they are uploaded. You or the app can delete them.</li>
             <li><strong>Usage data:</strong> URLs you submit for analysis, scores generated, and credit balances.</li>
             <li><strong>Payment data:</strong> Processed by Stripe. We never see or store your card number. We store your email and Stripe customer ID for credit delivery.</li>
             <li><strong>Analytics:</strong> Page views, clicks, and funnel events (anonymized IP hash, tool used), tied together by two first-party cookies. See Cookies below.</li>

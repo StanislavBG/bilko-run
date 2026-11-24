@@ -10,6 +10,7 @@ This document defines the contract: what the host provides, what an app must imp
 - [What the host provides](#what-the-host-provides)
 - [What an app must implement](#what-an-app-must-implement)
 - [Where an app keeps its state](#where-an-app-keeps-its-state)
+- [Bilko-DB](#bilko-db)
 - [App backends (forwarding)](#app-backends-forwarding)
 - [Registry rules](#registry-rules)
 - [Project listing — who owns what](#project-listing--who-owns-what)
@@ -62,7 +63,8 @@ React-route apps also get in-process Clerk, credits, Stripe, rate limiting, Gemi
 ### To `static-path` and `external-url` apps additionally
 
 - **Shared UI and SDK: `host-kit`** (`packages/host-kit/`), the unscoped npm package, current release 0.11.0: `"host-kit": "^0.11.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. It carries the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`), Bearer-authenticated games hooks, `trackFlow`, and the `env` tag on every telemetry record. The scoped `@bilkobibitkov/host-kit` is not published; do not use it.
-- **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs a server, run your own; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below).
+- **Bilko-DB is your app's database.** Keep each signed-in user's JSON, text and images in [Bilko-DB](#bilko-db). Do not add a database of your own.
+- **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs server logic, run your own server; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below). That server keeps its data in Bilko-DB and adds no database of its own; ask the Bilko project for storage Bilko-DB does not offer yet, such as data shared between users.
 - **CSP stays report-only under `/projects/`.** The host enforces its policy on host pages only (switch: ~/Projects/Bilko/docs/deployment.md#env-vars). Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Enforcing it under `/projects/` needs a per-project policy declared in the registry first (`server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
 - **Large assets are precompressed at build time.** Files ≥1 KB of compressible types (js, css, json, wasm, pck, data, …, never HTML) get `.br`/`.gz` siblings, served with a Content-Length. Don't publish your own `.br`/`.gz` next to a source file; the build replaces them.
 - **Same-origin framing only.** Responses under `/projects/` carry CSP `frame-ancestors 'self'`, so one static-path app may embed another in an iframe (e.g. Game Academy hosting an engine game slug) and talk to it over `postMessage`. Cross-origin framing is refused; every other host page is `frame-ancestors 'none'`.
@@ -106,23 +108,65 @@ A `react-route` app's page, route and server file: ~/Projects/Bilko/docs/host-in
 
 ## Where an app keeps its state
 
-Pick the option that fits; each line links to the section that defines it.
+**Keep your app's data in [Bilko-DB](#bilko-db).** Use browser storage only for device-local preferences and caches. Each line below links to the section that defines it.
 
-- **The browser** (`localStorage`, `sessionStorage`, IndexedDB, cookies): see the shared-origin rule below.
-- **Per-user save state**: `/api/games/:slug/save` through host-kit's `useSaveState`, at most 1 MiB of UTF-8 JSON per user per slug, any slug matching `^[a-z0-9][a-z0-9-]{0,63}$`, versioned; at most 100 slots per user and 300 writes per user per minute. See [Game services](#game-services).
+- **Bilko-DB**: each signed-in user's JSON and text documents and images for your app. See [Bilko-DB](#bilko-db).
+- **The browser** (`localStorage`, `sessionStorage`, IndexedDB, cookies): device-local preferences and caches only; see the shared-origin rule below.
+- **Legacy single-slot save state**: `/api/games/<slug>/save` through host-kit's `useSaveState`, one versioned slot of at most 1 MiB of UTF-8 JSON per user per slug. Existing apps keep using it; new apps use Bilko-DB. See [Game services](#game-services).
 - **Leaderboards and unlocks**: registered games only. See [Game services](#game-services).
 - **Project data snapshot** and the **append-only event stream** (`POST /api/projects/:slug/events`, read at `/projects/:slug/data-events.ndjson`): both written only by the owner's publisher token. See [Project data snapshot](#project-data-snapshot).
-- **Your own backend**: for anything larger, relational or shared between users. The app owns its data. See [App backends (forwarding)](#app-backends-forwarding).
+- **Your own backend**: for server logic only. Its data belongs in Bilko-DB; it adds no database of its own. Ask the Bilko project for storage Bilko-DB does not offer yet, such as data shared between users. See [App backends (forwarding)](#app-backends-forwarding).
 - **Authoritative game rooms**: table state is saved on every move and survives a deploy. See [Authoritative game rooms](#authoritative-game-rooms).
 - **Realtime relay and lobby directory**: memory only, lost on a deploy or spin-down. See [Realtime relay](#realtime-relay).
 
 **Browser storage is shared.** Every static-path app is served from the one `https://bilko.run` origin, so `localStorage`, `sessionStorage`, IndexedDB and cookies are shared with every other app and with the host's own pages (the host itself keeps `bilko_vid` there: ~/Projects/Bilko/docs/observability.md). Prefix every key with your slug, assume other apps can read it, and keep tokens and secrets out of it.
 
-**The host has one database.** bilko.run has one database, the host's (Turso in production). Game saves, scores, unlocks, rooms and play currency are shared tables in it, keyed by slug. An app reaches them only through the host endpoints above; it cannot query or extend them. Nothing an app writes to the server's disk or memory survives a deploy.
+**The host has one database.** bilko.run has one database, the host's (Turso in production). Bilko-DB, game saves, scores, unlocks, rooms and play currency are shared tables in it, keyed by app or slug. An app reaches them only through the host endpoints above; it cannot query or extend them. Nothing an app writes to the server's disk or memory survives a deploy.
+
+## Bilko-DB
+
+Bilko-DB is every app's database: JSON and text documents and images, per signed-in user per app, kept in the host database. It is a lite store for app state, not for big data. An app runs no database of its own. The user is always the email in the verified Bearer token (see "Calling authenticated host APIs from a `static-path` app"); `:app` is your slug and must match `^[a-z0-9][a-z0-9-]{0,63}$`, a document key `^[a-z0-9][a-z0-9._-]{0,127}$`. Code: `server/routes/bilko-db.ts`, `server/services/bilko-db.ts`.
+
+| Method and path | Auth | What it does |
+|---|---|---|
+| `GET /api/db/:app/docs?prefix=` | Bearer | Lists your documents, sorted by key: `{ docs: [{ key, type: 'json' \| 'text', bytes, version, updatedAt }] }`. `prefix` matches literally, at most 128 chars. |
+| `GET /api/db/:app/docs/:key` | Bearer | Returns the document body with `ETag: "<version>"`; 404 `not_found`. |
+| `PUT /api/db/:app/docs/:key` | Bearer | Body as `application/json` (must parse, else 400 `bad_json`) or `text/plain` / `text/markdown`; other types 415. `If-Match: "<version>"` writes only over that version, `If-None-Match: *` only creates; a mismatch is 412 `{ error: 'version_mismatch', version }`. Returns `{ key, type, version, bytes, updatedAt }`. |
+| `DELETE /api/db/:app/docs/:key` | Bearer | Deletes; honours `If-Match` (412 on mismatch); 404 `not_found`. |
+| `POST /api/db/:app/images` | Bearer | Body is the raw image with its `Content-Type`. 201 `{ id, url, type, bytes, createdAt }`; 400 `bad_image` when the bytes are not that type. |
+| `GET /api/db/:app/images` | Bearer | Lists your images for the app: `{ images: [...] }`. |
+| `GET /api/db/:app/images/:id` | None | The image bytes, for a plain `<img src>`. |
+| `DELETE /api/db/:app/images/:id` | Bearer | Deletes your image; 404 `not_found`. |
+
+| Limit | Value |
+|---|---|
+| Document size | 1 MiB (1,048,576 bytes) of UTF-8 per document; 413 `too_large` |
+| Image size | 10 MiB (10,485,760 bytes) per image; 413 `too_large` |
+| Storage per user | 100 MiB (104,857,600 bytes) of documents and images across all apps; 507 `quota_exceeded` |
+| Writes | 300 per minute per user, documents and images together (PUT, POST, DELETE); 429 `rate_limited` with `Retry-After` |
+| Image types | PNG, JPEG, WebP and GIF only; anything else 415 |
+| Image privacy | An image link is public: anyone who has it can load the image. The id is random and unguessable. |
+| Image metadata | Location and camera metadata is removed on upload: JPEG Exif and XMP segments, PNG `eXIf` chunks |
+
+Use host-kit (`bilkoDb`, `useDoc`, `BilkoDbError`; the npm release 0.11.0 does not carry them yet, so link `file:../Bilko/packages/host-kit`). Reference: ~/Projects/Bilko/packages/host-kit/README.md#bilko-db.
+
+```tsx
+import { bilkoDb, useDoc } from 'host-kit';
+
+const db = bilkoDb('my-app');
+await db.put('settings', { theme: 'dark' });
+const { url } = await db.images.upload(file);
+
+function Notes() {
+  const { value, loading, save } = useDoc<{ text: string }>('my-app', 'notes');
+  if (loading) return null;
+  return <textarea defaultValue={value?.text ?? ''} onBlur={(e) => save({ text: e.target.value })} />;
+}
+```
 
 ## App backends (forwarding)
 
-An app that needs a server runs its own, anywhere it likes. bilko.run forwards one path prefix to it. The app owns its backend, its data, its auth checks and its uptime. bilko.run only forwards. The code is `server/app-backends/` (`config.ts`, `http.ts`, `socket.ts`).
+An app that needs server logic runs its own server, anywhere it likes. bilko.run forwards one path prefix to it. The app owns its backend, its auth checks and its uptime; bilko.run only forwards. The backend's data belongs in [Bilko-DB](#bilko-db): an app adds no database of its own, and asks the Bilko project for storage Bilko-DB does not offer yet, such as data shared between users. The code is `server/app-backends/` (`config.ts`, `http.ts`, `socket.ts`).
 
 ### What is forwarded
 

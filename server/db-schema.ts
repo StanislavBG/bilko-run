@@ -904,6 +904,15 @@ export const MIGRATIONS = [
     content BLOB NOT NULL,
     PRIMARY KEY (id, idx)
   )`,
+  // Bilko-DB app teams: who may read/write team:<app> docs and images (server/services/bilko-db-team.ts).
+  `CREATE TABLE IF NOT EXISTS bilko_db_team_members (
+    app      TEXT NOT NULL,
+    email    TEXT NOT NULL,
+    role     TEXT NOT NULL CHECK (role IN ('owner', 'member')),
+    added_by TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (app, email)
+  )`,
   // Bilko-DB project registry: one validated registry entry per project (server/services/registry-db.ts).
   // version bumps by one per write (compare-and-set); updated_at is epoch ms.
   `CREATE TABLE IF NOT EXISTS bilko_db_projects (

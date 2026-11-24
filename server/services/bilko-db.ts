@@ -64,7 +64,7 @@ function toMeta(r: Omit<DocRow, 'body'>): DocMeta {
 // new connection per transaction and fails a second concurrent writer with SQLITE_BUSY
 // instead of waiting; queuing here makes the loser see the winner's version instead.
 let writeChain: Promise<unknown> = Promise.resolve();
-function serializedWrite<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+export function serializedWrite<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   const run = writeChain.then(() => dbTransaction(fn));
   writeChain = run.catch(() => undefined);
   return run;

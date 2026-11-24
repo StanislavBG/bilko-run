@@ -1,13 +1,13 @@
 # Who writes to this repo
 
-`~/Projects/Bilko` is the live checkout. Render deploys `origin/main`. Scheduler PRDs commit code to local `main`, a `Ship:` PRD pushes only the feature commit, and most publishers push from a throwaway worktree or their own checkout. So local `main` drifts behind and ahead of `origin/main`.
+`~/Projects/Bilko` is the live checkout. Render deploys `origin/main`. Scheduler PRDs commit code to local `main`; their plan records go to the git-ignored `session-manager-operations/plan-records/` and are never committed. A `Ship:` PRD pushes only the feature commit, and most publishers push from a throwaway worktree or their own checkout. So local `main` drifts behind and ahead of `origin/main`.
 
 Goal: `git status -sb` prints `## main...origin/main`, with no ahead or behind count (strictly ahead with work waiting to ship is fine).
 
 ## Rules
 
 1. Never push local `main` as a whole unless `git status -sb` shows only your own commits ahead and nothing behind. Pushing more publishes other plans' unvalidated work.
-2. When local `main` drifts, run `bash scripts/sync-local-main.sh --dry-run`, then `bash scripts/sync-local-main.sh`. It drops commits already on `origin/main`, keeps unshipped work on top and saves the old tip as `backup/main-pre-sync`. It never pushes.
+2. When local `main` drifts, run `bash scripts/sync-local-main.sh --dry-run`, then `bash scripts/sync-local-main.sh`. It drops commits already on `origin/main`, keeps unshipped work on top in order and saves the old tip as `backup/main-pre-sync`. It never pushes.
 3. A new publisher copies `build_seed_commit`, `seed_commit_ok` and `mirror_to_local_main` from `scripts/blog-seed.sh`: one guarded commit built on a fresh `origin/main` in a throwaway worktree, pushed as `<sha>:main`, rebuilt on a push race. It ends with `bash scripts/sync-local-main.sh --no-push` in the live checkout (releasing `.git/blog-seed.lock` first if it holds it). It never cherry-picks onto local `main`: that makes a twin (the same patch under another sha) and leaves local `main` diverged.
 
 ## Writers

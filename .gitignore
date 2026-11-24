@@ -42,8 +42,8 @@ playwright-report/
 # and chat state): machine-local, never source. It holds chat transcripts that
 # quote whatever agents wrote, and this repo is public (docs/identity-boundary.md).
 # Untrack from the main checkout only, never from a worktree: landing that
-# deletion deletes the live files. Nothing under it is committed; plan records
-# stay in its plan-records/ folder.
+# deletion deletes the live files. Nothing under it is ever committed or force-added;
+# plan records stay in its plan-records/ folder.
 session-manager-operations/
 
 # Playwright MCP console logs and screenshots (local only).

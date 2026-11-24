@@ -214,7 +214,8 @@ export function registerReportTools(server: McpServer): void {
       description:
         `Read-only. Calls the bilko.run admin API (GET /api/admin/checkout-starts, and GET /api/admin/sessions/:id for timelines) ${ADMIN_KEY}. ` +
         'Lists every checkout_start funnel row in the window, newest first: web-product checkouts, agent-buy /buy links and client-reported starts. ' +
-        'Each row: id, createdAt (UTC), ts, tool, source, checkoutSessionId, stripeMode, path, label, labelReasons, counted, mine, mineReasons, visitorId, sessionId, session (startedAt, landingPath, referrerHost, sourceBucket, utm*, country, device), sessionNote, visitorClasses, metadata. ' +
+        'Each row: id, createdAt (UTC), ts, tool, source, checkoutSessionId, stripeMode, path, label, labelReasons, counted, mine, mineReasons, visitorId, sessionId, session (startedAt, landingPath, referrerHost, sourceBucket, utm*, country, device), sessionNote, visitorClasses, hit (ts, path, status, referrerHost, country, device, browser, os, visitorClass), metadata. ' +
+        'hit is the /buy page hit of an agent-buy start, matched by IP hash and time (null when none matched); it never carries the IP or user agent. ' +
         'Nothing is filtered: owner-flagged (is_admin) rows are listed with counted: false and their mine marks, and automated rows with label: automated and their labelReasons (ua, visitor_bot_view, session_bot_view). ' +
         "label is the host's human/automated/unlabeled split; unlabeled means the start predates labels (window.labelsSince). " +
         'counted is false only for owner-flagged rows, which the host counts leave out. Counted rows grouped by label equal totals.counted, which equals the human/automated/unlabeled numbers the host reports as checkout starts (GET /api/admin/web-products checkoutStartsAll); totals.all includes the owner-flagged rows. ' +

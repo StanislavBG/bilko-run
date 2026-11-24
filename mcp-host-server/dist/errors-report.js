@@ -382,6 +382,23 @@ function pickCheckoutSession(v) {
     const s = v;
     return Object.fromEntries(CHECKOUT_SESSION_FIELDS.map((k) => [k, s[k] ?? null]));
 }
+/** The /buy page hit of an agent-buy start, reduced to the host's nine keys (no IP or user agent ever passes). */
+function pickCheckoutHit(v) {
+    if (!v || typeof v !== 'object' || Array.isArray(v))
+        return null;
+    const h = v;
+    return {
+        ts: numOrNull(h.ts),
+        path: str(h.path),
+        status: numOrNull(h.status),
+        referrerHost: str(h.referrerHost),
+        country: str(h.country),
+        device: str(h.device),
+        browser: str(h.browser),
+        os: str(h.os),
+        visitorClass: str(h.visitorClass),
+    };
+}
 /** One checkout start reduced to the host's documented fields; unknown keys are dropped. */
 function pickCheckoutStart(r) {
     return {
@@ -403,6 +420,7 @@ function pickCheckoutStart(r) {
         session: pickCheckoutSession(r.session),
         sessionNote: str(r.sessionNote),
         visitorClasses: strs(r.visitorClasses),
+        hit: pickCheckoutHit(r.hit),
         metadata: r.metadata ?? null,
     };
 }

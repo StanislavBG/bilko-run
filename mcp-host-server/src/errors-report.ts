@@ -443,6 +443,23 @@ function pickCheckoutSession(v: unknown): Record<string, unknown> | null {
   return Object.fromEntries(CHECKOUT_SESSION_FIELDS.map((k) => [k, s[k] ?? null]));
 }
 
+/** The /buy page hit of an agent-buy start, reduced to the host's nine keys (no IP or user agent ever passes). */
+function pickCheckoutHit(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const h = v as Record<string, unknown>;
+  return {
+    ts: numOrNull(h.ts),
+    path: str(h.path),
+    status: numOrNull(h.status),
+    referrerHost: str(h.referrerHost),
+    country: str(h.country),
+    device: str(h.device),
+    browser: str(h.browser),
+    os: str(h.os),
+    visitorClass: str(h.visitorClass),
+  };
+}
+
 /** One checkout start reduced to the host's documented fields; unknown keys are dropped. */
 function pickCheckoutStart(r: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -464,6 +481,7 @@ function pickCheckoutStart(r: Record<string, unknown>): Record<string, unknown> 
     session: pickCheckoutSession(r.session),
     sessionNote: str(r.sessionNote),
     visitorClasses: strs(r.visitorClasses),
+    hit: pickCheckoutHit(r.hit),
     metadata: r.metadata ?? null,
   };
 }

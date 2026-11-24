@@ -164,6 +164,30 @@ describe('checkout_starts_report', () => {
     expect(r.starts[50]).toMatchObject({ timeline: [], timeline_note: 'timeline unavailable: more than 50 sessions listed' });
   });
 
+  it('passes the agent-buy /buy hit through with only its nine keys, and null when the host sends none', async () => {
+    const hit = {
+      ts: 2, path: '/buy/launch-kit', status: 302, referrerHost: 'news.example', country: 'DE', device: 'mobile',
+      browser: 'Safari', os: 'iOS', visitorClass: 'human', ip: '203.0.113.9', ua: 'Mozilla/5.0 (iPhone)',
+    };
+    const rowsIn = [
+      start({ id: 1, source: 'agent-buy', path: '/buy/launch-kit', hit }),
+      start({ id: 2 }),
+      start({ id: 3, hit: 'not-an-object' }),
+    ];
+    fetchMock.mockImplementation(async () => res(200, { days: 7, listed: 3, truncated: false, starts: rowsIn }));
+    const out = await call('checkout_starts_report');
+    expect(out.isError).toBeFalsy();
+    expect(out.content[0].text).not.toContain('203.0.113.9');
+    expect(out.content[0].text).not.toContain('iPhone');
+    const [withHit, noHit, badHit] = JSON.parse(out.content[0].text).starts;
+    expect(withHit.hit).toEqual({
+      ts: 2, path: '/buy/launch-kit', status: 302, referrerHost: 'news.example', country: 'DE', device: 'mobile',
+      browser: 'Safari', os: 'iOS', visitorClass: 'human',
+    });
+    expect(noHit.hit).toBeNull();
+    expect(badHit.hit).toBeNull();
+  });
+
   it('names the deploy step on a 404', async () => {
     startsStatus = 404;
     const out = await call('checkout_starts_report');

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0
+
+### Minor Changes
+
+- Add the Bilko-DB client: `bilkoDb(app)` reads and writes the signed-in user's JSON documents and images for one app, `useDoc(app, key)` is its React hook, and failures throw `BilkoDbError`. `bilkoDb`/`useDoc` take a `team` option for the app's shared team space, and `bilkoTeam(app)` manages team members.
+- 3cd2533: Add `host-kit/vite`: `hostKitVite()` makes the Vite dev server re-bundle host-kit whenever the installed copy changes. Apps on the `file:` dependency no longer serve a stale host-kit after `pnpm install`, which Vite's lockfile-keyed dependency cache caused. The README's refresh steps now clear `node_modules/.vite` for apps without the plugin and check what the dev server serves.
+
 ## 0.11.0
 
 ### Minor Changes

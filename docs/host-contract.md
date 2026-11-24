@@ -62,7 +62,7 @@ React-route apps also get in-process Clerk, credits, Stripe, rate limiting, Gemi
 
 ### To `static-path` and `external-url` apps additionally
 
-- **Shared UI and SDK: `host-kit`** (`packages/host-kit/`), the unscoped npm package, current release 0.11.0: `"host-kit": "^0.11.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. It carries the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`), Bearer-authenticated games hooks, `trackFlow`, and the `env` tag on every telemetry record. The scoped `@bilkobibitkov/host-kit` is not published; do not use it.
+- **Shared UI and SDK: `host-kit`** (`packages/host-kit/`), the unscoped npm package, current release 0.12.0: `"host-kit": "^0.12.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. It carries the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`), Bearer-authenticated games hooks, `trackFlow`, the `env` tag on every telemetry record, and the Bilko-DB client (`bilkoDb`, `useDoc`, `bilkoTeam`, `BilkoDbError`). The scoped `@bilkobibitkov/host-kit` is not published; do not use it.
 - **Bilko-DB is your app's database.** Keep each signed-in user's JSON, text and images, and the data your app's team shares, in [Bilko-DB](#bilko-db). Do not add a database of your own.
 - **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs server logic, run your own server; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below). That server keeps its data in Bilko-DB, including data shared between users in [team documents](#team-documents), and adds no database of its own; ask the Bilko project for storage Bilko-DB does not offer yet.
 - **CSP stays report-only under `/projects/`.** The host enforces its policy on host pages only (switch: ~/Projects/Bilko/docs/deployment.md#env-vars). Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Enforcing it under `/projects/` needs a per-project policy declared in the registry first (`server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
@@ -148,7 +148,7 @@ Bilko-DB is every app's database: JSON and text documents and images, per signed
 | Image privacy | An image link is public: anyone who has it can load the image. The id is random and unguessable. |
 | Image metadata | Location and camera metadata is removed on upload: JPEG Exif and XMP segments, PNG `eXIf` chunks |
 
-Use host-kit (`bilkoDb`, `useDoc`, `BilkoDbError`; the npm release 0.11.0 does not carry them yet, so link `file:../Bilko/packages/host-kit`). Reference: ~/Projects/Bilko/packages/host-kit/README.md#bilko-db.
+Use host-kit 0.12.0 or later (`bilkoDb`, `useDoc`, `BilkoDbError`). Reference: ~/Projects/Bilko/packages/host-kit/README.md#bilko-db.
 
 ```tsx
 import { bilkoDb, useDoc } from 'host-kit';
@@ -593,7 +593,7 @@ Defined once, in `mcp-host-server/src/manifest-schema.ts` (Zod), which the `mani
 {
   "schemaVersion": 1, "slug": "stack-audit", "version": "1.0.0",
   "builtAt": "2026-05-08T14:30:00.000Z", "gitSha": "abc1234", "gitBranch": "main",
-  "hostKit": { "version": "0.11.0" },
+  "hostKit": { "version": "0.12.0" },
   "golden": { "path": "/projects/stack-audit/", "expect": "StackAudit" },
   "health": {},
   "bundle": { "sizeBytesGz": 245760, "fileCount": 38 }

@@ -10,7 +10,7 @@ Sibling apps in the workspace depend on it locally:
 "host-kit": "file:../Bilko/packages/host-kit"
 ```
 
-The npm package name is `host-kit` (`pnpm add host-kit@^0.11.0`; 0.11.0 is the first release that tags every telemetry record with `env`, see [Telemetry](#telemetry)). Peer deps: `react` ^18, and `@playwright/test` >=1.40 only if you use `host-kit/testing`.
+The npm package name is `host-kit` (`pnpm add host-kit@^0.12.0`; 0.12.0 is the first release with the [Bilko-DB](#bilko-db) client, and 0.11.0 the first that tags every telemetry record with `env`, see [Telemetry](#telemetry)). Peer deps: `react` ^18, and `@playwright/test` >=1.40 only if you use `host-kit/testing`.
 
 - **Tailwind.** Tailwind skips `node_modules`, so apps that render kit components need `@source "<rel>/node_modules/host-kit/dist";` in their Tailwind CSS.
 - **Vite.** Apps on the `file:` dependency add `hostKitVite()` from `host-kit/vite` to `plugins` in `vite.config.ts`. Vite pre-bundles host-kit into `node_modules/.vite/deps` and rebuilds that copy only when the lockfile or the Vite config changes. A `file:` dependency's version is not in `pnpm-lock.yaml`, so without the plugin `pnpm dev` (and a Playwright `webServer` running it) keeps serving the old host-kit after `pnpm install`. The plugin's name carries a fingerprint of the installed host-kit, so Vite re-bundles when that copy changes and keeps its cache otherwise. npm installs record the version in the lockfile and need no plugin. `optimizeDeps.exclude: ['host-kit']` is not a fix: Vite serves an excluded dep at an immutable `?v=` URL that also changes only with the lockfile or config, so an open browser keeps the old copy.

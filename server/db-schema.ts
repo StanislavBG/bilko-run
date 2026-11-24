@@ -998,6 +998,9 @@ export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {
   service_bookings: [['ics_sequence', 'INTEGER NOT NULL DEFAULT 0']],
   // record_id: the client's recordId, deduplicated by a partial UNIQUE index (server/db.ts).
   app_logs: [['env', 'TEXT'], ['record_id', 'TEXT']],
+  // 'read' keys pass requireAdmin on GET/HEAD only; 'registry' keys also pass requireRegistryWriter
+  // (server/services/admin-api-keys.ts) for any method.
+  admin_api_keys: [['scope', "TEXT NOT NULL DEFAULT 'read'"]],
   app_errors: [
     ['env', 'TEXT'],
     // 1 = the request UA is not a person's browser; set by /api/telemetry/error.

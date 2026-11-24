@@ -84,11 +84,19 @@ interface ApiKeyRow {
   id: number;
   label: string | null;
   prefix: string;
+  scope: ApiKeyScope;
   created_at: number;
   expires_at: number;
   last_used_at: number | null;
   revoked_at: number | null;
 }
+
+type ApiKeyScope = 'read' | 'registry';
+
+const SCOPE_LABELS: Record<ApiKeyScope, string> = {
+  read: 'Read-only',
+  registry: 'Registry write',
+};
 
 export function keyStatus(
   k: { revoked_at: number | null; expires_at: number },
@@ -109,6 +117,7 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
   const keys = data ?? [];
   const [label, setLabel] = useState('');
   const [ttlDays, setTtlDays] = useState(90);
+  const [scope, setScope] = useState<ApiKeyScope>('read');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -122,7 +131,7 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
       const res = await adminFetch('/admin/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: label.trim() || undefined, ttlDays }),
+        body: JSON.stringify({ label: label.trim() || undefined, ttlDays, scope }),
       });
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
       const body = (await res.json()) as { key: string };
@@ -130,6 +139,7 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
       setNewKey(body.key);
       setCopied(false);
       setLabel('');
+      setScope('read');
       await reload();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Request failed');
@@ -168,7 +178,8 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
       <div>
         <h2 className="text-xl font-extrabold text-warm-900">Admin API keys</h2>
         <p className="text-warm-500 text-sm mt-1">
-          Personal read-only keys for the bilko-host MCP. Keys cannot manage other keys.
+          Personal keys for the bilko-host MCP. Read-only keys can only read the admin API; registry-write
+          keys can also write project metadata. Keys cannot manage other keys.
         </p>
       </div>
 
@@ -224,6 +235,17 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
             <option value={365}>365 days</option>
           </select>
         </label>
+        <label className="text-xs font-semibold text-warm-500 space-y-1">
+          <span className="block">Scope</span>
+          <select
+            value={scope}
+            onChange={e => setScope(e.target.value as ApiKeyScope)}
+            className="border border-warm-200 rounded-lg px-3 py-2 text-sm font-normal text-warm-900 bg-white focus:outline-none focus:ring-2 focus:ring-fire-400"
+          >
+            <option value="read">{SCOPE_LABELS.read}</option>
+            <option value="registry">{SCOPE_LABELS.registry}</option>
+          </select>
+        </label>
         <button
           type="submit"
           disabled={busy}
@@ -243,6 +265,7 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
               <tr className="border-b border-warm-100 text-xs font-bold text-warm-400 uppercase tracking-wide">
                 <th className="text-left px-4 py-3">Prefix</th>
                 <th className="text-left px-4 py-3">Label</th>
+                <th className="text-left px-4 py-3">Scope</th>
                 <th className="text-left px-4 py-3">Created</th>
                 <th className="text-left px-4 py-3">Expires</th>
                 <th className="text-left px-4 py-3">Last used</th>
@@ -259,6 +282,7 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
                   >
                     <td className="px-4 py-3"><code className="font-mono text-xs font-semibold text-warm-800">{k.prefix}…</code></td>
                     <td className="px-4 py-3 text-warm-600 text-xs">{k.label ?? '—'}</td>
+                    <td className="px-4 py-3 text-warm-600 text-xs">{SCOPE_LABELS[k.scope] ?? k.scope}</td>
                     <td className="px-4 py-3 text-warm-600 text-xs">{humanizeAgo(k.created_at)}</td>
                     <td className="px-4 py-3 text-warm-600 text-xs">
                       {formatDate(k.expires_at)}
@@ -281,7 +305,7 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
               })}
               {keys.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-warm-400 text-sm">
+                  <td colSpan={7} className="text-center py-8 text-warm-400 text-sm">
                     No admin API keys yet.
                   </td>
                 </tr>

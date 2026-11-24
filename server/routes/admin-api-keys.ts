@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAdminSession } from '../clerk.js';
-import { listAdminApiKeys, mintAdminApiKey, revokeAdminApiKey } from '../services/admin-api-keys.js';
+import { isAdminApiKeyScope, listAdminApiKeys, mintAdminApiKey, revokeAdminApiKey } from '../services/admin-api-keys.js';
 
 // Key management requires a real Clerk admin session, never an admin API key.
 export function registerAdminApiKeyRoutes(app: FastifyInstance): void {
@@ -8,7 +8,7 @@ export function registerAdminApiKeyRoutes(app: FastifyInstance): void {
     const email = await requireAdminSession(req, reply);
     if (!email) return;
 
-    const { label, ttlDays } = ((req.body ?? {}) as { label?: unknown; ttlDays?: unknown });
+    const { label, ttlDays, scope } = ((req.body ?? {}) as { label?: unknown; ttlDays?: unknown; scope?: unknown });
     if (label !== undefined && typeof label !== 'string') {
       reply.status(400).send({ error: 'label must be a string.' });
       return;
@@ -17,8 +17,12 @@ export function registerAdminApiKeyRoutes(app: FastifyInstance): void {
       reply.status(400).send({ error: 'ttlDays must be an integer.' });
       return;
     }
-    const minted = await mintAdminApiKey(email, label ? label.slice(0, 80) : null, ttlDays);
-    return { id: minted.id, key: minted.key, prefix: minted.prefix, expiresAt: minted.expiresAt };
+    if (scope !== undefined && !isAdminApiKeyScope(scope)) {
+      reply.status(400).send({ error: "scope must be 'read' or 'registry'." });
+      return;
+    }
+    const minted = await mintAdminApiKey(email, label ? label.slice(0, 80) : null, ttlDays, scope ?? 'read');
+    return { id: minted.id, key: minted.key, prefix: minted.prefix, expiresAt: minted.expiresAt, scope: minted.scope };
   });
 
   app.get('/api/admin/api-keys', async (req, reply) => {

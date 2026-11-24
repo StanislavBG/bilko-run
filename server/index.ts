@@ -37,6 +37,7 @@ import { registerAdminInternalDeviceRoutes } from './routes/admin-internal-devic
 import { registerAdminGitViewerRoutes } from './routes/admin-git-viewer.js';
 import { registerGameRoutes } from './routes/games.js';
 import { registerBilkoDbRoutes } from './routes/bilko-db.js';
+import { registerBilkoDbTeamRoutes } from './routes/bilko-db-team.js';
 import { registerAcademyRoutes } from './routes/academy.js';
 import { registerProjectDataRoutes } from './routes/project-data.js';
 import { registerProjectEventsRoutes } from './routes/project-events.js';
@@ -263,6 +264,7 @@ registerAdminInternalDeviceRoutes(app);
 registerAdminGitViewerRoutes(app);
 registerGameRoutes(app);
 registerBilkoDbRoutes(app);
+registerBilkoDbTeamRoutes(app);
 registerAcademyRoutes(app);
 registerProjectDataRoutes(app);
 registerProjectFeedbackRoutes(app);

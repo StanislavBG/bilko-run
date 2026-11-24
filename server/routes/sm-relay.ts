@@ -25,6 +25,19 @@ import {
   closeSessionsForUser,
   closeAllRelayConnections,
 } from '../sm-relay/router.js';
+import { deleteBoxesForDevice, purgeExpiredEnvelopes } from '../sm-relay/boxes.js';
+
+export const ENVELOPE_PURGE_INTERVAL_MS = 60 * 60 * 1000;
+
+/** One envelope TTL sweep; logs the purged count only when something was purged. */
+export async function runEnvelopePurgeTick(
+  log: { info: (obj: { purged: number }, msg: string) => void },
+  now = Date.now(),
+): Promise<number> {
+  const purged = await purgeExpiredEnvelopes(now);
+  if (purged > 0) log.info({ purged }, 'sm-relay: purged expired envelopes');
+  return purged;
+}
 
 // ── Optional email allowlist (defense in depth; default: any authenticated Clerk user) ──
 // canRoute already isolates devices per-email and pairing needs physical access to the
@@ -162,6 +175,10 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
       const result = verifyOtp(code);
       if ('error' in result) return reply.status(result.status).send({ error: result.error });
 
+      // A device id moving to another account must not carry the old account's boxes along.
+      const existing = await getDevice(deviceId);
+      if (existing && existing.userId !== result.userId) await deleteBoxesForDevice(deviceId);
+
       const deviceToken = await issueDeviceToken(deviceId, result.userId, result.email, devicePubKey);
       reply.send({ deviceToken, deviceId }); // token returned to agent; never logged
     },
@@ -181,6 +198,7 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
     const entry = await getDevice(req.params.deviceId);
     if (!entry || entry.userId !== auth.userId) return reply.status(404).send({ error: 'device_not_found' });
     await revokeDevice(req.params.deviceId);
+    await deleteBoxesForDevice(req.params.deviceId);
     notifyDeviceRevoked(req.params.deviceId);
     reply.send({ ok: true });
   });
@@ -190,6 +208,7 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
     const auth = await requireRelayUser(req, reply);
     if (!auth) return;
     const revokedIds = await revokeAllDevicesForUser(auth.userId);
+    for (const deviceId of revokedIds) await deleteBoxesForDevice(deviceId);
     for (const deviceId of revokedIds) notifyDeviceRevoked(deviceId);
     closeSessionsForUser(auth.userId);
     reply.send({ ok: true, revokedCount: revokedIds.length });
@@ -198,4 +217,10 @@ export function registerSmRelayRoutes(app: FastifyInstance): void {
   // Periodic housekeeping (in-process OTPs, WS tickets, rate counters)
   const timer = setInterval(() => purgeExpired(), 5 * 60 * 1000);
   if (typeof timer.unref === 'function') timer.unref();
+
+  // Drop-box envelopes older than ENVELOPE_TTL_MS (30 days)
+  const purgeTimer = setInterval(() => {
+    runEnvelopePurgeTick(app.log).catch((err) => app.log.error({ err }, 'sm-relay: envelope purge failed'));
+  }, ENVELOPE_PURGE_INTERVAL_MS);
+  if (typeof purgeTimer.unref === 'function') purgeTimer.unref();
 }

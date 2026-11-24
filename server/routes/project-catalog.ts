@@ -41,7 +41,7 @@ function offersForProject(project: { slug: string; url: string }, offers: readon
 // (refreshRegistry swaps the array, so identity is the change signal).
 let cachedSnapshot: readonly unknown[] | null = null;
 let cachedProjects: readonly CatalogProject[] = [];
-function catalogProjects(): readonly CatalogProject[] {
+export function catalogProjects(): readonly CatalogProject[] {
   const snapshot = getRegistrySnapshot();
   if (snapshot !== cachedSnapshot) {
     cachedProjects = catalogProjectsOf(snapshot);

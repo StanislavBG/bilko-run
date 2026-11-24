@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { buildCatalog } from '../../src/data/projectCatalog.js';
+import { buildCatalogFrom, type CatalogProject } from '../../src/data/projectCatalog.js';
 import { AGENT_OFFERS, formatPrice, type AgentOffer } from '../../shared/agent-offers.js';
 import { availableOffers } from '../services/offer-availability.js';
-import type { ListOffers } from './project-catalog.js';
+import { catalogProjects, type ListOffers } from './project-catalog.js';
 
 /**
  * /llms.txt (llmstxt.org): what bilko.run is, every public project, every paid
@@ -35,11 +35,12 @@ export const MCP_TOOLS = [
 export function buildLlmsTxt(
   offers: readonly AgentOffer[] = AGENT_OFFERS,
   hasProjectLlmsTxt: (slug: string) => boolean = () => false,
+  projectsSource: readonly CatalogProject[] = catalogProjects(),
 ): string {
   const buy = offers.map(
     o => `- [${o.name} — ${formatPrice(o)}](${o.buyUrl}): ${oneLine(o.summary)} ${oneLine(o.whatYouGet)}`,
   );
-  const catalog = buildCatalog().projects;
+  const catalog = buildCatalogFrom(projectsSource).projects;
   const projects = catalog.map(
     p => `- [${p.name}](${SITE}/projects/${p.slug}/): ${oneLine(p.tagline)}`,
   );

@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { initDb } from '../server/db.js';
 import { registerListingMediaRoutes } from '../server/routes/listing-media.js';
-import { isListingMediaDeclared } from '../server/services/listing-media-declared.js';
+import { isListingMediaDeclared, GITHUB_REGISTRY_URL } from '../server/services/listing-media-declared.js';
 import type { CardMediaField } from '../shared/listing-media.js';
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
@@ -129,6 +129,35 @@ describe('isListingMediaDeclared', () => {
     expect(await isListingMediaDeclared('demo', file, { registry: entry({ shareImage: `/projects/demo/_media/${'b'.repeat(64)}.png` }) })).toBeUndefined();
     // Declared on another slug's entry does not count.
     expect(await isListingMediaDeclared('other', file, { registry: [{ slug: 'demo', listing: { icon: `/projects/other/_media/${file}` } }] })).toBeUndefined();
+  });
+
+  describe('GitHub-main fallback', () => {
+    const github = (listing: Record<string, unknown>) => [{ slug: 'demo', listing }];
+    const okFetch = (body: unknown) => vi.fn(async (_u: string, _i?: RequestInit) => new Response(JSON.stringify(body), { status: 200 }));
+
+    it('does not fetch when the snapshot declares the file', async () => {
+      const f = okFetch(github({ icon: path }));
+      expect(await isListingMediaDeclared('demo', file, { registry: entry({ icon: path }), fetch: f })).toBe('icon');
+      expect(f).not.toHaveBeenCalled();
+    });
+
+    it('accepts a file only GitHub main declares, fetching exactly the fixed URL', async () => {
+      const f = okFetch(github({ shareImage: path }));
+      expect(await isListingMediaDeclared('demo', file, { registry: [], fetch: f })).toBe('shareImage');
+      expect(f).toHaveBeenCalledTimes(1);
+      expect(f.mock.calls[0][0]).toBe(GITHUB_REGISTRY_URL);
+    });
+
+    it('refuses when neither declares it', async () => {
+      expect(await isListingMediaDeclared('demo', file, { registry: [], fetch: okFetch(github({})) })).toBeUndefined();
+    });
+
+    it('refuses on a non-OK response or a thrown fetch', async () => {
+      const bad = vi.fn(async () => new Response('nope', { status: 500 }));
+      expect(await isListingMediaDeclared('demo', file, { registry: [], fetch: bad })).toBeUndefined();
+      const boom = vi.fn(async () => { throw new Error('net'); });
+      expect(await isListingMediaDeclared('demo', file, { registry: [], fetch: boom })).toBeUndefined();
+    });
   });
 
   it('rejects bad slugs and file names without any lookup', async () => {

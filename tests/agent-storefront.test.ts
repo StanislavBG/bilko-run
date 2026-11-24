@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,15 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { buildLlmsTxt, registerAgentStorefrontRoutes } from '../server/routes/agent-storefront.js';
 import { AGENT_OFFERS, formatPrice } from '../shared/agent-offers.js';
 import { buildCatalog } from '../src/data/projectCatalog.js';
+import { initDb } from '../server/db.js';
+import { initRegistry, refreshRegistry } from '../server/registry-runtime.js';
+import { putProject, deleteProject } from '../server/services/registry-db.js';
+
+// /llms.txt lists the registry snapshot, so load it (imports the bundled registry file) first.
+beforeAll(async () => {
+  await initDb();
+  await initRegistry();
+});
 
 describe('GET /llms.txt', () => {
   async function fetchTxt() {
@@ -84,5 +93,24 @@ describe('/llms.txt project guides', () => {
     const body = (await app.inject({ method: 'GET', url: '/llms.txt' })).body;
     expect(body).toContain(`(https://bilko.run/projects/${first}/llms.txt)`);
     expect(body).not.toContain(`(https://bilko.run/projects/${second}/llms.txt)`);
+  });
+});
+
+describe('/llms.txt reads the registry snapshot', () => {
+  it('shows a project added to the snapshot and drops one removed from it', async () => {
+    const slug = 'llms-snapshot-app';
+    const res = await putProject({
+      slug, name: 'Llms Snapshot App', tagline: 'Seen only via the snapshot', category: 'Test',
+      status: 'live', year: 2026, public: true, host: { kind: 'static-path', path: `/projects/${slug}/` },
+    }, 'test');
+    expect(res).not.toHaveProperty('error');
+    try {
+      await refreshRegistry();
+      expect(buildLlmsTxt(AGENT_OFFERS)).toContain(`https://bilko.run/projects/${slug}/`);
+    } finally {
+      await deleteProject(slug, 'test');
+      await refreshRegistry();
+    }
+    expect(buildLlmsTxt(AGENT_OFFERS)).not.toContain(`/projects/${slug}/)`);
   });
 });

@@ -169,17 +169,18 @@ describe('listing media declared by the registry snapshot', () => {
   const file = `${'c'.repeat(64)}.png`;
   const path = `/projects/media-app/_media/${file}`;
 
-  it('accepts a path once declared and refuses it once removed, without fetching', async () => {
+  it('accepts a path once declared and refuses it once removed; a declared path never fetches', async () => {
+    const noGithub = vi.fn(async () => new Response('[]', { status: 200 }));
     await put(entry('media-app'));
-    expect(await isListingMediaDeclared('media-app', file)).toBeUndefined();
+    expect(await isListingMediaDeclared('media-app', file, { fetch: noGithub })).toBeUndefined();
 
     await put(entry('media-app', {}, { icon: path }));
     expect(await isListingMediaDeclared('media-app', file)).toBe('icon');
     // Another slug's declaration never counts.
-    expect(await isListingMediaDeclared('other-app', file)).toBeUndefined();
+    expect(await isListingMediaDeclared('other-app', file, { fetch: noGithub })).toBeUndefined();
 
     await put(entry('media-app'));
-    expect(await isListingMediaDeclared('media-app', file)).toBeUndefined();
+    expect(await isListingMediaDeclared('media-app', file, { fetch: noGithub })).toBeUndefined();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

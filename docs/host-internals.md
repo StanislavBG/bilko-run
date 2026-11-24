@@ -290,6 +290,65 @@ Three Winds: `ROOM_MODULES` registers the engine's own `threeWindsRoomModule` fr
 
 A sweeper (every 60 s) releases held escrows older than 60 s whose table is not in this process.
 
+## Session Manager relay drop boxes
+
+A drop box lets a website widget send a sealed report to its owner's paired Session Manager desktop. The widget encrypts the report to the box's P-256 public key (an `SMF1` envelope); the host stores the opaque bytes and never decrypts, parses, hashes or logs them. Code: `server/routes/sm-relay-boxes.ts` (owner routes), `server/routes/sm-relay-box-ingest.ts` (public routes), `server/sm-relay/boxes.ts` (store), with the device purge paths in `server/routes/sm-relay.ts`.
+
+### Auth
+
+Every owner route takes `Authorization: Bearer <token>`. A token with exactly two dots is a Clerk session; anything else is checked as a device token from `POST /api/sm-relay/pair`.
+
+- No or empty bearer: `401 missing_token`. Bad Clerk session: `401` from `requireAuth`. Bad device token: `401 invalid_token`.
+- An email outside `SM_RELAY_ALLOWED_EMAILS` (Clerk or device): `403 not_allowed`.
+- A device token sees only the boxes of its own device; a Clerk session sees every box of the account (the account id is the Clerk email). A box the caller does not own is `404 box_not_found`.
+- Only a device token can create a box or drain one; a Clerk session there gets `403 device_token_required`.
+- Creating a box also needs the account email to pass `SM_RELAY_BOXES_ALLOWED_EMAILS`, else `403 not_enabled`. Unset means site admins (`ADMIN_EMAILS` in `server/clerk.ts`) only, `*` means every account, otherwise a comma-separated email list. Both switches are read on every call ([`docs/deployment.md`](deployment.md#env-vars)).
+
+### Owner routes (`server/routes/sm-relay-boxes.ts`)
+
+A box in JSON is `{ boxId, label, allowedOrigins, publicKey, state, pending, pendingBytes, createdAt, lastReceivedAt, deviceId }` (`pending` and `pendingBytes` count the stored envelopes; times are ISO strings, `lastReceivedAt` may be `null`).
+
+| Route | Auth | Request | Response |
+| --- | --- | --- | --- |
+| `POST /api/sm-relay/boxes` | device token | `{ label, publicKey, allowedOrigins }` | `201 { boxId, state: "open", createdAt }`; `400 invalid_label` / `invalid_public_key` / `invalid_allowed_origins`; `403 device_token_required` / `not_enabled` / `box_limit_reached` |
+| `GET /api/sm-relay/boxes` | device token or Clerk session | — | `200 { boxes: [box] }` |
+| `PATCH /api/sm-relay/boxes/:boxId` | device token or Clerk session | any of `{ label, allowedOrigins, state }` (`state` is `open` or `paused`) | `200 box`; `400 invalid_label` / `invalid_allowed_origins` / `invalid_state`; `404 box_not_found` |
+| `DELETE /api/sm-relay/boxes/:boxId` | device token or Clerk session | — | `200 { ok: true }` (deletes the box and every envelope in it); `404 box_not_found` |
+| `GET /api/sm-relay/boxes/:boxId/envelopes?limit=1..20` | owning device token | `limit` defaults to 20 | `200 { envelopes: [{ envelopeId, hostId, clientReportId, receivedAt, origin, bytes }] }`, oldest first; `400 invalid_limit`; `403 device_token_required`; `404 box_not_found` |
+| `GET /api/sm-relay/boxes/:boxId/envelopes/:envelopeId` | owning device token | — | `200` the exact stored bytes, `application/octet-stream`, `cache-control: no-store`, uncompressed; `404 envelope_not_found` |
+| `DELETE /api/sm-relay/boxes/:boxId/envelopes/:envelopeId` | owning device token | — | `200 { ok: true }` (the acknowledge: deletes the envelope); `404 envelope_not_found` |
+
+Validation: `label` is 1-80 characters after trimming. `publicKey` is the unpadded base64url of a 65-byte uncompressed P-256 point that is on the curve. `allowedOrigins` is 1-10 bare origins (`https:`, or `http:` on `localhost` / `127.0.0.1`), no wildcards, deduplicated.
+
+### Public routes (`server/routes/sm-relay-box-ingest.ts`)
+
+| Route | Request | Response |
+| --- | --- | --- |
+| `GET /api/sm-relay/boxes/:boxId/key` | — | `200 { boxId, publicKey, state }` with `access-control-allow-origin: *` and `cache-control: public, max-age=60`; `404 box_not_found` |
+| `OPTIONS /api/sm-relay/boxes/:boxId/envelopes` | CORS preflight | `204` with `access-control-allow-methods: POST`, `access-control-allow-headers: Content-Type, X-Sm-Envelope, X-Sm-Report-Id`, `access-control-max-age: 600`; same `404` / `403` / `410` checks as the POST |
+| `POST /api/sm-relay/boxes/:boxId/envelopes` | body `application/octet-stream` starting with `SMF1`; headers `X-Sm-Envelope: 1` and `X-Sm-Report-Id: <uuid>` | `201 { id }` (new envelope; the owning desktop gets a `box:envelope` nudge over its relay socket, with no body bytes); `200 { id }` (same report id already stored, nothing new stored); errors below |
+
+POST checks, in order: `429 rate_limited` with `retry-after` (per IP), `404 box_not_found`, `403 origin_not_allowed`, `410 box_paused`, `429 rate_limited` with `retry-after` (per box), `413 too_large` (`Content-Length` over the cap; a body over the cap with no length also gets `413` from the body parser), `400 bad_envelope` (missing `X-Sm-Envelope: 1`), `400 invalid_report_id` (not a UUID), `400 bad_envelope` (wrong content type, or a body that does not start with `SMF1`), then `507 box_full`.
+
+**Per-box CORS.** These routes skip the global CORS plugin. The envelope routes echo `access-control-allow-origin: <Origin>` with `vary: Origin` only when the request's `Origin` is in that box's `allowedOrigins`, and the header is set before the body is read, so error replies carry it too. A missing or unlisted origin gets `403 origin_not_allowed`. The key route sends `*`. No public route sends `Access-Control-Allow-Credentials`.
+
+### Caps
+
+- 25 boxes per account (`403 box_limit_reached`); the count and the insert are one statement.
+- 12 MiB per envelope body (`413`).
+- 10 envelope POSTs per minute per IP and 60 per hour per box (`429`). These are in-process sliding windows that every POST counts toward; a restart resets them.
+- 500 envelopes or 200 MiB of stored envelopes per box, whichever comes first (`507 box_full`).
+
+### Retention and purge paths
+
+An envelope is kept at most 30 days. It is deleted when:
+
+- the owning desktop acknowledges it (`DELETE /api/sm-relay/boxes/:boxId/envelopes/:envelopeId`);
+- its box is deleted (`DELETE /api/sm-relay/boxes/:boxId`);
+- the device is revoked (`DELETE /api/sm-relay/devices/:deviceId`) or every device of the account is revoked (`DELETE /api/sm-relay/devices`): the device's boxes and their envelopes go with it;
+- the device id is paired to a different account (`POST /api/sm-relay/pair`): the old account's boxes on that device are deleted first;
+- it is older than 30 days: an hourly sweep in `server/routes/sm-relay.ts` (`runEnvelopePurgeTick`) deletes it and logs the count when it purged any.
+
 ## Sanctioned app-specific host code
 
 
@@ -299,7 +358,7 @@ Host code is framework by default — it should not know about one specific app.
 - PageRoast `roast_page` on the agent surface — its name in the tool list in `server/routes/agent-storefront.ts` and its agent-key check on `/mcp` in `server/routes/project-catalog.ts`
 - Stepproof package card — the `stepproof` entry in `src/data/packages.ts`
 - Observability Command preview — the per-app sample rows (`COUNTRIES` through `HITS`) in `src/pages/admin/command/PreviewPage.tsx`
-- Session Manager — `CROSS_ORIGIN_ASSET_PREFIXES` in `server/static-cache.ts` (its widget prefix), `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
+- Session Manager — `CROSS_ORIGIN_ASSET_PREFIXES` in `server/static-cache.ts` (its widget prefix), `server/sm-relay/`, `server/routes/sm-relay.ts`, `server/routes/sm-relay-boxes.ts`, `server/routes/sm-relay-box-ingest.ts`, `server/routes/manual.ts`, `server/routes/admin-session-manager-usage.ts`, `src/pages/session-manager-landing/` (includes `SessionManagerPage.tsx` and `ManualPage.tsx`), `shared/manual-catalog.ts`, `server/services/manual.ts`, `src/lib/manualClient.ts`, `src/styles/session-manager-*.css`, `data/manual/`
 - Academy gateway — `server/routes/academy.ts`, `server/services/academy-quota.ts`, `shared/academy-models.ts`
 - Shared Bilko coffee tip jar — `GET /coffee` in `server/routes/stripe.ts` plus catalog defaults in `shared/product-catalog.ts`; linked from the site footer (`src/components/Layout.tsx`) and the Session Manager landing header (`src/pages/session-manager-landing/Header.tsx`, link text and href in `copy.ts`)
 - Game config — `shared/game-config.ts`

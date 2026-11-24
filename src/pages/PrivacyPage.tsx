@@ -81,6 +81,7 @@ export function PrivacyPage() {
         <div>
           <h2 className="text-lg font-bold text-warm-900 mb-2">8. Data Retention</h2>
           <p>Account data is retained while your account is active. Roast history (domain + score) is retained indefinitely for the Wall of Shame feature. Payment records are retained as required by law. You can request deletion at any time.</p>
+          <p className="mt-2">Session Manager's website feedback widget sends each report through bilko.run encrypted to the site owner's own desktop. bilko.run stores only the encrypted bytes and cannot read them. It deletes them when the owner's desktop collects them, or after 30 days at most.</p>
         </div>
 
         <div>

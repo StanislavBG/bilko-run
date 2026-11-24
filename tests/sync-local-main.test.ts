@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Runs scripts/sync-local-main.sh against a temp repo with a bare-repo origin. Guards the publish
-// boundary: only plan records may be pushed, unshipped product commits stay local, and --no-push
-// (what publishers run right after their own push) never runs git push at all.
+// boundary: the sync never runs git push in either mode. Every local commit not on origin/main,
+// plan records included, stays local on top of origin/main in its original order.
 const SCRIPT = join(__dirname, '..', 'scripts/sync-local-main.sh');
 const RECORD = 'session-manager-operations/reviews/deploy/epic-1/ship.md';
 const USAGE = 'usage: bash scripts/sync-local-main.sh [--dry-run] [--no-push]';
@@ -91,38 +91,38 @@ describe('sync-local-main.sh', () => {
     expect(git(repo, 'rev-parse', 'main')).toBe(git(origin, 'rev-parse', 'main'));
   });
 
-  it('diverged: pushes only the records, drops shipped twins, keeps unshipped work on top', () => {
-    // A ship cherry-picked the feature onto origin (a twin); a blog post landed there too.
-    commit(repo, 'server/feature.ts', 'feature\n', 'feat: the feature');
-    const recordSha = commit(repo, RECORD, 'SHIP: PASS\n', 'docs(deploy): record the ship');
-    const unshipped = commit(repo, 'server/next.ts', 'next\n', 'feat: not validated yet');
-    commit(other, 'server/feature.ts', 'feature\n', 'feat: the feature');
-    commit(other, 'content/blog/post.md', 'post\n', 'feat(blog): publish post');
-    git(other, 'push', '-q', 'origin', 'main');
-    write(repo, 'scheduler-state.json', '{"dirty":true}\n');
-    const originBefore = git(origin, 'rev-parse', 'main');
+  for (const args of [[], ['--no-push']]) {
+    it(`diverged: drops shipped twins, keeps record and unshipped work on top in order, pushes nothing (${args.join(' ') || 'default'})`, () => {
+      // A ship cherry-picked the feature onto origin (a twin); a blog post landed there too.
+      commit(repo, 'server/feature.ts', 'feature\n', 'feat: the feature');
+      commit(repo, RECORD, 'SHIP: PASS\n', 'docs(deploy): record the ship');
+      const unshipped = commit(repo, 'server/next.ts', 'next\n', 'feat: not validated yet');
+      commit(other, 'server/feature.ts', 'feature\n', 'feat: the feature');
+      commit(other, 'content/blog/post.md', 'post\n', 'feat(blog): publish post');
+      git(other, 'push', '-q', 'origin', 'main');
+      write(repo, 'scheduler-state.json', '{"dirty":true}\n');
+      const originBefore = git(origin, 'rev-parse', 'main');
 
-    const r = run();
-    expect(r.status, r.stderr).toBe(0);
-    expect(r.stdout).toBe(''); // logs go to stderr only, push output included
-    expect(pushes()).toHaveLength(1); // the shim sees the script's pushes
-    const originAfter = git(origin, 'rev-parse', 'main');
-    expect(git(origin, 'rev-list', '--count', `${originBefore}..${originAfter}`)).toBe('1');
-    expect(git(origin, 'show', '--name-only', '--format=', originAfter)).toBe(RECORD);
-    expect(spawnSync('git', ['cat-file', '-e', `${originAfter}:server/next.ts`], { cwd: origin }).status).not.toBe(0);
+      const r = run(...args);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toBe(''); // logs go to stderr only
+      expect(gitCalls()).toContain('fetch -q origin main'); // the shim saw the script's git calls
+      expect(pushes()).toEqual([]);
+      expect(git(origin, 'rev-parse', 'main')).toBe(originBefore);
 
-    git(repo, 'fetch', '-q', 'origin');
-    expect(behind()).toBe('0');
-    expect(ahead()).toBe('1');
-    expect(git(repo, 'log', '-1', '--format=%s', 'main')).toBe('feat: not validated yet');
-    expect(readFileSync(join(repo, 'server/next.ts'), 'utf-8')).toBe('next\n');
-    expect(readFileSync(join(repo, 'content/blog/post.md'), 'utf-8')).toBe('post\n');
-    expect(readFileSync(join(repo, 'scheduler-state.json'), 'utf-8')).toBe('{"dirty":true}\n');
-    expect(git(repo, 'rev-parse', 'backup/main-pre-sync')).toBe(unshipped);
-    expect(git(repo, 'log', '--format=%s', 'origin/main')).toContain('docs(deploy): record the ship');
-    expect(recordSha).not.toBe(originAfter);
-    expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(1);
-  });
+      git(repo, 'fetch', '-q', 'origin');
+      expect(behind()).toBe('0');
+      expect(ahead()).toBe('2');
+      expect(git(repo, 'log', '--reverse', '--format=%s', 'origin/main..main').split('\n'))
+        .toEqual(['docs(deploy): record the ship', 'feat: not validated yet']);
+      expect(readFileSync(join(repo, RECORD), 'utf-8')).toBe('SHIP: PASS\n');
+      expect(readFileSync(join(repo, 'server/next.ts'), 'utf-8')).toBe('next\n');
+      expect(readFileSync(join(repo, 'content/blog/post.md'), 'utf-8')).toBe('post\n');
+      expect(readFileSync(join(repo, 'scheduler-state.json'), 'utf-8')).toBe('{"dirty":true}\n');
+      expect(git(repo, 'rev-parse', 'backup/main-pre-sync')).toBe(unshipped);
+      expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(1);
+    });
+  }
 
   it('exit 3 and nothing changes when a local commit conflicts with origin/main', () => {
     const local = commit(repo, 'CLAUDE.md', 'local\n', 'docs: local shape');
@@ -136,17 +136,20 @@ describe('sync-local-main.sh', () => {
     expect(readFileSync(join(repo, 'CLAUDE.md'), 'utf-8')).toBe('local\n');
   });
 
-  it('--dry-run changes nothing', () => {
-    commit(repo, RECORD, 'SHIP: PASS\n', 'docs(deploy): record the ship');
-    commit(other, 'content/blog/post.md', 'post\n', 'feat(blog): publish post');
-    git(other, 'push', '-q', 'origin', 'main');
-    const before = { local: git(repo, 'rev-parse', 'main'), origin: git(origin, 'rev-parse', 'main') };
-    const r = run('--dry-run');
-    expect(r.status, r.stderr).toBe(0);
-    expect(r.stderr).toContain('would push 1 record commit(s)');
-    expect(git(repo, 'rev-parse', 'main')).toBe(before.local);
-    expect(git(origin, 'rev-parse', 'main')).toBe(before.origin);
-  });
+  for (const args of [['--dry-run'], ['--dry-run', '--no-push']]) {
+    it(`--dry-run changes nothing and pushes nothing (${args.join(' ')})`, () => {
+      commit(repo, RECORD, 'SHIP: PASS\n', 'docs(deploy): record the ship');
+      commit(other, 'content/blog/post.md', 'post\n', 'feat(blog): publish post');
+      git(other, 'push', '-q', 'origin', 'main');
+      const before = { local: git(repo, 'rev-parse', 'main'), origin: git(origin, 'rev-parse', 'main') };
+      const r = run(...args);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stderr).toContain('would move local main to 1 commit(s) on top of origin/main and push nothing');
+      expect(git(repo, 'rev-parse', 'main')).toBe(before.local);
+      expect(git(origin, 'rev-parse', 'main')).toBe(before.origin);
+      expect(pushes()).toEqual([]);
+    });
+  }
 
   // 2026-11-08: local main held a twin of an origin commit that added a changeset, and origin's
   // release then deleted it. The net origin diff since the merge base never lists that file, so the
@@ -223,16 +226,23 @@ describe('sync-local-main.sh', () => {
     }
   });
 
-  it('records directly on origin/main keep their shas', () => {
-    const r1 = commit(repo, RECORD, 'SHIP: PASS\n', 'docs(deploy): record the ship');
-    const o = commit(repo, 'server/o.ts', 'o\n', 'feat: o');
-    const r = run();
-    expect(r.status, r.stderr).toBe(0);
-    git(repo, 'fetch', '-q', 'origin');
-    expect(git(repo, 'rev-parse', 'origin/main')).toBe(r1);
-    expect(git(repo, 'rev-parse', 'main')).toBe(o);
-    expect(backupAbsent()).toBe(true);
-  });
+  for (const args of [[], ['--no-push']]) {
+    it(`records directly on top of origin/main keep their shas and stay local (${args.join(' ') || 'default'})`, () => {
+      const originBefore = git(origin, 'rev-parse', 'main');
+      const r1 = commit(repo, RECORD, 'SHIP: PASS\n', 'docs(deploy): record the ship');
+      const o = commit(repo, 'server/o.ts', 'o\n', 'feat: o');
+      const r = run(...args);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stderr).toContain('nothing to do');
+      expect(pushes()).toEqual([]);
+      expect(git(origin, 'rev-parse', 'main')).toBe(originBefore);
+      git(repo, 'fetch', '-q', 'origin');
+      expect(git(repo, 'rev-parse', 'main')).toBe(o);
+      expect(git(repo, 'rev-parse', 'main~1')).toBe(r1);
+      expect(git(repo, 'rev-parse', 'main~2')).toBe(originBefore);
+      expect(backupAbsent()).toBe(true);
+    });
+  }
 
   it('an unknown flag exits 1 with the usage line, before the lock or any git command', () => {
     for (const args of [['--bogus'], ['--no-push', '--bogus'], ['--bogus', '--dry-run']]) {

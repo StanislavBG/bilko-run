@@ -2,27 +2,24 @@
 # Usage: bash scripts/sync-local-main.sh [--dry-run] [--no-push]
 #
 # Puts the live checkout's local main back on top of origin/main. Local main drifts because
-# scheduler plans commit their work and their validation/ship records to it, while a Ship PRD
-# pushes only a cherry-picked copy of the feature commit. The blog seed, Burrow's video publisher
-# and blog withdraw, and the bilko-host publisher push from their own worktrees. So local main
-# falls behind and collects twins: the same patch under another sha.
+# scheduler plans commit their work to it, while a Ship PRD pushes only a cherry-picked copy of the
+# feature commit. The blog seed, Burrow's video publisher and blog withdraw, and the bilko-host
+# publisher push from their own worktrees. So local main falls behind and collects twins: the same
+# patch under another sha.
 #
 # In a throwaway worktree at a freshly fetched origin/main it:
 #   1. drops local commits whose patch is already on origin/main (git cherry),
-#   2. replays record-only commits (every path under session-manager-operations/reviews/) and
-#      pushes them to origin main as they are, since they are plan logs, not product code,
-#   3. replays every other local commit on top, in order. It never pushes them,
-#   4. moves local main there with `git reset --keep`, keeping uncommitted files.
+#   2. replays every other local commit on top, in its original order, without pushing it,
+#   3. moves local main there with `git reset --keep`, keeping uncommitted files.
+# The script never runs git push. The repo is public and session-manager-operations/ can hold chat
+# transcripts, so no local commit, plan record or not, is ever published from here.
 # Commits already on top of origin/main keep their shas (cherry-pick --ff). A strictly-ahead local
-# main with nothing to publish is left untouched: no push, no backup overwrite, no reset.
-# Unshipped product commits end up strictly ahead of origin/main. Nothing changes if a replay
-# conflicts, local main has merge commits, a dirty file is in the way, or local main moves meanwhile.
+# main is left untouched: no backup overwrite, no reset. A behind-only local main is fast-forwarded.
+# Unshipped commits end up strictly ahead of origin/main. Nothing changes if a replay conflicts,
+# local main has merge commits, a dirty file is in the way, or local main moves meanwhile.
 # The old tip is kept as branch backup/main-pre-sync (overwritten on each sync).
 #
-# --no-push never runs git push. Step 2 goes away: record-only commits stay local and step 3
-# replays them with the rest, every commit in its original order. A publisher runs this right after
-# its own push to catch local main up without publishing anyone else's commits. A behind-only local
-# main is fast-forwarded, a strictly-ahead one is left untouched, and every other rule above holds.
+# --no-push is accepted for the callers that pass it and changes nothing: both modes behave the same.
 # Callers, each right after its push: scripts/blog-seed.sh and the bilko-host publisher in this
 # repo; Burrow's video publisher and blog withdraw outside it. Burrow's two release
 # .git/blog-seed.lock, then run `bash <checkout>/scripts/sync-local-main.sh --no-push` with
@@ -44,13 +41,12 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${BILKO_SYNC_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
-RECORDS_PREFIX="session-manager-operations/reviews/"
 DRY=0; NO_PUSH=0
 for arg in "$@"; do
   case "$arg" in
     "") ;;
     --dry-run) DRY=1 ;;
-    --no-push) NO_PUSH=1 ;;
+    --no-push) NO_PUSH=1 ;;  # accepted for callers; changes nothing
     *) echo "usage: bash scripts/sync-local-main.sh [--dry-run] [--no-push]" >&2; exit 1 ;;
   esac
 done
@@ -78,22 +74,12 @@ if git merge-base --is-ancestor "$OLD" "$BASE"; then
 fi
 [[ -z "$(git rev-list --merges origin/main..main)" ]] || die "local main has merge commits that are not on origin/main; sync by hand" 3
 
-# git cherry lists the + commits oldest first. --no-push keeps them all in that one list, records
-# included, so RECORDS stays empty and nothing is published.
-RECORDS=(); OTHERS=()
+# git cherry lists the + commits oldest first; all of them stay on top in that order.
+OTHERS=()
 while read -r mark sha; do
-  [[ "$mark" == "+" ]] || continue
-  if (( NO_PUSH )) || git diff-tree --no-commit-id --name-only -r --no-renames "$sha" | grep -qv "^$RECORDS_PREFIX"; then
-    OTHERS+=("$sha")
-  else
-    RECORDS+=("$sha")
-  fi
+  [[ "$mark" == "+" ]] && OTHERS+=("$sha")
 done < <(git cherry origin/main main)
-if (( NO_PUSH )); then
-  log "local main: ${#OTHERS[@]} commit(s) to keep on top in order, records included (--no-push: nothing is pushed), rest already on origin"
-else
-  log "local main: ${#RECORDS[@]} record commit(s) to publish, ${#OTHERS[@]} unshipped commit(s) to keep on top, rest already on origin"
-fi
+log "local main: ${#OTHERS[@]} commit(s) to keep on top in order, rest already on origin; nothing is pushed"
 
 WT_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/sync-local-main.XXXXXX")" || die "mktemp failed"
 WT="$WT_PARENT/tree"
@@ -110,11 +96,9 @@ replay() {  # <sha>: cherry-pick onto the worktree; an already-applied patch is 
   die "$(git log -1 --format='%h %s' "$1") does not apply on origin/main; local main untouched" 3
 }
 
-for c in "${RECORDS[@]}"; do replay "$c"; done
-RECORDS_TIP="$(git -C "$WT" rev-parse HEAD)"
 for c in "${OTHERS[@]}"; do replay "$c"; done
 NEW="$(git -C "$WT" rev-parse HEAD)"
-if [[ "$NEW" == "$OLD" && "$RECORDS_TIP" == "$BASE" ]]; then
+if [[ "$NEW" == "$OLD" ]]; then
   log "local main is already $(git rev-list --count "$BASE..$OLD") unshipped commit(s) strictly ahead of origin/main; nothing to do"
   exit 0
 fi
@@ -130,27 +114,11 @@ BLOCKED="$(comm -12 <(git diff --name-only "$OLD" "$NEW" | sort) <(git status --
 [[ -z "$BLOCKED" ]] || die "uncommitted changes in files the sync must update: $(echo $BLOCKED); local main untouched"
 
 if (( DRY )); then
-  if (( NO_PUSH )); then
-    log "would move local main to $(git rev-list --count "$BASE..$NEW") commit(s) on top of origin/main and push nothing"
-  else
-    log "would push ${#RECORDS[@]} record commit(s) and move local main to $(git rev-list --count "$BASE..$NEW") commit(s) on origin/main"
-  fi
+  log "would move local main to $(git rev-list --count "$BASE..$NEW") commit(s) on top of origin/main and push nothing"
   exit 0
-fi
-
-# --no-push never reaches git push, whatever RECORDS holds.
-if (( ! NO_PUSH )) && [[ "$RECORDS_TIP" != "$BASE" ]]; then
-  outside="$(git diff --name-only "$BASE" "$RECORDS_TIP" | grep -v "^$RECORDS_PREFIX" || true)"
-  [[ -z "$outside" ]] || die "record commits touch files outside $RECORDS_PREFIX: $(echo $outside)"
-  out="$(git push origin "$RECORDS_TIP:refs/heads/main" 2>&1)" || { echo "$out" >&2; die "pushing the records failed (origin moved? rerun); local main untouched"; }
-  log "pushed $(git rev-list --count "$BASE..$RECORDS_TIP") record commit(s) to origin main"
 fi
 
 [[ "$(git rev-parse main)" == "$OLD" ]] || die "local main moved during the sync; rerun"
-if [[ "$NEW" == "$OLD" ]]; then
-  log "local main unchanged at ${NEW:0:8}; only the records were published"
-  exit 0
-fi
 git branch -f backup/main-pre-sync "$OLD" >/dev/null
 git reset -q --keep "$NEW" || die "git reset --keep failed; the old tip is backup/main-pre-sync"
 log "local main is now ${NEW:0:8}: $(git rev-list --count origin/main..main) unshipped commit(s) ahead of origin/main, 0 behind (old tip: backup/main-pre-sync)"

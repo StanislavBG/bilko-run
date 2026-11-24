@@ -36,13 +36,19 @@ Clerk-backed sign-in state for the host's `/api`. Import from `host-kit`.
 
 Each signed-in user's documents (JSON or text) and images for one app, on the host's `/api/db/:app` API. Every call goes through `authFetch`. Import from `host-kit`.
 
-- `bilkoDb(app: string): BilkoDbClient`:
+- `bilkoDb(app: string, opts?: { team?: boolean }): BilkoDbClient`. With `{ team: true }` every docs and images call goes to the app's shared team storage: `GET /api/db/<app>/team/docs?prefix=`, `GET`/`PUT`/`DELETE /api/db/<app>/team/docs/<key>`, `POST`/`GET /api/db/<app>/team/images`, `DELETE /api/db/<app>/team/images/<id>` (403 `not_member` for a user not on the team). Image links stay public at `/api/db/<app>/images/<id>` either way. Without the option the calls use the signed-in user's own `/api/db/<app>/docs` and `/api/db/<app>/images`:
   - `list(prefix?)` → `BilkoDocMeta[]` (`{ key, type: 'json' | 'text', bytes, version, updatedAt }`).
   - `get<T>(key)` → `{ value: T, version, type } | null` (null when missing; the version comes from the ETag).
   - `put(key, value, opts?)` → `BilkoDocMeta`. Objects go as `application/json`; `put(key, string, { text: true })` goes as `text/plain`. `opts.ifVersion` sends `If-Match`, `opts.createOnly` sends `If-None-Match: *`.
   - `remove(key, opts?)` → `true`, or `false` when missing; `opts.ifVersion` sends `If-Match`.
   - `images.upload(blob)` → `BilkoImage` (`{ id, url, type, bytes, createdAt }`, `url` absolute and public by link); `images.list()`, `images.remove(id)`, `images.url(id)`.
-- `useDoc<T>(app, key)` — `{ value, version, loading, error, save(value): Promise<boolean>, remove(): Promise<boolean> }`. `save` sends `If-Match` with the version it last read (create-only when the doc did not exist), so a write from elsewhere comes back as `error.code === 'version_mismatch'` instead of overwriting it. String values are saved as text.
+- `useDoc<T>(app, key, opts?: { team?: boolean })` — reads and writes through `bilkoDb(app, opts)`; it reloads when `opts.team` changes. `{ value, version, loading, error, save(value): Promise<boolean>, remove(): Promise<boolean> }`. `save` sends `If-Match` with the version it last read (create-only when the doc did not exist), so a write from elsewhere comes back as `error.code === 'version_mismatch'` instead of overwriting it. String values are saved as text.
+- `bilkoTeam(app: string): BilkoTeam` — manage the app's team from the browser:
+  - `get()` → `GET /api/db/<app>/team` → `{ app, role, members: [{ email, role, addedAt }] }` (`role` is the caller's: `owner`, `member`, or `admin` for the site admin).
+  - `set(email, role: 'owner' | 'member')` → `PUT /api/db/<app>/team/members/<email>` with JSON `{ role }` → `{ email, role, created }`. Owners only.
+  - `remove(email)` → `DELETE /api/db/<app>/team/members/<email>` → `true`, or `false` on 404 `not_found`. A member may remove themselves.
+  - The email is sent with `encodeURIComponent`. Failures throw `BilkoDbError` with the API's code: `not_member`, `last_owner`, `team_full`, `bad_email`, `bad_role`.
+  - Types: `BilkoTeamRole`, `BilkoTeamMember`, `BilkoTeam`.
 - `BilkoDbError` — thrown on failure: `status`, `code` (the API's `error`, e.g. `version_mismatch`, `too_large`, `quota_exceeded`, `rate_limited`; `signed_out` when there is no session) and `version` when the API reports the stored one.
 
 ## Games hooks

@@ -36,8 +36,22 @@ export type { ScoreRow, LeaderboardOpts, AchievementDef, UnlockRow, SaveStateRes
 // ─────────────────────────────────────────────────────────────
 // Bilko-DB — per-user documents and images for one app.
 
-export { bilkoDb, useDoc, BilkoDbError } from './db.js';
-export type { BilkoDbClient, BilkoDoc, BilkoDocMeta, BilkoImage, BilkoPutOptions, BilkoRemoveOptions, DocState } from './db.js';
+export { bilkoDb, bilkoTeam, useDoc, BilkoDbError } from './db.js';
+export type {
+  BilkoDbClient,
+  BilkoDbOptions,
+  BilkoDoc,
+  BilkoDocMeta,
+  BilkoImage,
+  BilkoPutOptions,
+  BilkoRemoveOptions,
+  BilkoTeam,
+  BilkoTeamMember,
+  BilkoTeamRole,
+  BilkoTeamSetResult,
+  BilkoTeamView,
+  DocState,
+} from './db.js';
 
 // ─────────────────────────────────────────────────────────────
 // Game shell — layout, typed bus, timer, tokens (v0.7.1).

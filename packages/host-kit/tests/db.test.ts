@@ -12,7 +12,7 @@ vi.mock('../src/auth', () => ({
   },
 }));
 
-import { bilkoDb, useDoc, BilkoDbError } from '../src/db';
+import { bilkoDb, bilkoTeam, useDoc, BilkoDbError } from '../src/db';
 
 type Call = { url: string; method: string; headers: Headers; body: unknown };
 let calls: Call[];
@@ -142,7 +142,134 @@ describe('bilkoDb images', () => {
   });
 });
 
+const TEAM = `${BASE}/team`;
+
+describe('bilkoDb team storage', () => {
+  it('docs: list, get, put, remove go to /team/docs', async () => {
+    responder = (c) => {
+      if (c.url.startsWith(`${TEAM}/docs?`) || c.url === `${TEAM}/docs`) return json(200, { docs: [] });
+      if (c.method === 'GET') return json(200, { n: 1 }, { etag: '"3"' });
+      if (c.method === 'PUT') return json(200, { key: 'k', type: 'json', version: 4, bytes: 7, updatedAt: 'x' });
+      return json(404, { error: 'not_found' });
+    };
+    const db = bilkoDb('notes', { team: true });
+    await db.list();
+    await db.list('draft.');
+    expect(await db.get('doc 1')).toEqual({ value: { n: 1 }, version: 3, type: 'json' });
+    await db.put('k', { a: 1 }, { ifVersion: 3 });
+    expect(await db.remove('k')).toBe(false);
+    expect(calls.map((c) => [c.method, c.url])).toEqual([
+      ['GET', `${TEAM}/docs`],
+      ['GET', `${TEAM}/docs?prefix=draft.`],
+      ['GET', `${TEAM}/docs/doc%201`],
+      ['PUT', `${TEAM}/docs/k`],
+      ['DELETE', `${TEAM}/docs/k`],
+    ]);
+    expect(calls[3].headers.get('if-match')).toBe('"3"');
+  });
+
+  it('images: upload, list, remove go to /team/images; urls stay public', async () => {
+    const view = { id: 'img_1', url: '/api/db/notes/images/img_1', type: 'image/png', bytes: 3, createdAt: 'x' };
+    responder = (c) => (c.method === 'POST' ? json(201, view) : c.method === 'GET' ? json(200, { images: [view] }) : json(200, { ok: true }));
+    const db = bilkoDb('notes', { team: true });
+    const img = await db.images.upload(new Blob([new Uint8Array([1])], { type: 'image/png' }));
+    const listed = await db.images.list();
+    expect(await db.images.remove('img_1')).toBe(true);
+    expect(calls.map((c) => [c.method, c.url])).toEqual([
+      ['POST', `${TEAM}/images`],
+      ['GET', `${TEAM}/images`],
+      ['DELETE', `${TEAM}/images/img_1`],
+    ]);
+    expect(img.url).toBe(`${BASE}/images/img_1`);
+    expect(listed[0].url).toBe(`${BASE}/images/img_1`);
+    expect(db.images.url('img_1')).toBe(`${BASE}/images/img_1`);
+  });
+
+  it('team: false and no opts keep the personal URLs', async () => {
+    responder = (c) => (c.method === 'GET' && c.url.includes('/docs/') ? json(404, { error: 'not_found' }) : json(200, { docs: [], images: [] }));
+    for (const db of [bilkoDb('notes'), bilkoDb('notes', {}), bilkoDb('notes', { team: false })]) {
+      await db.list();
+      await db.get('k');
+      await db.images.list();
+      expect(db.images.url('i')).toBe(`${BASE}/images/i`);
+    }
+    expect(calls.every((c) => !c.url.includes('/team'))).toBe(true);
+    expect(calls.slice(0, 3).map((c) => c.url)).toEqual([`${BASE}/docs`, `${BASE}/docs/k`, `${BASE}/images`]);
+  });
+});
+
+describe('bilkoTeam', () => {
+  it('get: GET /team returns app, role and members', async () => {
+    const body = { app: 'notes', role: 'owner', members: [{ email: 'a@x.io', role: 'owner', addedAt: '2026-11-23T00:00:00.000Z' }] };
+    responder = () => json(200, body);
+    expect(await bilkoTeam('notes').get()).toEqual(body);
+    expect(calls[0]).toMatchObject({ url: TEAM, method: 'GET' });
+    expect(calls[0].headers.get('authorization')).toBe('Bearer jwt-test');
+  });
+
+  it('set: PUT /team/members/<encoded email> with JSON { role }', async () => {
+    responder = () => json(200, { email: 'b+1@x.io', role: 'member', created: true });
+    expect(await bilkoTeam('notes').set('b+1@x.io', 'member')).toEqual({ email: 'b+1@x.io', role: 'member', created: true });
+    expect(calls[0]).toMatchObject({ url: `${TEAM}/members/b%2B1%40x.io`, method: 'PUT', body: '{"role":"member"}' });
+    expect(calls[0].headers.get('content-type')).toBe('application/json');
+  });
+
+  it('remove: DELETE /team/members/<encoded email>; false on 404', async () => {
+    responder = () => json(200, { ok: true });
+    const team = bilkoTeam('notes');
+    expect(await team.remove('b+1@x.io')).toBe(true);
+    expect(calls[0]).toMatchObject({ url: `${TEAM}/members/b%2B1%40x.io`, method: 'DELETE' });
+    responder = () => json(404, { error: 'not_found' });
+    expect(await team.remove('gone@x.io')).toBe(false);
+  });
+
+  it('maps failures to BilkoDbError with the API code', async () => {
+    const team = bilkoTeam('notes');
+    responder = () => json(403, { error: 'not_member' });
+    const e = await team.get().catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(BilkoDbError);
+    expect(e).toMatchObject({ status: 403, code: 'not_member' });
+
+    responder = () => json(409, { error: 'last_owner' });
+    await expect(team.remove('a@x.io')).rejects.toMatchObject({ status: 409, code: 'last_owner' });
+
+    responder = () => json(409, { error: 'team_full' });
+    await expect(team.set('c@x.io', 'member')).rejects.toMatchObject({ status: 409, code: 'team_full' });
+
+    auth.signedIn = false;
+    await expect(team.get()).rejects.toMatchObject({ status: 401, code: 'signed_out' });
+  });
+});
+
 describe('useDoc', () => {
+  it('team: true reads, saves and removes through /team/docs and reloads when team changes', async () => {
+    responder = (c) => {
+      if (c.method === 'GET') return json(200, { scope: c.url.includes('/team/') ? 'team' : 'personal' }, { etag: '"1"' });
+      if (c.method === 'PUT') return json(200, { key: 'k', type: 'json', version: 2, bytes: 1, updatedAt: 'x' });
+      return json(200, { ok: true });
+    };
+    const { result, rerender } = renderHook(({ team }) => useDoc<{ scope: string }>('notes', 'k', { team }), {
+      initialProps: { team: true },
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.value).toEqual({ scope: 'team' });
+    expect(calls[0].url).toBe(`${TEAM}/docs/k`);
+
+    await act(async () => { await result.current.save({ scope: 'team' }); });
+    expect(calls[1]).toMatchObject({ url: `${TEAM}/docs/k`, method: 'PUT' });
+    await act(async () => { await result.current.remove(); });
+    expect(calls[2]).toMatchObject({ url: `${TEAM}/docs/k`, method: 'DELETE' });
+
+    // A fresh options object with the same flag does not refetch.
+    rerender({ team: true });
+    expect(calls).toHaveLength(3);
+
+    rerender({ team: false });
+    await waitFor(() => expect(result.current.value).toEqual({ scope: 'personal' }));
+    expect(calls[3]).toMatchObject({ url: `${BASE}/docs/k`, method: 'GET' });
+  });
+
+
   it('loads, saves with the version it read, and surfaces version_mismatch without overwriting', async () => {
     let stored = { value: { n: 1 }, version: 5 };
     responder = (c) => {

@@ -99,23 +99,43 @@ function parseEtag(h: string | null): number {
   return m ? Number(m[1]) : 0;
 }
 
-/** Bilko-DB client for one app. Every call needs a signed-in user (401 signed_out otherwise). */
-export function bilkoDb(app: string): BilkoDbClient {
-  const base = `${HOST}/api/db/${encodeURIComponent(app)}`;
+async function call(url: string, init?: RequestInit): Promise<Response> {
+  const r = await authFetch(url, init);
+  if (!r) throw new BilkoDbError(401, 'signed_out');
+  return r;
+}
+
+async function ok(url: string, init?: RequestInit): Promise<Response> {
+  const r = await call(url, init);
+  if (!r.ok) throw await toError(r);
+  return r;
+}
+
+/** DELETE that resolves false on 404 and throws BilkoDbError on any other failure. */
+async function del(url: string, init?: RequestInit): Promise<boolean> {
+  const r = await call(url, { ...init, method: 'DELETE' });
+  if (r.status === 404) return false;
+  if (!r.ok) throw await toError(r);
+  return true;
+}
+
+const appBase = (app: string) => `${HOST}/api/db/${encodeURIComponent(app)}`;
+
+export interface BilkoDbOptions {
+  /** Use the app's team storage (/team/docs, /team/images) instead of the user's own. */
+  team?: boolean;
+}
+
+/**
+ * Bilko-DB client for one app. Every call needs a signed-in user (401 signed_out otherwise).
+ * `{ team: true }` reads and writes the app's shared team storage (403 not_member for outsiders);
+ * image links stay public at /api/db/<app>/images/<id> either way.
+ */
+export function bilkoDb(app: string, opts?: BilkoDbOptions): BilkoDbClient {
+  const publicBase = appBase(app);
+  const base = `${publicBase}${opts?.team ? '/team' : ''}`;
   const docUrl = (key: string) => `${base}/docs/${encodeURIComponent(key)}`;
-  const imageUrl = (id: string) => `${base}/images/${encodeURIComponent(id)}`;
-
-  async function call(url: string, init?: RequestInit): Promise<Response> {
-    const r = await authFetch(url, init);
-    if (!r) throw new BilkoDbError(401, 'signed_out');
-    return r;
-  }
-
-  async function ok(url: string, init?: RequestInit): Promise<Response> {
-    const r = await call(url, init);
-    if (!r.ok) throw await toError(r);
-    return r;
-  }
+  const imageUrl = (id: string) => `${publicBase}/images/${encodeURIComponent(id)}`;
 
   const absImage = (img: BilkoImage): BilkoImage => ({ ...img, url: imageUrl(img.id) });
 
@@ -157,10 +177,7 @@ export function bilkoDb(app: string): BilkoDbClient {
     async remove(key, opts = {}) {
       const headers: Record<string, string> = {};
       if (opts.ifVersion !== undefined) headers['if-match'] = versionHeader(opts.ifVersion);
-      const r = await call(docUrl(key), { method: 'DELETE', headers });
-      if (r.status === 404) return false;
-      if (!r.ok) throw await toError(r);
-      return true;
+      return del(docUrl(key), { headers });
     },
 
     images: {
@@ -176,14 +193,62 @@ export function bilkoDb(app: string): BilkoDbClient {
         const r = await ok(`${base}/images`);
         return ((await r.json()) as { images: BilkoImage[] }).images.map(absImage);
       },
-      async remove(id) {
-        const r = await call(imageUrl(id), { method: 'DELETE' });
-        if (r.status === 404) return false;
-        if (!r.ok) throw await toError(r);
-        return true;
-      },
+      remove: (id) => del(`${base}/images/${encodeURIComponent(id)}`),
       url: imageUrl,
     },
+  };
+}
+
+// ── bilkoTeam ────────────────────────────────────────────────────────────────
+
+export type BilkoTeamRole = 'owner' | 'member';
+
+export interface BilkoTeamMember {
+  email: string;
+  role: BilkoTeamRole;
+  addedAt: string;
+}
+
+export interface BilkoTeamView {
+  app: string;
+  /** The caller's role; `admin` for the site admin, who manages but is not a member. */
+  role: BilkoTeamRole | 'admin';
+  members: BilkoTeamMember[];
+}
+
+export interface BilkoTeamSetResult {
+  email: string;
+  role: BilkoTeamRole;
+  /** True when the member was added, false when an existing member's role changed. */
+  created: boolean;
+}
+
+export interface BilkoTeam {
+  /** GET /api/db/<app>/team. */
+  get(): Promise<BilkoTeamView>;
+  /** PUT /api/db/<app>/team/members/<email> with { role }. Owners only. */
+  set(email: string, role: BilkoTeamRole): Promise<BilkoTeamSetResult>;
+  /** DELETE /api/db/<app>/team/members/<email>. True when removed, false when not on the team. */
+  remove(email: string): Promise<boolean>;
+}
+
+/** Manage one app's Bilko-DB team. Failures throw BilkoDbError (not_member, last_owner, team_full, …). */
+export function bilkoTeam(app: string): BilkoTeam {
+  const base = `${appBase(app)}/team`;
+  const memberUrl = (email: string) => `${base}/members/${encodeURIComponent(email)}`;
+  return {
+    async get() {
+      return (await (await ok(base)).json()) as BilkoTeamView;
+    },
+    async set(email, role) {
+      const r = await ok(memberUrl(email), {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      return (await r.json()) as BilkoTeamSetResult;
+    },
+    remove: (email) => del(memberUrl(email)),
   };
 }
 
@@ -208,9 +273,11 @@ const asError = (e: unknown): BilkoDbError | Error => (e instanceof Error ? e : 
 /**
  * One Bilko-DB document as React state. Writes never overwrite blindly: save sends the
  * version it last read, so a write from another tab surfaces as a `version_mismatch` error.
- * String values are stored as text, everything else as JSON.
+ * String values are stored as text, everything else as JSON. `{ team: true }` uses the
+ * app's team storage; the hook reloads when the flag changes.
  */
-export function useDoc<T = unknown>(app: string, key: string): DocState<T> {
+export function useDoc<T = unknown>(app: string, key: string, opts?: BilkoDbOptions): DocState<T> {
+  const team = opts?.team === true;
   const [doc, setDoc] = useState<{ value: T | null; version: number | null }>({ value: null, version: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<BilkoDbError | Error | null>(null);
@@ -224,7 +291,7 @@ export function useDoc<T = unknown>(app: string, key: string): DocState<T> {
     setDoc({ value: null, version: null });
     void (async () => {
       try {
-        const d = await bilkoDb(app).get<T>(key);
+        const d = await bilkoDb(app, { team }).get<T>(key);
         if (cancelled) return;
         setDoc(d ? { value: d.value, version: d.version } : { value: null, version: null });
       } catch (e) {
@@ -236,12 +303,12 @@ export function useDoc<T = unknown>(app: string, key: string): DocState<T> {
     return () => {
       cancelled = true;
     };
-  }, [app, key]);
+  }, [app, key, team]);
 
   const save = useCallback(async (value: T): Promise<boolean> => {
     const v = versionRef.current;
     try {
-      const meta = await bilkoDb(app).put(key, value, {
+      const meta = await bilkoDb(app, { team }).put(key, value, {
         text: typeof value === 'string',
         ...(v === null ? { createOnly: true } : { ifVersion: v }),
       });
@@ -253,12 +320,12 @@ export function useDoc<T = unknown>(app: string, key: string): DocState<T> {
       setError(asError(e));
       return false;
     }
-  }, [app, key]);
+  }, [app, key, team]);
 
   const remove = useCallback(async (): Promise<boolean> => {
     const v = versionRef.current;
     try {
-      await bilkoDb(app).remove(key, v === null ? {} : { ifVersion: v });
+      await bilkoDb(app, { team }).remove(key, v === null ? {} : { ifVersion: v });
       versionRef.current = null;
       setDoc({ value: null, version: null });
       setError(null);
@@ -267,7 +334,7 @@ export function useDoc<T = unknown>(app: string, key: string): DocState<T> {
       setError(asError(e));
       return false;
     }
-  }, [app, key]);
+  }, [app, key, team]);
 
   return { ...doc, loading, error, save, remove };
 }

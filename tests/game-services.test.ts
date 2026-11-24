@@ -1,12 +1,27 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+
+// Route tests authenticate as the email in `Authorization: Bearer <email>`.
+vi.mock('../server/clerk.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../server/clerk.js')>();
+  return {
+    ...original,
+    requireAuth: vi.fn().mockImplementation(async (req: any, reply: any) => {
+      const h: string | undefined = req.headers.authorization;
+      const email = h?.startsWith('Bearer ') ? h.slice(7) : null;
+      if (!email) { reply.status(401).send({ error: 'Sign in required.' }); return null; }
+      return email;
+    }),
+  };
+});
 import { createClient } from '@libsql/client';
 import { dbRun, initDb } from '../server/db.js';
 import {
   submitScore, getTopScores, buildTopScoresQuery, checkScoreRateLimit, resetScoreRateLimit,
   getGameSave, putGameSave, deleteGameSave,
   unlockAchievement, getUnlocks,
-  SAVE_BLOB_MAX,
+  SAVE_BLOB_MAX, SAVE_SLOT_MAX,
 } from '../server/services/games.js';
+import { resetSaveWriteRateLimit } from '../server/routes/games.js';
 
 const GAME = 'boat-shooter';
 const USER = 'test@example.com';
@@ -22,6 +37,7 @@ beforeEach(async () => {
   await dbRun('DELETE FROM game_achievements');
   resetScoreRateLimit(USER, GAME);
   resetScoreRateLimit(USER2, GAME);
+  resetSaveWriteRateLimit();
 });
 
 // ── Leaderboard ──────────────────────────────────────────────────────────────
@@ -157,11 +173,45 @@ describe('Save state', () => {
     expect(r.version).toBe(2);
   });
 
-  it('rejects blob > 32 KB', async () => {
-    const big = { data: 'x'.repeat(SAVE_BLOB_MAX + 1) };
+  it('SAVE_BLOB_MAX is 1 MiB', () => {
+    expect(SAVE_BLOB_MAX).toBe(1_048_576);
+  });
+
+  // JSON.stringify({ d: s }) is s.length + 8 bytes for ASCII s.
+  it('stores a blob of exactly SAVE_BLOB_MAX UTF-8 bytes', async () => {
+    const blob = { d: 'x'.repeat(SAVE_BLOB_MAX - 8) };
+    expect(Buffer.byteLength(JSON.stringify(blob), 'utf8')).toBe(SAVE_BLOB_MAX);
+    const r = await putGameSave(GAME, USER, blob);
+    expect(r.ok).toBe(true);
+    const s = await getGameSave(GAME, USER);
+    expect((s.blob as { d: string }).d.length).toBe(SAVE_BLOB_MAX - 8);
+  });
+
+  it('rejects a blob one byte over SAVE_BLOB_MAX with 413', async () => {
+    const big = { d: 'x'.repeat(SAVE_BLOB_MAX - 7) };
     const r = await putGameSave(GAME, USER, big);
     expect(r.status).toBe(413);
-    expect(r.error).toMatch(/too large/i);
+    expect(r.error).toMatch(/save too large/i);
+  });
+
+  it('measures UTF-8 bytes, not characters', async () => {
+    // 'é' is 2 bytes: (SAVE_BLOB_MAX - 8) / 2 + 1 chars stays under the char count but exceeds the byte cap.
+    const big = { d: 'é'.repeat((SAVE_BLOB_MAX - 8) / 2 + 1) };
+    expect(JSON.stringify(big).length).toBeLessThan(SAVE_BLOB_MAX);
+    const r = await putGameSave(GAME, USER, big);
+    expect(r.status).toBe(413);
+  });
+
+  it('refuses a new slot at SAVE_SLOT_MAX slots but still updates existing ones', async () => {
+    expect(SAVE_SLOT_MAX).toBe(100);
+    await seedSlots(USER, SAVE_SLOT_MAX);
+    const r = await putGameSave('new-slot', USER, { v: 1 });
+    expect(r.status).toBe(403);
+    expect(r.error).toBe('save_slot_limit');
+    const upd = await putGameSave('slot-0', USER, { v: 2 });
+    expect(upd.ok).toBe(true);
+    const other = await putGameSave('new-slot', USER2, { v: 1 });
+    expect(other.ok).toBe(true);
   });
 
   it('delete clears save', async () => {
@@ -170,6 +220,86 @@ describe('Save state', () => {
     const s = await getGameSave(GAME, USER);
     expect(s.blob).toBeNull();
     expect(s.version).toBe(0);
+  });
+});
+
+async function seedSlots(email: string, n: number) {
+  for (let i = 0; i < n; i++) {
+    await dbRun(
+      `INSERT INTO game_saves (game, user_email, blob_json, version, updated_at) VALUES (?, ?, '{}', 1, 0)`,
+      `slot-${i}`, email,
+    );
+  }
+}
+
+// ── Save routes ───────────────────────────────────────────────────────────────
+
+describe('Save routes', () => {
+  async function makeApp() {
+    const { default: Fastify } = await import('fastify');
+    const { registerGameRoutes } = await import('../server/routes/games.js');
+    const app = Fastify();
+    registerGameRoutes(app);
+    return app;
+  }
+
+  it.each(['GET', 'PUT', 'DELETE'] as const)('%s rejects a bad slug with 400 before auth', async (method) => {
+    const app = await makeApp();
+    for (const slug of ['Bad', '-lead', 'a_b', 'a.b', 'a'.repeat(65)]) {
+      const res = await app.inject({ method, url: `/api/games/${slug}/save`, payload: method === 'PUT' ? { blob: {} } : undefined });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toEqual({ error: 'bad slug' });
+    }
+    await app.close();
+  });
+
+  it.each(['academy', 'ga-platform', 'ga-pong', 'mindswiffer-streak', 'sudoku', 'escape-velocity', 'threewinds', 'a'.repeat(64)])(
+    'slug %s passes the pattern', async (slug) => {
+      const app = await makeApp();
+      const unauth = await app.inject({ method: 'GET', url: `/api/games/${slug}/save` });
+      expect(unauth.statusCode).toBe(401);
+      const put = await app.inject({
+        method: 'PUT', url: `/api/games/${slug}/save`,
+        headers: { authorization: `Bearer ${USER}` }, payload: { blob: { ok: 1 } },
+      });
+      expect(put.statusCode).toBe(200);
+      const del = await app.inject({ method: 'DELETE', url: `/api/games/${slug}/save`, headers: { authorization: `Bearer ${USER}` } });
+      expect(del.statusCode).toBe(200);
+      await app.close();
+    },
+  );
+
+  it('PUT answers 429 with Retry-After after 300 writes in a minute, across slugs and per user', async () => {
+    const app = await makeApp();
+    const put = (slug: string, email: string) => app.inject({
+      method: 'PUT', url: `/api/games/${slug}/save`,
+      headers: { authorization: `Bearer ${email}` }, payload: { blob: { n: 1 } },
+    });
+    for (let i = 0; i < 300; i++) {
+      const res = await put(i % 2 ? 'slot-a' : 'slot-b', USER);
+      expect(res.statusCode).toBe(200);
+    }
+    const res = await put('slot-c', USER);
+    expect(res.statusCode).toBe(429);
+    expect(res.json()).toEqual({ error: 'rate_limited' });
+    const retry = Number(res.headers['retry-after']);
+    expect(retry).toBeGreaterThanOrEqual(1);
+    expect(retry).toBeLessThanOrEqual(60);
+    expect((await put('slot-a', USER2)).statusCode).toBe(200);
+    await app.close();
+  }, 60_000);
+
+  it('PUT answers 403 save_slot_limit for a new slot at 100 slots; updates still pass', async () => {
+    await seedSlots(USER, 100);
+    const app = await makeApp();
+    const auth = { authorization: `Bearer ${USER}` };
+    const res = await app.inject({ method: 'PUT', url: '/api/games/new-slot/save', headers: auth, payload: { blob: {} } });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: 'save_slot_limit' });
+    const upd = await app.inject({ method: 'PUT', url: '/api/games/slot-7/save', headers: auth, payload: { blob: { v: 2 } } });
+    expect(upd.statusCode).toBe(200);
+    expect(upd.json()).toEqual({ ok: true, version: 2 });
+    await app.close();
   });
 });
 

@@ -7,6 +7,32 @@ import {
   unlockAchievement, getUnlocks,
 } from '../services/games.js';
 
+/** Save-slot slugs: lowercase letters, digits and hyphens, 1-64 chars, not starting with a hyphen. */
+export const SAVE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+const SAVE_WRITE_LIMIT = 300;
+const SAVE_WRITE_WINDOW_MS = 60_000;
+/** In-process sliding window of save-write timestamps per user, across all slugs. */
+const saveWrites = new Map<string, number[]>();
+
+/** Returns 0 if the write is allowed (and records it), else seconds until one is. */
+function checkSaveWriteRateLimit(email: string, now = Date.now()): number {
+  const cutoff = now - SAVE_WRITE_WINDOW_MS;
+  const hits = (saveWrites.get(email) ?? []).filter((t) => t > cutoff);
+  if (hits.length >= SAVE_WRITE_LIMIT) {
+    saveWrites.set(email, hits);
+    return Math.max(1, Math.ceil((hits[0]! + SAVE_WRITE_WINDOW_MS - now) / 1000));
+  }
+  hits.push(now);
+  saveWrites.set(email, hits);
+  return 0;
+}
+
+export function resetSaveWriteRateLimit(email?: string): void {
+  if (email === undefined) saveWrites.clear();
+  else saveWrites.delete(email);
+}
+
 export function registerGameRoutes(app: FastifyInstance): void {
 
   // ── Leaderboards ─────────────────────────────────────────────────────────
@@ -48,6 +74,7 @@ export function registerGameRoutes(app: FastifyInstance): void {
 
   app.get('/api/games/:slug/save', async (req, reply) => {
     const { slug } = req.params as { slug: string };
+    if (!SAVE_SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
     const email = await requireAuth(req, reply);
     if (!email) return;
     return getGameSave(slug, email);
@@ -55,11 +82,18 @@ export function registerGameRoutes(app: FastifyInstance): void {
 
   app.put('/api/games/:slug/save', async (req, reply) => {
     const { slug } = req.params as { slug: string };
+    if (!SAVE_SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
     const email = await requireAuth(req, reply);
     if (!email) return;
 
     const body = req.body as { blob?: unknown; expectedVersion?: number } | null;
     if (body?.blob === undefined) return reply.code(400).send({ error: 'missing blob' });
+
+    const retryAfter = checkSaveWriteRateLimit(email);
+    if (retryAfter > 0) {
+      reply.header('Retry-After', String(retryAfter));
+      return reply.code(429).send({ error: 'rate_limited' });
+    }
 
     const result = await putGameSave(slug, email, body.blob, body.expectedVersion);
     if (result.error) {
@@ -71,6 +105,7 @@ export function registerGameRoutes(app: FastifyInstance): void {
 
   app.delete('/api/games/:slug/save', async (req, reply) => {
     const { slug } = req.params as { slug: string };
+    if (!SAVE_SLUG_RE.test(slug)) return reply.code(400).send({ error: 'bad slug' });
     const email = await requireAuth(req, reply);
     if (!email) return;
     await deleteGameSave(slug, email);

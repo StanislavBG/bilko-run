@@ -109,7 +109,7 @@ A `react-route` app's page, route and server file: ~/Projects/Bilko/docs/host-in
 Pick the option that fits; each line links to the section that defines it.
 
 - **The browser** (`localStorage`, `sessionStorage`, IndexedDB, cookies): see the shared-origin rule below.
-- **Per-user save state**: `/api/games/:slug/save` through host-kit's `useSaveState`, at most 32 KB per user per slug, any slug, versioned. See [Game services](#game-services).
+- **Per-user save state**: `/api/games/:slug/save` through host-kit's `useSaveState`, at most 1 MiB of UTF-8 JSON per user per slug, any slug matching `^[a-z0-9][a-z0-9-]{0,63}$`, versioned; at most 100 slots per user and 300 writes per user per minute. See [Game services](#game-services).
 - **Leaderboards and unlocks**: registered games only. See [Game services](#game-services).
 - **Project data snapshot** and the **append-only event stream** (`POST /api/projects/:slug/events`, read at `/projects/:slug/data-events.ndjson`): both written only by the owner's publisher token. See [Project data snapshot](#project-data-snapshot).
 - **Your own backend**: for anything larger, relational or shared between users. The app owns its data. See [App backends (forwarding)](#app-backends-forwarding).
@@ -576,14 +576,14 @@ For games hosted on bilko.run (the slugs in `GAME_CONFIGS` in `shared/game-confi
 
 All endpoints live under `/api/games/:slug/`. Endpoints marked *Required* need a Bearer token (see "Calling authenticated host APIs from a `static-path` app").
 
-Leaderboard and achievement endpoints require `slug` to be registered in `shared/game-config.ts`. **Save-state endpoints accept any slug** — they're a per-user, per-slug blob store (≤ 32 KB) with no `GAME_CONFIGS` entry needed. Non-game apps rely on this, e.g. Academy stores course progress at `/api/games/academy/save`. `tests/game-services.test.ts` guards that behavior.
+Leaderboard and achievement endpoints require `slug` to be registered in `shared/game-config.ts`. **Save-state endpoints accept any slug** — they're a per-user, per-slug blob store with no `GAME_CONFIGS` entry needed. Limits: each slot holds at most 1 MiB (1,048,576 bytes) of UTF-8 JSON (413 `save too large` above that); the slug must match `^[a-z0-9][a-z0-9-]{0,63}$` (400 `bad slug`, checked before auth); each user may write 300 times per minute across all slugs (429 `rate_limited` with `Retry-After`); each user may hold at most 100 slots (a PUT that would create a 101st answers 403 `save_slot_limit`; updating an existing slot is never refused for this). Non-game apps rely on this, e.g. Academy stores course progress at `/api/games/academy/save`. `tests/game-services.test.ts` guards that behavior.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `POST /api/games/:slug/scores` | Required | Leaderboard. Submit `{ score, mode?, payload?, sig?, ts? }`. Rate-limited 60/hour/user. Validates `score ≤ maxPlausibleScore`. |
 | `GET /api/games/:slug/scores` | Open | Leaderboard. Query `range=today\|week\|all`, `mode`, `limit` (max 500). Returns `{ scores: ScoreRow[] }`. `display_name` is the email prefix. |
 | `GET /api/games/:slug/save` | Required | Save state (one row per user per slug). Returns `{ blob, version, updated_at }`. |
-| `PUT /api/games/:slug/save` | Required | Body `{ blob, expectedVersion? }`. CAS: if `expectedVersion` ≠ current, returns 409 with `currentVersion`. Blob ≤ 32 KB. |
+| `PUT /api/games/:slug/save` | Required | Body `{ blob, expectedVersion? }`. CAS: if `expectedVersion` ≠ current, returns 409 with `currentVersion`. Blob ≤ 1 MiB of UTF-8 JSON (413). 300 writes/min/user (429 + `Retry-After`). New slot refused at 100 slots/user (403 `save_slot_limit`). |
 | `DELETE /api/games/:slug/save` | Required | Clears the save for the authenticated user. |
 | `POST /api/games/:slug/unlock` | Required | Achievements. Body `{ key }`. Idempotent. Returns `{ ok, alreadyUnlocked, unlocked_at }`. |
 | `GET /api/games/:slug/unlocks` | Required | Returns `{ unlocks: Array<{key, unlocked_at}> }` for the authenticated user. |

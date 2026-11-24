@@ -123,7 +123,10 @@ export async function getTopScores(
 
 // ── Save state ─────────────────────────────────────────────────────────────
 
-export const SAVE_BLOB_MAX = 32_768;
+/** Max bytes of UTF-8 JSON per save slot (1 MiB; one row per slot, inside the 2 MB body limit). */
+export const SAVE_BLOB_MAX = 1_048_576;
+/** Max save slots (rows in game_saves) per user across all slugs. */
+export const SAVE_SLOT_MAX = 100;
 
 export interface GetSaveResult {
   blob: unknown;
@@ -155,8 +158,9 @@ export async function putGameSave(
   expectedVersion?: number,
 ): Promise<PutSaveResult> {
   const blobJson = JSON.stringify(blob);
-  if (blobJson.length > SAVE_BLOB_MAX) {
-    return { error: `save too large (${blobJson.length} > ${SAVE_BLOB_MAX})`, status: 413 };
+  const bytes = Buffer.byteLength(blobJson, 'utf8');
+  if (bytes > SAVE_BLOB_MAX) {
+    return { error: `save too large (${bytes} > ${SAVE_BLOB_MAX})`, status: 413 };
   }
 
   return dbTransaction(async (tx) => {
@@ -165,6 +169,16 @@ export async function putGameSave(
       `SELECT version FROM game_saves WHERE game = ? AND user_email = ?`,
       game, userEmail,
     );
+    if (!cur) {
+      const count = await txGet<{ n: number }>(
+        tx,
+        `SELECT COUNT(*) AS n FROM game_saves WHERE user_email = ?`,
+        userEmail,
+      );
+      if (Number(count?.n ?? 0) >= SAVE_SLOT_MAX) {
+        return { error: 'save_slot_limit', status: 403 };
+      }
+    }
     const curVer = cur?.version ?? 0;
     if (expectedVersion !== undefined && expectedVersion !== curVer) {
       return { error: 'version mismatch', currentVersion: curVer, status: 409 };

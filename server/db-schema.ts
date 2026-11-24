@@ -904,6 +904,33 @@ export const MIGRATIONS = [
     content BLOB NOT NULL,
     PRIMARY KEY (id, idx)
   )`,
+  // Bilko-DB project registry: one validated registry entry per project (server/services/registry-db.ts).
+  // version bumps by one per write (compare-and-set); updated_at is epoch ms.
+  `CREATE TABLE IF NOT EXISTS bilko_db_projects (
+    slug       TEXT PRIMARY KEY,
+    position   INTEGER NOT NULL,
+    entry_json TEXT NOT NULL,
+    version    INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    updated_by TEXT NOT NULL
+  )`,
+  // Audit log for bilko_db_projects: one row per put/delete/import; at is epoch ms.
+  // An 'import' row has slug NULL and the whole before/after registry arrays.
+  `CREATE TABLE IF NOT EXISTS bilko_db_project_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug        TEXT,
+    action      TEXT NOT NULL,
+    before_json TEXT,
+    after_json  TEXT,
+    actor       TEXT NOT NULL,
+    at          INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bilko_db_project_log_slug ON bilko_db_project_log(slug)`,
+  // Key/value state for Bilko-DB (registry import hash, API-written flag).
+  `CREATE TABLE IF NOT EXISTS bilko_db_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

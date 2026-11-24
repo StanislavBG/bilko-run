@@ -871,6 +871,19 @@ export const MIGRATIONS = [
     visitor_id    TEXT PRIMARY KEY,
     first_seen_ms INTEGER NOT NULL
   )`,
+  // Bilko-DB document store: named JSON/text docs per user per app (server/services/bilko-db.ts).
+  `CREATE TABLE IF NOT EXISTS bilko_db_docs (
+    app        TEXT NOT NULL,
+    user_email TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    kind       TEXT NOT NULL CHECK (kind IN ('json', 'text')),
+    body       TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    version    INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (app, user_email, key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bilko_db_docs_user ON bilko_db_docs(user_email)`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

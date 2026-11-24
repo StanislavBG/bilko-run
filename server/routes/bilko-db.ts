@@ -1,17 +1,26 @@
 // Bilko-DB lite document API: a signed-in user's JSON or text documents for one app.
 // Versioning is plain HTTP: GET returns ETag "<version>", PUT/DELETE honour If-Match,
 // PUT honours If-None-Match: * (create only). The user is always the verified token's email.
+// Images: POST/GET list/DELETE under /api/db/:app/images (Bearer), plus a public GET by id.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth } from '../clerk.js';
 import {
   DOC_MAX_BYTES,
+  IMAGE_MAX_BYTES,
+  IMAGE_TYPES,
   deleteDoc,
+  deleteImage,
   getDoc,
+  getImage,
   isAppName,
   isDocKey,
+  isImageType,
   listDocs,
+  listImages,
   putDoc,
+  putImage,
   type DocKind,
+  type ImageMeta,
 } from '../services/bilko-db.js';
 
 const WRITE_LIMIT = 300;
@@ -81,6 +90,23 @@ function docParams(req: FastifyRequest): DocParams {
 }
 type AuthedRequest = FastifyRequest & { bilkoDbUser?: string };
 
+/** Maps body-limit and content-type failures to the API's error shapes. */
+function bilkoDbErrorHandler(err: any, req: FastifyRequest, reply: FastifyReply) {
+  const status = typeof err?.statusCode === 'number' ? err.statusCode : 500;
+  if (status === 413) return reply.code(413).send({ error: 'too_large' });
+  if (status === 415) return reply.code(415).send({ error: 'unsupported_media_type' });
+  if (status >= 400 && status < 500) return reply.code(status).send({ error: 'bad_request' });
+  console.error(`[error] ${req.method} ${req.url}:`, err);
+  return reply.code(500).send({ error: 'Something went wrong. Please try again.' });
+}
+
+// Image ids are 16 random bytes as base64url (22 chars); anything else is not an image.
+const IMAGE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+function imageView(appName: string, m: ImageMeta) {
+  return { id: m.id, url: `/api/db/${appName}/images/${m.id}`, type: m.type, bytes: m.bytes, createdAt: iso(m.createdAt) };
+}
+
 export function registerBilkoDbRoutes(app: FastifyInstance): void {
   app.register(async (scope) => {
     // Bodies are taken as strings so JSON validity is ours to judge (400 bad_json) and text
@@ -90,14 +116,7 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
       scope.addContentTypeParser(type, { parseAs: 'string' }, (_req, body, done) => done(null, body));
     }
 
-    scope.setErrorHandler((err: any, req, reply) => {
-      const status = typeof err?.statusCode === 'number' ? err.statusCode : 500;
-      if (status === 413) return reply.code(413).send({ error: 'too_large' });
-      if (status === 415) return reply.code(415).send({ error: 'unsupported_media_type' });
-      if (status >= 400 && status < 500) return reply.code(status).send({ error: 'bad_request' });
-      console.error(`[error] ${req.method} ${req.url}:`, err);
-      return reply.code(500).send({ error: 'Something went wrong. Please try again.' });
-    });
+    scope.setErrorHandler(bilkoDbErrorHandler);
 
     // Names are checked before auth; auth and the write budget run before the body is
     // parsed so unauthenticated or throttled uploads are never read.
@@ -184,5 +203,78 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
       if (!r.deleted) return reply.code(404).send({ error: 'not_found' });
       return { ok: true };
     });
+  });
+
+  // Image upload, list and delete: Bearer only, owner only. The raw-bytes parsers live in
+  // this scope so the global parsers are untouched; other content types get 415.
+  app.register(async (scope) => {
+    scope.removeAllContentTypeParsers();
+    scope.addContentTypeParser(
+      [...IMAGE_TYPES],
+      { parseAs: 'buffer', bodyLimit: IMAGE_MAX_BYTES },
+      (_req, body, done) => done(null, body),
+    );
+    scope.setErrorHandler(bilkoDbErrorHandler);
+
+    // As for documents: names, then auth, then the shared write budget, all before the body.
+    scope.addHook('onRequest', async (req: AuthedRequest, reply) => {
+      const { app: appName } = req.params as { app: string };
+      if (!isAppName(appName)) return reply.code(400).send({ error: 'bad_app' });
+      const email = await requireAuth(req, reply);
+      if (!email) return reply;
+      req.bilkoDbUser = email;
+      if (req.method === 'POST' || req.method === 'DELETE') {
+        if (!checkBilkoDbWrite(email, reply)) return reply;
+      }
+    });
+
+    const routeOpts = { bodyLimit: IMAGE_MAX_BYTES };
+
+    scope.post('/api/db/:app/images', routeOpts, async (req: AuthedRequest, reply) => {
+      const { app: appName } = req.params as { app: string };
+      const type = mediaType(req);
+      if (!isImageType(type)) return reply.code(415).send({ error: 'unsupported_media_type' });
+      if (!Buffer.isBuffer(req.body)) return reply.code(400).send({ error: 'bad_image' });
+      const r = await putImage({ app: appName, user: req.bilkoDbUser!, bytes: req.body, type });
+      if ('error' in r) {
+        if (r.error === 'bad_image') return reply.code(400).send({ error: 'bad_image' });
+        if (r.error === 'too_large') return reply.code(413).send({ error: 'too_large' });
+        return reply.code(507).send({ error: 'quota_exceeded' });
+      }
+      return reply.code(201).header('Cache-Control', 'private, no-store').send(imageView(appName, r));
+    });
+
+    scope.get('/api/db/:app/images', async (req: AuthedRequest, reply) => {
+      const { app: appName } = req.params as { app: string };
+      const images = await listImages({ app: appName, user: req.bilkoDbUser! });
+      reply.header('Cache-Control', 'private, no-store');
+      return { images: images.map((m) => imageView(appName, m)) };
+    });
+
+    scope.delete('/api/db/:app/images/:id', async (req: AuthedRequest, reply) => {
+      const { app: appName, id } = req.params as { app: string; id: string };
+      if (!IMAGE_ID_RE.test(id)) return reply.code(404).send({ error: 'not_found' });
+      const r = await deleteImage({ app: appName, user: req.bilkoDbUser!, id });
+      if (!r.deleted) return reply.code(404).send({ error: 'not_found' });
+      return { ok: true };
+    });
+  });
+
+  // Public image link: no auth, so it works in a plain <img>. The unguessable id is the
+  // capability; the app in the path must match the stored one. The CSP sandbox and nosniff
+  // keep a crafted file from ever running as a document. Compression is off: the bytes are
+  // already compressed images and are sent exactly as stored.
+  app.get('/api/db/:app/images/:id', { compress: false }, async (req, reply) => {
+    const { app: appName, id } = req.params as { app: string; id: string };
+    if (!isAppName(appName) || !IMAGE_ID_RE.test(id)) return reply.code(404).send({ error: 'not_found' });
+    const img = await getImage(id);
+    if (!img || img.app !== appName) return reply.code(404).send({ error: 'not_found' });
+    return reply
+      .header('Cache-Control', 'public, max-age=3600')
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Content-Security-Policy', "default-src 'none'; sandbox")
+      .header('Content-Length', String(img.bytes.length))
+      .type(img.type)
+      .send(img.bytes);
   });
 }

@@ -30,7 +30,7 @@ import {
 // canRoute already isolates devices per-email and pairing needs physical access to the
 // local machine, so the relay is multi-tenant-safe without this. Set SM_RELAY_ALLOWED_EMAILS
 // (comma-separated) to restrict further.
-function emailAllowed(email: string): boolean {
+export function emailAllowed(email: string): boolean {
   const env = process.env.SM_RELAY_ALLOWED_EMAILS;
   if (!env) return true;
   return env.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
@@ -56,7 +56,7 @@ const DEVICE_TICKET_RATE_MAX = 10;
 const DEVICE_TICKET_RATE_WINDOW_MS = 60_000;
 const deviceTicketRateStore = new Map<string, { count: number; resetAt: number }>();
 
-function getClientIp(req: FastifyRequest): string {
+export function getClientIp(req: FastifyRequest): string {
   // Render appends the real client IP, so the rightmost X-Forwarded-For value is trusted.
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string') return forwarded.split(',').at(-1)!.trim();

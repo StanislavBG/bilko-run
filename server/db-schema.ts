@@ -884,6 +884,26 @@ export const MIGRATIONS = [
     PRIMARY KEY (app, user_email, key)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_bilko_db_docs_user ON bilko_db_docs(user_email)`,
+  // Bilko-DB image store: PNG/JPEG/WebP/GIF per user per app (server/services/bilko-db.ts).
+  // Bytes are split into <= 1 MiB rows in bilko_db_image_chunks; the bilko_db_images row is
+  // written last, so an image exists (and counts toward quota) only once all chunks landed.
+  // created_at is epoch ms.
+  `CREATE TABLE IF NOT EXISTS bilko_db_images (
+    id         TEXT PRIMARY KEY,
+    app        TEXT NOT NULL,
+    user_email TEXT NOT NULL,
+    type       TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    chunks     INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bilko_db_images_app_user ON bilko_db_images(app, user_email)`,
+  `CREATE TABLE IF NOT EXISTS bilko_db_image_chunks (
+    id      TEXT NOT NULL,
+    idx     INTEGER NOT NULL,
+    content BLOB NOT NULL,
+    PRIMARY KEY (id, idx)
+  )`,
 ];
 
 export const ADDITIVE_COLUMNS: Record<string, Array<[string, string]>> = {

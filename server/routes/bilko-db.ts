@@ -1,4 +1,6 @@
 // Bilko-DB lite document API: a signed-in user's JSON or text documents for one app.
+// Team routes under /api/db/:app/team/... use the same handlers, owned by teamPrincipal(app)
+// after a membership check; the write budget stays the caller's.
 // Versioning is plain HTTP: GET returns ETag "<version>", PUT/DELETE honour If-Match,
 // PUT honours If-None-Match: * (create only). The user is always the verified token's email.
 // Images: POST/GET list/DELETE under /api/db/:app/images (Bearer), plus a public GET by id.
@@ -22,6 +24,7 @@ import {
   type DocKind,
   type ImageMeta,
 } from '../services/bilko-db.js';
+import { getTeamRole, teamPrincipal } from '../services/bilko-db-team.js';
 
 const WRITE_LIMIT = 300;
 const WRITE_WINDOW_MS = 60_000;
@@ -88,6 +91,7 @@ function docParams(req: FastifyRequest): DocParams {
   const p = req.params as RawParams;
   return { app: p.app, key: p['*'] };
 }
+// bilkoDbUser is the owner principal: the caller's email, or teamPrincipal(app) on team routes.
 type AuthedRequest = FastifyRequest & { bilkoDbUser?: string };
 
 /** Maps body-limit and content-type failures to the API's error shapes. */
@@ -107,7 +111,51 @@ function imageView(appName: string, m: ImageMeta) {
   return { id: m.id, url: `/api/db/${appName}/images/${m.id}`, type: m.type, bytes: m.bytes, createdAt: iso(m.createdAt) };
 }
 
+/**
+ * Resolves the Bilko-DB owner principal for a signed-in caller, or sends a reply and returns
+ * null. Personal routes own by the caller's email; team routes by teamPrincipal(app).
+ */
+type OwnerFor = (appName: string, email: string, reply: FastifyReply) => Promise<string | null>;
+type ScopePrefix = '' | '/team';
+
+const personalOwner: OwnerFor = async (_appName, email) => email;
+
+const teamOwner: OwnerFor = async (appName, email, reply) => {
+  const role = await getTeamRole({ app: appName, email });
+  if (!role) {
+    reply.code(403).send({ error: 'not_member' });
+    return null;
+  }
+  return teamPrincipal(appName);
+};
+
 export function registerBilkoDbRoutes(app: FastifyInstance): void {
+  registerDocScope(app, '', personalOwner);
+  registerDocScope(app, '/team', teamOwner);
+  registerImageScope(app, '', personalOwner);
+  registerImageScope(app, '/team', teamOwner);
+
+  // Public image link: no auth, so it works in a plain <img>. The unguessable id is the
+  // capability; the app in the path must match the stored one. The CSP sandbox and nosniff
+  // keep a crafted file from ever running as a document. Compression is off: the bytes are
+  // already compressed images and are sent exactly as stored.
+  app.get('/api/db/:app/images/:id', { compress: false }, async (req, reply) => {
+    const { app: appName, id } = req.params as { app: string; id: string };
+    if (!isAppName(appName) || !IMAGE_ID_RE.test(id)) return reply.code(404).send({ error: 'not_found' });
+    const img = await getImage(id);
+    if (!img || img.app !== appName) return reply.code(404).send({ error: 'not_found' });
+    return reply
+      .header('Cache-Control', 'public, max-age=3600')
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Content-Security-Policy', "default-src 'none'; sandbox")
+      .header('Content-Length', String(img.bytes.length))
+      .type(img.type)
+      .send(img.bytes);
+  });
+}
+
+/** Document routes under /api/db/:app<prefix>/docs, owned by ownerFor's principal. */
+function registerDocScope(app: FastifyInstance, prefix: ScopePrefix, ownerFor: OwnerFor): void {
   app.register(async (scope) => {
     // Bodies are taken as strings so JSON validity is ours to judge (400 bad_json) and text
     // is stored exactly as sent. Any other content type is rejected by Fastify with 415.
@@ -126,7 +174,9 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
       if (key !== undefined && !isDocKey(key)) return reply.code(400).send({ error: 'bad_key' });
       const email = await requireAuth(req, reply);
       if (!email) return reply;
-      req.bilkoDbUser = email;
+      const owner = await ownerFor(appName, email, reply);
+      if (!owner) return reply;
+      req.bilkoDbUser = owner;
       if (req.method === 'PUT' || req.method === 'DELETE') {
         if (!checkBilkoDbWrite(email, reply)) return reply;
       }
@@ -134,20 +184,20 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
 
     const routeOpts = { bodyLimit: DOC_MAX_BYTES + 1024 };
 
-    scope.get('/api/db/:app/docs', routeOpts, async (req: AuthedRequest, reply) => {
+    scope.get(`/api/db/:app${prefix}/docs`, routeOpts, async (req: AuthedRequest, reply) => {
       const { app: appName } = docParams(req);
-      const { prefix } = req.query as { prefix?: unknown };
-      if (prefix !== undefined && (typeof prefix !== 'string' || prefix.length > 128)) {
+      const { prefix: keyPrefix } = req.query as { prefix?: unknown };
+      if (keyPrefix !== undefined && (typeof keyPrefix !== 'string' || keyPrefix.length > 128)) {
         return reply.code(400).send({ error: 'bad_prefix' });
       }
-      const docs = await listDocs({ app: appName, user: req.bilkoDbUser!, prefix });
+      const docs = await listDocs({ app: appName, user: req.bilkoDbUser!, prefix: keyPrefix });
       reply.header('Cache-Control', 'private, no-store');
       return {
         docs: docs.map((d) => ({ key: d.key, type: d.kind, bytes: d.bytes, version: d.version, updatedAt: iso(d.updatedAt) })),
       };
     });
 
-    scope.get('/api/db/:app/docs/*', routeOpts, async (req: AuthedRequest, reply) => {
+    scope.get(`/api/db/:app${prefix}/docs/*`, routeOpts, async (req: AuthedRequest, reply) => {
       const { app: appName, key } = docParams(req) as Required<DocParams>;
       const doc = await getDoc({ app: appName, user: req.bilkoDbUser!, key });
       reply.header('Cache-Control', 'private, no-store').header('X-Content-Type-Options', 'nosniff');
@@ -158,7 +208,7 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
         .send(doc.body);
     });
 
-    scope.put('/api/db/:app/docs/*', routeOpts, async (req: AuthedRequest, reply) => {
+    scope.put(`/api/db/:app${prefix}/docs/*`, routeOpts, async (req: AuthedRequest, reply) => {
       const { app: appName, key } = docParams(req) as Required<DocParams>;
       const type = mediaType(req);
       let kind: DocKind;
@@ -194,7 +244,7 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
       return { key: r.key, type: r.kind, version: r.version, bytes: r.bytes, updatedAt: iso(r.updatedAt) };
     });
 
-    scope.delete('/api/db/:app/docs/*', routeOpts, async (req: AuthedRequest, reply) => {
+    scope.delete(`/api/db/:app${prefix}/docs/*`, routeOpts, async (req: AuthedRequest, reply) => {
       const { app: appName, key } = docParams(req) as Required<DocParams>;
       const ifVersion = parseIfMatch(req.headers['if-match']);
       if (ifVersion === null) return reply.code(400).send({ error: 'bad_if_match' });
@@ -204,7 +254,10 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
       return { ok: true };
     });
   });
+}
 
+/** Image upload/list/delete under /api/db/:app<prefix>/images, owned by ownerFor's principal. */
+function registerImageScope(app: FastifyInstance, prefix: ScopePrefix, ownerFor: OwnerFor): void {
   // Image upload, list and delete: Bearer only, owner only. The raw-bytes parsers live in
   // this scope so the global parsers are untouched; other content types get 415.
   app.register(async (scope) => {
@@ -222,7 +275,9 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
       if (!isAppName(appName)) return reply.code(400).send({ error: 'bad_app' });
       const email = await requireAuth(req, reply);
       if (!email) return reply;
-      req.bilkoDbUser = email;
+      const owner = await ownerFor(appName, email, reply);
+      if (!owner) return reply;
+      req.bilkoDbUser = owner;
       if (req.method === 'POST' || req.method === 'DELETE') {
         if (!checkBilkoDbWrite(email, reply)) return reply;
       }
@@ -230,7 +285,7 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
 
     const routeOpts = { bodyLimit: IMAGE_MAX_BYTES };
 
-    scope.post('/api/db/:app/images', routeOpts, async (req: AuthedRequest, reply) => {
+    scope.post(`/api/db/:app${prefix}/images`, routeOpts, async (req: AuthedRequest, reply) => {
       const { app: appName } = req.params as { app: string };
       const type = mediaType(req);
       if (!isImageType(type)) return reply.code(415).send({ error: 'unsupported_media_type' });
@@ -244,37 +299,19 @@ export function registerBilkoDbRoutes(app: FastifyInstance): void {
       return reply.code(201).header('Cache-Control', 'private, no-store').send(imageView(appName, r));
     });
 
-    scope.get('/api/db/:app/images', async (req: AuthedRequest, reply) => {
+    scope.get(`/api/db/:app${prefix}/images`, async (req: AuthedRequest, reply) => {
       const { app: appName } = req.params as { app: string };
       const images = await listImages({ app: appName, user: req.bilkoDbUser! });
       reply.header('Cache-Control', 'private, no-store');
       return { images: images.map((m) => imageView(appName, m)) };
     });
 
-    scope.delete('/api/db/:app/images/:id', async (req: AuthedRequest, reply) => {
+    scope.delete(`/api/db/:app${prefix}/images/:id`, async (req: AuthedRequest, reply) => {
       const { app: appName, id } = req.params as { app: string; id: string };
       if (!IMAGE_ID_RE.test(id)) return reply.code(404).send({ error: 'not_found' });
       const r = await deleteImage({ app: appName, user: req.bilkoDbUser!, id });
       if (!r.deleted) return reply.code(404).send({ error: 'not_found' });
       return { ok: true };
     });
-  });
-
-  // Public image link: no auth, so it works in a plain <img>. The unguessable id is the
-  // capability; the app in the path must match the stored one. The CSP sandbox and nosniff
-  // keep a crafted file from ever running as a document. Compression is off: the bytes are
-  // already compressed images and are sent exactly as stored.
-  app.get('/api/db/:app/images/:id', { compress: false }, async (req, reply) => {
-    const { app: appName, id } = req.params as { app: string; id: string };
-    if (!isAppName(appName) || !IMAGE_ID_RE.test(id)) return reply.code(404).send({ error: 'not_found' });
-    const img = await getImage(id);
-    if (!img || img.app !== appName) return reply.code(404).send({ error: 'not_found' });
-    return reply
-      .header('Cache-Control', 'public, max-age=3600')
-      .header('X-Content-Type-Options', 'nosniff')
-      .header('Content-Security-Policy', "default-src 'none'; sandbox")
-      .header('Content-Length', String(img.bytes.length))
-      .type(img.type)
-      .send(img.bytes);
   });
 }

@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
-import { buildCatalog, findCatalogProject } from '../../src/data/projectCatalog.js';
+import { buildCatalogFrom, catalogProjectsOf, type CatalogProject } from '../../src/data/projectCatalog.js';
+import { getRegistrySnapshot } from '../registry-runtime.js';
 import { registerPageRoastMcpTool } from './tools/page-roast.js';
 import { hashIp } from './tools/_shared.js';
 import { verifyAgentApiKey } from '../services/agent-api-keys.js';
@@ -19,7 +20,7 @@ import { getWalletCents } from '../services/wallet.js';
  * Contract: docs/host-contract.md → "Public project catalog".
  */
 
-// Registry only changes on deploy; 5 minutes keeps consumers close to live.
+// 5 minutes keeps consumers close to live registry edits.
 const CACHE_CONTROL = 'public, max-age=300';
 
 function json(data: unknown) {
@@ -36,8 +37,21 @@ function offersForProject(project: { slug: string; url: string }, offers: readon
     .map(o => ({ id: o.id, price: formatPrice(o), buyUrl: o.buyUrl }));
 }
 
+// Catalog projects for the current registry snapshot, rebuilt only when the snapshot changes
+// (refreshRegistry swaps the array, so identity is the change signal).
+let cachedSnapshot: readonly unknown[] | null = null;
+let cachedProjects: readonly CatalogProject[] = [];
+function catalogProjects(): readonly CatalogProject[] {
+  const snapshot = getRegistrySnapshot();
+  if (snapshot !== cachedSnapshot) {
+    cachedProjects = catalogProjectsOf(snapshot);
+    cachedSnapshot = snapshot;
+  }
+  return cachedProjects;
+}
+
 function enrichedCatalog(offers: readonly AgentOffer[]) {
-  const catalog = buildCatalog();
+  const catalog = buildCatalogFrom(catalogProjects());
   return { ...catalog, projects: catalog.projects.map(p => ({ ...p, offers: offersForProject(p, offers) })) };
 }
 
@@ -117,7 +131,7 @@ export function buildCatalogMcpServer(
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ slug }) => {
-      const project = findCatalogProject(slug);
+      const project = catalogProjects().find(p => p.slug === slug);
       if (!project) {
         return { isError: true, content: [{ type: 'text' as const, text: `Project "${slug}" not found.` }] };
       }

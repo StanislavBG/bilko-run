@@ -58,11 +58,16 @@ const SPA_ROUTE_OVERRIDES: Readonly<Record<string, string>> = {
   'session-manager': '/products/session-manager',
 };
 
+/** Registry entries as hub projects, with SPA_ROUTE_OVERRIDES applied. */
+export function toProjects(entries: readonly RegistryProject[]): Project[] {
+  return entries.map(p => {
+    const path = SPA_ROUTE_OVERRIDES[p.slug];
+    return path ? { ...p, host: { kind: 'react-route' as const, path } } : p;
+  });
+}
+
 /** Every project on bilko.run, regardless of where it's hosted. */
-export const PROJECTS: readonly Project[] = STANDALONE_PROJECTS.map(p => {
-  const path = SPA_ROUTE_OVERRIDES[p.slug];
-  return path ? { ...p, host: { kind: 'react-route' as const, path } } : p;
-});
+export const PROJECTS: readonly Project[] = toProjects(STANDALONE_PROJECTS);
 
 
 /** Resolve a project's primary URL/path for navigation. */

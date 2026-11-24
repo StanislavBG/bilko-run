@@ -170,6 +170,18 @@ export const HUB_CARDS: readonly HubCard[] = (() => {
 
 export const PUBLIC_CARDS: readonly HubCard[] = HUB_CARDS.filter(c => c.isPublic);
 
+/**
+ * The public cards for a given project list, in the same order PUBLIC_CARDS uses
+ * (commit count desc, then last commit; the stable sort keeps registry order on ties).
+ * Package cards are never public, so leaving them out changes nothing.
+ */
+export function publicCardsOf(projects: readonly Project[]): HubCard[] {
+  return projects
+    .map(projectCard)
+    .filter(c => c.isPublic)
+    .sort((a, b) => commitCount(b.slug) - commitCount(a.slug) || b.lastCommitAt - a.lastCommitAt);
+}
+
 /** Slugs of the public cards, in /projects order. Derived from the registry's
  *  `public` flag — edit standalone-projects.json, not this file. */
 export const PUBLIC_SLUGS: ReadonlySet<string> = new Set(PUBLIC_CARDS.map(c => c.slug));

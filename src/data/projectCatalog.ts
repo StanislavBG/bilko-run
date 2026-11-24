@@ -20,7 +20,9 @@
  *   - `share_image_url` is derived (`/og/<slug>.png`). X unfurls the project
  *     `url`'s og:image automatically, so this is for previews/attachments only.
  */
-import { PUBLIC_CARDS, type HubCard } from './projectsView.js';
+import { PUBLIC_CARDS, publicCardsOf, type HubCard } from './projectsView.js';
+import { toProjects } from './projectsRegistry.js';
+import type { RegistryProject } from '../../mcp-host-server/src/contract/registry.js';
 
 export const CATALOG_SCHEMA_VERSION = 1;
 export const SITE_ORIGIN = 'https://bilko.run';
@@ -85,12 +87,22 @@ function toCatalogProject(card: HubCard): CatalogProject {
 /** Public projects in /projects order. Static per deploy — computed once. */
 export const CATALOG_PROJECTS: readonly CatalogProject[] = PUBLIC_CARDS.map(toCatalogProject);
 
-export function buildCatalog(now: Date = new Date()): Catalog {
+/** Public catalog projects, in /projects order, for a given set of registry entries. */
+export function catalogProjectsOf(entries: readonly RegistryProject[]): CatalogProject[] {
+  return publicCardsOf(toProjects(entries)).map(toCatalogProject);
+}
+
+/** The catalog envelope around `projects` (deep-copied so callers can't mutate the source). */
+export function buildCatalogFrom(projects: readonly CatalogProject[], now: Date = new Date()): Catalog {
   return {
     schema_version: CATALOG_SCHEMA_VERSION,
     generated_at: now.toISOString(),
-    projects: CATALOG_PROJECTS.map(p => ({ ...p, tags: [...p.tags], talking_points: [...p.talking_points], avoid_claims: [...p.avoid_claims] })),
+    projects: projects.map(p => ({ ...p, tags: [...p.tags], talking_points: [...p.talking_points], avoid_claims: [...p.avoid_claims] })),
   };
+}
+
+export function buildCatalog(now: Date = new Date()): Catalog {
+  return buildCatalogFrom(CATALOG_PROJECTS, now);
 }
 
 /** A public project by slug, or undefined (unknown and non-public alike). */

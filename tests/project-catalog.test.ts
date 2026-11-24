@@ -5,10 +5,15 @@ import { registerProjectCatalogRoutes } from '../server/routes/project-catalog.j
 import { PUBLIC_CARDS, HUB_CARDS } from '../src/data/projectsView.js';
 import { PROJECTS } from '../src/data/projectsRegistry.js';
 import { AGENT_OFFERS, formatPrice } from '../shared/agent-offers.js';
+import { initDb } from '../server/db.js';
+import { initRegistry } from '../server/registry-runtime.js';
 
 const app = Fastify();
 
 beforeAll(async () => {
+  // The catalog reads the in-memory registry; seed it from the repo file as boot does.
+  await initDb();
+  await initRegistry();
   registerProjectCatalogRoutes(app, { listOffers: async () => AGENT_OFFERS });
   await app.ready();
 });

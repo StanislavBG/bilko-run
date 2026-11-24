@@ -6,6 +6,7 @@ import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
 import { initDb, dbAll } from './db.js';
+import { initRegistry } from './registry-runtime.js';
 import { registerToolRoutes } from './routes/tools/index.js';
 import { registerStripeRoutes } from './routes/stripe.js';
 import { registerWebProductRoutes } from './routes/web-products.js';
@@ -85,6 +86,15 @@ try {
   await initDb();
 } catch (err) {
   console.error('[DB] Init failed, exiting:', err);
+  process.exit(1);
+}
+
+// Registry into memory before any route can read it: imports the registry file while it is
+// still the writer, then loads Bilko-DB. Readers use getRegistrySnapshot().
+try {
+  await initRegistry();
+} catch (err) {
+  console.error('[Registry] Init failed, exiting:', err);
   process.exit(1);
 }
 

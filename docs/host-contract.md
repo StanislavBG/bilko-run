@@ -464,7 +464,7 @@ Machine-readable list of exactly the cards an anonymous visitor sees on `/projec
 }
 ```
 
-- **`url`** is the card's real destination, so it follows the card's overrides: `session-manager` links to `https://bilko.run/products/session-manager` (its landing page), and `external-url` entries link to their external URL.
+- **`url`** is the card's real destination, so it follows the card's overrides: `session-manager` links to `https://bilko.run/products/session-manager` (its landing page), and `external-url` entries link to their external URL. `/llms.txt` links each project to this same `url`. It is the page to link, promote and capture; see [URL canonicalization](#url-canonicalization).
 - **Source of truth:** built from `PUBLIC_CARDS` in `src/data/projectsView.ts` (`src/data/projectCatalog.ts`), so the page and the API can't disagree. Change who is public with the registry `public` flag (Bilko-owned). `detail`, `audience` and `talking_points` come from the registry entry's `listing` (`detail`, `audience`, `talkingPoints`), which the project edits itself; see "Project listing — who owns what". Talking points may be posted publicly word for word, so keep each one a plain fact the site already supports.
 - **Marketing fields:** `offering`, `pricing`, `call_to_action` and `avoid_claims` come from the entry's `listing` (`offering`, `pricing`, `callToAction`, `avoidClaims`); see "Marketing meta-categories". They are `''` / `[]` when unset. They are additive under `schema_version` 1. **`avoid_claims` is binding:** consumers like Burrow must never make those claims.
 - **Freshness:** the data is baked in at build time. It changes when a registry change reaches `main` and deploys.
@@ -484,6 +484,8 @@ The wallet, MCP tools, offers, agent keys, visitor classes and the UTM funnel ar
 
 - `/products/<slug>` is the canonical path for every `react-route` app; its redirects are in ~/Projects/Bilko/docs/host-internals.md#react-route-apps.
 - `/projects/<slug>/` (trailing slash, `static-path`) does **not** redirect — it's a different host kind serving different bytes.
+- **Sign-in is the app's choice.** The host puts no sign-in in front of an app's pages, and the registry `public` flag only decides whether the card is listed. A sign-in form on `/projects/<slug>/` comes from that app's own bundle.
+- **A project's public page is its catalog `url`**, not its registry `host.path`: the `url` in `GET /api/projects` and `get_project`, the link in `/llms.txt`, the card on `/projects`. Link, promote and capture that page. For `session-manager` it is `https://bilko.run/products/session-manager`. `/projects/session-manager/` is the Session Manager phone remote, which shows a sign-in form to signed-out visitors.
 
 Page-specific host content (sub-paths of a `react-route` product, what must not move under `/products/<slug>/`) lives in ~/Projects/Bilko/docs/site.md.
 

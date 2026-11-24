@@ -8,7 +8,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { buildLlmsTxt, registerAgentStorefrontRoutes } from '../server/routes/agent-storefront.js';
 import { AGENT_OFFERS, formatPrice } from '../shared/agent-offers.js';
-import { buildCatalog } from '../src/data/projectCatalog.js';
+import { buildCatalog, catalogProjectsOf } from '../src/data/projectCatalog.js';
+import type { RegistryProject } from '../mcp-host-server/src/contract/registry.js';
 import { initDb } from '../server/db.js';
 import { initRegistry, refreshRegistry } from '../server/registry-runtime.js';
 import { putProject, deleteProject } from '../server/services/registry-db.js';
@@ -40,8 +41,9 @@ describe('GET /llms.txt', () => {
       expect(body).toContain(o.buyUrl);
       expect(body).toContain(formatPrice(o));
     }
-    const slug = buildCatalog().projects[0].slug;
-    expect(body).toContain(`https://bilko.run/projects/${slug}/`);
+    for (const p of buildCatalog().projects) {
+      expect(body).toContain(`- [${p.name}](${p.url}): `);
+    }
     for (const e of ['POST https://bilko.run/mcp', 'GET https://bilko.run/api/projects', 'GET https://bilko.run/api/offers']) {
       expect(body).toContain(e);
     }
@@ -93,6 +95,35 @@ describe('/llms.txt project guides', () => {
     const body = (await app.inject({ method: 'GET', url: '/llms.txt' })).body;
     expect(body).toContain(`(https://bilko.run/projects/${first}/llms.txt)`);
     expect(body).not.toContain(`(https://bilko.run/projects/${second}/llms.txt)`);
+  });
+});
+
+describe('/llms.txt links each project where its /projects card goes', () => {
+  const entries: RegistryProject[] = [
+    {
+      slug: 'session-manager', name: 'Session Manager', tagline: 'Landing page is a react-route', category: 'Test',
+      status: 'live', year: 2026, public: true, host: { kind: 'static-path', path: '/projects/session-manager/' },
+    },
+    {
+      slug: 'llms-external-app', name: 'Llms External App', tagline: 'Lives on another domain', category: 'Test',
+      status: 'live', year: 2026, public: true, host: { kind: 'external-url', url: 'https://external.example.com/app' },
+    },
+    {
+      slug: 'llms-static-app', name: 'Llms Static App', tagline: 'Plain static-path app', category: 'Test',
+      status: 'live', year: 2026, public: true, host: { kind: 'static-path', path: '/projects/llms-static-app/' },
+    },
+  ];
+  const lines = buildLlmsTxt(AGENT_OFFERS, () => false, catalogProjectsOf(entries)).split('\n');
+  const linkOf = (name: string) => lines.find(l => l.startsWith(`- [${name}](`))?.match(/\]\(([^)]+)\)/)?.[1];
+
+  it('sends session-manager to its landing page, not the signed-in phone remote at host.path', () => {
+    expect(linkOf('Session Manager')).toBe('https://bilko.run/products/session-manager');
+    expect(lines.join('\n')).not.toContain('(https://bilko.run/projects/session-manager/)');
+  });
+
+  it('sends an external-url project to its own site and a static-path project to /projects/<slug>/', () => {
+    expect(linkOf('Llms External App')).toBe('https://external.example.com/app');
+    expect(linkOf('Llms Static App')).toBe('https://bilko.run/projects/llms-static-app/');
   });
 });
 

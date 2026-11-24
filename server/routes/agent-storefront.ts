@@ -10,6 +10,8 @@ import { catalogProjects, type ListOffers } from './project-catalog.js';
  * /llms.txt (llmstxt.org): what bilko.run is, every public project, every paid
  * offer that can be bought now with price + buy link, and the machine endpoints.
  * Built per request from the available AGENT_OFFERS and the project catalog so it cannot drift.
+ * Each project links to its catalog `url`, the same destination as its /projects card
+ * (session-manager → /products/session-manager, external-url → the external site).
  * A public project whose published bundle ships its own llms.txt
  * (<dist>/projects/<slug>/llms.txt) is linked under "Project guides".
  */
@@ -42,7 +44,7 @@ export function buildLlmsTxt(
   );
   const catalog = buildCatalogFrom(projectsSource).projects;
   const projects = catalog.map(
-    p => `- [${p.name}](${SITE}/projects/${p.slug}/): ${oneLine(p.tagline)}`,
+    p => `- [${p.name}](${p.url}): ${oneLine(p.tagline)}`,
   );
   const guides = catalog
     .filter(p => SLUG_RE.test(p.slug) && hasProjectLlmsTxt(p.slug))

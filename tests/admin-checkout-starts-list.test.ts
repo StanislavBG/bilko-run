@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import { createHash } from 'node:crypto';
 import { initDb, dbRun } from '../server/db.js';
@@ -35,6 +35,10 @@ beforeAll(async () => {
   vi.setSystemTime(NOW);
   await initDb();
   await app.ready();
+});
+
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 type Seed = {

@@ -20,7 +20,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     // Per-file throwaway DB (a file, not ':memory:': libsql's sqlite3 client
     // reopens the connection after a transaction, which would wipe ':memory:').
-    setupFiles: ['tests/setup-db.ts'],
+    setupFiles: ['tests/setup-db.ts', 'tests/setup-timers.ts'],
     coverage: {
       provider: 'v8',
       include: ['server/**/*.ts'],

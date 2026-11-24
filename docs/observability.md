@@ -193,6 +193,7 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 |---|---|---|---|
 | `flows_report` | `GET /api/admin/flows` | `mine=exclude&bots=exclude&env=prod` | `includeMine: true` sends `mine=include`; `includeBots: true` sends `bots=include`; `env: 'dev'`, `'test'` or `'all'` sends that `env` |
 | `sessions_report` | `GET /api/admin/sessions` (`/:id` for timelines) | `mine=exclude&bots=exclude` | `includeMine` / `includeBots`, as `flows_report`; no `env` filter |
+| `checkout_starts_report` | `GET /api/admin/checkout-starts` (`/api/admin/sessions/:id` for timelines) | `days=7`; every checkout start listed, newest first, each with its `label` (human, automated or unlabeled) and `labelReasons`, `counted`, `mine` marks (`mineReasons`) and its `session` or a `sessionNote` saying why there is none | `days` (1–90), `limit` (1–1000); `timeline: true` adds each start's session timeline (at most 50 sessions) |
 | `traffic_report` | `GET /api/admin/traffic` | `mine=exclude&bots=include` | `excludeSelf: false` sends `mine=include`; `includeBots: false` sends `bots=exclude` |
 | `funnel_report` | `GET /api/admin/funnel` | owner and bot sessions excluded (the host's defaults) | none |
 | `errors_report` | `GET /api/admin/observability/errors` | `days=1&env=prod`; errors grouped by app + signature, with counts, first/last seen, versions and a sample | `days`, `app`, `limit`; `env: 'dev'`, `'test'` or `'all'` sends that `env` |
@@ -227,7 +228,7 @@ From your own repo, read your app's numbers with the `bilko-host` MCP report too
 
 `traffic_report` keeps `bots=include` by default because its human numbers (visitors, hits, pages, referrers, countries, devices) exclude bot hits either way. `bots=exclude` only trims `byClass` and `topPagesByClass` to the non-bot classes.
 
-`funnel_report` has no opt-out. It drops sessions with an admin or bot-flagged page view, sessions from the owner's devices (seen signed in as admin in the last 30 days, or marked), the owner's own checkout and free-hour events, and anything under an admin email.
+`funnel_report` has no opt-out. It drops sessions with an admin or bot-flagged page view, sessions from the owner's devices (seen signed in as admin in the last 30 days, or marked), the owner's own checkout and free-hour events, and anything under an admin email. `checkout_starts_report` excludes nothing: it lists every checkout start, the owner's and automation's included, and marks each one instead (`counted: false` for owner-flagged starts, `label: automated` with its `labelReasons`, and `mine` with its `mineReasons`).
 
 **Secret-file probes are bots.** A page hit on a probe path (`server/non-page-paths.ts` `isProbePath`: a dotfile segment such as `/.env` or `/.git/HEAD` except `/.well-known`, a scanner extension such as `.php`, `.bak` or `.sql`, or a config filename such as `config.json`) is recorded as class `script`, whatever its user agent (`server/page-hits.ts`). Its IP+user-agent visitor is marked too: every hit from that visitor from 24 hours before to 24 hours after its first probe becomes a bot hit, including hits already written.
 

@@ -63,8 +63,8 @@ React-route apps also get in-process Clerk, credits, Stripe, rate limiting, Gemi
 ### To `static-path` and `external-url` apps additionally
 
 - **Shared UI and SDK: `host-kit`** (`packages/host-kit/`), the unscoped npm package, current release 0.11.0: `"host-kit": "^0.11.0"`, or `"host-kit": "file:../Bilko/packages/host-kit"` for a local sibling. It carries the auth API (`initAuth`, `useAuth`, `openSignIn`, `signOut`, `getAuthToken`, `authFetch`), Bearer-authenticated games hooks, `trackFlow`, and the `env` tag on every telemetry record. The scoped `@bilkobibitkov/host-kit` is not published; do not use it.
-- **Bilko-DB is your app's database.** Keep each signed-in user's JSON, text and images in [Bilko-DB](#bilko-db). Do not add a database of your own.
-- **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs server logic, run your own server; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below). That server keeps its data in Bilko-DB and adds no database of its own; ask the Bilko project for storage Bilko-DB does not offer yet, such as data shared between users.
+- **Bilko-DB is your app's database.** Keep each signed-in user's JSON, text and images, and the data your app's team shares, in [Bilko-DB](#bilko-db). Do not add a database of your own.
+- **No shared runtime.** Bring your own runtime and your own UI. The host serves the bytes. It does not inject the Clerk SDK, the component kit, or any providers into your page. If your app needs server logic, run your own server; bilko.run forwards `/projects/<slug>/api/*` to it (see "App backends (forwarding)" below). That server keeps its data in Bilko-DB, including data shared between users in [team documents](#team-documents), and adds no database of its own; ask the Bilko project for storage Bilko-DB does not offer yet.
 - **CSP stays report-only under `/projects/`.** The host enforces its policy on host pages only (switch: ~/Projects/Bilko/docs/deployment.md#env-vars). Static-path apps keep the report-only policy because engines need things the host policy does not grant (Godot's `JavaScriptBridge.eval` needs `'unsafe-eval'`). They also get `blob:` in `img-src`. Enforcing it under `/projects/` needs a per-project policy declared in the registry first (`server/security-headers.ts`). The host stamps its per-request nonce onto every `<script>`, `<style>`, `<link rel="preload" as="script">` and `<link rel="modulepreload">` in your HTML, so your build's own tags need no nonce. A `<script src>` your own code adds at runtime is allowed through `'strict-dynamic'`. An inline `<script>` or `<style>` your code adds needs the nonce from `<meta name="csp-nonce">`.
 - **Large assets are precompressed at build time.** Files ≥1 KB of compressible types (js, css, json, wasm, pck, data, …, never HTML) get `.br`/`.gz` siblings, served with a Content-Length. Don't publish your own `.br`/`.gz` next to a source file; the build replaces them.
 - **Same-origin framing only.** Responses under `/projects/` carry CSP `frame-ancestors 'self'`, so one static-path app may embed another in an iframe (e.g. Game Academy hosting an engine game slug) and talk to it over `postMessage`. Cross-origin framing is refused; every other host page is `frame-ancestors 'none'`.
@@ -110,12 +110,12 @@ A `react-route` app's page, route and server file: ~/Projects/Bilko/docs/host-in
 
 **Keep your app's data in [Bilko-DB](#bilko-db).** Use browser storage only for device-local preferences and caches. Each line below links to the section that defines it.
 
-- **Bilko-DB**: each signed-in user's JSON and text documents and images for your app. See [Bilko-DB](#bilko-db).
+- **Bilko-DB**: each signed-in user's JSON and text documents and images for your app, and the team documents and images your app's team shares. See [Bilko-DB](#bilko-db).
 - **The browser** (`localStorage`, `sessionStorage`, IndexedDB, cookies): device-local preferences and caches only; see the shared-origin rule below.
 - **Legacy single-slot save state**: `/api/games/<slug>/save` through host-kit's `useSaveState`, one versioned slot of at most 1 MiB of UTF-8 JSON per user per slug. Existing apps keep using it; new apps use Bilko-DB. See [Game services](#game-services).
 - **Leaderboards and unlocks**: registered games only. See [Game services](#game-services).
 - **Project data snapshot** and the **append-only event stream** (`POST /api/projects/:slug/events`, read at `/projects/:slug/data-events.ndjson`): both written only by the owner's publisher token. See [Project data snapshot](#project-data-snapshot).
-- **Your own backend**: for server logic only. Its data belongs in Bilko-DB; it adds no database of its own. Ask the Bilko project for storage Bilko-DB does not offer yet, such as data shared between users. See [App backends (forwarding)](#app-backends-forwarding).
+- **Your own backend**: for server logic only. Its data belongs in Bilko-DB, and data shared between users goes in [team documents](#team-documents); it adds no database of its own. Ask the Bilko project for storage Bilko-DB does not offer yet. See [App backends (forwarding)](#app-backends-forwarding).
 - **Authoritative game rooms**: table state is saved on every move and survives a deploy. See [Authoritative game rooms](#authoritative-game-rooms).
 - **Realtime relay and lobby directory**: memory only, lost on a deploy or spin-down. See [Realtime relay](#realtime-relay).
 
@@ -125,7 +125,7 @@ A `react-route` app's page, route and server file: ~/Projects/Bilko/docs/host-in
 
 ## Bilko-DB
 
-Bilko-DB is every app's database: JSON and text documents and images, per signed-in user per app, kept in the host database. It is a lite store for app state, not for big data. An app runs no database of its own. The user is always the email in the verified Bearer token (see "Calling authenticated host APIs from a `static-path` app"); `:app` is your slug and must match `^[a-z0-9][a-z0-9-]{0,63}$`, a document key `^[a-z0-9][a-z0-9._-]{0,127}$`. Code: `server/routes/bilko-db.ts`, `server/services/bilko-db.ts`.
+Bilko-DB is every app's database: JSON and text documents and images, per signed-in user per app, plus [team documents](#team-documents) shared by an app's team, kept in the host database. It is a lite store for app state, not for big data. An app runs no database of its own. The user is always the email in the verified Bearer token (see "Calling authenticated host APIs from a `static-path` app"); `:app` is your slug and must match `^[a-z0-9][a-z0-9-]{0,63}$`, a document key `^[a-z0-9][a-z0-9._-]{0,127}$`. Code: `server/routes/bilko-db.ts`, `server/services/bilko-db.ts`.
 
 | Method and path | Auth | What it does |
 |---|---|---|
@@ -164,9 +164,54 @@ function Notes() {
 }
 ```
 
+### Team documents
+
+An app's team shares one set of documents and images. They take the same requests, bodies, versioning and errors as the personal routes above, under `/api/db/:app/team/`. A team document belongs to the team, not to the member who wrote it. Membership is managed at `/api/db/:app/team`. Code: `server/routes/bilko-db.ts`, `server/routes/bilko-db-team.ts`, `server/services/bilko-db-team.ts`.
+
+| Method and path | Auth | Who may call it |
+|---|---|---|
+| `GET /api/db/:app/team/docs?prefix=` | Bearer (Clerk) | Members and owners; anyone else 403 `not_member` |
+| `GET /api/db/:app/team/docs/:key` | Bearer (Clerk) | Members and owners |
+| `PUT /api/db/:app/team/docs/:key` | Bearer (Clerk) | Members and owners |
+| `DELETE /api/db/:app/team/docs/:key` | Bearer (Clerk) | Members and owners |
+| `POST /api/db/:app/team/images` | Bearer (Clerk) | Members and owners |
+| `GET /api/db/:app/team/images` | Bearer (Clerk) | Members and owners |
+| `DELETE /api/db/:app/team/images/:id` | Bearer (Clerk) | Members and owners |
+| `GET /api/db/:app/images/:id` | None | Anyone with the link, for team images as for personal ones |
+| `GET /api/db/:app/team` | Bearer (Clerk) or `Bearer bka_` registry key | Members, owners, the admin session and a registry key. Returns `{ app, role, members: [{ email, role, addedAt }] }`; `role` is the caller's (`owner`, `member` or `admin`). |
+| `PUT /api/db/:app/team/members/:email` | Bearer (Clerk) or `Bearer bka_` registry key | Owners, the admin session and a registry key. JSON body `{ role: 'owner' \| 'member' }`; adds the member or changes their role. Returns `{ email, role, created }`. A member who is not an owner gets 403 `not_member`. |
+| `DELETE /api/db/:app/team/members/:email` | Bearer (Clerk) or `Bearer bka_` registry key | Owners, the admin session and a registry key; a member may remove themselves. Returns `{ ok: true }`; 404 `not_found` when the email is not on the team. |
+
+The admin session is a Clerk token for a site admin email. A registry key is an admin API key with `registry` scope; a read-only key gets 403. A membership call without a valid token gets 401. The email in the path is trimmed and lowercased, at most 254 characters (400 `bad_email`); a role other than `owner` or `member` is 400 `bad_role`.
+
+| Limit | Value |
+|---|---|
+| Document size | 1 MiB (1,048,576 bytes) per document; 413 `too_large` |
+| Image size | 10 MiB (10,485,760 bytes) per image; 413 `too_large` |
+| Storage per team | 100 MiB (104,857,600 bytes) of documents and images per team, separate from each member's own quota; 507 `quota_exceeded` |
+| Members | `TEAM_MAX_MEMBERS` (100) per team; adding one more is 409 `team_full` |
+| Writes | Each team write, and each membership change, counts against the writer's own 300 per minute; 429 `rate_limited` |
+| Roles | `owner` and `member`. Owners manage membership; members read and write team documents and images. |
+| Last owner | A team always keeps one owner: demoting or removing the only owner is 409 `last_owner`. |
+
+Privacy:
+
+- Only members (owners included) read or write team documents and images.
+- The admin session and registry keys manage membership but are not members, so they cannot read or write team documents. A new app's team starts with its first owner added by one of them.
+- Member emails are shown only to members, through `GET /api/db/:app/team`, and to the admin principals that manage it.
+- Membership is checked on every request, so a removal applies on the next request.
+- A team image link is public like a personal one: anyone who has it can load the image.
+- Team documents and images stay when a member leaves; they belong to the team.
+
+In the browser, use host-kit's `bilkoDb(app, { team: true })` (and `useDoc(app, key, { team: true })`) for team documents and images, and `bilkoTeam(app)` to manage members: ~/Projects/Bilko/packages/host-kit/README.md#bilko-db. From a sibling repo, the `bilko-host` MCP tool `app_team` lists, sets and removes members with the registry key: ~/Projects/Bilko/mcp-host-server/README.md.
+
+### From an app backend
+
+A backend may call the personal and team routes at `https://bilko.run` with the user's forwarded `Authorization: Bearer` header, and acts as that user: it reads and writes that user's own documents and, when the user is a member, their team's. The token is short-lived, so the backend makes the call during the request it was forwarded and never stores the token.
+
 ## App backends (forwarding)
 
-An app that needs server logic runs its own server, anywhere it likes. bilko.run forwards one path prefix to it. The app owns its backend, its auth checks and its uptime; bilko.run only forwards. The backend's data belongs in [Bilko-DB](#bilko-db): an app adds no database of its own, and asks the Bilko project for storage Bilko-DB does not offer yet, such as data shared between users. The code is `server/app-backends/` (`config.ts`, `http.ts`, `socket.ts`).
+An app that needs server logic runs its own server, anywhere it likes. bilko.run forwards one path prefix to it. The app owns its backend, its auth checks and its uptime; bilko.run only forwards. The backend's data belongs in [Bilko-DB](#bilko-db): data shared between users goes in [team documents](#team-documents). An app adds no database of its own, and asks the Bilko project for storage Bilko-DB does not offer yet. The code is `server/app-backends/` (`config.ts`, `http.ts`, `socket.ts`).
 
 ### What is forwarded
 

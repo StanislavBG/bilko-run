@@ -3,6 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 import { useAdminFetch, useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 import { AdminHomeLink } from './AdminHomeLink.js';
+import { keySaveHint } from '../../lib/adminKeyHint.js';
 
 interface SecretRow {
   name: string;
@@ -121,8 +122,9 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
   const [scope, setScope] = useState<ApiKeyScope>('read');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [newKey, setNewKey] = useState<string | null>(null);
+  const [newKey, setNewKey] = useState<{ key: string; scope: ApiKeyScope } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [cmdCopied, setCmdCopied] = useState(false);
   const error = actionError ?? loadError;
   const nowSec = Math.floor(Date.now() / 1000);
 
@@ -137,8 +139,9 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
       const body = (await res.json()) as { key: string };
       setActionError(null);
-      setNewKey(body.key);
+      setNewKey({ key: body.key, scope });
       setCopied(false);
+      setCmdCopied(false);
       setLabel('');
       setScope('read');
       await reload();
@@ -167,12 +170,23 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
   async function copy() {
     if (!newKey) return;
     try {
-      await navigator.clipboard.writeText(newKey);
+      await navigator.clipboard.writeText(newKey.key);
       setCopied(true);
     } catch {
       setActionError('Copy failed — select the key and copy it manually.');
     }
   }
+
+  async function copyCommand(command: string) {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCmdCopied(true);
+    } catch {
+      setActionError('Copy failed — select the command and copy it manually.');
+    }
+  }
+
+  const saveHint = newKey ? keySaveHint(newKey.scope) : null;
 
   return (
     <section className="space-y-4">
@@ -184,12 +198,12 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
         </p>
       </div>
 
-      {newKey && (
+      {newKey && saveHint && (
         <div className="rounded-xl border border-fire-200 bg-fire-50 p-4 space-y-2">
           <div className="flex gap-2">
             <input
               readOnly
-              value={newKey}
+              value={newKey.key}
               onFocus={e => e.currentTarget.select()}
               className="flex-1 font-mono text-xs border border-warm-200 rounded-lg px-3 py-2 bg-white"
             />
@@ -206,7 +220,19 @@ function ApiKeysPanel({ enabled }: { enabled: boolean }) {
               Dismiss
             </button>
           </div>
-          <p className="text-xs text-warm-600">Shown once. Save it to ~/.config/bilko-host/admin-key (mode 600) or BILKO_ADMIN_KEY for the bilko-host MCP.</p>
+          <p className="text-xs text-warm-600">
+            Shown once. This is a {SCOPE_LABELS[newKey.scope]} key: save it to <code className="font-mono">{saveHint.file}</code> (mode 600)
+            or set <code className="font-mono">{saveHint.envVar}</code> for the bilko-host MCP. Run this command, paste the key, press Enter, then Ctrl-D:
+          </p>
+          <div className="flex gap-2 items-start">
+            <pre className="flex-1 font-mono text-xs border border-warm-200 rounded-lg px-3 py-2 bg-white overflow-x-auto select-all"><code>{saveHint.command}</code></pre>
+            <button
+              onClick={() => void copyCommand(saveHint.command)}
+              className="px-3 py-2 text-xs font-semibold rounded-lg bg-warm-100 text-warm-700 hover:bg-warm-200 transition-colors"
+            >
+              {cmdCopied ? 'Copied' : 'Copy command'}
+            </button>
+          </div>
         </div>
       )}
 

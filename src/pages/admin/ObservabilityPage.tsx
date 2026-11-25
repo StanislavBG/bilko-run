@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 import { useIsAdmin } from '../../hooks/useAdmin.js';
+import { AdminHomeLink } from './AdminHomeLink.js';
 import { CommandShell, type RefreshOpt, type TrafficFilterState, type WindowOpt } from './command/CommandShell.js';
 import { KpiStrip, Ticker } from './command/KpiStrip.js';
 import { AppsModule, appTiles, appsSubtitle } from './command/AppsModule.js';
@@ -77,6 +78,8 @@ export function ObservabilityPage() {
   };
 
   return (
+    <>
+    <AdminHomeLink className="fixed top-1 left-2 z-50 rounded bg-black/60 px-2 py-0.5 text-white/70 hover:text-white" />
     <CommandShell
       layout="rails"
       window={win}
@@ -100,5 +103,6 @@ export function ObservabilityPage() {
       }}
       render={render}
     />
+    </>
   );
 }

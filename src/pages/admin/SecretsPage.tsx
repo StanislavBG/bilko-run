@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
 import { useAdminFetch, useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
+import { AdminHomeLink } from './AdminHomeLink.js';
 
 interface SecretRow {
   name: string;
@@ -505,6 +506,7 @@ export function SecretsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10 space-y-6">
+      <AdminHomeLink />
       {modal && (
         <MarkRotatedModal
           name={modal}

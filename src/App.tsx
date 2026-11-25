@@ -44,6 +44,7 @@ const ObservabilityPreviewPage = import.meta.env.DEV
   ? lazyWithRetry(() => import('./pages/admin/command/PreviewPage.js').then(m => ({ default: m.PreviewPage })))
   : null;
 const AdminPage = lazyWithRetry(() => import('./pages/AdminPage.js').then(m => ({ default: m.AdminPage })));
+const AnalyticsPage = lazyWithRetry(() => import('./pages/admin/AnalyticsPage.js').then(m => ({ default: m.AnalyticsPage })));
 const AdminCostPage = lazyWithRetry(() => import('./pages/AdminCostPage.js').then(m => ({ default: m.AdminCostPage })));
 const ObservabilityPage = lazyWithRetry(() => import('./pages/admin/ObservabilityPage.js').then(m => ({ default: m.ObservabilityPage })));
 const SessionViewPage = lazyWithRetry(() => import('./pages/admin/SessionViewPage.js').then(m => ({ default: m.SessionViewPage })));
@@ -219,6 +220,7 @@ function AppRoutes() {
             <Route path="/privacy" element={lazyRoute(PrivacyPage)} />
             <Route path="/terms" element={lazyRoute(TermsPage)} />
             <Route path="/admin" element={lazyRoute(AdminPage)} />
+            <Route path="/admin/analytics" element={lazyRoute(AnalyticsPage)} />
             <Route path="/admin/cost" element={lazyRoute(AdminCostPage)} />
             <Route path="/admin/sessions" element={lazyRoute(SessionViewPage)} />
             <Route path="/admin/sessions/:id" element={lazyRoute(SessionViewPage)} />

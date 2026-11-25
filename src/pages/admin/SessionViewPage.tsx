@@ -5,6 +5,7 @@ import { useAdminFetch, useIsAdmin } from '../../hooks/useAdmin.js';
 import { fmtMmSs, fmtTime, shortId } from '../../lib/format';
 import { SessionsPanel } from './SessionsPanel.js';
 import { SessionPlayer } from './SessionPlayer.js';
+import { AdminHomeLink } from './AdminHomeLink.js';
 import type { TimelineItem } from '../../lib/sessionSteps';
 
 interface SessionHead {
@@ -115,6 +116,7 @@ export function SessionViewPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      <AdminHomeLink className="mb-4" />
       {id ? <SessionDetailView id={id} /> : <SessionsPanel />}
     </div>
   );

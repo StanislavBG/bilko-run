@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AdminGate, useAdminFetch, useAdminResource } from '../hooks/useAdmin.js';
+import { AdminHomeLink } from './admin/AdminHomeLink.js';
 
 const COST_PER_CALL = 0.001;
 
@@ -82,6 +83,7 @@ function CostContent() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-10 space-y-10">
       <div>
+        <AdminHomeLink className="mb-3" />
         <h1 className="text-2xl font-bold text-white">Cost Controls</h1>
         <p className="text-zinc-400 text-sm mt-1">Gemini call usage, spend ceilings, and open alerts</p>
       </div>

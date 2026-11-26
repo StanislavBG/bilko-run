@@ -13,7 +13,7 @@ export interface AdminArea {
 /** One card per admin area on the /admin home. */
 export const ADMIN_AREAS: readonly AdminArea[] = [
   { name: 'Command', to: '/admin/observability', description: 'Live traffic, apps, sessions and errors on one screen.' },
-  { name: 'Analytics', to: '/admin/analytics', description: 'Views, visitors, funnels, sign-ups, bookings and product tabs.' },
+  { name: 'Analytics', to: '/admin/analytics', description: 'Live web-product revenue, traffic sources, per-tool funnels, product orders, bookings, Session Manager and sign-ups.' },
   { name: 'Secrets & API keys', to: '/admin/secrets', description: 'Rotate secrets and create the read-only and Registry write keys for the bilko-host MCP.' },
   { name: 'Sessions', to: '/admin/sessions', description: 'Replay visitor sessions step by step.' },
   { name: 'Cost', to: '/admin/cost', description: 'Gemini call usage, spend ceilings and open alerts.' },

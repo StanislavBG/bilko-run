@@ -5,6 +5,7 @@ import { classifyReferrer, parseUa, isBotRequest } from '../services/analytics.j
 import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, markAutomationVisitor, isAutomationVisitor, recordClickForBurst, automationBackfillStmts } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
 import { internalFlag } from '../internal-traffic.js';
+import { getRegistrySnapshot } from '../registry-runtime.js';
 
 // Event allowlist (must match client-side enum).
 // `checkout_success` is intentionally NOT client-settable — only the Stripe
@@ -322,28 +323,24 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     const rawDays = parseInt(String((req.query as any)?.days ?? ''), 10);
     const days = Number.isFinite(rawDays) ? Math.min(365, Math.max(1, rawDays)) : 7;
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-    const priorSince = new Date(Date.now() - days * 2 * 86400000).toISOString().slice(0, 10);
-    const priorUntil = since; // prior window is [priorSince, since)
-
-    const [
-      revenueSingle, revenueBundle,
-      priorRevenueSingle, priorRevenueBundle,
-    ] = await raceTimeout(Promise.all([
-      dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1"),
-      dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7"),
-      dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1 AND p.created_at >= ? AND p.created_at < ?", priorSince, priorUntil),
-      dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7 AND p.created_at >= ? AND p.created_at < ?", priorSince, priorUntil),
+    const nowMs = Date.now();
+    const sinceMs = nowMs - days * 86400000;
+    const priorSinceMs = nowMs - days * 2 * 86400000;
+    // Live revenue only: Stripe test-mode sessions (cs_test_) are not money.
+    const NOT_TEST = " AND checkout_session_id NOT LIKE 'cs\\_test\\_%' ESCAPE '\\'";
+    const sumOrders = (from: number, to: number) => dbGet<{ n: number; cents: number }>(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(amount_total), 0) AS cents FROM web_product_orders WHERE created_at >= ? AND created_at < ?${NOT_TEST}`,
+      from, to,
+    );
+    const [cur, prior] = await raceTimeout(Promise.all([
+      sumOrders(sinceMs, nowMs + 1),
+      sumOrders(priorSinceMs, sinceMs),
     ]), 15000, 'admin /stats');
-
-    const singleCount = revenueSingle?.n ?? 0;
-    const bundleCount = revenueBundle?.n ?? 0;
-    const priorSingleCount = priorRevenueSingle?.n ?? 0;
-    const priorBundleCount = priorRevenueBundle?.n ?? 0;
 
     return {
       period: { days, since },
-      revenue: { single: singleCount, bundle: bundleCount, total: singleCount * 1 + bundleCount * 5 },
-      revenue_prior: { single: priorSingleCount, bundle: priorBundleCount, total: priorSingleCount * 1 + priorBundleCount * 5 },
+      revenue: { orders: cur?.n ?? 0, cents: cur?.cents ?? 0 },
+      revenue_prior: { orders: prior?.n ?? 0, cents: prior?.cents ?? 0 },
     };
   });
 
@@ -414,7 +411,9 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       if (!tools.has(row.tool)) tools.set(row.tool, {});
       tools.get(row.tool)![row.event] = row.n;
     }
-    const funnels = Array.from(tools.entries()).map(([tool, events]) => {
+    // Only live, public registry slugs: retired tools and internal slugs drop out.
+    const publicSlugs = new Set(getRegistrySnapshot().filter((p) => p.public === true).map((p) => p.slug));
+    const funnels = Array.from(tools.entries()).filter(([tool]) => publicSlugs.has(tool)).map(([tool, events]) => {
       const views = events.view_tool ?? 0;
       const starts = events.submit_start ?? 0;
       const successes = events.submit_success ?? 0;
@@ -475,25 +474,4 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     return { ok: true };
   });
 
-  // Revenue widget data
-  app.get('/api/analytics/revenue', async (req, reply) => {
-    if (!await requireAdmin(req, reply)) return;
-    const { since } = buildAdminExclusion(req);
-
-    const daily = await dbAll(
-      `SELECT date(p.created_at) as date,
-          SUM(CASE WHEN t.amount = 1 THEN 1 ELSE 5 END) as revenue,
-          COUNT(*) as purchases
-        FROM stripe_one_time_purchases p
-        JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id
-        WHERE p.created_at >= ?
-        GROUP BY date(p.created_at) ORDER BY date`,
-      since,
-    ) as Array<{ date: string; revenue: number; purchases: number }>;
-
-    let cum = 0;
-    const cumulative = daily.map(d => ({ date: d.date, revenue: d.revenue, cumulative: (cum += d.revenue), purchases: d.purchases }));
-
-    return { daily, cumulative };
-  });
 }

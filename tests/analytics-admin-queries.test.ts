@@ -59,7 +59,7 @@ describe('GET /api/analytics/stats (range-filtered queries)', () => {
     const body = res.json();
     expect(Object.keys(body).sort()).toEqual(['period', 'revenue', 'revenue_prior']);
     expect(body.period.days).toBe(7);
-    expect(body.revenue).toEqual({ single: 0, bundle: 0, total: 0 });
+    expect(body.revenue).toEqual({ orders: 0, cents: 0 });
   });
 
   it('no longer serves /api/analytics/audience', async () => {

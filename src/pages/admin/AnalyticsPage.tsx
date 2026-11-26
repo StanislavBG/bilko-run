@@ -9,10 +9,11 @@ import { WebProductsTab } from './analytics/WebProductsTab.js';
 import { SessionManagerTab } from './analytics/SessionManagerTab.js';
 import { SignupsTab } from './analytics/SignupsTab.js';
 import { BookingsTab } from './BookingsTab.js';
-import { SyntheticTab } from './analytics/OpsTabs.js';
 import { AdminHomeLink } from './AdminHomeLink.js';
 
-const TABS = ['sources', 'funnels', 'products', 'bookings', 'session manager', 'signups', 'synthetic'] as const;
+const TABS = ['sources', 'funnels', 'products', 'bookings', 'session manager', 'signups'] as const;
+
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 export function AnalyticsPage() {
   const { isLoaded } = useUser();
@@ -68,7 +69,7 @@ export function AnalyticsPage() {
         <>
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <StatCard label="Revenue" value={`$${stats.revenue.total}`} sub={`$${stats.revenue.single} + $${stats.revenue.bundle * 5}`} currentNumeric={stats.revenue.total} priorValue={stats.revenue_prior.total} />
+            <StatCard label="Revenue" value={dollars(stats.revenue.cents)} sub={`${stats.revenue.orders} live order${stats.revenue.orders === 1 ? '' : 's'}`} currentNumeric={stats.revenue.cents} priorValue={stats.revenue_prior.cents} />
           </div>
 
           {/* Tab Nav */}
@@ -92,8 +93,6 @@ export function AnalyticsPage() {
           {tab === 'bookings' && <BookingsTab days={days} />}
           {tab === 'session manager' && <SessionManagerTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'signups' && <SignupsTab days={days} />}
-
-          {tab === 'synthetic' && <SyntheticTab />}
         </>
       )}
     </section>

@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 
 export interface Stats {
   period: { days: number; since: string };
-  revenue: { single: number; bundle: number; total: number };
-  revenue_prior: { single: number; bundle: number; total: number };
+  revenue: { orders: number; cents: number };
+  revenue_prior: { orders: number; cents: number };
 }
 
 export function StatCard({ label, value, sub, priorValue, currentNumeric }: { label: string; value: string | number; sub?: string; priorValue?: number; currentNumeric?: number }) {

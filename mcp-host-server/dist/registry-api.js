@@ -98,3 +98,29 @@ export async function deleteRegistryProject(slug, ifVersion) {
     });
     return (await res.json());
 }
+/** True when a registry write was refused because the entry changed since it was read. */
+export function isVersionMismatch(e) {
+    return e instanceof Error && e.message.includes('version_mismatch');
+}
+/**
+ * Runs one read-modify-write attempt; on a version_mismatch it re-reads and retries the same
+ * change once. A second mismatch is thrown to the caller.
+ */
+export async function withVersionRetry(attempt) {
+    try {
+        return await attempt();
+    }
+    catch (e) {
+        if (!isVersionMismatch(e))
+            throw e;
+    }
+    try {
+        return await attempt();
+    }
+    catch (e) {
+        if (isVersionMismatch(e)) {
+            throw new Error(`registry changed twice while writing: ${e.message}. Re-run the tool.`);
+        }
+        throw e;
+    }
+}

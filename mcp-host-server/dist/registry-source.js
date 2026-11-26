@@ -3,8 +3,6 @@
  * GET /api/admin/registry (Bilko-DB). No git command runs.
  */
 import { readRegistry } from './registry-api.js';
-/** Legacy path of the registry file; the API is the source of truth and nothing writes this file. */
-export const REGISTRY_PATH = 'src/data/standalone-projects.json';
 // hostRoot is kept so existing callers need no change; the API does not use it.
 export async function readLatestRegistryRaw(_hostRoot, opts = {}) {
     const entries = await (opts.read ?? readRegistry)();

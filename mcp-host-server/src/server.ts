@@ -466,7 +466,7 @@ server.registerTool(
       }
 
       // Cheap ownership check before gates, which execute commands in sourceRepoPath.
-      // The check inside withPublishCheckout remains the authoritative re-check.
+      // planPublishListing re-checks ownership against the registry it reads before writing.
       const preRegistry = await readLatestRegistry();
       assertPublishOwner(preRegistry, slug, sourceRepoPath);
 

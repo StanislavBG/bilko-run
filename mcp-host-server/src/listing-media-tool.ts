@@ -20,6 +20,7 @@ import { checkCardMediaFile } from './gates/share-assets.js';
 import { updateListingInRegistry } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 import { defaultRegistryApi, type RegistryReadWriteApi } from './app-backend-tool.js';
+import { withVersionRetry } from './registry-api.js';
 
 export type MediaField = 'video' | 'shareImage' | 'icon';
 const FIELDS: readonly MediaField[] = ['video', 'shareImage', 'icon'];
@@ -172,21 +173,15 @@ export async function setListingMedia(
   // ── One registry write through the API, with the version it read ──
   console.error(`[set_listing_media] ${slug}: updating the registry`);
   try {
-    for (let attempt = 0; ; attempt++) {
+    await withVersionRetry(async () => {
       const rows = await api.read();
       const projects = RegistrySchema.parse(rows.map((e) => e.entry));
       const { next, changed } = updateListingInRegistry(projects, slug, callerRepoPath, { listing: listingPatch });
-      if (!changed) break;
+      if (!changed) return;
       const version = rows.find((e) => e.entry.slug === slug)?.version;
       const updated = next.find((p) => p.slug === slug)!;
-      try {
-        await api.put(updated as unknown as { slug: string } & Record<string, unknown>, version);
-        break;
-      } catch (e) {
-        if (!(e instanceof Error && e.message.includes('version_mismatch'))) throw e;
-        if (attempt >= 1) throw new Error(`registry changed twice while writing: ${e.message}. Re-run the tool.`);
-      }
-    }
+      await api.put(updated as unknown as { slug: string } & Record<string, unknown>, version);
+    });
   } catch (e: unknown) {
     return fail((e as Error).message);
   }

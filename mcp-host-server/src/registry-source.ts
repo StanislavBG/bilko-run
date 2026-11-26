@@ -5,9 +5,6 @@
 
 import { readRegistry, type RegistryApiEntry } from './registry-api.js';
 
-/** Legacy path of the registry file; the API is the source of truth and nothing writes this file. */
-export const REGISTRY_PATH = 'src/data/standalone-projects.json';
-
 export interface RegistrySourceOptions {
   /** Test seam: replaces the API call. */
   read?: () => Promise<RegistryApiEntry[]>;

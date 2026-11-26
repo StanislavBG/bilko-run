@@ -10,6 +10,7 @@ import {
   readRegistry as apiReadRegistry,
   putRegistryProject,
   deleteRegistryProject,
+  withVersionRetry,
   type RegistryApiEntry,
 } from './registry-api.js';
 
@@ -128,30 +129,6 @@ export interface RegistryWriteApi {
 
 const defaultApi: RegistryWriteApi = { read: apiReadRegistry, put: putRegistryProject, del: deleteRegistryProject };
 
-function isVersionMismatch(e: unknown): boolean {
-  return e instanceof Error && e.message.includes('version_mismatch');
-}
-
-/**
- * Runs one read-modify-write attempt; on a version_mismatch it re-reads and retries the same
- * change once. A second mismatch is thrown to the caller.
- */
-async function withRetry<T>(attempt: () => Promise<T>): Promise<T> {
-  try {
-    return await attempt();
-  } catch (e) {
-    if (!isVersionMismatch(e)) throw e;
-  }
-  try {
-    return await attempt();
-  } catch (e) {
-    if (isVersionMismatch(e)) {
-      throw new Error(`registry changed twice while writing: ${(e as Error).message}. Re-run the tool.`);
-    }
-    throw e;
-  }
-}
-
 async function readProjects(api: RegistryWriteApi): Promise<{ projects: RegistryProject[]; versions: Map<string, number> }> {
   const entries = await api.read();
   const versions = new Map<string, number>();
@@ -164,7 +141,7 @@ export function registerProjectLive(
   input: Parameters<typeof buildRegistration>[1],
   api: RegistryWriteApi = defaultApi,
 ): Promise<{ slug: string; version: number }> {
-  return withRetry(async () => {
+  return withVersionRetry(async () => {
     const { projects } = await readProjects(api);
     const entry = buildRegistration(projects, input);
     return api.put(entry, 0);
@@ -178,7 +155,7 @@ export function updateListingLive(
   patch: unknown,
   api: RegistryWriteApi = defaultApi,
 ): Promise<{ changed: boolean; removed: string[] }> {
-  return withRetry(async () => {
+  return withVersionRetry(async () => {
     const { projects, versions } = await readProjects(api);
     const { next, changed, removed } = updateListingInRegistry(projects, slug, callerRepoPath, patch);
     if (!changed) return { changed: false, removed };
@@ -213,7 +190,7 @@ export function unregisterProjectLive(
   callerRepoPath: string | undefined,
   api: RegistryWriteApi = defaultApi,
 ): Promise<void> {
-  return withRetry(async () => {
+  return withVersionRetry(async () => {
     const { projects, versions } = await readProjects(api);
     const existing = projects.find((p) => p.slug === slug);
     if (!existing) throw new Error(`slug "${slug}" not found in registry.`);

@@ -12,7 +12,7 @@
 
 import { RegistrySchema, appBackendOriginProblem, type RegistryProject } from './contract/registry.js';
 import { assertCallerOwnsSlug } from './ownership.js';
-import { readRegistry, putRegistryProject, type RegistryApiEntry } from './registry-api.js';
+import { readRegistry, putRegistryProject, withVersionRetry, type RegistryApiEntry } from './registry-api.js';
 
 export interface SetBackendResult {
   next: RegistryProject[];
@@ -95,30 +95,23 @@ async function liveBackendSource(fetchFn: typeof fetch, base: string, slug: stri
   }
 }
 
-const isVersionMismatch = (e: unknown) => e instanceof Error && e.message.includes('version_mismatch');
-
 /** One read-modify-write; on version_mismatch re-reads and retries once. */
-async function writeBackend(
+function writeBackend(
   api: RegistryReadWriteApi,
   slug: string,
   callerRepoPath: string,
   origin: string | null,
 ): Promise<SetBackendResult> {
-  for (let attempt = 0; ; attempt++) {
+  return withVersionRetry(async () => {
     const entries = await api.read();
     const projects = RegistrySchema.parse(entries.map((e) => e.entry));
     const result = setBackendInRegistry(projects, slug, callerRepoPath, origin);
     if (!result.changed) return result;
     const version = entries.find((e) => e.entry.slug === slug)?.version;
     const entry = result.next.find((p) => p.slug === slug)!;
-    try {
-      await api.put(entry as unknown as { slug: string } & Record<string, unknown>, version);
-      return result;
-    } catch (e) {
-      if (!isVersionMismatch(e)) throw e;
-      if (attempt >= 1) throw new Error(`registry changed twice while writing: ${(e as Error).message}. Re-run the tool.`);
-    }
-  }
+    await api.put(entry as unknown as { slug: string } & Record<string, unknown>, version);
+    return result;
+  });
 }
 
 export async function setAppBackend(

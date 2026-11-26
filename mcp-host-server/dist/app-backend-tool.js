@@ -11,7 +11,7 @@
  */
 import { RegistrySchema, appBackendOriginProblem } from './contract/registry.js';
 import { assertCallerOwnsSlug } from './ownership.js';
-import { readRegistry, putRegistryProject } from './registry-api.js';
+import { readRegistry, putRegistryProject, withVersionRetry } from './registry-api.js';
 /**
  * Returns the registry with host.backend of `slug` set to the normalized `origin`, or removed
  * when `origin` is null. Throws for an unknown slug, a caller that does not own the slug, an
@@ -62,10 +62,9 @@ async function liveBackendSource(fetchFn, base, slug) {
         return undefined;
     }
 }
-const isVersionMismatch = (e) => e instanceof Error && e.message.includes('version_mismatch');
 /** One read-modify-write; on version_mismatch re-reads and retries once. */
-async function writeBackend(api, slug, callerRepoPath, origin) {
-    for (let attempt = 0;; attempt++) {
+function writeBackend(api, slug, callerRepoPath, origin) {
+    return withVersionRetry(async () => {
         const entries = await api.read();
         const projects = RegistrySchema.parse(entries.map((e) => e.entry));
         const result = setBackendInRegistry(projects, slug, callerRepoPath, origin);
@@ -73,17 +72,9 @@ async function writeBackend(api, slug, callerRepoPath, origin) {
             return result;
         const version = entries.find((e) => e.entry.slug === slug)?.version;
         const entry = result.next.find((p) => p.slug === slug);
-        try {
-            await api.put(entry, version);
-            return result;
-        }
-        catch (e) {
-            if (!isVersionMismatch(e))
-                throw e;
-            if (attempt >= 1)
-                throw new Error(`registry changed twice while writing: ${e.message}. Re-run the tool.`);
-        }
-    }
+        await api.put(entry, version);
+        return result;
+    });
 }
 export async function setAppBackend(input, deps) {
     const { slug, callerRepoPath, origin } = input;

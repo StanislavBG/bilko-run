@@ -404,7 +404,7 @@ server.registerTool('publish_static_project', {
             return err(`distPath has no index.html — not a Vite build? (${distAbs})`);
         }
         // Cheap ownership check before gates, which execute commands in sourceRepoPath.
-        // The check inside withPublishCheckout remains the authoritative re-check.
+        // planPublishListing re-checks ownership against the registry it reads before writing.
         const preRegistry = await readLatestRegistry();
         assertPublishOwner(preRegistry, slug, sourceRepoPath);
         // Run publish gates against distPath, outside the publish checkout/lock.

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "session-manager",
   "version": "0.1.0",
-  "builtAt": "2026-11-24T16:24:47.102Z",
-  "gitSha": "66eee675",
+  "builtAt": "2026-11-26T17:49:56.757Z",
+  "gitSha": "9e3a35dd",
   "gitBranch": "HEAD",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 1419032,
+    "sizeBytesGz": 1430324,
     "fileCount": 77
   },
   "widget": {
@@ -26,7 +26,7 @@
       },
       {
         "path": "widget/v1/feedback.js",
-        "sizeBytes": 161206
+        "sizeBytes": 176074
       },
       {
         "path": "widget/v1/fonts/inter-tight-latin-400-normal.woff2",

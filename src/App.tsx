@@ -156,10 +156,10 @@ function RedirectHireToBook() {
 
 function RedirectAppToProducts() {
   const loc = useLocation();
-  // /app/<old> → /products/<canonical>; /app/metrics → /admin; /app or anything else → /products
+  // /app/<old> → /products/<canonical>; /app/metrics → /admin/analytics; /app or anything else → /products
   const segments = loc.pathname.split('/').filter(Boolean); // ["app", "<rest>"]
   const old = segments[1];
-  if (old === 'metrics') return <Navigate to="/admin" replace />;
+  if (old === 'metrics') return <Navigate to="/admin/analytics" replace />;
   const canonical = old ? APP_TO_PRODUCT[old] : undefined;
   const target = canonical ? `/products/${canonical}` : '/products';
   return <Navigate to={target + loc.search + loc.hash} replace />;

@@ -3,10 +3,9 @@
 // The registry snapshot (server/registry-runtime.ts) is checked first: a
 // listing change written through the registry API refreshes it, so bytes can
 // land as soon as the declaration does.
-// Fallback: the registry on GitHub main. It stays until the bilko-host MCP
-// writes listings through the registry API (plans 1961-1965); until then the MCP
-// declares media by pushing the file to GitHub, and the snapshot only sees that
-// after a redeploy. The URL is a fixed constant; nothing from the request goes in it.
+// Fallback: the registry file on GitHub main, for media declared by a bilko-host
+// MCP process started before it wrote through the registry API. The registry-file
+// retirement plan removes it. The URL is a fixed constant; nothing from the request goes in it.
 import type { CardMediaField } from '../../shared/listing-media.js';
 import { getRegistrySnapshot } from '../registry-runtime.js';
 

@@ -5,7 +5,6 @@ import { classifyReferrer, parseUa, isBotRequest } from '../services/analytics.j
 import { slugFromPath, visitorHash, stableVisitorId, sessionCookie, markAutomationVisitor, isAutomationVisitor, recordClickForBurst, automationBackfillStmts } from '../page-hits.js';
 import { readSessionIds, isValidId } from '../session-identity.js';
 import { internalFlag } from '../internal-traffic.js';
-import { PRODUCT_KEYS } from '../../shared/product-catalog.js';
 
 // Event allowlist (must match client-side enum).
 // `checkout_success` is intentionally NOT client-settable — only the Stripe
@@ -332,14 +331,11 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
 
     const [
       totalViews, byDay, byPage, byReferrer, todayViews, botViews, botUserAgents,
-      totalRoasts, totalUsers, topUsers, tokenPurchases,
-      signupsByDay, roastsByDay, recentUserRoasts, activityFeed,
       revenueSingle, revenueBundle, toolUsage, toolVisits,
       uniqueVisitors, topLandingPages, referrerToTool, dailyActiveUsers, blogTraffic,
       topUtms, byCountry,
       // prior-period KPIs
       priorTotalViews, priorTodayViews, priorUniqueVisitors,
-      priorTotalRoasts, priorTotalUsers, priorTokenPurchases,
       priorRevenueSingle, priorRevenueBundle,
     ] = await raceTimeout(Promise.all([
       dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ?${excludeAdmins}`, since, ...adminArgs),
@@ -351,37 +347,6 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ? AND is_bot = 1`, since),
       // Top bot user-agents so admin can see who's hitting the site.
       dbAll(`SELECT COALESCE(ua, '(empty)') as ua, COUNT(*) as views FROM page_views WHERE date >= ? AND is_bot = 1 GROUP BY ua ORDER BY views DESC LIMIT 10`, since),
-      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history'),
-      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances'),
-      dbAll(`
-        WITH roast_agg AS (
-          SELECT email, COUNT(*) AS roasts, MAX(created_at) AS last_roast FROM user_roasts GROUP BY email
-        ), purchase_agg AS (
-          SELECT email, SUM(amount) AS purchased FROM token_transactions WHERE reason = 'stripe_purchase' GROUP BY email
-        )
-        SELECT tb.email, tb.balance AS credits,
-          COALESCE(ra.roasts, 0) AS roasts, ra.last_roast AS last_roast, pa.purchased AS purchased
-        FROM token_balances tb
-        LEFT JOIN roast_agg ra ON ra.email = tb.email
-        LEFT JOIN purchase_agg pa ON pa.email = tb.email
-        ORDER BY roasts DESC LIMIT 50
-      `),
-      dbGet<{ count: number }>('SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = ?', PRODUCT_KEYS.PAGEROAST_TOKENS),
-      dbAll('SELECT date(created_at) as date, COUNT(*) as signups FROM token_balances WHERE created_at >= ? GROUP BY date(created_at) ORDER BY date', since),
-      // Roasts by day (for chart)
-      dbAll('SELECT date(created_at) as date, COUNT(*) as roasts FROM user_roasts WHERE created_at >= ? GROUP BY date(created_at) ORDER BY date', since),
-      // Recent roasts with WHO did them
-      dbAll('SELECT email, url, score, grade, roast, created_at FROM user_roasts ORDER BY created_at DESC LIMIT 30'),
-      // Activity feed: recent signups + purchases + roasts interleaved
-      dbAll(`
-        SELECT * FROM (
-          SELECT 'signup' as type, email, '' as detail, created_at FROM token_balances WHERE created_at >= ?
-          UNION ALL
-          SELECT 'purchase' as type, email, CAST(amount AS TEXT) as detail, created_at FROM token_transactions WHERE reason = 'stripe_purchase' AND created_at >= ?
-          UNION ALL
-          SELECT 'roast' as type, email, url as detail, created_at FROM user_roasts WHERE created_at >= ?
-        ) ORDER BY created_at DESC LIMIT 50
-      `, since, since, since),
       // Revenue breakdown
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1"),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7"),
@@ -407,9 +372,6 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ? AND date < ?${excludeAdmins}`, priorSince, priorUntil, ...adminArgs),
       dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date = ?${excludeAdmins}`, yesterday, ...adminArgs),
       dbGet<{ n: number }>(`SELECT COUNT(DISTINCT email) as n FROM page_views WHERE date >= ? AND date < ? AND email IS NOT NULL${excludeAdmins}`, priorSince, priorUntil, ...adminArgs),
-      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM roast_history WHERE created_at >= ? AND created_at < ?', priorSince, priorUntil),
-      dbGet<{ n: number }>('SELECT COUNT(*) as n FROM token_balances WHERE created_at >= ? AND created_at < ?', priorSince, priorUntil),
-      dbGet<{ count: number }>('SELECT COUNT(*) as count FROM stripe_one_time_purchases WHERE product_key = ? AND created_at >= ? AND created_at < ?', PRODUCT_KEYS.PAGEROAST_TOKENS, priorSince, priorUntil),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1 AND p.created_at >= ? AND p.created_at < ?", priorSince, priorUntil),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7 AND p.created_at >= ? AND p.created_at < ?", priorSince, priorUntil),
     ]), 15000, 'admin /stats');
@@ -425,28 +387,17 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       botViews: botViews?.n ?? 0,
       botUserAgents,
       todayViews: todayViews?.n ?? 0,
-      totalRoasts: totalRoasts?.n ?? 0,
-      totalUsers: totalUsers?.n ?? 0,
-      tokenPurchases: tokenPurchases?.count ?? 0,
       revenue: { single: singleCount, bundle: bundleCount, total: singleCount * 1 + bundleCount * 5 },
       // Prior-period deltas
       views_prior: priorTotalViews?.n ?? 0,
       todayViews_prior: priorTodayViews?.n ?? 0,
       uniqueVisitors_prior: priorUniqueVisitors?.n ?? 0,
-      totalRoasts_prior: priorTotalRoasts?.n ?? 0,
-      totalUsers_prior: priorTotalUsers?.n ?? 0,
-      tokenPurchases_prior: priorTokenPurchases?.count ?? 0,
       revenue_prior: { single: priorSingleCount, bundle: priorBundleCount, total: priorSingleCount * 1 + priorBundleCount * 5 },
       byDay,
       byPage,
       byReferrer,
-      topUsers,
-      signupsByDay,
       toolUsage,
       toolVisits,
-      roastsByDay,
-      recentUserRoasts,
-      activityFeed,
       uniqueVisitors: uniqueVisitors?.n ?? 0,
       topLandingPages,
       referrerToTool,

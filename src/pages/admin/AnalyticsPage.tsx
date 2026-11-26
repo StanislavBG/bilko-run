@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 
 import { useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 import { StatCard, type Stats } from './analytics/parts.js';
-import { OverviewTab, UsersTab, RoastsTab, ActivityTab } from './analytics/ActivityTabs.js';
+import { OverviewTab } from './analytics/ActivityTabs.js';
 import { SourcesTab, FunnelsTab, AudienceTab, ToolsTab } from './analytics/GrowthTabs.js';
 import { WebProductsTab } from './analytics/WebProductsTab.js';
 import { SessionManagerTab } from './analytics/SessionManagerTab.js';
@@ -13,7 +13,7 @@ import { BookingsTab } from './BookingsTab.js';
 import { SyntheticTab, ManifestsTab } from './analytics/OpsTabs.js';
 import { AdminHomeLink } from './AdminHomeLink.js';
 
-const TABS = ['overview', 'sources', 'funnels', 'audience', 'users', 'roasts', 'activity', 'tools', 'products', 'bookings', 'session manager', 'signups', 'manifests', 'synthetic'] as const;
+const TABS = ['overview', 'sources', 'funnels', 'audience', 'tools', 'products', 'bookings', 'session manager', 'signups', 'manifests', 'synthetic'] as const;
 
 export function AnalyticsPage() {
   const { isLoaded } = useUser();
@@ -65,13 +65,10 @@ export function AnalyticsPage() {
       {stats && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3 mb-6">
             <StatCard label="Views Today" value={stats.todayViews} currentNumeric={stats.todayViews} priorValue={stats.todayViews_prior} />
             <StatCard label={`Views (${days}d)`} value={stats.views} currentNumeric={stats.views} priorValue={stats.views_prior} />
             <StatCard label="Unique Visitors" value={stats.uniqueVisitors} sub={`${days}d with email`} currentNumeric={stats.uniqueVisitors} priorValue={stats.uniqueVisitors_prior} />
-            <StatCard label="Total Roasts" value={stats.totalRoasts} currentNumeric={stats.totalRoasts} priorValue={stats.totalRoasts_prior} />
-            <StatCard label="Total Users" value={stats.totalUsers} currentNumeric={stats.totalUsers} priorValue={stats.totalUsers_prior} />
-            <StatCard label="Purchases" value={stats.tokenPurchases} sub={`${stats.revenue.single} single + ${stats.revenue.bundle} bundle`} currentNumeric={stats.tokenPurchases} priorValue={stats.tokenPurchases_prior} />
             <StatCard label="Revenue" value={`$${stats.revenue.total}`} sub={`$${stats.revenue.single} + $${stats.revenue.bundle * 5}`} currentNumeric={stats.revenue.total} priorValue={stats.revenue_prior.total} />
           </div>
 
@@ -91,9 +88,6 @@ export function AnalyticsPage() {
           </div>
 
           {tab === 'overview' && <OverviewTab days={days} excludeSelf={excludeSelf} />}
-          {tab === 'users' && <UsersTab days={days} excludeSelf={excludeSelf} />}
-          {tab === 'roasts' && <RoastsTab days={days} excludeSelf={excludeSelf} />}
-          {tab === 'activity' && <ActivityTab days={days} excludeSelf={excludeSelf} />}
 
           {tab === 'sources' && <SourcesTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'funnels' && <FunnelsTab days={days} excludeSelf={excludeSelf} />}

@@ -62,22 +62,14 @@ describe('GET /api/analytics/stats (range-filtered queries)', () => {
     expect(body.views).toBe(expectedViews);
     expect(body.todayViews).toBe(3);
     expect(body.byDay.map((r: any) => r.views)).toEqual([4, 2, 3]);
-
-    // signups / roasts within window: a (2d ago 00:00:00) and b (today 23:59:59) — boundary rows included
-    expect(body.signupsByDay.reduce((s: number, r: any) => s + r.signups, 0)).toBe(2);
-    expect(body.roastsByDay.reduce((s: number, r: any) => s + r.roasts, 0)).toBe(3);
-    expect(body.activityFeed.filter((r: any) => r.type === 'signup')).toHaveLength(2);
-    expect(body.activityFeed.filter((r: any) => r.type === 'purchase')).toHaveLength(2);
-    expect(body.activityFeed.filter((r: any) => r.type === 'roast')).toHaveLength(3);
   });
 
-  it('computes topUsers (roasts, last_roast, purchased) via grouped join', async () => {
+  it('no longer returns the dropped roast/user/purchase fields', async () => {
     const body = (await app.inject({ method: 'GET', url: '/api/analytics/stats?days=7' })).json();
-    const byEmail = Object.fromEntries(body.topUsers.map((u: any) => [u.email, u]));
-    expect(body.topUsers[0].email).toBe('a@t.dev');
-    expect(byEmail['a@t.dev']).toMatchObject({ credits: 5, roasts: 2, purchased: 8, last_roast: ts(0) });
-    expect(byEmail['b@t.dev']).toMatchObject({ credits: 1, roasts: 1, purchased: null });
-    expect(byEmail['old@t.dev']).toMatchObject({ roasts: 1 });
+    for (const k of ['totalRoasts', 'totalUsers', 'tokenPurchases', 'topUsers', 'roastsByDay', 'recentUserRoasts', 'activityFeed', 'signupsByDay', 'totalRoasts_prior', 'totalUsers_prior', 'tokenPurchases_prior']) {
+      expect(body).not.toHaveProperty(k);
+    }
+    expect(body.revenue).toEqual({ single: 0, bundle: 0, total: 0 });
   });
 
   it('uses an index for the main pageview count query', async () => {

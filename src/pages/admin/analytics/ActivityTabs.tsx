@@ -1,5 +1,5 @@
 import { useAdminResource } from '../../../hooks/useAdmin.js';
-import { BarChart, LoadingState, activityIcon, aggregateReferrers, gradeBadge, timeAgo, type Stats } from './parts.js';
+import { BarChart, LoadingState, aggregateReferrers, type Stats } from './parts.js';
 
 interface TabProps {
   days: number;
@@ -15,19 +15,11 @@ export function OverviewTab(props: TabProps) {
   if (!stats) return <LoadingState loading={loading} error={error} />;
   return (
     <>
-      {/* Views + Roasts by Day side by side */}
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
+      {/* Views by Day */}
+      <div className="mb-6">
         <div className="bg-white rounded-xl border border-warm-200/60 p-5">
           <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Views by Day</h2>
           <BarChart data={stats.byDay.map(d => ({ key: d.date.slice(5), value: d.views }))} label="views" />
-        </div>
-        <div className="bg-white rounded-xl border border-warm-200/60 p-5">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Roasts by Day</h2>
-          <BarChart
-            data={stats.roastsByDay.map(d => ({ key: d.date.slice(5), value: d.roasts }))}
-            label="roasts"
-            color="bg-fire-500"
-          />
         </div>
       </div>
 
@@ -155,131 +147,6 @@ export function OverviewTab(props: TabProps) {
           )}
         </div>
       </div>
-
-      {/* Signups by Day */}
-      {stats.signupsByDay.length > 0 && (
-        <div className="bg-white rounded-xl border border-warm-200/60 p-5 mb-6">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">Signups by Day</h2>
-          <BarChart
-            data={stats.signupsByDay.map(d => ({ key: d.date.slice(5), value: d.signups }))}
-            label="signups"
-            color="bg-green-400"
-          />
-        </div>
-      )}
     </>
-  );
-}
-
-export function UsersTab(props: TabProps) {
-  const { data: stats, error, loading } = useStats(props);
-  if (!stats) return <LoadingState loading={loading} error={error} />;
-  if (stats.topUsers.length === 0) return null;
-  return (
-    <div className="bg-white rounded-xl border border-warm-200/60 p-5">
-      <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">
-        All Users ({stats.topUsers.length})
-      </h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-warm-100">
-              <th className="text-left py-2 px-2 text-xs font-bold text-warm-400 uppercase">Email</th>
-              <th className="text-right py-2 px-2 text-xs font-bold text-warm-400 uppercase">Roasts</th>
-              <th className="text-right py-2 px-2 text-xs font-bold text-warm-400 uppercase">Credits</th>
-              <th className="text-right py-2 px-2 text-xs font-bold text-warm-400 uppercase">Purchased</th>
-              <th className="text-right py-2 px-2 text-xs font-bold text-warm-400 uppercase">Last Active</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.topUsers.map(u => (
-              <tr key={u.email} className="border-b border-warm-50 hover:bg-warm-50">
-                <td className="py-2 px-2 text-warm-800 font-medium truncate max-w-[220px]">{u.email}</td>
-                <td className="py-2 px-2 text-right font-bold text-warm-900">{u.roasts}</td>
-                <td className="py-2 px-2 text-right">
-                  <span className={u.credits === 0 ? 'text-red-500 font-bold' : 'text-warm-600'}>{u.credits}</span>
-                </td>
-                <td className="py-2 px-2 text-right">
-                  {u.purchased ? (
-                    <span className="text-green-600 font-bold">{u.purchased} cr</span>
-                  ) : (
-                    <span className="text-warm-300">free</span>
-                  )}
-                </td>
-                <td className="py-2 px-2 text-right text-xs text-warm-400">
-                  {u.last_roast ? timeAgo(u.last_roast) : 'Never'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-export function RoastsTab(props: TabProps) {
-  const { data: stats, error, loading } = useStats(props);
-  if (!stats) return <LoadingState loading={loading} error={error} />;
-  return (
-    <div className="bg-white rounded-xl border border-warm-200/60 p-5">
-      <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">
-        Recent Roasts (with user)
-      </h2>
-      <div className="space-y-2">
-        {stats.recentUserRoasts.map((r, i) => (
-          <div key={i} className="flex items-center gap-3 py-2.5 border-b border-warm-100 last:border-0">
-            {gradeBadge(r.grade)}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-warm-800 truncate">{r.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
-                <span className="text-xs font-bold text-warm-500">{r.score}/100</span>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-fire-600 font-medium">{r.email}</span>
-                <span className="text-xs text-warm-300">&middot;</span>
-                <span className="text-xs text-warm-400 italic truncate">&ldquo;{r.roast}&rdquo;</span>
-              </div>
-            </div>
-            <span className="text-xs text-warm-400 flex-shrink-0">{timeAgo(r.created_at)}</span>
-          </div>
-        ))}
-        {stats.recentUserRoasts.length === 0 && <p className="text-sm text-warm-400">No roasts yet</p>}
-      </div>
-    </div>
-  );
-}
-
-export function ActivityTab(props: TabProps) {
-  const { data: stats, error, loading } = useStats(props);
-  const { days } = props;
-  if (!stats) return <LoadingState loading={loading} error={error} />;
-  return (
-    <div className="bg-white rounded-xl border border-warm-200/60 p-5">
-      <h2 className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-4">
-        Activity Feed ({days}d)
-      </h2>
-      <div className="space-y-1">
-        {stats.activityFeed.map((a, i) => (
-          <div key={i} className="flex items-center gap-3 py-2 border-b border-warm-50 last:border-0">
-            <div className="w-7 h-7 rounded-full bg-warm-100 flex items-center justify-center text-sm font-black">
-              {activityIcon(a.type)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-sm text-warm-800 font-medium">{a.email}</span>
-              <span className="text-sm text-warm-400 ml-2">
-                {a.type === 'signup' && 'signed up'}
-                {a.type === 'purchase' && `purchased ${a.detail} credits`}
-                {a.type === 'roast' && (
-                  <>roasted <span className="text-warm-600">{a.detail.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 40)}</span></>
-                )}
-              </span>
-            </div>
-            <span className="text-xs text-warm-400 flex-shrink-0">{timeAgo(a.created_at)}</span>
-          </div>
-        ))}
-        {stats.activityFeed.length === 0 && <p className="text-sm text-warm-400">No activity in this period</p>}
-      </div>
-    </div>
   );
 }

@@ -39,18 +39,10 @@ export interface Stats {
   botViews: number;
   botUserAgents: Array<{ ua: string; views: number }>;
   todayViews: number;
-  totalRoasts: number;
-  totalUsers: number;
-  tokenPurchases: number;
   revenue: { single: number; bundle: number; total: number };
   byDay: Array<{ date: string; views: number }>;
   byPage: Array<{ path: string; views: number }>;
   byReferrer: Array<{ referrer: string; views: number }>;
-  topUsers: Array<{ email: string; credits: number; roasts: number; last_roast: string | null; purchased: number | null }>;
-  signupsByDay: Array<{ date: string; signups: number }>;
-  roastsByDay: Array<{ date: string; roasts: number }>;
-  recentUserRoasts: Array<{ email: string; url: string; score: number; grade: string; roast: string; created_at: string }>;
-  activityFeed: Array<{ type: string; email: string; detail: string; created_at: string }>;
   toolUsage: Array<{ endpoint: string; uses: number }>;
   toolVisits: Array<{ path: string; visits: number }>;
   uniqueVisitors: number;
@@ -63,9 +55,6 @@ export interface Stats {
   views_prior: number;
   todayViews_prior: number;
   uniqueVisitors_prior: number;
-  totalRoasts_prior: number;
-  totalUsers_prior: number;
-  tokenPurchases_prior: number;
   revenue_prior: { single: number; bundle: number; total: number };
 }
 
@@ -111,20 +100,6 @@ export function BarChart({ data, label: _label, color = 'bg-fire-400' }: { data:
       ))}
     </div>
   );
-}
-
-export function gradeBadge(grade: string) {
-  const color = grade.startsWith('A') ? 'bg-green-100 text-green-700' :
-    grade.startsWith('B') ? 'bg-blue-100 text-blue-700' :
-    grade.startsWith('C') ? 'bg-yellow-100 text-yellow-700' :
-    grade === 'D' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700';
-  return <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg font-black text-xs ${color}`}>{grade}</span>;
-}
-
-export function activityIcon(type: string) {
-  if (type === 'signup') return <span className="text-green-500" title="Signup">+</span>;
-  if (type === 'purchase') return <span className="text-fire-500" title="Purchase">$</span>;
-  return <span className="text-blue-500" title="Roast">R</span>;
 }
 
 export function timeAgo(ts: string): string {

@@ -36,7 +36,7 @@ describe('sync-local-main.sh', () => {
   // The script reaches git through tmp/bin/git, a shim that logs every call to tmp/git.log and runs
   // tmp/mid-run.sh once, if a test wrote it, just before the sync creates its throwaway worktree.
   const run = (...args: string[]) =>
-    spawnSync('env', ['-i', `HOME=${tmp}`, `PATH=${join(tmp, 'bin')}:/usr/bin:/bin`, `BILKO_SYNC_REPO_ROOT=${repo}`,
+    spawnSync('env', ['-i', `HOME=${tmp}`, `TMPDIR=${tmpdir()}`, `PATH=${join(tmp, 'bin')}:/usr/bin:/bin`, `BILKO_SYNC_REPO_ROOT=${repo}`,
       'GIT_AUTHOR_NAME=T', 'GIT_AUTHOR_EMAIL=t@example.com', 'GIT_COMMITTER_NAME=T', 'GIT_COMMITTER_EMAIL=t@example.com',
       'bash', SCRIPT, ...args], { encoding: 'utf-8', timeout: 60_000 });
   const gitCalls = () => {

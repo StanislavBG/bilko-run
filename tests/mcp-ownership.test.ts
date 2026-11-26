@@ -22,12 +22,15 @@ afterEach(() => {
 
 describe('assertCallerOwnsSlug', () => {
   it('matches via ~ path', () => {
-    const dir = fs.mkdtempSync(path.join(os.homedir(), '.ownership-test-'));
+    const prevHome = process.env.HOME;
+    process.env.HOME = tmp;
     try {
-      const tilde = '~/' + path.basename(dir);
-      expect(() => assertCallerOwnsSlug(entry(tilde), dir)).not.toThrow();
+      const dir = path.join(os.homedir(), 'ownership-home-repo');
+      fs.mkdirSync(dir);
+      expect(() => assertCallerOwnsSlug(entry('~/ownership-home-repo'), dir)).not.toThrow();
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      if (prevHome === undefined) delete process.env.HOME;
+      else process.env.HOME = prevHome;
     }
   });
 

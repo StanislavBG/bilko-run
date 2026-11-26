@@ -98,6 +98,7 @@ describe('blog-seed.sh', () => {
       [
         '-i',
         `HOME=${tmp}`,
+        `TMPDIR=${tmpdir()}`,
         `PATH=${fake}:/usr/bin:/bin`,
         `FAKE_DIR=${fake}`,
         `FAKE_CURL_BODY=${join(tmp, 'live.json')}`,

@@ -84,6 +84,7 @@ describe('blog-draft.sh', () => {
       [
         '-i',
         `HOME=${tmp}`,
+        `TMPDIR=${tmpdir()}`,
         `PATH=${withFake ? `${fake}:` : ''}/usr/bin:/bin`,
         `FAKE_MODE=${mode}`,
         `FAKE_DIR=${fake}`,

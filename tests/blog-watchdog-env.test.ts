@@ -28,7 +28,7 @@ describe('blog-watchdog-env.sh', () => {
   function missing(): string {
     const r = spawnSync(
       'env',
-      ['-i', `HOME=${home}`, 'PATH=/usr/bin:/bin', 'bash', '-c', `source ${ENV_FILE}; watchdog_missing_binaries`],
+      ['-i', `HOME=${home}`, `TMPDIR=${tmpdir()}`, 'PATH=/usr/bin:/bin', 'bash', '-c', `source ${ENV_FILE}; watchdog_missing_binaries`],
       { encoding: 'utf8' },
     );
     return r.stdout;
@@ -57,6 +57,7 @@ describe('blog-watchdog-env.sh', () => {
           '-i',
           `HOME=${homedir()}`,
           'PATH=/usr/bin:/bin',
+          `TMPDIR=${tmpdir()}`,
           'bash',
           '-c',
           'source scripts/blog-watchdog-env.sh && timeout 180 pnpm tsx scripts/blog-cadence-gate.ts next-slot',

@@ -3,8 +3,7 @@
  *
  * The owner points listing.video / shareImage / icon at local files. Each file is checked with
  * the share-assets rules, the registry is pointed at its hosted path
- * /projects/<slug>/_media/<sha256>.<ext> in one commit pushed through the isolated publish
- * checkout, then the bytes are uploaded to bilko.run's PUT /api/listing-media/<slug>/<file>.
+ * /projects/<slug>/_media/<sha256>.<ext> through the Bilko-DB registry API (live at once), then the bytes are uploaded to bilko.run's PUT /api/listing-media/<slug>/<file>.
  * Nothing is ever written into public/projects/<slug>/.
  *
  * Pure of the MCP SDK (server.ts registers the tool). Progress goes to stderr only: stdout is
@@ -12,17 +11,14 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { RegistrySchema } from './contract/registry.js';
 import { hostedMediaPath } from './contract/listing-media.js';
 import { checkCardMediaFile } from './gates/share-assets.js';
-import { parseRegistry } from './publish-request.js';
-import { readLatestRegistryRaw, REGISTRY_PATH } from './registry-source.js';
-import { withPublishCheckout } from './publish-checkout.js';
 import { updateListingInRegistry } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
+import { defaultRegistryApi } from './app-backend-tool.js';
 const FIELDS = ['video', 'shareImage', 'icon'];
 export const DEFAULT_RETRY_DELAYS_MS = [2000, 5000, 10000, 20000];
 const CONTENT_TYPES = {
@@ -58,25 +54,6 @@ function prepareFile(slug, field, file) {
     const bytes = readFileSync(abs);
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     return { field, abs, bytes, sha256, ext, url: hostedMediaPath(slug, sha256, ext) };
-}
-// Same formatting as server.ts writeRegistry (server.ts starts the stdio server, so it can't be imported).
-async function writeRegistry(root, projects) {
-    const validated = RegistrySchema.parse(projects);
-    await writeFile(path.resolve(root, REGISTRY_PATH), JSON.stringify(validated, null, 2) + '\n', 'utf8');
-}
-// Copies of server.ts pushedLine/localMainLine.
-function localMainLine(sync) {
-    const detail = sync.detail ? ` — ${sync.detail}` : '';
-    if (sync.synced)
-        return `local main: synced${detail}`;
-    const exit = sync.exitCode === null ? 'no exit code' : `exit ${sync.exitCode}`;
-    return `local main: not synced (${exit})${detail}`;
-}
-function pushedLine(outcome) {
-    if (!outcome.committed)
-        return 'no changes to commit';
-    const pushed = `pushed: ${outcome.sha}`;
-    return outcome.localMain ? `${pushed}\n${localMainLine(outcome.localMain)}` : pushed;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
@@ -129,8 +106,9 @@ export async function setListingMedia(input, deps) {
     const entries = FIELDS.flatMap((f) => (media[f] === undefined ? [] : [[f, media[f]]]));
     if (entries.length === 0)
         return fail(`media: give at least one of ${FIELDS.join(', ')} (a file path, or null to remove)`);
+    const api = deps.api ?? defaultRegistryApi;
     try {
-        const projects = parseRegistry((await readLatestRegistryRaw(deps.hostRoot)).raw);
+        const projects = RegistrySchema.parse((await api.read()).map((e) => e.entry));
         const entry = projects.find((p) => p.slug === slug);
         if (!entry)
             return fail(`slug "${slug}" not found in registry.`);
@@ -157,31 +135,38 @@ export async function setListingMedia(input, deps) {
     }
     if (problems.length > 0)
         return fail(problems.join('\n'));
-    // ── One registry commit through the isolated publish checkout ──
+    // ── One registry write through the API, with the version it read ──
     console.error(`[set_listing_media] ${slug}: updating the registry`);
-    let outcome;
     try {
-        outcome = await withPublishCheckout({ hostRoot: deps.hostRoot, checkoutDir: deps.checkoutDir }, async (root) => {
-            const current = parseRegistry(await readFile(path.resolve(root, REGISTRY_PATH), 'utf8'));
-            const { next, changed } = updateListingInRegistry(current, slug, callerRepoPath, { listing: listingPatch });
-            const message = `listing: media ${slug}`;
+        for (let attempt = 0;; attempt++) {
+            const rows = await api.read();
+            const projects = RegistrySchema.parse(rows.map((e) => e.entry));
+            const { next, changed } = updateListingInRegistry(projects, slug, callerRepoPath, { listing: listingPatch });
             if (!changed)
-                return { result: { changed: false }, paths: [], message };
-            await writeRegistry(root, next);
-            return { result: { changed: true }, paths: [REGISTRY_PATH], message };
-        });
+                break;
+            const version = rows.find((e) => e.entry.slug === slug)?.version;
+            const updated = next.find((p) => p.slug === slug);
+            try {
+                await api.put(updated, version);
+                break;
+            }
+            catch (e) {
+                if (!(e instanceof Error && e.message.includes('version_mismatch')))
+                    throw e;
+                if (attempt >= 1)
+                    throw new Error(`registry changed twice while writing: ${e.message}. Re-run the tool.`);
+            }
+        }
     }
     catch (e) {
         return fail(e.message);
     }
-    if (!outcome.ok)
-        return fail(`publish checkout failed at stage "${outcome.stage}": ${outcome.error}`);
     const lines = [];
     for (const [field] of entries) {
         const url = listingPatch[field];
         lines.push(url ? `listing: ${field} -> ${url}` : `listing: ${field} removed`);
     }
-    lines.push(pushedLine(outcome));
+    lines.push('registry updated: live immediately.');
     // ── Upload the bytes ──
     const fetchFn = deps.fetch ?? fetch;
     const delays = deps.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
@@ -197,6 +182,6 @@ export async function setListingMedia(input, deps) {
         lines.push('The registry already points at the new media, but some bytes did not reach bilko.run: run set_listing_media again with the same files to finish the upload.');
         return { ok: false, text: lines.join('\n') };
     }
-    lines.push('bilko.run redeploys in about a minute; the card shows the new media after that.');
+    lines.push('The card shows the new media now.');
     return { ok: true, text: lines.join('\n') };
 }

@@ -3,8 +3,7 @@
  *
  * The owner points listing.video / shareImage / icon at local files. Each file is checked with
  * the share-assets rules, the registry is pointed at its hosted path
- * /projects/<slug>/_media/<sha256>.<ext> in one commit pushed through the isolated publish
- * checkout, then the bytes are uploaded to bilko.run's PUT /api/listing-media/<slug>/<file>.
+ * /projects/<slug>/_media/<sha256>.<ext> through the Bilko-DB registry API (live at once), then the bytes are uploaded to bilko.run's PUT /api/listing-media/<slug>/<file>.
  * Nothing is ever written into public/projects/<slug>/.
  *
  * Pure of the MCP SDK (server.ts registers the tool). Progress goes to stderr only: stdout is
@@ -13,17 +12,14 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { RegistrySchema, type RegistryProject } from './contract/registry.js';
+import { RegistrySchema } from './contract/registry.js';
 import { hostedMediaPath, type HostedMediaExt } from './contract/listing-media.js';
 import { checkCardMediaFile } from './gates/share-assets.js';
-import { parseRegistry } from './publish-request.js';
-import { readLatestRegistryRaw, REGISTRY_PATH } from './registry-source.js';
-import { withPublishCheckout, type LocalMainSync, type PublishOutcome } from './publish-checkout.js';
 import { updateListingInRegistry } from './listing-tool.js';
 import { assertCallerOwnsSlug } from './ownership.js';
+import { defaultRegistryApi, type RegistryReadWriteApi } from './app-backend-tool.js';
 
 export type MediaField = 'video' | 'shareImage' | 'icon';
 const FIELDS: readonly MediaField[] = ['video', 'shareImage', 'icon'];
@@ -49,8 +45,9 @@ export interface SetListingMediaInput {
 }
 
 export interface SetListingMediaDeps {
-  hostRoot: string;
-  checkoutDir?: string;
+  /** Kept for existing callers; the API does not use it. */
+  hostRoot?: string;
+  api?: RegistryReadWriteApi;
   fetch?: typeof fetch;
   baseUrl: string;
   retryDelaysMs?: number[];
@@ -85,25 +82,6 @@ function prepareFile(slug: string, field: MediaField, file: string): PreparedFil
   const bytes = readFileSync(abs);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   return { field, abs, bytes, sha256, ext, url: hostedMediaPath(slug, sha256, ext) };
-}
-
-// Same formatting as server.ts writeRegistry (server.ts starts the stdio server, so it can't be imported).
-async function writeRegistry(root: string, projects: RegistryProject[]): Promise<void> {
-  const validated = RegistrySchema.parse(projects);
-  await writeFile(path.resolve(root, REGISTRY_PATH), JSON.stringify(validated, null, 2) + '\n', 'utf8');
-}
-
-// Copies of server.ts pushedLine/localMainLine.
-function localMainLine(sync: LocalMainSync): string {
-  const detail = sync.detail ? ` — ${sync.detail}` : '';
-  if (sync.synced) return `local main: synced${detail}`;
-  const exit = sync.exitCode === null ? 'no exit code' : `exit ${sync.exitCode}`;
-  return `local main: not synced (${exit})${detail}`;
-}
-function pushedLine<T>(outcome: PublishOutcome<T> & { ok: true }): string {
-  if (!outcome.committed) return 'no changes to commit';
-  const pushed = `pushed: ${outcome.sha}`;
-  return outcome.localMain ? `${pushed}\n${localMainLine(outcome.localMain)}` : pushed;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -163,8 +141,9 @@ export async function setListingMedia(
   const entries = FIELDS.flatMap((f) => (media[f] === undefined ? [] : [[f, media[f]] as const]));
   if (entries.length === 0) return fail(`media: give at least one of ${FIELDS.join(', ')} (a file path, or null to remove)`);
 
+  const api = deps.api ?? defaultRegistryApi;
   try {
-    const projects = parseRegistry((await readLatestRegistryRaw(deps.hostRoot)).raw);
+    const projects = RegistrySchema.parse((await api.read()).map((e) => e.entry));
     const entry = projects.find((p) => p.slug === slug);
     if (!entry) return fail(`slug "${slug}" not found in registry.`);
     assertCallerOwnsSlug(entry, callerRepoPath);
@@ -190,29 +169,34 @@ export async function setListingMedia(
   }
   if (problems.length > 0) return fail(problems.join('\n'));
 
-  // ── One registry commit through the isolated publish checkout ──
+  // ── One registry write through the API, with the version it read ──
   console.error(`[set_listing_media] ${slug}: updating the registry`);
-  let outcome: PublishOutcome<{ changed: boolean }>;
   try {
-    outcome = await withPublishCheckout<{ changed: boolean }>({ hostRoot: deps.hostRoot, checkoutDir: deps.checkoutDir }, async (root) => {
-      const current = parseRegistry(await readFile(path.resolve(root, REGISTRY_PATH), 'utf8'));
-      const { next, changed } = updateListingInRegistry(current, slug, callerRepoPath, { listing: listingPatch });
-      const message = `listing: media ${slug}`;
-      if (!changed) return { result: { changed: false }, paths: [], message };
-      await writeRegistry(root, next);
-      return { result: { changed: true }, paths: [REGISTRY_PATH], message };
-    });
+    for (let attempt = 0; ; attempt++) {
+      const rows = await api.read();
+      const projects = RegistrySchema.parse(rows.map((e) => e.entry));
+      const { next, changed } = updateListingInRegistry(projects, slug, callerRepoPath, { listing: listingPatch });
+      if (!changed) break;
+      const version = rows.find((e) => e.entry.slug === slug)?.version;
+      const updated = next.find((p) => p.slug === slug)!;
+      try {
+        await api.put(updated as unknown as { slug: string } & Record<string, unknown>, version);
+        break;
+      } catch (e) {
+        if (!(e instanceof Error && e.message.includes('version_mismatch'))) throw e;
+        if (attempt >= 1) throw new Error(`registry changed twice while writing: ${e.message}. Re-run the tool.`);
+      }
+    }
   } catch (e: unknown) {
     return fail((e as Error).message);
   }
-  if (!outcome.ok) return fail(`publish checkout failed at stage "${outcome.stage}": ${outcome.error}`);
 
   const lines: string[] = [];
   for (const [field] of entries) {
     const url = listingPatch[field];
     lines.push(url ? `listing: ${field} -> ${url}` : `listing: ${field} removed`);
   }
-  lines.push(pushedLine(outcome));
+  lines.push('registry updated: live immediately.');
 
   // ── Upload the bytes ──
   const fetchFn = deps.fetch ?? fetch;
@@ -231,6 +215,6 @@ export async function setListingMedia(
     );
     return { ok: false, text: lines.join('\n') };
   }
-  lines.push('bilko.run redeploys in about a minute; the card shows the new media after that.');
+  lines.push('The card shows the new media now.');
   return { ok: true, text: lines.join('\n') };
 }

@@ -141,6 +141,21 @@ export function updateListingLive(slug, callerRepoPath, patch, api = defaultApi)
         return { changed: true, removed };
     });
 }
+/**
+ * publish_static_project: checks registration, kind and ownership against the live entries and
+ * validates bilko.listing.json before any bytes are copied. Throws `bilko.listing.json: <msg>` for a bad file.
+ */
+export function planPublishListing(projects, slug, sourceRepoPath, patch) {
+    assertPublishOwner(projects, slug, sourceRepoPath);
+    if (patch === undefined)
+        return { hasFile: false, changed: false };
+    try {
+        return { hasFile: true, changed: updateListingInRegistry(projects, slug, sourceRepoPath, patch).changed };
+    }
+    catch (e) {
+        throw new Error(`${LISTING_FILE}: ${e.message}`);
+    }
+}
 /** unregister_project: ownership checked against the entry just read, delete with its version. */
 export function unregisterProjectLive(slug, callerRepoPath, api = defaultApi) {
     return withRetry(async () => {

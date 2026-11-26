@@ -52,7 +52,7 @@ export async function appTeam(input, deps) {
     const fetchFn = deps.fetch ?? fetch;
     // ── Ownership first: no network call for a caller that does not own the slug ──
     try {
-        const projects = parseRegistry((await readLatestRegistryRaw(deps.hostRoot)).raw);
+        const projects = parseRegistry((await readLatestRegistryRaw(deps.hostRoot, { read: deps.readRegistry })).raw);
         const entry = projects.find((p) => p.slug === slug);
         if (!entry)
             return fail(`slug "${slug}" not found in registry.`);

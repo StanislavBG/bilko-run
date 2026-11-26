@@ -16,6 +16,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseRegistry } from './publish-request.js';
 import { readLatestRegistryRaw } from './registry-source.js';
+import type { RegistryApiEntry } from './registry-api.js';
 import { assertCallerOwnsSlug } from './ownership.js';
 
 export type AppTeamAction = 'list' | 'set' | 'remove';
@@ -34,6 +35,8 @@ export interface AppTeamDeps {
   fetch?: typeof fetch;
   env?: Record<string, string | undefined>;
   readFile?: (path: string) => Promise<string>;
+  /** Test seam: replaces the registry API read. */
+  readRegistry?: () => Promise<RegistryApiEntry[]>;
 }
 
 export const DEFAULT_REGISTRY_KEY_PATH = join('.config', 'bilko-host', 'registry-key');
@@ -79,7 +82,7 @@ export async function appTeam(input: AppTeamInput, deps: AppTeamDeps): Promise<{
 
   // ── Ownership first: no network call for a caller that does not own the slug ──
   try {
-    const projects = parseRegistry((await readLatestRegistryRaw(deps.hostRoot)).raw);
+    const projects = parseRegistry((await readLatestRegistryRaw(deps.hostRoot, { read: deps.readRegistry })).raw);
     const entry = projects.find((p) => p.slug === slug);
     if (!entry) return fail(`slug "${slug}" not found in registry.`);
     assertCallerOwnsSlug(entry, callerRepoPath);

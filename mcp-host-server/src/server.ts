@@ -47,7 +47,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, rm, mkdir, stat, cp, rename } from 'node:fs/promises';
+import { rm, mkdir, stat, cp, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,15 +59,14 @@ import { registerReportTools } from './report-tools.js';
 import { registerGitViewerReportTool } from './git-viewer-report.js';
 import { ok, err } from './tool-result.js';
 import { runGates, gateSummary, gateLines, type GateContext } from './gates/index.js';
-import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject } from './contract/registry.js';
+import { SlugSchema, ProjectStatusSchema, type RegistryProject } from './contract/registry.js';
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout, type PublishOutcome, type LocalMainSync } from './publish-checkout.js';
 import { readLatestRegistryRaw } from './registry-source.js';
-import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner, registerProjectLive, updateListingLive, unregisterProjectLive } from './listing-tool.js';
+import { buildRegistration, readListingFile, assertPublishOwner, planPublishListing, registerProjectLive, updateListingLive, unregisterProjectLive } from './listing-tool.js';
 import { setListingMedia } from './listing-media-tool.js';
 import { setAppBackend } from './app-backend-tool.js';
 import { appTeam } from './app-team-tool.js';
-import { assertCallerOwnsSlug } from './ownership.js';
 import { readHostContract } from './host-contract.js';
 
 export { readHostContract };
@@ -119,19 +118,9 @@ async function upsertManifest(manifest: ReturnType<typeof ManifestSchema.parse>)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
-async function readRegistry(root: string): Promise<RegistryProject[]> {
-  const raw = await readFile(resolve(root, 'src/data/standalone-projects.json'), 'utf8');
-  return parseRegistry(raw);
-}
-
-// Read tools use origin/main, not HOST_ROOT's tree, which lags until someone pulls.
+// Read tools get the registry from the Bilko-DB registry API (live), not from a file.
 async function readLatestRegistry(): Promise<RegistryProject[]> {
   return parseRegistry((await readLatestRegistryRaw(HOST_ROOT)).raw);
-}
-
-async function writeRegistry(root: string, projects: RegistryProject[]): Promise<void> {
-  const validated = RegistrySchema.parse(projects);
-  await writeFile(resolve(root, 'src/data/standalone-projects.json'), JSON.stringify(validated, null, 2) + '\n', 'utf8');
 }
 
 async function gitInHost(...args: string[]): Promise<string> {
@@ -344,7 +333,7 @@ server.registerTool(
   {
     title: 'Set listing card media',
     description:
-      'Upload YOUR project\'s /projects card media from local files: video, shareImage and icon. Works for static-path and external-url slugs alike; this is the one way to give an external-url card media. Only the repo bound to the slug (host.localPath) may call it. Each value is an absolute path to a local file, or null to remove that field from the listing; fields you leave out are kept. File limits: icon is a square PNG 128-1024 px, up to 512 KB; shareImage is a PNG exactly 1200x630, up to 5 MB; video is an MP4 or WebM, up to 8 MB. The bytes are hosted by bilko.run (served at /projects/<slug>/_media/<sha256>.<ext>), not committed to any repo; only the hosted path is written into the registry, in one commit pushed to origin. The card updates after bilko.run redeploys in ~1 minute.',
+      'Upload YOUR project\'s /projects card media from local files: video, shareImage and icon. Works for static-path and external-url slugs alike; this is the one way to give an external-url card media. Only the repo bound to the slug (host.localPath) may call it. Each value is an absolute path to a local file, or null to remove that field from the listing; fields you leave out are kept. File limits: icon is a square PNG 128-1024 px, up to 512 KB; shareImage is a PNG exactly 1200x630, up to 5 MB; video is an MP4 or WebM, up to 8 MB. The bytes are hosted by bilko.run (served at /projects/<slug>/_media/<sha256>.<ext>), not committed to any repo; only the hosted path is written into the registry, through the Bilko-DB registry API, and the card shows it on bilko.run at once, with no commit and no deploy wait.',
     inputSchema: {
       slug: SlugSchema,
       callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
@@ -371,7 +360,7 @@ server.registerTool(
   {
     title: 'Set the app backend origin',
     description:
-      'Sets or clears the origin bilko.run forwards /projects/<slug>/api/* to (host.backend in the registry). Static-path slugs only. origin is a bare https origin with no path, query, hash or credentials, e.g. "https://api.example.com"; null clears it. Only the repo bound to the slug (callerRepoPath must match host.localPath) may call it, because the forwarder passes users\' Authorization headers to that origin. Commits and pushes the registry through the isolated publish checkout; takes effect after bilko.run redeploys in about a minute. An APP_BACKENDS entry on Render, if any, overrides it for that slug.',
+      'Sets or clears the origin bilko.run forwards /projects/<slug>/api/* to (host.backend in the registry). Static-path slugs only. origin is a bare https origin with no path, query, hash or credentials, e.g. "https://api.example.com"; null clears it. Only the repo bound to the slug (callerRepoPath must match host.localPath) may call it, because the forwarder passes users\' Authorization headers to that origin. Writes host.backend through the Bilko-DB registry API; the forwarder rebuilds its map on every registry change, so it takes effect on bilko.run at once (GET /api/health shows appBackends.<slug> = "registry"). An APP_BACKENDS entry on Render, if any, overrides it for that slug.',
     inputSchema: {
       slug: SlugSchema,
       callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
@@ -456,7 +445,7 @@ server.registerTool(
   {
     title: 'Publish a static-path app build',
     description:
-      'Only the repo bound to the slug may publish it (sourceRepoPath must match host.localPath; unregistered slugs are refused). Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs six publish gates (manifest, budget, golden, a11y, audit, share-assets) before copying; the budget gate has no size budget: it reports the measured gzipped size and fails only when one file is over GitHub\'s 100 MiB per-file limit. Any non-bypassed gate failure blocks the publish. On success the result lists each gate\'s details under the gates line (budget: gate-measured KB gz, manifest-reported KB and the largest file). Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The copy, registry check, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree. Card media (video, shareImage, icon) can also be uploaded without a publish via set_listing_media, which bilko.run hosts outside the bundle.',
+      'Only the repo bound to the slug may publish it (sourceRepoPath must match host.localPath; unregistered slugs are refused). Copies a built dist/ from a sibling repo into the host\'s public/projects/<slug>/. Runs six publish gates (manifest, budget, golden, a11y, audit, share-assets) before copying; the budget gate has no size budget: it reports the measured gzipped size and fails only when one file is over GitHub\'s 100 MiB per-file limit. Any non-bypassed gate failure blocks the publish. On success the result lists each gate\'s details under the gates line (budget: gate-measured KB gz, manifest-reported KB and the largest file). Pass sourceRepoPath so the golden and audit gates can run. Pass bypass (comma-sep gate names) + bypassReason to override a specific gate — every bypass is audit-logged. The registration, kind and ownership checks read the live Bilko-DB registry API; the copy, commit, and push of the bytes to origin happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree. A changed bilko.listing.json is written live through the registry API after the bytes are pushed. Card media (video, shareImage, icon) can also be uploaded without a publish via set_listing_media, which bilko.run hosts outside the bundle.',
     inputSchema: {
       slug: SlugSchema,
       distPath: z.string().describe('Absolute path to the built dist/ directory in the sibling repo. Example: "/home/bilko/Projects/Outdoor-Hours/dist".'),
@@ -528,34 +517,14 @@ server.registerTool(
         };
       }
 
-      // Gates passed — copy + swap + commit + push, all inside the publish checkout.
+      // Gates passed. Registration, kind and ownership come from the live registry API, not a file
+      // in the checkout; the listing file is validated before any bytes are copied.
+      const liveProjects = await readLatestRegistry();
+      const listingPatch = sourceRepoPath ? readListingFile(resolve(sourceRepoPath.replace(/^~(?=\/|$)/, homedir()))) : undefined;
+      const plan = planPublishListing(liveProjects, slug, sourceRepoPath, listingPatch);
+
+      // Copy + swap + commit + push the bytes, all inside the publish checkout.
       const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
-        const projects = await readRegistry(root);
-        const p = projects.find(x => x.slug === slug);
-        if (!p) throw new Error(`slug "${slug}" is not registered. Call register_static_project first.`);
-        if (p.host.kind !== 'static-path') throw new Error(`slug "${slug}" is registered but not a static-path host (${p.host.kind}).`);
-        assertCallerOwnsSlug(p, sourceRepoPath);
-
-        // Listing file is validated before any bytes are copied, so a bad file aborts cleanly.
-        let listingNext: RegistryProject[] | undefined;
-        let listingStatus = 'listing: no bilko.listing.json';
-        const listingPatch = sourceRepoPath ? readListingFile(resolve(sourceRepoPath.replace(/^~(?=\/|$)/, homedir()))) : undefined;
-        if (listingPatch !== undefined) {
-          let res;
-          try {
-            res = updateListingInRegistry(projects, slug, sourceRepoPath, listingPatch);
-          } catch (e) {
-            throw new Error(`bilko.listing.json: ${(e as Error).message}`);
-          }
-          if (res.changed) {
-            listingNext = res.next;
-            listingStatus = 'listing: synced from bilko.listing.json'
-              + (res.removed.length > 0 ? ` (removed: ${res.removed.join(', ')})` : '');
-          } else {
-            listingStatus = 'listing: unchanged';
-          }
-        }
-
         const publicProjects = resolve(root, 'public/projects');
         const target = projectDir(publicProjects, slug);
         const incoming = `${target}.incoming-${process.pid}`;
@@ -573,15 +542,27 @@ server.registerTool(
         await rename(incoming, target);
         await rm(oldAside, { recursive: true, force: true });
 
-        const paths = [`public/projects/${slug}`];
-        if (listingNext) {
-          await writeRegistry(root, listingNext);
-          paths.push('src/data/standalone-projects.json');
-        }
-        return { result: { target, listingStatus }, paths, message: `publish: ${slug} build` };
+        return { result: { target }, paths: [`public/projects/${slug}`], message: `publish: ${slug} build` };
       });
 
       if (!outcome.ok) return checkoutErr(outcome);
+
+      // The bytes are pushed; now the listing, live through the registry API.
+      let listingStatus = 'listing: no bilko.listing.json';
+      if (plan.hasFile) {
+        listingStatus = 'listing: unchanged';
+        if (plan.changed) {
+          try {
+            const written = await updateListingLive(slug, sourceRepoPath, listingPatch);
+            if (written.changed) {
+              listingStatus = 'listing: synced from bilko.listing.json (live)'
+                + (written.removed.length > 0 ? ` (removed: ${written.removed.join(', ')})` : '');
+            }
+          } catch (e: unknown) {
+            return err(`bytes are published (public/projects/${slug}), but the listing write failed: ${(e as Error).message}`);
+          }
+        }
+      }
 
       // Write manifest row to host DB (best-effort — don't fail the publish if DB is down).
       if (ctx.manifest) {
@@ -595,7 +576,7 @@ server.registerTool(
       const lines = [
         ...gateLines(results),
         `published: ${distAbs} → public/projects/${slug}`,
-        outcome.result.listingStatus,
+        listingStatus,
         pushedLine(outcome),
       ];
       return ok(lines.join('\n'));

@@ -1,8 +1,10 @@
+import { RegistrySchema } from '../mcp-host-server/src/contract/registry.js';
 import { describe, it, expect, vi } from 'vitest';
 import {
   registerProjectLive,
   updateListingLive,
   unregisterProjectLive,
+  planPublishListing,
   type RegistryWriteApi,
 } from '../mcp-host-server/src/listing-tool.js';
 
@@ -140,5 +142,34 @@ describe('unregisterProjectLive', () => {
     api.del.mockRejectedValueOnce(new Error('registry delete "demo" failed: HTTP 409 version_mismatch'));
     await unregisterProjectLive('demo', OWNER, api);
     expect(api.del).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('publish_static_project registry lookup and listing write', () => {
+  // A slug that exists only in the (stubbed) API read, never in a file.
+  const projects = () => RegistrySchema.parse([structuredClone(demo)]);
+
+  it('accepts a slug the API has, without a listing file', () => {
+    expect(planPublishListing(projects(), 'demo', OWNER, undefined)).toEqual({ hasFile: false, changed: false });
+  });
+
+  it('refuses an unregistered slug and a caller who does not own it', () => {
+    expect(() => planPublishListing(projects(), 'nope', OWNER, undefined)).toThrow(/not registered/);
+    expect(() => planPublishListing(projects(), 'demo', OTHER, undefined)).toThrow(/is owned by/);
+  });
+
+  it('prefixes a bad listing file error and reports unchanged/changed patches', () => {
+    expect(() => planPublishListing(projects(), 'demo', OWNER, { tagline: 5 })).toThrow(/^bilko\.listing\.json: /);
+    expect(planPublishListing(projects(), 'demo', OWNER, { tagline: 'Old tagline' })).toEqual({ hasFile: true, changed: false });
+    expect(planPublishListing(projects(), 'demo', OWNER, { tagline: 'Fresh' })).toEqual({ hasFile: true, changed: true });
+  });
+
+  it('writes a changed listing through the API put with the read version', async () => {
+    const api = mockApi(11);
+    const r = await updateListingLive('demo', OWNER, { tagline: 'Fresh' }, api);
+    expect(r.changed).toBe(true);
+    const [entry, ifVersion] = api.put.mock.calls[0] as unknown as [{ tagline: string }, number];
+    expect(entry.tagline).toBe('Fresh');
+    expect(ifVersion).toBe(11);
   });
 });

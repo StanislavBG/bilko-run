@@ -230,7 +230,7 @@ bilko-host__set_app_backend { slug, callerRepoPath, origin }   # origin: "https:
 
 - `static-path` slugs only. Only the repo bound to the slug (`callerRepoPath` equal to `host.localPath`) may call it, because the forwarder passes users' `Authorization` headers to that origin.
 - `origin` is a bare `https://` origin: no path, query, hash or credentials, at most 200 chars. `null` removes `host.backend`, which stops forwarding for that slug unless `APP_BACKENDS` names it.
-- The tool commits and pushes the registry. The change is live after bilko.run redeploys, in about a minute, because the forwarding map is built at boot.
+- The tool writes `host.backend` through the Bilko-DB registry API. The change is live at once, because the forwarding map is rebuilt on every registry change.
 - Confirm with `GET https://bilko.run/api/health`: `appBackends` maps each forwarded slug to its source, `"registry"` or `"env"` (origins are never shown). After a set, `appBackends.<slug>` is `"registry"`; after a clear, the slug is gone. If it shows `"env"`, an `APP_BACKENDS` entry on Render overrides the registry for that slug, and the tool's result says so.
 
 ### Headers
@@ -295,8 +295,8 @@ Banned-term rule: no text field (`name`, `displayName`, `tagline`, `category`, `
 
 **Two edit paths.** Both take the same patch and run the same ownership and schema checks. `update_project_listing` sets any project-owned field on `static-path` and `external-url` entries alike; `bilko.listing.json` works only for `static-path` entries, since it rides on a publish. Neither one uploads files: to upload card media (video, share image, icon) from a local file, use `set_listing_media` (see "Card media upload (set_listing_media)" below).
 
-1. `update_project_listing { slug, callerRepoPath, patch }` — edits the card now. Commits and pushes. Use `get_project { slug }` first to see the current entry. The result names any field the patch removed (`removed: listing.avoidClaims`).
-2. `bilko.listing.json` at the sibling repo root (max 16 KB) — `publish_static_project` reads it from `sourceRepoPath` and syncs it into the registry in the same commit as the bytes. The result line reports `listing: synced from bilko.listing.json` (plus `(removed: …)` when the file deleted a field), `listing: unchanged` or `listing: no bilko.listing.json`. Invalid JSON or a rejected field fails the publish.
+1. `update_project_listing { slug, callerRepoPath, patch }` — edits the card now, live at once through the Bilko-DB registry API. Use `get_project { slug }` first to see the current entry. The result names any field the patch removed (`removed: listing.avoidClaims`).
+2. `bilko.listing.json` at the sibling repo root (max 16 KB) — `publish_static_project` reads it from `sourceRepoPath` and validates it before any bytes are copied, then writes a changed listing through the registry API after the bytes are pushed. The result line reports `listing: synced from bilko.listing.json (live)` (plus `(removed: …)` when the file deleted a field), `listing: unchanged` or `listing: no bilko.listing.json`. Invalid JSON or a rejected field fails the publish.
 
 **The patch is a merge patch** ([RFC 7386](https://www.rfc-editor.org/rfc/rfc7386)). Send only what you want to change:
 
@@ -395,9 +395,9 @@ Limits (the same checks as the `share-assets` gate, in `shared/listing-media.ts`
 Flow:
 
 1. **Local checks.** Each file is checked on your machine: extension, signature, size and dimensions. Any problem fails the call before anything is written. The error names the field and the file.
-2. **Registry commit.** Each file's sha256 gives its hosted path, `/projects/<slug>/_media/<sha256>.<ext>`. The tool writes those paths (and removes any `null` field) in one registry commit, `listing: media <slug>`, through the isolated publish checkout, and pushes it to `origin`.
-3. **Bytes upload.** The tool PUTs each file to `https://bilko.run/api/listing-media/<slug>/<sha256>.<ext>`. bilko.run stores the bytes in the host database, not in git and not in any repo. If the server does not see the new registry yet (`404`), or the network fails, the tool retries a few times. If an upload still fails, the result says so: run the same call again with the same files to finish.
-4. **Redeploy.** bilko.run redeploys in about a minute. The card shows the new media after that.
+2. **Registry write.** Each file's sha256 gives its hosted path, `/projects/<slug>/_media/<sha256>.<ext>`. The tool writes those paths (and removes any `null` field) through the Bilko-DB registry API.
+3. **Bytes upload.** The tool PUTs each file to `https://bilko.run/api/listing-media/<slug>/<sha256>.<ext>`. bilko.run stores the bytes in the host database, not in git and not in any repo. If the server answers `404`, or the network fails, the tool retries a few times. If an upload still fails, the result says so: run the same call again with the same files to finish.
+4. **Live.** The card shows the new media at once; there is no deploy wait.
 
 Replacing a file is the same call with the new file. A new file has a new sha256, so it gets a new path and a new URL. Sending the same file again changes nothing in the registry and reports `already stored`.
 
@@ -427,7 +427,7 @@ Recipe for a sibling (any host kind):
 1. Export H.264 MP4 (or VP9 WebM) at 1200x630, about 60 s or less. Keep the soundtrack: AAC in MP4 (for example `ffmpeg … -c:a aac -b:a 128k -movflags +faststart`) or Opus in WebM. Do not pass `-an`. The 8 MB cap covers video plus audio.
 2. Call `set_listing_media { slug, callerRepoPath, media: { video: "/abs/path/tile.mp4" } }`. Add `shareImage` in the same call if the card has none yet.
 3. Keep `shareImage` set. It is the poster and the link preview.
-4. Wait about a minute for the redeploy, then check the card on https://bilko.run/projects. To remove the video, call `set_listing_media` with `{ "video": null }`.
+4. Check the card on https://bilko.run/projects. To remove the video, call `set_listing_media` with `{ "video": null }`.
 
 A `static-path` entry can instead ship the file in its bundle (`public/tile.mp4` lands at `/projects/<slug>/tile.mp4`; never under `_media/`), set `{ "listing": { "video": "/projects/<slug>/tile.mp4" } }` in `bilko.listing.json` or through `update_project_listing`, and run `publish_static_project`.
 

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appTeam, type AppTeamDeps } from '../mcp-host-server/src/app-team-tool.js';
+import type { RegistryApiEntry } from '../mcp-host-server/src/registry-api.js';
 import type { RegistryProject } from '../mcp-host-server/src/contract/registry.js';
 
-const REGISTRY = 'src/data/standalone-projects.json';
 const KEY = 'reg-secret-key-123';
 
 interface Call { url: string; method: string; headers: Record<string, string>; body?: string }
@@ -28,6 +28,7 @@ describe('appTeam', () => {
   let tmp: string;
   let hostDir: string;
   let owner: string;
+  let seeded: RegistryApiEntry[] = [];
 
   beforeEach(async () => {
     tmp = await mkdtemp(join(tmpdir(), 'app-team-'));
@@ -41,7 +42,7 @@ describe('appTeam', () => {
         host: { kind: 'static-path', path: '/projects/stat/', localPath: owner },
       },
     ] as RegistryProject[];
-    await writeFile(join(hostDir, REGISTRY), JSON.stringify(projects, null, 2) + '\n', 'utf8');
+    seeded = projects.map((entry) => ({ entry: entry as unknown as Record<string, unknown>, version: 1 }));
   });
 
   afterEach(async () => {
@@ -51,6 +52,7 @@ describe('appTeam', () => {
   function deps(fetchFn: typeof fetch, env: Record<string, string | undefined> = { BILKO_REGISTRY_KEY: KEY }): AppTeamDeps {
     return {
       hostRoot: hostDir,
+      readRegistry: async () => seeded,
       fetch: fetchFn,
       env: { BILKO_HOST_URL: 'https://bilko.test/', ...env },
       readFile: async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
@@ -133,6 +135,7 @@ describe('appTeam', () => {
     const seen: string[] = [];
     const d: AppTeamDeps = {
       hostRoot: hostDir,
+      readRegistry: async () => seeded,
       fetch: m.fn,
       env: { BILKO_REGISTRY_KEY_FILE: '/keys/registry' },
       readFile: async (p: string) => { seen.push(p); return 'file-key\n'; },

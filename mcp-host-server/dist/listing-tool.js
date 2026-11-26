@@ -6,6 +6,7 @@ import { buildStaticEntry, buildExternalEntry } from './publish-request.js';
 import os from 'node:os';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { readRegistry as apiReadRegistry, putRegistryProject, deleteRegistryProject, } from './registry-api.js';
 /**
  * Pure core of `update_project_listing`: ownership check + allowlisted patch
  * over a registry array. No fs, no git. Throws on unknown slug, foreign caller,
@@ -86,4 +87,68 @@ export function readListingFile(sourceRepoPath) {
     catch (e) {
         throw new Error(`${LISTING_FILE}: invalid JSON (${e.message})`);
     }
+}
+const defaultApi = { read: apiReadRegistry, put: putRegistryProject, del: deleteRegistryProject };
+function isVersionMismatch(e) {
+    return e instanceof Error && e.message.includes('version_mismatch');
+}
+/**
+ * Runs one read-modify-write attempt; on a version_mismatch it re-reads and retries the same
+ * change once. A second mismatch is thrown to the caller.
+ */
+async function withRetry(attempt) {
+    try {
+        return await attempt();
+    }
+    catch (e) {
+        if (!isVersionMismatch(e))
+            throw e;
+    }
+    try {
+        return await attempt();
+    }
+    catch (e) {
+        if (isVersionMismatch(e)) {
+            throw new Error(`registry changed twice while writing: ${e.message}. Re-run the tool.`);
+        }
+        throw e;
+    }
+}
+async function readProjects(api) {
+    const entries = await api.read();
+    const versions = new Map();
+    for (const e of entries)
+        versions.set(String(e.entry.slug), e.version);
+    return { projects: RegistrySchema.parse(entries.map((e) => e.entry)), versions };
+}
+/** register_static_project / register_external_project: a new slug must not exist yet (ifVersion 0). */
+export function registerProjectLive(input, api = defaultApi) {
+    return withRetry(async () => {
+        const { projects } = await readProjects(api);
+        const entry = buildRegistration(projects, input);
+        return api.put(entry, 0);
+    });
+}
+/** update_project_listing: writes with the version it read; an unchanged patch writes nothing. */
+export function updateListingLive(slug, callerRepoPath, patch, api = defaultApi) {
+    return withRetry(async () => {
+        const { projects, versions } = await readProjects(api);
+        const { next, changed, removed } = updateListingInRegistry(projects, slug, callerRepoPath, patch);
+        if (!changed)
+            return { changed: false, removed };
+        const entry = next.find((p) => p.slug === slug);
+        await api.put(entry, versions.get(slug));
+        return { changed: true, removed };
+    });
+}
+/** unregister_project: ownership checked against the entry just read, delete with its version. */
+export function unregisterProjectLive(slug, callerRepoPath, api = defaultApi) {
+    return withRetry(async () => {
+        const { projects, versions } = await readProjects(api);
+        const existing = projects.find((p) => p.slug === slug);
+        if (!existing)
+            throw new Error(`slug "${slug}" not found in registry.`);
+        assertCallerOwnsSlug(existing, callerRepoPath);
+        await api.del(slug, versions.get(slug));
+    });
 }

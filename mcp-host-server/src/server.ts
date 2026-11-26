@@ -63,7 +63,7 @@ import { SlugSchema, ProjectStatusSchema, RegistrySchema, type RegistryProject }
 import { projectDir, parseBypass, parseRegistry } from './publish-request.js';
 import { withPublishCheckout, type PublishOutcome, type LocalMainSync } from './publish-checkout.js';
 import { readLatestRegistryRaw } from './registry-source.js';
-import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner } from './listing-tool.js';
+import { updateListingInRegistry, buildRegistration, readListingFile, assertPublishOwner, registerProjectLive, updateListingLive, unregisterProjectLive } from './listing-tool.js';
 import { setListingMedia } from './listing-media-tool.js';
 import { setAppBackend } from './app-backend-tool.js';
 import { appTeam } from './app-team-tool.js';
@@ -219,7 +219,7 @@ server.registerTool(
   {
     title: 'Register a static-path app',
     description:
-      'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app appears in ⌘K and the admin view of /projects; it is admin-only: public listing on /projects is the Bilko owner\'s call, made in a Bilko session. The new slug is bound to callerRepoPath, and only that repo can later publish, unregister, or edit it. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main — never against the caller\'s own working tree.',
+      'Adds a static-path entry to the bilko.run host registry. Use this once per app, when you first deploy. The slug must be unique. After this call, the app appears in ⌘K and the admin view of /projects; it is admin-only: public listing on /projects is the Bilko owner\'s call, made in a Bilko session. The new slug is bound to callerRepoPath, and only that repo can later publish, unregister, or edit it. The registry write goes through the Bilko-DB registry API, so the change is live on bilko.run immediately, with no deploy wait.',
     inputSchema: {
       slug: SlugSchema.describe('URL slug, kebab-case. Example: "outdoor-hours". Path will be /projects/<slug>/.'),
       name: z.string().min(1).describe('Display name. Example: "OutdoorHours".'),
@@ -235,20 +235,8 @@ server.registerTool(
   },
   async ({ slug, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName }) => {
     try {
-      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
-        const projects = await readRegistry(root);
-        const entry = buildRegistration(projects, { slug, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName });
-        projects.push(entry);
-        await writeRegistry(root, projects);
-        return {
-          result: { slug },
-          paths: ['src/data/standalone-projects.json'],
-          message: `registry: add ${slug} (${name})`,
-        };
-      });
-
-      if (!outcome.ok) return checkoutErr(outcome);
-      return ok([`registered: ${slug} → /projects/${slug}/ (admin-only until the Bilko owner lists it)`, pushedLine(outcome)].join('\n'));
+      await registerProjectLive({ slug, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName });
+      return ok(`registered: ${slug} → /projects/${slug}/ (admin-only until the Bilko owner lists it)\nlive on bilko.run now; no deploy wait`);
     } catch (e: unknown) {
       return err((e as Error).message);
     }
@@ -261,7 +249,7 @@ server.registerTool(
   {
     title: 'Register an externally hosted app',
     description:
-      'Adds an external-url entry to the bilko.run host registry: for an app hosted on its own domain (e.g. https://<app>.replit.app), whose /projects card links straight to that URL. No bundle is published, so never call publish_static_project for it. url must be https://. Same rules as register_static_project otherwise: unique slug, admin-only until the Bilko owner lists it, and the slug is bound to callerRepoPath, so only that repo can later unregister it or edit its card (including url, via update_project_listing). The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main.',
+      'Adds an external-url entry to the bilko.run host registry: for an app hosted on its own domain (e.g. https://<app>.replit.app), whose /projects card links straight to that URL. No bundle is published, so never call publish_static_project for it. url must be https://. Same rules as register_static_project otherwise: unique slug, admin-only until the Bilko owner lists it, and the slug is bound to callerRepoPath, so only that repo can later unregister it or edit its card (including url, via update_project_listing). The registry write goes through the Bilko-DB registry API, so the change is live on bilko.run immediately, with no deploy wait.',
     inputSchema: {
       slug: SlugSchema.describe('Kebab-case slug, unique in the registry. Example: "family-frame".'),
       url: z.string().url().describe('The app\'s live https:// URL, e.g. "https://family-frame.replit.app".'),
@@ -278,20 +266,8 @@ server.registerTool(
   },
   async ({ slug, url, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName }) => {
     try {
-      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
-        const projects = await readRegistry(root);
-        const entry = buildRegistration(projects, { slug, url, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName });
-        projects.push(entry);
-        await writeRegistry(root, projects);
-        return {
-          result: { slug },
-          paths: ['src/data/standalone-projects.json'],
-          message: `registry: add ${slug} (${name}, external)`,
-        };
-      });
-
-      if (!outcome.ok) return checkoutErr(outcome);
-      return ok([`registered: ${slug} → ${url} (admin-only until the Bilko owner lists it)`, pushedLine(outcome)].join('\n'));
+      await registerProjectLive({ slug, url, name, tagline, category, status, year, sourceRepo, callerRepoPath, tags, displayName });
+      return ok(`registered: ${slug} → ${url} (admin-only until the Bilko owner lists it)\nlive on bilko.run now; no deploy wait`);
     } catch (e: unknown) {
       return err((e as Error).message);
     }
@@ -304,7 +280,7 @@ server.registerTool(
   {
     title: 'Unregister a static-path app',
     description:
-      'Removes a project from the host registry by slug. Only the repo bound to the slug (callerRepoPath must match host.localPath) may remove it. Does NOT delete the public/projects/<slug>/ directory — pass deleteAssets=true to also rm -rf those bytes. Use this when retiring an app or before re-registering with different metadata. The registry write, commit, and push to origin all happen inside an isolated publish checkout synced to origin/main.',
+      'Removes a project from the host registry by slug. Only the repo bound to the slug (callerRepoPath must match host.localPath) may remove it. Does NOT delete the public/projects/<slug>/ directory — pass deleteAssets=true to also rm -rf those bytes. Use this when retiring an app or before re-registering with different metadata. The registry removal goes through the Bilko-DB registry API and is live on bilko.run immediately, with no deploy wait; only deleteAssets=true commits and pushes (the bundle directory removal).',
     inputSchema: {
       slug: SlugSchema,
       callerRepoPath: z.string().min(1).describe('Absolute path to the repo that owns this slug.'),
@@ -313,34 +289,19 @@ server.registerTool(
   },
   async ({ slug, callerRepoPath, deleteAssets }) => {
     try {
-      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
-        const projects = await readRegistry(root);
-        const existing = projects.find(p => p.slug === slug);
-        if (!existing) {
-          throw new Error(`slug "${slug}" not found in registry.`);
-        }
-        assertCallerOwnsSlug(existing, callerRepoPath);
-        const next = projects.filter(p => p.slug !== slug);
-        await writeRegistry(root, next);
-        const paths = ['src/data/standalone-projects.json'];
-        const removed: string[] = [];
-
-        if (deleteAssets) {
+      await unregisterProjectLive(slug, callerRepoPath);
+      const lines = [`unregistered: ${slug}`, 'live on bilko.run now; no deploy wait'];
+      if (deleteAssets) {
+        const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
           const dir = projectDir(resolve(root, 'public/projects'), slug);
-          if (existsSync(dir)) {
-            await rm(dir, { recursive: true, force: true });
-            removed.push(dir);
-            paths.push(`public/projects/${slug}`);
-          }
-        }
-
-        return { result: { removed }, paths, message: `registry: remove ${slug}` };
-      });
-
-      if (!outcome.ok) return checkoutErr(outcome);
-      const lines = [`unregistered: ${slug}`];
-      for (const dir of outcome.result.removed) lines.push(`removed: ${dir}`);
-      lines.push(pushedLine(outcome));
+          if (!existsSync(dir)) return { result: { removed: [] as string[] }, paths: [], message: `assets: remove ${slug}` };
+          await rm(dir, { recursive: true, force: true });
+          return { result: { removed: [dir] }, paths: [`public/projects/${slug}`], message: `assets: remove ${slug}` };
+        });
+        if (!outcome.ok) return checkoutErr(outcome);
+        for (const dir of outcome.result.removed) lines.push(`removed: ${dir}`);
+        lines.push(pushedLine(outcome));
+      }
       return ok(lines.join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);
@@ -354,7 +315,7 @@ server.registerTool(
   {
     title: 'Update a project listing',
     description:
-      'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints,offering,pricing,callToAction,avoidClaims,icon,shareImage,video}). icon, shareImage and video each take either a path inside your project\'s own published bundle (like /projects/<slug>/icon.png) or a hosted path returned by set_listing_media (/projects/<slug>/_media/<sha256>.<ext>); this tool never uploads files, so to upload card media from a local file (any host kind, external-url included) use set_listing_media. icon is a square PNG composited onto the generated share card; shareImage is a PNG exactly 1200x630 that replaces the generated card. video is an .mp4 or .webm file that plays muted and looping on the active /projects card, with the share image as its poster; X/LinkedIn link previews keep the PNG. offering/pricing/callToAction/avoidClaims tell promoters (e.g. Burrow) what kind of project this is, what the reader should do, and claims never to make. Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. The patch is a JSON merge patch: send only what changes. Fields you leave out keep their value, and listing merges key by key, so {listing:{audience:"..."}} keeps avoidClaims and every other listing key. null deletes: {displayName:null} removes a field, {listing:{avoidClaims:null}} removes one listing key, {listing:null} removes the whole listing. Arrays (tags, talkingPoints, avoidClaims) are replaced whole. The result names any field the patch removed. Commits and pushes; bilko.run redeploys in ~1 minute.',
+      'Change YOUR project\'s public card content (name, displayName, tagline, category, tags, status, thumbnail, listing{detail,metric,metricLabel,lang,audience,talkingPoints,offering,pricing,callToAction,avoidClaims,icon,shareImage,video}). icon, shareImage and video each take either a path inside your project\'s own published bundle (like /projects/<slug>/icon.png) or a hosted path returned by set_listing_media (/projects/<slug>/_media/<sha256>.<ext>); this tool never uploads files, so to upload card media from a local file (any host kind, external-url included) use set_listing_media. icon is a square PNG composited onto the generated share card; shareImage is a PNG exactly 1200x630 that replaces the generated card. video is an .mp4 or .webm file that plays muted and looping on the active /projects card, with the share image as its poster; X/LinkedIn link previews keep the PNG. offering/pricing/callToAction/avoidClaims tell promoters (e.g. Burrow) what kind of project this is, what the reader should do, and claims never to make. Only the repo bound to the slug (host.localPath) may call it. Visibility (public), slug and hosting are owned by Bilko and cannot be changed here. The patch is a JSON merge patch: send only what changes. Fields you leave out keep their value, and listing merges key by key, so {listing:{audience:"..."}} keeps avoidClaims and every other listing key. null deletes: {displayName:null} removes a field, {listing:{avoidClaims:null}} removes one listing key, {listing:null} removes the whole listing. Arrays (tags, talkingPoints, avoidClaims) are replaced whole. The result names any field the patch removed. The change goes through the Bilko-DB registry API and is live on bilko.run immediately, with no deploy wait.',
     inputSchema: {
       slug: SlugSchema,
       callerRepoPath: z.string().describe('Absolute path to your sibling repo root (must match the slug\'s host.localPath). Example: "/home/bilko/Projects/Outdoor-Hours".'),
@@ -363,22 +324,12 @@ server.registerTool(
   },
   async ({ slug, callerRepoPath, patch }) => {
     try {
-      const outcome = await withPublishCheckout({ hostRoot: HOST_ROOT }, async (root) => {
-        const projects = await readRegistry(root);
-        const { next, changed, removed } = updateListingInRegistry(projects, slug, callerRepoPath, patch);
-        const message = `listing: update ${slug}`;
-        if (!changed) return { result: { changed: false as boolean, removed }, paths: [], message };
-        await writeRegistry(root, next);
-        return { result: { changed: true as boolean, removed }, paths: ['src/data/standalone-projects.json'], message };
-      });
-
-      if (!outcome.ok) return checkoutErr(outcome);
-      if (!outcome.result.changed) return ok(`no change: ${slug}`);
-      const { removed } = outcome.result;
+      const { changed, removed } = await updateListingLive(slug, callerRepoPath, patch);
+      if (!changed) return ok(`no change: ${slug}`);
       return ok([
         `updated listing: ${slug}`,
         ...(removed.length > 0 ? [`removed: ${removed.join(', ')}`] : []),
-        pushedLine(outcome),
+        'live on bilko.run now; no deploy wait',
       ].join('\n'));
     } catch (e: unknown) {
       return err((e as Error).message);

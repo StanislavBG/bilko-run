@@ -24,7 +24,6 @@ import { registerAdminBookingRoutes } from './routes/admin-bookings.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerBlogRoutes } from './routes/blog.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
-import { registerManifestsRoutes } from './routes/manifests.js';
 import { registerSyntheticRoutes } from './routes/synthetic.js';
 import { registerObservabilityRoutes } from './routes/admin-observability.js';
 import { registerAdminApiKeyRoutes } from './routes/admin-api-keys.js';
@@ -251,7 +250,6 @@ registerBlogRoutes(app, {
 });
 registerAnalyticsRoutes(app);
 registerTelemetryRoutes(app);
-registerManifestsRoutes(app);
 registerSyntheticRoutes(app);
 registerObservabilityRoutes(app);
 registerAdminApiKeyRoutes(app);

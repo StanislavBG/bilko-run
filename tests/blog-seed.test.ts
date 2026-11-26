@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { writeTsxShim } from './helpers/tsx-node';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -46,6 +47,7 @@ describe('blog-seed.sh', () => {
   let origin: string;
   let bundle: string;
   let fake: string;
+  let realTsx: string;
 
   beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), 'blog-seed-'));
@@ -89,6 +91,7 @@ describe('blog-seed.sh', () => {
     writeFileSync(join(fake, 'npx'), '#!/bin/sh\nexit "${FAKE_READABILITY_RC:-0}"\n', { mode: 0o755 });
     writeFileSync(join(fake, 'curl'), FAKE_CURL, { mode: 0o755 });
     symlinkSync(process.execPath, join(fake, 'node'));
+    realTsx = writeTsxShim(fake);
   });
   afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -102,7 +105,7 @@ describe('blog-seed.sh', () => {
         `PATH=${fake}:/usr/bin:/bin`,
         `FAKE_DIR=${fake}`,
         `FAKE_CURL_BODY=${join(tmp, 'live.json')}`,
-        `REAL_TSX=${join(ROOT, 'node_modules/.bin/tsx')}`,
+        `REAL_TSX=${realTsx}`,
         `BLOG_SEED_REPO_ROOT=${repo}`,
         'BLOG_SEED_API_URL=http://fake.invalid/api/blog',
         'BLOG_SEED_VERIFY_TIMEOUT=2',

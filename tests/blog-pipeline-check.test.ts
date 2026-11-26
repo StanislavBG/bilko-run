@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { tsxNodeArgs } from './helpers/tsx-node';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_PIPELINE_CONFIG,
@@ -13,7 +13,6 @@ import {
 } from '../scripts/blog-pipeline-check';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
-const TSX_CLI = createRequire(import.meta.url).resolve('tsx/cli');
 const CLI = join(REPO_ROOT, 'scripts/blog-pipeline-check.ts');
 
 const words = (n: number, seed = 'word'): string =>
@@ -174,7 +173,7 @@ describe('CLI', () => {
 
   function run(dir: string): number {
     try {
-      execFileSync('node', [TSX_CLI, CLI, dir, join(dir, 'post.md')], { cwd: REPO_ROOT, stdio: 'pipe' });
+      execFileSync(process.execPath, tsxNodeArgs(CLI, dir, join(dir, 'post.md')), { cwd: REPO_ROOT, stdio: 'pipe' });
       return 0;
     } catch (err) {
       return (err as { status: number }).status;

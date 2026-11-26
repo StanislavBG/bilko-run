@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
+import { tsxNodeArgs } from './helpers/tsx-node';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import {
   analyzeReadability,
@@ -44,7 +44,6 @@ const CLAIM_WITH_NO_LINK_ANYWHERE_MARKDOWN = [
 ].join('\n');
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
-const TSX_CLI = createRequire(import.meta.url).resolve('tsx/cli');
 
 const PLAIN_PARAGRAPH = [
   'The new tool is easy to use. You can score a blog post in one click.',
@@ -328,7 +327,7 @@ describe('blog-readability CLI', () => {
 
     let status: number | null = null;
     try {
-      execFileSync(process.execPath, [TSX_CLI, 'scripts/blog-readability.ts', file], {
+      execFileSync(process.execPath, tsxNodeArgs('scripts/blog-readability.ts', file), {
         cwd: REPO_ROOT,
         timeout: 60_000,
         stdio: 'pipe',
@@ -344,7 +343,7 @@ describe('blog-readability CLI', () => {
     const file = join(dir, 'pass.md');
     writeFileSync(file, PLAIN_PARAGRAPH, 'utf-8');
 
-    const output = execFileSync(process.execPath, [TSX_CLI, 'scripts/blog-readability.ts', file], {
+    const output = execFileSync(process.execPath, tsxNodeArgs('scripts/blog-readability.ts', file), {
       cwd: REPO_ROOT,
       timeout: 60_000,
       stdio: 'pipe',

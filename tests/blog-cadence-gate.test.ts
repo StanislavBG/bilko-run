@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { tsxNodeArgs } from './helpers/tsx-node';
 import {
   findSpacingViolations,
   loadSeededPosts,
@@ -133,7 +134,7 @@ describe('next-slot CLI stdout contract', () => {
     delete env.TURSO_DATABASE_URL;
     delete env.TURSO_AUTH_TOKEN;
 
-    const result = spawnSync('pnpm', ['tsx', 'scripts/blog-cadence-gate.ts', 'next-slot'], {
+    const result = spawnSync(process.execPath, tsxNodeArgs('scripts/blog-cadence-gate.ts', 'next-slot'), {
       cwd: path.join(path.dirname(fileURLToPath(import.meta.url)), '..'),
       env,
       encoding: 'utf-8',

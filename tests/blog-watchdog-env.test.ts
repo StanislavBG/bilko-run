@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { canListenUnixSocket } from './helpers/tsx-node';
 
 // Sources the env file under a bare systemd-like environment. Never invokes
 // curl, claude -p, or the watchdog itself (it calls production bilko.run).
@@ -48,7 +49,8 @@ describe('blog-watchdog-env.sh', () => {
     expect(out).toContain('claude');
   });
 
-  it.skipIf(!existsSync(join(homedir(), '.npm-global/bin/pnpm')))(
+  // The tsx CLI's IPC socket cannot bind in sandboxes that deny Unix-socket listen.
+  it.skipIf(!existsSync(join(homedir(), '.npm-global/bin/pnpm')) || !canListenUnixSocket)(
     'runs the cadence gate under a bare PATH once the env file is sourced',
     () => {
       const r = spawnSync(

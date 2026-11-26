@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { writeTsxShim } from './helpers/tsx-node';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,6 +10,15 @@ import { join } from 'node:path';
 const ROOT = join(__dirname, '..');
 const SCRIPT = join(ROOT, 'scripts/blog-draft.sh');
 const DRAFTS = join(ROOT, '.claude/skills/blog-from-git/drafts');
+// The fake claude writes into drafts/ under .claude/skills, which some sandboxes mount read-only.
+const draftsParentWritable = (() => {
+  try {
+    accessSync(join(ROOT, '.claude/skills/blog-from-git'), constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+})();
 const SLOT = '2026-10-13T16:00:00Z';
 // Burrow's draft context: the public set and the posts already covered.
 const CONTEXT = {
@@ -52,6 +62,7 @@ describe('blog-draft.sh', () => {
   let tmp: string;
   let fake: string;
   let out: string;
+  let realTsx: string;
 
   beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), 'blog-draft-'));
@@ -61,6 +72,7 @@ describe('blog-draft.sh', () => {
     // node_modules/.bin/tsx execs `node` from PATH. CI's setup-node installs it outside
     // /usr/bin, so link just the running node binary into the stub dir.
     symlinkSync(process.execPath, join(fake, 'node'));
+    realTsx = writeTsxShim(fake);
     writeFileSync(join(fake, 'claude'), FAKE_CLAUDE, { mode: 0o755 });
     // npx stands in for `npx tsx scripts/blog-readability.ts`; blog-subjects.ts runs for real.
     // pnpm only needs to resolve.
@@ -91,7 +103,7 @@ describe('blog-draft.sh', () => {
         `FAKE_OUT=${out}`,
         `FAKE_ROOT=${ROOT}`,
         `FAKE_DRAFTS=${DRAFTS}`,
-        `REAL_TSX=${join(ROOT, 'node_modules/.bin/tsx')}`,
+        `REAL_TSX=${realTsx}`,
         `BLOG_DRAFT_CONTEXT=${join(tmp, 'context.json')}`,
         ...Object.entries(extra).map(([k, v]) => `${k}=${v}`),
         'bash',
@@ -227,7 +239,7 @@ describe('blog-draft.sh', () => {
     expect(result().error).toContain('claude');
   });
 
-  it('fails and leaves drafts/ listing unchanged when claude writes into drafts/ is detected', () => {
+  it.skipIf(!draftsParentWritable)('fails and leaves drafts/ listing unchanged when claude writes into drafts/ is detected', () => {
     const r = run('touch-drafts');
     expect(r.status).toBe(1);
     expect(result().status).toBe('error');

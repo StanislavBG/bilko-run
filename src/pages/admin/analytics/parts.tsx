@@ -1,60 +1,8 @@
 import type { ReactNode } from 'react';
 
-export function normalizeReferrer(raw: string): { host: string; source: string } {
-  if (!raw) return { host: '', source: 'direct' };
-  let host = '';
-  try {
-    host = new URL(raw).hostname.toLowerCase().replace(/^www\./, '');
-  } catch {
-    host = raw.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-  }
-  if (!host) return { host: '', source: 'direct' };
-  if (host === 't.co' || host === 'twitter.com' || host === 'x.com' || host.endsWith('.twitter.com') || host.endsWith('.x.com')) return { host, source: 'twitter/x' };
-  if (host === 'lnkd.in' || host === 'linkedin.com' || host.endsWith('.linkedin.com')) return { host, source: 'linkedin' };
-  if (host === 'reddit.com' || host === 'old.reddit.com' || host.endsWith('.reddit.com')) return { host, source: 'reddit' };
-  if (host === 'news.ycombinator.com') return { host, source: 'hackernews' };
-  if (/^google\./.test(host) || host.includes('.google.')) return { host, source: 'google' };
-  if (host === 'bing.com' || host.endsWith('.bing.com')) return { host, source: 'bing' };
-  if (host === 'duckduckgo.com' || host.endsWith('.duckduckgo.com')) return { host, source: 'duckduckgo' };
-  if (host === 'producthunt.com' || host.endsWith('.producthunt.com')) return { host, source: 'producthunt' };
-  if (host === 'github.com' || host.endsWith('.github.com')) return { host, source: 'github' };
-  if (host === 'bilko.run' || host.endsWith('.bilko.run')) return { host, source: 'internal' };
-  return { host, source: host };
-}
-
-export function aggregateReferrers(list: Array<{ referrer: string; views: number }>): Array<{ source: string; views: number }> {
-  const agg = new Map<string, number>();
-  for (const r of list) {
-    const { source } = normalizeReferrer(r.referrer || '');
-    agg.set(source, (agg.get(source) ?? 0) + r.views);
-  }
-  return Array.from(agg.entries())
-    .map(([source, views]) => ({ source, views }))
-    .sort((a, b) => b.views - a.views);
-}
-
 export interface Stats {
   period: { days: number; since: string };
-  views: number;
-  botViews: number;
-  botUserAgents: Array<{ ua: string; views: number }>;
-  todayViews: number;
   revenue: { single: number; bundle: number; total: number };
-  byDay: Array<{ date: string; views: number }>;
-  byPage: Array<{ path: string; views: number }>;
-  byReferrer: Array<{ referrer: string; views: number }>;
-  toolUsage: Array<{ endpoint: string; uses: number }>;
-  toolVisits: Array<{ path: string; visits: number }>;
-  uniqueVisitors: number;
-  topLandingPages: Array<{ path: string; unique_users: number }>;
-  referrerToTool: Array<{ referrer: string; path: string; visits: number }>;
-  dailyActiveUsers: Array<{ date: string; users: number }>;
-  blogTraffic: Array<{ path: string; views: number }>;
-  topUtms: Array<{ utm_source: string | null; utm_medium: string | null; utm_campaign: string | null; views: number; signed_in: number }>;
-  byCountry: Array<{ country: string; views: number }>;
-  views_prior: number;
-  todayViews_prior: number;
-  uniqueVisitors_prior: number;
   revenue_prior: { single: number; bundle: number; total: number };
 }
 
@@ -80,24 +28,6 @@ export function StatCard({ label, value, sub, priorValue, currentNumeric }: { la
       <div className="text-xs font-bold uppercase tracking-wider text-warm-400 mb-1">{label}</div>
       <div className="text-3xl font-black text-warm-900 flex items-baseline">{value}{badge}</div>
       {sub && <div className="text-xs text-warm-500 mt-1">{sub}</div>}
-    </div>
-  );
-}
-
-export function BarChart({ data, label: _label, color = 'bg-fire-400' }: { data: Array<{ key: string; value: number }>; label: string; color?: string }) {
-  if (data.length === 0) return <p className="text-sm text-warm-400">No data yet</p>;
-  const max = Math.max(...data.map(x => x.value), 1);
-  return (
-    <div className="space-y-1.5">
-      {data.map(d => (
-        <div key={d.key} className="flex items-center gap-3">
-          <span className="text-xs text-warm-500 w-16 flex-shrink-0 font-mono">{d.key}</span>
-          <div className="flex-1 h-4 bg-warm-50 rounded-full overflow-hidden">
-            <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${Math.round((d.value / max) * 100)}%` }} />
-          </div>
-          <span className="text-xs font-bold text-warm-700 w-8 text-right">{d.value}</span>
-        </div>
-      ))}
     </div>
   );
 }

@@ -53,23 +53,18 @@ beforeEach(async () => {
 });
 
 describe('GET /api/analytics/stats (range-filtered queries)', () => {
-  it('returns the same counts the date()-wrapped queries produced', async () => {
+  it('returns only period and revenue; traffic fields moved to Command', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/analytics/stats?days=7' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-
-    const expectedViews = PV.reduce((s, [, n]) => s + n, 0);
-    expect(body.views).toBe(expectedViews);
-    expect(body.todayViews).toBe(3);
-    expect(body.byDay.map((r: any) => r.views)).toEqual([4, 2, 3]);
+    expect(Object.keys(body).sort()).toEqual(['period', 'revenue', 'revenue_prior']);
+    expect(body.period.days).toBe(7);
+    expect(body.revenue).toEqual({ single: 0, bundle: 0, total: 0 });
   });
 
-  it('no longer returns the dropped roast/user/purchase fields', async () => {
-    const body = (await app.inject({ method: 'GET', url: '/api/analytics/stats?days=7' })).json();
-    for (const k of ['totalRoasts', 'totalUsers', 'tokenPurchases', 'topUsers', 'roastsByDay', 'recentUserRoasts', 'activityFeed', 'signupsByDay', 'totalRoasts_prior', 'totalUsers_prior', 'tokenPurchases_prior']) {
-      expect(body).not.toHaveProperty(k);
-    }
-    expect(body.revenue).toEqual({ single: 0, bundle: 0, total: 0 });
+  it('no longer serves /api/analytics/audience', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/analytics/audience' });
+    expect(res.statusCode).toBe(404);
   });
 
   it('uses an index for the main pageview count query', async () => {

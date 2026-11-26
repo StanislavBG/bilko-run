@@ -321,57 +321,16 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     if (!await requireAdmin(req, reply)) return;
     const rawDays = parseInt(String((req.query as any)?.days ?? ''), 10);
     const days = Number.isFinite(rawDays) ? Math.min(365, Math.max(1, rawDays)) : 7;
-    const { excludeAdmins, adminArgs } = buildAdminExclusion(req);
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
     const priorSince = new Date(Date.now() - days * 2 * 86400000).toISOString().slice(0, 10);
     const priorUntil = since; // prior window is [priorSince, since)
 
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-
     const [
-      totalViews, byDay, byPage, byReferrer, todayViews, botViews, botUserAgents,
-      revenueSingle, revenueBundle, toolUsage, toolVisits,
-      uniqueVisitors, topLandingPages, referrerToTool, dailyActiveUsers, blogTraffic,
-      topUtms, byCountry,
-      // prior-period KPIs
-      priorTotalViews, priorTodayViews, priorUniqueVisitors,
+      revenueSingle, revenueBundle,
       priorRevenueSingle, priorRevenueBundle,
     ] = await raceTimeout(Promise.all([
-      dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ?${excludeAdmins}`, since, ...adminArgs),
-      dbAll(`SELECT date, COUNT(*) as views FROM page_views WHERE date >= ?${excludeAdmins} GROUP BY date ORDER BY date`, since, ...adminArgs),
-      dbAll(`SELECT path, COUNT(*) as views FROM page_views WHERE date >= ?${excludeAdmins} GROUP BY path ORDER BY views DESC LIMIT 20`, since, ...adminArgs),
-      dbAll(`SELECT referrer, COUNT(*) as views FROM page_views WHERE date >= ? AND referrer IS NOT NULL AND referrer != ''${excludeAdmins} GROUP BY referrer ORDER BY views DESC LIMIT 20`, since, ...adminArgs),
-      dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date = ?${excludeAdmins}`, today, ...adminArgs),
-      // Bot traffic since `since` — captured but excluded from real-traffic numbers.
-      dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ? AND is_bot = 1`, since),
-      // Top bot user-agents so admin can see who's hitting the site.
-      dbAll(`SELECT COALESCE(ua, '(empty)') as ua, COUNT(*) as views FROM page_views WHERE date >= ? AND is_bot = 1 GROUP BY ua ORDER BY views DESC LIMIT 10`, since),
-      // Revenue breakdown
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1"),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7"),
-      // Per-tool usage stats
-      dbAll(`SELECT endpoint, SUM(count) as uses FROM usage_tracking WHERE date >= ? GROUP BY endpoint ORDER BY uses DESC`, since),
-      // Per-tool page visits
-      dbAll(`SELECT path, COUNT(*) as visits FROM page_views WHERE date >= ? AND path LIKE '/projects/%'${excludeAdmins} GROUP BY path ORDER BY visits DESC`, since, ...adminArgs),
-      // Unique visitors (distinct emails)
-      dbGet<{ n: number }>(`SELECT COUNT(DISTINCT email) as n FROM page_views WHERE date >= ? AND email IS NOT NULL${excludeAdmins}`, since, ...adminArgs),
-      // Top landing pages (from sessions table — falls back to legacy logic if sessions empty)
-      dbAll(`SELECT landing_path as path, COUNT(*) as sessions FROM sessions WHERE started_at >= ? GROUP BY landing_path ORDER BY sessions DESC LIMIT 15`, Date.now() - days * 86400000),
-      // Referrer → tool conversion (which referrers lead to tool pages)
-      dbAll(`SELECT referrer, path, COUNT(*) as visits FROM page_views WHERE date >= ? AND referrer IS NOT NULL AND referrer != '' AND path LIKE '/projects/%'${excludeAdmins} GROUP BY referrer, path ORDER BY visits DESC LIMIT 20`, since, ...adminArgs),
-      // Daily active users
-      dbAll(`SELECT date, COUNT(DISTINCT email) as users FROM page_views WHERE date >= ? AND email IS NOT NULL${excludeAdmins} GROUP BY date ORDER BY date`, since, ...adminArgs),
-      // Blog traffic
-      dbAll(`SELECT path, COUNT(*) as views FROM page_views WHERE date >= ? AND path LIKE '/blog%'${excludeAdmins} GROUP BY path ORDER BY views DESC LIMIT 10`, since, ...adminArgs),
-      // Top UTM campaigns
-      dbAll(`SELECT utm_source, utm_medium, utm_campaign, COUNT(*) AS views, COUNT(DISTINCT email) AS signed_in FROM page_views WHERE date >= ? AND utm_source IS NOT NULL${excludeAdmins} GROUP BY utm_source, utm_medium, utm_campaign ORDER BY views DESC LIMIT 20`, since, ...adminArgs),
-      // Views by country
-      dbAll(`SELECT country, COUNT(*) as views FROM page_views WHERE date >= ? AND country IS NOT NULL AND country != ''${excludeAdmins} GROUP BY country ORDER BY views DESC LIMIT 15`, since, ...adminArgs),
-      // Prior-period KPIs
-      dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date >= ? AND date < ?${excludeAdmins}`, priorSince, priorUntil, ...adminArgs),
-      dbGet<{ n: number }>(`SELECT COUNT(*) as n FROM page_views WHERE date = ?${excludeAdmins}`, yesterday, ...adminArgs),
-      dbGet<{ n: number }>(`SELECT COUNT(DISTINCT email) as n FROM page_views WHERE date >= ? AND date < ? AND email IS NOT NULL${excludeAdmins}`, priorSince, priorUntil, ...adminArgs),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 1 AND p.created_at >= ? AND p.created_at < ?", priorSince, priorUntil),
       dbGet<{ n: number }>("SELECT COUNT(*) as n FROM stripe_one_time_purchases p JOIN token_transactions t ON t.stripe_payment_intent_id = p.stripe_payment_intent_id WHERE t.amount = 7 AND p.created_at >= ? AND p.created_at < ?", priorSince, priorUntil),
     ]), 15000, 'admin /stats');
@@ -383,28 +342,8 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
 
     return {
       period: { days, since },
-      views: totalViews?.n ?? 0,
-      botViews: botViews?.n ?? 0,
-      botUserAgents,
-      todayViews: todayViews?.n ?? 0,
       revenue: { single: singleCount, bundle: bundleCount, total: singleCount * 1 + bundleCount * 5 },
-      // Prior-period deltas
-      views_prior: priorTotalViews?.n ?? 0,
-      todayViews_prior: priorTodayViews?.n ?? 0,
-      uniqueVisitors_prior: priorUniqueVisitors?.n ?? 0,
       revenue_prior: { single: priorSingleCount, bundle: priorBundleCount, total: priorSingleCount * 1 + priorBundleCount * 5 },
-      byDay,
-      byPage,
-      byReferrer,
-      toolUsage,
-      toolVisits,
-      uniqueVisitors: uniqueVisitors?.n ?? 0,
-      topLandingPages,
-      referrerToTool,
-      dailyActiveUsers,
-      blogTraffic,
-      topUtms,
-      byCountry,
     };
   });
 
@@ -491,26 +430,6 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     return { funnels, dropOff };
   });
 
-  // Audience widget data
-  app.get('/api/analytics/audience', async (req, reply) => {
-    if (!await requireAdmin(req, reply)) return;
-    const { excludeAdmins, adminArgs, since } = buildAdminExclusion(req);
-
-    const [newVsReturning, byCountry, byDevice, byBrowser] = await Promise.all([
-      dbAll(`SELECT date,
-               SUM(CASE WHEN is_new_visitor = 1 THEN 1 ELSE 0 END) as new_visitors,
-               SUM(CASE WHEN is_new_visitor = 0 THEN 1 ELSE 0 END) as returning_visitors
-             FROM page_views WHERE date >= ?${excludeAdmins}
-             GROUP BY date ORDER BY date`, since, ...adminArgs),
-      dbAll(`SELECT country, COUNT(*) as views FROM page_views WHERE date >= ? AND country IS NOT NULL AND country != ''${excludeAdmins} GROUP BY country ORDER BY views DESC LIMIT 20`, since, ...adminArgs),
-      dbAll(`SELECT COALESCE(device, 'other') as device, COUNT(*) as views FROM page_views WHERE date >= ?${excludeAdmins} GROUP BY device ORDER BY views DESC`, since, ...adminArgs),
-      dbAll(`SELECT COALESCE(browser, 'other') as browser, COUNT(*) as views FROM page_views WHERE date >= ?${excludeAdmins} GROUP BY browser ORDER BY views DESC LIMIT 10`, since, ...adminArgs),
-    ]);
-
-    return { newVsReturning, byCountry, byDevice, byBrowser };
-  });
-
-  // Cost controls dashboard
   app.get('/api/admin/cost', async (req, reply) => {
     if (!await requireAdmin(req, reply)) return;
     const today = new Date().toISOString().slice(0, 10);

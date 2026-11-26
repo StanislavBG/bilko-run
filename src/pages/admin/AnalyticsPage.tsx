@@ -1,19 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 
 import { useAdminResource, useIsAdmin } from '../../hooks/useAdmin.js';
 import { StatCard, type Stats } from './analytics/parts.js';
-import { OverviewTab } from './analytics/ActivityTabs.js';
-import { SourcesTab, FunnelsTab, AudienceTab, ToolsTab } from './analytics/GrowthTabs.js';
+import { SourcesTab, FunnelsTab } from './analytics/GrowthTabs.js';
 import { WebProductsTab } from './analytics/WebProductsTab.js';
 import { SessionManagerTab } from './analytics/SessionManagerTab.js';
 import { SignupsTab } from './analytics/SignupsTab.js';
 import { BookingsTab } from './BookingsTab.js';
-import { SyntheticTab, ManifestsTab } from './analytics/OpsTabs.js';
+import { SyntheticTab } from './analytics/OpsTabs.js';
 import { AdminHomeLink } from './AdminHomeLink.js';
 
-const TABS = ['overview', 'sources', 'funnels', 'audience', 'tools', 'products', 'bookings', 'session manager', 'signups', 'manifests', 'synthetic'] as const;
+const TABS = ['sources', 'funnels', 'products', 'bookings', 'session manager', 'signups', 'synthetic'] as const;
 
 export function AnalyticsPage() {
   const { isLoaded } = useUser();
@@ -21,7 +20,7 @@ export function AnalyticsPage() {
 
   const [days, setDays] = useState(7);
   const [excludeSelf, setExcludeSelf] = useState(true);
-  const [tab, setTab] = useState<(typeof TABS)[number]>('overview');
+  const [tab, setTab] = useState<(typeof TABS)[number]>('sources');
   const { data: stats, loading } = useAdminResource<Stats>(
     `/analytics/stats?days=${days}&exclude_self=${excludeSelf ? '1' : '0'}`,
     { enabled: isAdmin },
@@ -38,6 +37,9 @@ export function AnalyticsPage() {
   return (
     <section className="max-w-6xl mx-auto px-6 py-10">
       <AdminHomeLink className="mb-4" />
+      <p className="mb-4 text-sm text-warm-600">
+        <Link to="/admin/observability" className="font-semibold text-fire-600 hover:underline">Traffic is in Command →</Link>
+      </p>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-extrabold text-warm-900">Admin Dashboard</h1>
@@ -65,10 +67,7 @@ export function AnalyticsPage() {
       {stats && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard label="Views Today" value={stats.todayViews} currentNumeric={stats.todayViews} priorValue={stats.todayViews_prior} />
-            <StatCard label={`Views (${days}d)`} value={stats.views} currentNumeric={stats.views} priorValue={stats.views_prior} />
-            <StatCard label="Unique Visitors" value={stats.uniqueVisitors} sub={`${days}d with email`} currentNumeric={stats.uniqueVisitors} priorValue={stats.uniqueVisitors_prior} />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <StatCard label="Revenue" value={`$${stats.revenue.total}`} sub={`$${stats.revenue.single} + $${stats.revenue.bundle * 5}`} currentNumeric={stats.revenue.total} priorValue={stats.revenue_prior.total} />
           </div>
 
@@ -87,19 +86,14 @@ export function AnalyticsPage() {
             ))}
           </div>
 
-          {tab === 'overview' && <OverviewTab days={days} excludeSelf={excludeSelf} />}
-
           {tab === 'sources' && <SourcesTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'funnels' && <FunnelsTab days={days} excludeSelf={excludeSelf} />}
-          {tab === 'audience' && <AudienceTab days={days} excludeSelf={excludeSelf} />}
-          {tab === 'tools' && <ToolsTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'products' && <WebProductsTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'bookings' && <BookingsTab days={days} />}
           {tab === 'session manager' && <SessionManagerTab days={days} excludeSelf={excludeSelf} />}
           {tab === 'signups' && <SignupsTab days={days} />}
 
           {tab === 'synthetic' && <SyntheticTab />}
-          {tab === 'manifests' && <ManifestsTab />}
         </>
       )}
     </section>

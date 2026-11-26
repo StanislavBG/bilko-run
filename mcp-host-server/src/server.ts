@@ -202,9 +202,7 @@ server.registerTool(
         standalone,
         notes: [
           `react-route apps live in src/data/projectsRegistry.ts and aren't returned here.`,
-          latest.source === 'remote'
-            ? `Source: ${latest.ref}:src/data/standalone-projects.json (fetched just now).`
-            : `Source: ${latest.ref} (local working tree; could not read origin/main: ${latest.reason}). May lag behind origin/main.`,
+          `Source: bilko.run ${latest.ref} (Bilko-DB registry API).`,
         ],
         counts: { standalone: counts.standalone, public_projects_dirs: await counts.public_projects_dirs },
       };

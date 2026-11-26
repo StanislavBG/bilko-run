@@ -1,57 +1,41 @@
 /**
- * Where the bilko-host MCP's read tools get the registry from.
- *
- * Writes always land on <remote>/<branch> via the publish checkout, but the
- * human's main checkout (HOST_ROOT) only moves when someone pulls. Reading
- * HOST_ROOT's working tree therefore hid every listing pushed since the last
- * pull. Reads go to <remote>/<branch> instead, falling back to the working
- * tree only when git can't answer (offline, no remote).
- *
- * Pure git/fs module: no MCP SDK.
+ * Where the bilko-host MCP's read tools get the registry from: bilko.run's
+ * GET /api/admin/registry (Bilko-DB). No git command runs.
  */
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { readRegistry, type RegistryApiEntry } from './registry-api.js';
 
-const exec = promisify(execFile);
-
+/** Legacy path of the registry file; write tools still commit to it until they move to the API. */
 export const REGISTRY_PATH = 'src/data/standalone-projects.json';
-const FETCH_TIMEOUT_MS = 20 * 1000;
-const SHOW_TIMEOUT_MS = 10 * 1000;
 
 export interface RegistrySourceOptions {
-  remote?: string;
-  branch?: string;
+  /** Test seam: replaces the API call. */
+  read?: () => Promise<RegistryApiEntry[]>;
 }
 
-export type RegistrySource =
-  | { raw: string; source: 'remote'; ref: string }
-  | { raw: string; source: 'local'; ref: string; reason: string };
+export interface RegistrySource {
+  /** JSON array of entries, same shape the registry file had. */
+  raw: string;
+  source: 'api';
+  ref: string;
+  /** slug -> version, for optimistic writes. */
+  versions: Record<string, number>;
+  entries: RegistryApiEntry[];
+}
 
+// hostRoot is kept so existing callers need no change; the API does not use it.
 export async function readLatestRegistryRaw(
-  hostRoot: string,
+  _hostRoot?: string,
   opts: RegistrySourceOptions = {},
 ): Promise<RegistrySource> {
-  const remote = opts.remote ?? 'origin';
-  const branch = opts.branch ?? 'main';
-  const ref = `${remote}/${branch}`;
-  try {
-    // Updates refs/remotes only; never touches the caller's HEAD, index or tree.
-    await exec('git', ['fetch', '--quiet', remote, branch], { cwd: hostRoot, timeout: FETCH_TIMEOUT_MS });
-  } catch {
-    // Offline: the last fetched remote ref is still fresher than the working tree.
-  }
-  try {
-    const { stdout } = await exec('git', ['show', `${ref}:${REGISTRY_PATH}`], {
-      cwd: hostRoot,
-      timeout: SHOW_TIMEOUT_MS,
-      maxBuffer: 32 * 1024 * 1024,
-    });
-    return { raw: stdout, source: 'remote', ref };
-  } catch (e: unknown) {
-    const raw = await readFile(resolve(hostRoot, REGISTRY_PATH), 'utf8');
-    return { raw, source: 'local', ref: resolve(hostRoot, REGISTRY_PATH), reason: (e as Error).message };
-  }
+  const entries = await (opts.read ?? readRegistry)();
+  const versions: Record<string, number> = {};
+  for (const e of entries) versions[String(e.entry.slug)] = e.version;
+  return {
+    raw: JSON.stringify(entries.map((e) => e.entry), null, 2) + '\n',
+    source: 'api',
+    ref: '/api/admin/registry',
+    versions,
+    entries,
+  };
 }

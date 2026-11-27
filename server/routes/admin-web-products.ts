@@ -42,13 +42,14 @@ export type CheckoutSplit = { human: number; automated: number; unlabeled: numbe
 
 /** Every checkout_start in the window, any tool (the /buy agent offers included), split by label. */
 async function checkoutStartSplit(sinceDate: string, excludeSelf: boolean): Promise<CheckoutSplit> {
+  const moved = (await hitAutomatedStartIds(sinceDate, excludeSelf)).size;
   const feSelfSql = excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : '';
   const all = await dbGet<SplitRow>(
     `SELECT ${SPLIT_COLS} FROM funnel_events fe
      WHERE fe.event = 'checkout_start' AND date(fe.created_at) >= ?${feSelfSql}`, CHECKOUT_LABELS_SINCE, sinceDate);
   return {
-    human: (all?.n ?? 0) - (all?.automated ?? 0) - (all?.unlabeled ?? 0),
-    automated: all?.automated ?? 0,
+    human: (all?.n ?? 0) - (all?.automated ?? 0) - (all?.unlabeled ?? 0) - moved,
+    automated: (all?.automated ?? 0) + moved,
     unlabeled: all?.unlabeled ?? 0,
   };
 }
@@ -74,12 +75,17 @@ type BuyHitRow = {
   ts_ms: number; path: string; status: number; referrer_host: string | null; country: string | null; device: string | null;
   browser: string | null; os: string | null; visitor_class: string | null; is_bot: number; ip: string | null;
 };
+/** Two /buy/<offer> hits for different offers from one IP this close together are one script walking the catalog. */
+export const BUY_BURST_MS = 300;
 const BUY_HIT_BEFORE_MS = 30000;
 const BUY_HIT_AFTER_MS = 5000;
 
 // Agent-buy starts carry no session; match each to the page_hits row of its /buy/<offer> request by IP hash and
 // time (created_at is whole seconds, so ts is the start of its second). The raw IP is compared here and never returned.
-async function agentBuyHits(rows: StartRow[]): Promise<Map<number, BuyHit>> {
+type StartMatchRow = Pick<StartRow, 'id' | 'created_at' | 'tool' | 'metadata' | 'ip_hash'>;
+type AgentBuyMatch = { hits: Map<number, BuyHit>; reasons: Map<number, string[]> };
+
+async function agentBuyHits(rows: StartMatchRow[]): Promise<AgentBuyMatch> {
   const wanted: { id: number; ts: number; ipHash: string; path: string }[] = [];
   for (const r of rows) {
     const metadata = parseMetadata(r.metadata);
@@ -92,14 +98,15 @@ async function agentBuyHits(rows: StartRow[]): Promise<Map<number, BuyHit>> {
     wanted.push({ id: r.id, ts, ipHash: r.ip_hash, path: `/buy/${offer}` });
   }
   const out = new Map<number, BuyHit>();
-  if (wanted.length === 0) return out;
-  const paths = [...new Set(wanted.map((w) => w.path))];
-  const minTs = Math.min(...wanted.map((w) => w.ts)) - BUY_HIT_BEFORE_MS;
-  const maxTs = Math.max(...wanted.map((w) => w.ts)) + BUY_HIT_AFTER_MS;
+  const reasons = new Map<number, string[]>();
+  if (wanted.length === 0) return { hits: out, reasons };
+  const minTs = Math.min(...wanted.map((w) => w.ts)) - BUY_HIT_BEFORE_MS - BUY_BURST_MS;
+  const maxTs = Math.max(...wanted.map((w) => w.ts)) + BUY_HIT_AFTER_MS + BUY_BURST_MS;
+  // Every /buy/ path, so the burst check sees the other offers.
   const hits = await dbAll<BuyHitRow>(
     `SELECT ts_ms, path, status, referrer_host, country, device, browser, os, visitor_class, COALESCE(is_bot, 0) AS is_bot, ip
-     FROM page_hits WHERE path IN (${paths.map(() => '?').join(', ')}) AND ts_ms BETWEEN ? AND ? AND ip IS NOT NULL`,
-    ...paths, minTs, maxTs);
+     FROM page_hits WHERE path LIKE ? AND ts_ms BETWEEN ? AND ? AND ip IS NOT NULL`,
+    '/buy/%', minTs, maxTs);
   const hashed = hits.map((h) => ({ h, ipHash: hashIp(h.ip as string) }));
   for (const w of wanted) {
     let best: BuyHitRow | null = null;
@@ -109,14 +116,35 @@ async function agentBuyHits(rows: StartRow[]): Promise<Map<number, BuyHit>> {
       if (!best || Math.abs(t - w.ts) < Math.abs(Number(best.ts_ms) - w.ts)) best = h;
     }
     if (best) {
+      const visitorClass = best.visitor_class ?? (Number(best.is_bot) === 1 ? 'script' : 'human');
       out.set(w.id, {
         ts: Number(best.ts_ms), path: best.path, status: Number(best.status), referrerHost: best.referrer_host,
-        country: best.country, device: best.device, browser: best.browser, os: best.os,
-        visitorClass: best.visitor_class ?? (Number(best.is_bot) === 1 ? 'script' : 'human'),
+        country: best.country, device: best.device, browser: best.browser, os: best.os, visitorClass,
       });
+      const why: string[] = [];
+      if (visitorClass !== 'human') why.push('buy_hit_script');
+      const bt = Number(best.ts_ms);
+      if (hashed.some(({ h, ipHash }) => ipHash === w.ipHash && h.path !== best!.path && Math.abs(Number(h.ts_ms) - bt) <= BUY_BURST_MS)) {
+        why.push('buy_burst');
+      }
+      if (why.length) reasons.set(w.id, why);
     }
   }
-  return out;
+  return { hits: out, reasons };
+}
+
+/**
+ * Ids of agent-buy starts in the window that FE_AUTOMATED misses but whose matched /buy/ hit marks them automated.
+ * Only rows created since CHECKOUT_LABELS_SINCE (earlier unflagged rows stay unlabeled). Labels only; nothing is dropped.
+ */
+async function hitAutomatedStartIds(sinceDate: string, excludeSelf: boolean, tool?: string): Promise<Set<number>> {
+  const rows = await dbAll<StartMatchRow>(
+    `SELECT fe.id, fe.created_at, fe.tool, fe.metadata, fe.ip_hash FROM funnel_events fe
+     WHERE fe.event = 'checkout_start' AND date(fe.created_at) >= ? AND fe.created_at >= ? AND fe.metadata LIKE ?
+       AND NOT ${FE_AUTOMATED}${excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : ''}${tool !== undefined ? ' AND fe.tool = ?' : ''}`,
+    sinceDate, CHECKOUT_LABELS_SINCE, '%agent-buy%', ...(tool !== undefined ? [tool] : []));
+  const { reasons } = await agentBuyHits(rows);
+  return new Set(reasons.keys());
 }
 
 function parseTs(createdAt: string | null): number | null {
@@ -243,6 +271,7 @@ export function registerAdminWebProductRoutes(
            WHERE event IN ('checkout_expired', 'checkout_recovered') AND tool = ? AND date(created_at) >= ? GROUP BY event`,
           p.slug, sinceDate),
       ]);
+      const moved = (await hitAutomatedStartIds(sinceDate, excludeSelf, p.slug)).size;
       const outcome = (e: string) => outcomes.find((o) => o.event === e)?.n ?? 0;
 
       // Services have no zip: show upcoming bookings (and intake) instead, so the owner
@@ -266,8 +295,8 @@ export function registerAdminWebProductRoutes(
         views: views?.views ?? 0,
         uniqueVisitors: views?.visitors ?? 0,
         checkoutStarts: checkouts?.n ?? 0,
-        checkoutStartsHuman: (checkouts?.n ?? 0) - (checkouts?.automated ?? 0) - (checkouts?.unlabeled ?? 0),
-        checkoutStartsAutomated: checkouts?.automated ?? 0,
+        checkoutStartsHuman: (checkouts?.n ?? 0) - (checkouts?.automated ?? 0) - (checkouts?.unlabeled ?? 0) - moved,
+        checkoutStartsAutomated: (checkouts?.automated ?? 0) + moved,
         checkoutStartsUnlabeled: checkouts?.unlabeled ?? 0,
         checkoutsExpired: outcome('checkout_expired'),
         checkoutsRecovered: outcome('checkout_recovered'),
@@ -336,18 +365,23 @@ export function registerAdminWebProductRoutes(
     const sessionIds = [...new Set(rows.map((r) => r.session_id).filter((s): s is string => !!s))];
     const [adminSids, classes] = await Promise.all([adminSessions(sessionIds), sessionVisitorClasses(sessionIds)]);
     const ownerCookies = new Set(ownerIds.cookieIds);
-    const buyHits = await agentBuyHits(rows);
+    const { hits: buyHits, reasons: buyReasons } = await agentBuyHits(rows);
 
     const starts = rows.map((r) => {
       const createdAt = r.created_at ?? '';
-      const automated = Number(r.automated) === 1;
-      const label = automated ? 'automated' : createdAt < CHECKOUT_LABELS_SINCE ? 'unlabeled' : 'human';
+      const feAutomated = Number(r.automated) === 1;
+      const hitReasons = buyReasons.get(r.id) ?? [];
+      // Hit-based reasons only label rows from the labelled era, matching hitAutomatedStartIds.
+      const hitAutomated = !feAutomated && createdAt >= CHECKOUT_LABELS_SINCE && hitReasons.length > 0;
+      const automated = feAutomated;
+      const label = automated || hitAutomated ? 'automated' : createdAt < CHECKOUT_LABELS_SINCE ? 'unlabeled' : 'human';
       const labelReasons: string[] = [];
       if (automated) {
         if (Number(r.is_bot) === 1) labelReasons.push('ua');
         if (Number(r.visitor_bot_view) === 1) labelReasons.push('visitor_bot_view');
         if (Number(r.session_bot_view) === 1) labelReasons.push('session_bot_view');
       }
+      if (feAutomated || hitAutomated) labelReasons.push(...hitReasons);
       const mineReasons: string[] = [];
       if (Number(r.is_admin) === 1) mineReasons.push('owner_ip');
       if (Number(r.is_internal) === 1) mineReasons.push('internal_marker');

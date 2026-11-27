@@ -17,6 +17,9 @@ in short:
 - **One idea per paragraph.** If a paragraph covers two things, split it.
 - **Explain any needed technical term in plain words the first time you use it.** If a reader
   needs the word "coverage" to understand the post, define it in one plain clause the first time.
+- **Write for an adult who has never worked in tech.** Use words that reader already uses.
+- **Give each sentence one clear meaning.** If a sentence can be read two ways, rewrite it.
+- **Say every step outright.** Do not skip a step because it seems obvious to a builder.
 
 Two before/after rewrites, pulled from this file's own tone micro-examples below:
 

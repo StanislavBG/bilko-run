@@ -25,7 +25,7 @@ To see what production runs, use the admin key (`~/.config/bilko-host/admin-key`
 curl -s -H "Authorization: Bearer $(cat ~/.config/bilko-host/admin-key)" https://bilko.run/api/admin/runtime
 ```
 
-`node` is the running release. `nodeVersionEnv` should be `null`: Render never sets that variable itself, so any value means it is set on the service and is overriding `engines`. After removing it, choose **Save, rebuild, and deploy**, because Render picks the Node version at build time.
+`node` is the running release. `nodeVersionEnv` should be `null` or `""` (Render's runtime leaves it empty when `engines` decides). Any version string means it is set on the service and is overriding `engines`. Remove it with the Render API one key at a time (`DELETE /v1/services/<id>/env-vars/NODE_VERSION`, never the bulk `PUT /env-vars`, which deletes every variable not in the request), then start a deploy (`POST /v1/services/<id>/deploys`), because Render picks the Node version at build time.
 
 To move to a new major, run `pnpm typecheck`, `pnpm test`, `pnpm --filter host-kit test` and `pnpm build` on it, then change both bounds together. Node 25 and later add a global `localStorage` that hides jsdom's, so `packages/host-kit/tests/telemetry.test.ts` fails on Node 26 until its test setup handles that.
 

@@ -4,6 +4,7 @@ import { getStripe } from '../services/stripe.js';
 import { dbRun } from '../db.js';
 import { hashIp } from './tools/_shared.js';
 import { classifyVisitor } from '../services/analytics.js';
+import { readSessionIds } from '../session-identity.js';
 import { formatPrice, offerById, type AgentOffer } from '../../shared/agent-offers.js';
 import { entryForPriceType } from '../../shared/product-catalog.js';
 import { buildWebProductCheckoutParams, ipSeenAsAdmin } from './web-products.js';
@@ -78,12 +79,12 @@ function topupParams(offer: AgentOffer & { source: { kind: 'wallet_topup'; cents
 }
 
 /**
- * Only a person in a browser can finish Stripe Checkout, so only a browser GET opens a live
- * session. HEAD, crawlers, AI fetchers (ChatGPT-User), HTTP clients (curl, fetch, python-requests)
+ * Only a person in a browser can finish Stripe Checkout, so only a browser POST opens a live
+ * session (a browser GET shows the confirm page). HEAD, crawlers, AI fetchers (ChatGPT-User), HTTP clients (curl, fetch, python-requests)
  * and headless browsers get the info page instead.
  */
 function opensCheckout(method: string, ua: string): boolean {
-  return method === 'GET' && ua.startsWith('Mozilla/') && classifyVisitor(ua) === 'human';
+  return (method === 'GET' || method === 'POST') && ua.startsWith('Mozilla/') && classifyVisitor(ua) === 'human';
 }
 
 function sessionParams(offer: AgentOffer, priceId: string, publicUrl: string): Record<string, unknown> {
@@ -103,7 +104,7 @@ function sessionParams(offer: AgentOffer, priceId: string, publicUrl: string): R
 }
 
 export function registerAgentBuyRoutes(app: FastifyInstance): void {
-  app.get('/buy/:offerId', async (req, reply) => {
+  const handler = async (req: any, reply: any) => {
     const offerId = (req.params as { offerId?: string }).offerId;
     const offer = typeof offerId === 'string' && OFFER_ID_RE.test(offerId) ? offerById(offerId) : undefined;
     if (!offer) {
@@ -116,7 +117,7 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     const notYet = () => sendHtml(reply, 503, page('Not available yet',
       `<p>${esc(offer.name)} is not on sale yet. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
 
-    // ?dryRun=1 runs every check a browser GET would (Stripe, price, stock) without a session.
+    // ?dryRun=1 runs every check a browser POST would (Stripe, price, stock) without a session.
     const dryRun = (req.query as { dryRun?: string } | undefined)?.dryRun === '1';
     const info = (note = '') => sendHtml(reply, 200, page(offer.name,
       `<p>${esc(offer.summary)}</p><p>Price: ${esc(formatPrice(offer))}</p>${note}`
@@ -126,6 +127,18 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     if (!dryRun && !opensCheckout(req.method, String(req.headers['user-agent'] ?? ''))) {
       if (!(await isOfferAvailable(offer))) return notYet();
       return info();
+    }
+
+    // A browser GET only shows what is being bought; the form's POST opens Checkout.
+    if (!dryRun && req.method === 'GET') {
+      if (!(await isOfferAvailable(offer))) return notYet();
+      const action = `/buy/${offer.id}`;
+      return sendHtml(reply, 200, page(offer.name,
+        `<p>${esc(offer.summary)}</p><p><strong>${esc(formatPrice(offer))}</strong></p>`
+        + `<p>${esc(offer.whatYouGet)}</p><p>Sold by bilko.run</p><p>Secure checkout by Stripe</p>`
+        + `<p>You pay on Stripe. Card, Apple Pay (Safari) and Link are accepted.</p>`
+        + `<form method="post" action="${esc(action)}"><button type="submit" style="font-size:1.1rem;padding:.7rem 1.4rem">Continue to payment</button></form>`
+        + `<p>Product page: <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a></p>`));
     }
 
     if (!dryRun && !rateOk(`agent-buy:${req.ip}`, SESSION_LIMIT)) {
@@ -177,11 +190,12 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     try {
       // Label only, same rule as POST /api/web-products/:slug/checkout.
       const isBot = classifyVisitor(String(req.headers['user-agent'] ?? '')) === 'human' ? 0 : 1;
+      const ids = req.bilkoIds ?? readSessionIds(req.headers.cookie);
       await dbRun(
-        'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin, is_internal, is_bot) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO funnel_events (event, ip_hash, tool, metadata, is_admin, session_id, visitor_id, is_internal, is_bot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         'checkout_start', hashIp(req.ip), offer.id,
         JSON.stringify({ via: 'agent-buy', offer: offer.id, checkout_session_id: session.id }), ownerIp ? 1 : 0,
-        internalFlag(req), isBot,
+        ids.sessionId, ids.visitorId, internalFlag(req), isBot,
       );
     } catch (err: any) {
       console.error('[agent-buy] funnel insert failed:', err?.message);
@@ -189,5 +203,7 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
 
     reply.header('Cache-Control', 'no-store');
     return reply.redirect(url, 302);
-  });
+  };
+  app.get('/buy/:offerId', handler);
+  app.post('/buy/:offerId', handler);
 }

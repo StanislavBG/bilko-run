@@ -68,7 +68,7 @@ describe.skipIf(!KEY)('sandbox: /buy/:offerId -> Stripe test-mode Checkout', () 
 
   it.each(AGENT_OFFERS.map((o) => [o.id, o] as const))('%s redirects to a valid test Checkout session', async (_id, offer) => {
     const res = await app.inject({
-      method: 'GET',
+      method: 'POST',
       url: `/buy/${offer.id}`,
       headers: { 'user-agent': HUMAN_UA },
       remoteAddress: `10.9.0.${AGENT_OFFERS.indexOf(offer) + 1}`,

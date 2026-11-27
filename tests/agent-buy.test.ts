@@ -35,7 +35,11 @@ function get(app: Awaited<ReturnType<typeof buildApp>>, url: string, headers: Re
   return app.inject({ method: 'GET', url, headers: { 'user-agent': HUMAN_UA, ...headers }, remoteAddress: ip });
 }
 
-describe('GET /buy/:offerId', () => {
+function post(app: Awaited<ReturnType<typeof buildApp>>, url: string, headers: Record<string, string> = {}, ip = nextIp()) {
+  return app.inject({ method: 'POST', url, headers: { 'user-agent': HUMAN_UA, ...headers }, remoteAddress: ip });
+}
+
+describe('/buy/:offerId', () => {
   afterEach(() => { process.env = OLD_ENV; });
   afterAll(() => { process.env = OLD_ENV; });
 
@@ -57,7 +61,7 @@ describe('GET /buy/:offerId', () => {
 
   it('launch-kit creates a web-product payment session and 302s', async () => {
     const app = await buildApp();
-    const res = await get(app, '/buy/launch-kit');
+    const res = await post(app, '/buy/launch-kit');
     expect(res.statusCode).toBe(302);
     expect(res.headers.location).toBe('https://checkout.stripe.com/c/pay/cs_test_abc');
     expect(sessionsCreate).toHaveBeenCalledTimes(1);
@@ -76,7 +80,7 @@ describe('GET /buy/:offerId', () => {
   it('agent-factory-kit charges $3 inline even when its price env var is unset', async () => {
     delete process.env.STRIPE_PRICE_WP_AGENT_FACTORY_KIT;
     const app = await buildApp();
-    const res = await get(app, '/buy/agent-factory-kit');
+    const res = await post(app, '/buy/agent-factory-kit');
     expect(res.statusCode).toBe(302);
     const params = sessionsCreate.mock.calls[0][0];
     expect(params.mode).toBe('payment');
@@ -86,7 +90,7 @@ describe('GET /buy/:offerId', () => {
 
   it('credits-5 creates a $5 wallet top-up checkout', async () => {
     const app = await buildApp();
-    const res = await get(app, '/buy/credits-5');
+    const res = await post(app, '/buy/credits-5');
     expect(res.statusCode).toBe(302);
     expect(sessionsCreate).toHaveBeenCalledWith(expect.objectContaining({
       mode: 'payment',
@@ -113,7 +117,7 @@ describe('GET /buy/:offerId', () => {
 
   it('retired hfh-unstick offer returns 404 and creates no session', async () => {
     const app = await buildApp();
-    const res = await get(app, '/buy/hfh-unstick');
+    const res = await post(app, '/buy/hfh-unstick');
     expect(res.statusCode).toBe(404);
     expect(sessionsCreate).not.toHaveBeenCalled();
     await app.close();
@@ -121,7 +125,7 @@ describe('GET /buy/:offerId', () => {
 
   it('git-viewer creates a subscription session without customer_creation', async () => {
     const app = await buildApp();
-    const res = await get(app, '/buy/git-viewer');
+    const res = await post(app, '/buy/git-viewer');
     expect(res.statusCode).toBe(302);
     const params = sessionsCreate.mock.calls[0][0];
     expect(params).toMatchObject({
@@ -140,7 +144,7 @@ describe('GET /buy/:offerId', () => {
     ['pageroast-credit-1', 'price_token_1'],
   ])('%s creates a payment session with customer_creation always', async (id, price) => {
     const app = await buildApp();
-    const res = await get(app, `/buy/${id}`);
+    const res = await post(app, `/buy/${id}`);
     expect(res.statusCode).toBe(302);
     expect(res.headers.location).toBe('https://checkout.stripe.com/c/pay/cs_test_abc');
     expect(sessionsCreate).toHaveBeenCalledWith(expect.objectContaining({
@@ -154,9 +158,51 @@ describe('GET /buy/:offerId', () => {
     await app.close();
   });
 
+  it('browser GET returns the confirm page and creates no session or funnel row', async () => {
+    const app = await buildApp();
+    const res = await get(app, '/buy/git-viewer');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    const { offerById, formatPrice } = await import('../shared/agent-offers');
+    const offer = offerById('git-viewer')!;
+    expect(res.body).toContain(offer.name);
+    expect(res.body).toContain(formatPrice(offer));
+    expect(res.body).toContain('GitHub-linked');
+    expect(res.body).toContain('Sold by bilko.run');
+    expect(res.body).toContain('Secure checkout by Stripe');
+    expect(res.body).toContain('<form method="post" action="/buy/git-viewer">');
+    expect(res.body).toContain('Continue to payment');
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    expect(dbRun.mock.calls.some((c: any[]) => String(c[0]).includes('funnel_events'))).toBe(false);
+    await app.close();
+  });
+
+  it('browser POST records checkout_start with session and visitor ids and 302s', async () => {
+    const app = await buildApp();
+    const res = await post(app, '/buy/git-viewer', { cookie: 'bilko_vid=11111111-1111-4111-8111-111111111111; bilko_sid=22222222-2222-4222-8222-222222222222' });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('https://checkout.stripe.com/c/pay/cs_test_abc');
+    expect(sessionsCreate).toHaveBeenCalledTimes(1);
+    const call = dbRun.mock.calls.find((c: any[]) => String(c[0]).includes('funnel_events'))!;
+    expect(call).toContain('checkout_start');
+    const cols = /\(([^)]*)\)\s*VALUES/.exec(String(call[0]))![1].split(',').map((c) => c.trim());
+    expect(call[1 + cols.indexOf('session_id')]).toBe('22222222-2222-4222-8222-222222222222');
+    expect(call[1 + cols.indexOf('visitor_id')]).toBe('11111111-1111-4111-8111-111111111111');
+    await app.close();
+  });
+
+  it('a curl POST gets the info page and no session', async () => {
+    const app = await buildApp();
+    const res = await post(app, '/buy/git-viewer', { 'user-agent': 'curl/8.7.1' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('https://bilko.run/buy/git-viewer');
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('records a best-effort checkout_start funnel event', async () => {
     const app = await buildApp();
-    await get(app, '/buy/launch-kit');
+    await post(app, '/buy/launch-kit');
     const call = dbRun.mock.calls.find((c: any[]) => String(c[0]).includes('funnel_events'));
     expect(call).toBeDefined();
     expect(call).toContain('checkout_start');
@@ -170,7 +216,7 @@ describe('GET /buy/:offerId', () => {
   it('still redirects when the funnel insert fails', async () => {
     dbRun.mockRejectedValueOnce(new Error('db down'));
     const app = await buildApp();
-    const res = await get(app, '/buy/launch-kit');
+    const res = await post(app, '/buy/launch-kit');
     expect(res.statusCode).toBe(302);
     await app.close();
   });
@@ -219,9 +265,9 @@ describe('GET /buy/:offerId', () => {
     await app.close();
   });
 
-  it('a mobile Safari GET still opens checkout', async () => {
+  it('a mobile Safari POST opens checkout', async () => {
     const app = await buildApp();
-    const res = await get(app, '/buy/agent-factory-kit', {
+    const res = await post(app, '/buy/agent-factory-kit', {
       'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
     });
     expect(res.statusCode).toBe(302);
@@ -249,7 +295,7 @@ describe('GET /buy/:offerId', () => {
     for (let i = 0; i < 12; i++) {
       expect((await get(app, '/buy/launch-kit?dryRun=1', {}, ip)).statusCode).toBe(200);
     }
-    expect((await get(app, '/buy/launch-kit', {}, ip)).statusCode).toBe(302);
+    expect((await post(app, '/buy/launch-kit', {}, ip)).statusCode).toBe(302);
     await app.close();
   });
 
@@ -261,7 +307,7 @@ describe('GET /buy/:offerId', () => {
       return undefined;
     });
     const app = await buildApp();
-    expect((await get(app, '/buy/launch-kit')).statusCode).toBe(302);
+    expect((await post(app, '/buy/launch-kit')).statusCode).toBe(302);
     expect(sessionsCreate.mock.calls[0][0].metadata).toMatchObject({ web_product: 'launch-kit', owner_ip: 'true' });
     const call = dbRun.mock.calls.find((c: any[]) => String(c[0]).includes('funnel_events'))!;
     // Read each flag by its column, so adding a column cannot shift the assertion.
@@ -274,7 +320,7 @@ describe('GET /buy/:offerId', () => {
   it('unknown or malformed offer id is a 404 HTML page', async () => {
     const app = await buildApp();
     for (const url of ['/buy/nope', '/buy/Not%20Valid', '/buy/..%2Fx']) {
-      const res = await get(app, url);
+      const res = await post(app, url);
       expect(res.statusCode).toBe(404);
       expect(res.headers['content-type']).toContain('text/html');
     }
@@ -285,7 +331,7 @@ describe('GET /buy/:offerId', () => {
   it('503 HTML when Stripe is unavailable', async () => {
     stripeAvailable = false;
     const app = await buildApp();
-    const res = await get(app, '/buy/launch-kit');
+    const res = await post(app, '/buy/launch-kit');
     expect(res.statusCode).toBe(503);
     expect(res.headers['content-type']).toContain('text/html');
     await app.close();
@@ -294,7 +340,7 @@ describe('GET /buy/:offerId', () => {
   it('503 HTML when the price id is unavailable', async () => {
     delete process.env.STRIPE_PRICE_TOKENS;
     const app = await buildApp();
-    const res = await get(app, '/buy/pageroast-credits-7');
+    const res = await post(app, '/buy/pageroast-credits-7');
     expect(res.statusCode).toBe(503);
     expect(sessionsCreate).not.toHaveBeenCalled();
     await app.close();
@@ -303,7 +349,7 @@ describe('GET /buy/:offerId', () => {
   it('503 HTML when Stripe session creation throws', async () => {
     sessionsCreate.mockRejectedValueOnce(new Error('boom'));
     const app = await buildApp();
-    const res = await get(app, '/buy/launch-kit');
+    const res = await post(app, '/buy/launch-kit');
     expect(res.statusCode).toBe(503);
     expect(res.body).not.toContain('boom');
     await app.close();
@@ -313,10 +359,10 @@ describe('GET /buy/:offerId', () => {
     const app = await buildApp();
     const ip = nextIp();
     for (let i = 0; i < 10; i++) {
-      expect((await get(app, '/buy/launch-kit', {}, ip)).statusCode).toBe(302);
+      expect((await post(app, '/buy/launch-kit', {}, ip)).statusCode).toBe(302);
     }
-    expect((await get(app, '/buy/launch-kit', {}, ip)).statusCode).toBe(429);
-    expect((await get(app, '/buy/launch-kit', {}, nextIp())).statusCode).toBe(302);
+    expect((await post(app, '/buy/launch-kit', {}, ip)).statusCode).toBe(429);
+    expect((await post(app, '/buy/launch-kit', {}, nextIp())).statusCode).toBe(302);
     await app.close();
   });
 });

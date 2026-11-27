@@ -24,6 +24,8 @@ app.get('/api/other', async () => ({ ok: true }));
 app.post('/mcp', async () => ({ ok: true }));
 app.get('/llms.txt', async (_req, reply) => reply.type('text/plain').send('hi'));
 app.get('/coffee', async (_req, reply) => reply.redirect('https://buy.stripe.com/test_link', 302));
+app.post('/buy/:id', async (_req, reply) => reply.redirect('https://checkout.stripe.com/test', 302));
+app.post('/api/other-post', async () => ({ ok: true }));
 app.get('/other-redirect', async (_req, reply) => reply.redirect('/', 302));
 
 interface Row {
@@ -277,6 +279,16 @@ describe('visitor class', () => {
       { path: '/coffee', status: 302, visitor_class: 'human', referrer_host: 'github.com' },
       { path: '/coffee', status: 302, visitor_class: 'script', referrer_host: null },
     ]);
+  });
+
+  it('records POST /buy/:offer with status and visitor class, but no other POST', async () => {
+    await app.inject({ method: 'POST', url: '/buy/launch-kit', headers: { 'user-agent': 'curl/8.5.0' } });
+    await app.inject({ method: 'POST', url: '/api/other-post', headers: { 'user-agent': CHROME }, payload: {} });
+    await settle();
+    await flushPageHits();
+    const r = await dbAll<{ path: string; status: number; visitor_class: string }>(
+      'SELECT path, status, visitor_class FROM page_hits ORDER BY id');
+    expect(r).toEqual([{ path: '/buy/launch-kit', status: 302, visitor_class: 'script' }]);
   });
 
   it('uses x-bot-id as api_client', async () => {

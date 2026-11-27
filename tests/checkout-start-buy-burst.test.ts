@@ -64,6 +64,21 @@ describe('agent-buy hit labels', () => {
     expect((await wp()).checkoutStartsAll).toEqual({ human: 1, automated: 5, unlabeled: 0 });
   });
 
+  it('labels a burst of POST-only hits (no confirm-page GET) automated', async () => {
+    const offers = ['p1', 'p2', 'p3', 'p4', 'p5'];
+    for (const [i, o] of offers.entries()) {
+      await start(o, IP);
+      await dbRun(`INSERT INTO page_hits (ts_ms, date, path, status, is_bot, visitor_class, ip) VALUES (?, '2026-11-25', ?, 302, 0, 'script', ?)`,
+        T + 100 + i * 25, `/buy/${o}`, IP);
+    }
+    const body = await list();
+    for (const o of offers) {
+      const r = body.starts.find((s: any) => s.tool === o);
+      expect(r).toMatchObject({ label: 'automated', counted: true });
+      expect(r.labelReasons).toContain('buy_burst');
+    }
+  });
+
   it('labels a human-class burst buy_burst only, and splits per product', async () => {
     await start('burst-skills', IP);
     await hit('burst-skills', IP, T + 100);

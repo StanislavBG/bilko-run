@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { internalFlag } from '../internal-traffic.js';
 import { getStripe } from '../services/stripe.js';
 import { dbRun } from '../db.js';
@@ -44,7 +44,7 @@ function page(title: string, body: string): string {
     + `<body style="font-family:system-ui,sans-serif;max-width:36rem;margin:3rem auto;padding:0 1rem"><h1>${esc(title)}</h1>${body}</body></html>`;
 }
 
-function sendHtml(reply: any, status: number, html: string) {
+function sendHtml(reply: FastifyReply, status: number, html: string) {
   return reply
     .status(status)
     .header('Content-Type', 'text/html; charset=utf-8')
@@ -104,8 +104,8 @@ function sessionParams(offer: AgentOffer, priceId: string, publicUrl: string): R
 }
 
 export function registerAgentBuyRoutes(app: FastifyInstance): void {
-  const handler = async (req: any, reply: any) => {
-    const offerId = (req.params as { offerId?: string }).offerId;
+  const handler = async (req: FastifyRequest<{ Params: { offerId?: string }; Querystring: { dryRun?: string } }>, reply: FastifyReply) => {
+    const offerId = req.params.offerId;
     const offer = typeof offerId === 'string' && OFFER_ID_RE.test(offerId) ? offerById(offerId) : undefined;
     if (!offer) {
       const open = await availableOffers();
@@ -118,7 +118,7 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
       `<p>${esc(offer.name)} is not on sale yet. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
 
     // ?dryRun=1 runs every check a browser POST would (Stripe, price, stock) without a session.
-    const dryRun = (req.query as { dryRun?: string } | undefined)?.dryRun === '1';
+    const dryRun = req.query?.dryRun === '1';
     const info = (note = '') => sendHtml(reply, 200, page(offer.name,
       `<p>${esc(offer.summary)}</p><p>Price: ${esc(formatPrice(offer))}</p>${note}`
       + `<p>To buy, open <a href="${esc(offer.buyUrl)}">${esc(offer.buyUrl)}</a> in a browser.</p>`
@@ -129,9 +129,32 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
       return info();
     }
 
+    const unavailable = () => sendHtml(reply, 503, page('Checkout unavailable',
+      `<p>Checkout is not available right now. Try again later or visit <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a>.</p>`));
+
+    // The checks a browser POST makes before opening a session; the GET confirm page runs them too,
+    // so it never offers a button that is bound to fail.
+    const preflight = async (): Promise<FastifyReply | null> => {
+      // One-time web products charge amountCents inline; only catalog offers and monthly products need a price id.
+      if (!getStripe() || !isOfferPriced(offer, process.env)) return unavailable();
+      if (!(await isOfferAvailable(offer))) return notYet();
+      const soldOutProduct = offer.source.kind === 'web_product' ? webProductBySlug(offer.source.slug) : undefined;
+      try {
+        if (soldOutProduct?.maxOrders !== undefined && (await countLiveOrders(soldOutProduct.slug)) >= soldOutProduct.maxOrders) {
+          return sendHtml(reply, 409, page('Sold out',
+            `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
+        }
+      } catch (err: any) {
+        console.error('[agent-buy] stock check failed:', err?.message);
+        return unavailable();
+      }
+      return null;
+    };
+
     // A browser GET only shows what is being bought; the form's POST opens Checkout.
     if (!dryRun && req.method === 'GET') {
-      if (!(await isOfferAvailable(offer))) return notYet();
+      const failed = await preflight();
+      if (failed) return failed;
       const action = `/buy/${offer.id}`;
       return sendHtml(reply, 200, page(offer.name,
         `<p>${esc(offer.summary)}</p><p><strong>${esc(formatPrice(offer))}</strong></p>`
@@ -145,24 +168,15 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
       return sendHtml(reply, 429, page('Too many requests', '<p>Try again in a minute.</p>'));
     }
 
-    const unavailable = () => sendHtml(reply, 503, page('Checkout unavailable',
-      `<p>Checkout is not available right now. Try again later or visit <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a>.</p>`));
-
-    const stripe = getStripe();
+    const failed = await preflight();
+    if (failed) return failed;
+    const stripe = getStripe()!;
     const priceId = offerPriceId(offer, process.env);
-    // One-time web products charge amountCents inline; only catalog offers and monthly products need a price id.
-    if (!stripe || !isOfferPriced(offer, process.env)) return unavailable();
-    if (!(await isOfferAvailable(offer))) return notYet();
-
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
     const product = offer.source.kind === 'web_product' ? webProductBySlug(offer.source.slug)! : undefined;
     let session: { id: string; url?: string | null };
     let ownerIp = false;
     try {
-      if (product?.maxOrders !== undefined && (await countLiveOrders(product.slug)) >= product.maxOrders) {
-        return sendHtml(reply, 409, page('Sold out',
-          `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
-      }
       if (dryRun) return info('<p>Dry run: checkout is ready. No Stripe session was created.</p>');
 
       // Same owner flag as POST /api/web-products/:slug/checkout: keeps the owner's own clicks out of /admin.

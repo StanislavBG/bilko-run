@@ -14,6 +14,22 @@ vi.mock('../server/services/stripe.js', () => ({
   hasPurchased: async () => false,
 }));
 
+let soldOut = false;
+vi.mock('../shared/web-products.js', async (orig) => {
+  const mod = await orig<typeof import('../shared/web-products.js')>();
+  return {
+    ...mod,
+    webProductBySlug: (slug: string) => {
+      const p = mod.webProductBySlug(slug);
+      return p && soldOut && slug === 'launch-kit' ? { ...p, maxOrders: 5 } : p;
+    },
+  };
+});
+vi.mock('../server/services/web-products.js', async (orig) => ({
+  ...(await orig<typeof import('../server/services/web-products.js')>()),
+  countLiveOrders: async () => 5,
+}));
+
 const dbRun = vi.fn(async () => {});
 vi.mock('../server/db.js', () => ({
   dbRun,
@@ -46,6 +62,7 @@ describe('/buy/:offerId', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stripeAvailable = true;
+    soldOut = false;
     process.env = {
       ...OLD_ENV,
       PUBLIC_URL: 'https://bilko.run',
@@ -172,6 +189,34 @@ describe('/buy/:offerId', () => {
     expect(res.body).toContain('Secure checkout by Stripe');
     expect(res.body).toContain('<form method="post" action="/buy/git-viewer">');
     expect(res.body).toContain('Continue to payment');
+    expect(sessionsCreate).not.toHaveBeenCalled();
+    expect(dbRun.mock.calls.some((c: any[]) => String(c[0]).includes('funnel_events'))).toBe(false);
+    await app.close();
+  });
+
+  it('browser GET confirm page gives the POST failure pages and opens no session', async () => {
+    const app = await buildApp();
+    const noButton = (res: { body: string }) => expect(res.body).not.toContain('Continue to payment');
+
+    stripeAvailable = false;
+    let res = await get(app, '/buy/launch-kit');
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Checkout unavailable');
+    noButton(res);
+
+    stripeAvailable = true;
+    delete process.env.STRIPE_PRICE_TOKENS;
+    res = await get(app, '/buy/pageroast-credits-7');
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Checkout unavailable');
+    noButton(res);
+
+    soldOut = true;
+    res = await get(app, '/buy/launch-kit');
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toContain('Sold out');
+    noButton(res);
+
     expect(sessionsCreate).not.toHaveBeenCalled();
     expect(dbRun.mock.calls.some((c: any[]) => String(c[0]).includes('funnel_events'))).toBe(false);
     await app.close();

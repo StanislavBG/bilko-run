@@ -171,7 +171,9 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
 
     const failed = await preflight();
     if (failed) return failed.sent;
-    const stripe = getStripe()!;
+    // preflight already checked this; re-check so a later edit to preflight cannot pass a null client on.
+    const stripe = getStripe();
+    if (!stripe) return unavailable();
     const priceId = offerPriceId(offer, process.env);
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';
     const product = offer.source.kind === 'web_product' ? webProductBySlug(offer.source.slug)! : undefined;

@@ -88,18 +88,18 @@ describe('POST /api/web-products/:slug/checkout checkout_start is_bot', () => {
   });
 });
 
-describe('GET /buy/:offer checkout_start is_bot', () => {
-  async function start(ua: string | null) {
+describe('/buy/:offer checkout_start is_bot', () => {
+  async function start(ua: string | null, method: 'GET' | 'POST' = 'POST') {
     const { registerAgentBuyRoutes } = await import('../server/routes/agent-buy.js');
     const app = Fastify();
     registerAgentBuyRoutes(app);
     const headers: Record<string, string> = ua === null ? {} : { 'user-agent': ua };
-    const res = await app.inject({ method: 'GET', url: '/buy/launch-kit', headers, remoteAddress: nextIp() });
+    const res = await app.inject({ method, url: '/buy/launch-kit', headers, remoteAddress: nextIp() });
     await app.close();
     return res;
   }
 
-  // /buy only opens a live session for a human browser GET (opensCheckout); curl and a
+  // /buy only opens a live session for a human browser POST (opensCheckout); curl and a
   // missing UA get the info page before any session or checkout_start row exists.
   // That gate predates is_bot and stays as is, so a script never reaches the INSERT here.
   it('a curl request gets the info page and stores no checkout_start row', async () => {

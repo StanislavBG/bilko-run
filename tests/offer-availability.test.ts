@@ -115,7 +115,7 @@ describe('offers are listed only when they can be bought and delivered', () => {
     expect(checkout.json()).toEqual({ error: 'not_available_yet' });
     expect(sessionsCreate).not.toHaveBeenCalled();
 
-    const kit = await a.inject({ method: 'GET', url: '/buy/launch-kit', headers: { 'user-agent': HUMAN_UA }, remoteAddress: `10.7.0.${++ip}` });
+    const kit = await a.inject({ method: 'POST', url: '/buy/launch-kit', headers: { 'user-agent': HUMAN_UA }, remoteAddress: `10.7.0.${++ip}` });
     expect(kit.statusCode).toBe(302);
     expect(sessionsCreate).toHaveBeenCalledTimes(1);
     await a.close();

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "threewinds",
   "version": "1.0.0",
-  "builtAt": "2026-11-27T00:13:45.284Z",
-  "gitSha": "ca7bbc4",
+  "builtAt": "2026-11-27T00:47:13.926Z",
+  "gitSha": "547d69b",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
@@ -14,7 +14,7 @@
   },
   "health": {},
   "bundle": {
-    "sizeBytesGz": 2502808,
+    "sizeBytesGz": 2504143,
     "fileCount": 107
   }
 }

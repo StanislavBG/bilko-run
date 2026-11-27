@@ -132,21 +132,22 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     const unavailable = () => sendHtml(reply, 503, page('Checkout unavailable',
       `<p>Checkout is not available right now. Try again later or visit <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a>.</p>`));
 
+    // Wrapped because a Fastify reply is thenable: awaiting a bare reply would not hand it back.
     // The checks a browser POST makes before opening a session; the GET confirm page runs them too,
     // so it never offers a button that is bound to fail.
-    const preflight = async (): Promise<FastifyReply | null> => {
+    const preflight = async (): Promise<{ sent: FastifyReply } | null> => {
       // One-time web products charge amountCents inline; only catalog offers and monthly products need a price id.
-      if (!getStripe() || !isOfferPriced(offer, process.env)) return unavailable();
-      if (!(await isOfferAvailable(offer))) return notYet();
+      if (!getStripe() || !isOfferPriced(offer, process.env)) return { sent: unavailable() };
+      if (!(await isOfferAvailable(offer))) return { sent: notYet() };
       const soldOutProduct = offer.source.kind === 'web_product' ? webProductBySlug(offer.source.slug) : undefined;
       try {
         if (soldOutProduct?.maxOrders !== undefined && (await countLiveOrders(soldOutProduct.slug)) >= soldOutProduct.maxOrders) {
-          return sendHtml(reply, 409, page('Sold out',
-            `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`));
+          return { sent: sendHtml(reply, 409, page('Sold out',
+            `<p>${esc(offer.name)} is sold out right now. See <a href="${esc(offer.pageUrl)}">${esc(offer.pageUrl)}</a> for updates.</p>`)) };
         }
       } catch (err: any) {
         console.error('[agent-buy] stock check failed:', err?.message);
-        return unavailable();
+        return { sent: unavailable() };
       }
       return null;
     };
@@ -154,7 +155,7 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     // A browser GET only shows what is being bought; the form's POST opens Checkout.
     if (!dryRun && req.method === 'GET') {
       const failed = await preflight();
-      if (failed) return failed;
+      if (failed) return failed.sent;
       const action = `/buy/${offer.id}`;
       return sendHtml(reply, 200, page(offer.name,
         `<p>${esc(offer.summary)}</p><p><strong>${esc(formatPrice(offer))}</strong></p>`
@@ -169,7 +170,7 @@ export function registerAgentBuyRoutes(app: FastifyInstance): void {
     }
 
     const failed = await preflight();
-    if (failed) return failed;
+    if (failed) return failed.sent;
     const stripe = getStripe()!;
     const priceId = offerPriceId(offer, process.env);
     const publicUrl = process.env.PUBLIC_URL || 'https://bilko.run';

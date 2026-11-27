@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "slug": "hatch-day",
+  "version": "1.0.0",
+  "builtAt": "2026-11-27T18:46:42.109Z",
+  "gitSha": "37a8e07",
+  "gitBranch": "sm-epic/build-hatch-day-7517e186",
+  "hostKit": {
+    "version": "0.0.0"
+  },
+  "golden": {
+    "path": "/projects/hatch-day/",
+    "expect": "Hatch Day"
+  },
+  "health": {},
+  "bundle": {
+    "sizeBytesGz": 128161,
+    "fileCount": 5
+  }
+}

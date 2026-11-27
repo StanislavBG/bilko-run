@@ -239,7 +239,7 @@ describe('GET /api/admin/checkout-starts agent-buy hit', () => {
     await hit({ ts: T - 20000, ip: BUYER_IP, cls: 'automated', country: 'FR' });
     // Same IP, outside the window.
     await hit({ ts: T - 60000, ip: BUYER_IP, cls: 'automated', country: 'GB' });
-    // Same IP, other path, 700 ms away (not a burst).
+    // Same IP, other path, 1500 ms away (not a burst).
     await hit({ ts: T + 1500, ip: BUYER_IP, path: '/buy/other', cls: 'automated', country: 'JP' });
   };
 

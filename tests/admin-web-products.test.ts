@@ -1,8 +1,21 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import Fastify from 'fastify';
+import { createHash } from 'node:crypto';
 import { initDb, dbRun } from '../server/db.js';
 
 const adminOk = vi.hoisted(() => ({ value: true }));
+const dbAllSql = vi.hoisted(() => ({ calls: [] as string[] }));
+
+vi.mock('../server/db.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../server/db.js')>();
+  return {
+    ...original,
+    dbAll: (sql: string, ...args: unknown[]) => {
+      dbAllSql.calls.push(sql);
+      return (original.dbAll as any)(sql, ...args);
+    },
+  };
+});
 
 vi.mock('../server/clerk.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../server/clerk.js')>();
@@ -275,5 +288,30 @@ describe('views of a product nested in another product page', () => {
     const b = await body();
     expect(b.products.find((p: any) => p.slug === 'launch-kit')).toMatchObject({ views: 2, uniqueVisitors: 2 });
     expect(b.products.find((p: any) => p.slug === 'agent-factory-kit').views).toBe(0);
+  });
+
+  it('reads the /buy/ page_hits once per request and counts hit-labelled starts per product', async () => {
+    const sha = (x: string) => createHash('sha256').update(x).digest('hex');
+    const created = `${dayStr(0)} 10:00:00`;
+    const t0 = Date.parse(`${dayStr(0)}T10:00:00Z`);
+    const start = (tool: string, ip: string) => dbRun(
+      'INSERT INTO funnel_events (event, tool, created_at, ip_hash, metadata) VALUES (?, ?, ?, ?, ?)',
+      'checkout_start', tool, created, sha(ip), JSON.stringify({ via: 'agent-buy', offer: tool }));
+    const hit = (ip: string, path: string, cls: string) => dbRun(
+      `INSERT INTO page_hits (ts_ms, date, path, status, is_bot, visitor_class, ip) VALUES (?, ?, ?, 303, 0, ?, ?)`,
+      t0 + 500, dayStr(0), path, cls, ip);
+    // fixture-skills: two script starts and one human; fixture-service: one script start.
+    await start('fixture-skills', '203.0.113.1'); await hit('203.0.113.1', '/buy/fixture-skills', 'script');
+    await start('fixture-skills', '203.0.113.2'); await hit('203.0.113.2', '/buy/fixture-skills', 'script');
+    await start('fixture-skills', '203.0.113.3'); await hit('203.0.113.3', '/buy/fixture-skills', 'human');
+    await start('fixture-service', '203.0.113.4'); await hit('203.0.113.4', '/buy/fixture-service', 'script');
+
+    dbAllSql.calls.length = 0;
+    const res = await app.inject({ method: 'GET', url: '/api/admin/web-products?days=7' });
+    expect(res.statusCode).toBe(200);
+    expect(dbAllSql.calls.filter((q) => q.includes('FROM page_hits') && q.includes('path LIKE'))).toHaveLength(1);
+    const [skills, svc] = res.json().products;
+    expect(skills).toMatchObject({ checkoutStarts: 5, checkoutStartsAutomated: 2, checkoutStartsHuman: 3 });
+    expect(svc).toMatchObject({ checkoutStarts: 1, checkoutStartsAutomated: 1, checkoutStartsHuman: 0 });
   });
 });

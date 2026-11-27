@@ -41,8 +41,10 @@ type SplitRow = { n: number; automated: number; unlabeled: number };
 export type CheckoutSplit = { human: number; automated: number; unlabeled: number };
 
 /** Every checkout_start in the window, any tool (the /buy agent offers included), split by label. */
-async function checkoutStartSplit(sinceDate: string, excludeSelf: boolean): Promise<CheckoutSplit> {
-  const moved = (await hitAutomatedStartIds(sinceDate, excludeSelf)).size;
+async function checkoutStartSplit(
+  sinceDate: string, excludeSelf: boolean, hitIds?: Map<number, string | null>,
+): Promise<CheckoutSplit> {
+  const moved = (hitIds ?? await hitAutomatedStartIds(sinceDate, excludeSelf)).size;
   const feSelfSql = excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : '';
   const all = await dbGet<SplitRow>(
     `SELECT ${SPLIT_COLS} FROM funnel_events fe
@@ -134,17 +136,18 @@ async function agentBuyHits(rows: StartMatchRow[]): Promise<AgentBuyMatch> {
 }
 
 /**
- * Ids of agent-buy starts in the window that FE_AUTOMATED misses but whose matched /buy/ hit marks them automated.
+ * Ids (with their tool) of agent-buy starts in the window, all tools, that FE_AUTOMATED misses but whose matched /buy/ hit marks them automated.
  * Only rows created since CHECKOUT_LABELS_SINCE (earlier unflagged rows stay unlabeled). Labels only; nothing is dropped.
  */
-async function hitAutomatedStartIds(sinceDate: string, excludeSelf: boolean, tool?: string): Promise<Set<number>> {
+async function hitAutomatedStartIds(sinceDate: string, excludeSelf: boolean): Promise<Map<number, string | null>> {
   const rows = await dbAll<StartMatchRow>(
     `SELECT fe.id, fe.created_at, fe.tool, fe.metadata, fe.ip_hash FROM funnel_events fe
      WHERE fe.event = 'checkout_start' AND date(fe.created_at) >= ? AND fe.created_at >= ? AND fe.metadata LIKE ?
-       AND NOT ${FE_AUTOMATED}${excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : ''}${tool !== undefined ? ' AND fe.tool = ?' : ''}`,
-    sinceDate, CHECKOUT_LABELS_SINCE, '%agent-buy%', ...(tool !== undefined ? [tool] : []));
+       AND NOT ${FE_AUTOMATED}${excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : ''}`,
+    sinceDate, CHECKOUT_LABELS_SINCE, '%agent-buy%');
   const { reasons } = await agentBuyHits(rows);
-  return new Set(reasons.keys());
+  const toolById = new Map(rows.map((r) => [r.id, r.tool] as const));
+  return new Map([...reasons.keys()].map((id) => [id, toolById.get(id) ?? null] as const));
 }
 
 function parseTs(createdAt: string | null): number | null {
@@ -228,6 +231,13 @@ export function registerAdminWebProductRoutes(
     const feSelfSql = excludeSelf ? ' AND COALESCE(fe.is_admin, 0) = 0' : '';
     const NOT_TEST = " AND checkout_session_id NOT LIKE 'cs\\_test\\_%' ESCAPE '\\'";
 
+    // One page_hits read for every product; each product counts its own tool from this map.
+    const movedByTool = new Map<string | null, number>();
+    const hitIds = await hitAutomatedStartIds(sinceDate, excludeSelf);
+    for (const tool of hitIds.values()) {
+      movedByTool.set(tool, (movedByTool.get(tool) ?? 0) + 1);
+    }
+
     const entries = [];
     const daily: Array<{ date: string; slug: string; views: number; checkoutStarts: number; orders: number; downloads: number }> = [];
 
@@ -271,7 +281,7 @@ export function registerAdminWebProductRoutes(
            WHERE event IN ('checkout_expired', 'checkout_recovered') AND tool = ? AND date(created_at) >= ? GROUP BY event`,
           p.slug, sinceDate),
       ]);
-      const moved = (await hitAutomatedStartIds(sinceDate, excludeSelf, p.slug)).size;
+      const moved = movedByTool.get(p.slug) ?? 0;
       const outcome = (e: string) => outcomes.find((o) => o.event === e)?.n ?? 0;
 
       // Services have no zip: show upcoming bookings (and intake) instead, so the owner
@@ -321,7 +331,7 @@ export function registerAdminWebProductRoutes(
       daily.push(...[...rows.values()].sort((a, b) => a.date.localeCompare(b.date)));
     }
 
-    const checkoutStartsAll = await checkoutStartSplit(sinceDate, excludeSelf);
+    const checkoutStartsAll = await checkoutStartSplit(sinceDate, excludeSelf, hitIds);
 
     // /coffee is a 302 to the Stripe Payment Link, recorded in page_hits with a visitor class.
     const mine = excludeSelf ? mineExclusionSql(await loadOwnerIds(), HITS_MINE_COLS) : { sql: '', args: [] as string[] };

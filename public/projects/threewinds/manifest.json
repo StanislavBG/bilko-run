@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "slug": "threewinds",
   "version": "1.0.0",
-  "builtAt": "2026-11-27T00:47:13.926Z",
-  "gitSha": "547d69b",
+  "builtAt": "2026-11-27T00:59:48.161Z",
+  "gitSha": "f58b7d6",
   "gitBranch": "main",
   "hostKit": {
     "version": "0.0.0"
